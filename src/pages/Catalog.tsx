@@ -1,82 +1,233 @@
-import React, { useState } from 'react';
-import { Filter, ChevronDown } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { ProductCard } from '../components/product/ProductCard';
-import { MOCK_PRODUCTS, MOCK_CATEGORIES } from '../lib/mock-data';
 import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Drawer } from '../components/ui/Drawer';
+import { PRODUCTS, CATEGORIES, BRANDS } from '../lib/mock-data';
+
+const SORT_OPTIONS = [
+  { value: 'new', label: 'Сначала новые' },
+  { value: 'price-asc', label: 'Цена: по возрастанию' },
+  { value: 'price-desc', label: 'Цена: по убыванию' },
+  { value: 'name', label: 'По названию' },
+];
 
 export function Catalog() {
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [activeBrand, setActiveBrand] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState('new');
+  const [showSort, setShowSort] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const filteredProducts = useMemo(() => {
+    let result = [...PRODUCTS];
+
+    // Search
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.brand.toLowerCase().includes(q)
+      );
+    }
+
+    // Category
+    if (activeCategory !== 'all') {
+      result = result.filter(p => p.category === activeCategory);
+    }
+
+    // Brand
+    if (activeBrand) {
+      result = result.filter(p => p.brandId === activeBrand);
+    }
+
+    // Sort
+    switch (sortBy) {
+      case 'price-asc': result.sort((a, b) => a.price - b.price); break;
+      case 'price-desc': result.sort((a, b) => b.price - a.price); break;
+      case 'name': result.sort((a, b) => a.name.localeCompare(b.name)); break;
+      case 'new': result.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0)); break;
+    }
+
+    return result;
+  }, [searchQuery, activeCategory, activeBrand, sortBy]);
+
+  const currentSort = SORT_OPTIONS.find(s => s.value === sortBy);
 
   return (
-    <div className="container mx-auto px-6 max-w-7xl py-12">
-      <div className="mb-16">
-        <h1 className="text-4xl md:text-5xl font-serif text-graphite mb-4">The Collection</h1>
-        <p className="text-ash max-w-2xl text-lg">
-          Browse our entire selection of carefully curated items.
-        </p>
-      </div>
+    <div className="min-h-screen bg-milk">
+      <div className="container mx-auto px-4 sm:px-6 max-w-7xl py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl sm:text-4xl font-serif text-graphite mb-2">Каталог</h1>
+          <p className="text-sm text-ash">{filteredProducts.length} товаров</p>
+        </div>
 
-      <div className="flex flex-col md:flex-row gap-12">
-        {/* Sidebar Filter */}
-        <aside className="w-full md:w-64 shrink-0">
-          <div className="sticky top-32 space-y-10">
-            <div>
-              <h3 className="text-xs font-bold tracking-[0.2em] text-graphite uppercase mb-6 flex items-center justify-between">
-                Categories
-                <Filter className="w-4 h-4 md:hidden" />
-              </h3>
-              <ul className="space-y-4 text-sm">
-                <li>
-                  <button 
-                    className={`transition-colors ${activeCategory === "All" ? "text-graphite font-medium" : "text-ash hover:text-graphite"}`}
-                    onClick={() => setActiveCategory("All")}
-                  >
-                    All Items
-                  </button>
-                </li>
-                {MOCK_CATEGORIES.map(cat => (
-                  <li key={cat}>
-                    <button 
-                      className={`transition-colors ${activeCategory === cat ? "text-graphite font-medium" : "text-ash hover:text-graphite"}`}
-                      onClick={() => setActiveCategory(cat)}
+        {/* Search */}
+        <div className="mb-6">
+          <Input
+            isSearch
+            placeholder="Поиск по 1 000 брендам..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        {/* Categories */}
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-6 scrollbar-hide">
+          {CATEGORIES.map(cat => (
+            <Button
+              key={cat.id}
+              variant={activeCategory === cat.id ? 'primary' : 'pill'}
+              size="sm"
+              onClick={() => setActiveCategory(cat.id)}
+              className="shrink-0"
+            >
+              {cat.name}
+            </Button>
+          ))}
+        </div>
+
+        {/* Sort & Filter bar */}
+        <div className="flex items-center justify-between mb-6 gap-3">
+          {/* Desktop Brand Filter */}
+          <div className="hidden md:flex gap-2 overflow-x-auto">
+            <Button
+              variant={activeBrand === null ? 'secondary' : 'pill'}
+              size="sm"
+              onClick={() => setActiveBrand(null)}
+            >
+              Все бренды
+            </Button>
+            {BRANDS.slice(0, 5).map(brand => (
+              <Button
+                key={brand.id}
+                variant={activeBrand === brand.id ? 'primary' : 'pill'}
+                size="sm"
+                onClick={() => setActiveBrand(brand.id)}
+                className="shrink-0"
+              >
+                {brand.name}
+              </Button>
+            ))}
+          </div>
+
+          {/* Mobile filter button */}
+          <Button
+            variant="secondary"
+            size="sm"
+            className="md:hidden gap-1.5"
+            onClick={() => setShowFilters(true)}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            Фильтры
+          </Button>
+
+          {/* Sort dropdown */}
+          <div className="relative">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setShowSort(!showSort)}
+            >
+              {currentSort?.label}
+              <ChevronDown className="w-3.5 h-3.5" />
+            </Button>
+
+            {showSort && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setShowSort(false)} />
+                <div className="absolute right-0 top-full mt-2 w-56 glass-strong rounded-2xl shadow-lg border border-border-lighter py-2 z-40">
+                  {SORT_OPTIONS.map(opt => (
+                    <button
+                      key={opt.value}
+                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                        sortBy === opt.value ? 'text-primary font-medium bg-primary/5' : 'text-graphite hover:bg-surface'
+                      }`}
+                      onClick={() => { setSortBy(opt.value); setShowSort(false); }}
                     >
-                      {cat}
+                      {opt.label}
                     </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            
-            <div className="hidden md:block">
-              <h3 className="text-xs font-bold tracking-[0.2em] text-graphite uppercase mb-6">Sort By</h3>
-              <div className="relative">
-                <select className="w-full appearance-none bg-transparent border-b border-border-soft pb-2 text-sm text-graphite focus:outline-none focus:border-graphite rounded-none cursor-pointer">
-                  <option>Newest Arrivals</option>
-                  <option>Price: High to Low</option>
-                  <option>Price: Low to High</option>
-                </select>
-                <ChevronDown className="absolute right-0 top-1 text-ash w-4 h-4 pointer-events-none" />
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* Product Grid */}
-        <div className="flex-1">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-x-8 md:gap-y-12">
-            {MOCK_PRODUCTS.map(product => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-            {MOCK_PRODUCTS.map(product => (
-              <ProductCard key={product.id + '-dup'} product={product} />
-            ))}
-          </div>
-          
-          <div className="mt-24 text-center">
-            <Button variant="outline" className="px-12">Load More</Button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
+
+        {/* Product Grid */}
+        {filteredProducts.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+            {filteredProducts.map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-surface flex items-center justify-center mb-4">
+              <span className="text-2xl">🔍</span>
+            </div>
+            <h3 className="text-lg font-semibold text-graphite mb-2">Ничего не найдено</h3>
+            <p className="text-sm text-ash mb-4">Попробуйте изменить критерии поиска</p>
+            <Button variant="secondary" onClick={() => { setSearchQuery(''); setActiveCategory('all'); setActiveBrand(null); }}>
+              Сбросить фильтры
+            </Button>
+          </div>
+        )}
       </div>
+
+      {/* Mobile Filter Drawer */}
+      <Drawer isOpen={showFilters} onClose={() => setShowFilters(false)} title="Фильтры" side="left">
+        <div className="space-y-6">
+          <div>
+            <h4 className="font-semibold text-sm text-graphite mb-3">Категория</h4>
+            <div className="flex flex-col gap-1.5">
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat.id}
+                  className={`text-left px-3 py-2 rounded-xl text-sm transition-all ${
+                    activeCategory === cat.id ? 'bg-primary/10 text-primary font-medium' : 'text-graphite hover:bg-surface'
+                  }`}
+                  onClick={() => setActiveCategory(cat.id)}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <hr className="border-border-lighter" />
+          <div>
+            <h4 className="font-semibold text-sm text-graphite mb-3">Бренд</h4>
+            <div className="flex flex-col gap-1.5">
+              <button
+                className={`text-left px-3 py-2 rounded-xl text-sm transition-all ${
+                  !activeBrand ? 'bg-primary/10 text-primary font-medium' : 'text-graphite hover:bg-surface'
+                }`}
+                onClick={() => setActiveBrand(null)}
+              >
+                Все бренды
+              </button>
+              {BRANDS.map(brand => (
+                <button
+                  key={brand.id}
+                  className={`text-left px-3 py-2 rounded-xl text-sm transition-all ${
+                    activeBrand === brand.id ? 'bg-primary/10 text-primary font-medium' : 'text-graphite hover:bg-surface'
+                  }`}
+                  onClick={() => setActiveBrand(brand.id)}
+                >
+                  {brand.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Button variant="primary" className="w-full mt-4" onClick={() => setShowFilters(false)}>
+            Показать {filteredProducts.length} товаров
+          </Button>
+        </div>
+      </Drawer>
     </div>
   );
 }

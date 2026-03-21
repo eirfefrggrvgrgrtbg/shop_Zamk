@@ -1,31 +1,61 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { CartProvider } from './contexts/CartContext';
+import { FavoritesProvider } from './contexts/FavoritesContext';
+import { ToastProvider } from './contexts/ToastContext';
 import { Layout } from './components/layout/Layout';
 import { Home } from './pages/Home';
 import { Catalog } from './pages/Catalog';
 import { ProductDetail } from './pages/ProductDetail';
-import { Profile } from './pages/Profile';
 import { Cart } from './pages/Cart';
+import { Checkout } from './pages/Checkout';
+import { Profile } from './pages/Profile';
+import { Favorites } from './pages/Favorites';
+import { Brands } from './pages/Brands';
+import { BrandDetail } from './pages/BrandDetail';
+import { About } from './pages/About';
+import { Delivery } from './pages/Delivery';
+import { Help } from './pages/Help';
+import { Contacts } from './pages/Contacts';
+import { Privacy } from './pages/Privacy';
+import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 
-// Small wrapper adjusting Navbar Links for Router (simulated in demo)
-// Normally Navbar would use React Router Links natively.
-// Here we inject the Router at the very top.
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
 
 function App() {
   return (
-    <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/shop" element={<Catalog />} />
-          <Route path="/product/:id" element={<ProductDetail />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/cart" element={<Cart />} />
-          {/* Catch all to go Home for demo purposes */}
-          <Route path="*" element={<Home />} />
-        </Routes>
-      </Layout>
-    </Router>
+    <ToastProvider>
+      <CartProvider>
+        <FavoritesProvider>
+          <Router>
+            <ScrollToTop />
+            <Layout>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/catalog" element={<Catalog />} />
+                <Route path="/product/:id" element={<ProductDetail />} />
+                <Route path="/cart" element={<Cart />} />
+                <Route path="/checkout" element={<Checkout />} />
+                <Route path="/favorites" element={<Favorites />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/brands" element={<Brands />} />
+                <Route path="/brand/:id" element={<BrandDetail />} />
+                <Route path="/about" element={<About />} />
+                <Route path="/delivery" element={<Delivery />} />
+                <Route path="/help" element={<Help />} />
+                <Route path="/contacts" element={<Contacts />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="*" element={<Home />} />
+              </Routes>
+            </Layout>
+          </Router>
+        </FavoritesProvider>
+      </CartProvider>
+    </ToastProvider>
   );
 }
 

@@ -1,19 +1,143 @@
 @import "tailwindcss";
 
 @theme {
-  --color-milk: #FAFAFA;
-  --color-graphite: #1E293B;
-  --color-ash: #64748B;
-  --color-dusty-blue: #7DD3FC;
-  --color-dusty-blue-dark: #38BDF8;
-  --color-border-soft: rgba(226, 232, 240, 0.5);
+  /* ─── Color Palette ─── */
+  --color-milk: #F7F9FC;
+  --color-surface: #EEF2F7;
+  --color-surface-warm: #F0F4F8;
+  --color-ice: #E8F0FE;
+  
+  --color-primary: #7CB9E8;
+  --color-primary-hover: #5BA3D9;
+  --color-primary-light: #B8D8F8;
+  --color-primary-soft: #D6EAFB;
+  
+  --color-graphite: #2C3E50;
+  --color-graphite-light: #3D5166;
+  --color-ash: #7B8D9E;
+  --color-ash-light: #A0B0BE;
+  
+  --color-border-soft: #D0DAE5;
+  --color-border-lighter: #E2EAF2;
+  
+  --color-success: #6BCB77;
+  --color-error: #E8636C;
+  --color-warning: #F4A940;
+  
+  /* ─── Typography ─── */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+}
 
-  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-serif: 'Playfair Display', Georgia, Cambria, 'Times New Roman', Times, serif;
+/* ─── Keyframes ─── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @layer base {
   body {
-    @apply bg-milk text-graphite antialiased selection:bg-dusty-blue selection:text-white min-h-screen flex flex-col;
+    @apply bg-milk text-graphite antialiased min-h-screen flex flex-col;
+    font-family: var(--font-sans);
+  }
+
+  ::selection {
+    @apply bg-primary/30 text-graphite;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border-soft);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ash-light);
+  }
+}
+
+@layer utilities {
+  /* ─── Glass panels ─── */
+  .glass {
+    background: rgba(247, 249, 252, 0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(208, 218, 229, 0.4);
+  }
+
+  .glass-strong {
+    background: rgba(247, 249, 252, 0.88);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(208, 218, 229, 0.5);
+  }
+
+  /* ─── Shelf card effect ─── */
+  .shelf-card {
+    background: white;
+    border: 1px solid var(--color-border-lighter);
+    box-shadow:
+      inset 0 -4px 12px rgba(208, 218, 229, 0.15),
+      0 1px 3px rgba(44, 62, 80, 0.04),
+      0 0 0 0 rgba(124, 185, 232, 0);
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .shelf-card:hover {
+    transform: translateY(-6px);
+    box-shadow:
+      inset 0 -2px 8px rgba(208, 218, 229, 0.1),
+      0 16px 40px -8px rgba(44, 62, 80, 0.08),
+      0 0 0 1px rgba(124, 185, 232, 0.15);
+  }
+
+  /* ─── Shimmer skeleton ─── */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--color-surface) 25%,
+      var(--color-border-lighter) 50%,
+      var(--color-surface) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  /* ─── Fade in animation ─── */
+  .animate-fadeIn {
+    animation: fadeIn 0.4s ease-out forwards;
+  }
+
+  .animate-slideUp {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+
+  .animate-toastIn {
+    animation: toastIn 0.35s ease-out forwards;
   }
 }
