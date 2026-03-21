@@ -1,51 +1,35 @@
-import { Link } from 'react-router-dom';
+import { HeroBlock, InfoPanel } from '../components/editorial/StudioKit';
 
 export function About() {
   return (
-    <div className="min-h-screen bg-milk">
-      <div className="container mx-auto px-4 sm:px-6 max-w-3xl py-8">
-        <h1 className="text-3xl sm:text-4xl font-serif text-graphite mb-8">О нас</h1>
+    <div className='relative z-10 min-h-screen pt-28 pb-20'>
+      <div className='container mx-auto px-4 sm:px-6 max-w-[980px]'>
+        <HeroBlock
+          label='О проекте'
+          title={<>Кураторская платформа ZAMK</>}
+          description='Мы собираем независимые модные бренды в единое цифровое пространство с премиальной редакционной подачей.'
+        />
 
-        <div className="space-y-6 text-ash leading-relaxed">
-          <p className="text-lg">
-            <span className="font-serif text-graphite text-2xl">ЗАМК</span> — это кураторская модная платформа нового поколения. Мы отбираем лучшие бренды со всего мира и создаем пространство, где каждая вещь — осознанный выбор.
-          </p>
+        <div className='mt-8 grid grid-cols-1 md:grid-cols-2 gap-5'>
+          <InfoPanel title='Наша философия'>
+            Осознанный гардероб формируется не количеством, а качеством выбора. Поэтому мы работаем как кураторы, а не как массовый ритейл.
+          </InfoPanel>
+          <InfoPanel title='Что нас отличает'>
+            Прямые контракты с брендами, прозрачное происхождение товаров, спокойный UX и единый художественный язык интерфейса.
+          </InfoPanel>
+        </div>
 
-          <div className="bg-white rounded-3xl border border-border-lighter p-8">
-            <h2 className="text-xl font-semibold text-graphite mb-4">Наша философия</h2>
-            <p>Мы верим, что гардероб должен быть компактным, продуманным и качественным. Поэтому мы не гонимся за количеством, а тщательно выбираем каждый бренд и каждую коллекцию.</p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { number: '8+', label: 'Брендов-партнёров' },
-              { number: '16+', label: 'Наименований' },
-              { number: '2026', label: 'Год основания' },
-            ].map(stat => (
-              <div key={stat.label} className="bg-white rounded-2xl border border-border-lighter p-6 text-center">
-                <p className="text-3xl font-serif text-primary mb-1">{stat.number}</p>
-                <p className="text-xs text-ash">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-white rounded-3xl border border-border-lighter p-8">
-            <h2 className="text-xl font-semibold text-graphite mb-4">Что нас отличает</h2>
-            <ul className="space-y-3">
-              {[
-                'Кураторский подход к отбору брендов',
-                'Только оригинальные товары напрямую от производителей',
-                'Бережная доставка в экологичной упаковке',
-                'Профессиональные стилисты для персональных подборок',
-                'Программа лояльности для постоянных клиентов',
-              ].map((item, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center shrink-0 mt-0.5">✓</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+        <div className='mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4'>
+          {[
+            { value: '8+', label: 'Брендов-партнёров' },
+            { value: '16+', label: 'Кураторских позиций' },
+            { value: '2026', label: 'Год запуска' },
+          ].map((item) => (
+            <div key={item.label} className='glass-panel p-6 text-center'>
+              <p className='text-3xl font-serif text-graphite'>{item.value}</p>
+              <p className='mt-1 text-xs uppercase tracking-[0.14em] text-ash'>{item.label}</p>
+            </div>
+          ))}
         </div>
       </div>
     </div>

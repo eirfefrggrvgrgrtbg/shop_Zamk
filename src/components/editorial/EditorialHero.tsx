@@ -30,7 +30,7 @@ export function EditorialHero() {
 
                 <p className="text-base md:text-lg text-graphite-light max-w-xl mb-10 leading-relaxed">
                   Цифровая витрина для независимых брендов, одежды, обуви и аксессуаров.
-                  Спокойный premium-подход без массового ритейла.
+                  Спокойный премиальный подход без массового ритейла.
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-4">
@@ -59,19 +59,19 @@ export function EditorialHero() {
                 transition={{ duration: 1, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
                 className="relative w-full aspect-[4/5] sm:aspect-square lg:aspect-[4/5] max-w-xl mx-auto"
               >
-                <div className="absolute inset-0 rounded-[2rem] overflow-hidden border border-border-soft bg-white p-3 shadow-[0_26px_48px_rgba(89,124,161,0.18)]">
+                <div className="absolute inset-0 rounded-[2rem] overflow-hidden border border-border-lighter bg-white p-2.5 shadow-md">
                   <div className="w-full h-full rounded-[1.5rem] overflow-hidden relative">
                     <img
-                      src="https://images.unsplash.com/photo-1485230895905-ec40ba36b9bc?q=80&w=1880&auto=format&fit=crop"
-                      alt="Редакторская fashion-съёмка"
-                      className="w-full h-full object-cover"
+                      src="https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1740&auto=format&fit=crop"
+                      alt="Модный лукбук"
+                      className="w-full h-full object-cover rounded-[1rem]"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#22344f66] via-transparent to-transparent"></div>
                   </div>
                 </div>
 
                 <motion.div
-                  className="absolute top-8 -left-3 md:-left-8 rounded-3xl border border-border-soft bg-white/95 px-4 py-3 max-w-[220px] shadow-[0_12px_24px_rgba(101,134,169,0.14)]"
+                  className="absolute top-8 -left-3 md:-left-8 rounded-3xl border border-border-lighter bg-white/95 backdrop-blur-sm px-4 py-3 max-w-[220px] shadow-sm"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.8, delay: 0.5, ease: 'easeOut' }}
@@ -81,7 +81,7 @@ export function EditorialHero() {
                 </motion.div>
 
                 <motion.div
-                  className="absolute bottom-10 -right-4 md:-right-8 rounded-full border border-border-soft bg-white/95 p-3 pl-4 flex items-center gap-3 shadow-[0_14px_28px_rgba(101,134,169,0.16)]"
+                  className="absolute bottom-10 -right-4 md:-right-8 rounded-full border border-border-lighter bg-white/95 backdrop-blur-sm p-3 pl-4 flex items-center gap-3 shadow-sm"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.8, delay: 0.7, ease: 'easeOut' }}

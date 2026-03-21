@@ -1,174 +1,149 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { EditorialHero } from '../components/editorial/EditorialHero';
+import {
+  BrandCard,
+  CategoryCard,
+  FloatingBadge,
+  HeroBlock,
+  SectionHeader,
+} from '../components/editorial/StudioKit';
 import { ProductCard } from '../components/product/ProductCard';
 import { Button } from '../components/ui/Button';
 import { BRANDS, CATEGORIES, COLLECTIONS, PRODUCTS, getNewProducts } from '../lib/mock-data';
 
-const fadeInUp = {
+const reveal = {
   initial: { opacity: 0, y: 20 },
   whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true, margin: '-40px' },
-  transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] as const },
+  viewport: { once: true, margin: '-60px' },
+  transition: { duration: 0.75, ease: [0.16, 1, 0.3, 1] as const },
 };
 
 export function Home() {
   const newProducts = getNewProducts();
-  const editorPicks = PRODUCTS.slice(0, 4);
-  const bestsellers = PRODUCTS.filter((product) => product.isBestseller).slice(0, 4);
+  const editorPick = PRODUCTS.slice(0, 4);
 
   return (
-    <div className="flex flex-col gap-20 md:gap-28 w-full pt-12">
-      <EditorialHero />
-
-      <section className="container mx-auto px-4 sm:px-6 relative z-10">
-        <div className="flex overflow-x-auto scrollbar-hide gap-3 pb-4">
-          {CATEGORIES.map((category) => (
-            <Link
-              key={category.id}
-              to={`/catalog?category=${category.slug}`}
-              className="flex-shrink-0 group flex items-center gap-2 rounded-full border border-border-lighter bg-white px-5 py-3 hover:border-border-soft hover:-translate-y-0.5 transition-all duration-300"
-            >
-              <span className="text-base group-hover:scale-110 transition-transform duration-300">{category.icon}</span>
-              <span className="text-sm font-medium text-graphite group-hover:text-primary transition-colors">{category.name}</span>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <motion.section {...fadeInUp} className="container mx-auto px-4 sm:px-6 relative z-10">
-        <div className="studio-shell p-8 sm:p-12 md:p-14 flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="max-w-xl">
-            <div className="flex items-center gap-2 text-primary font-semibold text-xs tracking-[0.14em] uppercase mb-4">
-              <Sparkles className="w-4 h-4" />
-              <span>Кураторская подборка недели</span>
-            </div>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif text-graphite mb-4 leading-tight font-medium">
-              Независимые бренды,
+    <div className='relative z-10 min-h-screen pt-28 pb-20'>
+      <div className='container mx-auto px-4 sm:px-6 max-w-[1280px] space-y-16'>
+        <HeroBlock
+          label='Кураторская платформа ZAMK'
+          title={
+            <>
+              Архив новой
               <br />
-              которые формируют новую сцену.
-            </h2>
-            <p className="text-graphite-light text-sm md:text-base leading-relaxed mb-8">
-              ZAMK собирает релизы с чистой архитектурой силуэта, спокойной фактурой и точной стилистикой.
-            </p>
-            <Button variant="primary" size="lg" className="w-full sm:w-auto">
-              Смотреть подборку <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </div>
-          <div className="hidden md:block w-full max-w-sm rounded-[2rem] overflow-hidden shadow-[0_24px_38px_rgba(89,124,161,0.18)] border border-border-soft">
-            <img
-              src="https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&q=80"
-              alt="Капсульный стиль"
-              className="w-full aspect-[3/4] object-cover"
-            />
-          </div>
-        </div>
-      </motion.section>
+              волны <span className='text-accent'>стиля</span>
+            </>
+          }
+          description='Цифровая витрина независимых брендов в эстетике showroom: молочный свет, мягкая композиция, отборные капсулы и спокойный премиальный ритм.'
+          primaryCta={{ label: 'Перейти в каталог', to: '/catalog' }}
+          secondaryCta={{ label: 'Смотреть новинки', to: '/new' }}
+          right={
+            <div className='relative'>
+              <div className='relative rounded-[2.3rem] border border-border-lighter bg-white/85 p-2 shadow-cloud'>
+                <div className='overflow-hidden rounded-[1.8rem] aspect-[4/5]'>
+                  <img
+                    src='https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=1200&auto=format'
+                    alt='Модный лукбук'
+                    className='w-full h-full object-cover'
+                  />
+                </div>
+              </div>
+              <div className='absolute -left-4 top-8'>
+                <FloatingBadge>Новая поставка</FloatingBadge>
+              </div>
+              <div className='absolute -right-4 bottom-8'>
+                <FloatingBadge>Студийный свет</FloatingBadge>
+              </div>
+            </div>
+          }
+        />
 
-      <motion.section {...fadeInUp} className="container mx-auto px-4 sm:px-6 relative z-10">
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <h2 className="text-3xl font-serif text-graphite mb-2">Новая поставка</h2>
-            <p className="text-sm text-ash">Свежие поступления и лимитированные релизы</p>
+        <motion.section {...reveal}>
+          <SectionHeader
+            label='Новые бренды'
+            title='Новая волна партнёров'
+            description='Выбранные бренды, которые формируют современный независимый язык моды.'
+            action={
+              <Link to='/brands'>
+                <Button variant='secondary' className='gap-2'>
+                  Смотреть все <ArrowRight className='w-4 h-4' />
+                </Button>
+              </Link>
+            }
+          />
+          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
+            {BRANDS.slice(0, 3).map((brand) => (
+              <BrandCard key={brand.id} brand={brand} />
+            ))}
           </div>
-          <Button variant="ghost" className="hidden sm:flex">
-            Все хиты <ArrowRight className="w-4 h-4 ml-2" />
-          </Button>
-        </div>
+        </motion.section>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          {newProducts.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
-        <Button variant="secondary" className="w-full mt-6 sm:hidden">
-          Смотреть все новинки
-        </Button>
-      </motion.section>
-
-      <section className="relative z-10 py-12">
-        <div className="container mx-auto px-4">
-          <p className="text-center text-xs font-bold text-ash uppercase tracking-widest mb-8">Бренды цифровой витрины</p>
-          <div className="flex flex-wrap justify-center items-center gap-x-12 gap-y-8 opacity-70">
-            {BRANDS.map((brand) => (
-              <Link key={brand.id} to={`/brand/${brand.id}`} className="hover:opacity-100 hover:scale-105 transition-all grayscale hover:grayscale-0">
-                <span className="font-serif font-bold text-xl md:text-2xl text-graphite">{brand.name}</span>
+        <motion.section {...reveal}>
+          <SectionHeader
+            label='Капсульные подборки'
+            title='Кураторские наборы'
+            description='Большие тематические блоки вместо обычной витрины: собранные образы и цельные истории.'
+          />
+          <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+            {COLLECTIONS.map((collection) => (
+              <Link
+                key={collection.id}
+                to={`/catalog?collection=${collection.id}`}
+                className='group block rounded-[2.2rem] border border-border-lighter bg-white/86 p-2 shadow-sm transition-all hover:-translate-y-1 hover:shadow-cloud'
+              >
+                <div className='relative overflow-hidden rounded-[1.7rem] aspect-[4/3]'>
+                  <img src={collection.image} alt={collection.title} className='w-full h-full object-cover transition-transform duration-700 group-hover:scale-105' />
+                  <div className='absolute inset-0 bg-gradient-to-t from-graphite/45 to-transparent' />
+                  <div className='absolute left-5 right-5 bottom-5 text-white'>
+                    <p className='text-xs uppercase tracking-[0.16em] text-white/80'>{collection.subtitle}</p>
+                    <h3 className='mt-2 text-2xl font-serif'>{collection.title}</h3>
+                  </div>
+                </div>
               </Link>
             ))}
           </div>
-        </div>
-      </section>
+        </motion.section>
 
-      <motion.section {...fadeInUp} className="container mx-auto px-4 sm:px-6 relative z-10">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-serif text-graphite mb-2">Кураторские подборки</h2>
-          <p className="text-sm text-ash">Редакторские темы для сезонного гардероба</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[300px] md:auto-rows-[400px]">
-          {COLLECTIONS.map((collection, index) => (
-            <Link
-              key={collection.id}
-              to={`/catalog?collection=${collection.id}`}
-              className={`group rounded-[2rem] overflow-hidden block border border-border-lighter shadow-[0_12px_26px_rgba(96,129,163,0.12)] ${index === 0 ? 'md:col-span-2' : ''}`}
-            >
-              <div className="absolute inset-0">
-                <img
-                  src={collection.image}
-                  alt={collection.title}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-graphite/65 via-graphite/10 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
-              </div>
-              <div className="absolute bottom-0 left-0 p-8 w-full">
-                <span className="inline-block px-3 py-1 bg-white/22 rounded-full text-white text-[10px] font-semibold uppercase tracking-widest mb-3">
-                  {collection.itemCount} товаров
-                </span>
-                <h3 className="text-2xl font-serif font-medium text-white mb-2">{collection.title}</h3>
-                <p className="text-white/80 text-sm line-clamp-2 max-w-md">{collection.description}</p>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </motion.section>
-
-      <motion.section {...fadeInUp} className="container mx-auto px-4 sm:px-6 relative z-10">
-        <div className="flex flex-col md:flex-row items-center gap-12">
-          <div className="md:w-1/3 w-full">
-            <h2 className="text-3xl font-serif text-graphite mb-4">Выбор куратора</h2>
-            <p className="text-ash mb-8 leading-relaxed text-sm">
-              Вещи с особым характером: деконструкция, объем, холодные фактуры и независимый дизайнерский язык.
-            </p>
-            <Button variant="outline" className="w-full md:w-auto">
-              Изучить селекцию
-            </Button>
-          </div>
-          <div className="md:w-2/3 w-full grid grid-cols-2 gap-4 sm:gap-6">
-            {editorPicks.slice(0, 2).map((product) => (
+        <motion.section {...reveal}>
+          <SectionHeader
+            label='Новая поставка'
+            title='Свежие поступления'
+            description='Светлая продуктовая система: rounded image block, деликатные бейджи и спокойная типографика.'
+          />
+          <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
+            {newProducts.slice(0, 4).map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
-        </div>
-      </motion.section>
+        </motion.section>
 
-      <motion.section {...fadeInUp} className="container mx-auto px-4 sm:px-6 relative z-10 mb-20">
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <h2 className="text-3xl font-serif text-graphite mb-2">Архив хитов</h2>
-            <p className="text-sm text-ash">Модели, которые выбирают чаще всего</p>
+        <motion.section {...reveal} className='glass-panel p-8 md:p-10'>
+          <SectionHeader
+            label='Выбор редакции'
+            title='Собрано редакцией ZAMK'
+            description='Вещи с ясным архитектурным кроем и выразительным, но спокойным характером.'
+          />
+          <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
+            {editorPick.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
           </div>
-          <Button variant="ghost" className="hidden sm:flex">
-            В каталог <ArrowRight className="w-4 h-4 ml-2" />
-          </Button>
-        </div>
+        </motion.section>
 
-        <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-4">
-          {bestsellers.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
-      </motion.section>
+        <motion.section {...reveal}>
+          <SectionHeader
+            label='Категории'
+            title='Навигация по архиву'
+            description='Большие блоки категорий в единой editorial-системе.'
+          />
+          <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6'>
+            {CATEGORIES.filter((c) => c.id !== 'all').map((category) => (
+              <CategoryCard key={category.id} category={category} />
+            ))}
+          </div>
+        </motion.section>
+      </div>
     </div>
   );
 }

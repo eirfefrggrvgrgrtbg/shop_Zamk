@@ -1,8 +1,8 @@
-import { useParams, Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { Button } from '../components/ui/Button';
 import { ProductCard } from '../components/product/ProductCard';
+import { HeroBlock, InfoPanel, SectionHeader } from '../components/editorial/StudioKit';
 import { getBrandById, getProductsByBrand } from '../lib/mock-data';
 
 export function BrandDetail() {
@@ -12,56 +12,60 @@ export function BrandDetail() {
 
   if (!brand) {
     return (
-      <div className="min-h-screen bg-milk flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-serif text-graphite mb-4">Бренд не найден</h2>
-          <Link to="/brands"><Button variant="primary">Все бренды</Button></Link>
+      <div className='relative z-10 min-h-screen pt-36'>
+        <div className='container mx-auto px-4 sm:px-6 max-w-4xl text-center'>
+          <h1 className='text-4xl font-serif text-graphite'>Бренд не найден</h1>
+          <Link to='/brands' className='inline-block mt-6'>
+            <Button>К брендам</Button>
+          </Link>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-milk">
-      {/* Hero cover */}
-      <div className="relative h-64 sm:h-80 overflow-hidden">
-        <img src={brand.image} alt={brand.name} className="w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-milk via-milk/30 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0">
-          <div className="container mx-auto px-4 sm:px-6 max-w-7xl pb-8">
-            <Link to="/brands" className="inline-flex items-center gap-1.5 text-sm text-white/80 hover:text-white transition-colors mb-3">
-              <ArrowLeft className="w-4 h-4" /> Все бренды
-            </Link>
-            <h1 className="text-4xl sm:text-5xl font-serif text-white">{brand.name}</h1>
-            <p className="text-sm text-white/70 mt-1">{brand.country}</p>
-          </div>
+    <div className='relative z-10 min-h-screen pt-28 pb-20'>
+      <div className='container mx-auto px-4 sm:px-6 max-w-[1280px]'>
+        <Link to='/brands' className='inline-flex items-center gap-2 text-sm text-ash hover:text-graphite'>
+          <ArrowLeft className='w-4 h-4' /> Все бренды
+        </Link>
+
+        <div className='mt-6'>
+          <HeroBlock
+            label={brand.country}
+            title={<>{brand.name}</>}
+            description={brand.description}
+            right={
+              <div className='rounded-[2.1rem] border border-border-lighter bg-white/85 p-2'>
+                <div className='overflow-hidden rounded-[1.7rem] aspect-[4/5]'>
+                  <img src={brand.image} alt={brand.name} className='w-full h-full object-cover' />
+                </div>
+              </div>
+            }
+          />
         </div>
-      </div>
 
-      <div className="container mx-auto px-4 sm:px-6 max-w-7xl py-10">
-        {/* Description */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-2xl mb-12"
-        >
-          <h2 className="text-xl font-semibold text-graphite mb-3">О бренде</h2>
-          <p className="text-ash leading-relaxed">{brand.description}</p>
-        </motion.div>
+        <div className='mt-8 grid grid-cols-1 lg:grid-cols-2 gap-5'>
+          <InfoPanel title='Философия бренда'>
+            Акцент на архитектурный крой, тактильные материалы и функциональность без визуального шума.
+          </InfoPanel>
+          <InfoPanel title='Кураторский взгляд'>
+            Бренд отобран за цельность эстетики, качество производства и способность формировать личный стиль.
+          </InfoPanel>
+        </div>
 
-        {/* Products */}
-        {products.length > 0 && (
-          <section>
-            <h2 className="text-2xl font-serif text-graphite mb-8">
-              Товары {brand.name} <span className="text-ash text-lg font-normal">({products.length})</span>
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-              {products.map(p => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
-          </section>
-        )}
+        <section className='mt-12'>
+          <SectionHeader
+            label='Товары бренда'
+            title={`${brand.name} в каталоге`}
+            description={`Доступно ${products.length} позиций`}
+          />
+          <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
+            {products.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

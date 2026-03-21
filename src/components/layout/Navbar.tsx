@@ -28,37 +28,37 @@ export function Navbar() {
 
   return (
     <>
-      <header className={`fixed top-0 w-full z-50 transition-all duration-300 ${isScrolled ? 'pt-3 pb-0' : 'pt-5 pb-0'}`}>
+      <header className={`fixed top-0 w-full z-50 transition-all duration-500 ${isScrolled ? 'pt-4' : 'pt-6 md:pt-8'}`}>
         <div className="container mx-auto px-4 md:px-6">
-          <div className={`glass-panel rounded-full px-6 md:px-8 h-16 flex items-center justify-between transition-all duration-500 ${isScrolled ? 'shadow-[0_18px_28px_rgba(86,123,163,0.16)]' : 'shadow-[0_10px_22px_rgba(86,123,163,0.1)]'}`}>
+          <div className={`mx-auto max-w-7xl rounded-[2.8rem] px-6 md:px-8 h-16 md:h-[74px] flex items-center justify-between transition-all duration-500 ${isScrolled ? 'bg-white/88 backdrop-blur-xl border border-border-lighter shadow-[0_20px_60px_rgba(130,158,186,0.14)]' : 'bg-white/70 backdrop-blur-lg border border-border-lighter/70 shadow-[0_12px_42px_rgba(130,158,186,0.08)]'}`}>
             <button className="md:hidden p-2 -ml-2 text-graphite hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(true)}>
               <Menu className="w-5 h-5" />
             </button>
 
-            <nav className="hidden md:flex items-center gap-8 lg:gap-10">
+            <nav className="hidden md:flex items-center gap-8 lg:gap-12 flex-1">
               {navLinks.map((link) => (
-                <Link key={link.to} to={link.to} className="text-sm font-medium text-graphite-light hover:text-graphite transition-colors">
+                <Link key={link.to} to={link.to} className="text-sm font-medium text-graphite/80 hover:text-graphite transition-colors tracking-wide">
                   {link.label}
                 </Link>
               ))}
             </nav>
 
-            <Link to="/" className="absolute left-1/2 -translate-x-1/2">
-              <span className="font-serif text-2xl font-bold tracking-tighter text-graphite">ЗАМК</span>
+            <Link to="/" className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
+              <span className="font-serif text-3xl font-bold tracking-tighter text-graphite">ZAMK</span>
             </Link>
 
-            <div className="flex items-center gap-1.5 sm:gap-2.5">
-              <button className="hidden sm:flex p-2 text-graphite hover:text-primary transition-colors rounded-full hover:bg-white/60" aria-label="Поиск">
+            <div className="flex items-center justify-end gap-2 sm:gap-4 flex-1">
+              <button className="hidden sm:flex p-2 text-graphite/80 hover:text-graphite transition-colors" aria-label="Поиск по архиву">
                 <Search className="w-5 h-5" />
               </button>
-              <Link to="/profile" className="hidden sm:flex p-2 text-graphite hover:text-primary transition-colors rounded-full hover:bg-white/60" aria-label="Профиль">
+              <Link to="/profile" className="hidden sm:flex p-2 text-graphite/80 hover:text-graphite transition-colors" aria-label="Профиль">
                 <User className="w-5 h-5" />
               </Link>
-              <Link to="/favorites" className="hidden sm:flex p-2 text-graphite hover:text-primary transition-colors relative rounded-full hover:bg-white/60" aria-label="Избранное">
+              <Link to="/favorites" className="hidden sm:flex p-2 text-graphite/80 hover:text-graphite transition-colors relative" aria-label="Избранное">
                 <Heart className="w-5 h-5" />
                 {favorites.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full ring-2 ring-white" />}
               </Link>
-              <Link to="/cart" className="p-2 text-graphite hover:text-primary transition-colors relative rounded-full hover:bg-white/60" aria-label="Корзина">
+              <Link to="/cart" className="p-2 text-graphite/80 hover:text-graphite transition-colors relative" aria-label="Корзина">
                 <ShoppingBag className="w-5 h-5" />
                 {totalItems > 0 && (
                   <span className="absolute top-1 right-1 bg-graphite text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white">
@@ -73,7 +73,7 @@ export function Navbar() {
 
       <Drawer isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} title="Меню">
         <div className="flex flex-col gap-6 py-4">
-          <Input placeholder="Поиск по каталогу" isSearch className="bg-white/50" />
+          <Input placeholder="Поиск по архиву" isSearch className="bg-white/50" />
 
           <nav className="flex flex-col gap-4">
             <Link to="/" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
@@ -103,8 +103,8 @@ export function Navbar() {
       </Drawer>
 
       <div className="md:hidden fixed bottom-5 left-4 right-4 z-50">
-        <div className="glass-panel rounded-full flex justify-between items-center px-5 py-3 shadow-[0_16px_28px_rgba(86,123,163,0.16)]">
-          <Link to="/" className={`p-2 rounded-full ${location.pathname === '/' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+        <div className="bg-white/92 border border-border-lighter rounded-full flex justify-between items-center px-5 py-3 shadow-[0_14px_40px_rgba(130,158,186,0.18)] backdrop-blur-lg">
+          <Link to="/" className={`p-2 rounded-full ${location.pathname === '/' ? 'text-graphite bg-milk' : 'text-ash'}`}>
             <House className="w-5 h-5" />
           </Link>
           <Link to="/catalog" className={`p-2 rounded-full ${location.pathname === '/catalog' ? 'text-primary bg-primary/10' : 'text-ash'}`}>

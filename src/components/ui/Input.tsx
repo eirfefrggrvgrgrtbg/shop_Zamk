@@ -13,8 +13,8 @@ function Input({ className, isSearch, ...props }: InputProps) {
       )}
       <input
         className={cn(
-          "w-full h-12 bg-white/90 border border-border-soft text-graphite placeholder:text-ash-light transition-all focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/60",
-          "rounded-full",
+          "w-full h-12 bg-white border border-border-soft text-graphite placeholder:text-ash-light shadow-sm transition-all focus:outline-none focus:ring-1 focus:ring-graphite/20 focus:border-graphite/40",
+          "rounded-[18px]",
           isSearch ? "pl-11 pr-5" : "px-5",
           className
         )}
