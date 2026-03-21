@@ -12,6 +12,7 @@ import { Profile } from './pages/Profile';
 import { Favorites } from './pages/Favorites';
 import { Brands } from './pages/Brands';
 import { BrandDetail } from './pages/BrandDetail';
+import { NewArrivals } from './pages/NewArrivals';
 import { About } from './pages/About';
 import { Delivery } from './pages/Delivery';
 import { Help } from './pages/Help';
@@ -44,6 +45,7 @@ function App() {
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/brands" element={<Brands />} />
                 <Route path="/brand/:id" element={<BrandDetail />} />
+                <Route path="/new" element={<NewArrivals />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/delivery" element={<Delivery />} />
                 <Route path="/help" element={<Help />} />

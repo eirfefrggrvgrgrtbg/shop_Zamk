@@ -3,7 +3,7 @@ import { ArrowRight, Instagram } from 'lucide-react';
 
 export function Footer() {
   return (
-    <footer className="relative mt-20 pb-24 md:pb-12 z-10 pt-20 border-t border-border-lighter bg-gradient-to-b from-transparent to-white/30 backdrop-blur-sm">
+    <footer className="relative mt-20 pb-24 md:pb-12 z-10 pt-20 border-t border-border-lighter/70">
       <div className="container mx-auto px-4 sm:px-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-12 lg:gap-8 mb-16">
           
@@ -16,10 +16,10 @@ export function Footer() {
               Цифровая витрина для независимых брендов и альтернативной эстетики. Кураторский подход к современной моде.
             </p>
             <div className="flex gap-4">
-              <a href="#" className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-graphite hover:text-primary hover:bg-white/60 transition-all">
+              <a href="#" className="w-10 h-10 rounded-full border border-border-lighter bg-white flex items-center justify-center text-graphite hover:text-primary transition-all">
                 <Instagram className="w-4 h-4" />
               </a>
-              <a href="#" className="h-10 px-4 rounded-full glass-panel flex items-center justify-center text-xs font-medium text-graphite hover:text-primary hover:bg-white/60 transition-all uppercase tracking-widest">
+              <a href="#" className="h-10 px-4 rounded-full border border-border-lighter bg-white flex items-center justify-center text-xs font-medium text-graphite hover:text-primary transition-all uppercase tracking-widest">
                 Канал
               </a>
             </div>
@@ -31,7 +31,7 @@ export function Footer() {
             <ul className="space-y-4">
               <li><Link to="/catalog" className="text-sm text-ash hover:text-primary transition-colors">Каталог</Link></li>
               <li><Link to="/brands" className="text-sm text-ash hover:text-primary transition-colors">Бренды</Link></li>
-              <li><Link to="/catalog?sort=new" className="text-sm text-ash hover:text-primary transition-colors">Новинки</Link></li>
+              <li><Link to="/new" className="text-sm text-ash hover:text-primary transition-colors">Новинки</Link></li>
               <li><Link to="/catalog?sort=sale" className="text-sm text-ash hover:text-primary transition-colors">Скидки</Link></li>
             </ul>
           </div>

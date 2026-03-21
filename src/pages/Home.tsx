@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Play, Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { EditorialHero } from '../components/editorial/EditorialHero';
 import { ProductCard } from '../components/product/ProductCard';
@@ -19,16 +19,16 @@ export function Home() {
   const bestsellers = PRODUCTS.filter((product) => product.isBestseller).slice(0, 4);
 
   return (
-    <div className="flex flex-col gap-24 md:gap-32 w-full pt-16">
+    <div className="flex flex-col gap-20 md:gap-28 w-full pt-12">
       <EditorialHero />
 
       <section className="container mx-auto px-4 sm:px-6 relative z-10">
-        <div className="flex z-[9999] overflow-x-auto scrollbar-hide gap-3 pb-4">
+        <div className="flex overflow-x-auto scrollbar-hide gap-3 pb-4">
           {CATEGORIES.map((category) => (
             <Link
               key={category.id}
               to={`/catalog?category=${category.slug}`}
-              className="flex-shrink-0 group flex items-center gap-2 glass-panel px-6 py-3.5 rounded-full hover:bg-white/70 hover:-translate-y-1 transition-all duration-300"
+              className="flex-shrink-0 group flex items-center gap-2 rounded-full border border-border-lighter bg-white px-5 py-3 hover:border-border-soft hover:-translate-y-0.5 transition-all duration-300"
             >
               <span className="text-base group-hover:scale-110 transition-transform duration-300">{category.icon}</span>
               <span className="text-sm font-medium text-graphite group-hover:text-primary transition-colors">{category.name}</span>
@@ -38,25 +38,25 @@ export function Home() {
       </section>
 
       <motion.section {...fadeInUp} className="container mx-auto px-4 sm:px-6 relative z-10">
-        <div className="capsule p-8 sm:p-12 md:p-16 flex flex-col md:flex-row items-center justify-between gap-8 border-primary/20">
+        <div className="studio-shell p-8 sm:p-12 md:p-14 flex flex-col md:flex-row items-center justify-between gap-8">
           <div className="max-w-xl">
-            <div className="flex items-center gap-2 text-primary font-bold text-xs tracking-widest uppercase mb-4">
+            <div className="flex items-center gap-2 text-primary font-semibold text-xs tracking-[0.14em] uppercase mb-4">
               <Sparkles className="w-4 h-4" />
               <span>Кураторская подборка недели</span>
             </div>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif text-graphite mb-4 leading-tight">
-              5 нишевых брендов,
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif text-graphite mb-4 leading-tight font-medium">
+              Независимые бренды,
               <br />
-              которые формируют сцену.
+              которые формируют новую сцену.
             </h2>
             <p className="text-graphite-light text-sm md:text-base leading-relaxed mb-8">
-              Еженедельно собираем вещи с выразительным кроем, цифровой фактурой и холодным дизайнерским настроением.
+              ZAMK собирает релизы с чистой архитектурой силуэта, спокойной фактурой и точной стилистикой.
             </p>
-            <Button variant="primary" size="lg" className="w-full sm:w-auto shadow-primary/30">
+            <Button variant="primary" size="lg" className="w-full sm:w-auto">
               Смотреть подборку <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </div>
-          <div className="hidden md:block w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500 border-4 border-white/50">
+          <div className="hidden md:block w-full max-w-sm rounded-[2rem] overflow-hidden shadow-[0_24px_38px_rgba(89,124,161,0.18)] border border-border-soft">
             <img
               src="https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&q=80"
               alt="Капсульный стиль"
@@ -87,7 +87,7 @@ export function Home() {
         </Button>
       </motion.section>
 
-      <section className="relative z-10 py-12 glass-panel border-x-0 !rounded-none shadow-none">
+      <section className="relative z-10 py-12">
         <div className="container mx-auto px-4">
           <p className="text-center text-xs font-bold text-ash uppercase tracking-widest mb-8">Бренды цифровой витрины</p>
           <div className="flex flex-wrap justify-center items-center gap-x-12 gap-y-8 opacity-70">
@@ -103,7 +103,7 @@ export function Home() {
       <motion.section {...fadeInUp} className="container mx-auto px-4 sm:px-6 relative z-10">
         <div className="text-center mb-12">
           <h2 className="text-3xl font-serif text-graphite mb-2">Кураторские подборки</h2>
-          <p className="text-sm text-ash">Асимметричные капсулы и редакторские темы</p>
+          <p className="text-sm text-ash">Редакторские темы для сезонного гардероба</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[300px] md:auto-rows-[400px]">
@@ -111,7 +111,7 @@ export function Home() {
             <Link
               key={collection.id}
               to={`/catalog?collection=${collection.id}`}
-              className={`group capsule overflow-hidden block ${index === 0 ? 'md:col-span-2' : ''}`}
+              className={`group rounded-[2rem] overflow-hidden block border border-border-lighter shadow-[0_12px_26px_rgba(96,129,163,0.12)] ${index === 0 ? 'md:col-span-2' : ''}`}
             >
               <div className="absolute inset-0">
                 <img
@@ -119,10 +119,10 @@ export function Home() {
                   alt={collection.title}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-graphite/80 via-graphite/20 to-transparent opacity-85 group-hover:opacity-90 transition-opacity" />
+                <div className="absolute inset-0 bg-gradient-to-t from-graphite/65 via-graphite/10 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
               </div>
               <div className="absolute bottom-0 left-0 p-8 w-full">
-                <span className="inline-block px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-[10px] font-bold uppercase tracking-widest mb-3">
+                <span className="inline-block px-3 py-1 bg-white/22 rounded-full text-white text-[10px] font-semibold uppercase tracking-widest mb-3">
                   {collection.itemCount} товаров
                 </span>
                 <h3 className="text-2xl font-serif font-medium text-white mb-2">{collection.title}</h3>
@@ -148,27 +148,6 @@ export function Home() {
             {editorPicks.slice(0, 2).map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
-          </div>
-        </div>
-      </motion.section>
-
-      <motion.section {...fadeInUp} className="relative z-10 w-full mb-8">
-        <div className="container mx-auto px-4 sm:px-6">
-          <div className="capsule aspect-video w-full flex items-center justify-center p-0 border border-primary/20 bg-graphite/5 relative group cursor-pointer overflow-hidden shadow-2xl">
-            <img
-              src="https://images.unsplash.com/photo-1550614000-4b95d415dc14?auto=format&fit=crop&q=80"
-              className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-[2s]"
-              alt="Видео-история коллекции"
-            />
-            <div className="absolute inset-0 bg-graphite/30 group-hover:bg-graphite/40 transition-colors" />
-            <div className="relative w-20 h-20 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center border border-white/50 group-hover:scale-110 transition-transform">
-              <Play className="w-8 h-8 text-white ml-2" />
-            </div>
-
-            <div className="absolute bottom-8 left-8">
-              <p className="text-white/80 text-xs font-bold uppercase tracking-widest mb-2 drop-shadow-md">Видеодневник / сезон 26</p>
-              <h3 className="text-3xl font-serif text-white drop-shadow-md">Зимняя Меланхолия</h3>
-            </div>
           </div>
         </div>
       </motion.section>

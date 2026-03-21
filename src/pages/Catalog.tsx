@@ -57,25 +57,26 @@ export function Catalog() {
   const currentSort = SORT_OPTIONS.find(s => s.value === sortBy);
 
   return (
-    <div className="min-h-screen relative z-10">
-      <div className="container mx-auto px-4 sm:px-6 max-w-7xl pt-32 pb-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl sm:text-4xl font-serif text-graphite mb-2">Каталог</h1>
-          <p className="text-sm text-ash">{filteredProducts.length} товаров</p>
-        </div>
+    <div className="min-h-screen relative z-10 pt-28 pb-16">
+      <div className="container mx-auto px-4 sm:px-6 max-w-[1200px]">
+        <section className="studio-shell p-6 md:p-8 mb-8">
+          <p className="studio-label mb-2">Каталог ZAMK</p>
+          <h1 className="studio-title mb-3">Кураторская выборка независимых брендов</h1>
+          <p className="studio-subtitle max-w-3xl">
+            Одежда, обувь, сумки и аксессуары в светлой cold-premium эстетике.
+            Чистая витрина без шума массового ритейла.
+          </p>
+        </section>
 
-        {/* Search */}
         <div className="mb-6">
           <Input
             isSearch
-            placeholder="Поиск по 1 000 брендам..."
+            placeholder="Поиск по каталогу и брендам"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
         </div>
 
-        {/* Categories */}
         <div className="flex gap-2 overflow-x-auto pb-2 mb-6 scrollbar-hide">
           {CATEGORIES.map(cat => (
             <Button
@@ -90,9 +91,7 @@ export function Catalog() {
           ))}
         </div>
 
-        {/* Sort & Filter bar */}
         <div className="flex items-center justify-between mb-6 gap-3">
-          {/* Desktop Brand Filter */}
           <div className="hidden md:flex gap-2 overflow-x-auto">
             <Button
               variant={activeBrand === null ? 'secondary' : 'pill'}
@@ -114,7 +113,6 @@ export function Catalog() {
             ))}
           </div>
 
-          {/* Mobile filter button */}
           <Button
             variant="secondary"
             size="sm"
@@ -125,7 +123,6 @@ export function Catalog() {
             Фильтры
           </Button>
 
-          {/* Sort dropdown */}
           <div className="relative">
             <Button
               variant="secondary"
@@ -140,7 +137,7 @@ export function Catalog() {
             {showSort && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setShowSort(false)} />
-                <div className="absolute right-0 top-full mt-2 w-56 glass-panel-strong shadow-[0_8px_32px_rgba(137,207,240,0.2)] py-2 z-40 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-56 glass-panel-strong py-2 z-40 overflow-hidden rounded-2xl">
                   {SORT_OPTIONS.map(opt => (
                     <button
                       key={opt.value}
@@ -158,28 +155,85 @@ export function Catalog() {
           </div>
         </div>
 
-        {/* Product Grid */}
-        {filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-            {filteredProducts.map(product => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-surface flex items-center justify-center mb-4">
-              <span className="text-2xl">🔍</span>
+        <div className="grid grid-cols-1 lg:grid-cols-[280px,1fr] gap-6 lg:gap-8 items-start">
+          <aside className="hidden lg:block sticky top-24 studio-shell p-5">
+            <p className="studio-label mb-4">Фильтры</p>
+            <div className="space-y-6">
+              <div>
+                <p className="text-xs uppercase tracking-[0.14em] text-ash mb-3">Категории</p>
+                <div className="space-y-1.5">
+                  {CATEGORIES.map(cat => (
+                    <button
+                      key={cat.id}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-sm transition-colors ${
+                        activeCategory === cat.id ? 'bg-primary-soft text-primary font-medium' : 'text-graphite hover:bg-primary-soft/60'
+                      }`}
+                      onClick={() => setActiveCategory(cat.id)}
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs uppercase tracking-[0.14em] text-ash mb-3">Бренды</p>
+                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                  <button
+                    className={`w-full text-left px-3 py-2 rounded-xl text-sm transition-colors ${
+                      !activeBrand ? 'bg-primary-soft text-primary font-medium' : 'text-graphite hover:bg-primary-soft/60'
+                    }`}
+                    onClick={() => setActiveBrand(null)}
+                  >
+                    Все бренды
+                  </button>
+                  {BRANDS.map(brand => (
+                    <button
+                      key={brand.id}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-sm transition-colors ${
+                        activeBrand === brand.id ? 'bg-primary-soft text-primary font-medium' : 'text-graphite hover:bg-primary-soft/60'
+                      }`}
+                      onClick={() => setActiveBrand(brand.id)}
+                    >
+                      {brand.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <Button variant="secondary" className="w-full" onClick={() => { setSearchQuery(''); setActiveCategory('all'); setActiveBrand(null); }}>
+                Сбросить фильтры
+              </Button>
             </div>
-            <h3 className="text-lg font-semibold text-graphite mb-2">Ничего не найдено</h3>
-            <p className="text-sm text-ash mb-4">Попробуйте изменить критерии поиска</p>
-            <Button variant="secondary" onClick={() => { setSearchQuery(''); setActiveCategory('all'); setActiveBrand(null); }}>
-              Сбросить фильтры
-            </Button>
+          </aside>
+
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-ash">Найдено: {filteredProducts.length} товаров</p>
+            </div>
+
+            {filteredProducts.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-6">
+                {filteredProducts.map(product => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            ) : (
+              <div className="studio-shell flex flex-col items-center justify-center py-20 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-surface flex items-center justify-center mb-4">
+                  <span className="text-2xl">🔍</span>
+                </div>
+                <h3 className="text-lg font-semibold text-graphite mb-2">Ничего не найдено</h3>
+                <p className="text-sm text-ash mb-4">Попробуйте изменить критерии поиска</p>
+                <Button variant="secondary" onClick={() => { setSearchQuery(''); setActiveCategory('all'); setActiveBrand(null); }}>
+                  Сбросить фильтры
+                </Button>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Mobile Filter Drawer */}
       <Drawer isOpen={showFilters} onClose={() => setShowFilters(false)} title="Фильтры" position="left">
         <div className="space-y-6">
           <div>
@@ -189,7 +243,7 @@ export function Catalog() {
                 <button
                   key={cat.id}
                   className={`text-left px-3 py-2 rounded-xl text-sm transition-all ${
-                    activeCategory === cat.id ? 'bg-primary/10 text-primary font-medium' : 'text-graphite hover:bg-surface'
+                    activeCategory === cat.id ? 'bg-primary-soft text-primary font-medium' : 'text-graphite hover:bg-surface'
                   }`}
                   onClick={() => setActiveCategory(cat.id)}
                 >
@@ -204,7 +258,7 @@ export function Catalog() {
             <div className="flex flex-col gap-1.5">
               <button
                 className={`text-left px-3 py-2 rounded-xl text-sm transition-all ${
-                  !activeBrand ? 'bg-primary/10 text-primary font-medium' : 'text-graphite hover:bg-surface'
+                  !activeBrand ? 'bg-primary-soft text-primary font-medium' : 'text-graphite hover:bg-surface'
                 }`}
                 onClick={() => setActiveBrand(null)}
               >
@@ -214,7 +268,7 @@ export function Catalog() {
                 <button
                   key={brand.id}
                   className={`text-left px-3 py-2 rounded-xl text-sm transition-all ${
-                    activeBrand === brand.id ? 'bg-primary/10 text-primary font-medium' : 'text-graphite hover:bg-surface'
+                    activeBrand === brand.id ? 'bg-primary-soft text-primary font-medium' : 'text-graphite hover:bg-surface'
                   }`}
                   onClick={() => setActiveBrand(brand.id)}
                 >

@@ -14,37 +14,33 @@ export function ProductCard({ product }: ProductCardProps) {
   const favorited = isFavorite(product.id);
 
   return (
-    <div className="group capsule flex flex-col h-full">
-      <Link to={`/product/${product.id}`} className="relative block overflow-hidden aspect-[4/5] p-2">
-        {/* The image is contained within the glass capsule for the digital showcase effect */}
-        <div className="relative w-full h-full rounded-[1.5rem] overflow-hidden">
+    <div className="group rounded-[1.75rem] border border-border-lighter bg-white/90 flex flex-col h-full shadow-[0_12px_22px_rgba(94,125,160,0.08)] hover:shadow-[0_20px_28px_rgba(94,125,160,0.12)] transition-all duration-300">
+      <Link to={`/product/${product.id}`} className="relative block overflow-hidden aspect-[4/5] p-2.5">
+        <div className="relative w-full h-full rounded-[1.35rem] overflow-hidden">
           <img
             src={product.images?.[0] ?? product.image}
             alt={product.name}
-            className="object-cover w-full h-full transition-transform duration-[1.5s] ease-out group-hover:scale-105"
+            className="object-cover w-full h-full transition-transform duration-700 ease-out group-hover:scale-105"
             loading="lazy"
           />
-          {/* Subtle noise over image */}
-          <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity mix-blend-overlay"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-[#2036511c] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
         </div>
-        
-        {/* Badges */}
+
         <div className="absolute top-5 left-5 flex flex-col gap-2">
           {product.isNew && <Badge variant="new">Новинка</Badge>}
           {product.isBestseller && <Badge variant="bestseller">Хит</Badge>}
           {product.discountPrice && <Badge variant="sale">Скидка</Badge>}
         </div>
 
-        {/* Floating favorite button */}
-        <button 
+        <button
           onClick={(e) => {
             e.preventDefault();
             toggleFavorite(product.id);
           }}
-          className={`absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 z-10 
-            ${favorited 
-              ? 'bg-primary text-white shadow-md' 
-              : 'bg-white/40 backdrop-blur-md text-graphite hover:bg-white/80 hover:text-primary'
+          className={`absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 z-10
+            ${favorited
+              ? 'bg-graphite text-white shadow-md'
+              : 'bg-white/85 border border-border-lighter text-graphite hover:bg-white hover:text-primary'
             }`}
         >
           <Heart className={`w-5 h-5 ${favorited ? 'fill-current' : ''}`} />
@@ -53,12 +49,12 @@ export function ProductCard({ product }: ProductCardProps) {
 
       <div className="p-5 flex flex-col flex-grow">
         <div className="mb-auto">
-          <p className="text-[10px] font-bold tracking-widest text-ash uppercase mb-1.5">{product.brand}</p>
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-ash uppercase mb-1.5">{product.brand}</p>
           <Link to={`/product/${product.id}`} className="block group-hover:text-primary transition-colors duration-300">
             <h3 className="text-sm font-medium text-graphite line-clamp-2 leading-relaxed">{product.name}</h3>
           </Link>
         </div>
-        
+
         <div className="mt-4 flex items-baseline gap-2">
           {product.discountPrice ? (
             <>

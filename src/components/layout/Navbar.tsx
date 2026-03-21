@@ -22,22 +22,22 @@ export function Navbar() {
   const navLinks = [
     { to: '/catalog', label: 'Каталог' },
     { to: '/brands', label: 'Бренды' },
-    { to: '/catalog?sort=new', label: 'Новинки' },
+    { to: '/new', label: 'Новинки' },
     { to: '/about', label: 'О проекте' },
   ];
 
   return (
     <>
-      <header className={`fixed top-0 w-full z-50 transition-all duration-300 ${isScrolled ? 'pt-4 pb-0' : 'pt-6 pb-0'}`}>
+      <header className={`fixed top-0 w-full z-50 transition-all duration-300 ${isScrolled ? 'pt-3 pb-0' : 'pt-5 pb-0'}`}>
         <div className="container mx-auto px-4 md:px-6">
-          <div className={`glass-panel rounded-full px-6 h-16 flex items-center justify-between transition-all duration-500 ${isScrolled ? 'shadow-lg bg-white/70' : 'bg-white/55'}`}>
+          <div className={`glass-panel rounded-full px-6 md:px-8 h-16 flex items-center justify-between transition-all duration-500 ${isScrolled ? 'shadow-[0_18px_28px_rgba(86,123,163,0.16)]' : 'shadow-[0_10px_22px_rgba(86,123,163,0.1)]'}`}>
             <button className="md:hidden p-2 -ml-2 text-graphite hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(true)}>
               <Menu className="w-5 h-5" />
             </button>
 
-            <nav className="hidden md:flex items-center gap-8">
+            <nav className="hidden md:flex items-center gap-8 lg:gap-10">
               {navLinks.map((link) => (
-                <Link key={link.to} to={link.to} className="text-sm font-medium hover:text-primary transition-colors">
+                <Link key={link.to} to={link.to} className="text-sm font-medium text-graphite-light hover:text-graphite transition-colors">
                   {link.label}
                 </Link>
               ))}
@@ -47,7 +47,7 @@ export function Navbar() {
               <span className="font-serif text-2xl font-bold tracking-tighter text-graphite">ЗАМК</span>
             </Link>
 
-            <div className="flex items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-1.5 sm:gap-2.5">
               <button className="hidden sm:flex p-2 text-graphite hover:text-primary transition-colors rounded-full hover:bg-white/60" aria-label="Поиск">
                 <Search className="w-5 h-5" />
               </button>
@@ -61,7 +61,7 @@ export function Navbar() {
               <Link to="/cart" className="p-2 text-graphite hover:text-primary transition-colors relative rounded-full hover:bg-white/60" aria-label="Корзина">
                 <ShoppingBag className="w-5 h-5" />
                 {totalItems > 0 && (
-                  <span className="absolute top-1 right-1 bg-primary text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white">
+                  <span className="absolute top-1 right-1 bg-graphite text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white">
                     {totalItems}
                   </span>
                 )}
@@ -85,6 +85,9 @@ export function Navbar() {
             <Link to="/brands" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               Бренды
             </Link>
+            <Link to="/new" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
+              Новинки
+            </Link>
             <Link to="/favorites" className="text-lg font-medium py-2 border-b border-border-lighter flex justify-between items-center" onClick={() => setIsMobileMenuOpen(false)}>
               Избранное
               {favorites.length > 0 && <span className="bg-primary/20 text-primary text-xs px-2 py-1 rounded-full">{favorites.length}</span>}
@@ -99,8 +102,8 @@ export function Navbar() {
         </div>
       </Drawer>
 
-      <div className="md:hidden fixed bottom-6 left-4 right-4 z-50">
-        <div className="glass-panel rounded-full flex justify-between items-center px-5 py-3 shadow-[0_8px_32px_rgba(118,183,255,0.2)]">
+      <div className="md:hidden fixed bottom-5 left-4 right-4 z-50">
+        <div className="glass-panel rounded-full flex justify-between items-center px-5 py-3 shadow-[0_16px_28px_rgba(86,123,163,0.16)]">
           <Link to="/" className={`p-2 rounded-full ${location.pathname === '/' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
             <House className="w-5 h-5" />
           </Link>

@@ -13,8 +13,8 @@ function Input({ className, isSearch, ...props }: InputProps) {
       )}
       <input
         className={cn(
-          "w-full h-12 bg-surface backdrop-blur-md border border-border-soft text-graphite placeholder:text-ash-light transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60",
-          "rounded-full", // Full rounded to match Icy theme
+          "w-full h-12 bg-white/90 border border-border-soft text-graphite placeholder:text-ash-light transition-all focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/60",
+          "rounded-full",
           isSearch ? "pl-11 pr-5" : "px-5",
           className
         )}
