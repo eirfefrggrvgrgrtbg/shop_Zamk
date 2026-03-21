@@ -14,54 +14,99 @@ export function Navbar() {
   const location = useLocation();
 
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 16);
+    const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const navLinks = [
-    { to: '/catalog', label: 'Каталог' },
-    { to: '/brands', label: 'Бренды' },
-    { to: '/new', label: 'Новинки' },
-    { to: '/about', label: 'О проекте' },
+    { to: '/catalog', label: 'Архив' },
+    { to: '/new', label: 'Новая Волна' },
+    { to: '/brands', label: 'Коллекция' },
   ];
 
   return (
     <>
-      <header className={`fixed top-0 w-full z-50 transition-all duration-500 ${isScrolled ? 'pt-4' : 'pt-6 md:pt-8'}`}>
-        <div className="container mx-auto px-4 md:px-6">
-          <div className={`mx-auto max-w-7xl rounded-[2.8rem] px-6 md:px-8 h-16 md:h-[74px] flex items-center justify-between transition-all duration-500 ${isScrolled ? 'bg-white/88 backdrop-blur-xl border border-border-lighter shadow-[0_20px_60px_rgba(130,158,186,0.14)]' : 'bg-white/70 backdrop-blur-lg border border-border-lighter/70 shadow-[0_12px_42px_rgba(130,158,186,0.08)]'}`}>
-            <button className="md:hidden p-2 -ml-2 text-graphite hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(true)}>
-              <Menu className="w-5 h-5" />
+      <header className={`fixed w-full z-50 transition-all duration-700 ease-out left-0 right-0 ${
+        isScrolled ? 'top-2 md:top-3' : 'top-3 md:top-5'
+      }`}>
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
+          <div className={`h-[60px] md:h-[68px] rounded-full flex items-center justify-between transition-all duration-700 px-5 md:px-7 ${
+            isScrolled
+              ? 'bg-white/82 backdrop-blur-2xl border border-white/70 shadow-[0_4px_24px_rgba(100,130,170,0.14),0_1px_0_rgba(255,255,255,0.8)_inset]'
+              : 'bg-white/52 backdrop-blur-xl border border-white/50 shadow-[0_2px_16px_rgba(120,155,190,0.10),0_1px_0_rgba(255,255,255,0.6)_inset]'
+          }`}>
+
+            {/* Mobile burger */}
+            <button
+              className="md:hidden p-2 -ml-1 text-graphite/70 hover:text-graphite transition-colors"
+              onClick={() => setIsMobileMenuOpen(true)}
+            >
+              <Menu className="w-[18px] h-[18px]" />
             </button>
 
-            <nav className="hidden md:flex items-center gap-8 lg:gap-12 flex-1">
+            {/* Left nav links */}
+            <nav className="hidden md:flex items-center gap-8 lg:gap-10 flex-1">
               {navLinks.map((link) => (
-                <Link key={link.to} to={link.to} className="text-sm font-medium text-graphite/80 hover:text-graphite transition-colors tracking-wide">
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={`text-[13.5px] font-medium transition-all duration-300 tracking-[0.04em] uppercase ${
+                    location.pathname === link.to
+                      ? 'text-graphite'
+                      : 'text-graphite/50 hover:text-graphite/80'
+                  }`}
+                >
                   {link.label}
                 </Link>
               ))}
             </nav>
 
-            <Link to="/" className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
-              <span className="font-serif text-3xl font-bold tracking-tighter text-graphite">ZAMK</span>
+            {/* Center logo */}
+            <Link
+              to="/"
+              className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
+            >
+              <span className={`font-serif text-[34px] md:text-[40px] font-medium tracking-[0.06em] transition-colors duration-500 ${
+                isScrolled ? 'text-graphite' : 'text-graphite/85'
+              }`}>
+                ZAMK
+              </span>
             </Link>
 
-            <div className="flex items-center justify-end gap-2 sm:gap-4 flex-1">
-              <button className="hidden sm:flex p-2 text-graphite/80 hover:text-graphite transition-colors" aria-label="Поиск по архиву">
-                <Search className="w-5 h-5" />
+            {/* Right actions */}
+            <div className="flex items-center justify-end gap-0.5 sm:gap-1 flex-1">
+              <button
+                className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite transition-colors rounded-full hover:bg-white/40"
+                aria-label="Поиск"
+              >
+                <Search className="w-[17px] h-[17px]" />
               </button>
-              <Link to="/profile" className="hidden sm:flex p-2 text-graphite/80 hover:text-graphite transition-colors" aria-label="Профиль">
-                <User className="w-5 h-5" />
+              <Link
+                to="/profile"
+                className="hidden sm:flex p-2.5 text-[13px] text-graphite/50 hover:text-graphite transition-colors font-medium tracking-[0.04em] rounded-full hover:bg-white/40 uppercase"
+                aria-label="Профиль"
+              >
+                Вход
               </Link>
-              <Link to="/favorites" className="hidden sm:flex p-2 text-graphite/80 hover:text-graphite transition-colors relative" aria-label="Избранное">
-                <Heart className="w-5 h-5" />
-                {favorites.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full ring-2 ring-white" />}
+              <Link
+                to="/favorites"
+                className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite transition-colors relative rounded-full hover:bg-white/40"
+                aria-label="Избранное"
+              >
+                <Heart className="w-[17px] h-[17px]" />
+                {favorites.length > 0 && (
+                  <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-primary rounded-full ring-2 ring-white/80" />
+                )}
               </Link>
-              <Link to="/cart" className="p-2 text-graphite/80 hover:text-graphite transition-colors relative" aria-label="Корзина">
-                <ShoppingBag className="w-5 h-5" />
+              <Link
+                to="/cart"
+                className="p-2.5 text-graphite/50 hover:text-graphite transition-colors relative rounded-full hover:bg-white/40"
+                aria-label="Корзина"
+              >
+                <ShoppingBag className="w-[17px] h-[17px]" />
                 {totalItems > 0 && (
-                  <span className="absolute top-1 right-1 bg-graphite text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white">
+                  <span className="absolute top-1.5 right-1.5 bg-primary text-white text-[9px] font-bold w-[16px] h-[16px] rounded-full flex items-center justify-center shadow-sm">
                     {totalItems}
                   </span>
                 )}
@@ -74,7 +119,6 @@ export function Navbar() {
       <Drawer isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} title="Меню">
         <div className="flex flex-col gap-6 py-4">
           <Input placeholder="Поиск по архиву" isSearch className="bg-white/50" />
-
           <nav className="flex flex-col gap-4">
             <Link to="/" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               Главная
@@ -102,23 +146,24 @@ export function Navbar() {
         </div>
       </Drawer>
 
-      <div className="md:hidden fixed bottom-5 left-4 right-4 z-50">
-        <div className="bg-white/92 border border-border-lighter rounded-full flex justify-between items-center px-5 py-3 shadow-[0_14px_40px_rgba(130,158,186,0.18)] backdrop-blur-lg">
-          <Link to="/" className={`p-2 rounded-full ${location.pathname === '/' ? 'text-graphite bg-milk' : 'text-ash'}`}>
+      {/* Mobile bottom nav */}
+      <div className="md:hidden fixed bottom-4 left-4 right-4 z-50">
+        <div className="bg-white/90 border border-white/70 rounded-full flex justify-between items-center px-5 py-3 shadow-[0_12px_36px_rgba(110,140,170,0.18)] backdrop-blur-xl">
+          <Link to="/" className={`p-2 rounded-full transition-colors ${location.pathname === '/' ? 'text-graphite bg-ice' : 'text-ash'}`}>
             <House className="w-5 h-5" />
           </Link>
-          <Link to="/catalog" className={`p-2 rounded-full ${location.pathname === '/catalog' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+          <Link to="/catalog" className={`p-2 rounded-full transition-colors ${location.pathname === '/catalog' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
             <Search className="w-5 h-5" />
           </Link>
-          <Link to="/favorites" className={`relative p-2 rounded-full ${location.pathname === '/favorites' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+          <Link to="/favorites" className={`relative p-2 rounded-full transition-colors ${location.pathname === '/favorites' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
             <Heart className="w-5 h-5" />
-            {favorites.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full ring-2 ring-white" />}
+            {favorites.length > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-primary rounded-full ring-2 ring-white" />}
           </Link>
-          <Link to="/cart" className={`relative p-2 rounded-full ${location.pathname === '/cart' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+          <Link to="/cart" className={`relative p-2 rounded-full transition-colors ${location.pathname === '/cart' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
             <ShoppingBag className="w-5 h-5" />
             {totalItems > 0 && <span className="absolute -top-0.5 -right-0.5 bg-primary text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{totalItems}</span>}
           </Link>
-          <Link to="/profile" className={`p-2 rounded-full ${location.pathname === '/profile' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+          <Link to="/profile" className={`p-2 rounded-full transition-colors ${location.pathname === '/profile' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
             <User className="w-5 h-5" />
           </Link>
         </div>

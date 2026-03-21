@@ -1,14 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ProductCard } from '../components/product/ProductCard';
 import { Drawer } from '../components/ui/Drawer';
-import {
-  FilterGroup,
-  HeroBlock,
-  PillFilter,
-  SearchField,
-  SectionHeader,
-  SortDropdown,
-} from '../components/editorial/StudioKit';
+import { FilterGroup, PillFilter, SearchField, SortDropdown } from '../components/editorial/StudioKit';
 import { BRANDS, CATEGORIES, PRODUCTS } from '../lib/mock-data';
 
 const SORT_OPTIONS = [
@@ -50,26 +43,23 @@ export function Catalog() {
   }, [searchQuery, activeCategory, activeBrand, sortBy]);
 
   return (
-    <div className='relative z-10 min-h-screen pt-28 pb-20'>
-      <div className='container mx-auto px-4 sm:px-6 max-w-[1280px]'>
-        <HeroBlock
-          label='Каталог ZAMK'
-          title={
-            <>
-              Цифровая витрина
-              <br />
-              независимых брендов
-            </>
-          }
-          description='Кураторский каталог в спокойной студийной эстетике: лёгкий фон, мягкие фильтры, чистые карточки и аккуратная навигация.'
-          right={
-            <div className='glass-panel p-6 md:p-7'>
-              <p className='studio-label mb-2'>Капсулы сезона</p>
-              <h3 className='text-2xl font-serif text-graphite'>Архив коллекций</h3>
-              <p className='mt-2 text-sm text-graphite-light'>Сфокусированная селекция без визуального шума.</p>
+    <div className='relative z-10 min-h-screen pt-16 md:pt-20 pb-20'>
+      <div className='container mx-auto px-4 sm:px-6 max-w-[1400px]'>
+        <section className='overflow-hidden rounded-[0.8rem] border border-white/45 bg-white/16 backdrop-blur-sm'>
+          <div className='relative h-[220px] md:h-[280px]'>
+            <div className='absolute inset-0 bg-[radial-gradient(ellipse_at_18%_50%,rgba(164,193,223,0.56),transparent_50%),radial-gradient(ellipse_at_58%_50%,rgba(197,217,238,0.72),transparent_56%),radial-gradient(ellipse_at_86%_52%,rgba(167,196,225,0.58),transparent_52%)]' />
+            <div className='absolute inset-0 bg-[linear-gradient(180deg,rgba(242,247,252,0.76),rgba(236,242,249,0.66))]' />
+            <div className='relative z-10 h-full px-5 md:px-10 flex flex-col items-start justify-center gap-2 md:flex-row md:items-center md:justify-between md:gap-7'>
+              <h2 className='font-serif text-[clamp(2.8rem,8vw,8.3rem)] text-white/43 leading-[0.8] tracking-[-0.03em]'>КАТАЛОГ</h2>
+              <h3 className='font-serif text-[clamp(2.4rem,6.8vw,7.4rem)] text-white/42 leading-[0.82] tracking-[-0.03em] text-center'>
+                НОВАЯ
+                <br />
+                ВОЛНА
+              </h3>
+              <h4 className='font-serif text-[clamp(2.4rem,7vw,7.8rem)] text-white/42 leading-[0.8] tracking-[-0.03em] text-right'>АРХИВ</h4>
             </div>
-          }
-        />
+          </div>
+        </section>
 
         <div className='mt-10 space-y-8'>
           <SearchField
@@ -78,14 +68,8 @@ export function Catalog() {
             onChange={(event) => setSearchQuery(event.target.value)}
           />
 
-          <section className='glass-panel p-5 md:p-6'>
-            <SectionHeader
-              label='Категории'
-              title='Навигация по разделам'
-              action={<SortDropdown value={sortBy} options={SORT_OPTIONS} onChange={setSortBy} />}
-            />
-
-            <div className='flex flex-wrap gap-2'>
+          <section className='border-t border-b border-white/45 bg-white/46 px-4 md:px-6 py-4'>
+            <div className='flex flex-wrap items-center gap-2 md:gap-3'>
               {CATEGORIES.map((category) => (
                 <PillFilter
                   key={category.id}
@@ -94,6 +78,9 @@ export function Catalog() {
                   onClick={() => setActiveCategory(category.id)}
                 />
               ))}
+              <div className='ml-auto'>
+                <SortDropdown value={sortBy} options={SORT_OPTIONS} onChange={setSortBy} />
+              </div>
             </div>
 
             <div className='mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4'>

@@ -2,11 +2,20 @@ import { Truck, RotateCcw, Clock, Shield } from 'lucide-react';
 
 export function Delivery() {
   return (
-    <div className="min-h-screen relative z-10 pt-28 pb-20">
-      <div className="container mx-auto px-4 sm:px-6 max-w-4xl">
-        <h1 className="text-4xl sm:text-5xl font-serif text-graphite mb-10 text-center">Доставка и возврат</h1>
+    <div className="min-h-screen relative z-10 pt-16 md:pt-20 pb-20">
+      <div className="container mx-auto px-4 sm:px-6 max-w-[1200px]">
+        <section className="overflow-hidden rounded-[0.8rem] border border-white/45 bg-white/16 backdrop-blur-sm">
+          <div className="relative h-[190px] md:h-[240px]">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_18%_50%,rgba(166,194,223,0.54),transparent_50%),radial-gradient(ellipse_at_56%_48%,rgba(198,217,238,0.68),transparent_56%),radial-gradient(ellipse_at_84%_52%,rgba(170,197,226,0.55),transparent_52%)]" />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(242,247,252,0.74),rgba(236,242,249,0.64))]" />
+            <div className="relative z-10 h-full px-5 md:px-10 flex flex-col items-start justify-center gap-2 md:flex-row md:items-center md:justify-between md:gap-7">
+              <h2 className="font-serif text-[clamp(2rem,5.8vw,6rem)] text-white/43 leading-[0.8] tracking-[-0.03em]">ДОСТАВКА</h2>
+              <h3 className="font-serif text-[clamp(1.7rem,4.9vw,4.8rem)] text-white/42 leading-[0.82] tracking-[-0.03em] text-center">И ВОЗВРАТ</h3>
+            </div>
+          </div>
+        </section>
 
-        <div className="space-y-8">
+        <div className="mt-8 space-y-8 max-w-[980px] mx-auto">
           {/* Delivery */}
           <div className="bg-white/70 backdrop-blur-xl rounded-[2.5rem] border border-white p-8 md:p-10 shadow-cloud">
             <div className="flex items-center gap-4 mb-6">

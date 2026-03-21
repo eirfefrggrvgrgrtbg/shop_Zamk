@@ -15,16 +15,40 @@ interface HeroBlockProps {
   primaryCta?: { label: string; to: string };
   secondaryCta?: { label: string; to: string };
   right?: React.ReactNode;
+  ghostWords?: string[];
   className?: string;
 }
 
-export function HeroBlock({ label, title, description, primaryCta, secondaryCta, right, className }: HeroBlockProps) {
+export function HeroBlock({
+  label,
+  title,
+  description,
+  primaryCta,
+  secondaryCta,
+  right,
+  ghostWords,
+  className,
+}: HeroBlockProps) {
   return (
-    <section className={cn('glass-panel-strong p-8 md:p-12 lg:p-14 rounded-[2.6rem]', className)}>
+    <section className={cn('glass-panel-strong relative overflow-hidden p-8 md:p-12 lg:p-14 rounded-[2.6rem]', className)}>
+      {ghostWords && ghostWords.length > 0 && (
+        <div className='pointer-events-none absolute inset-x-6 top-4 hidden md:flex items-start justify-between gap-8'>
+          {ghostWords.slice(0, 3).map((word) => (
+            <span
+              key={word}
+              className='font-serif text-[clamp(3.4rem,8vw,8.5rem)] leading-[0.8] tracking-[-0.02em] text-white/45 select-none'
+            >
+              {word}
+            </span>
+          ))}
+        </div>
+      )}
       <div className='grid grid-cols-1 lg:grid-cols-12 gap-8 items-center'>
-        <div className='lg:col-span-7'>
+        <div className='lg:col-span-7 relative z-10'>
           <FloatingBadge>{label}</FloatingBadge>
-          <h1 className='mt-5 text-4xl md:text-5xl lg:text-6xl leading-[0.95] font-serif text-graphite'>{title}</h1>
+          <h1 className='mt-5 text-5xl md:text-6xl lg:text-7xl leading-[0.9] font-serif font-medium tracking-[-0.02em] text-graphite'>
+            {title}
+          </h1>
           <p className='mt-5 max-w-2xl text-base md:text-lg text-graphite-light leading-relaxed'>{description}</p>
           {(primaryCta || secondaryCta) && (
             <div className='mt-8 flex flex-wrap gap-3'>
@@ -41,7 +65,7 @@ export function HeroBlock({ label, title, description, primaryCta, secondaryCta,
             </div>
           )}
         </div>
-        <div className='lg:col-span-5'>{right}</div>
+        <div className='lg:col-span-5 relative z-10'>{right}</div>
       </div>
     </section>
   );
@@ -71,8 +95,8 @@ export function SectionHeader({ label, title, description, action }: SectionHead
     <div className='mb-7 flex flex-col gap-4 md:flex-row md:items-end md:justify-between'>
       <div>
         {label && <p className='studio-label mb-2'>{label}</p>}
-        <h2 className='text-3xl md:text-4xl font-serif text-graphite'>{title}</h2>
-        {description && <p className='mt-2 max-w-2xl text-sm md:text-base text-graphite-light'>{description}</p>}
+        <h2 className='text-[2rem] md:text-[2.55rem] leading-[0.95] tracking-[-0.02em] font-serif text-graphite'>{title}</h2>
+        {description && <p className='mt-2.5 max-w-2xl text-sm md:text-base text-graphite-light'>{description}</p>}
       </div>
       {action}
     </div>

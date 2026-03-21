@@ -9,10 +9,10 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   return (
-    <div className="flex flex-col min-h-screen relative">
+    <div className="relative isolate flex flex-col min-h-screen">
       <IcyBackground />
       <Navbar />
-      <main className="flex-grow pt-16 pb-20 md:pb-0 relative z-10">
+      <main className="flex-grow pb-20 md:pb-0 relative z-10">
         {children}
       </main>
       <Footer />
