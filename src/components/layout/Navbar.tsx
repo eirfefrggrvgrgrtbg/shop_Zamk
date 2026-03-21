@@ -1,178 +1,124 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingBag, Heart, User, Search, Menu, X, Home, Grid3x3 } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { Heart, House, Menu, Search, ShoppingBag, User } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
-import { motion, AnimatePresence } from 'framer-motion';
-
-const navLinks = [
-  { to: '/catalog', label: 'Каталог' },
-  { to: '/brands', label: 'Бренды' },
-  { to: '/catalog?filter=new', label: 'Новинки' },
-  { to: '/about', label: 'О нас' },
-];
+import { useFavorites } from '../../contexts/FavoritesContext';
+import { Drawer } from '../ui/Drawer';
+import { Input } from '../ui/Input';
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { totalItems } = useCart();
+  const { favorites } = useFavorites();
   const location = useLocation();
 
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 10);
+    const handleScroll = () => setIsScrolled(window.scrollY > 16);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [location]);
+  const navLinks = [
+    { to: '/catalog', label: 'Каталог' },
+    { to: '/brands', label: 'Бренды' },
+    { to: '/catalog?sort=new', label: 'Новинки' },
+    { to: '/about', label: 'О проекте' },
+  ];
 
   return (
     <>
-      {/* Desktop & Mobile Header */}
-      <header
-        className={cn(
-          'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
-          isScrolled
-            ? 'glass-strong py-3 shadow-sm'
-            : 'bg-milk/50 backdrop-blur-sm py-4'
-        )}
-      >
-        <div className="container mx-auto px-4 sm:px-6 max-w-7xl flex items-center justify-between">
-          {/* Left: Hamburger (mobile) + Navigation (Desktop) */}
-          <div className="flex items-center gap-6">
-            <button
-              className="md:hidden w-10 h-10 rounded-xl flex items-center justify-center text-graphite hover:bg-surface transition-all"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            >
-              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+      <header className={`fixed top-0 w-full z-50 transition-all duration-300 ${isScrolled ? 'pt-4 pb-0' : 'pt-6 pb-0'}`}>
+        <div className="container mx-auto px-4 md:px-6">
+          <div className={`glass-panel rounded-full px-6 h-16 flex items-center justify-between transition-all duration-500 ${isScrolled ? 'shadow-lg bg-white/70' : 'bg-white/55'}`}>
+            <button className="md:hidden p-2 -ml-2 text-graphite hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(true)}>
+              <Menu className="w-5 h-5" />
             </button>
 
-            <nav className="hidden md:flex items-center gap-7">
-              {navLinks.map(link => (
-                <Link
-                  key={link.to}
-                  to={link.to}
-                  className={cn(
-                    "text-sm font-medium transition-colors hover:text-primary",
-                    location.pathname === link.to ? 'text-primary' : 'text-graphite-light'
-                  )}
-                >
+            <nav className="hidden md:flex items-center gap-8">
+              {navLinks.map((link) => (
+                <Link key={link.to} to={link.to} className="text-sm font-medium hover:text-primary transition-colors">
                   {link.label}
                 </Link>
               ))}
             </nav>
-          </div>
 
-          {/* Center: Logo */}
-          <Link to="/" className="text-2xl font-serif font-bold tracking-tight text-graphite">
-            ZAMK
-          </Link>
+            <Link to="/" className="absolute left-1/2 -translate-x-1/2">
+              <span className="font-serif text-2xl font-bold tracking-tighter text-graphite">ЗАМК</span>
+            </Link>
 
-          {/* Right: Actions */}
-          <div className="flex items-center gap-1 sm:gap-2">
-            <Link to="/catalog" className="hidden sm:flex w-10 h-10 rounded-xl items-center justify-center text-ash hover:text-graphite hover:bg-surface transition-all">
-              <Search className="w-5 h-5" />
-            </Link>
-            <Link to="/profile" className="hidden sm:flex w-10 h-10 rounded-xl items-center justify-center text-ash hover:text-graphite hover:bg-surface transition-all">
-              <User className="w-5 h-5" />
-            </Link>
-            <Link to="/favorites" className="w-10 h-10 rounded-xl flex items-center justify-center text-ash hover:text-graphite hover:bg-surface transition-all">
-              <Heart className="w-5 h-5" />
-            </Link>
-            <Link to="/cart" className="relative w-10 h-10 rounded-xl flex items-center justify-center text-ash hover:text-graphite hover:bg-surface transition-all">
-              <ShoppingBag className="w-5 h-5" />
-              {totalItems > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  {totalItems}
-                </span>
-              )}
-            </Link>
+            <div className="flex items-center gap-2 sm:gap-4">
+              <button className="hidden sm:flex p-2 text-graphite hover:text-primary transition-colors rounded-full hover:bg-white/60" aria-label="Поиск">
+                <Search className="w-5 h-5" />
+              </button>
+              <Link to="/profile" className="hidden sm:flex p-2 text-graphite hover:text-primary transition-colors rounded-full hover:bg-white/60" aria-label="Профиль">
+                <User className="w-5 h-5" />
+              </Link>
+              <Link to="/favorites" className="hidden sm:flex p-2 text-graphite hover:text-primary transition-colors relative rounded-full hover:bg-white/60" aria-label="Избранное">
+                <Heart className="w-5 h-5" />
+                {favorites.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full ring-2 ring-white" />}
+              </Link>
+              <Link to="/cart" className="p-2 text-graphite hover:text-primary transition-colors relative rounded-full hover:bg-white/60" aria-label="Корзина">
+                <ShoppingBag className="w-5 h-5" />
+                {totalItems > 0 && (
+                  <span className="absolute top-1 right-1 bg-primary text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white">
+                    {totalItems}
+                  </span>
+                )}
+              </Link>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Mobile Menu Overlay */}
-      <AnimatePresence>
-        {isMobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-graphite/20 backdrop-blur-sm md:hidden"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            <motion.div
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute top-0 left-0 h-full w-72 glass-strong shadow-2xl pt-20 px-6"
-              onClick={e => e.stopPropagation()}
-            >
-              <nav className="flex flex-col gap-2">
-                {navLinks.map(link => (
-                  <Link
-                    key={link.to}
-                    to={link.to}
-                    className={cn(
-                      "px-4 py-3 rounded-xl text-base font-medium transition-all",
-                      location.pathname === link.to
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-graphite hover:bg-surface'
-                    )}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-                <hr className="my-3 border-border-lighter" />
-                <Link to="/delivery" className="px-4 py-3 rounded-xl text-sm text-ash hover:bg-surface transition-all">
-                  Доставка и возврат
-                </Link>
-                <Link to="/help" className="px-4 py-3 rounded-xl text-sm text-ash hover:bg-surface transition-all">
-                  Помощь
-                </Link>
-                <Link to="/contacts" className="px-4 py-3 rounded-xl text-sm text-ash hover:bg-surface transition-all">
-                  Контакты
-                </Link>
-              </nav>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <Drawer isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} title="Меню">
+        <div className="flex flex-col gap-6 py-4">
+          <Input placeholder="Поиск по каталогу" isSearch className="bg-white/50" />
 
-      {/* Mobile Bottom Tab Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden glass-strong border-t border-border-lighter">
-        <nav className="flex items-center justify-around py-2 px-4">
-          {[
-            { to: '/', icon: Home, label: 'Главная' },
-            { to: '/catalog', icon: Grid3x3, label: 'Каталог' },
-            { to: '/favorites', icon: Heart, label: 'Избранное' },
-            { to: '/cart', icon: ShoppingBag, label: 'Корзина', badge: totalItems },
-            { to: '/profile', icon: User, label: 'Профиль' },
-          ].map(item => {
-            const isActive = location.pathname === item.to;
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all relative",
-                  isActive ? 'text-primary' : 'text-ash'
-                )}
-              >
-                <item.icon className="w-5 h-5" />
-                <span className="text-[10px] font-medium">{item.label}</span>
-                {item.badge && item.badge > 0 && (
-                  <span className="absolute -top-1 right-0 w-4 h-4 bg-primary text-white text-[8px] font-bold rounded-full flex items-center justify-center">
-                    {item.badge}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+          <nav className="flex flex-col gap-4">
+            <Link to="/" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
+              Главная
+            </Link>
+            <Link to="/catalog" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
+              Каталог
+            </Link>
+            <Link to="/brands" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
+              Бренды
+            </Link>
+            <Link to="/favorites" className="text-lg font-medium py-2 border-b border-border-lighter flex justify-between items-center" onClick={() => setIsMobileMenuOpen(false)}>
+              Избранное
+              {favorites.length > 0 && <span className="bg-primary/20 text-primary text-xs px-2 py-1 rounded-full">{favorites.length}</span>}
+            </Link>
+            <Link to="/profile" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
+              Профиль
+            </Link>
+            <Link to="/about" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
+              О проекте
+            </Link>
+          </nav>
+        </div>
+      </Drawer>
+
+      <div className="md:hidden fixed bottom-6 left-4 right-4 z-50">
+        <div className="glass-panel rounded-full flex justify-between items-center px-5 py-3 shadow-[0_8px_32px_rgba(118,183,255,0.2)]">
+          <Link to="/" className={`p-2 rounded-full ${location.pathname === '/' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+            <House className="w-5 h-5" />
+          </Link>
+          <Link to="/catalog" className={`p-2 rounded-full ${location.pathname === '/catalog' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+            <Search className="w-5 h-5" />
+          </Link>
+          <Link to="/favorites" className={`relative p-2 rounded-full ${location.pathname === '/favorites' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+            <Heart className="w-5 h-5" />
+            {favorites.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full ring-2 ring-white" />}
+          </Link>
+          <Link to="/cart" className={`relative p-2 rounded-full ${location.pathname === '/cart' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+            <ShoppingBag className="w-5 h-5" />
+            {totalItems > 0 && <span className="absolute -top-0.5 -right-0.5 bg-primary text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{totalItems}</span>}
+          </Link>
+          <Link to="/profile" className={`p-2 rounded-full ${location.pathname === '/profile' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+            <User className="w-5 h-5" />
+          </Link>
+        </div>
       </div>
     </>
   );

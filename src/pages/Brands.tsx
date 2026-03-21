@@ -5,8 +5,8 @@ import { BRANDS } from '../lib/mock-data';
 
 export function Brands() {
   return (
-    <div className="min-h-screen bg-milk">
-      <div className="container mx-auto px-4 sm:px-6 max-w-7xl py-8">
+    <div className="min-h-screen relative z-10">
+      <div className="container mx-auto px-4 sm:px-6 max-w-7xl pt-32 pb-8">
         <h1 className="text-3xl sm:text-4xl font-serif text-graphite mb-2">Бренды</h1>
         <p className="text-sm text-ash mb-10">{BRANDS.length} партнёров магазина</p>
 

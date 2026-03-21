@@ -13,7 +13,7 @@ function Skeleton({ className, variant = 'default', ...props }: SkeletonProps) {
 
   return (
     <div
-      className={cn("shimmer", variants[variant], className)}
+      className={cn('shimmer-bg bg-white/60', variants[variant], className)}
       {...props}
     />
   )
@@ -21,7 +21,7 @@ function Skeleton({ className, variant = 'default', ...props }: SkeletonProps) {
 
 function ProductCardSkeleton() {
   return (
-    <div className="shelf-card rounded-2xl overflow-hidden">
+    <div className="capsule rounded-2xl overflow-hidden">
       <div className="aspect-[4/5] m-2 rounded-xl">
         <Skeleton className="w-full h-full rounded-xl" />
       </div>

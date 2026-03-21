@@ -10,7 +10,7 @@ export function Contacts() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
           {[
-            { icon: Mail, label: 'Email', value: 'hello@zamk.store' },
+            { icon: Mail, label: 'Эл. почта', value: 'hello@zamk.store' },
             { icon: Phone, label: 'Телефон', value: '+7 (495) 123-45-67' },
             { icon: MapPin, label: 'Адрес', value: 'Москва, ул. Пречистенка, 12' },
             { icon: Clock, label: 'Часы работы', value: 'Пн-Пт 10:00 — 20:00' },
@@ -32,7 +32,7 @@ export function Contacts() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input placeholder="Имя" />
-              <Input placeholder="Email" type="email" />
+              <Input placeholder="Эл. почта" type="email" />
             </div>
             <Input placeholder="Тема обращения" />
             <textarea

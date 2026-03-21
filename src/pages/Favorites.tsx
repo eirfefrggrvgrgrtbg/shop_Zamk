@@ -49,7 +49,7 @@ export function Favorites() {
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
           {favoriteProducts.map(product => (
-            <div key={product.id} className="relative">
+            <div key={product.id} className="relative group">
               <ProductCard product={product} />
               <Button
                 variant="secondary"

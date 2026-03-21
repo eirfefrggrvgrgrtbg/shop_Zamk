@@ -1,143 +1,139 @@
 @import "tailwindcss";
 
 @theme {
-  /* ─── Color Palette ─── */
-  --color-milk: #F7F9FC;
-  --color-surface: #EEF2F7;
-  --color-surface-warm: #F0F4F8;
-  --color-ice: #E8F0FE;
-  
-  --color-primary: #7CB9E8;
-  --color-primary-hover: #5BA3D9;
-  --color-primary-light: #B8D8F8;
-  --color-primary-soft: #D6EAFB;
-  
-  --color-graphite: #2C3E50;
-  --color-graphite-light: #3D5166;
-  --color-ash: #7B8D9E;
-  --color-ash-light: #A0B0BE;
-  
-  --color-border-soft: #D0DAE5;
-  --color-border-lighter: #E2EAF2;
-  
-  --color-success: #6BCB77;
-  --color-error: #E8636C;
-  --color-warning: #F4A940;
-  
-  /* ─── Typography ─── */
-  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
-}
+  --color-milk: #f4f8fd;
+  --color-ice: #edf5ff;
+  --color-surface: rgba(255, 255, 255, 0.62);
+  --color-surface-hover: rgba(255, 255, 255, 0.82);
 
-/* ─── Keyframes ─── */
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
+  --color-primary: #76b7ff;
+  --color-primary-hover: #5aa7ff;
+  --color-primary-soft: rgba(118, 183, 255, 0.14);
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+  --color-graphite: #243346;
+  --color-graphite-light: #3e526a;
+  --color-ash: #677f9a;
+  --color-ash-light: #9cb1c7;
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+  --color-border-lighter: rgba(114, 154, 194, 0.2);
+  --color-border-soft: rgba(114, 154, 194, 0.35);
 
-@keyframes toastIn {
-  from { opacity: 0; transform: translateY(16px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  --color-success: #35b394;
+  --color-error: #e86a78;
+
+  --font-sans: 'Manrope', 'Segoe UI', sans-serif;
+  --font-serif: 'Forum', 'Times New Roman', serif;
 }
 
 @layer base {
-  body {
-    @apply bg-milk text-graphite antialiased min-h-screen flex flex-col;
-    font-family: var(--font-sans);
-  }
-
-  ::selection {
-    @apply bg-primary/30 text-graphite;
-  }
-
-  /* Smooth scrolling */
   html {
     scroll-behavior: smooth;
   }
 
-  /* Custom scrollbar */
+  body {
+    @apply bg-milk text-graphite font-sans antialiased selection:bg-primary/20 selection:text-primary-hover;
+    background-color: var(--color-milk);
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif tracking-tight text-graphite;
+  }
+
   ::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--color-border-soft);
-    border-radius: 3px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-ash-light);
+    @apply bg-primary/30 rounded-full hover:bg-primary/50 transition-colors;
   }
 }
 
 @layer utilities {
-  /* ─── Glass panels ─── */
-  .glass {
-    background: rgba(247, 249, 252, 0.72);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(208, 218, 229, 0.4);
-  }
-
-  .glass-strong {
-    background: rgba(247, 249, 252, 0.88);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(208, 218, 229, 0.5);
-  }
-
-  /* ─── Shelf card effect ─── */
-  .shelf-card {
-    background: white;
-    border: 1px solid var(--color-border-lighter);
+  .glass-panel {
+    @apply bg-white/55 backdrop-blur-xl border border-white/70;
     box-shadow:
-      inset 0 -4px 12px rgba(208, 218, 229, 0.15),
-      0 1px 3px rgba(44, 62, 80, 0.04),
-      0 0 0 0 rgba(124, 185, 232, 0);
+      0 8px 28px rgba(118, 183, 255, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  }
+
+  .glass-panel-strong {
+    @apply bg-white/72 backdrop-blur-2xl border border-white/80;
+    box-shadow:
+      0 14px 36px rgba(74, 142, 211, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  }
+
+  .capsule {
+    @apply relative overflow-hidden rounded-[2rem] border border-white/65 backdrop-blur-lg;
+    background: linear-gradient(152deg, rgba(255, 255, 255, 0.72) 4%, rgba(240, 248, 255, 0.52) 40%, rgba(255, 255, 255, 0.42) 100%);
+    box-shadow: 
+      inset 0 0 0 1px rgba(255, 255, 255, 0.32),
+      inset 0 16px 30px rgba(255, 255, 255, 0.22),
+      0 12px 26px rgba(95, 145, 196, 0.11);
     transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  .shelf-card:hover {
-    transform: translateY(-6px);
-    box-shadow:
-      inset 0 -2px 8px rgba(208, 218, 229, 0.1),
-      0 16px 40px -8px rgba(44, 62, 80, 0.08),
-      0 0 0 1px rgba(124, 185, 232, 0.15);
+  .capsule::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.6), transparent 40%);
+    pointer-events: none;
   }
 
-  /* ─── Shimmer skeleton ─── */
-  .shimmer {
+  .capsule:hover {
+    @apply -translate-y-1.5 border-white/85;
+    box-shadow: 
+      inset 0 0 0 1px rgba(255, 255, 255, 0.38),
+      inset 0 18px 34px rgba(255, 255, 255, 0.3),
+      0 16px 40px rgba(86, 145, 207, 0.2),
+      0 0 24px rgba(132, 188, 255, 0.2);
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .shimmer-bg {
     background: linear-gradient(
       90deg,
-      var(--color-surface) 25%,
-      var(--color-border-lighter) 50%,
-      var(--color-surface) 75%
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.5) 50%,
+      rgba(255, 255, 255, 0) 100%
     );
     background-size: 200% 100%;
-    animation: shimmer 1.5s ease-in-out infinite;
+    animation: shimmer 1.5s infinite;
   }
 
-  /* ─── Fade in animation ─── */
-  .animate-fadeIn {
-    animation: fadeIn 0.4s ease-out forwards;
+  .mist-grid {
+    background-image:
+      linear-gradient(rgba(124, 156, 191, 0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124, 156, 191, 0.07) 1px, transparent 1px);
+    background-size: 48px 48px;
   }
+}
 
-  .animate-slideUp {
-    animation: slideUp 0.5s ease-out forwards;
-  }
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
 
-  .animate-toastIn {
-    animation: toastIn 0.35s ease-out forwards;
-  }
+#noise-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.22;
 }

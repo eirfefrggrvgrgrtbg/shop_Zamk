@@ -36,7 +36,7 @@ export function Profile() {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-graphite">Анна Прокофьева</h2>
-            <p className="text-sm text-ash">Партнёр брендов · MONADE</p>
+            <p className="text-sm text-ash">Партнер брендов · Монада</p>
             <div className="flex gap-4 mt-2 text-xs text-ash">
               <span>Заказов: 2</span>
               <span>В избранном: {favorites.length}</span>
@@ -91,7 +91,7 @@ export function Profile() {
         <div className="mt-8">
           <h3 className="text-lg font-semibold text-graphite mb-4">Мои бренды</h3>
           <div className="grid grid-cols-2 gap-3">
-            {['MONADE', 'STAHL AIR'].map(brand => (
+            {['Монада', 'Шталь Эйр'].map(brand => (
               <div key={brand} className="bg-white rounded-2xl border border-border-lighter p-4 text-center">
                 <div className="w-14 h-14 rounded-xl bg-surface flex items-center justify-center mx-auto mb-2">
                   <span className="text-lg font-serif text-graphite">{brand[0]}</span>

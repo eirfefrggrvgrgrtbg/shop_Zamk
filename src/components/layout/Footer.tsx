@@ -1,66 +1,78 @@
 import { Link } from 'react-router-dom';
-import { Send } from 'lucide-react';
+import { ArrowRight, Instagram } from 'lucide-react';
 
 export function Footer() {
   return (
-    <footer className="bg-white border-t border-border-lighter pt-16 pb-24 md:pb-8 mt-auto">
-      <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12 mb-12">
-          {/* Brand */}
-          <div className="col-span-2 md:col-span-1 space-y-4">
-            <h3 className="font-serif text-2xl font-bold text-graphite">ZAMK</h3>
-            <p className="text-sm text-ash leading-relaxed max-w-xs">
-              Кураторский fashion-магазин. Избранные бренды, продуманные подборки, бережная доставка.
+    <footer className="relative mt-20 pb-24 md:pb-12 z-10 pt-20 border-t border-border-lighter bg-gradient-to-b from-transparent to-white/30 backdrop-blur-sm">
+      <div className="container mx-auto px-4 sm:px-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-12 lg:gap-8 mb-16">
+          
+          {/* Brand Col */}
+          <div className="lg:col-span-5 pr-4">
+            <Link to="/" className="inline-block mb-6">
+              <span className="font-serif text-3xl font-bold tracking-tighter text-graphite">ЗАМК</span>
+            </Link>
+            <p className="text-sm text-graphite-light leading-relaxed max-w-sm mb-8">
+              Цифровая витрина для независимых брендов и альтернативной эстетики. Кураторский подход к современной моде.
             </p>
-          </div>
-
-          {/* Shop */}
-          <div>
-            <h4 className="font-semibold text-sm text-graphite mb-4">Магазин</h4>
-            <ul className="space-y-2.5 text-sm text-ash">
-              <li><Link to="/catalog?filter=new" className="hover:text-primary transition-colors">Новинки</Link></li>
-              <li><Link to="/brands" className="hover:text-primary transition-colors">Бренды</Link></li>
-              <li><Link to="/catalog" className="hover:text-primary transition-colors">Одежда</Link></li>
-              <li><Link to="/catalog" className="hover:text-primary transition-colors">Сумки</Link></li>
-              <li><Link to="/catalog" className="hover:text-primary transition-colors">Обувь</Link></li>
-              <li><Link to="/catalog" className="hover:text-primary transition-colors">Аксессуары</Link></li>
-            </ul>
-          </div>
-
-          {/* Info */}
-          <div>
-            <h4 className="font-semibold text-sm text-graphite mb-4">Информация</h4>
-            <ul className="space-y-2.5 text-sm text-ash">
-              <li><Link to="/about" className="hover:text-primary transition-colors">О нас</Link></li>
-              <li><Link to="/delivery" className="hover:text-primary transition-colors">Доставка и возврат</Link></li>
-              <li><Link to="/help" className="hover:text-primary transition-colors">Помощь</Link></li>
-              <li><Link to="/contacts" className="hover:text-primary transition-colors">Контакты</Link></li>
-              <li><Link to="/privacy" className="hover:text-primary transition-colors">Политика конфиденциальности</Link></li>
-            </ul>
-          </div>
-
-          {/* Newsletter */}
-          <div className="col-span-2 md:col-span-1">
-            <h4 className="font-semibold text-sm text-graphite mb-4">Рассылка</h4>
-            <p className="text-sm text-ash mb-4">Подпишитесь на новости о новых коллекциях и эксклюзивных предложениях.</p>
-            <div className="flex items-center gap-2">
-              <input
-                type="email"
-                placeholder="Ваш email"
-                className="flex-1 h-10 rounded-xl border border-border-soft bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
-              />
-              <button className="h-10 w-10 rounded-xl bg-primary text-white flex items-center justify-center hover:bg-primary-hover transition-colors shrink-0">
-                <Send className="w-4 h-4" />
-              </button>
+            <div className="flex gap-4">
+              <a href="#" className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-graphite hover:text-primary hover:bg-white/60 transition-all">
+                <Instagram className="w-4 h-4" />
+              </a>
+              <a href="#" className="h-10 px-4 rounded-full glass-panel flex items-center justify-center text-xs font-medium text-graphite hover:text-primary hover:bg-white/60 transition-all uppercase tracking-widest">
+                Канал
+              </a>
             </div>
+          </div>
+
+          {/* Links Col 1 */}
+          <div className="lg:col-span-2">
+            <h4 className="text-xs font-bold text-graphite uppercase tracking-widest mb-6 border-b border-border-lighter pb-3">Магазин</h4>
+            <ul className="space-y-4">
+              <li><Link to="/catalog" className="text-sm text-ash hover:text-primary transition-colors">Каталог</Link></li>
+              <li><Link to="/brands" className="text-sm text-ash hover:text-primary transition-colors">Бренды</Link></li>
+              <li><Link to="/catalog?sort=new" className="text-sm text-ash hover:text-primary transition-colors">Новинки</Link></li>
+              <li><Link to="/catalog?sort=sale" className="text-sm text-ash hover:text-primary transition-colors">Скидки</Link></li>
+            </ul>
+          </div>
+
+          {/* Links Col 2 */}
+          <div className="lg:col-span-2">
+            <h4 className="text-xs font-bold text-graphite uppercase tracking-widest mb-6 border-b border-border-lighter pb-3">Информация</h4>
+            <ul className="space-y-4">
+              <li><Link to="/about" className="text-sm text-ash hover:text-primary transition-colors">О нас</Link></li>
+              <li><Link to="/delivery" className="text-sm text-ash hover:text-primary transition-colors">Доставка и возврат</Link></li>
+              <li><Link to="/help" className="text-sm text-ash hover:text-primary transition-colors">Вопросы и ответы</Link></li>
+              <li><Link to="/contacts" className="text-sm text-ash hover:text-primary transition-colors">Контакты</Link></li>
+            </ul>
+          </div>
+
+          {/* Newsletter Col */}
+          <div className="lg:col-span-3">
+            <h4 className="text-xs font-bold text-graphite uppercase tracking-widest mb-6 border-b border-border-lighter pb-3">Рассылка</h4>
+            <p className="text-sm text-ash mb-4">Узнавайте первыми о новых кураторских подборках и лимитированных релизах.</p>
+            <form className="relative" onSubmit={(e) => e.preventDefault()}>
+              <input 
+                type="email" 
+                placeholder="Ваша эл. почта" 
+                className="w-full h-12 bg-white/40 backdrop-blur-md rounded-full border border-border-soft px-5 text-sm outline-none focus:border-primary/50 transition-colors"
+                required
+              />
+              <button 
+                type="submit" 
+                className="absolute right-1 top-1 bottom-1 w-10 bg-graphite text-white rounded-full flex items-center justify-center hover:bg-primary transition-colors"
+              >
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </form>
           </div>
         </div>
 
-        <div className="pt-8 border-t border-border-lighter flex flex-col md:flex-row items-center justify-between text-xs text-ash gap-3">
-          <p>&copy; {new Date().getFullYear()} ZAMK. Все права защищены.</p>
-          <div className="flex gap-4">
-            <Link to="/privacy" className="hover:text-primary transition-colors">Политика конфиденциальности</Link>
-            <Link to="/privacy" className="hover:text-primary transition-colors">Условия использования</Link>
+        {/* Bottom */}
+        <div className="flex flex-col md:flex-row items-center justify-between pt-8 border-t border-border-lighter gap-4">
+          <p className="text-xs text-ash-light">© 2026 ЗАМК. Все права защищены.</p>
+          <div className="flex gap-6">
+            <Link to="/privacy" className="text-xs text-ash-light hover:text-graphite transition-colors">Политика конфиденциальности</Link>
           </div>
         </div>
       </div>

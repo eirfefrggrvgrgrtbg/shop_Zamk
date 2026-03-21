@@ -57,8 +57,8 @@ export function Catalog() {
   const currentSort = SORT_OPTIONS.find(s => s.value === sortBy);
 
   return (
-    <div className="min-h-screen bg-milk">
-      <div className="container mx-auto px-4 sm:px-6 max-w-7xl py-8">
+    <div className="min-h-screen relative z-10">
+      <div className="container mx-auto px-4 sm:px-6 max-w-7xl pt-32 pb-8">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl sm:text-4xl font-serif text-graphite mb-2">Каталог</h1>
@@ -140,7 +140,7 @@ export function Catalog() {
             {showSort && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setShowSort(false)} />
-                <div className="absolute right-0 top-full mt-2 w-56 glass-strong rounded-2xl shadow-lg border border-border-lighter py-2 z-40">
+                <div className="absolute right-0 top-full mt-2 w-56 glass-panel-strong shadow-[0_8px_32px_rgba(137,207,240,0.2)] py-2 z-40 overflow-hidden">
                   {SORT_OPTIONS.map(opt => (
                     <button
                       key={opt.value}
@@ -180,7 +180,7 @@ export function Catalog() {
       </div>
 
       {/* Mobile Filter Drawer */}
-      <Drawer isOpen={showFilters} onClose={() => setShowFilters(false)} title="Фильтры" side="left">
+      <Drawer isOpen={showFilters} onClose={() => setShowFilters(false)} title="Фильтры" position="left">
         <div className="space-y-6">
           <div>
             <h4 className="font-semibold text-sm text-graphite mb-3">Категория</h4>

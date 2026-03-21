@@ -8,7 +8,7 @@ export function About() {
 
         <div className="space-y-6 text-ash leading-relaxed">
           <p className="text-lg">
-            <span className="font-serif text-graphite text-2xl">ZAMK</span> — это кураторский fashion-магазин нового поколения. Мы отбираем лучшие бренды со всего мира и создаём пространство, где каждая вещь — осознанный выбор.
+            <span className="font-serif text-graphite text-2xl">ЗАМК</span> — это кураторская модная платформа нового поколения. Мы отбираем лучшие бренды со всего мира и создаем пространство, где каждая вещь — осознанный выбор.
           </p>
 
           <div className="bg-white rounded-3xl border border-border-lighter p-8">

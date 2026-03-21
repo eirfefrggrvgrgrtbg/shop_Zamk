@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 
@@ -6,49 +7,59 @@ interface ModalProps {
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg';
 }
 
-export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
-  const sizes = {
-    sm: 'max-w-md',
-    md: 'max-w-xl',
-    lg: 'max-w-3xl',
-  };
+export function Modal({ isOpen, onClose, title, children }: ModalProps) {
+  // Prevent scrolling when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => { document.body.style.overflow = 'unset'; };
+  }, [isOpen]);
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+        <>
+          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="absolute inset-0 bg-graphite/20 backdrop-blur-sm"
             onClick={onClose}
+            className="fixed inset-0 z-50 bg-graphite/20 backdrop-blur-sm"
           />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className={`relative glass-strong rounded-3xl p-6 w-full ${sizes[size]} shadow-2xl`}
-          >
-            {title && (
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-lg font-semibold text-graphite">{title}</h3>
+
+          {/* Modal Content */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="pointer-events-auto w-full max-w-lg glass-panel-strong rounded-[2rem] overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-border-lighter">
+                {title && <h2 className="text-xl font-serif font-semibold text-graphite">{title}</h2>}
                 <button
                   onClick={onClose}
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-ash hover:text-graphite hover:bg-surface transition-all"
+                  className="p-2 -mr-2 text-ash hover:text-graphite bg-white/40 hover:bg-white/80 rounded-full transition-all"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-            )}
-            {children}
-          </motion.div>
-        </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto scrollbar-hide">
+                {children}
+              </div>
+            </motion.div>
+          </div>
+        </>
       )}
     </AnimatePresence>
   );

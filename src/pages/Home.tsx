@@ -1,202 +1,195 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight, Play, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { EditorialHero } from '../components/editorial/EditorialHero';
 import { ProductCard } from '../components/product/ProductCard';
 import { Button } from '../components/ui/Button';
-import { PRODUCTS, BRANDS, CATEGORIES, COLLECTIONS, getNewProducts } from '../lib/mock-data';
+import { BRANDS, CATEGORIES, COLLECTIONS, PRODUCTS, getNewProducts } from '../lib/mock-data';
 
 const fadeInUp = {
   initial: { opacity: 0, y: 20 },
   whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true, margin: '-50px' },
+  viewport: { once: true, margin: '-40px' },
   transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] as const },
 };
 
 export function Home() {
   const newProducts = getNewProducts();
   const editorPicks = PRODUCTS.slice(0, 4);
-  const bestsellers = PRODUCTS.filter(p => p.isBestseller);
+  const bestsellers = PRODUCTS.filter((product) => product.isBestseller).slice(0, 4);
 
   return (
-    <div className="flex flex-col w-full">
+    <div className="flex flex-col gap-24 md:gap-32 w-full pt-16">
       <EditorialHero />
 
-      {/* ─── Categories Pills ─── */}
-      <section className="py-8 bg-white border-b border-border-lighter">
-        <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
-          <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide">
-            {CATEGORIES.filter(c => c.id !== 'all').map(cat => (
-              <Link key={cat.id} to={`/catalog?category=${cat.id}`}>
-                <Button variant="pill" size="sm" className="shrink-0 gap-1.5">
-                  <span>{cat.icon}</span>
-                  <span>{cat.name}</span>
-                </Button>
-              </Link>
-            ))}
-          </div>
+      <section className="container mx-auto px-4 sm:px-6 relative z-10">
+        <div className="flex z-[9999] overflow-x-auto scrollbar-hide gap-3 pb-4">
+          {CATEGORIES.map((category) => (
+            <Link
+              key={category.id}
+              to={`/catalog?category=${category.slug}`}
+              className="flex-shrink-0 group flex items-center gap-2 glass-panel px-6 py-3.5 rounded-full hover:bg-white/70 hover:-translate-y-1 transition-all duration-300"
+            >
+              <span className="text-base group-hover:scale-110 transition-transform duration-300">{category.icon}</span>
+              <span className="text-sm font-medium text-graphite group-hover:text-primary transition-colors">{category.name}</span>
+            </Link>
+          ))}
         </div>
       </section>
 
-      {/* ─── New Brands Banner ─── */}
-      <motion.section className="py-16 sm:py-20 bg-white" {...fadeInUp}>
-        <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
-          <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-primary/10 via-ice to-primary-soft p-8 sm:p-12">
-            <div className="relative z-10 max-w-md">
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-hover uppercase tracking-wider mb-3">
-                <Sparkles className="w-3.5 h-3.5" /> Новые бренды недели
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-serif text-graphite mb-3 leading-tight">
-                5 главных коллекций, которые стоит попробовать уже сейчас
-              </h2>
-              <p className="text-sm text-ash mb-6 leading-relaxed">
-                Обновление каталога каждую неделю. Только проверенные бренды с уникальным характером.
-              </p>
-              <Link to="/brands">
-                <Button variant="primary" className="gap-2">
-                  Смотреть
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
+      <motion.section {...fadeInUp} className="container mx-auto px-4 sm:px-6 relative z-10">
+        <div className="capsule p-8 sm:p-12 md:p-16 flex flex-col md:flex-row items-center justify-between gap-8 border-primary/20">
+          <div className="max-w-xl">
+            <div className="flex items-center gap-2 text-primary font-bold text-xs tracking-widest uppercase mb-4">
+              <Sparkles className="w-4 h-4" />
+              <span>Кураторская подборка недели</span>
             </div>
-            {/* Decorative blobs */}
-            <div className="absolute top-0 right-0 w-48 h-48 rounded-full bg-primary/5 -translate-y-1/4 translate-x-1/4 blur-2xl" />
-            <div className="absolute bottom-0 right-1/4 w-32 h-32 rounded-full bg-primary-light/20 translate-y-1/4 blur-xl" />
-          </div>
-        </div>
-      </motion.section>
-
-      {/* ─── New Arrivals ─── */}
-      <motion.section className="py-16 sm:py-20 bg-milk" {...fadeInUp}>
-        <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-serif text-graphite mb-2">Новинки</h2>
-              <p className="text-sm text-ash">Свежие поступления этой недели</p>
-            </div>
-            <Link to="/catalog?filter=new">
-              <Button variant="outline" size="sm" className="gap-2 group">
-                Все новинки
-                <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-              </Button>
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-            {newProducts.slice(0, 4).map(product => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        </div>
-      </motion.section>
-
-      {/* ─── Brand Marquee ─── */}
-      <section className="py-14 bg-white border-y border-border-lighter overflow-hidden">
-        <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
-          <p className="text-[10px] font-bold tracking-[0.2em] text-center text-ash uppercase mb-8">
-            Избранные бренды
-          </p>
-          <div className="flex flex-wrap justify-center gap-x-10 gap-y-6 md:gap-x-16">
-            {BRANDS.map(brand => (
-              <Link
-                key={brand.id}
-                to={`/brand/${brand.id}`}
-                className="text-lg md:text-xl font-serif text-graphite/50 tracking-wide hover:text-primary transition-colors"
-              >
-                {brand.name}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Collections ─── */}
-      <motion.section className="py-16 sm:py-20 bg-milk" {...fadeInUp}>
-        <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
-          <h2 className="text-2xl sm:text-3xl font-serif text-graphite mb-10">Подборки</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {COLLECTIONS.map(col => (
-              <Link key={col.id} to={`/catalog`} className="group relative block rounded-3xl overflow-hidden aspect-[3/4]">
-                <img src={col.image} alt={col.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-6">
-                  <h3 className="text-xl font-serif text-white mb-1">{col.title}</h3>
-                  <p className="text-sm text-white/70">{col.subtitle}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </motion.section>
-
-      {/* ─── Editor's Choice ─── */}
-      <motion.section className="py-16 sm:py-20 bg-white" {...fadeInUp}>
-        <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 gap-4">
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-serif text-graphite mb-2">Выбор редакции</h2>
-              <p className="text-sm text-ash">Наши стилисты рекомендуют</p>
-            </div>
-            <Link to="/catalog">
-              <Button variant="outline" size="sm" className="gap-2 group">
-                Смотреть все
-                <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-              </Button>
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-            {editorPicks.map(product => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        </div>
-      </motion.section>
-
-      {/* ─── Editorial Story Block ─── */}
-      <motion.section className="py-16 sm:py-24 bg-milk" {...fadeInUp}>
-        <div className="container mx-auto px-4 sm:px-6 max-w-7xl grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-          <div className="relative aspect-[3/4] rounded-3xl overflow-hidden">
-            <img
-              src="https://images.unsplash.com/photo-1550614000-4b95d4158223?q=80&w=2000&auto=format&fit=crop"
-              alt="Editorial"
-              className="w-full h-full object-cover"
-            />
-            {/* Editorial overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-            <div className="absolute bottom-6 left-6 right-6">
-              <p className="text-5xl font-serif text-white/90 leading-none">Искусство<br />сдержанности.</p>
-            </div>
-          </div>
-          <div className="max-w-md">
-            <span className="text-xs font-semibold tracking-[0.15em] text-primary-hover uppercase mb-3 block">Эдиториал</span>
-            <h2 className="text-3xl sm:text-4xl font-serif text-graphite mb-5 leading-tight">
-              Когда меньше — значит больше
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif text-graphite mb-4 leading-tight">
+              5 нишевых брендов,
+              <br />
+              которые формируют сцену.
             </h2>
-            <p className="text-ash leading-relaxed mb-8">
-              Настоящая роскошь шепчет. Она — в идеальной драпировке шёлка, в архитектурной точности пальто оверсайз и в тихой уверенности минималистичного дизайна. Наш новый эдиториал о вещах переходного сезона.
+            <p className="text-graphite-light text-sm md:text-base leading-relaxed mb-8">
+              Еженедельно собираем вещи с выразительным кроем, цифровой фактурой и холодным дизайнерским настроением.
             </p>
-            <Link to="/catalog">
-              <Button variant="link" className="text-graphite font-medium gap-2 group">
-                Читать эдиториал
-                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-              </Button>
-            </Link>
+            <Button variant="primary" size="lg" className="w-full sm:w-auto shadow-primary/30">
+              Смотреть подборку <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
+          <div className="hidden md:block w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500 border-4 border-white/50">
+            <img
+              src="https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&q=80"
+              alt="Капсульный стиль"
+              className="w-full aspect-[3/4] object-cover"
+            />
           </div>
         </div>
       </motion.section>
 
-      {/* ─── Bestsellers ─── */}
-      {bestsellers.length > 0 && (
-        <motion.section className="py-16 sm:py-20 bg-white" {...fadeInUp}>
-          <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
-            <h2 className="text-2xl sm:text-3xl font-serif text-graphite mb-10">Популярное</h2>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-              {bestsellers.map(product => (
-                <ProductCard key={product.id} product={product} />
-              ))}
+      <motion.section {...fadeInUp} className="container mx-auto px-4 sm:px-6 relative z-10">
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <h2 className="text-3xl font-serif text-graphite mb-2">Новая поставка</h2>
+            <p className="text-sm text-ash">Свежие поступления и лимитированные релизы</p>
+          </div>
+          <Button variant="ghost" className="hidden sm:flex">
+            Все хиты <ArrowRight className="w-4 h-4 ml-2" />
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          {newProducts.map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+        </div>
+        <Button variant="secondary" className="w-full mt-6 sm:hidden">
+          Смотреть все новинки
+        </Button>
+      </motion.section>
+
+      <section className="relative z-10 py-12 glass-panel border-x-0 !rounded-none shadow-none">
+        <div className="container mx-auto px-4">
+          <p className="text-center text-xs font-bold text-ash uppercase tracking-widest mb-8">Бренды цифровой витрины</p>
+          <div className="flex flex-wrap justify-center items-center gap-x-12 gap-y-8 opacity-70">
+            {BRANDS.map((brand) => (
+              <Link key={brand.id} to={`/brand/${brand.id}`} className="hover:opacity-100 hover:scale-105 transition-all grayscale hover:grayscale-0">
+                <span className="font-serif font-bold text-xl md:text-2xl text-graphite">{brand.name}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <motion.section {...fadeInUp} className="container mx-auto px-4 sm:px-6 relative z-10">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-serif text-graphite mb-2">Кураторские подборки</h2>
+          <p className="text-sm text-ash">Асимметричные капсулы и редакторские темы</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[300px] md:auto-rows-[400px]">
+          {COLLECTIONS.map((collection, index) => (
+            <Link
+              key={collection.id}
+              to={`/catalog?collection=${collection.id}`}
+              className={`group capsule overflow-hidden block ${index === 0 ? 'md:col-span-2' : ''}`}
+            >
+              <div className="absolute inset-0">
+                <img
+                  src={collection.image}
+                  alt={collection.title}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-graphite/80 via-graphite/20 to-transparent opacity-85 group-hover:opacity-90 transition-opacity" />
+              </div>
+              <div className="absolute bottom-0 left-0 p-8 w-full">
+                <span className="inline-block px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-[10px] font-bold uppercase tracking-widest mb-3">
+                  {collection.itemCount} товаров
+                </span>
+                <h3 className="text-2xl font-serif font-medium text-white mb-2">{collection.title}</h3>
+                <p className="text-white/80 text-sm line-clamp-2 max-w-md">{collection.description}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </motion.section>
+
+      <motion.section {...fadeInUp} className="container mx-auto px-4 sm:px-6 relative z-10">
+        <div className="flex flex-col md:flex-row items-center gap-12">
+          <div className="md:w-1/3 w-full">
+            <h2 className="text-3xl font-serif text-graphite mb-4">Выбор куратора</h2>
+            <p className="text-ash mb-8 leading-relaxed text-sm">
+              Вещи с особым характером: деконструкция, объем, холодные фактуры и независимый дизайнерский язык.
+            </p>
+            <Button variant="outline" className="w-full md:w-auto">
+              Изучить селекцию
+            </Button>
+          </div>
+          <div className="md:w-2/3 w-full grid grid-cols-2 gap-4 sm:gap-6">
+            {editorPicks.slice(0, 2).map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </div>
+      </motion.section>
+
+      <motion.section {...fadeInUp} className="relative z-10 w-full mb-8">
+        <div className="container mx-auto px-4 sm:px-6">
+          <div className="capsule aspect-video w-full flex items-center justify-center p-0 border border-primary/20 bg-graphite/5 relative group cursor-pointer overflow-hidden shadow-2xl">
+            <img
+              src="https://images.unsplash.com/photo-1550614000-4b95d415dc14?auto=format&fit=crop&q=80"
+              className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-[2s]"
+              alt="Видео-история коллекции"
+            />
+            <div className="absolute inset-0 bg-graphite/30 group-hover:bg-graphite/40 transition-colors" />
+            <div className="relative w-20 h-20 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center border border-white/50 group-hover:scale-110 transition-transform">
+              <Play className="w-8 h-8 text-white ml-2" />
+            </div>
+
+            <div className="absolute bottom-8 left-8">
+              <p className="text-white/80 text-xs font-bold uppercase tracking-widest mb-2 drop-shadow-md">Видеодневник / сезон 26</p>
+              <h3 className="text-3xl font-serif text-white drop-shadow-md">Зимняя Меланхолия</h3>
             </div>
           </div>
-        </motion.section>
-      )}
+        </div>
+      </motion.section>
+
+      <motion.section {...fadeInUp} className="container mx-auto px-4 sm:px-6 relative z-10 mb-20">
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <h2 className="text-3xl font-serif text-graphite mb-2">Архив хитов</h2>
+            <p className="text-sm text-ash">Модели, которые выбирают чаще всего</p>
+          </div>
+          <Button variant="ghost" className="hidden sm:flex">
+            В каталог <ArrowRight className="w-4 h-4 ml-2" />
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-4">
+          {bestsellers.map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+        </div>
+      </motion.section>
     </div>
   );
 }

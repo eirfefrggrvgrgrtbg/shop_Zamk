@@ -1,41 +1,35 @@
-import * as React from "react"
 import { cn } from "../../lib/utils"
 
-export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "ghost" | "pill" | "outline" | "link";
-  size?: "default" | "sm" | "lg" | "icon";
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'ghost' | 'pill' | 'outline' | 'link';
+  size?: 'sm' | 'md' | 'lg' | 'icon';
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "primary", size = "default", ...props }, ref) => {
-
-    const baseStyles = "inline-flex items-center justify-center whitespace-nowrap font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none";
-
-    const variants: Record<string, string> = {
-      primary: "bg-primary text-white rounded-2xl shadow-sm hover:bg-primary-hover hover:shadow-md active:scale-[0.97]",
-      secondary: "bg-white text-graphite border border-border-soft rounded-2xl hover:border-primary/40 hover:bg-ice active:scale-[0.97]",
-      ghost: "text-graphite rounded-xl hover:bg-surface active:bg-surface-warm",
-      pill: "bg-surface text-ash rounded-full border border-border-lighter hover:bg-primary-soft hover:text-graphite hover:border-primary/30 active:scale-[0.97]",
-      outline: "border border-border-soft bg-transparent rounded-2xl text-graphite hover:bg-surface hover:border-primary/40",
-      link: "text-primary underline-offset-4 hover:underline p-0 h-auto",
-    };
-
-    const sizes: Record<string, string> = {
-      default: "h-11 px-6 py-2.5 text-sm",
-      sm: "h-8 px-4 text-xs",
-      lg: "h-12 px-8 text-base",
-      icon: "h-10 w-10 rounded-xl",
-    };
-
-    return (
-      <button
-        className={cn(baseStyles, variants[variant], sizes[size], className)}
-        ref={ref}
-        {...props}
-      />
-    )
+function Button({ className, variant = 'primary', size = 'md', ...props }: ButtonProps) {
+  const baseStyles = "inline-flex items-center justify-center font-medium transition-all active:scale-[0.98] focus-visible:outline-none disabled:opacity-50 disabled:pointer-events-none";
+  
+  const variants: Record<string, string> = {
+    primary: "bg-primary text-white hover:bg-primary-hover shadow-[0_4px_14px_0_rgba(137,207,240,0.39)] hover:shadow-[0_6px_20px_rgba(137,207,240,0.23)] hover:-translate-y-0.5 rounded-full",
+    secondary: "bg-surface backdrop-blur-md text-graphite hover:bg-surface-hover border border-border-soft hover:border-primary/50 shadow-sm rounded-full",
+    ghost: "bg-transparent text-graphite hover:bg-primary-soft hover:text-primary rounded-full",
+    pill: "bg-surface backdrop-blur-md text-graphite hover:bg-primary/20 hover:text-primary border border-border-lighter rounded-full",
+    outline: "bg-transparent border-2 border-primary text-primary hover:bg-primary hover:text-white rounded-full",
+    link: "bg-transparent text-primary hover:text-primary-hover underline-offset-4 hover:underline rounded-none !p-0 h-auto",
   }
-)
-Button.displayName = "Button"
+
+  const sizes: Record<string, string> = {
+    sm: "h-9 px-4 text-xs",
+    md: "h-11 px-6 text-sm",
+    lg: "h-14 px-8 text-base",
+    icon: "h-11 w-11",
+  }
+
+  return (
+    <button
+      className={cn(baseStyles, variants[variant], sizes[size], className)}
+      {...props}
+    />
+  )
+}
 
 export { Button }

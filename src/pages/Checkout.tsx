@@ -92,7 +92,7 @@ export function Checkout() {
                   <Input placeholder="Имя" />
                   <Input placeholder="Фамилия" />
                 </div>
-                <Input placeholder="Email" type="email" />
+                <Input placeholder="Эл. почта" type="email" />
                 <Input placeholder="Телефон" type="tel" />
                 <h3 className="text-lg font-semibold text-graphite pt-4">Адрес доставки</h3>
                 <Input placeholder="Город" />

@@ -46,8 +46,8 @@ export function ProductDetail() {
   };
 
   return (
-    <div className="min-h-screen bg-milk">
-      <div className="container mx-auto px-4 sm:px-6 max-w-7xl py-6">
+    <div className="min-h-screen relative z-10">
+      <div className="container mx-auto px-4 sm:px-6 max-w-7xl pt-32 pb-12">
         {/* Back button */}
         <Link to="/catalog" className="inline-flex items-center gap-1.5 text-sm text-ash hover:text-graphite transition-colors mb-6">
           <ArrowLeft className="w-4 h-4" /> Назад в каталог
@@ -57,7 +57,7 @@ export function ProductDetail() {
           {/* Gallery */}
           <div className="space-y-3">
             <motion.div
-              className="relative aspect-square bg-surface rounded-3xl overflow-hidden flex items-center justify-center"
+              className="relative aspect-[4/5] capsule p-2 md:p-4 overflow-hidden flex items-center justify-center border-primary/20"
               layoutId={`product-image-${product.id}`}
             >
               <img
@@ -131,7 +131,7 @@ export function ProductDetail() {
             )}
 
             {/* Sizes */}
-            {product.sizes && product.sizes.length > 0 && product.sizes[0] !== 'One Size' && (
+            {product.sizes && product.sizes.length > 0 && product.sizes[0] !== 'Единый' && (
               <div>
                 <p className="text-sm font-medium text-graphite mb-2.5">Размер</p>
                 <div className="flex flex-wrap gap-2">
@@ -258,7 +258,7 @@ export function ProductDetail() {
       </div>
 
       {/* Sticky Purchase Panel (mobile) */}
-      <div className="fixed bottom-16 left-0 right-0 md:hidden glass-strong border-t border-border-lighter px-4 py-3 z-40">
+      <div className="fixed bottom-16 left-0 right-0 md:hidden glass-panel-strong border-t border-border-lighter px-4 py-3 z-40">
         <div className="flex items-center gap-3">
           <div className="flex-1">
             <p className="text-xs text-ash">{product.brand}</p>

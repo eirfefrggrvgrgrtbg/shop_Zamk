@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 
@@ -6,49 +7,59 @@ interface DrawerProps {
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
-  side?: 'right' | 'left';
+  position?: 'left' | 'right';
 }
 
-export function Drawer({ isOpen, onClose, title, children, side = 'right' }: DrawerProps) {
-  const isRight = side === 'right';
+export function Drawer({ isOpen, onClose, title, children, position = 'left' }: DrawerProps) {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => { document.body.style.overflow = 'unset'; };
+  }, [isOpen]);
+
+  const slideDirection = position === 'left' ? -100 : 100;
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[80]">
+        <>
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="absolute inset-0 bg-graphite/20 backdrop-blur-sm"
             onClick={onClose}
+            className="fixed inset-0 z-50 bg-graphite/20 backdrop-blur-sm"
           />
+
           <motion.div
-            initial={{ x: isRight ? '100%' : '-100%' }}
+            initial={{ x: `${slideDirection}%` }}
             animate={{ x: 0 }}
-            exit={{ x: isRight ? '100%' : '-100%' }}
-            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            className={`absolute top-0 ${isRight ? 'right-0' : 'left-0'} h-full w-full max-w-md glass-strong shadow-2xl`}
+            exit={{ x: `${slideDirection}%` }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className={`fixed top-0 bottom-0 z-50 w-[85vw] sm:w-[400px] glass-panel-strong flex flex-col
+              ${position === 'left' ? 'left-0 rounded-r-[2rem]' : 'right-0 rounded-l-[2rem]'}
+            `}
           >
-            <div className="h-full flex flex-col">
-              {title && (
-                <div className="flex items-center justify-between p-5 border-b border-border-lighter">
-                  <h3 className="text-lg font-semibold text-graphite">{title}</h3>
-                  <button
-                    onClick={onClose}
-                    className="w-8 h-8 rounded-xl flex items-center justify-center text-ash hover:text-graphite hover:bg-surface transition-all"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-              <div className="flex-1 overflow-y-auto p-5">
-                {children}
-              </div>
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-border-lighter">
+              {title && <h2 className="text-xl font-serif font-semibold text-graphite">{title}</h2>}
+              <button
+                onClick={onClose}
+                className="p-2 -mr-2 text-ash hover:text-graphite bg-white/40 hover:bg-white/80 rounded-full transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 overflow-y-auto flex-1 scrollbar-hide">
+              {children}
             </div>
           </motion.div>
-        </div>
+        </>
       )}
     </AnimatePresence>
   );
