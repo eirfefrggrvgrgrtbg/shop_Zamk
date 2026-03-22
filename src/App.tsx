@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { CartProvider } from './contexts/CartContext';
 import { FavoritesProvider } from './contexts/FavoritesContext';
 import { SearchProvider } from './contexts/SearchContext';
@@ -36,8 +37,9 @@ function ScrollToTop() {
 
 function App() {
   return (
-    <AuthProvider>
-      <SearchProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <SearchProvider>
         <ToastProvider>
           <CartProvider>
             <FavoritesProvider>
@@ -72,7 +74,8 @@ function App() {
           </CartProvider>
         </ToastProvider>
       </SearchProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

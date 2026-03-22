@@ -14,12 +14,12 @@ export function ProductCard({ product }: ProductCardProps) {
   const favorited = isFavorite(product.id);
 
   return (
-    <div className="group flex flex-col h-full bg-white rounded-[1.4rem] shadow-[0_2px_12px_rgba(120,148,180,0.08)] hover:shadow-[0_12px_40px_rgba(100,135,175,0.14)] transition-all duration-500 overflow-hidden ring-1 ring-border-lighter/60 hover:-translate-y-0.5">
+    <div className="relative group flex flex-col h-full bg-white/40 dark:bg-white/[0.03] backdrop-blur-2xl rounded-[1.4rem] shadow-[0_2px_12px_rgba(120,148,180,0.08)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.6)] hover:shadow-[0_12px_40px_rgba(100,135,175,0.14)] dark:hover:shadow-[0_12px_40px_rgba(0,0,0,0.8)] transition-all duration-500 overflow-hidden border border-white/60 dark:border-white/[0.08]  hover:-translate-y-0.5">
 
       {/* Image area */}
       <Link
         to={`/product/${product.id}`}
-        className="relative block overflow-hidden bg-gradient-to-b from-[#f0f5fb] to-[#eef3f9]"
+        className="relative block overflow-hidden dark:bg-transparent"
         style={{ aspectRatio: '4/5' }}
       >
         <div className="relative w-full h-full overflow-hidden p-2">
@@ -30,7 +30,7 @@ export function ProductCard({ product }: ProductCardProps) {
             loading="lazy"
           />
           {/* Hover vignette */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#1b2b4218] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-[1.1rem]" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-[1.1rem]" />
         </div>
 
         {/* Badges — top left, stacked cleanly */}
@@ -69,7 +69,7 @@ export function ProductCard({ product }: ProductCardProps) {
       </Link>
 
       {/* Info area */}
-      <div className="px-4 pt-3.5 pb-4 md:px-5 md:pt-4 md:pb-5 flex flex-col flex-grow bg-white">
+      <div className="px-4 pt-3.5 pb-4 md:px-5 md:pt-4 md:pb-5 flex flex-col flex-grow dark:bg-transparent">
         <div className="mb-auto">
           {/* Brand label */}
           <p className="text-[10px] font-semibold tracking-[0.1em] text-ash uppercase mb-1">

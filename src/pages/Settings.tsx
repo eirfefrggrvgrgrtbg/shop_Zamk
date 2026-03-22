@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, LogOut, Trash2, Moon, Sun, Monitor, MapPin, ChevronRight, X, Plus, CreditCard } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -67,8 +68,8 @@ export function Settings() {
   const { user, logout } = useAuth();
   
   // States - Оформление
-  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
-  
+  const { theme, setTheme } = useTheme();
+
   // States - Уведомления
   const [notifOrders, setNotifOrders] = useState(true);
   const [notifDelivery, setNotifDelivery] = useState(true);
