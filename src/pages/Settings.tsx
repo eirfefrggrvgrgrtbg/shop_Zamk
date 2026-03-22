@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, LogOut, Trash2, Moon, Sun, Monitor, MapPin, ChevronRight, X, Plus } from 'lucide-react';
+import { Lock, LogOut, Trash2, Moon, Sun, Monitor, MapPin, ChevronRight, X, Plus, CreditCard } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
@@ -99,6 +99,29 @@ export function Settings() {
     localStorage.setItem('zamk_addresses', JSON.stringify(addresses));
   }, [addresses]);
 
+  // States - Способы оплаты
+  interface PaymentMethod {
+    id: number;
+    cardNumber: string;
+    expiry: string;
+    isDefault: boolean;
+  }
+  const [payments, setPayments] = useState<PaymentMethod[]>(() => {
+    const saved = localStorage.getItem('zamk_payments');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [
+      { id: 1, cardNumber: '**** **** **** 4242', expiry: '12/25', isDefault: true }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('zamk_payments', JSON.stringify(payments));
+  }, [payments]);
+
   // Modals
   const [isPasswordModalOpen, setPasswordModalOpen] = useState(false);
   const [isLogoutModalOpen, setLogoutModalOpen] = useState(false);
@@ -133,6 +156,35 @@ export function Settings() {
     setAddresses(addresses.filter(a => a.id !== id));
   };
 
+  // Payment editing state
+  const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<{ id?: number; cardNumber: string; expiry: string } | null>(null);
+
+  const handleOpenPaymentModal = (payment?: PaymentMethod) => {
+    if (payment) {
+      setEditingPayment(payment);
+    } else {
+      setEditingPayment({ cardNumber: '', expiry: '' });
+    }
+    setPaymentModalOpen(true);
+  };
+
+  const handleSavePayment = () => {
+    if (!editingPayment || !editingPayment.cardNumber.trim() || !editingPayment.expiry.trim()) return;
+
+    if (editingPayment.id) {
+      setPayments(payments.map(p => p.id === editingPayment.id ? { ...p, cardNumber: editingPayment.cardNumber, expiry: editingPayment.expiry } : p));
+    } else {
+      const newId = payments.length > 0 ? Math.max(...payments.map(p => p.id)) + 1 : 1;
+      setPayments([...payments, { id: newId, cardNumber: editingPayment.cardNumber, expiry: editingPayment.expiry, isDefault: payments.length === 0 }]);
+    }
+    setPaymentModalOpen(false);
+  };
+
+  const handleDeletePayment = (id: number) => {
+    setPayments(payments.filter(p => p.id !== id));
+  };
+
   return (
     <div className='relative z-10 min-h-screen pt-24 md:pt-32 pb-20'>
       <div className='container mx-auto px-4 sm:px-6 max-w-[800px]'>
@@ -142,29 +194,6 @@ export function Settings() {
           <h1 className="font-serif text-4xl md:text-5xl text-graphite mb-2">Настройки</h1>
           <p className="text-graphite/50 text-[15px]">Управление аккаунтом и предпочтениями</p>
         </div>
-
-        {/* 1. Безопасность */}
-        <Section title="Безопасность">
-          <SectionRow 
-            icon={Lock} 
-            title="Сменить пароль" 
-            description="Обновить текущий пароль учетной записи"
-            onClick={() => setPasswordModalOpen(true)}
-          />
-          <SectionRow 
-            icon={LogOut} 
-            title="Выйти со всех устройств" 
-            description="Завершить сеансы на других устройствах"
-            onClick={() => setLogoutModalOpen(true)}
-          />
-          <SectionRow 
-            icon={Trash2} 
-            title="Удалить аккаунт" 
-            description="Навсегда удалить профиль и все данные"
-            danger
-            onClick={() => setDeleteModalOpen(true)}
-          />
-        </Section>
 
         {/* 2. Внешний вид */}
         <Section title="Внешний вид">
@@ -198,20 +227,40 @@ export function Settings() {
           </div>
         </Section>
 
-        {/* 3. Уведомления */}
-        <Section title="Уведомления">
-          <SectionRow title="Статусы заказов" description="Изменения в статусе обработки">
-            <ToggleSwitch isOn={notifOrders} onToggle={() => setNotifOrders(!notifOrders)} />
-          </SectionRow>
-          <SectionRow title="Доставка" description="Оповещения курьерских служб">
-            <ToggleSwitch isOn={notifDelivery} onToggle={() => setNotifDelivery(!notifDelivery)} />
-          </SectionRow>
-          <SectionRow title="Новые поступления" description="Дропы и свежие коллекции">
-            <ToggleSwitch isOn={notifBrands} onToggle={() => setNotifBrands(!notifBrands)} />
-          </SectionRow>
-          <SectionRow title="Подборки и новости" description="Редакционные материалы ZAMK">
-            <ToggleSwitch isOn={notifNews} onToggle={() => setNotifNews(!notifNews)} />
-          </SectionRow>
+        {/* 2.5 Способы оплаты */}
+        <Section title="Способы оплаты">
+          <div className="p-5 md:p-6 grid gap-4">
+            {payments.map((item) => (
+              <div key={item.id} className={`p-4 rounded-2xl border transition-all ${item.isDefault ? 'border-graphite/30 bg-white/60' : 'border-white/50 bg-white/20'}`}>
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-graphite/50" />
+                    <h5 className="font-medium text-graphite text-[14px]">{item.cardNumber}</h5>
+                    {item.isDefault && (
+                      <span className="bg-graphite/10 text-graphite px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-semibold">Основной</span>
+                    )}
+                  </div>
+                  <div className="flex gap-3 text-[12px] font-medium">
+                    <button onClick={() => handleOpenPaymentModal(item)} className="text-graphite/40 hover:text-graphite transition-colors">Изм.</button>
+                    {!item.isDefault && <button onClick={() => handleDeletePayment(item.id)} className="text-red-400 hover:text-red-500 transition-colors">Удал.</button>}
+                  </div>
+                </div>
+                <p className="text-[13px] text-graphite/60 pl-6 leading-relaxed">Срок действия: {item.expiry}</p>
+                {!item.isDefault && (
+                   <div className="pl-6 mt-3">
+                     <button onClick={() => setPayments(payments.map(a => ({...a, isDefault: a.id === item.id})))} className="text-[12px] text-graphite hover:underline underline-offset-4">
+                       Сделать основным
+                     </button>
+                   </div>
+                )}
+              </div>
+            ))}
+            
+            <button onClick={() => handleOpenPaymentModal()} className="flex items-center justify-center gap-2 w-full py-4 mt-2 border border-dashed border-graphite/20 rounded-2xl text-graphite/50 hover:text-graphite hover:border-graphite/40 hover:bg-graphite/5 transition-all text-[14px] font-medium">
+              <Plus className="w-4 h-4" />
+              Добавить способ оплаты
+            </button>
+          </div>
         </Section>
 
         {/* 4. Доставка */}
@@ -250,11 +299,48 @@ export function Settings() {
           </div>
         </Section>
 
+        {/* 3. Уведомления */}
+        <Section title="Уведомления">
+          <SectionRow title="Статусы заказов" description="Изменения в статусе обработки">
+            <ToggleSwitch isOn={notifOrders} onToggle={() => setNotifOrders(!notifOrders)} />
+          </SectionRow>
+          <SectionRow title="Доставка" description="Оповещения курьерских служб">
+            <ToggleSwitch isOn={notifDelivery} onToggle={() => setNotifDelivery(!notifDelivery)} />
+          </SectionRow>
+          <SectionRow title="Новые поступления" description="Дропы и свежие коллекции">
+            <ToggleSwitch isOn={notifBrands} onToggle={() => setNotifBrands(!notifBrands)} />
+          </SectionRow>
+          <SectionRow title="Подборки и новости" description="Редакционные материалы ZAMK">
+            <ToggleSwitch isOn={notifNews} onToggle={() => setNotifNews(!notifNews)} />
+          </SectionRow>
+        </Section>
+
+        {/* 1. Безопасность */}
+        <Section title="Безопасность">
+          <SectionRow 
+            icon={Lock} 
+            title="Сменить пароль" 
+            description="Обновить текущий пароль учетной записи"
+            onClick={() => setPasswordModalOpen(true)}
+          />
+          <SectionRow 
+            icon={LogOut} 
+            title="Выйти со всех устройств" 
+            description="Завершить сеансы на других устройствах"
+            onClick={() => setLogoutModalOpen(true)}
+          />
+          <SectionRow 
+            icon={Trash2} 
+            title="Удалить аккаунт" 
+            description="Навсегда удалить профиль и все данные"
+            danger
+            onClick={() => setDeleteModalOpen(true)}
+          />
+        </Section>
+
       </div>
 
       {/* Модалки */}
-      
-      {/* Смена пароля */}
       <Modal isOpen={isPasswordModalOpen} onClose={() => setPasswordModalOpen(false)} title="Смена пароля">
         <div className="space-y-4 pt-2">
           <Input type="password" placeholder="Текущий пароль" className="bg-white/50" />
@@ -321,6 +407,33 @@ export function Settings() {
           </div>
           <Button onClick={handleSaveAddress} className="w-full mt-4">
             Сохранить адрес
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Оплата Модалка */}
+      <Modal isOpen={isPaymentModalOpen} onClose={() => setPaymentModalOpen(false)} title={editingPayment?.id ? "Редактировать карту" : "Добавить карту"}>
+        <div className="pt-2 flex flex-col gap-4">
+          <div>
+            <label className="text-[12px] font-medium text-graphite/60 uppercase tracking-wider mb-2 block">Номер карты</label>
+            <Input 
+              value={editingPayment?.cardNumber || ''} 
+              onChange={(e) => setEditingPayment(prev => prev ? { ...prev, cardNumber: e.target.value } : { cardNumber: e.target.value, expiry: '' })}
+              className="bg-white/50 border-white/40 shadow-sm"
+              placeholder="0000 0000 0000 0000"
+            />
+          </div>
+          <div>
+            <label className="text-[12px] font-medium text-graphite/60 uppercase tracking-wider mb-2 block">Срок действия</label>
+            <Input
+              value={editingPayment?.expiry || ''} 
+              onChange={(e) => setEditingPayment(prev => prev ? { ...prev, expiry: e.target.value } : { cardNumber: '', expiry: e.target.value })}
+              className="bg-white/50 border-white/40 shadow-sm w-1/2"
+              placeholder="ММ/ГГ"
+            />
+          </div>
+          <Button onClick={handleSavePayment} className="w-full mt-4">
+            Сохранить способ оплаты
           </Button>
         </div>
       </Modal>
