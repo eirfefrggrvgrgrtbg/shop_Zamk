@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-milk: var(--color-milk);
   --color-ice: var(--color-ice);
@@ -236,3 +238,42 @@
   z-index: 0;
   opacity: 0.2;
 }
+
+/* ====================================================
+   Page Peel View Transitions for Theme Toggle
+==================================================== */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* The existing theme stays at the bottom */
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+/* The new theme sweeps in as a triangle from the top left corner */
+::view-transition-new(root) {
+  z-index: 2;
+  clip-path: polygon(0 0, 0 0, 0 0);
+  animation: page-peel-sweep 0.7s cubic-bezier(0.25, 1, 0.4, 1) forwards;
+}
+
+@keyframes page-peel-sweep {
+  0% {
+    clip-path: polygon(0 0, 0 0, 0 0);
+  }
+  100% {
+    /* 300% handles ultra-wide aspect ratios to ensure it sweeps the entire diagonal */
+    clip-path: polygon(0 0, 300% 0, 0 300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+  }
+}
+

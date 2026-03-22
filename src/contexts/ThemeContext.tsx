@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useLayoutEffect, useState } from 'react';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -17,7 +17,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const [isDark, setIsDark] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     localStorage.setItem('zamk_theme', theme);
     
     const root = window.document.documentElement;
