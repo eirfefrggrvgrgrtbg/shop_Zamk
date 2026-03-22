@@ -1,11 +1,13 @@
 import { Link } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useFavorites } from '../contexts/FavoritesContext';
+import { useAuth } from '../contexts/AuthContext';
 import { ProfilePanel } from '../components/editorial/StudioKit';
 
 export function Profile() {
   const { totalItems } = useCart();
   const { favorites } = useFavorites();
+  const { user } = useAuth();
 
   return (
     <div className='relative z-10 min-h-screen pt-16 md:pt-20 pb-20'>
@@ -23,8 +25,8 @@ export function Profile() {
 
         <div className='mt-8 grid grid-cols-1 md:grid-cols-2 gap-5 max-w-[980px] mx-auto'>
           <ProfilePanel title='Аккаунт'>
-            <p className='text-graphite-light'>Анна Прокофьева</p>
-            <p className='text-sm text-ash mt-1'>anna@zamk.store</p>
+            <p className='text-graphite-light'>{user ? user.name : 'Гость'}</p>
+            <p className='text-sm text-ash mt-1'>{user ? user.email : 'Авторизуйтесь для управления аккаунтом'}</p>
           </ProfilePanel>
 
           <ProfilePanel title='Статистика'>

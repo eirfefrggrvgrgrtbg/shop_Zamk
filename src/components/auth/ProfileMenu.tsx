@@ -55,7 +55,7 @@ export function ProfileMenu() {
                 Мой профиль
               </Link>
               <Link 
-                to="/profile"  // Или отдельная страница
+                to="/orders"
                 onClick={() => setIsOpen(false)}
                 className="flex items-center gap-3 px-5 py-2.5 text-[13.5px] text-graphite/70 hover:bg-white/60 hover:text-graphite transition-all"
               >

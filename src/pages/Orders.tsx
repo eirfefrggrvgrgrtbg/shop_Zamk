@@ -1,0 +1,237 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Package, ChevronRight, ArrowLeft, MapPin, CreditCard, Truck } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { Drawer } from '../components/ui/Drawer';
+
+const MOCK_ORDERS = [
+  {
+    id: 'ZMK-10293',
+    date: '20 марта 2026',
+    status: 'В пути',
+    statusColor: 'text-blue-600 bg-blue-50/80 border border-blue-100',
+    total: 32500,
+    delivery: {
+      address: 'Москва, ул. Тверская 12, кв. 44',
+      service: 'Курьер СДЭК'
+    },
+    items: [
+      { id: 'p8', name: 'Пальто-кокон северной серии', size: 'M', price: 34900, image: 'https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?w=800&auto=format' },
+      { id: 'p4', name: 'Свитер объемной вязки', size: 'L', price: 12500, image: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=800&auto=format' }
+    ]
+  },
+  {
+    id: 'ZMK-08112',
+    date: '15 февраля 2026',
+    status: 'Доставлен',
+    statusColor: 'text-graphite bg-graphite/5 border border-graphite/10',
+    total: 18900,
+    delivery: {
+      address: 'Санкт-Петербург, Невский пр. 45, кв. 12',
+      service: 'Пункт выдачи Boxberry'
+    },
+    items: [
+      { id: 'p12', name: 'Тренч с деконструкцией', size: 'M', price: 28900, image: 'https://images.unsplash.com/photo-1585487000143-6519d58aef14?w=800&auto=format' }
+    ]
+  },
+  {
+    id: 'ZMK-05441',
+    date: '10 января 2026',
+    status: 'Доставлен',
+    statusColor: 'text-graphite bg-graphite/5 border border-graphite/10',
+    total: 45000,
+    delivery: {
+      address: 'Москва, Пятницкая 10',
+      service: 'Курьер ZAMK VIP'
+    },
+    items: [
+      { id: 'p1', name: 'Анорак ледяной линии', size: 'L', price: 14900, image: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=800&auto=format' },
+      { id: 'p5', name: 'Кроссовки аэр-сетки', size: '42', price: 21500, image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format' }
+    ]
+  }
+];
+
+export function Orders() {
+  const { isAuthenticated } = useAuth();
+  const [selectedOrder, setSelectedOrder] = useState<typeof MOCK_ORDERS[0] | null>(null);
+  
+  if (!isAuthenticated) {
+    return (
+      <div className="pt-32 pb-20 min-h-[70vh] flex flex-col items-center justify-center text-center px-4">
+        <Package className="w-12 h-12 text-ash-light mb-4" />
+        <h2 className="text-xl font-medium text-graphite mb-2">Доступ закрыт</h2>
+        <p className="text-sm text-ash mb-6">Войдите в аккаунт, чтобы просматривать историю заказов</p>
+        <Link to="/" className="text-[13px] font-medium border-b border-graphite pb-0.5 uppercase tracking-wide">
+          Вернуться на главную
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className='relative z-10 min-h-screen pt-24 md:pt-32 pb-20'>
+      <div className='container mx-auto px-4 sm:px-6 max-w-[800px]'>
+        
+        {/* Шапка страницы */}
+        <div className="mb-10 md:mb-12">
+          <Link to="/profile" className="inline-flex items-center gap-2 text-[13px] text-ash hover:text-graphite transition-colors mb-6 font-medium uppercase tracking-[0.04em]">
+            <ArrowLeft className="w-[14px] h-[14px]" />
+            Мой профиль
+          </Link>
+          <div className="flex items-end justify-between">
+            <h1 className="text-4xl md:text-5xl font-serif text-graphite tracking-tight leading-none">
+              Мои заказы
+            </h1>
+            <span className="text-sm text-ash mb-1 hidden sm:block">
+              {MOCK_ORDERS.length} заказа(ов)
+            </span>
+          </div>
+        </div>
+
+        {/* Список заказов */}
+        <div className="space-y-5">
+          {MOCK_ORDERS.map((order) => (
+            <div 
+              key={order.id} 
+              className="group bg-white/50 hover:bg-white/80 backdrop-blur-xl border border-white/60 shadow-[0_8px_30px_rgba(100,130,170,0.06)] rounded-[1.5rem] p-6 md:p-8 transition-all duration-500"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 sm:gap-0 border-b border-graphite/5 pb-6 mb-6">
+                <div>
+                  <div className="flex items-center gap-4 mb-2">
+                    <span className="font-medium text-graphite text-lg tracking-wide">{order.id}</span>
+                    <span className={`text-[11px] uppercase tracking-wider font-medium px-3 py-1 rounded-full ${order.statusColor}`}>
+                      {order.status}
+                    </span>
+                  </div>
+                  <p className="text-[13.5px] text-ash font-medium tracking-wide">{order.date}</p>
+                </div>
+                <div className="sm:text-right">
+                  <p className="text-[12px] text-ash uppercase tracking-wider mb-1">Сумма заказа</p>
+                  <p className="font-serif text-xl text-graphite">{order.total.toLocaleString('ru-RU')} ₽</p>
+                </div>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                <div className="flex-1">
+                  <p className="text-[14px] text-graphite/70 leading-relaxed font-medium">
+                    {order.items.map(i => `${i.name} · ${i.size}`).join(' / ')}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setSelectedOrder(order)}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent border border-graphite/20 hover:border-graphite text-[13px] font-medium text-graphite rounded-full transition-all group-hover:bg-white"
+                >
+                  Детали заказа
+                  <ChevronRight className="w-[14px] h-[14px]" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+      </div>
+
+      <Drawer 
+        isOpen={!!selectedOrder} 
+        onClose={() => setSelectedOrder(null)} 
+        position="right"
+      >
+        {selectedOrder && (
+          <div className="flex flex-col h-full overflow-y-auto w-full max-w-[480px] bg-white sm:rounded-l-[2rem]">
+            {/* Header Drawer'а */}
+            <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-xl border-b border-border-lighter px-6 py-5 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-serif text-graphite">Заказ {selectedOrder.id}</h3>
+                <p className="text-sm text-ash mt-0.5">{selectedOrder.date}</p>
+              </div>
+              <button 
+                onClick={() => setSelectedOrder(null)}
+                className="w-10 h-10 rounded-full bg-graphite/5 flex items-center justify-center text-graphite hover:bg-graphite/10 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Контент Drawer'а */}
+            <div className="flex-1 p-6 space-y-8">
+              
+              {/* Статус */}
+              <div className="flex items-center gap-3">
+                <span className={`text-[12px] uppercase tracking-wider font-medium px-4 py-1.5 rounded-full ${selectedOrder.statusColor}`}>
+                  {selectedOrder.status}
+                </span>
+                <span className="text-sm text-ash">Ожидаемая дата: 25 марта</span>
+              </div>
+
+              {/* Состав заказа */}
+              <div>
+                <h4 className="text-[13px] uppercase tracking-[0.05em] text-ash font-medium mb-4">Состав заказа</h4>
+                <div className="space-y-4">
+                  {selectedOrder.items.map((item, idx) => (
+                    <Link to={`/product/${item.id}`} key={idx} className="flex gap-4 group cursor-pointer hover:bg-graphite/[0.02] p-2 -m-2 rounded-xl transition-colors">
+                      <div className="w-20 h-24 bg-graphite/5 rounded-xl overflow-hidden flex-shrink-0">
+                        <img 
+                          src={item.image} 
+                          alt={item.name} 
+                          className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700" 
+                        />
+                      </div>
+                      <div className="flex-1 py-1 flex flex-col justify-between">
+                        <div>
+                          <p className="text-[14.5px] font-medium text-graphite leading-snug group-hover:underline decoration-1 underline-offset-2">{item.name}</p>
+                          <p className="text-[13px] text-ash mt-1">Размер: {item.size}</p>
+                        </div>
+                        <p className="font-serif text-[15px] text-graphite">{item.price.toLocaleString('ru-RU')} ₽</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+
+              <div className="h-px bg-graphite/5 w-full"></div>
+
+              {/* Детали доставки */}
+              <div>
+                <h4 className="text-[13px] uppercase tracking-[0.05em] text-ash font-medium mb-4">Доставка и оплата</h4>
+                <div className="space-y-5">
+                  <div className="flex gap-3">
+                    <MapPin className="w-5 h-5 text-ash mt-0.5" />
+                    <div>
+                      <p className="text-[14px] text-graphite font-medium">{selectedOrder.delivery.address}</p>
+                      <p className="text-[13px] text-ash mt-0.5">{selectedOrder.delivery.service}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <CreditCard className="w-5 h-5 text-ash mt-0.5" />
+                    <div>
+                      <p className="text-[14px] text-graphite font-medium">Оплачено картой</p>
+                      <p className="text-[13px] text-ash mt-0.5">**** 4592</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Итого */}
+              <div className="bg-graphite/5 rounded-2xl p-5 mt-8">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-graphite/70">Товары ({selectedOrder.items.length})</span>
+                  <span className="text-sm font-medium text-graphite">{selectedOrder.total.toLocaleString('ru-RU')} ₽</span>
+                </div>
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-sm text-graphite/70">Доставка</span>
+                  <span className="text-sm font-medium text-graphite">Бесплатно</span>
+                </div>
+                <div className="h-px bg-graphite/10 w-full mb-4"></div>
+                <div className="flex justify-between items-center">
+                  <span className="text-base font-medium text-graphite">Итого</span>
+                  <span className="text-xl font-serif text-graphite">{selectedOrder.total.toLocaleString('ru-RU')} ₽</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+      </Drawer>
+    </div>
+  );
+}
