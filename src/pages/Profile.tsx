@@ -49,10 +49,12 @@ export function Profile() {
 
         <ProfilePanel title='Разделы' className='mt-5 max-w-[980px] mx-auto'>
           <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
-            <Link to='/favorites' className='rounded-2xl border border-border-lighter bg-white px-4 py-3 text-sm text-graphite'>Избранное</Link>
-            <Link to='/cart' className='rounded-2xl border border-border-lighter bg-white px-4 py-3 text-sm text-graphite'>Корзина</Link>
-            <Link to='/delivery' className='rounded-2xl border border-border-lighter bg-white px-4 py-3 text-sm text-graphite'>Доставка и возврат</Link>
-            <Link to='/help' className='rounded-2xl border border-border-lighter bg-white px-4 py-3 text-sm text-graphite'>Помощь</Link>
+            <Link to='/settings' className='rounded-2xl border border-border-lighter bg-white px-4 py-3 text-sm text-graphite hover:border-graphite/30 transition-colors'>Настройки</Link>
+            <Link to='/favorites' className='rounded-2xl border border-border-lighter bg-white px-4 py-3 text-sm text-graphite hover:border-graphite/30 transition-colors'>Избранное</Link>
+            <Link to='/cart' className='rounded-2xl border border-border-lighter bg-white px-4 py-3 text-sm text-graphite hover:border-graphite/30 transition-colors'>Корзина</Link>
+            <Link to='/orders' className='rounded-2xl border border-border-lighter bg-white px-4 py-3 text-sm text-graphite hover:border-graphite/30 transition-colors'>Мои заказы</Link>
+            <Link to='/delivery' className='rounded-2xl border border-border-lighter bg-white px-4 py-3 text-sm text-graphite hover:border-graphite/30 transition-colors'>Доставка и возврат</Link>
+            <Link to='/help' className='rounded-2xl border border-border-lighter bg-white px-4 py-3 text-sm text-graphite hover:border-graphite/30 transition-colors'>Помощь</Link>
           </div>
         </ProfilePanel>
       </div>
