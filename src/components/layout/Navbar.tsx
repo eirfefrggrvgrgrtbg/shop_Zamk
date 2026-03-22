@@ -3,14 +3,17 @@ import { Link, useLocation } from 'react-router-dom';
 import { Heart, House, Menu, Search, ShoppingBag, User } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { useFavorites } from '../../contexts/FavoritesContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { Drawer } from '../ui/Drawer';
 import { Input } from '../ui/Input';
+import { ProfileMenu } from '../auth/ProfileMenu';
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { totalItems } = useCart();
   const { favorites } = useFavorites();
+  const { isAuthenticated, openAuthModal } = useAuth();
   const location = useLocation();
 
   useEffect(() => {
@@ -82,13 +85,19 @@ export function Navbar() {
               >
                 <Search className="w-[17px] h-[17px]" />
               </button>
-              <Link
-                to="/profile"
-                className="hidden sm:flex p-2.5 text-[13px] text-graphite/50 hover:text-graphite transition-colors font-medium tracking-[0.04em] rounded-full hover:bg-white/40 uppercase"
-                aria-label="Профиль"
-              >
-                Вход
-              </Link>
+              
+              {isAuthenticated ? (
+                <ProfileMenu />
+              ) : (
+                <button
+                  onClick={() => openAuthModal('login')}
+                  className="hidden sm:flex p-2.5 text-[13px] text-graphite/50 hover:text-graphite transition-colors font-medium tracking-[0.04em] rounded-full hover:bg-white/40 uppercase"
+                  aria-label="Вход"
+                >
+                  Вход
+                </button>
+              )}
+
               <Link
                 to="/favorites"
                 className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite transition-colors relative rounded-full hover:bg-white/40"
@@ -136,9 +145,23 @@ export function Navbar() {
               Избранное
               {favorites.length > 0 && <span className="bg-primary/20 text-primary text-xs px-2 py-1 rounded-full">{favorites.length}</span>}
             </Link>
-            <Link to="/profile" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
-              Профиль
-            </Link>
+            
+            {isAuthenticated ? (
+              <Link to="/profile" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
+                Профиль
+              </Link>
+            ) : (
+              <button 
+                className="text-lg font-medium py-2 border-b border-border-lighter text-left" 
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  openAuthModal('login');
+                }}
+              >
+                Вход / Регистрация
+              </button>
+            )}
+
             <Link to="/about" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               О проекте
             </Link>
@@ -163,9 +186,19 @@ export function Navbar() {
             <ShoppingBag className="w-5 h-5" />
             {totalItems > 0 && <span className="absolute -top-0.5 -right-0.5 bg-primary text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{totalItems}</span>}
           </Link>
-          <Link to="/profile" className={`p-2 rounded-full transition-colors ${location.pathname === '/profile' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
-            <User className="w-5 h-5" />
-          </Link>
+          
+          {isAuthenticated ? (
+            <Link to="/profile" className={`p-2 rounded-full transition-colors ${location.pathname === '/profile' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+              <User className="w-5 h-5" />
+            </Link>
+          ) : (
+            <button 
+              onClick={() => openAuthModal('login')}
+              className={`p-2 rounded-full transition-colors text-ash`}
+            >
+              <User className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
     </>
