@@ -2,9 +2,12 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import { FavoritesProvider } from './contexts/FavoritesContext';
+import { SearchProvider } from './contexts/SearchContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { ToastContainer } from './components/ui/ToastContainer';
 import { Layout } from './components/layout/Layout';
 import { AuthModal } from './components/auth/AuthModal';
+import { SearchOverlay } from './components/search/SearchOverlay';
 import { Home } from './pages/Home';
 import { Catalog } from './pages/Catalog';
 import { ProductDetail } from './pages/ProductDetail';
@@ -33,37 +36,40 @@ function ScrollToTop() {
 function App() {
   return (
     <AuthProvider>
-      <ToastProvider>
-        <CartProvider>
-          <FavoritesProvider>
-            <Router>
-              <ScrollToTop />
-              <Layout>
-                <Routes>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/catalog" element={<Catalog />} />
-                  <Route path="/product/:id" element={<ProductDetail />} />
-                  <Route path="/cart" element={<Cart />} />
-                  <Route path="/checkout" element={<Checkout />} />
-                  <Route path="/favorites" element={<Favorites />} />
-                  <Route path="/profile" element={<Profile />} />
-                  <Route path="/orders" element={<Orders />} />
-                  <Route path="/brands" element={<Brands />} />
-                  <Route path="/brand/:id" element={<BrandDetail />} />
-                  <Route path="/new" element={<NewArrivals />} />
-                  <Route path="/about" element={<About />} />
-                  <Route path="/delivery" element={<Delivery />} />
-                  <Route path="/help" element={<Help />} />
-                  <Route path="/contacts" element={<Contacts />} />
-                  <Route path="/privacy" element={<Privacy />} />
-                  <Route path="*" element={<Home />} />
-                </Routes>
-              </Layout>
-              <AuthModal />
-            </Router>
-          </FavoritesProvider>
-        </CartProvider>
-      </ToastProvider>
+      <SearchProvider>
+        <ToastProvider>
+          <CartProvider>
+            <FavoritesProvider>
+              <Router>
+                <ScrollToTop />
+                <Layout>
+                  <Routes>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/catalog" element={<Catalog />} />
+                    <Route path="/product/:id" element={<ProductDetail />} />
+                    <Route path="/cart" element={<Cart />} />
+                    <Route path="/checkout" element={<Checkout />} />
+                    <Route path="/favorites" element={<Favorites />} />
+                    <Route path="/profile" element={<Profile />} />
+                    <Route path="/orders" element={<Orders />} />
+                    <Route path="/brands" element={<Brands />} />
+                    <Route path="/brand/:id" element={<BrandDetail />} />
+                    <Route path="/new" element={<NewArrivals />} />
+                    <Route path="/about" element={<About />} />
+                    <Route path="/delivery" element={<Delivery />} />
+                    <Route path="/help" element={<Help />} />
+                    <Route path="/contacts" element={<Contacts />} />
+                    <Route path="/privacy" element={<Privacy />} />
+                    <Route path="*" element={<Home />} />
+                  </Routes>
+                </Layout>
+                <AuthModal />
+                <SearchOverlay />
+              </Router>
+            </FavoritesProvider>
+          </CartProvider>
+        </ToastProvider>
+      </SearchProvider>
     </AuthProvider>
   );
 }

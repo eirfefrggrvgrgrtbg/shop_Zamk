@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, type ReactNode, useEffect } from 'react';
 
 export interface User {
   id: string;
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const openAuthModal = (view: 'login' | 'register' = 'login') => {
+  const openAuthModal = (view: 'login' | 'register' | 'forgot_password' = 'login') => {
     setAuthView(view);
     setIsAuthModalOpen(true);
   };

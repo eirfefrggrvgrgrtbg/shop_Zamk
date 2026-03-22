@@ -4,6 +4,7 @@ import { Heart, House, Menu, Search, ShoppingBag, User } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { useFavorites } from '../../contexts/FavoritesContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSearch } from '../../contexts/SearchContext';
 import { Drawer } from '../ui/Drawer';
 import { Input } from '../ui/Input';
 import { ProfileMenu } from '../auth/ProfileMenu';
@@ -14,6 +15,7 @@ export function Navbar() {
   const { totalItems } = useCart();
   const { favorites } = useFavorites();
   const { isAuthenticated, openAuthModal } = useAuth();
+  const { openSearch } = useSearch();
   const location = useLocation();
 
   useEffect(() => {
@@ -80,6 +82,7 @@ export function Navbar() {
             {/* Right actions */}
             <div className="flex items-center justify-end gap-0.5 sm:gap-1 flex-1">
               <button
+                onClick={openSearch}
                 className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite transition-colors rounded-full hover:bg-white/40"
                 aria-label="Поиск"
               >
@@ -127,7 +130,9 @@ export function Navbar() {
 
       <Drawer isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} title="Меню">
         <div className="flex flex-col gap-6 py-4">
-          <Input placeholder="Поиск по архиву" isSearch className="bg-white/50" />
+          <div onClick={() => { setIsMobileMenuOpen(false); openSearch(); }}>
+            <Input placeholder="Поиск по архиву" isSearch className="bg-white/50 pointer-events-none" readOnly />
+          </div>
           <nav className="flex flex-col gap-4">
             <Link to="/" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               Главная
@@ -175,9 +180,9 @@ export function Navbar() {
           <Link to="/" className={`p-2 rounded-full transition-colors ${location.pathname === '/' ? 'text-graphite bg-ice' : 'text-ash'}`}>
             <House className="w-5 h-5" />
           </Link>
-          <Link to="/catalog" className={`p-2 rounded-full transition-colors ${location.pathname === '/catalog' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+          <button onClick={openSearch} className={`p-2 rounded-full transition-colors ${location.pathname === '/catalog' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
             <Search className="w-5 h-5" />
-          </Link>
+          </button>
           <Link to="/favorites" className={`relative p-2 rounded-full transition-colors ${location.pathname === '/favorites' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
             <Heart className="w-5 h-5" />
             {favorites.length > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-primary rounded-full ring-2 ring-white" />}
