@@ -21,7 +21,7 @@ export function ThemeFlipCorner() {
     });
   };
 
-  const size = isHovered ? 82 : 56; 
+  const size = isHovered ? 46 : 28; 
 
   return (
     <button 

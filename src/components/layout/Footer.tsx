@@ -90,7 +90,7 @@ export function Footer() {
                 />
                 <button 
                   type="submit" 
-                  className="absolute right-1 top-1 bottom-1 w-10 bg-graphite text-white rounded-full flex items-center justify-center hover:bg-primary transition-colors"
+                  className="absolute right-1 top-1 bottom-1 w-10 bg-graphite text-white dark:text-black rounded-full flex items-center justify-center hover:bg-primary transition-colors"
                 >
                   <ArrowRight className="w-4 h-4" />
                 </button>

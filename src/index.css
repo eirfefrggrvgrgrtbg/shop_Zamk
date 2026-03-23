@@ -100,9 +100,9 @@
 
     --color-border-lighter: #1A1C20;
     --color-border-soft: #25282D;
-    
-    --color-white: #0B0C0E;
-    --color-black: #FFFFFF;
+
+    --color-white: #FFFFFF;
+    --color-black: #000000;
   }
 
   html {

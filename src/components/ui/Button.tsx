@@ -9,7 +9,7 @@ function Button({ className, variant = 'primary', size = 'md', ...props }: Butto
   const baseStyles = "inline-flex items-center justify-center font-medium transition-all duration-300 active:scale-[0.98] focus-visible:outline-none disabled:opacity-50 disabled:pointer-events-none";
 
   const variants: Record<string, string> = {
-    primary: "bg-graphite dark:bg-white text-white dark:text-graphite hover:bg-graphite-light dark:hover:bg-gray-100 shadow-sm hover:shadow hover:-translate-y-px rounded-lg",
+    primary: "bg-graphite dark:bg-white text-white dark:text-black hover:bg-graphite-light dark:hover:bg-gray-100 shadow-sm hover:shadow hover:-translate-y-px rounded-lg",
     secondary: "bg-white dark:bg-transparent text-graphite dark:text-white hover:bg-milk dark:hover:bg-white/5 border border-border-soft dark:border-white/20 hover:border-graphite/40 dark:hover:border-white/40 shadow-sm rounded-lg",
     ghost: "bg-transparent text-graphite dark:text-white hover:bg-milk dark:hover:bg-white/5 rounded-lg",
     pill: "bg-white dark:bg-transparent text-graphite dark:text-white hover:bg-milk dark:hover:bg-white/5 border border-border-lighter dark:border-white/20 rounded-full shadow-sm",

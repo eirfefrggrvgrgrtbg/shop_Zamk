@@ -120,7 +120,7 @@ export function ProductDetail() {
               />
               {/* Badges */}
               {product.isNew && (
-                <span className="absolute top-4 left-4 px-3 py-1 rounded bg-graphite text-white text-xs font-semibold uppercase">
+                <span className="absolute top-4 left-4 px-3 py-1 rounded bg-graphite text-white dark:text-black text-xs font-semibold uppercase">
                   New
                 </span>
               )}
@@ -249,7 +249,7 @@ export function ProductDetail() {
                       className={cn(
                         "h-10 min-w-[48px] px-4 rounded-lg border text-sm font-medium transition-all",
                         activeSize === size
-                          ? "bg-graphite text-white border-graphite dark:bg-white dark:text-graphite dark:border-white"
+                            ? "bg-graphite text-white border-graphite dark:bg-white dark:text-black dark:border-white"
                           : "bg-white dark:bg-transparent border-border-lighter dark:border-white/20 text-graphite dark:text-white hover:border-graphite dark:hover:border-white"
                       )}
                     >

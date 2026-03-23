@@ -36,7 +36,7 @@ export function ProductCard({ product }: ProductCardProps) {
         {/* Badge — только один, приоритет: Новинка > Хит > Скидка */}
         <div className="absolute top-2.5 left-2.5 z-10">
           {product.isNew ? (
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-graphite text-white text-[10px] font-semibold uppercase">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-graphite text-white dark:text-black text-[10px] font-semibold uppercase">
               New
             </span>
           ) : product.isBestseller ? (

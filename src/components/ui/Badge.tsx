@@ -7,7 +7,7 @@ interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 function Badge({ className, variant = 'default', ...props }: BadgeProps) {
   const variants: Record<string, string> = {
     default: "bg-surface text-graphite border border-border-lighter",
-    new: "bg-graphite text-white border-0 shadow-sm",
+    new: "bg-graphite text-white dark:text-black border-0 shadow-sm",
     sale: "bg-error text-white border-0 shadow-sm",
     bestseller: "bg-accent text-white border-0 shadow-sm",
   }

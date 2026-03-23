@@ -36,7 +36,7 @@ export function EditorialHero() {
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Link
                     to="/catalog"
-                    className="inline-flex items-center justify-center gap-2 h-14 px-8 rounded-full bg-graphite text-white hover:bg-primary-hover transition-all duration-300 font-medium group"
+                    className="inline-flex items-center justify-center gap-2 h-14 px-8 rounded-full bg-graphite text-white dark:text-black hover:bg-primary-hover transition-all duration-300 font-medium group"
                   >
                     Перейти в каталог
                     <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />

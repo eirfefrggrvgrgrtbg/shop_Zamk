@@ -66,7 +66,7 @@ function FilterChip({
       className={cn(
         "h-8 px-3.5 rounded-full border text-[13px] font-medium transition-all duration-300 flex items-center gap-1.5",
         isActive
-          ? "bg-graphite text-white border-graphite dark:bg-white dark:text-graphite dark:border-white shadow-sm"
+          ? "bg-graphite text-white border-graphite dark:bg-white dark:text-black dark:border-white shadow-sm"
           : "bg-transparent border-border-lighter dark:border-white/20 text-graphite/70 dark:text-white/70 hover:border-graphite/40 dark:hover:border-white/40 hover:text-graphite dark:hover:text-white"
       )}
     >
@@ -74,7 +74,7 @@ function FilterChip({
       {count !== undefined && (
         <span className={cn(
           "text-[10px] opacity-60",
-          isActive ? "text-white/80 dark:text-graphite/80" : "text-graphite/50 dark:text-white/50"
+          isActive ? "text-white/80 dark:text-black/80" : "text-graphite/50 dark:text-white/50"
         )}>
           {count}
         </span>
@@ -228,7 +228,7 @@ export function Catalog() {
               className={cn(
                 "h-8 pl-1 pr-3 rounded-full border text-[13px] font-medium transition-all duration-300 flex items-center gap-2",
                 activeColors.includes(color.name)
-                  ? "bg-graphite text-white border-graphite dark:bg-white dark:text-graphite dark:border-white shadow-sm"
+                    ? "bg-graphite text-white border-graphite dark:bg-white dark:text-black dark:border-white shadow-sm"
                   : "bg-transparent border-border-lighter dark:border-white/20 text-graphite/70 dark:text-white/70 hover:border-graphite/40 dark:hover:border-white/40 hover:text-graphite dark:hover:text-white"
               )}
             >
@@ -340,7 +340,7 @@ export function Catalog() {
             >
               <SlidersHorizontal className="w-4 h-4" />
               Фильтры
-              {hasActiveFilters && <span className="w-5 h-5 rounded-full bg-graphite text-white text-xs flex items-center justify-center">{activeStyles.length + activeSizes.length + activeColors.length + activeMaterials.length + (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0)}</span>}
+              {hasActiveFilters && <span className="w-5 h-5 rounded-full bg-graphite text-white dark:text-black text-xs flex items-center justify-center">{activeStyles.length + activeSizes.length + activeColors.length + activeMaterials.length + (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0)}</span>}
             </button>
 
             <SortDropdown value={sortBy} options={SORT_OPTIONS} onChange={setSortBy} />
@@ -431,7 +431,7 @@ export function Catalog() {
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white dark:bg-[#111214] border-t border-border-lighter dark:border-white/10">
           <button
             onClick={() => setShowMobileFilters(false)}
-            className="w-full h-12 rounded-xl bg-graphite text-white text-sm font-medium"
+            className="w-full h-12 rounded-xl bg-graphite text-white dark:text-black text-sm font-medium"
           >
             Показать {filteredProducts.length} товаров
           </button>
