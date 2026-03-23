@@ -137,7 +137,7 @@ export function Home() {
         </div>
 
         {/* Bottom fade-out edge — blends hero into content below */}
-        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-ice/80 to-transparent pointer-events-none z-10" />
+        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-ice/80 dark:from-[#111214]/80 to-transparent pointer-events-none z-10" />
       </section>
 
       {/* ═══════════════════════════════════════════════════════
@@ -178,7 +178,7 @@ export function Home() {
               <Link
                 key={collection.id}
                 to={`/catalog?collection=${collection.id}`}
-                className="group block rounded-[2rem] border border-border-lighter bg-white/86 p-2 shadow-sm transition-all hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(120,150,185,0.12)]"
+                className="group block rounded-[2rem] border border-border-lighter dark:border-white/10 bg-white/86 dark:bg-white/5 p-2 shadow-sm transition-all hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(120,150,185,0.12)] dark:hover:shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
               >
                 <div className="relative overflow-hidden rounded-[1.5rem] aspect-[4/3]">
                   <img

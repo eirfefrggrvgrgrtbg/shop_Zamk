@@ -55,9 +55,9 @@ export function Footer() {
             <h4 className="text-xs font-bold text-graphite uppercase tracking-widest mb-6 border-b border-border-lighter pb-3">Магазин</h4>
             <ul className="space-y-4">
               <li><Link to="/catalog" className="text-sm text-ash hover:text-primary transition-colors">Каталог</Link></li>
+              <li><Link to="/collections" className="text-sm text-ash hover:text-primary transition-colors">Подборки</Link></li>
               <li><Link to="/brands" className="text-sm text-ash hover:text-primary transition-colors">Бренды</Link></li>
-              <li><Link to="/new" className="text-sm text-ash hover:text-primary transition-colors">Новинки</Link></li>
-              <li><Link to="/catalog?sort=sale" className="text-sm text-ash hover:text-primary transition-colors">Скидки</Link></li>
+              <li><Link to="/catalog?collection=archive" className="text-sm text-ash hover:text-primary transition-colors">Архив</Link></li>
             </ul>
           </div>
 
@@ -65,8 +65,8 @@ export function Footer() {
           <div className="lg:col-span-2">
             <h4 className="text-xs font-bold text-graphite uppercase tracking-widest mb-6 border-b border-border-lighter pb-3">Информация</h4>
             <ul className="space-y-4">
-              <li><Link to="/about" className="text-sm text-ash hover:text-primary transition-colors">О нас</Link></li>
-              <li><Link to="/delivery" className="text-sm text-ash hover:text-primary transition-colors">Доставка и возврат</Link></li>
+              <li><Link to="/about" className="text-sm text-ash hover:text-primary transition-colors">О витрине</Link></li>
+              <li><Link to="/returns" className="text-sm text-ash hover:text-primary transition-colors">Возврат и обмен</Link></li>
               <li><Link to="/help" className="text-sm text-ash hover:text-primary transition-colors">Вопросы и ответы</Link></li>
               <li><Link to="/contacts" className="text-sm text-ash hover:text-primary transition-colors">Контакты</Link></li>
             </ul>

@@ -25,9 +25,10 @@ export function Navbar() {
   }, []);
 
   const navLinks = [
-    { to: '/catalog', label: 'Архив' },
-    { to: '/new', label: 'Новая Волна' },
-    { to: '/brands', label: 'Коллекция' },
+    { to: '/catalog', label: 'Каталог' },
+    { to: '/collections', label: 'Подборки' },
+    { to: '/brands', label: 'Бренды' },
+    { to: '/about', label: 'О витрине' },
   ];
 
   return (
@@ -140,11 +141,14 @@ export function Navbar() {
             <Link to="/catalog" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               Каталог
             </Link>
+            <Link to="/collections" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
+              Подборки
+            </Link>
             <Link to="/brands" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               Бренды
             </Link>
-            <Link to="/new" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
-              Новинки
+            <Link to="/about" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
+              О витрине
             </Link>
             <Link to="/favorites" className="text-lg font-medium py-2 border-b border-border-lighter flex justify-between items-center" onClick={() => setIsMobileMenuOpen(false)}>
               Избранное

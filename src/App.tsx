@@ -22,6 +22,8 @@ import { Brands } from './pages/Brands';
 import { BrandDetail } from './pages/BrandDetail';
 import { NewArrivals } from './pages/NewArrivals';
 import { About } from './pages/About';
+import { Collections } from './pages/Collections';
+import { Returns } from './pages/Returns';
 import { Delivery } from './pages/Delivery';
 import { Help } from './pages/Help';
 import { Contacts } from './pages/Contacts';
@@ -60,6 +62,8 @@ function App() {
                     <Route path="/brand/:id" element={<BrandDetail />} />
                     <Route path="/new" element={<NewArrivals />} />
                     <Route path="/about" element={<About />} />
+                    <Route path="/collections" element={<Collections />} />
+                    <Route path="/returns" element={<Returns />} />
                     <Route path="/delivery" element={<Delivery />} />
                     <Route path="/help" element={<Help />} />
                     <Route path="/contacts" element={<Contacts />} />

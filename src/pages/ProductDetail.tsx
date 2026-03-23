@@ -8,7 +8,7 @@ import { useCart } from '../contexts/CartContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatPrice } from '../lib/utils';
-import { PRODUCTS, getProductById } from '../lib/mock-data';
+import { PRODUCTS, getProductById, getBrandById, getProductsByBrand } from '../lib/mock-data';
 import { InfoPanel, PillFilter, SectionHeader } from '../components/editorial/StudioKit';
 
 export function ProductDetail() {
@@ -37,6 +37,8 @@ export function ProductDetail() {
 
   const images = product.images || [product.image];
   const relatedProducts = PRODUCTS.filter((item) => item.category === product.category && item.id !== product.id).slice(0, 4);
+  const brandProducts = getProductsByBrand(product.brandId).filter((item) => item.id !== product.id).slice(0, 4);
+  const brand = getBrandById(product.brandId);
   const liked = isFavorite(product.id);
 
   const handleAddToCart = () => {
@@ -88,10 +90,19 @@ export function ProductDetail() {
           </div>
 
           <div className='xl:col-span-5'>
-            <section className='bg-white/72 border border-white/60 p-6 md:p-8'>
-              <p className='text-xs uppercase tracking-[0.14em] text-ash'>{product.brand}</p>
-              <h1 className='mt-2 text-[40px] leading-[0.95] font-serif text-graphite'>{product.name}</h1>
-              <p className='mt-4 text-[34px] font-medium text-graphite'>{formatPrice(product.price)}</p>
+            <section className='bg-white/72 border border-white/60 p-6 md:p-8 relative'>
+              <Link to={`/brands`} className='text-xs uppercase tracking-[0.14em] text-ash hover:text-graphite transition-colors'>{product.brand}</Link>
+              <h1 className='mt-2 text-[40px] leading-[0.95] font-serif text-graphite mb-1'>{product.name}</h1>
+              
+              {(product.rating || product.reviewsCount) && (
+                <div className="flex items-center gap-2 text-[13px] text-graphite-light mb-4 mt-2">
+                  {product.rating && <span className="flex items-center font-medium"><span className="text-yellow-500 mr-1 text-base leading-none">★</span> {product.rating.toFixed(1)}</span>}
+                  {product.rating && product.reviewsCount && <span className="opacity-50">·</span>}
+                  {product.reviewsCount && <span>{product.reviewsCount} отзыв{product.reviewsCount % 10 === 1 && product.reviewsCount % 100 !== 11 ? '' : (product.reviewsCount % 10 >= 2 && product.reviewsCount % 10 <= 4 && (product.reviewsCount % 100 < 10 || product.reviewsCount % 100 >= 20) ? 'а' : 'ов')}</span>}
+                </div>
+              )}
+
+              <p className='mt-2 text-[34px] font-medium text-graphite'>{formatPrice(product.price)}</p>
 
               {product.colors && (
                 <div className='mt-6'>
@@ -139,13 +150,95 @@ export function ProductDetail() {
           </div>
         </div>
 
-        <div className='mt-10 grid grid-cols-1 lg:grid-cols-3 gap-5'>
+        <div className='mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5'>
           <InfoPanel title='Описание'>{product.description || 'Минималистичная вещь для капсульного гардероба в эстетике холодного premium.'}</InfoPanel>
           <InfoPanel title='Состав'>{product.materials || 'Высокотехнологичные смесовые ткани с акцентом на долговечность и тактильность.'}</InfoPanel>
-          <InfoPanel title='Доставка и возврат'>
-            Бесплатная доставка от 10 000 ₽. Возврат в течение 14 дней при сохранении товарного вида.
-          </InfoPanel>
+          <div className='glass-panel p-6 flex flex-col'>
+            <h4 className='font-serif text-[22px] text-graphite mb-3'>Возврат и обмен</h4>
+            <p className='text-[13px] text-graphite-light leading-relaxed mb-4'>
+              Бесплатная доставка от 10 000 ₽. Возврат в течение 14 дней при сохранении товарного вида и бирок.
+            </p>
+            <Link to="/returns" className="mt-auto text-sm text-primary hover:underline font-medium">Подробнее об условиях →</Link>
+          </div>
         </div>
+
+        {/* Brand Info */}
+        {brand && (
+          <section className='mt-14 glass-panel p-8 md:p-12'>
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+              <div className="md:col-span-4 lg:col-span-3">
+                <div className="aspect-square rounded-full overflow-hidden border border-border-lighter opacity-90 shadow-sm max-w-[200px] mx-auto md:max-w-none">
+                  <img src={brand.image} alt={brand.name} className="w-full h-full object-cover grayscale opacity-90" />
+                </div>
+              </div>
+              <div className="md:col-span-8 lg:col-span-9">
+                <p className="text-xs uppercase tracking-[0.14em] text-ash mb-2 font-semibold">О бренде</p>
+                <h3 className="font-serif text-[32px] md:text-[40px] text-graphite leading-tight mb-4">{brand.name}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-[14px] text-graphite-light leading-relaxed">
+                  <div>
+                    <strong className="block text-graphite font-medium mb-1 text-xs uppercase tracking-wider">История</strong>
+                    {brand.history || brand.description}
+                  </div>
+                  <div>
+                    <strong className="block text-graphite font-medium mb-1 text-xs uppercase tracking-wider">Философия</strong>
+                    {brand.philosophy || `Проект из ${brand.origin || brand.country}, исследующий формы и материалы.`}
+                  </div>
+                </div>
+                <Link to={`/brand/${brand.id}`}>
+                  <Button variant="secondary" className="mt-6">Страница бренда</Button>
+                </Link>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Reviews */}
+        {product.reviews && product.reviews.length > 0 && (
+          <section className='mt-14'>
+            <SectionHeader
+              label='Мнения'
+              title='Отзывы об архиве'
+              description={`${product.reviewsCount} отзыв${product.reviewsCount && product.reviewsCount % 10 === 1 && product.reviewsCount % 100 !== 11 ? '' : (product.reviewsCount && product.reviewsCount % 10 >= 2 && product.reviewsCount % 10 <= 4 && (product.reviewsCount % 100 < 10 || product.reviewsCount % 100 >= 20) ? 'а' : 'ов')}. Рейтинг ${product.rating?.toFixed(1)}`}
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-8">
+              {product.reviews.map(review => (
+                <div key={review.id} className="glass-panel p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h4 className="font-medium text-graphite text-sm">{review.author}</h4>
+                      <p className="text-[11px] text-ash tracking-wide uppercase mt-0.5">{review.date}</p>
+                    </div>
+                    <div className="flex text-yellow-500 text-sm">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <span key={i} className={i < review.rating ? 'opacity-100' : 'text-border-soft'}>★</span>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[14px] text-graphite-light leading-relaxed mb-4">"{review.text}"</p>
+                  <div className="flex flex-wrap gap-2">
+                    {review.fit && <span className="text-[11px] px-2 py-1 bg-ice/50 border border-border-lighter rounded-md text-ash font-medium tracking-wide">Крой: {review.fit}</span>}
+                    {review.quality && <span className="text-[11px] px-2 py-1 bg-ice/50 border border-border-lighter rounded-md text-ash font-medium tracking-wide">Качество: {review.quality}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {brandProducts.length > 0 && (
+          <motion.section className='mt-14' initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+            <SectionHeader
+              label='Ассортимент марки'
+              title={`Ещё от ${product.brand}`}
+              description='Вещи, формирующие общую капсулу.'
+            />
+            <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
+              {brandProducts.map((item) => (
+                <ProductCard key={item.id} product={item} />
+              ))}
+            </div>
+          </motion.section>
+        )}
 
         {relatedProducts.length > 0 && (
           <motion.section className='mt-14' initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>

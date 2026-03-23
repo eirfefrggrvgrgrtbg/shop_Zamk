@@ -83,21 +83,32 @@ export function ProductCard({ product }: ProductCardProps) {
           </Link>
         </div>
 
-        {/* Price row */}
-        <div className="mt-3.5 flex items-baseline gap-2">
-          {product.discountPrice ? (
-            <>
-              <span className="text-[20px] md:text-[22px] leading-none font-semibold tracking-tight text-error">
-                {formatPrice(product.discountPrice)}
-              </span>
-              <span className="text-[12px] text-ash/70 line-through decoration-ash-light flex-shrink-0">
+        {/* Price and Rating row */}
+        <div className="mt-auto pt-3.5 flex flex-col gap-1.5">
+          <div className="flex items-baseline gap-2">
+            {product.discountPrice ? (
+              <>
+                <span className="text-[20px] md:text-[22px] leading-none font-semibold tracking-tight text-error">
+                  {formatPrice(product.discountPrice)}
+                </span>
+                <span className="text-[12px] text-ash/70 line-through decoration-ash-light flex-shrink-0">
+                  {formatPrice(product.price)}
+                </span>
+              </>
+            ) : (
+              <span className="text-[20px] md:text-[22px] leading-none font-semibold tracking-tight text-graphite">
                 {formatPrice(product.price)}
               </span>
-            </>
-          ) : (
-            <span className="text-[20px] md:text-[22px] leading-none font-semibold tracking-tight text-graphite">
-              {formatPrice(product.price)}
-            </span>
+            )}
+          </div>
+          
+          {/* Rating */}
+          {(product.rating || product.reviewsCount) && (
+            <div className="flex items-center gap-1.5 text-[11px] text-graphite-light font-medium tracking-wide">
+              {product.rating && <span>{product.rating.toFixed(1)}</span>}
+              {product.rating && product.reviewsCount && <span className="opacity-50">·</span>}
+              {product.reviewsCount && <span>{product.reviewsCount} отзыв{product.reviewsCount % 10 === 1 && product.reviewsCount % 100 !== 11 ? '' : (product.reviewsCount % 10 >= 2 && product.reviewsCount % 10 <= 4 && (product.reviewsCount % 100 < 10 || product.reviewsCount % 100 >= 20) ? 'а' : 'ов')}</span>}
+            </div>
           )}
         </div>
       </div>

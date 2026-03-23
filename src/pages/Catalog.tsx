@@ -45,18 +45,18 @@ export function Catalog() {
   return (
     <div className='relative z-10 min-h-screen pt-16 md:pt-20 pb-20'>
       <div className='container mx-auto px-4 sm:px-6 max-w-[1400px]'>
-        <section className='overflow-hidden rounded-[0.8rem] border border-white/45 bg-white/16 backdrop-blur-sm'>
+        <section className='overflow-hidden rounded-[0.8rem] border border-white/45 bg-white/16 dark:border-white/10 dark:bg-white/5 backdrop-blur-sm'>
           <div className='relative h-[220px] md:h-[280px]'>
-            <div className='absolute inset-0 bg-[radial-gradient(ellipse_at_18%_50%,rgba(164,193,223,0.56),transparent_50%),radial-gradient(ellipse_at_58%_50%,rgba(197,217,238,0.72),transparent_56%),radial-gradient(ellipse_at_86%_52%,rgba(167,196,225,0.58),transparent_52%)]' />
-            <div className='absolute inset-0 bg-[linear-gradient(180deg,rgba(242,247,252,0.76),rgba(236,242,249,0.66))]' />
+            <div className='absolute inset-0 bg-[radial-gradient(ellipse_at_18%_50%,rgba(164,193,223,0.56),transparent_50%),radial-gradient(ellipse_at_58%_50%,rgba(197,217,238,0.72),transparent_56%),radial-gradient(ellipse_at_86%_52%,rgba(167,196,225,0.58),transparent_52%)] dark:opacity-20' />
+            <div className='absolute inset-0 bg-[linear-gradient(180deg,rgba(242,247,252,0.76),rgba(236,242,249,0.66))] dark:hidden' />
             <div className='relative z-10 h-full px-5 md:px-10 flex flex-col items-start justify-center gap-2 md:flex-row md:items-center md:justify-between md:gap-7'>
-              <h2 className='font-serif text-[clamp(2.8rem,8vw,8.3rem)] text-white/43 leading-[0.8] tracking-[-0.03em]'>КАТАЛОГ</h2>
-              <h3 className='font-serif text-[clamp(2.4rem,6.8vw,7.4rem)] text-white/42 leading-[0.82] tracking-[-0.03em] text-center'>
+              <h2 className='font-serif text-[clamp(2.8rem,8vw,8.3rem)] text-white/43 dark:text-white/20 leading-[0.8] tracking-[-0.03em]'>КАТАЛОГ</h2>
+              <h3 className='font-serif text-[clamp(2.4rem,6.8vw,7.4rem)] text-white/42 dark:text-white/20 leading-[0.82] tracking-[-0.03em] text-center'>
                 НОВАЯ
                 <br />
                 ВОЛНА
               </h3>
-              <h4 className='font-serif text-[clamp(2.4rem,7vw,7.8rem)] text-white/42 leading-[0.8] tracking-[-0.03em] text-right'>АРХИВ</h4>
+              <h4 className='font-serif text-[clamp(2.4rem,7vw,7.8rem)] text-white/42 dark:text-white/20 leading-[0.8] tracking-[-0.03em] text-right'>АРХИВ</h4>
             </div>
           </div>
         </section>
@@ -68,7 +68,7 @@ export function Catalog() {
             onChange={(event) => setSearchQuery(event.target.value)}
           />
 
-          <section className='border-t border-b border-white/45 bg-white/46 px-4 md:px-6 py-4'>
+          <section className='border-t border-b border-border-lighter dark:border-white/10 bg-white/46 dark:bg-white/5 px-4 md:px-6 py-4'>
             <div className='flex flex-wrap items-center gap-2 md:gap-3'>
               {CATEGORIES.map((category) => (
                 <PillFilter

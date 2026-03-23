@@ -1,3 +1,13 @@
+export interface Review {
+  id: string;
+  author: string;
+  rating: number;
+  text: string;
+  date: string;
+  fit?: 'маломерит' | 'в размер' | 'большемерит';
+  quality?: 'отличное' | 'хорошее' | 'нормальное';
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -15,12 +25,18 @@ export interface Product {
   colors?: { name: string; hex: string }[];
   isNew?: boolean;
   isBestseller?: boolean;
+  rating?: number;
+  reviewsCount?: number;
+  reviews?: Review[];
 }
 
 export interface Brand {
   id: string;
   name: string;
   description: string;
+  history?: string;
+  philosophy?: string;
+  origin?: string;
   country: string;
   image: string;
 }
@@ -57,6 +73,9 @@ export const BRANDS: Brand[] = [
     id: 'narra-studio',
     name: 'Нарра Студио',
     description: 'Функциональная одежда с архитектурным кроем и переработанными материалами.',
+    history: 'Основана в 2018 году группой промышленных дизайнеров в Санкт-Петербурге с фокусом на утилитарную эстетику.',
+    philosophy: 'Новый минимализм через функциональность и независимость формы от трендов.',
+    origin: 'Санкт-Петербург, Россия',
     country: 'Россия',
     image: 'https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=1200&auto=format',
   },
@@ -64,6 +83,9 @@ export const BRANDS: Brand[] = [
     id: 'drop-blu',
     name: 'Дроп Блю',
     description: 'Капсульный стритвир с мягкой футуристикой и графическими акцентами.',
+    history: 'Независимая лаборатория форм, появившаяся в Токио и исследующая взаимодействие ткани и городского шума.',
+    philosophy: 'Современный цифровой кочевник в поиске мягкой брони.',
+    origin: 'Токио, Япония',
     country: 'Япония',
     image: 'https://images.unsplash.com/photo-1558171013-2442e067ac7e?w=1200&auto=format',
   },
@@ -71,6 +93,9 @@ export const BRANDS: Brand[] = [
     id: 'kenzo-forma',
     name: 'Форма Кэндзо',
     description: 'Скульптурные силуэты и чистая конструкция повседневных вещей.',
+    history: 'Авангардная студия, выросшая из небольшой мастерской в Милане, переосмысляющая классические коды кроя.',
+    philosophy: 'Одежда как пространство для тела. Чистота, деконструкция, воздух.',
+    origin: 'Милан, Италия',
     country: 'Италия',
     image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=1200&auto=format',
   },
@@ -78,6 +103,9 @@ export const BRANDS: Brand[] = [
     id: 'novalis',
     name: 'Новалис',
     description: 'Северная практичность и прозрачная эстетика материалов.',
+    history: 'Бренд родился из потребности создать идеальный внесезонный гардероб для сурового климата, сохранив визуальную легкость.',
+    philosophy: 'Рациональность формы. Ничего лишнего, кроме самого необходимого.',
+    origin: 'Копенгаген, Дания',
     country: 'Дания',
     image: 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=1200&auto=format',
   },
@@ -85,6 +113,9 @@ export const BRANDS: Brand[] = [
     id: 'graavel',
     name: 'Граавель',
     description: 'Городской аутдор с эргономикой и премиальной фурнитурой.',
+    history: 'Берлинский экспериментальный проект, объединяющий технологии туристической экипировки и мрачный городской стиль.',
+    philosophy: 'Функция формирует эстетику. Выжить в городе с комфортом.',
+    origin: 'Берлин, Германия',
     country: 'Германия',
     image: 'https://images.unsplash.com/photo-1445205170230-053b83016050?w=1200&auto=format',
   },
@@ -92,6 +123,9 @@ export const BRANDS: Brand[] = [
     id: 'monade',
     name: 'Монада',
     description: 'Нишевая мастерская сумок и украшений ручной работы.',
+    history: 'Семейное ателье, превратившееся в культовый парижский бренд среди коллекционеров редких вещей.',
+    philosophy: 'Вещи, которые стареют красиво и передаются по наследству.',
+    origin: 'Париж, Франция',
     country: 'Франция',
     image: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&auto=format',
   },
@@ -109,6 +143,12 @@ export const PRODUCTS: Product[] = [
     description: 'Легкий анорак для межсезонья и многослойных образов.',
     sizes: ['S', 'M', 'L', 'XL'],
     isNew: true,
+    rating: 4.8,
+    reviewsCount: 24,
+    reviews: [
+      { id: 'r1', author: 'Алекс М.', rating: 5, date: '12 окт 2023', text: 'Идеальный крой, материал отлично держит форму.', fit: 'в размер', quality: 'отличное' },
+      { id: 'r2', author: 'Мария К.', rating: 4, date: '05 окт 2023', text: 'Очень легкий, но теплый анорак. Единственное - длинные рукава.', fit: 'в размер', quality: 'хорошее' }
+    ]
   },
   {
     id: 'p2',
@@ -133,6 +173,8 @@ export const PRODUCTS: Product[] = [
     category: 'clothing',
     sizes: ['S', 'M', 'L', 'XL'],
     isBestseller: true,
+    rating: 4.9,
+    reviewsCount: 128,
   },
   {
     id: 'p4',
@@ -228,36 +270,74 @@ export const PRODUCTS: Product[] = [
     image: 'https://images.unsplash.com/photo-1585487000143-6519d58aef14?w=800&auto=format',
     category: 'clothing',
     sizes: ['S', 'M', 'L', 'XL'],
+    rating: 5.0,
+    reviewsCount: 5,
   },
 ];
 
 export const COLLECTIONS: Collection[] = [
   {
-    id: 'col1',
-    title: 'Ледяная навигация',
-    subtitle: 'Городской межсезонный гардероб',
-    description: 'Техничные ткани, мягкие объемы и холодная палитра.',
+    id: 'new',
+    title: 'Новое',
+    subtitle: 'Свежие поступления',
+    description: 'Последние объекты из новых капсул и коллекций.',
     image: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1400&auto=format',
-    productIds: ['p1', 'p3', 'p8', 'p12'],
-    itemCount: 8,
+    productIds: ['p1', 'p2', 'p5', 'p8'],
+    itemCount: 4,
   },
   {
-    id: 'col2',
-    title: 'Тихий рейв',
-    subtitle: 'Мягкий андеграунд на каждый день',
-    description: 'Капсулы для вечерних маршрутов и городского ритма.',
+    id: 'popular',
+    title: 'Популярное',
+    subtitle: 'Выбор сообщества',
+    description: 'То, что чаще всего забирают в архив.',
     image: 'https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=1400&auto=format',
-    productIds: ['p2', 'p4', 'p5', 'p9'],
-    itemCount: 7,
+    productIds: ['p3', 'p6'],
+    itemCount: 2,
   },
   {
-    id: 'col3',
-    title: 'Архив прозрачности',
-    subtitle: 'Тактильные акценты',
-    description: 'Сумки и аксессуары для выразительных повседневных образов.',
+    id: 'under5k',
+    title: 'До 5000',
+    subtitle: 'Легкий вход',
+    description: 'Доступные, но выразительные акценты.',
     image: 'https://images.unsplash.com/photo-1558171013-2442e067ac7e?w=1400&auto=format',
-    productIds: ['p6', 'p7', 'p10', 'p11'],
-    itemCount: 6,
+    productIds: [],
+    itemCount: 0,
+  },
+  {
+    id: 'under10k',
+    title: 'До 10000',
+    subtitle: 'База гардероба',
+    description: 'Вещи, с которых начинается формирование капсулы.',
+    image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=1400&auto=format',
+    productIds: ['p2', 'p7', 'p9', 'p10'],
+    itemCount: 4,
+  },
+  {
+    id: 'editor-choice',
+    title: 'Выбор редакции',
+    subtitle: 'Кураторский срез',
+    description: 'Объекты, которые мы считаем наиболее значимыми в этом сезоне.',
+    image: 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=1400&auto=format',
+    productIds: ['p1', 'p3', 'p4', 'p12'],
+    itemCount: 4,
+  },
+  {
+    id: 'local',
+    title: 'Локальные бренды',
+    subtitle: 'Новая волна',
+    description: 'Независимые локальные проекты с уникальным видением.',
+    image: 'https://images.unsplash.com/photo-1445205170230-053b83016050?w=1400&auto=format',
+    productIds: ['p1', 'p8'],
+    itemCount: 2,
+  },
+  {
+    id: 'archive',
+    title: 'Архив',
+    subtitle: 'Редкие находки',
+    description: 'Сложные и редкие вещи, снятые с основного производства.',
+    image: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=1400&auto=format',
+    productIds: ['p4', 'p6', 'p11'],
+    itemCount: 3,
   },
 ];
 
