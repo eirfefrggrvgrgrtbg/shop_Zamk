@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -14,14 +13,10 @@ const reveal = {
   transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] as const },
 };
 
-const TABS = ['Все', 'Платья', 'Топы', 'Аксессуары'] as const;
-type Tab = typeof TABS[number];
-
 export function Home() {
   const newProducts = getNewProducts();
   const editorPick = PRODUCTS.slice(0, 4);
   const topProducts = newProducts.length >= 4 ? newProducts.slice(0, 4) : PRODUCTS.slice(0, 4);
-  const [activeTab, setActiveTab] = useState<Tab>('Все');
 
   return (
     <div className="relative z-10 min-h-screen pb-20">
@@ -44,26 +39,10 @@ export function Home() {
             </h1>
           </div>
 
-          {/* ── Tabs + control row ── */}
+          {/* ── control row ── */}
           <div className="relative mb-7 md:mb-9">
-            {/* Tab row */}
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-1">
-                {TABS.map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`text-[13px] font-medium px-4 py-2 rounded-full transition-all duration-300 tracking-[0.01em] ${
-                      activeTab === tab
-                        ? 'bg-graphite text-white shadow-[0_4px_14px_rgba(28,39,51,0.18)]'
-                        : 'text-graphite/55 hover:text-graphite hover:bg-white/60'
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-
+            {/* Row */}
+            <div className="flex items-center justify-end gap-4 flex-wrap">
               {/* New arrivals pill — part of the control row, not floating */}
               <Link
                 to="/new"
@@ -74,7 +53,7 @@ export function Home() {
               </Link>
             </div>
 
-            {/* Separator — subtle rule connecting tabs to products */}
+            {/* Separator — subtle rule connecting to products */}
             <div className="mt-5 h-px bg-gradient-to-r from-graphite/8 via-graphite/14 to-transparent" />
           </div>
 

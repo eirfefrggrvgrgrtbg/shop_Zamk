@@ -19,6 +19,7 @@ export interface Product {
   image: string;
   images?: string[];
   category: string;
+  styles?: string[];
   description?: string;
   materials?: string;
   sizes?: string[];
@@ -28,6 +29,7 @@ export interface Product {
   rating?: number;
   reviewsCount?: number;
   reviews?: Review[];
+  sellerId?: string;
 }
 
 export interface Brand {
@@ -66,6 +68,67 @@ export const CATEGORIES: Category[] = [
   { id: 'shoes', slug: 'shoes', name: 'Обувь', icon: '◐', count: 2 },
   { id: 'accessories', slug: 'accessories', name: 'Аксессуары', icon: '◒', count: 2 },
   { id: 'jewelry', slug: 'jewelry', name: 'Украшения', icon: '◓', count: 1 },
+];
+
+
+export interface Seller {
+  id: string;
+  slug: string;
+  name: string;
+  avatar: string;
+  coverImage: string;
+  rating: number;
+  reviewCount: number;
+  shortDescription: string;
+  fullDescription: string;
+  city?: string;
+  country?: string;
+  joinedAt: string;
+}
+
+export const SELLERS: Seller[] = [
+  {
+    id: 's-1',
+    slug: 'archiv-studio',
+    name: 'Archiv Studio',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80&auto=format',
+    coverImage: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1600&q=80&auto=format',
+    rating: 4.9,
+    reviewCount: 128,
+    shortDescription: 'Кураторская подборка авангардной моды и редких архивных вещей.',
+    fullDescription: 'Archiv Studio — это независимый концепт-стор и кураторский проект. Мы специализируемся на поиске уникальных предметов одежды авангардных дизайнеров. Мы верим, что одежда должна быть искусством и нести в себе историю.',
+    city: 'Санкт-Петербург',
+    country: 'Россия',
+    joinedAt: '2022'
+  },
+  {
+    id: 's-2',
+    slug: 'form-null',
+    name: 'Form Null',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=80&auto=format',
+    coverImage: 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=1600&q=80&auto=format',
+    rating: 5.0,
+    reviewCount: 45,
+    shortDescription: 'Минимализм, новые формы и устойчивые материалы.',
+    fullDescription: 'Form Null фокусируется на деконструкции и новом минимализме. Каждая вещь в подборке проходит строгий визуальный отбор. Только чистые линии, монохром и сложный крой.',
+    city: 'Москва',
+    country: 'Россия',
+    joinedAt: '2023'
+  },
+  {
+    id: 's-3',
+    slug: 'noir-concept',
+    name: 'Noir Concept',
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&q=80&auto=format',
+    coverImage: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=1600&q=80&auto=format',
+    rating: 4.8,
+    reviewCount: 204,
+    shortDescription: 'Темная эстетика и экспериментальный крой.',
+    fullDescription: 'Проект, посвященный исследованию темных оттенков в одежде. Мы собираем лучшие примеры азиатского и европейского авангарда, отдавая предпочтение сложным фактурам и асимметрии.',
+    city: 'Токио',
+    country: 'Япония',
+    joinedAt: '2021'
+  }
 ];
 
 export const BRANDS: Brand[] = [
@@ -134,12 +197,14 @@ export const BRANDS: Brand[] = [
 export const PRODUCTS: Product[] = [
   {
     id: 'p1',
+    sellerId: 's-1',
     name: 'Анорак ледяной линии',
     brand: 'Нарра Студио',
     brandId: 'narra-studio',
     price: 14900,
     image: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=800&auto=format',
     category: 'clothing',
+    styles: ['Горпкор', 'Спортвир', 'Стритвир'],
     description: 'Легкий анорак для межсезонья и многослойных образов.',
     sizes: ['S', 'M', 'L', 'XL'],
     isNew: true,
@@ -152,17 +217,20 @@ export const PRODUCTS: Product[] = [
   },
   {
     id: 'p2',
+    sellerId: 's-2',
     name: 'Сумка-капсула с ручной стежкой',
     brand: 'Дроп Блю',
     brandId: 'drop-blu',
     price: 9200,
     image: 'https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?w=800&auto=format',
     category: 'bags',
+    styles: ['Авангард', 'Арт'],
     sizes: ['Единый'],
     isNew: true,
   },
   {
     id: 'p3',
+    sellerId: 's-3',
     name: 'Парка с мембраной 10 000',
     brand: 'Новалис',
     brandId: 'novalis',
@@ -171,6 +239,7 @@ export const PRODUCTS: Product[] = [
     discountPrice: 17100,
     image: 'https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=800&auto=format',
     category: 'clothing',
+    styles: ['Кэжуал', 'Горпкор'],
     sizes: ['S', 'M', 'L', 'XL'],
     isBestseller: true,
     rating: 4.9,
@@ -178,79 +247,94 @@ export const PRODUCTS: Product[] = [
   },
   {
     id: 'p4',
-    name: 'Свитер объемной вязки',
+    sellerId: 's-1',
+    name: 'Топ базовый асимметричный',
     brand: 'Форма Кэндзо',
     brandId: 'kenzo-forma',
     price: 12500,
     image: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=800&auto=format',
     category: 'clothing',
+    styles: ['Y2K', 'Опиум', 'Авангард'],
     sizes: ['XS', 'S', 'M', 'L'],
   },
   {
     id: 'p5',
+    sellerId: 's-2',
     name: 'Кроссовки аэр-сетки',
     brand: 'Новалис',
     brandId: 'novalis',
     price: 21500,
     image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format',
     category: 'shoes',
+    styles: ['Стритвир', 'Спортвир'],
     sizes: ['39', '40', '41', '42', '43'],
     isNew: true,
   },
   {
     id: 'p6',
+    sellerId: 's-3',
     name: 'Дорожная сумка для уикенда',
     brand: 'Граавель',
     brandId: 'graavel',
     price: 23500,
     image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=800&auto=format',
     category: 'bags',
+    styles: ['Кэжуал', 'Архив'],
     sizes: ['Единый'],
     isBestseller: true,
   },
   {
     id: 'p7',
+    sellerId: 's-1',
     name: 'Слипоны мягкой формы',
     brand: 'Монада',
     brandId: 'monade',
     price: 8400,
     image: 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=800&auto=format',
     category: 'shoes',
+    styles: ['Арт', 'Авангард'],
     sizes: ['36', '37', '38', '39', '40'],
   },
   {
     id: 'p8',
-    name: 'Пальто-кокон северной серии',
+    sellerId: 's-2',
+    name: 'Платье миди струящееся',
     brand: 'Нарра Студио',
     brandId: 'narra-studio',
-    price: 34900,
+    price: 16900,
     image: 'https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?w=800&auto=format',
     category: 'clothing',
+    styles: ['Опиум', 'Арт'],
     sizes: ['S', 'M', 'L'],
     isNew: true,
   },
   {
     id: 'p9',
+    sellerId: 's-3',
     name: 'Серьги-капли из серебра',
     brand: 'Монада',
     brandId: 'monade',
     price: 6200,
     image: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?w=800&auto=format',
     category: 'jewelry',
+    styles: ['Апсайкл', 'Y2K', 'Арт'],
     sizes: ['Единый'],
   },
   {
     id: 'p10',
+    sellerId: 's-1',
     name: 'Ремень с матовой пряжкой',
     brand: 'Граавель',
     brandId: 'graavel',
     price: 5800,
     image: 'https://images.unsplash.com/photo-1624222247344-550fb60583dc?w=800&auto=format',
     category: 'accessories',
+    styles: ['Кэжуал', 'Стритвир'],
     sizes: ['S', 'M', 'L'],
   },
   {
     id: 'p11',
+    sellerId: 's-2',
     name: 'Очки в титановой оправе',
     brand: 'Новалис',
     brandId: 'novalis',
@@ -261,6 +345,7 @@ export const PRODUCTS: Product[] = [
   },
   {
     id: 'p12',
+    sellerId: 's-3',
     name: 'Тренч с деконструкцией',
     brand: 'Форма Кэндзо',
     brandId: 'kenzo-forma',
@@ -364,4 +449,12 @@ export function getBestsellers(): Product[] {
 export function getProductsByCategory(categoryId: string): Product[] {
   if (categoryId === 'all') return PRODUCTS;
   return PRODUCTS.filter((p) => p.category === categoryId);
+}
+
+export function getSellerById(id: string): Seller | undefined {
+  return SELLERS.find((s) => s.id === id);
+}
+
+export function getSellerBySlug(slug: string): Seller | undefined {
+  return SELLERS.find((s) => s.slug === slug);
 }
