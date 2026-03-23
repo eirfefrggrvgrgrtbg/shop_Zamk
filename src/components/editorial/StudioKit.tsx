@@ -95,8 +95,8 @@ export function SectionHeader({ label, title, description, action }: SectionHead
     <div className='mb-7 flex flex-col gap-4 md:flex-row md:items-end md:justify-between'>
       <div>
         {label && <p className='studio-label mb-2'>{label}</p>}
-        <h2 className='text-[2rem] md:text-[2.55rem] leading-[0.95] tracking-[-0.02em] font-serif text-graphite'>{title}</h2>
-        {description && <p className='mt-2.5 max-w-2xl text-sm md:text-base text-graphite-light'>{description}</p>}
+        <h2 className='text-[1.75rem] md:text-[2rem] leading-[0.95] tracking-[-0.02em] font-serif text-graphite dark:text-white'>{title}</h2>
+        {description && <p className='mt-2.5 max-w-2xl text-sm md:text-base text-graphite-light dark:text-white/70'>{description}</p>}
       </div>
       {action}
     </div>
@@ -147,16 +147,16 @@ export function SortDropdown({ value, options, onChange }: SortDropdownProps) {
   return (
     <div className='relative'>
       <button
-        className='flex h-10 items-center gap-2 rounded-full border border-border-soft bg-white/85 px-4 text-sm text-graphite'
+        className='flex h-10 items-center gap-2 rounded-lg border border-border-soft dark:border-white/20 bg-white dark:bg-transparent px-4 text-sm text-graphite dark:text-white'
         onClick={() => setOpen((v) => !v)}
       >
-        Сортировка: {active.label}
+        {active.label}
         <ChevronDown className='h-4 w-4 text-ash' />
       </button>
       {open && (
         <>
           <div className='fixed inset-0 z-20' onClick={() => setOpen(false)} />
-          <div className='absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-3xl border border-border-lighter bg-white shadow-[0_20px_50px_rgba(124,156,191,0.12)]'>
+          <div className='absolute right-0 z-30 mt-2 w-56 overflow-hidden rounded-xl border border-border-lighter dark:border-white/10 bg-white dark:bg-[#1a1a1c] shadow-lg'>
             {options.map((opt) => (
               <button
                 key={opt.value}
@@ -165,11 +165,73 @@ export function SortDropdown({ value, options, onChange }: SortDropdownProps) {
                   setOpen(false);
                 }}
                 className={cn(
-                  'block w-full px-5 py-3 text-left text-sm transition-colors',
-                  opt.value === value ? 'bg-ice text-graphite font-medium' : 'text-graphite-light hover:bg-milk'
+                  'block w-full px-4 py-2.5 text-left text-sm transition-colors',
+                  opt.value === value ? 'bg-ice dark:bg-white/10 text-graphite dark:text-white font-medium' : 'text-graphite-light dark:text-white/70 hover:bg-milk dark:hover:bg-white/5'
                 )}
               >
                 {opt.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+interface BrandDropdownProps {
+  value: string | null;
+  onChange: (value: string | null) => void;
+  brands: Brand[];
+}
+
+export function BrandDropdown({ value, onChange, brands }: BrandDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const activeBrand = brands.find((b) => b.id === value);
+
+  return (
+    <div className='relative'>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          'flex h-10 items-center gap-2 rounded-lg border px-4 text-sm transition-all',
+          value
+            ? 'bg-graphite text-white border-graphite dark:bg-white dark:text-graphite dark:border-white'
+            : 'bg-white dark:bg-transparent text-graphite dark:text-white border-border-soft dark:border-white/20 hover:border-graphite/35 dark:hover:border-white/50'
+        )}
+      >
+        {activeBrand ? activeBrand.name : 'Бренд'}
+        <ChevronDown className='h-4 w-4' />
+      </button>
+      {open && (
+        <>
+          <div className='fixed inset-0 z-20' onClick={() => setOpen(false)} />
+          <div className='absolute left-0 z-30 mt-2 w-56 overflow-hidden rounded-xl border border-border-lighter dark:border-white/10 bg-white dark:bg-[#1a1a1c] shadow-lg'>
+            <button
+              onClick={() => {
+                onChange(null);
+                setOpen(false);
+              }}
+              className={cn(
+                'block w-full px-4 py-2.5 text-left text-sm transition-colors',
+                !value ? 'bg-ice dark:bg-white/10 text-graphite dark:text-white font-medium' : 'text-graphite-light dark:text-white/70 hover:bg-milk dark:hover:bg-white/5'
+              )}
+            >
+              Все бренды
+            </button>
+            {brands.map((b) => (
+              <button
+                key={b.id}
+                onClick={() => {
+                  onChange(b.id);
+                  setOpen(false);
+                }}
+                className={cn(
+                  'block w-full px-4 py-2.5 text-left text-sm transition-colors',
+                  value === b.id ? 'bg-ice dark:bg-white/10 text-graphite dark:text-white font-medium' : 'text-graphite-light dark:text-white/70 hover:bg-milk dark:hover:bg-white/5'
+                )}
+              >
+                {b.name}
               </button>
             ))}
           </div>
@@ -186,8 +248,8 @@ interface FilterGroupProps {
 
 export function FilterGroup({ title, children }: FilterGroupProps) {
   return (
-    <div className='rounded-3xl border border-border-lighter bg-white/80 p-5'>
-      <h4 className='mb-3 text-sm font-semibold text-graphite'>{title}</h4>
+    <div className='rounded-2xl border border-border-lighter dark:border-white/10 bg-white/80 dark:bg-white/[0.03] p-5'>
+      <h4 className='mb-3 text-sm font-semibold text-graphite dark:text-white'>{title}</h4>
       {children}
     </div>
   );

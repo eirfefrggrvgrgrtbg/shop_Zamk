@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Heart, House, Menu, Search, ShoppingBag, User } from 'lucide-react';
+import { Heart, House, LayoutGrid, Menu, Search, ShoppingBag, User } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { useFavorites } from '../../contexts/FavoritesContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -8,10 +8,12 @@ import { useSearch } from '../../contexts/SearchContext';
 import { Drawer } from '../ui/Drawer';
 import { Input } from '../ui/Input';
 import { ProfileMenu } from '../auth/ProfileMenu';
+import { Sidebar } from './Sidebar';
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { totalItems } = useCart();
   const { favorites } = useFavorites();
   const { isAuthenticated, openAuthModal } = useAuth();
@@ -26,9 +28,7 @@ export function Navbar() {
 
   const navLinks = [
     { to: '/catalog', label: 'Каталог' },
-    { to: '/collections', label: 'Подборки' },
     { to: '/brands', label: 'Бренды' },
-    { to: '/about', label: 'О витрине' },
   ];
 
   return (
@@ -83,6 +83,13 @@ export function Navbar() {
             {/* Right actions */}
             <div className="flex items-center justify-end gap-0.5 sm:gap-1 flex-1">
               <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite transition-colors rounded-full hover:bg-white/40"
+                aria-label="Навигация"
+              >
+                <LayoutGrid className="w-[17px] h-[17px]" />
+              </button>
+              <button
                 onClick={openSearch}
                 className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite transition-colors rounded-full hover:bg-white/40"
                 aria-label="Поиск"
@@ -132,7 +139,7 @@ export function Navbar() {
       <Drawer isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} title="Меню">
         <div className="flex flex-col gap-6 py-4">
           <div onClick={() => { setIsMobileMenuOpen(false); openSearch(); }}>
-            <Input placeholder="Поиск по архиву" isSearch className="bg-white/50 pointer-events-none" readOnly />
+            <Input placeholder="Поиск" isSearch className="bg-white/50 pointer-events-none" readOnly />
           </div>
           <nav className="flex flex-col gap-4">
             <Link to="/" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
@@ -147,21 +154,18 @@ export function Navbar() {
             <Link to="/brands" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               Бренды
             </Link>
-            <Link to="/about" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
-              О витрине
-            </Link>
             <Link to="/favorites" className="text-lg font-medium py-2 border-b border-border-lighter flex justify-between items-center" onClick={() => setIsMobileMenuOpen(false)}>
               Избранное
               {favorites.length > 0 && <span className="bg-primary/20 text-primary text-xs px-2 py-1 rounded-full">{favorites.length}</span>}
             </Link>
-            
+
             {isAuthenticated ? (
               <Link to="/profile" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
                 Профиль
               </Link>
             ) : (
-              <button 
-                className="text-lg font-medium py-2 border-b border-border-lighter text-left" 
+              <button
+                className="text-lg font-medium py-2 border-b border-border-lighter text-left"
                 onClick={() => {
                   setIsMobileMenuOpen(false);
                   openAuthModal('login');
@@ -170,10 +174,6 @@ export function Navbar() {
                 Вход / Регистрация
               </button>
             )}
-
-            <Link to="/about" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
-              О проекте
-            </Link>
           </nav>
         </div>
       </Drawer>
@@ -210,6 +210,9 @@ export function Navbar() {
           )}
         </div>
       </div>
+
+      {/* Sidebar */}
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
     </>
   );
 }

@@ -147,17 +147,17 @@
 
 @layer utilities {
   .glass-panel {
-    @apply bg-white/86 border border-border-lighter rounded-[2.2rem];
+    @apply bg-white/86 dark:bg-white/[0.04] border border-border-lighter dark:border-white/10 rounded-[2.2rem];
     box-shadow: var(--shadow-glass);
   }
 
   .glass-panel-strong {
-    @apply bg-white/92 border border-border-lighter rounded-[2.5rem];
+    @apply bg-white/92 dark:bg-white/[0.06] border border-border-lighter dark:border-white/10 rounded-[2.5rem];
     box-shadow: var(--shadow-glass-strong);
   }
 
   .capsule {
-    @apply relative overflow-hidden rounded-[2rem] bg-white transition-all duration-500;
+    @apply relative overflow-hidden rounded-[2rem] bg-white dark:bg-[#1a1a1c] transition-all duration-500;
   }
 
   .capsule:hover {
@@ -166,7 +166,7 @@
   }
 
   .studio-shell {
-    @apply rounded-[2.5rem] bg-white/88 border border-border-lighter;
+    @apply rounded-[2.5rem] bg-white/88 dark:bg-white/[0.04] border border-border-lighter dark:border-white/10;
     box-shadow: var(--shadow-studio);
   }
 
@@ -175,12 +175,12 @@
   }
 
   .studio-title {
-    @apply text-3xl md:text-4xl font-serif text-graphite leading-tight;
+    @apply text-3xl md:text-4xl font-serif text-graphite dark:text-white leading-tight;
     text-shadow: var(--text-shadow-hero);
   }
 
   .studio-subtitle {
-    @apply text-sm md:text-base text-graphite-light leading-relaxed;
+    @apply text-sm md:text-base text-graphite-light dark:text-white/70 leading-relaxed;
   }
 
   .studio-cloud {
@@ -189,11 +189,11 @@
   }
 
   .studio-border {
-    @apply border border-border-lighter;
+    @apply border border-border-lighter dark:border-white/10;
   }
 
   .studio-pill {
-    @apply rounded-full border border-border-soft bg-white/80;
+    @apply rounded-full border border-border-soft dark:border-white/20 bg-white/80 dark:bg-white/5;
   }
 
   .scrollbar-hide {

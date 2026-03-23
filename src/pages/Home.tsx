@@ -31,41 +31,6 @@ export function Home() {
       ═══════════════════════════════════════════════════════ */}
       <section className="relative w-full overflow-hidden pt-[88px] md:pt-[96px]">
 
-        {/* Ghost typography layer — atmospheric, not dominant */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 pointer-events-none select-none overflow-hidden z-0"
-        >
-          {/* Horizontal ghost words fading across the background */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center gap-[6vw] whitespace-nowrap">
-            <span
-              className="font-serif text-[clamp(3.5rem,7vw,9rem)] text-[#8aa4c0] leading-none tracking-[-0.01em]"
-              style={{ opacity: 0.13, filter: 'blur(1.5px)' }}
-            >
-              АРХИВ
-            </span>
-            <span
-              className="font-serif text-[clamp(3rem,5.5vw,7rem)] text-[#8aa4c0] leading-none tracking-[-0.01em]"
-              style={{ opacity: 0.08, filter: 'blur(2px)' }}
-            >
-              ВОЛНА
-            </span>
-            <span
-              className="font-serif text-[clamp(3.5rem,7vw,9rem)] text-[#8aa4c0] leading-none tracking-[-0.01em]"
-              style={{ opacity: 0.11, filter: 'blur(1.5px)' }}
-            >
-              ЗАМК
-            </span>
-          </div>
-          {/* Subtle vertical word */}
-          <div
-            className="absolute right-[6%] top-[40%] font-serif text-[clamp(2.5rem,4vw,6rem)] text-[#7a9ab8] leading-none tracking-[0.12em]"
-            style={{ opacity: 0.07, filter: 'blur(2px)', writingMode: 'vertical-rl' }}
-          >
-            СТИЛЬ
-          </div>
-        </div>
-
         {/* Hero content shell */}
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-8 pb-0 relative z-10">
 
@@ -148,9 +113,8 @@ export function Home() {
         {/* New partners */}
         <motion.section {...reveal}>
           <SectionHeader
-            label="Новые бренды"
-            title="Новая волна партнёров"
-            description="Выбранные бренды, которые формируют современный независимый язык моды."
+            label="Партнёры"
+            title="Бренды"
             action={
               <Link to="/brands">
                 <Button variant="secondary" className="gap-2">
@@ -169,9 +133,8 @@ export function Home() {
         {/* Collections */}
         <motion.section {...reveal}>
           <SectionHeader
-            label="Капсульные подборки"
+            label="Подборки"
             title="Кураторские наборы"
-            description="Большие тематические блоки вместо обычной витрины: собранные образы и цельные истории."
           />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             {COLLECTIONS.map((collection) => (
@@ -200,9 +163,8 @@ export function Home() {
         {/* New arrivals */}
         <motion.section {...reveal}>
           <SectionHeader
-            label="Новая поставка"
+            label="Новинки"
             title="Свежие поступления"
-            description="Светлая продуктовая система: rounded image block, деликатные бейджи и спокойная типографика."
           />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
             {newProducts.slice(0, 4).map((product) => (
@@ -215,8 +177,7 @@ export function Home() {
         <motion.section {...reveal} className="glass-panel p-7 md:p-10">
           <SectionHeader
             label="Выбор редакции"
-            title="Собрано редакцией ZAMK"
-            description="Вещи с ясным архитектурным кроем и выразительным, но спокойным характером."
+            title="Собрано редакцией"
           />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
             {editorPick.map((product) => (
@@ -228,9 +189,8 @@ export function Home() {
         {/* Categories */}
         <motion.section {...reveal}>
           <SectionHeader
-            label="Категории"
-            title="Навигация по архиву"
-            description="Большие блоки категорий в единой editorial-системе."
+            label="Каталог"
+            title="Категории"
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {CATEGORIES.filter((c) => c.id !== 'all').map((category) => (

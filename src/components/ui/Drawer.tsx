@@ -31,7 +31,7 @@ export function Drawer({ isOpen, onClose, title, children, position = 'left' }: 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-50 bg-graphite/20 backdrop-blur-sm"
+            className="fixed inset-0 z-50 bg-graphite/20 dark:bg-black/50 backdrop-blur-sm"
           />
 
           <motion.div
@@ -39,23 +39,23 @@ export function Drawer({ isOpen, onClose, title, children, position = 'left' }: 
             animate={{ x: 0 }}
             exit={{ x: `${slideDirection}%` }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className={`fixed top-0 bottom-0 z-50 w-[85vw] sm:w-[400px] glass-panel-strong flex flex-col
-              ${position === 'left' ? 'left-0 rounded-r-[2rem]' : 'right-0 rounded-l-[2rem]'}
+            className={`fixed top-0 bottom-0 z-50 w-[85vw] sm:w-[400px] bg-white dark:bg-[#111214] border-border-lighter dark:border-white/10 flex flex-col
+              ${position === 'left' ? 'left-0 rounded-r-[1.5rem] border-r' : 'right-0 rounded-l-[1.5rem] border-l'}
             `}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-border-lighter">
-              {title && <h2 className="text-xl font-serif font-semibold text-graphite">{title}</h2>}
+            <div className="flex items-center justify-between p-5 border-b border-border-lighter dark:border-white/10">
+              {title && <h2 className="text-lg font-semibold text-graphite dark:text-white">{title}</h2>}
               <button
                 onClick={onClose}
-                className="p-2 -mr-2 text-ash hover:text-graphite bg-white/40 hover:bg-white/80 rounded-full transition-all"
+                className="p-2 -mr-2 text-ash hover:text-graphite dark:hover:text-white bg-ice/50 dark:bg-white/5 hover:bg-ice dark:hover:bg-white/10 rounded-full transition-all"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Body */}
-            <div className="p-6 overflow-y-auto flex-1 scrollbar-hide">
+            <div className="p-5 overflow-y-auto flex-1 scrollbar-hide">
               {children}
             </div>
           </motion.div>
