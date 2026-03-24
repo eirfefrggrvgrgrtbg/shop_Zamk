@@ -5,6 +5,7 @@ import { BrandCard, CategoryCard, SectionHeader } from '../components/editorial/
 import { ProductCard } from '../components/product/ProductCard';
 import { Button } from '../components/ui/Button';
 import { BRANDS, CATEGORIES, COLLECTIONS, PRODUCTS, getNewProducts } from '../lib/mock-data';
+import { HeroSection } from '../components/home/HeroSection';
 
 const reveal = {
   initial: { opacity: 0, y: 24 },
@@ -16,73 +17,14 @@ const reveal = {
 export function Home() {
   const newProducts = getNewProducts();
   const editorPick = PRODUCTS.slice(0, 4);
-  const topProducts = newProducts.length >= 4 ? newProducts.slice(0, 4) : PRODUCTS.slice(0, 4);
 
   return (
     <div className="relative z-10 min-h-screen pb-20">
 
       {/* ═══════════════════════════════════════════════════════
-          HERO SCENE — Unified first-screen composition
+          HERO SECTION — Minimalist design with typography art
       ═══════════════════════════════════════════════════════ */}
-      <section className="relative w-full overflow-hidden pt-[88px] md:pt-[96px]">
-
-        {/* Hero content shell */}
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-8 pb-0 relative z-10">
-
-          {/* Hero headline — tight & editorial */}
-          <div className="mb-8 md:mb-10 flex flex-col gap-1">
-            <p className="text-[11px] font-semibold tracking-[0.18em] text-ash uppercase">
-              Кураторская платформа
-            </p>
-            <h1 className="font-serif text-[clamp(2.4rem,5.5vw,4.2rem)] text-graphite leading-[0.95] tracking-tight">
-              Архив новой волны
-            </h1>
-          </div>
-
-          {/* ── control row ── */}
-          <div className="relative mb-7 md:mb-9">
-            {/* Row */}
-            <div className="flex items-center justify-end gap-4 flex-wrap">
-              {/* New arrivals pill — part of the control row, not floating */}
-              <Link
-                to="/new"
-                className="flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/8 px-4 py-2 text-[12.5px] font-medium text-primary hover:bg-primary hover:text-white hover:border-primary shadow-[0_3px_12px_rgba(152,90,215,0.12)] transition-all duration-300 tracking-[0.02em]"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                Новинки
-              </Link>
-            </div>
-
-            {/* Separator — subtle rule connecting to products */}
-            <div className="mt-5 h-px bg-gradient-to-r from-graphite/8 via-graphite/14 to-transparent" />
-          </div>
-
-          {/* ── Product grid intro label ── */}
-          <div className="flex items-center gap-3 mb-5">
-            <div className="h-px w-6 bg-graphite/20" />
-            <p className="text-[11px] font-semibold tracking-[0.14em] text-ash uppercase">
-              Актуальное
-            </p>
-          </div>
-
-          {/* ── Hero product grid ── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 pb-14 md:pb-18">
-            {topProducts.map((product, i) => (
-              <motion.div
-                key={product.id}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.65, delay: i * 0.08, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <ProductCard product={product} />
-              </motion.div>
-            ))}
-          </div>
-        </div>
-
-        {/* Bottom fade-out edge — blends hero into content below */}
-        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-ice/80 dark:from-[#111214]/80 to-transparent pointer-events-none z-10" />
-      </section>
+      <HeroSection />
 
       {/* ═══════════════════════════════════════════════════════
           CONTENT SECTIONS
