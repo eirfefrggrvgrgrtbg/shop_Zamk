@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { QuestionHero3D } from '../hero/QuestionHero3D';
-import { FloatingZamkWords } from '../hero/FloatingZamkWords';
 import { HeroShadow } from '../hero/HeroShadow';
 
 export const HeroSection = () => {
@@ -43,8 +42,6 @@ export const HeroSection = () => {
             className="flex justify-center lg:justify-end items-center"
           >
             <div className="relative w-full max-w-[480px] lg:max-w-[520px] aspect-square">
-              {/* Floating ZAMK brand words */}
-              <FloatingZamkWords />
               {/* 3D canvas */}
               <div className="absolute inset-0" style={{ zIndex: 2 }}>
                 <QuestionHero3D />

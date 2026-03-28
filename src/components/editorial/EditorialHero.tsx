@@ -2,7 +2,6 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { QuestionHero3D } from '../hero/QuestionHero3D';
-import { FloatingZamkWords } from '../hero/FloatingZamkWords';
 import { HeroShadow } from '../hero/HeroShadow';
 
 export function EditorialHero() {
@@ -64,9 +63,6 @@ export function EditorialHero() {
                 transition={{ duration: 1, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
                 className="relative w-full aspect-square lg:aspect-[4/5] max-w-xl mx-auto"
               >
-                {/* Floating ZAMK brand words — HTML layer above canvas */}
-                <FloatingZamkWords />
-
                 {/* 3D model — fills the container */}
                 <div className="absolute inset-0" style={{ zIndex: 2 }}>
                   <QuestionHero3D />
