@@ -74,8 +74,8 @@ export const QuestionMarkWordShape: React.FC<QuestionMarkWordShapeProps> = ({
             className={`absolute select-none ${themeClasses} ${p.sizeClass} z-0`}
             initial={{ x: `${p.baseX}%`, y: `${p.baseY}%`, opacity: 0 }}
             animate={{
-              x: p.animateX.map((val) => `${val}vw`),
-              y: p.animateY.map((val) => `${val}vh`),
+              x: p.animateX.map((val: number) => `${val}vw`),
+              y: p.animateY.map((val: number) => `${val}vh`),
               rotate: p.animateRotate,
               opacity: p.opacityAnim,
             }}
