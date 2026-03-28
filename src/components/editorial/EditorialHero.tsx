@@ -1,6 +1,9 @@
 import { motion } from 'framer-motion';
 import { ArrowRight, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { QuestionHero3D } from '../hero/QuestionHero3D';
+import { FloatingZamkWords } from '../hero/FloatingZamkWords';
+import { HeroShadow } from '../hero/HeroShadow';
 
 export function EditorialHero() {
   return (
@@ -8,7 +11,8 @@ export function EditorialHero() {
       <div className="container mx-auto px-4 sm:px-6 relative z-10">
         <div className="studio-shell p-6 md:p-10 lg:p-12">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 items-center">
-          
+
+            {/* ── Left: text content — unchanged ─────────────────────────── */}
             <div className="lg:col-span-7 xl:col-span-6 relative z-20">
               <motion.div
                 initial={{ opacity: 0, x: -30 }}
@@ -52,50 +56,24 @@ export function EditorialHero() {
               </motion.div>
             </div>
 
+            {/* ── Right: 3D question mark + floating ZAMK words ──────────── */}
             <div className="lg:col-span-5 xl:col-span-6 relative">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 1, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                className="relative w-full aspect-[4/5] sm:aspect-square lg:aspect-[4/5] max-w-xl mx-auto"
+                className="relative w-full aspect-square lg:aspect-[4/5] max-w-xl mx-auto"
               >
-                <div className="absolute inset-0 rounded-[2rem] overflow-hidden border border-border-lighter bg-white p-2.5 shadow-md">
-                  <div className="w-full h-full rounded-[1.5rem] overflow-hidden relative">
-                    <img
-                      src="https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1740&auto=format&fit=crop"
-                      alt="Модный лукбук"
-                      className="w-full h-full object-cover rounded-[1rem]"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#22344f66] via-transparent to-transparent"></div>
-                  </div>
+                {/* Floating ZAMK brand words — HTML layer above canvas */}
+                <FloatingZamkWords />
+
+                {/* 3D model — fills the container */}
+                <div className="absolute inset-0" style={{ zIndex: 2 }}>
+                  <QuestionHero3D />
                 </div>
 
-                <motion.div
-                  className="absolute top-8 -left-3 md:-left-8 rounded-3xl border border-border-lighter bg-white/95 backdrop-blur-sm px-4 py-3 max-w-[220px] shadow-sm"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8, delay: 0.5, ease: 'easeOut' }}
-                >
-                  <p className="studio-label mb-1">Фокус сезона</p>
-                  <p className="text-sm font-medium text-graphite">Точный крой, холодная палитра и функциональные слои</p>
-                </motion.div>
-
-                <motion.div
-                  className="absolute bottom-10 -right-4 md:-right-8 rounded-full border border-border-lighter bg-white/95 backdrop-blur-sm p-3 pl-4 flex items-center gap-3 shadow-sm"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8, delay: 0.7, ease: 'easeOut' }}
-                >
-                  <div className="flex -space-x-2">
-                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop" className="w-8 h-8 rounded-full border-2 border-white" alt="Куратор" />
-                    <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop" className="w-8 h-8 rounded-full border-2 border-white" alt="Стилист" />
-                  </div>
-                  <div className="text-xs font-semibold text-graphite pr-2">
-                    Новая
-                    <br />
-                    поставка
-                  </div>
-                </motion.div>
+                {/* Soft oval shadow beneath the model */}
+                <HeroShadow />
               </motion.div>
             </div>
 

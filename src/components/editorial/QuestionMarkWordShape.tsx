@@ -1,8 +1,7 @@
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 
-// Импорт картинки. Поместите logo_question.jpg в папку src/assets/
-import questionMarkImg from '../../assets/logo_question.jpg';
+import questionMarkImg from '../../assets/question-hero.png';
 
 export interface QuestionMarkWordShapeProps {
   word?: string;
