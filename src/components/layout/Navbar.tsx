@@ -39,13 +39,13 @@ export function Navbar() {
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
           <div className={`h-[60px] md:h-[68px] rounded-full flex items-center justify-between transition-all duration-700 px-5 md:px-7 ${
             isScrolled
-              ? 'bg-white/82 backdrop-blur-2xl border border-white/70 shadow-[0_4px_24px_rgba(100,130,170,0.14),0_1px_0_rgba(255,255,255,0.8)_inset]'
-              : 'bg-white/52 backdrop-blur-xl border border-white/50 shadow-[0_2px_16px_rgba(120,155,190,0.10),0_1px_0_rgba(255,255,255,0.6)_inset]'
-          }`}>
+                ? 'bg-white/60 dark:bg-black/40 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-[0_4px_24px_rgba(100,130,170,0.14),0_1px_0_rgba(255,255,255,0.8)_inset] dark:shadow-[0_4px_24px_rgba(0,0,0,0.4),0_1px_0_rgba(255,255,255,0.05)_inset]'
+                : 'bg-white/20 dark:bg-black/20 backdrop-blur-xl border border-white/30 dark:border-white/5 shadow-[0_2px_16px_rgba(120,155,190,0.10),0_1px_0_rgba(255,255,255,0.6)_inset] dark:shadow-[0_2px_16px_rgba(0,0,0,0.2),0_1px_0_rgba(255,255,255,0.02)_inset]'
+            }`}>
 
             {/* Mobile burger */}
             <button
-              className="md:hidden p-2 -ml-1 text-graphite/70 hover:text-graphite transition-colors"
+              className="md:hidden p-2 -ml-1 text-graphite/70 dark:text-white/70 hover:text-graphite dark:hover:text-white transition-colors"
               onClick={() => setIsMobileMenuOpen(true)}
             >
               <Menu className="w-[18px] h-[18px]" />
@@ -59,8 +59,8 @@ export function Navbar() {
                   to={link.to}
                   className={`text-[13.5px] font-medium transition-all duration-300 tracking-[0.04em] uppercase ${
                     location.pathname === link.to
-                      ? 'text-graphite'
-                      : 'text-graphite/50 hover:text-graphite/80'
+                      ? 'text-graphite dark:text-white'
+                      : 'text-graphite/50 dark:text-white/50 hover:text-graphite/80 dark:hover:text-white/80'
                   }`}
                 >
                   {link.label}
@@ -74,9 +74,9 @@ export function Navbar() {
               className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
             >
               <span className={`font-serif text-[34px] md:text-[40px] font-medium tracking-[0.06em] transition-colors duration-500 ${
-                isScrolled ? 'text-graphite' : 'text-graphite/85'
+                isScrolled ? 'text-graphite dark:text-white' : 'text-graphite/85 dark:text-white/85'
               }`}>
-                ZAMK
+                ЗАМК
               </span>
             </Link>
 
@@ -84,14 +84,14 @@ export function Navbar() {
             <div className="flex items-center justify-end gap-0.5 sm:gap-1 flex-1">
               <button
                 onClick={() => setIsSidebarOpen(true)}
-                className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite transition-colors rounded-full hover:bg-white/40"
+                className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite dark:text-white/50 dark:hover:text-white transition-colors rounded-full hover:bg-white/40 dark:hover:bg-white/10"
                 aria-label="Навигация"
               >
                 <LayoutGrid className="w-[17px] h-[17px]" />
               </button>
               <button
                 onClick={openSearch}
-                className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite transition-colors rounded-full hover:bg-white/40"
+                className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite dark:text-white/50 dark:hover:text-white transition-colors rounded-full hover:bg-white/40 dark:hover:bg-white/10"
                 aria-label="Поиск"
               >
                 <Search className="w-[17px] h-[17px]" />
@@ -102,7 +102,7 @@ export function Navbar() {
               ) : (
                 <button
                   onClick={() => openAuthModal('login')}
-                  className="hidden sm:flex p-2.5 text-[13px] text-graphite/50 hover:text-graphite transition-colors font-medium tracking-[0.04em] rounded-full hover:bg-white/40 uppercase"
+                  className="hidden sm:flex p-2.5 text-[13px] text-graphite/50 hover:text-graphite dark:text-white/50 dark:hover:text-white transition-colors font-medium tracking-[0.04em] rounded-full hover:bg-white/40 dark:hover:bg-white/10 uppercase"
                   aria-label="Вход"
                 >
                   Вход
@@ -111,17 +111,17 @@ export function Navbar() {
 
               <Link
                 to="/favorites"
-                className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite transition-colors relative rounded-full hover:bg-white/40"
+                className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite dark:text-white/50 dark:hover:text-white transition-colors relative rounded-full hover:bg-white/40 dark:hover:bg-white/10"
                 aria-label="Избранное"
               >
                 <Heart className="w-[17px] h-[17px]" />
                 {favorites.length > 0 && (
-                  <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-primary rounded-full ring-2 ring-white/80" />
+                  <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-primary rounded-full ring-2 ring-white/80 dark:ring-black/80" />
                 )}
               </Link>
               <Link
                 to="/cart"
-                className="p-2.5 text-graphite/50 hover:text-graphite transition-colors relative rounded-full hover:bg-white/40"
+                className="p-2.5 text-graphite/50 hover:text-graphite dark:text-white/50 dark:hover:text-white transition-colors relative rounded-full hover:bg-white/40 dark:hover:bg-white/10"
                 aria-label="Корзина"
               >
                 <ShoppingBag className="w-[17px] h-[17px]" />

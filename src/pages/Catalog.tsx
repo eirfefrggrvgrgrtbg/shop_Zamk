@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, SlidersHorizontal, X, Check } from 'lucide-react';
 import { ProductCard } from '../components/product/ProductCard';
 import { Drawer } from '../components/ui/Drawer';
 import { SortDropdown } from '../components/editorial/StudioKit';
@@ -25,7 +25,6 @@ const COLORS = [
 ];
 const MATERIALS = ['Хлопок', 'Шерсть', 'Лён', 'Кашемир', 'Полиэстер', 'Шёлк'];
 
-// Обратите внимание на порядок: "Все" первым, остальные перемешаны для естественного вида
 const STYLES = ['Все', 'Спортвир', 'Арт', 'Авангард', 'Горпкор', 'Стритвир', 'Опиум', 'Y2K', 'Апсайкл', 'Архив', 'Кэжуал'];
 
 // Компонент раскрывающейся секции фильтра
@@ -33,13 +32,13 @@ function FilterSection({ title, children, defaultOpen = true }: { title: string;
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
-    <div className="border-b border-border-lighter dark:border-white/10 py-5">
+    <div className="border-b border-black/10 dark:border-white/10 py-4">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between text-left group"
       >
-        <span className="text-[14px] font-medium text-graphite dark:text-white">{title}</span>
-        <ChevronDown className={cn("w-4 h-4 text-graphite/40 transition-transform duration-300 group-hover:text-graphite", isOpen && "rotate-180")} />
+        <span className="text-[10px] font-mono uppercase tracking-widest text-black dark:text-white/90">{title}</span>
+        <ChevronDown className={cn("w-3.5 h-3.5 text-black/50 dark:text-white/50 transition-transform duration-300 group-hover:text-black dark:group-hover:text-white", isOpen && "rotate-180")} />
       </button>
       <div className={cn("overflow-hidden transition-all duration-300 ease-in-out", isOpen ? "mt-4 max-h-[1000px] opacity-100" : "max-h-0 opacity-0")}>
         {children}
@@ -48,35 +47,37 @@ function FilterSection({ title, children, defaultOpen = true }: { title: string;
   );
 }
 
-// Универсальный компонент Chip/Pill для фильтров
-function FilterChip({ 
-  label, 
-  isActive, 
-  onClick, 
-  count 
-}: { 
-  label: string; 
-  isActive: boolean; 
+// Строгий чекбокс для списков (категории, бренды, т.д.)
+function FilterCheckbox({
+  label,
+  isActive,
+  onClick,
+  count
+}: {
+  label: string;
+  isActive: boolean;
   onClick: () => void;
   count?: number;
 }) {
   return (
     <button
       onClick={onClick}
-      className={cn(
-        "h-8 px-3.5 rounded-full border text-[13px] font-medium transition-all duration-300 flex items-center gap-1.5",
-        isActive
-          ? "bg-graphite text-white border-graphite dark:bg-white dark:text-black dark:border-white shadow-sm"
-          : "bg-transparent border-border-lighter dark:border-white/20 text-graphite/70 dark:text-white/70 hover:border-graphite/40 dark:hover:border-white/40 hover:text-graphite dark:hover:text-white"
-      )}
+      className="flex items-center justify-between w-full py-1.5 group text-left"
     >
-      <span>{label}</span>
-      {count !== undefined && (
+      <div className="flex items-center gap-3">
+        <div className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
+          {isActive && <Check className="w-4 h-4 text-black dark:text-white" strokeWidth={2.5} />}
+        </div>
         <span className={cn(
-          "text-[10px] opacity-60",
-          isActive ? "text-white/80 dark:text-black/80" : "text-graphite/50 dark:text-white/50"
+          "text-[12px] font-sans font-light tracking-wide transition-colors",
+          isActive ? "text-black dark:text-white font-normal" : "text-black/70 dark:text-white/70 group-hover:text-black dark:group-hover:text-white"
         )}>
-          {count}
+          {label}
+        </span>
+      </div>
+      {count !== undefined && (
+        <span className="text-[10px] font-mono text-black/40 dark:text-white/40">
+          [{count}]
         </span>
       )}
     </button>
@@ -173,12 +174,12 @@ export function Catalog() {
 
   // Контент фильтров (переиспользуется для desktop и mobile)
   const FiltersContent = () => (
-    <>
+    <div className="flex flex-col px-1 pb-4">
       {/* Стили */}
       <FilterSection title="Стиль" defaultOpen={true}>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-1">
           {STYLES.map((style) => (
-            <FilterChip
+            <FilterCheckbox
               key={style}
               label={style}
               isActive={style === 'Все' ? activeStyles.length === 0 : activeStyles.includes(style)}
@@ -190,9 +191,9 @@ export function Catalog() {
 
       {/* Категории */}
       <FilterSection title="Категории" defaultOpen={activeCategory !== 'all'}>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-1">
           {CATEGORIES.map((category) => (
-            <FilterChip
+            <FilterCheckbox
               key={category.id}
               label={category.name}
               count={category.count}
@@ -205,38 +206,44 @@ export function Catalog() {
 
       {/* Размеры */}
       <FilterSection title="Размер" defaultOpen={activeSizes.length > 0}>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {SIZES.map((size) => (
-            <FilterChip
+            <button
               key={size}
-              label={size}
-              isActive={activeSizes.includes(size)}
               onClick={() => toggleSize(size)}
-            />
+              className={cn(
+                "h-8 border text-[11px] font-mono transition-all flex items-center justify-center rounded-[2px]",
+                activeSizes.includes(size)
+                  ? "bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
+                  : "bg-transparent border-black/20 dark:border-white/20 text-black/60 dark:text-white/60 hover:border-black/50 dark:hover:border-white/50 hover:text-black dark:hover:text-white"
+              )}
+            >
+              {size}
+            </button>
           ))}
         </div>
       </FilterSection>
 
       {/* Цвета */}
       <FilterSection title="Цвет" defaultOpen={activeColors.length > 0}>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {COLORS.map((color) => (
             <button
               key={color.name}
               onClick={() => toggleColor(color.name)}
               title={color.name}
               className={cn(
-                "h-8 pl-1 pr-3 rounded-full border text-[13px] font-medium transition-all duration-300 flex items-center gap-2",
+                "h-8 px-2 border text-[10px] font-mono tracking-wider transition-all flex items-center gap-1.5 rounded-[2px]",
                 activeColors.includes(color.name)
-                    ? "bg-graphite text-white border-graphite dark:bg-white dark:text-black dark:border-white shadow-sm"
-                  : "bg-transparent border-border-lighter dark:border-white/20 text-graphite/70 dark:text-white/70 hover:border-graphite/40 dark:hover:border-white/40 hover:text-graphite dark:hover:text-white"
+                  ? "bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
+                  : "bg-transparent border-black/20 dark:border-white/20 text-black/60 dark:text-white/60 hover:border-black/50 dark:hover:border-white/50 hover:text-black dark:hover:text-white"
               )}
             >
               <span 
-                className="w-6 h-6 rounded-full border border-black/10 shadow-inner"
+                className="w-2.5 h-2.5 rounded-[1px] border border-black/30 shadow-inner block"
                 style={{ backgroundColor: color.hex }}
               />
-              {color.name}
+              <span className="truncate">{color.name}</span>
             </button>
           ))}
         </div>
@@ -244,14 +251,14 @@ export function Catalog() {
 
       {/* Бренды */}
       <FilterSection title="Бренд" defaultOpen={activeBrand !== null}>
-        <div className="flex flex-wrap gap-2 py-1">
-          <FilterChip
+        <div className="flex flex-col gap-1">
+          <FilterCheckbox
             label="Все бренды"
             isActive={activeBrand === null}
             onClick={() => setActiveBrand(null)}
           />
           {BRANDS.map((brand) => (
-            <FilterChip
+            <FilterCheckbox
               key={brand.id}
               label={brand.name}
               isActive={activeBrand === brand.id}
@@ -263,24 +270,24 @@ export function Catalog() {
 
       {/* Цена */}
       <FilterSection title="Цена" defaultOpen={priceRange[0] !== 0 || priceRange[1] !== 100000}>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-2 mt-1">
           <div className="relative flex-1">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-graphite/40 font-medium">От</span>
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] uppercase font-mono text-black/40 dark:text-white/40">От</span>
             <input
               type="number"
               value={priceRange[0] || ''}
               onChange={(e) => setPriceRange([Number(e.target.value) || 0, priceRange[1]])}
-              className="w-full h-10 pl-8 pr-3 rounded-full border border-border-lighter dark:border-white/20 bg-transparent text-[13px] text-graphite dark:text-white transition-colors focus:border-graphite/40 outline-none"
+              className="w-full h-8 pl-8 pr-2 rounded-[2px] border border-black/20 dark:border-white/20 bg-transparent text-[12px] font-mono text-black dark:text-white transition-colors focus:border-black/60 dark:focus:border-white/60 outline-none"
             />
           </div>
-          <div className="w-2 h-px bg-border-lighter dark:bg-white/20" />
+          <div className="w-2 h-px bg-black/20 dark:bg-white/20" />
           <div className="relative flex-1">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-graphite/40 font-medium">До</span>
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] uppercase font-mono text-black/40 dark:text-white/40">До</span>
             <input
               type="number"
               value={priceRange[1] === 100000 ? '' : priceRange[1]}
               onChange={(e) => setPriceRange([priceRange[0], Number(e.target.value) || 100000])}
-              className="w-full h-10 pl-8 pr-3 rounded-full border border-border-lighter dark:border-white/20 bg-transparent text-[13px] text-graphite dark:text-white transition-colors focus:border-graphite/40 outline-none"
+              className="w-full h-8 pl-8 pr-2 rounded-[2px] border border-black/20 dark:border-white/20 bg-transparent text-[12px] font-mono text-black dark:text-white transition-colors focus:border-black/60 dark:focus:border-white/60 outline-none"
             />
           </div>
         </div>
@@ -288,9 +295,9 @@ export function Catalog() {
 
       {/* Материал */}
       <FilterSection title="Материал" defaultOpen={activeMaterials.length > 0}>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-1">
           {MATERIALS.map((material) => (
-            <FilterChip
+            <FilterCheckbox
               key={material}
               label={material}
               isActive={activeMaterials.includes(material)}
@@ -304,12 +311,19 @@ export function Catalog() {
       {hasActiveFilters && (
         <button
           onClick={resetFilters}
-          className="w-full mt-4 h-10 rounded-lg border border-error/30 text-error text-sm font-medium hover:bg-error/5 transition-colors"
+          className="w-full mt-6 h-8 text-[10px] font-mono uppercase tracking-widest text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white border-b border-dashed border-black/20 dark:border-white/20 hover:border-black/60 dark:hover:border-white/60 transition-colors"
         >
           Сбросить фильтры
         </button>
       )}
-    </>
+
+      {/* Технический штамп / подвал (Archivecore) */}
+      <div className="mt-8 pt-4 border-t border-black/10 dark:border-white/10 opacity-30 select-none pointer-events-none flex flex-col gap-1">
+        <span className="text-[10px] font-mono uppercase font-semibold text-black dark:text-white">ARCH.REF.NZ001</span>
+        <span className="text-[8px] font-mono uppercase tracking-[0.2em] text-black dark:text-white">Система фильтрации {new Date().getFullYear()}</span>
+        <div className="w-16 h-[1px] bg-black dark:bg-white mt-1"></div>
+      </div>
+    </div>
   );
 
   return (
@@ -348,19 +362,19 @@ export function Catalog() {
         </div>
 
         {/* Main content */}
-        <div className="flex gap-8">
-          {/* Desktop Sidebar Filters */}
-          <aside className="hidden lg:block w-[260px] flex-shrink-0">
-            <div className="flex flex-col bg-white/60 dark:bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/60 dark:border-white/10">
-              <div className="flex items-center justify-between p-5 pb-0 shrink-0 z-10">
-                <h2 className="text-base font-semibold text-graphite dark:text-white">Фильтры</h2>
+        <div className="flex gap-10">
+          {/* Desktop Sidebar Filters (Archivecore / Liquid Glass) */}
+          <aside className="hidden lg:block w-[280px] flex-shrink-0 relative">
+            <div className="sticky top-28 flex flex-col max-h-[calc(100vh-120px)] bg-white/5 dark:bg-[#111111]/5 backdrop-blur-[24px] rounded-[24px] border-[1px] border-white/20 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04)] overflow-hidden">
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0 z-10 border-b border-black/5 dark:border-white/5">
+                <h2 className="text-[14px] font-mono tracking-widest uppercase font-semibold text-black dark:text-white">Фильтры</h2>
                 {hasActiveFilters && (
-                  <button onClick={resetFilters} className="text-xs text-error hover:underline transition-colors">
+                  <button onClick={resetFilters} className="text-[10px] font-mono uppercase tracking-widest text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white transition-colors">
                     Сбросить
                   </button>
                 )}
               </div>
-              <div className="px-5 pb-5 pt-4">
+              <div className="px-6 pb-6 pt-2 overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-black/10 dark:[&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-track]:bg-transparent">
                 <FiltersContent />
               </div>
             </div>
@@ -425,13 +439,13 @@ export function Catalog() {
 
       {/* Mobile Filters Drawer */}
       <Drawer isOpen={showMobileFilters} onClose={() => setShowMobileFilters(false)} title="Фильтры">
-        <div className="pb-20">
+        <div className="pb-20 bg-white/80 dark:bg-black/40 backdrop-blur-xl">
           <FiltersContent />
         </div>
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white dark:bg-[#111214] border-t border-border-lighter dark:border-white/10">
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-t border-black/10 dark:border-white/10">
           <button
             onClick={() => setShowMobileFilters(false)}
-            className="w-full h-12 rounded-xl bg-graphite text-white dark:text-black text-sm font-medium"
+            className="w-full h-10 rounded-lg bg-black text-white dark:bg-white dark:text-black text-[12px] font-mono uppercase tracking-widest font-semibold"
           >
             Показать {filteredProducts.length} товаров
           </button>
@@ -440,3 +454,4 @@ export function Catalog() {
     </div>
   );
 }
+

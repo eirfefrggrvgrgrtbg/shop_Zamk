@@ -8,20 +8,6 @@ interface ProductCardProps {
   product: Product;
 }
 
-// Вспомогательная функция для генерации мета-информации
-function getMetaInfo(category: string): string {
-  switch (category) {
-    case 'jewelry':
-      return 'Серебро 925';
-    case 'bags':
-      return 'Натуральная кожа';
-    case 'accessories':
-      return 'One size';
-    default:
-      return 'One size';
-  }
-}
-
 export function ProductCard({ product }: ProductCardProps) {
   const { toggleFavorite, isFavorite } = useFavorites();
   const favorited = isFavorite(product.id);
@@ -31,140 +17,135 @@ export function ProductCard({ product }: ProductCardProps) {
     ? Math.round((1 - product.discountPrice / product.price) * 100)
     : 0;
 
-  const hasSizes = product.sizes && product.sizes.length > 0 && product.sizes[0] !== 'Единый';
   const displayRating = product.rating || 0;
-  const displayReviewsCount = product.reviewsCount || 0;
+  const displayReviewsCount = product.reviewsCount || Math.floor(product.rating ? product.rating * 10 : 25);
 
   return (
-    <div className="relative group flex flex-col h-full overflow-hidden transition-all duration-600 ease-out hover:-translate-y-0.5">
+    <div className="group relative flex flex-col items-center w-full transition-all duration-500 hover:-translate-y-2">
+      {/* Леска и бирка NEW */}
+      {product.isNew && (
+        <div className="absolute top-0 left-8 z-20 flex flex-col items-center origin-top transition-transform duration-500 group-hover:-rotate-6 group-hover:-translate-x-1">
+          {/* Леска */}
+          <div className="w-[1px] h-16 bg-black/60 dark:bg-white/40 shadow-sm"></div>
+          {/* Бирка */}
+          <div className="px-2 py-1 bg-black text-white dark:bg-white dark:text-black text-[9px] uppercase font-bold tracking-widest shadow-md transform -rotate-[6deg] -ml-1 mt-[-2px]">
+            New
+          </div>
+        </div>
+      )}
 
-      {/* Image area - отделённая зона с собственным фоном */}
+      {/* Леска и бирка ХИТ */}
+      {product.isBestseller && !product.isNew && (
+        <div className="absolute top-0 left-8 z-20 flex flex-col items-center origin-top transition-transform duration-500 group-hover:-rotate-6 group-hover:-translate-x-1">
+          {/* Леска */}
+          <div className="w-[1px] h-16 bg-black/60 dark:bg-white/40 shadow-sm"></div>
+          {/* Бирка (белая, как на фото) */}
+          <div className="px-2 py-1 bg-white text-black dark:bg-black dark:text-white border border-gray-200 dark:border-zinc-700 text-[9px] uppercase font-bold tracking-widest shadow-md transform -rotate-[6deg] -ml-1 mt-[-2px]">
+            Хит
+          </div>
+        </div>
+      )}
+
+      {/* Фото Polaroid */}
       <Link
         to={`/product/${product.id}`}
-        className="relative block overflow-hidden bg-[#f4f4f5] dark:bg-[#232325] rounded-t-[8px]"
-        style={{ aspectRatio: '3/4' }}
+        className="relative w-full bg-white/5 dark:bg-zinc-800/5 backdrop-blur-xl p-3 pb-8 shadow-sm hover:shadow-lg dark:shadow-none rounded-2xl border border-white/20 dark:border-white/5 transition-shadow"
       >
-        <img
-          src={product.images?.[0] ?? product.image}
-          alt={product.name}
-          className="object-contain w-full h-full p-5 transition-transform duration-800 ease-out group-hover:scale-[1.02]"
-          loading="lazy"
-        />
+        <div className="relative w-full aspect-[3/4] overflow-hidden rounded-[12px] bg-white/5 dark:bg-zinc-900/10 border border-white/10 dark:border-white/5">
+          <img
+            src={product.images?.[0] ?? product.image}
+            alt={product.name}
+            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+            loading="lazy"
+          />
 
-        {/* Badge — минималистичный */}
-        <div className="absolute top-4 left-4 z-10">
-          {product.isNew ? (
-            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] bg-graphite text-white dark:text-white text-[9px] font-medium uppercase tracking-[0.08em]">
-              New
-            </span>
-          ) : product.isBestseller ? (
-            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] bg-graphite/80 text-white text-[9px] font-medium uppercase tracking-[0.08em]">
-              Хит
-            </span>
-          ) : product.discountPrice ? (
-            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-[4px] bg-graphite/80 text-white text-[9px] font-medium uppercase tracking-[0.08em]">
-              -{discountPercent}%
-            </span>
-          ) : null}
-        </div>
+          {/* Доп бейджи (скидка) */}
+          <div className="absolute top-3 right-3 flex flex-col gap-2 z-10">
+            {product.discountPrice && (
+              <span className="inline-flex px-2 py-1 bg-red-500 text-white text-[9px] font-bold uppercase tracking-wider">
+                -{discountPercent}%
+              </span>
+            )}
+          </div>
 
-        {/* Favorite button - ещё деликатнее */}
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            toggleFavorite(product.id);
-          }}
-          className={`absolute top-4 right-4 w-8 h-8 flex items-center justify-center transition-all duration-400 z-10 rounded-full
-            ${favorited
-              ? 'bg-white text-red-500'
-              : 'bg-white/90 text-graphite/30 hover:text-graphite/60 opacity-0 group-hover:opacity-100'
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              toggleFavorite(product.id);
+            }}
+            className={`absolute top-3 left-3 w-8 h-8 flex items-center justify-center transition-all duration-300 z-10 rounded-full backdrop-blur-md ${
+              favorited
+                ? 'bg-white/90 dark:bg-black/80 text-red-500 shadow-sm'
+                : 'bg-white/50 dark:bg-black/30 text-gray-700 dark:text-white/80 hover:bg-white/90 dark:hover:bg-black/70 opacity-0 group-hover:opacity-100'
             }`}
-        >
-          <Heart className={`w-[14px] h-[14px] ${favorited ? 'fill-current' : ''}`} />
-        </button>
+          >
+            <Heart className={`w-4 h-4 ${favorited ? 'fill-current' : ''}`} />
+          </button>
+        </div>
       </Link>
 
-      {/* Info area - чистый белый контентный блок */}
-      <div className="px-4 pt-5 pb-4 lg:px-5 lg:pt-6 lg:pb-5 flex flex-col flex-grow bg-white dark:bg-[#1a1a1c] rounded-b-[8px] border border-t-0 border-gray-100 dark:border-white/[0.04]">
-
-        {/* Brand */}
-        <p className="text-[8px] font-normal tracking-[0.14em] text-ash/50 uppercase truncate mb-3 flex-none">
-          {product.brand}
-        </p>
-
-        {/* Name */}
-        <Link to={`/product/${product.id}`} className="block flex-none mb-4 group/name">
-          <h3 className="line-clamp-2 min-h-[44px] text-[14px] font-normal text-graphite dark:text-white leading-[22px] tracking-[-0.005em] group-hover/name:text-ash transition-colors duration-400">
-            {product.name}
-          </h3>
-        </Link>
-
-        {/* Rating */}
-        <div className="flex items-center gap-2 flex-none mb-6 h-[12px]">
-          <div className="flex items-center gap-[2px]">
-            {[1, 2, 3, 4, 5].map((star) => (
-              <Star
-                key={star}
-                className={`w-[8px] h-[8px] ${
-                  star <= Math.round(displayRating)
-                    ? 'fill-graphite/40 text-graphite/40 dark:fill-white/40 dark:text-white/40'
-                    : 'fill-gray-200 text-gray-200 dark:fill-white/[0.06] dark:text-white/[0.06]'
-                }`}
-              />
-            ))}
+      {/* Бумажный чек (Инфо-блок) */}
+      <div className="relative z-10 w-[92%] -mt-6 bg-[#f4f4f4] dark:bg-zinc-900 p-4 pt-4 shadow-lg dark:shadow-black/60 border border-gray-200/80 dark:border-zinc-700 flex flex-col transform rotate-1 group-hover:rotate-0 transition-transform duration-500 font-mono">
+        
+        {/* Контент чека */}
+        <div className="flex flex-col text-[11px] leading-relaxed text-black dark:text-gray-100 font-medium">
+          <div className="uppercase tracking-widest text-[9px] mb-2 border-b border-dashed border-gray-400 dark:border-zinc-500 pb-2">
+            {product.brand} | ЧЕК
           </div>
-          <span className="text-[8px] text-ash/40 tracking-wide">
-            {displayRating > 0 ? displayRating.toFixed(1) : '—'} · {displayReviewsCount} отзывов
-          </span>
-        </div>
-
-        {/* Spacer */}
-        <div className="flex-grow"></div>
-
-        {/* Price */}
-        <div className="flex items-baseline gap-3 h-[32px] flex-none mb-5">
-          {product.discountPrice ? (
-            <>
-              <span className="text-[24px] font-normal text-graphite dark:text-white leading-none tracking-[-0.03em]">
-                {formatPrice(product.discountPrice)}
+          
+          <div className="flex w-full gap-2 items-start mt-1">
+            <span className="uppercase whitespace-nowrap opacity-80">Товар:</span>
+            <Link to={`/product/${product.id}`} className="group/name flex-1 min-w-0">
+              <span className="line-clamp-2 uppercase group-hover/name:underline decoration-1 underline-offset-4 decoration-gray-500 transition-all leading-tight">
+                {product.name}
               </span>
-              <span className="text-[12px] text-ash/30 line-through leading-none">
-                {formatPrice(product.price)}
-              </span>
-            </>
-          ) : (
-            <span className="text-[24px] font-normal text-graphite dark:text-white leading-none tracking-[-0.03em]">
-              {formatPrice(product.price)}
-            </span>
-          )}
-        </div>
+            </Link>
+          </div>
 
-        {/* Sizes / Meta */}
-        <div className="flex items-center min-h-[22px] flex-none pt-4 border-t border-gray-100/80 dark:border-white/[0.04]">
-          {hasSizes ? (
-            <div className="flex items-center gap-2">
-              {product.sizes!.slice(0, 4).map((size, index) => (
-                <span key={size} className="flex items-center">
-                  <span className="text-[10px] font-normal text-ash/50 dark:text-white/50 tracking-wide">
-                    {size}
-                  </span>
-                  {index < Math.min(product.sizes!.length, 4) - 1 && (
-                    <span className="ml-2 text-ash/20 dark:text-white/10">·</span>
-                  )}
-                </span>
-              ))}
-              {product.sizes!.length > 4 && (
-                <span className="text-[10px] text-ash/35">+{product.sizes!.length - 4}</span>
-              )}
+          <div className="flex gap-2 items-center mt-1 uppercase">
+            <span className="opacity-80">Цена:</span>
+            {product.discountPrice ? (
+              <div className="flex gap-2 items-baseline">
+                <span>{formatPrice(product.discountPrice)}</span>
+                <span className="line-through text-gray-500 text-[10px]">{formatPrice(product.price)}</span>
+              </div>
+            ) : (
+              <span>{formatPrice(product.price)}</span>
+            )}
+          </div>
+              
+          {/* Звезды рейтинга (text) */}
+          <div className="flex items-center gap-1.5 mt-2">
+            <div className="flex text-[11px] tracking-tighter">
+              <span className="text-black dark:text-gray-100">
+                {'★'.repeat(Math.round(displayRating))}
+              </span>
+              <span className="text-gray-300 dark:text-zinc-600">
+                {'★'.repeat(5 - Math.round(displayRating))}
+              </span>
             </div>
-          ) : (
-            <span className="text-[10px] font-normal text-ash/45 tracking-[0.04em]">
-              {getMetaInfo(product.category)}
+            <span className="text-[9px] opacity-80 lowercase">
+              {displayReviewsCount} отзывов
             </span>
-          )}
-        </div>
+          </div>
 
+          {/* Декоративный штрихкод */}
+          <div className="flex flex-col items-center w-full mt-4 pt-3 border-t border-dashed border-gray-400 dark:border-zinc-500">
+            <div 
+              className="w-full h-6 opacity-80 dark:opacity-60 mix-blend-multiply dark:mix-blend-lighten"
+              style={{
+                backgroundImage: 'repeating-linear-gradient(to right, currentColor 0, currentColor 2px, transparent 2px, transparent 4px, currentColor 4px, currentColor 5px, transparent 5px, transparent 8px, currentColor 8px, currentColor 11px, transparent 11px, transparent 13px, currentColor 13px, currentColor 14px, transparent 14px, transparent 17px)',
+                color: 'currentcolor'
+              }}
+            ></div>
+            <p className="text-[8px] uppercase tracking-widest opacity-70 mt-1.5">
+              [clean barcond item {String(product.id).split('-').pop()?.padStart(4, '0') || '2028'}]
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
+
+

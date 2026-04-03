@@ -16,8 +16,8 @@ const MOCK_ORDERS = [
       service: 'Курьер СДЭК'
     },
     items: [
-      { id: 'p8', name: 'Пальто-кокон северной серии', size: 'M', price: 34900, image: 'https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?w=800&auto=format' },
-      { id: 'p4', name: 'Свитер объемной вязки', size: 'L', price: 12500, image: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=800&auto=format' }
+      { id: 'p8', name: 'Пальто-кокон северной серии', size: 'M', price: 34900, image: 'https://wsrv.nl/?url=images.unsplash.com/photo-1539533113208-f6df8cc8b543&w=800&output=webp' },
+      { id: 'p4', name: 'Свитер объемной вязки', size: 'L', price: 12500, image: 'https://wsrv.nl/?url=images.unsplash.com/photo-1576566588028-4147f3842f27&w=800&output=webp' }
     ]
   },
   {
@@ -31,7 +31,7 @@ const MOCK_ORDERS = [
       service: 'Пункт выдачи Boxberry'
     },
     items: [
-      { id: 'p12', name: 'Тренч с деконструкцией', size: 'M', price: 28900, image: 'https://images.unsplash.com/photo-1585487000143-6519d58aef14?w=800&auto=format' }
+      { id: 'p12', name: 'Тренч с деконструкцией', size: 'M', price: 28900, image: 'https://wsrv.nl/?url=images.unsplash.com/photo-1585487000143-6519d58aef14&w=800&output=webp' }
     ]
   },
   {
@@ -45,8 +45,8 @@ const MOCK_ORDERS = [
       service: 'Курьер ZAMK VIP'
     },
     items: [
-      { id: 'p1', name: 'Анорак ледяной линии', size: 'L', price: 14900, image: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=800&auto=format' },
-      { id: 'p5', name: 'Кроссовки аэр-сетки', size: '42', price: 21500, image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format' }
+      { id: 'p1', name: 'Анорак ледяной линии', size: 'L', price: 14900, image: 'https://wsrv.nl/?url=images.unsplash.com/photo-1591047139829-d91aecb6caea&w=800&output=webp' },
+      { id: 'p5', name: 'Кроссовки аэр-сетки', size: '42', price: 21500, image: 'https://wsrv.nl/?url=images.unsplash.com/photo-1542291026-7eec264c27ff&w=800&output=webp' }
     ]
   }
 ];
