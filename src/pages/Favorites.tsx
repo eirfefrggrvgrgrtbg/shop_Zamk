@@ -30,7 +30,7 @@ export function Favorites() {
             </div>
           </section>
 
-          <div className='mt-8 bg-white/58 border border-white/50 p-8'>
+          <div className='mt-8 bg-white/60 dark:bg-white/5 border border-border-soft dark:border-white/10 rounded-3xl p-8 backdrop-blur-md shadow-sm'>
             <EmptyState
               icon='heart'
               title='Нет сохранённых товаров'

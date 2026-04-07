@@ -451,6 +451,10 @@ export function getProductsByCategory(categoryId: string): Product[] {
   return PRODUCTS.filter((p) => p.category === categoryId);
 }
 
+export function getProductsBySellerId(sellerId: string): Product[] {
+  return PRODUCTS.filter((p) => p.sellerId === sellerId);
+}
+
 export function getSellerById(id: string): Seller | undefined {
   return SELLERS.find((s) => s.id === id);
 }

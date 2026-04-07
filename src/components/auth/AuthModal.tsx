@@ -43,12 +43,12 @@ export function AuthModal() {
 
   return (
     <Modal isOpen={isAuthModalOpen} onClose={closeAuthModal}>
-      <div className="p-4 sm:p-6 w-full mt-2 bg-transparent text-graphite relative">
+      <div className="p-4 sm:p-6 w-full mt-2 bg-transparent text-graphite dark:text-white relative">
         <div className="text-center mb-8">
-          <h2 className="text-2xl font-serif font-medium tracking-wide">
+          <h2 className="text-2xl font-serif font-medium tracking-wide dark:text-white">
             {isLogin ? 'Вход' : isRegister ? 'Регистрация' : 'Сброс пароля'}
           </h2>
-          <p className="mt-2 text-[13.5px] text-graphite/60 tracking-wide">
+          <p className="mt-2 text-[13.5px] text-graphite/60 dark:text-white/70 tracking-wide">
             {isLogin 
               ? 'Войдите в личный кабинет' 
               : isRegister 
@@ -59,13 +59,13 @@ export function AuthModal() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="p-3 text-[13px] text-red-600 bg-red-50/50 backdrop-blur-sm border border-red-100 rounded-2xl text-center">
+            <div className="p-3 text-[13px] text-red-500 dark:text-red-400 bg-red-50/50 dark:bg-red-950/30 backdrop-blur-sm border border-red-100 dark:border-red-900/50 rounded-2xl text-center">
               {error}
             </div>
           )}
           
           {success && (
-            <div className="p-3 text-[13px] text-green-700 bg-green-50/50 backdrop-blur-sm border border-green-100 rounded-2xl text-center">
+            <div className="p-3 text-[13px] text-green-700 dark:text-green-400 bg-green-50/50 dark:bg-green-950/30 backdrop-blur-sm border border-green-100 dark:border-green-900/50 rounded-2xl text-center">
               {success}
             </div>
           )}
@@ -77,7 +77,7 @@ export function AuthModal() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="bg-white/60 focus:bg-white backdrop-blur-sm"
+                className="bg-white/60 dark:bg-white/5 focus:bg-white dark:focus:bg-white/10 backdrop-blur-sm"
               />
             </div>
           )}
@@ -89,7 +89,7 @@ export function AuthModal() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="bg-white/60 focus:bg-white backdrop-blur-sm"
+              className="bg-white/60 dark:bg-white/5 focus:bg-white dark:focus:bg-white/10 backdrop-blur-sm"
             />
           </div>
           
@@ -101,7 +101,7 @@ export function AuthModal() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="bg-white/60 focus:bg-white backdrop-blur-sm"
+                className="bg-white/60 dark:bg-white/5 focus:bg-white dark:focus:bg-white/10 backdrop-blur-sm"
               />
             </div>
           )}
@@ -115,7 +115,7 @@ export function AuthModal() {
                   setError('');
                   setSuccess('');
                 }}
-                className="text-[13px] text-graphite/50 hover:text-graphite transition-colors"
+                className="text-[13px] text-graphite/50 dark:text-white/50 hover:text-graphite dark:hover:text-white transition-colors"
               >
                 Забыли пароль?
               </button>
@@ -138,7 +138,7 @@ export function AuthModal() {
           </div>
         </form>
 
-        <div className="mt-8 text-center border-t border-border-lighter pt-6">
+        <div className="mt-8 text-center border-t border-border-lighter dark:border-white/10 pt-6">
           <button 
             type="button"
             onClick={() => {
@@ -146,7 +146,7 @@ export function AuthModal() {
               setError('');
               setSuccess('');
             }}
-            className="text-[13px] text-graphite/60 hover:text-graphite transition-colors uppercase tracking-[0.04em] font-medium"
+            className="text-[13px] text-graphite/60 dark:text-white/60 hover:text-graphite dark:hover:text-white transition-colors uppercase tracking-[0.04em] font-medium"
           >
             {isLogin 
               ? 'Нет аккаунта? Зарегистрироваться' 

@@ -27,7 +27,7 @@ export function Footer() {
               <span className="font-serif text-3xl font-bold tracking-tighter text-graphite dark:text-white">ЗАМК</span>
             </Link>
             <p className="text-sm text-graphite-light dark:text-white/60 leading-relaxed max-w-sm mb-8">
-              Цифровая витрина для независимых брендов и альтернативной эстетики. Кураторский подход к современной моде.
+              Цифровая витрина для независимых продавцов и альтернативной эстетики. Кураторский подход к современной моде.
             </p>
             <div className="flex gap-4">
               <a 
@@ -56,8 +56,7 @@ export function Footer() {
             <ul className="space-y-4">
               <li><Link to="/catalog" className="text-sm text-ash dark:text-white/50 hover:text-primary dark:hover:text-white transition-colors">Каталог</Link></li>
               <li><Link to="/collections" className="text-sm text-ash dark:text-white/50 hover:text-primary dark:hover:text-white transition-colors">Подборки</Link></li>
-              <li><Link to="/brands" className="text-sm text-ash dark:text-white/50 hover:text-primary dark:hover:text-white transition-colors">Бренды</Link></li>
-              <li><Link to="/catalog?collection=archive" className="text-sm text-ash dark:text-white/50 hover:text-primary dark:hover:text-white transition-colors">Архив</Link></li>
+                <li><Link to="/sellers" className="text-sm text-ash dark:text-white/50 hover:text-primary dark:hover:text-white transition-colors">Продавцы</Link></li>
             </ul>
           </div>
 

@@ -80,13 +80,13 @@ export function Profile() {
 
         <ProfilePanel title='Разделы' className='mt-5 max-w-[980px] mx-auto'>
           <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
-            <Link to='/orders' className='rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:border-graphite/30 transition-colors'>Мои заказы</Link>
-            <Link to='/favorites' className='rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:border-graphite/30 transition-colors'>Избранное</Link>
-            <Link to='/returns' className='rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:border-graphite/30 transition-colors'>Возвраты</Link>
-            <button className='text-left rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:border-graphite/30 transition-colors'>Данные</button>
-            <button className='text-left rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:border-graphite/30 transition-colors'>Адреса</button>
-            <Link to='/help' className='rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:border-graphite/30 transition-colors'>Поддержка</Link>
-            <Link to='/settings' className='rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:border-graphite/30 transition-colors sm:col-span-2'>Настройки</Link>
+            <Link to='/orders' className='rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:bg-surface-hover hover:border-graphite/20 shadow-sm transition-all'>Мои заказы</Link>
+            <Link to='/favorites' className='rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:bg-surface-hover hover:border-graphite/20 shadow-sm transition-all'>Избранное</Link>
+            <Link to='/returns' className='rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:bg-surface-hover hover:border-graphite/20 shadow-sm transition-all'>Возвраты</Link>
+            <button className='text-left rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:bg-surface-hover hover:border-graphite/20 shadow-sm transition-all'>Данные</button>
+            <button className='text-left rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:bg-surface-hover hover:border-graphite/20 shadow-sm transition-all'>Адреса</button>
+            <Link to='/help' className='rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:bg-surface-hover hover:border-graphite/20 shadow-sm transition-all'>Поддержка</Link>
+            <Link to='/settings' className='rounded-2xl border border-border-lighter dark:border-white/10 bg-white dark:bg-white/5 px-4 py-3 text-sm text-graphite dark:text-gray-300 hover:bg-surface-hover hover:border-graphite/20 shadow-sm transition-all sm:col-span-2'>Настройки</Link>
           </div>
         </ProfilePanel>
 

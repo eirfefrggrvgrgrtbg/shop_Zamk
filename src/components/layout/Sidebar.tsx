@@ -120,11 +120,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 </div>
               </section>
 
-              {/* Бренды */}
+              {/* Продавцы */}
               <section>
                 <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ash mb-4">
                   <Tag className="w-3.5 h-3.5" />
-                  Бренды
+                  Продавцы
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {BRANDS.map((brand) => (

@@ -16,8 +16,8 @@ export function Help() {
   return (
     <div className="min-h-screen relative z-10 pt-32 md:pt-40 pb-20">
       <div className="container mx-auto px-4 sm:px-6 max-w-[1200px]">
-        <section className="mb-12 max-w-[980px] mx-auto border-b border-border-lighter pb-8">
-          <p className="text-[13px] font-medium tracking-[0.14em] text-ash uppercase mb-3">
+        <section className="mb-12 max-w-[980px] mx-auto border-b border-border-lighter dark:border-white/10 pb-8">
+          <p className="text-[13px] font-medium tracking-[0.14em] text-ash dark:text-white/50 uppercase mb-3">
             Частые вопросы
           </p>
           <div className="flex items-end justify-between">
@@ -29,30 +29,30 @@ export function Help() {
 
         <div className="mt-8 space-y-4 max-w-[980px] mx-auto">
           {faqData.map((item, i) => (
-            <div key={i} className="bg-white/70 backdrop-blur-xl rounded-[2rem] border border-white overflow-hidden shadow-sm hover:shadow-cloud transition-all duration-300">
+            <div key={i} className="bg-white/70 dark:bg-white/5 backdrop-blur-xl rounded-[2rem] border border-white dark:border-white/10 overflow-hidden shadow-sm hover:shadow-cloud dark:hover:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-300">
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
-                className="w-full flex items-center justify-between px-6 py-5 md:py-6 text-left"
+                className="w-full flex items-center justify-between px-6 py-5 md:py-6 text-left hover:bg-white/50 dark:hover:bg-white/10 transition-colors"
               >
-                <span className="text-base md:text-lg font-medium text-graphite pr-4">{item.q}</span>
-                <ChevronDown className={`w-4 h-4 text-ash shrink-0 transition-transform ${openIndex === i ? 'rotate-180' : ''}`} />
+                <span className="text-base md:text-lg font-medium text-graphite dark:text-white pr-4">{item.q}</span>
+                <ChevronDown className={`w-4 h-4 text-ash dark:text-white/50 shrink-0 transition-transform ${openIndex === i ? 'rotate-180' : ''}`} />
               </button>
               {openIndex === i && (
-                <div className="px-6 pb-6 pt-2">
-                  <p className="text-base text-ash leading-relaxed">{item.a}</p>
+                <div className="px-6 pb-6 pt-2 border-t border-white/30 dark:border-white/10">
+                  <p className="text-base text-ash dark:text-white/70 leading-relaxed">{item.a}</p>
                 </div>
               )}
             </div>
           ))}
         </div>
 
-        <div className="mt-12 bg-white/60 backdrop-blur-xl rounded-[2.5rem] border border-white p-8 md:p-12 text-center shadow-cloud max-w-[980px] mx-auto">
-          <div className="w-16 h-16 rounded-[1.2rem] bg-white border border-white shadow-sm flex items-center justify-center mx-auto mb-6">
-            <HelpCircle className="w-8 h-8 text-primary" />
+        <div className="mt-12 bg-white/60 dark:bg-white/5 backdrop-blur-xl rounded-[2.5rem] border border-white dark:border-white/10 p-8 md:p-12 text-center shadow-cloud dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] max-w-[980px] mx-auto">
+          <div className="w-16 h-16 rounded-[1.2rem] bg-white dark:bg-white/10 border border-white dark:border-white/20 shadow-sm flex items-center justify-center mx-auto mb-6">
+            <HelpCircle className="w-8 h-8 text-primary dark:text-white" />
           </div>
-          <h3 className="text-2xl font-serif text-graphite mb-3">Не нашли ответ?</h3>
-          <p className="text-base text-ash mb-6">Напишите нам, и мы ответим в течение 24 часов</p>
-          <a href="mailto:help@zamk.store" className="inline-block text-base font-medium text-white bg-graphite hover:bg-primary transition-colors px-8 py-3.5 rounded-full shadow-sm">
+          <h3 className="text-2xl font-serif text-graphite dark:text-white mb-3">Не нашли ответ?</h3>
+          <p className="text-base text-ash dark:text-white/70 mb-6">Напишите нам, и мы ответим в течение 24 часов</p>
+          <a href="mailto:help@zamk.store" className="inline-block text-base font-medium text-white bg-graphite dark:bg-white dark:text-black hover:bg-primary dark:hover:bg-white/80 transition-colors px-8 py-3.5 rounded-full shadow-sm">
             help@zamk.store
           </a>
         </div>

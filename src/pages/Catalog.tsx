@@ -249,11 +249,11 @@ export function Catalog() {
         </div>
       </FilterSection>
 
-      {/* Бренды */}
-      <FilterSection title="Бренд" defaultOpen={activeBrand !== null}>
+      {/* Продавцы */}
+      <FilterSection title="Продавец" defaultOpen={activeBrand !== null}>
         <div className="flex flex-col gap-1">
           <FilterCheckbox
-            label="Все бренды"
+            label="Все продавцы"
             isActive={activeBrand === null}
             onClick={() => setActiveBrand(null)}
           />

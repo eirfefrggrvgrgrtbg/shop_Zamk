@@ -83,13 +83,6 @@ export function Navbar() {
             {/* Right actions */}
             <div className="flex items-center justify-end gap-0.5 sm:gap-1 flex-1">
               <button
-                onClick={() => setIsSidebarOpen(true)}
-                className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite dark:text-white/50 dark:hover:text-white transition-colors rounded-full hover:bg-white/40 dark:hover:bg-white/10"
-                aria-label="Навигация"
-              >
-                <LayoutGrid className="w-[17px] h-[17px]" />
-              </button>
-              <button
                 onClick={openSearch}
                 className="hidden sm:flex p-2.5 text-graphite/50 hover:text-graphite dark:text-white/50 dark:hover:text-white transition-colors rounded-full hover:bg-white/40 dark:hover:bg-white/10"
                 aria-label="Поиск"
@@ -116,7 +109,7 @@ export function Navbar() {
               >
                 <Heart className="w-[17px] h-[17px]" />
                 {favorites.length > 0 && (
-                  <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-primary rounded-full ring-2 ring-white/80 dark:ring-black/80" />
+                  <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-primary dark:bg-white rounded-full ring-2 ring-white/80 dark:ring-[#111214]/80" />
                 )}
               </Link>
               <Link
@@ -126,7 +119,7 @@ export function Navbar() {
               >
                 <ShoppingBag className="w-[17px] h-[17px]" />
                 {totalItems > 0 && (
-                  <span className="absolute top-1.5 right-1.5 bg-primary text-white text-[9px] font-bold w-[16px] h-[16px] rounded-full flex items-center justify-center shadow-sm">
+                  <span className="absolute top-1.5 right-1.5 bg-primary dark:bg-white text-white dark:text-black text-[9px] font-bold w-[16px] h-[16px] rounded-full flex items-center justify-center shadow-sm">
                     {totalItems}
                   </span>
                 )}
@@ -180,30 +173,30 @@ export function Navbar() {
 
       {/* Mobile bottom nav */}
       <div className="md:hidden fixed bottom-4 left-4 right-4 z-50">
-        <div className="bg-white/90 border border-white/70 rounded-full flex justify-between items-center px-5 py-3 shadow-[0_12px_36px_rgba(110,140,170,0.18)] backdrop-blur-xl">
-          <Link to="/" className={`p-2 rounded-full transition-colors ${location.pathname === '/' ? 'text-graphite bg-ice' : 'text-ash'}`}>
+        <div className="bg-white/90 dark:bg-[#111214]/90 border border-white/70 dark:border-white/10 rounded-full flex justify-between items-center px-5 py-3 shadow-[0_12px_36px_rgba(110,140,170,0.18)] dark:shadow-[0_12px_36px_rgba(0,0,0,0.5)] backdrop-blur-xl">
+          <Link to="/" className={`p-2 rounded-full transition-colors ${location.pathname === '/' ? 'text-graphite dark:text-white bg-ice dark:bg-white/10' : 'text-ash dark:text-gray-400'}`}>
             <House className="w-5 h-5" />
           </Link>
-          <button onClick={openSearch} className={`p-2 rounded-full transition-colors ${location.pathname === '/catalog' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+          <button onClick={openSearch} className={`p-2 rounded-full transition-colors ${location.pathname === '/catalog' ? 'text-primary dark:text-white bg-primary/10 dark:bg-white/10' : 'text-ash dark:text-gray-400'}`}>
             <Search className="w-5 h-5" />
           </button>
-          <Link to="/favorites" className={`relative p-2 rounded-full transition-colors ${location.pathname === '/favorites' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+          <Link to="/favorites" className={`relative p-2 rounded-full transition-colors ${location.pathname === '/favorites' ? 'text-primary dark:text-white bg-primary/10 dark:bg-white/10' : 'text-ash dark:text-gray-400'}`}>
             <Heart className="w-5 h-5" />
-            {favorites.length > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-primary rounded-full ring-2 ring-white" />}
+            {favorites.length > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-primary dark:bg-white rounded-full ring-2 ring-white dark:ring-[#111214]" />}
           </Link>
-          <Link to="/cart" className={`relative p-2 rounded-full transition-colors ${location.pathname === '/cart' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+          <Link to="/cart" className={`relative p-2 rounded-full transition-colors ${location.pathname === '/cart' ? 'text-primary dark:text-white bg-primary/10 dark:bg-white/10' : 'text-ash dark:text-gray-400'}`}>
             <ShoppingBag className="w-5 h-5" />
-            {totalItems > 0 && <span className="absolute -top-0.5 -right-0.5 bg-primary text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{totalItems}</span>}
+            {totalItems > 0 && <span className="absolute -top-0.5 -right-0.5 bg-primary dark:bg-white text-white dark:text-black text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{totalItems}</span>}
           </Link>
           
           {isAuthenticated ? (
-            <Link to="/profile" className={`p-2 rounded-full transition-colors ${location.pathname === '/profile' ? 'text-primary bg-primary/10' : 'text-ash'}`}>
+            <Link to="/profile" className={`p-2 rounded-full transition-colors ${location.pathname === '/profile' ? 'text-primary dark:text-white bg-primary/10 dark:bg-white/10' : 'text-ash dark:text-gray-400'}`}>
               <User className="w-5 h-5" />
             </Link>
           ) : (
             <button 
               onClick={() => openAuthModal('login')}
-              className={`p-2 rounded-full transition-colors text-ash`}
+              className={`p-2 rounded-full transition-colors text-ash dark:text-gray-400`}
             >
               <User className="w-5 h-5" />
             </button>

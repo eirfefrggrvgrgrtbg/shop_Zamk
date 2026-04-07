@@ -12,7 +12,8 @@ import { SearchOverlay } from './components/search/SearchOverlay';
 import { Home } from './pages/Home';
 import { Catalog } from './pages/Catalog';
 import { ProductDetail } from './pages/ProductDetail';
-import { SellerProfile } from './pages/SellerProfile';
+import { SellerDetail } from './pages/SellerDetail';
+import { BrandDetail } from './pages/BrandDetail';
 import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
 import { Profile } from './pages/Profile';
@@ -20,7 +21,6 @@ import { Orders } from './pages/Orders';
 import { Settings } from './pages/Settings';
 import { Favorites } from './pages/Favorites';
 import { Brands } from './pages/Brands';
-import { BrandDetail } from './pages/BrandDetail';
 import { NewArrivals } from './pages/NewArrivals';
 import { About } from './pages/About';
 import { Collections } from './pages/Collections';
@@ -53,7 +53,8 @@ function App() {
                     <Route path="/" element={<Home />} />
                     <Route path="/catalog" element={<Catalog />} />
                     <Route path="/product/:id" element={<ProductDetail />} />
-              <Route path="/seller/:slug" element={<SellerProfile />} />
+              <Route path="/seller/:slug" element={<SellerDetail />} />
+                    <Route path="/brand/:id" element={<BrandDetail />} />
                     <Route path="/cart" element={<Cart />} />
                     <Route path="/checkout" element={<Checkout />} />
                     <Route path="/favorites" element={<Favorites />} />
@@ -61,7 +62,6 @@ function App() {
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/orders" element={<Orders />} />
                     <Route path="/brands" element={<Brands />} />
-                    <Route path="/brand/:id" element={<BrandDetail />} />
                     <Route path="/new" element={<NewArrivals />} />
                     <Route path="/about" element={<About />} />
                     <Route path="/collections" element={<Collections />} />

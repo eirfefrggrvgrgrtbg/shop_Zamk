@@ -29,7 +29,7 @@ export function Cart() {
             </div>
           </section>
 
-          <div className='mt-8 bg-white/58 border border-white/50 p-8'>
+          <div className='mt-8 bg-white/60 dark:bg-white/5 border border-border-soft dark:border-white/10 rounded-3xl p-8 backdrop-blur-md shadow-sm'>
             <EmptyState
               icon='cart'
               title='Нет товаров'
@@ -66,27 +66,27 @@ export function Cart() {
         <div className='mt-10 grid grid-cols-1 lg:grid-cols-12 gap-6'>
           <div className='lg:col-span-8 space-y-4'>
             {items.map((item) => (
-              <article key={item.product.id} className='bg-white/62 border border-white/50 p-4 md:p-5 flex gap-4'>
-                <Link to={`/product/${item.product.id}`} className='h-28 w-24 overflow-hidden rounded-[0.45rem] border border-border-lighter'>
+              <article key={item.product.id} className='bg-white/60 dark:bg-white/5 border border-border-soft dark:border-white/10 rounded-2xl p-4 md:p-5 flex gap-4 backdrop-blur-md shadow-sm'>
+                <Link to={`/product/${item.product.id}`} className='h-full w-28 md:w-32 overflow-hidden rounded-[0.45rem] border border-border-lighter dark:border-white/10 shrink-0'>
                   <img src={item.product.image} alt={item.product.name} className='h-full w-full object-cover' />
                 </Link>
-                <div className='flex-1'>
+                <div className='flex-1 flex flex-col'>
                   <p className='text-xs uppercase tracking-[0.14em] text-ash'>{item.product.brand}</p>
-                  <h3 className='text-lg font-medium text-graphite'>{item.product.name}</h3>
-                  <p className='mt-1 text-sm text-graphite-light'>{formatPrice(item.product.price)}</p>
+                  <h3 className='text-lg font-medium text-graphite dark:text-gray-200 leading-tight mt-1'>{item.product.name}</h3>
+                  <p className='mt-2 text-sm text-graphite-light dark:text-gray-400'>{formatPrice(item.product.price)}</p>
 
-                  <div className='mt-4 flex items-center justify-between'>
+                  <div className='mt-auto pt-4 flex items-center justify-between'>
                     <div className='flex items-center gap-2'>
-                      <button className='h-8 w-8 rounded-full border border-border-soft flex items-center justify-center' onClick={() => updateQuantity(item.product.id, item.quantity - 1)}>
+                      <button className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10' onClick={() => updateQuantity(item.product.id, item.quantity - 1)}>
                         <Minus className='w-3.5 h-3.5' />
                       </button>
-                      <span className='w-7 text-center text-sm'>{item.quantity}</span>
-                      <button className='h-8 w-8 rounded-full border border-border-soft flex items-center justify-center' onClick={() => updateQuantity(item.product.id, item.quantity + 1)}>
+                      <span className='w-7 text-center text-sm font-medium text-graphite dark:text-gray-200'>{item.quantity}</span>
+                      <button className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10' onClick={() => updateQuantity(item.product.id, item.quantity + 1)}>
                         <Plus className='w-3.5 h-3.5' />
                       </button>
                     </div>
-                    <button className='text-ash hover:text-error' onClick={() => removeItem(item.product.id)}>
-                      <Trash2 className='w-4 h-4' />
+                    <button className='text-ash hover:text-error transition-colors p-2' onClick={() => removeItem(item.product.id)}>
+                      <Trash2 className='w-5 h-5' />
                     </button>
                   </div>
                 </div>

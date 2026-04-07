@@ -47,20 +47,24 @@ export function ProductCard({ product }: ProductCardProps) {
       )}
 
       {/* Фото Polaroid */}
-      <Link
-        to={`/product/${product.id}`}
+      <div
         className="relative w-full bg-white/5 dark:bg-zinc-800/5 backdrop-blur-xl p-3 pb-8 shadow-sm hover:shadow-lg dark:shadow-none rounded-2xl border border-white/20 dark:border-white/5 transition-shadow"
       >
         <div className="relative w-full aspect-[3/4] overflow-hidden rounded-[12px] bg-white/5 dark:bg-zinc-900/10 border border-white/10 dark:border-white/5">
-          <img
-            src={product.images?.[0] ?? product.image}
-            alt={product.name}
-            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-            loading="lazy"
-          />
+          <Link
+            to={`/product/${product.id}`}
+            className="block w-full h-full"
+          >
+            <img
+              src={product.images?.[0] ?? product.image}
+              alt={product.name}
+              className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+              loading="lazy"
+            />
+          </Link>
 
           {/* Доп бейджи (скидка) */}
-          <div className="absolute top-3 right-3 flex flex-col gap-2 z-10">
+          <div className="absolute top-3 right-3 flex flex-col gap-2 z-10 pointer-events-none">
             {product.discountPrice && (
               <span className="inline-flex px-2 py-1 bg-red-500 text-white text-[9px] font-bold uppercase tracking-wider">
                 -{discountPercent}%
@@ -71,9 +75,10 @@ export function ProductCard({ product }: ProductCardProps) {
           <button
             onClick={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               toggleFavorite(product.id);
             }}
-            className={`absolute top-3 left-3 w-8 h-8 flex items-center justify-center transition-all duration-300 z-10 rounded-full backdrop-blur-md ${
+            className={`absolute top-3 left-3 w-8 h-8 flex items-center justify-center transition-all duration-300 z-20 rounded-full backdrop-blur-md ${
               favorited
                 ? 'bg-white/90 dark:bg-black/80 text-red-500 shadow-sm'
                 : 'bg-white/50 dark:bg-black/30 text-gray-700 dark:text-white/80 hover:bg-white/90 dark:hover:bg-black/70 opacity-0 group-hover:opacity-100'
@@ -82,7 +87,7 @@ export function ProductCard({ product }: ProductCardProps) {
             <Heart className={`w-4 h-4 ${favorited ? 'fill-current' : ''}`} />
           </button>
         </div>
-      </Link>
+      </div>
 
       {/* Бумажный чек (Инфо-блок) */}
       <div className="relative z-10 w-[92%] -mt-6 bg-[#f4f4f4] dark:bg-zinc-900 p-4 pt-4 shadow-lg dark:shadow-black/60 border border-gray-200/80 dark:border-zinc-700 flex flex-col transform rotate-1 group-hover:rotate-0 transition-transform duration-500 font-mono">

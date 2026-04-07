@@ -40,10 +40,10 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="pointer-events-auto w-full max-w-lg bg-white dark:bg-[#1a1a1c] border border-border-lighter dark:border-white/10 rounded-2xl overflow-hidden flex flex-col max-h-[90vh] shadow-xl"
+              className="pointer-events-auto w-full max-w-lg bg-white dark:bg-black border border-border-lighter dark:border-white/20 rounded-2xl overflow-hidden flex flex-col max-h-[90vh] shadow-xl"
             >
               {/* Header */}
-              <div className="flex items-center justify-between p-5 border-b border-border-lighter dark:border-white/10">
+              <div className="flex items-center justify-between p-5 border-b border-border-lighter dark:border-white/20">
                 {title && <h2 className="text-lg font-semibold text-graphite dark:text-white">{title}</h2>}
                 <button
                   onClick={onClose}

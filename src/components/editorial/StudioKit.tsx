@@ -257,15 +257,15 @@ export function FilterGroup({ title, children }: FilterGroupProps) {
 
 export function BrandCard({ brand }: { brand: Brand }) {
   return (
-    <Link to={`/brand/${brand.id}`} className='group block overflow-hidden rounded-[2rem] border border-border-lighter bg-white/85 p-2 shadow-sm transition-all hover:-translate-y-1 hover:shadow-cloud'>
+    <Link to={`/brand/${brand.id}`} className='group block overflow-hidden rounded-[2rem] border border-border-lighter dark:border-white/10 bg-white/85 dark:bg-white/5 backdrop-blur-md p-2 shadow-sm transition-all hover:-translate-y-1 hover:shadow-cloud dark:hover:shadow-none'>
       <div className='relative h-56 overflow-hidden rounded-[1.6rem]'>
         <img src={brand.image} alt={brand.name} className='h-full w-full object-cover transition-transform duration-700 group-hover:scale-105' />
         <div className='absolute inset-0 bg-gradient-to-t from-graphite/40 to-transparent' />
       </div>
       <div className='p-5'>
-        <h3 className='text-2xl font-serif text-graphite'>{brand.name}</h3>
+        <h3 className='text-2xl font-serif text-graphite dark:text-white'>{brand.name}</h3>
         <p className='mt-1 text-xs uppercase tracking-[0.14em] text-ash'>{brand.country}</p>
-        <p className='mt-3 text-sm text-graphite-light line-clamp-2'>{brand.description}</p>
+        <p className='mt-3 text-sm text-graphite-light dark:text-gray-400 line-clamp-2'>{brand.description}</p>
       </div>
     </Link>
   );
@@ -273,9 +273,9 @@ export function BrandCard({ brand }: { brand: Brand }) {
 
 export function CategoryCard({ category }: { category: Category }) {
   return (
-    <Link to={`/catalog?category=${category.slug}`} className='block rounded-[2rem] border border-border-lighter bg-white/85 p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-cloud'>
+    <Link to={`/catalog?category=${category.slug}`} className='block rounded-[2rem] border border-border-lighter dark:border-white/10 bg-white/85 dark:bg-white/5 backdrop-blur-md p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-cloud dark:hover:shadow-none'>
       <p className='text-2xl'>{category.icon}</p>
-      <h3 className='mt-4 text-xl font-serif text-graphite'>{category.name}</h3>
+      <h3 className='mt-4 text-xl font-serif text-graphite dark:text-white'>{category.name}</h3>
       <p className='mt-1 text-sm text-ash'>{category.count} позиций</p>
     </Link>
   );
@@ -283,15 +283,15 @@ export function CategoryCard({ category }: { category: Category }) {
 
 export function InfoPanel({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <section className={cn('rounded-[2.3rem] border border-border-lighter bg-white/80 p-7 md:p-9 shadow-sm', className)}>
-      <h3 className='text-2xl font-serif text-graphite mb-4'>{title}</h3>
-      <div className='text-graphite-light leading-relaxed'>{children}</div>
+    <section className={cn('rounded-[2.3rem] border border-border-lighter dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur-md p-7 md:p-9 shadow-sm', className)}>
+      <h3 className='text-2xl font-serif text-graphite dark:text-white mb-4'>{title}</h3>
+      <div className='text-graphite-light dark:text-gray-300 leading-relaxed'>{children}</div>
     </section>
   );
 }
 
 export function CheckoutPanel({ children }: { children: React.ReactNode }) {
-  return <section className='rounded-[2.3rem] border border-border-lighter bg-white/82 p-7 md:p-9 shadow-cloud'>{children}</section>;
+  return <section className='rounded-[2.3rem] border border-border-lighter dark:border-white/10 bg-white/82 dark:bg-white/5 backdrop-blur-md p-7 md:p-9 shadow-cloud dark:shadow-none'>{children}</section>;
 }
 
 export function ProfilePanel({
@@ -304,8 +304,8 @@ export function ProfilePanel({
   className?: string;
 }) {
   return (
-    <section className={cn('rounded-[2.3rem] border border-border-lighter bg-white/82 p-7 md:p-9 shadow-sm', className)}>
-      <h3 className='text-2xl font-serif text-graphite mb-5'>{title}</h3>
+    <section className={cn('rounded-[2.3rem] border border-border-lighter dark:border-white/10 bg-white/82 dark:bg-white/5 backdrop-blur-md p-7 md:p-9 shadow-sm', className)}>
+      <h3 className='text-2xl font-serif text-graphite dark:text-white mb-5'>{title}</h3>
       {children}
     </section>
   );
@@ -313,7 +313,7 @@ export function ProfilePanel({
 
 export function WishlistCard({ product }: { product: Product }) {
   return (
-    <div className='rounded-[2rem] border border-border-lighter bg-white/88 p-2 shadow-sm'>
+    <div className='rounded-[2rem] border border-border-lighter dark:border-white/10 bg-white/88 dark:bg-white/5 backdrop-blur-md p-2 shadow-sm'>
       <ProductCard product={product} />
     </div>
   );
