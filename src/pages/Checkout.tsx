@@ -18,11 +18,11 @@ export function Checkout() {
         <div className='container mx-auto px-4 sm:px-6 max-w-4xl'>
           <CheckoutPanel>
             <div className='text-center'>
-              <div className='mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white border border-border-lighter'>
+              <div className='mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white dark:bg-white/10 border border-border-lighter dark:border-white/15'>
                 <Check className='w-10 h-10 text-success' />
               </div>
-              <h1 className='mt-6 text-4xl font-serif text-graphite'>Заказ оформлен</h1>
-              <p className='mt-3 text-graphite-light'>Спасибо за покупку. Подтверждение уже отправлено на вашу почту.</p>
+              <h1 className='mt-6 text-4xl font-serif text-graphite dark:text-white'>Заказ оформлен</h1>
+              <p className='mt-3 text-graphite-light dark:text-white/70'>Спасибо за покупку. Подтверждение уже отправлено на вашу почту.</p>
               <div className='mt-7 flex justify-center gap-3'>
                 <Link to='/'><Button>На главную</Button></Link>
                 <Link to='/catalog'><Button variant='secondary'>В каталог</Button></Link>
@@ -38,7 +38,7 @@ export function Checkout() {
     return (
       <div className='relative z-10 min-h-screen pt-16 md:pt-20 pb-20'>
         <div className='container mx-auto px-4 sm:px-6 max-w-4xl text-center'>
-          <h1 className='text-4xl font-serif text-graphite'>Корзина пуста</h1>
+          <h1 className='text-4xl font-serif text-graphite dark:text-white'>Корзина пуста</h1>
           <Link to='/catalog' className='inline-block mt-6'><Button>Перейти в каталог</Button></Link>
         </div>
       </div>
@@ -51,7 +51,7 @@ export function Checkout() {
   return (
     <div className='relative z-10 min-h-screen pt-16 md:pt-20 pb-20'>
       <div className='container mx-auto px-4 sm:px-6 max-w-[1400px]'>
-        <Link to='/cart' className='inline-flex items-center gap-2 text-sm text-ash hover:text-graphite'>
+        <Link to='/cart' className='inline-flex items-center gap-2 text-sm text-ash hover:text-graphite dark:text-white/55 dark:hover:text-white'>
           <ArrowLeft className='w-4 h-4' /> Вернуться в корзину
         </Link>
 
@@ -100,15 +100,15 @@ export function Checkout() {
               <SectionHeader label='Итог' title='Сводка заказа' />
               <div className='space-y-3 text-sm'>
                 {items.map((item) => (
-                  <div key={item.product.id} className='flex justify-between text-graphite-light'>
+                  <div key={item.product.id} className='flex justify-between text-graphite-light dark:text-white/68'>
                     <span>{item.product.name} × {item.quantity}</span>
                     <span>{formatPrice(item.product.price * item.quantity)}</span>
                   </div>
                 ))}
-                <div className='border-t border-border-lighter pt-3 mt-3 space-y-2'>
-                  <div className='flex justify-between'><span>Товары</span><span>{formatPrice(totalPrice)}</span></div>
-                  <div className='flex justify-between'><span>Доставка</span><span>{delivery ? formatPrice(delivery) : 'Бесплатно'}</span></div>
-                  <div className='flex justify-between text-base font-semibold text-graphite'><span>Итого</span><span>{formatPrice(total)}</span></div>
+                <div className='border-t border-border-lighter dark:border-white/10 pt-3 mt-3 space-y-2'>
+                  <div className='flex justify-between text-graphite dark:text-white/84'><span>Товары</span><span>{formatPrice(totalPrice)}</span></div>
+                  <div className='flex justify-between text-graphite dark:text-white/84'><span>Доставка</span><span>{delivery ? formatPrice(delivery) : 'Бесплатно'}</span></div>
+                  <div className='flex justify-between text-base font-semibold text-graphite dark:text-white'><span>Итого</span><span>{formatPrice(total)}</span></div>
                 </div>
               </div>
 

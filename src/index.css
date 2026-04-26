@@ -72,8 +72,8 @@
   }
   
   .dark {
-      --shadow-glass: 0 16px 48px rgba(0, 0, 0, 0.4);
-      --shadow-glass-strong: 0 24px 70px rgba(0, 0, 0, 0.5);
+      --shadow-glass: 0 16px 48px rgba(0, 0, 0, 0.52);
+      --shadow-glass-strong: 0 24px 70px rgba(0, 0, 0, 0.62);
       --shadow-capsule: 0 20px 50px rgba(0, 0, 0, 0.6);
       --shadow-studio: 0 20px 60px rgba(0, 0, 0, 0.5);
       --text-shadow-hero: 0 8px 24px rgba(0, 0, 0, 0.8);
@@ -95,8 +95,8 @@
 
     --color-graphite: #F4F6F8;
     --color-graphite-light: #AAB9C8;
-    --color-ash: #6D7D8E;
-    --color-ash-light: #2D3A48;
+    --color-ash: #93A5B8;
+    --color-ash-light: #5B6B7D;
 
     --color-border-lighter: #1A1C20;
     --color-border-soft: #25282D;
@@ -147,12 +147,12 @@
 
 @layer utilities {
   .glass-panel {
-    @apply bg-white/86 dark:bg-white/[0.04] border border-border-lighter dark:border-white/10 rounded-[2.2rem];
+    @apply bg-white/88 dark:bg-black/30 border border-border-lighter dark:border-white/16 rounded-[2.2rem] backdrop-blur-xl;
     box-shadow: var(--shadow-glass);
   }
 
   .glass-panel-strong {
-    @apply bg-white/92 dark:bg-white/[0.06] border border-border-lighter dark:border-white/10 rounded-[2.5rem];
+    @apply bg-white/92 dark:bg-black/35 border border-border-lighter dark:border-white/18 rounded-[2.5rem] backdrop-blur-xl;
     box-shadow: var(--shadow-glass-strong);
   }
 
@@ -166,12 +166,12 @@
   }
 
   .studio-shell {
-    @apply rounded-[2.5rem] bg-white/88 dark:bg-white/[0.04] border border-border-lighter dark:border-white/10;
+    @apply rounded-[2.5rem] bg-white/88 dark:bg-black/32 border border-border-lighter dark:border-white/16 backdrop-blur-xl;
     box-shadow: var(--shadow-studio);
   }
 
   .studio-label {
-    @apply text-[11px] font-semibold uppercase tracking-[0.16em] text-ash;
+    @apply text-[11px] font-semibold uppercase tracking-[0.16em] text-ash dark:text-white/62;
   }
 
   .studio-title {
@@ -193,7 +193,21 @@
   }
 
   .studio-pill {
-    @apply rounded-full border border-border-soft dark:border-white/20 bg-white/80 dark:bg-white/5;
+    @apply rounded-full border border-border-soft dark:border-white/22 bg-white/80 dark:bg-black/28;
+  }
+
+  .dark .seller-setting-input {
+    background-color: rgba(0, 0, 0, 0.24);
+    color: #ffffff;
+    caret-color: #ffffff;
+  }
+
+  .dark .seller-setting-input:-webkit-autofill,
+  .dark .seller-setting-input:-webkit-autofill:hover,
+  .dark .seller-setting-input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #ffffff;
+    box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.72) inset;
+    border-color: rgba(255, 255, 255, 0.22);
   }
 
   .scrollbar-hide {

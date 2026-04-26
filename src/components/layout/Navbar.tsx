@@ -29,6 +29,7 @@ export function Navbar() {
   const navLinks = [
     { to: '/catalog', label: 'Каталог' },
     { to: '/brands', label: 'Бренды' },
+    { to: '/seller-dashboard', label: 'Продавцам' },
   ];
 
   return (
@@ -146,6 +147,9 @@ export function Navbar() {
             </Link>
             <Link to="/brands" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               Бренды
+            </Link>
+            <Link to="/seller-dashboard" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
+              Продавцам
             </Link>
             <Link to="/favorites" className="text-lg font-medium py-2 border-b border-border-lighter flex justify-between items-center" onClick={() => setIsMobileMenuOpen(false)}>
               Избранное

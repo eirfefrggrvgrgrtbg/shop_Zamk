@@ -13,6 +13,9 @@ import { Home } from './pages/Home';
 import { Catalog } from './pages/Catalog';
 import { ProductDetail } from './pages/ProductDetail';
 import { SellerDetail } from './pages/SellerDetail';
+import { SellerDashboard } from './pages/SellerDashboard';
+import { SellerProducts } from './pages/SellerProducts';
+import { SellerProductNew } from './pages/SellerProductNew';
 import { BrandDetail } from './pages/BrandDetail';
 import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
@@ -53,7 +56,10 @@ function App() {
                     <Route path="/" element={<Home />} />
                     <Route path="/catalog" element={<Catalog />} />
                     <Route path="/product/:id" element={<ProductDetail />} />
-              <Route path="/seller/:slug" element={<SellerDetail />} />
+                    <Route path="/seller/:slug" element={<SellerDetail />} />
+                    <Route path="/seller-dashboard" element={<SellerDashboard />} />
+                    <Route path="/seller-products" element={<SellerProducts />} />
+                    <Route path="/seller-products/new" element={<SellerProductNew />} />
                     <Route path="/brand/:id" element={<BrandDetail />} />
                     <Route path="/cart" element={<Cart />} />
                     <Route path="/checkout" element={<Checkout />} />
