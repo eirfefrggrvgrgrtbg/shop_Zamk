@@ -57,6 +57,7 @@ export function ProductDetail() {
   const [activeColor, setActiveColor] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [showSizeChart, setShowSizeChart] = useState(false);
+  const [sizeError, setSizeError] = useState('');
   const [activeTab, setActiveTab] = useState<'description' | 'specs' | 'reviews'>('description');
 
   const { addItem } = useCart();
@@ -82,12 +83,15 @@ export function ProductDetail() {
   const brand = getBrandById(product.brandId);
   const liked = isFavorite(product.id);
   const specs = getProductSpecs(product);
+  const requiresSizeSelection = Boolean(product.sizes && product.sizes.length > 0 && !product.sizes.includes('Единый'));
+  const selectableSizes = product.sizes ?? [];
 
   const handleAddToCart = () => {
-    if (product.sizes && product.sizes[0] !== 'Единый' && !activeSize) {
-      showToast('Выберите размер');
+    if (requiresSizeSelection && !activeSize) {
+      setSizeError('Выберите размер перед добавлением в корзину');
       return;
     }
+    setSizeError('');
     for (let i = 0; i < quantity; i++) {
       addItem(product, activeSize || undefined, product.colors?.[activeColor]?.name);
     }
@@ -227,13 +231,14 @@ export function ProductDetail() {
             )}
 
             {/* Sizes */}
-            {product.sizes && product.sizes[0] !== 'Единый' && (
+            {requiresSizeSelection && (
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm text-graphite dark:text-white">
                     Размер: <span className="text-ash">{activeSize || 'Не выбран'}</span>
                   </p>
                   <button
+                    type="button"
                     onClick={() => setShowSizeChart(true)}
                     className="flex items-center gap-1 text-sm text-primary hover:underline"
                   >
@@ -242,10 +247,16 @@ export function ProductDetail() {
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {product.sizes.map((size) => (
+                  {selectableSizes.map((size) => (
                     <button
                       key={size}
-                      onClick={() => setActiveSize(size)}
+                      type="button"
+                      onClick={() => {
+                        setActiveSize(size);
+                        if (sizeError) {
+                          setSizeError('');
+                        }
+                      }}
                       className={cn(
                         "h-10 min-w-[48px] px-4 rounded-lg border text-sm font-medium transition-all",
                         activeSize === size
@@ -257,6 +268,11 @@ export function ProductDetail() {
                     </button>
                   ))}
                 </div>
+                {sizeError && (
+                  <p className="mt-2 text-sm text-error" role="alert">
+                    {sizeError}
+                  </p>
+                )}
               </div>
             )}
 
@@ -284,14 +300,16 @@ export function ProductDetail() {
 
             {/* Add to cart */}
             <div className="mt-6 flex gap-3">
-              <Button variant="primary" className="flex-1 h-12 gap-2" onClick={handleAddToCart}>
+              <Button type="button" variant="primary" className="flex-1 h-12 gap-2" onClick={handleAddToCart}>
                 <ShoppingBag className="w-5 h-5" />
                 Добавить в корзину
               </Button>
               <Button
+                type="button"
                 variant="secondary"
                 size="icon"
                 className="h-12 w-12"
+                aria-label={liked ? 'Убрать из избранного' : 'Добавить в избранное'}
                 onClick={() => {
                   toggleFavorite(product.id);
                   showToast(liked ? 'Удалено из избранного' : 'Добавлено в избранное');

@@ -102,6 +102,7 @@ export function SearchOverlay() {
             {/* Header / Close */}
             <div className="flex justify-end mb-6 md:mb-10">
               <button 
+                type="button"
                 onClick={closeSearch}
                 className="group flex items-center justify-center w-12 h-12 rounded-full hover:bg-white/10 transition-colors"
                 aria-label="Закрыть поиск"
@@ -165,7 +166,7 @@ function SearchInput({ query, setQuery, isLoading }: { query: string, setQuery: 
         {isLoading ? (
           <Loader2 className="w-8 h-8 md:w-10 md:h-10 text-graphite/40 animate-spin" />
         ) : (
-          <button className="p-2 md:p-3 rounded-full hover:bg-white/10 transition-colors text-graphite/50 hover:text-graphite">
+          <button type="button" aria-label="Выполнить поиск" className="p-2 md:p-3 rounded-full hover:bg-white/10 transition-colors text-graphite/50 hover:text-graphite">
             <ArrowRight className="w-8 h-8 md:w-10 md:h-10 stroke-[1.5]" />
           </button>
         )}
@@ -193,6 +194,7 @@ function SearchSuggestions({ onQueryClick, onProductClick }: { onQueryClick: (q:
           {TOP_QUERIES.map((q, idx) => (
             <motion.li key={idx} variants={itemVariants} className="shrink-0">
               <button
+                type="button"
                 onClick={() => onQueryClick(q)}
                 className="text-lg md:text-[1.35rem] leading-tight font-light text-graphite/60 hover:text-graphite transition-colors whitespace-nowrap"
               >
@@ -244,7 +246,10 @@ function SearchResults({ query, results, isLoading, onProductClick }: { query: s
       ) : (
         <motion.div variants={itemVariants} className="pt-20">
           <p className="text-2xl md:text-3xl text-graphite/50 font-light tracking-wide">
-            По запросу «<span className="text-graphite">{query}</span>» ничего не найдено
+            Ничего не найдено по запросу «<span className="text-graphite">{query}</span>»
+          </p>
+          <p className="mt-3 text-sm md:text-base text-graphite/35 font-light">
+            Попробуйте изменить запрос или очистить строку поиска.
           </p>
         </motion.div>
       )}

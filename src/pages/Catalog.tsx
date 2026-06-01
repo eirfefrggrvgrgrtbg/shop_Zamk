@@ -24,6 +24,9 @@ const COLORS = [
   { name: 'Коричневый', hex: '#6b4423' },
 ];
 const MATERIALS = ['Хлопок', 'Шерсть', 'Лён', 'Кашемир', 'Полиэстер', 'Шёлк'];
+const DEFAULT_PRICE_RANGE: [number, number] = [0, 100000];
+
+const normalizeText = (value: string) => value.toLowerCase().replace(/ё/g, 'е');
 
 const STYLES = ['Все', 'Спортвир', 'Арт', 'Авангард', 'Горпкор', 'Стритвир', 'Опиум', 'Y2K', 'Апсайкл', 'Архив', 'Кэжуал'];
 
@@ -91,11 +94,13 @@ export function Catalog() {
   const [activeSizes, setActiveSizes] = useState<string[]>([]);
   const [activeColors, setActiveColors] = useState<string[]>([]);
   const [activeMaterials, setActiveMaterials] = useState<string[]>([]);
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 100000]);
+  const [priceRange, setPriceRange] = useState<[number, number]>(DEFAULT_PRICE_RANGE);
   const [sortBy, setSortBy] = useState('new');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
-  const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeStyles.length > 0 || activeSizes.length > 0 || activeColors.length > 0 || activeMaterials.length > 0;
+  const hasActivePriceFilter = priceRange[0] !== DEFAULT_PRICE_RANGE[0] || priceRange[1] !== DEFAULT_PRICE_RANGE[1];
+  const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeStyles.length > 0 || activeSizes.length > 0 || activeColors.length > 0 || activeMaterials.length > 0 || hasActivePriceFilter;
+  const activeFiltersCount = activeStyles.length + activeSizes.length + activeColors.length + activeMaterials.length + (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
 
   const filteredProducts = useMemo(() => {
     let result = [...PRODUCTS];
@@ -123,6 +128,18 @@ export function Catalog() {
       result = result.filter((item) => item.colors?.some(color => activeColors.includes(color.name)));
     }
 
+    // Фильтр по материалу
+    if (activeMaterials.length > 0) {
+      result = result.filter((item) => {
+        if (!item.materials) {
+          return false;
+        }
+
+        const normalizedMaterials = normalizeText(item.materials);
+        return activeMaterials.some((material) => normalizedMaterials.includes(normalizeText(material)));
+      });
+    }
+
     // Фильтр по цене
     result = result.filter((item) => {
       const price = item.discountPrice || item.price;
@@ -145,7 +162,7 @@ export function Catalog() {
     setActiveSizes([]);
     setActiveColors([]);
     setActiveMaterials([]);
-    setPriceRange([0, 100000]);
+    setPriceRange(DEFAULT_PRICE_RANGE);
   };
 
   const toggleStyle = (style: string) => {
@@ -269,7 +286,7 @@ export function Catalog() {
       </FilterSection>
 
       {/* Цена */}
-      <FilterSection title="Цена" defaultOpen={priceRange[0] !== 0 || priceRange[1] !== 100000}>
+      <FilterSection title="Цена" defaultOpen={hasActivePriceFilter}>
         <div className="flex items-center justify-between gap-2 mt-1">
           <div className="relative flex-1">
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] uppercase font-mono text-black/40 dark:text-white/40">От</span>
@@ -354,7 +371,7 @@ export function Catalog() {
             >
               <SlidersHorizontal className="w-4 h-4" />
               Фильтры
-              {hasActiveFilters && <span className="w-5 h-5 rounded-full bg-graphite text-white dark:text-black text-xs flex items-center justify-center">{activeStyles.length + activeSizes.length + activeColors.length + activeMaterials.length + (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0)}</span>}
+              {hasActiveFilters && <span className="w-5 h-5 rounded-full bg-graphite text-white dark:text-black text-xs flex items-center justify-center">{activeFiltersCount}</span>}
             </button>
 
             <SortDropdown value={sortBy} options={SORT_OPTIONS} onChange={setSortBy} />
@@ -369,7 +386,7 @@ export function Catalog() {
               <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0 z-10 border-b border-black/5 dark:border-white/5">
                 <h2 className="text-[14px] font-mono tracking-widest uppercase font-semibold text-black dark:text-white">Фильтры</h2>
                 {hasActiveFilters && (
-                  <button onClick={resetFilters} className="text-[10px] font-mono uppercase tracking-widest text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white transition-colors">
+                  <button type="button" onClick={resetFilters} className="text-[10px] font-mono uppercase tracking-widest text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white transition-colors">
                     Сбросить
                   </button>
                 )}
@@ -388,25 +405,31 @@ export function Catalog() {
                 {activeCategory !== 'all' && (
                   <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
                     {CATEGORIES.find(c => c.id === activeCategory)?.name}
-                    <button onClick={() => setActiveCategory('all')} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
+                    <button type="button" aria-label="Снять фильтр категории" onClick={() => setActiveCategory('all')} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
                 {activeBrand && (
                   <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
                     {BRANDS.find(b => b.id === activeBrand)?.name}
-                    <button onClick={() => setActiveBrand(null)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
+                    <button type="button" aria-label="Снять фильтр бренда" onClick={() => setActiveBrand(null)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
                 {activeSizes.map(size => (
                   <span key={size} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
                     {size}
-                    <button onClick={() => toggleSize(size)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
+                    <button type="button" aria-label={`Снять фильтр размера ${size}`} onClick={() => toggleSize(size)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
                 ))}
                 {activeColors.map(color => (
                   <span key={color} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
                     {color}
-                    <button onClick={() => toggleColor(color)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
+                    <button type="button" aria-label={`Снять фильтр цвета ${color}`} onClick={() => toggleColor(color)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
+                  </span>
+                ))}
+                {activeMaterials.map(material => (
+                  <span key={material} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
+                    {material}
+                    <button type="button" aria-label={`Снять фильтр материала ${material}`} onClick={() => toggleMaterial(material)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
                 ))}
               </div>
@@ -426,6 +449,7 @@ export function Catalog() {
                 <h3 className="text-xl font-serif text-graphite dark:text-white mb-2">Ничего не найдено</h3>
                 <p className="text-sm text-ash mb-4">Попробуйте изменить параметры фильтрации</p>
                 <button
+                  type="button"
                   onClick={resetFilters}
                   className="inline-flex h-10 items-center rounded-lg bg-graphite px-5 text-sm text-white"
                 >

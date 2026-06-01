@@ -3,14 +3,41 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Check } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { useCart } from '../contexts/CartContext';
+import { getCartItemKey, useCart } from '../contexts/CartContext';
 import { formatPrice } from '../lib/utils';
 import { CheckoutPanel, PillFilter, SectionHeader } from '../components/editorial/StudioKit';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function Checkout() {
   const { items, totalPrice, clearCart } = useCart();
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [validationError, setValidationError] = useState('');
+
+  const handleCheckout = () => {
+    const trimmedFirstName = firstName.trim();
+    const trimmedEmail = email.trim();
+    const trimmedPhone = phone.trim();
+
+    if (!trimmedFirstName || !trimmedEmail || !trimmedPhone) {
+      setValidationError('Укажите имя, email и телефон.');
+      return;
+    }
+
+    if (!EMAIL_PATTERN.test(trimmedEmail)) {
+      setValidationError('Укажите корректный email.');
+      return;
+    }
+
+    setValidationError('');
+    setDone(true);
+    clearCart();
+  };
 
   if (done) {
     return (
@@ -69,11 +96,16 @@ export function Checkout() {
             <CheckoutPanel>
               <SectionHeader label='Шаг 1' title='Контактные данные' />
               <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-                <Input placeholder='Имя' />
-                <Input placeholder='Фамилия' />
-                <Input placeholder='Эл. почта' type='email' />
-                <Input placeholder='Телефон' type='tel' />
+                  <Input placeholder='Имя' value={firstName} onChange={(event) => { setFirstName(event.target.value); if (validationError) setValidationError(''); }} autoComplete='given-name' required />
+                  <Input placeholder='Фамилия' value={lastName} onChange={(event) => setLastName(event.target.value)} autoComplete='family-name' />
+                  <Input placeholder='Эл. почта' type='email' value={email} onChange={(event) => { setEmail(event.target.value); if (validationError) setValidationError(''); }} autoComplete='email' required />
+                  <Input placeholder='Телефон' type='tel' value={phone} onChange={(event) => { setPhone(event.target.value); if (validationError) setValidationError(''); }} autoComplete='tel' required />
               </div>
+              {validationError && (
+                <p className='mt-3 text-sm text-error' role='alert'>
+                  {validationError}
+                </p>
+              )}
             </CheckoutPanel>
 
             <CheckoutPanel>
@@ -100,8 +132,17 @@ export function Checkout() {
               <SectionHeader label='Итог' title='Сводка заказа' />
               <div className='space-y-3 text-sm'>
                 {items.map((item) => (
-                  <div key={item.product.id} className='flex justify-between text-graphite-light dark:text-white/68'>
-                    <span>{item.product.name} × {item.quantity}</span>
+                  <div key={getCartItemKey(item.product.id, item.selectedSize, item.selectedColor)} className='flex justify-between text-graphite-light dark:text-white/68'>
+                    <span>
+                      {item.product.name} × {item.quantity}
+                      {(item.selectedSize || item.selectedColor) && (
+                        <span className='block text-xs text-ash mt-1'>
+                          {item.selectedSize && <span>Размер: {item.selectedSize}</span>}
+                          {item.selectedSize && item.selectedColor ? ' · ' : ''}
+                          {item.selectedColor && <span>Цвет: {item.selectedColor}</span>}
+                        </span>
+                      )}
+                    </span>
                     <span>{formatPrice(item.product.price * item.quantity)}</span>
                   </div>
                 ))}
@@ -112,7 +153,7 @@ export function Checkout() {
                 </div>
               </div>
 
-              <Button className='w-full mt-5' onClick={() => { setDone(true); clearCart(); }}>
+              <Button type='button' className='w-full mt-5' onClick={handleCheckout}>
                 Оформить заказ
               </Button>
             </CheckoutPanel>

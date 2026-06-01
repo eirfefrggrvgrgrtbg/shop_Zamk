@@ -3,7 +3,7 @@ import { Minus, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ProductCard } from '../components/product/ProductCard';
-import { useCart } from '../contexts/CartContext';
+import { getCartItemKey, useCart } from '../contexts/CartContext';
 import { formatPrice } from '../lib/utils';
 import { PRODUCTS } from '../lib/mock-data';
 import { InfoPanel, SectionHeader } from '../components/editorial/StudioKit';
@@ -66,7 +66,7 @@ export function Cart() {
         <div className='mt-10 grid grid-cols-1 lg:grid-cols-12 gap-6'>
           <div className='lg:col-span-8 space-y-4'>
             {items.map((item) => (
-              <article key={item.product.id} className='bg-white/60 dark:bg-white/5 border border-border-soft dark:border-white/10 rounded-2xl p-4 md:p-5 flex gap-4 backdrop-blur-md shadow-sm'>
+              <article key={getCartItemKey(item.product.id, item.selectedSize, item.selectedColor)} className='bg-white/60 dark:bg-white/5 border border-border-soft dark:border-white/10 rounded-2xl p-4 md:p-5 flex gap-4 backdrop-blur-md shadow-sm'>
                 <Link to={`/product/${item.product.id}`} className='h-full w-28 md:w-32 overflow-hidden rounded-[0.45rem] border border-border-lighter dark:border-white/10 shrink-0'>
                   <img src={item.product.image} alt={item.product.name} className='h-full w-full object-cover' />
                 </Link>
@@ -74,18 +74,24 @@ export function Cart() {
                   <p className='text-xs uppercase tracking-[0.14em] text-ash'>{item.product.brand}</p>
                   <h3 className='text-lg font-medium text-graphite dark:text-gray-200 leading-tight mt-1'>{item.product.name}</h3>
                   <p className='mt-2 text-sm text-graphite-light dark:text-gray-400'>{formatPrice(item.product.price)}</p>
+                  {(item.selectedSize || item.selectedColor) && (
+                    <div className='mt-2 flex flex-wrap gap-2 text-xs text-ash'>
+                      {item.selectedSize && <span>Размер: {item.selectedSize}</span>}
+                      {item.selectedColor && <span>Цвет: {item.selectedColor}</span>}
+                    </div>
+                  )}
 
                   <div className='mt-auto pt-4 flex items-center justify-between'>
                     <div className='flex items-center gap-2'>
-                      <button className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10' onClick={() => updateQuantity(item.product.id, item.quantity - 1)}>
+                      <button type='button' aria-label={`Уменьшить количество ${item.product.name}`} className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10' onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.selectedSize, item.selectedColor)}>
                         <Minus className='w-3.5 h-3.5' />
                       </button>
                       <span className='w-7 text-center text-sm font-medium text-graphite dark:text-gray-200'>{item.quantity}</span>
-                      <button className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10' onClick={() => updateQuantity(item.product.id, item.quantity + 1)}>
+                      <button type='button' aria-label={`Увеличить количество ${item.product.name}`} className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10' onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.selectedSize, item.selectedColor)}>
                         <Plus className='w-3.5 h-3.5' />
                       </button>
                     </div>
-                    <button className='text-ash hover:text-error transition-colors p-2' onClick={() => removeItem(item.product.id)}>
+                    <button type='button' aria-label={`Удалить ${item.product.name} из корзины`} className='text-ash hover:text-error transition-colors p-2' onClick={() => removeItem(item.product.id, item.selectedSize, item.selectedColor)}>
                       <Trash2 className='w-5 h-5' />
                     </button>
                   </div>

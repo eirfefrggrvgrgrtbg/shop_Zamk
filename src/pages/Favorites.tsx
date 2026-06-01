@@ -71,10 +71,18 @@ export function Favorites() {
               <div key={product.id} className='group relative'>
                 <WishlistCard product={product} />
                 <Button
+                  type='button'
                   size='sm'
                   className='absolute bottom-7 left-1/2 -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100 w-[76%] gap-2'
                   onClick={(event) => {
                     event.preventDefault();
+                    const hasSelectableSizes = Boolean(product.sizes && product.sizes.length > 0 && !product.sizes.includes('Единый'));
+
+                    if (hasSelectableSizes) {
+                      showToast('Выберите размер на странице товара');
+                      return;
+                    }
+
                     addItem(product);
                     showToast('Товар добавлен в корзину');
                   }}

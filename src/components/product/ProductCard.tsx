@@ -73,11 +73,13 @@ export function ProductCard({ product }: ProductCardProps) {
           </div>
 
           <button
+            type="button"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               toggleFavorite(product.id);
             }}
+            aria-label={favorited ? 'Убрать из избранного' : 'Добавить в избранное'}
             className={`absolute top-3 left-3 w-8 h-8 flex items-center justify-center transition-all duration-300 z-20 rounded-full backdrop-blur-md ${
               favorited
                 ? 'bg-white/90 dark:bg-black/80 text-red-500 shadow-sm'
