@@ -5,6 +5,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { ProductCard } from '../components/product/ProductCard';
 import { getCartItemKey, useCart } from '../contexts/CartContext';
 import { formatPrice } from '../lib/utils';
+import { getProductEffectivePrice } from '../lib/orders';
 import { PRODUCTS } from '../lib/mock-data';
 import { InfoPanel, SectionHeader } from '../components/editorial/StudioKit';
 
@@ -73,7 +74,7 @@ export function Cart() {
                 <div className='flex-1 flex flex-col'>
                   <p className='text-xs uppercase tracking-[0.14em] text-ash'>{item.product.brand}</p>
                   <h3 className='text-lg font-medium text-graphite dark:text-gray-200 leading-tight mt-1'>{item.product.name}</h3>
-                  <p className='mt-2 text-sm text-graphite-light dark:text-gray-400'>{formatPrice(item.product.price)}</p>
+                  <p className='mt-2 text-sm text-graphite-light dark:text-gray-400'>{formatPrice(getProductEffectivePrice(item.product))}</p>
                   {(item.selectedSize || item.selectedColor) && (
                     <div className='mt-2 flex flex-wrap gap-2 text-xs text-ash'>
                       {item.selectedSize && <span>Размер: {item.selectedSize}</span>}

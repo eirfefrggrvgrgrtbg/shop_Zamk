@@ -5,9 +5,15 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { getCartItemKey, useCart } from '../contexts/CartContext';
 import { formatPrice } from '../lib/utils';
+import { createOrderFromCart, getCartLineTotal, saveOrder } from '../lib/orders';
 import { CheckoutPanel, PillFilter, SectionHeader } from '../components/editorial/StudioKit';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DELIVERY_OPTIONS = {
+  1: 'Курьер 1-2 дня',
+  2: 'Самовывоз',
+  3: 'Экспресс 3 часа',
+} as const;
 
 export function Checkout() {
   const { items, totalPrice, clearCart } = useCart();
@@ -18,19 +24,47 @@ export function Checkout() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [validationError, setValidationError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleCheckout = () => {
+    if (isSubmitting || done) {
+      return;
+    }
+
+    setIsSubmitting(true);
+
     const trimmedFirstName = firstName.trim();
     const trimmedEmail = email.trim();
     const trimmedPhone = phone.trim();
+    const phoneDigits = trimmedPhone.replace(/\D/g, '');
 
     if (!trimmedFirstName || !trimmedEmail || !trimmedPhone) {
       setValidationError('Укажите имя, email и телефон.');
+      setIsSubmitting(false);
       return;
     }
 
     if (!EMAIL_PATTERN.test(trimmedEmail)) {
       setValidationError('Укажите корректный email.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (phoneDigits.length < 7) {
+      setValidationError('Укажите корректный телефон, минимум 7 цифр.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const order = createOrderFromCart(items, {
+      deliveryCost: totalPrice >= 10000 ? 0 : 590,
+      deliveryService: DELIVERY_OPTIONS[step as keyof typeof DELIVERY_OPTIONS],
+      paymentMethod: 'Карта онлайн',
+    });
+
+    if (!saveOrder(order)) {
+      setValidationError('Не удалось сохранить заказ. Попробуйте ещё раз.');
+      setIsSubmitting(false);
       return;
     }
 
@@ -96,10 +130,10 @@ export function Checkout() {
             <CheckoutPanel>
               <SectionHeader label='Шаг 1' title='Контактные данные' />
               <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-                  <Input placeholder='Имя' value={firstName} onChange={(event) => { setFirstName(event.target.value); if (validationError) setValidationError(''); }} autoComplete='given-name' required />
-                  <Input placeholder='Фамилия' value={lastName} onChange={(event) => setLastName(event.target.value)} autoComplete='family-name' />
-                  <Input placeholder='Эл. почта' type='email' value={email} onChange={(event) => { setEmail(event.target.value); if (validationError) setValidationError(''); }} autoComplete='email' required />
-                  <Input placeholder='Телефон' type='tel' value={phone} onChange={(event) => { setPhone(event.target.value); if (validationError) setValidationError(''); }} autoComplete='tel' required />
+                <Input placeholder='Имя' value={firstName} onChange={(event) => { setFirstName(event.target.value); if (validationError) setValidationError(''); }} autoComplete='given-name' required />
+                <Input placeholder='Фамилия' value={lastName} onChange={(event) => setLastName(event.target.value)} autoComplete='family-name' />
+                <Input placeholder='Эл. почта' type='email' value={email} onChange={(event) => { setEmail(event.target.value); if (validationError) setValidationError(''); }} autoComplete='email' required />
+                <Input placeholder='Телефон' type='tel' value={phone} onChange={(event) => { setPhone(event.target.value); if (validationError) setValidationError(''); }} autoComplete='tel' required />
               </div>
               {validationError && (
                 <p className='mt-3 text-sm text-error' role='alert'>
@@ -143,7 +177,7 @@ export function Checkout() {
                         </span>
                       )}
                     </span>
-                    <span>{formatPrice(item.product.price * item.quantity)}</span>
+                    <span>{formatPrice(getCartLineTotal(item))}</span>
                   </div>
                 ))}
                 <div className='border-t border-border-lighter dark:border-white/10 pt-3 mt-3 space-y-2'>

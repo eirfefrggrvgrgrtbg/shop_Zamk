@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Package, ChevronRight, ArrowLeft, MapPin, CreditCard, Truck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Drawer } from '../components/ui/Drawer';
+import { ORDER_STORAGE_EVENT, type OrderRecord, getOrdersWithDefaults } from '../lib/orders';
 
-const MOCK_ORDERS = [
+const MOCK_ORDERS: OrderRecord[] = [
   {
     id: 'ZMK-10293',
     date: '20 марта 2026',
@@ -53,7 +54,14 @@ const MOCK_ORDERS = [
 
 export function Orders() {
   const { isAuthenticated } = useAuth();
-  const [selectedOrder, setSelectedOrder] = useState<typeof MOCK_ORDERS[0] | null>(null);
+  const [orders, setOrders] = useState<OrderRecord[]>(() => getOrdersWithDefaults(MOCK_ORDERS));
+  const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
+
+  useEffect(() => {
+    const syncOrders = () => setOrders(getOrdersWithDefaults(MOCK_ORDERS));
+    window.addEventListener(ORDER_STORAGE_EVENT, syncOrders);
+    return () => window.removeEventListener(ORDER_STORAGE_EVENT, syncOrders);
+  }, []);
   
   if (!isAuthenticated) {
     return (
@@ -83,14 +91,15 @@ export function Orders() {
               Мои заказы
             </h1>
             <span className="text-sm text-ash dark:text-white/60 mb-1 hidden sm:block">
-              {MOCK_ORDERS.length} заказа(ов)
+              {orders.length} заказа(ов)
             </span>
           </div>
         </div>
 
         {/* Список заказов */}
-        <div className="space-y-5">
-          {MOCK_ORDERS.map((order) => (
+        {orders.length > 0 ? (
+          <div className="space-y-5">
+          {orders.map((order) => (
             <div 
               key={order.id} 
               className="group bg-white/50 hover:bg-white/80 dark:bg-white/5 dark:hover:bg-white/10 backdrop-blur-xl border border-white/60 dark:border-white/10 shadow-[0_8px_30px_rgba(100,130,170,0.06)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] rounded-[1.5rem] p-6 md:p-8 transition-all duration-500"
@@ -114,10 +123,17 @@ export function Orders() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                 <div className="flex-1">
                   <p className="text-[14px] text-graphite/70 dark:text-white/70 leading-relaxed font-medium">
-                    {order.items.map(i => `${i.name} · ${i.size}`).join(' / ')}
+                    {order.items.map((item) => {
+                      const details = [item.name];
+                      if (item.size) details.push(`Размер: ${item.size}`);
+                      if (item.color) details.push(`Цвет: ${item.color}`);
+                      if ((item.quantity ?? 1) > 1) details.push(`× ${item.quantity}`);
+                      return details.join(' · ');
+                    }).join(' / ')}
                   </p>
                 </div>
                 <button 
+                  type="button"
                   onClick={() => setSelectedOrder(order)}
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent border border-graphite/20 dark:border-white/20 hover:border-graphite dark:hover:border-white text-[13px] font-medium text-graphite dark:text-white rounded-full transition-all group-hover:bg-white dark:group-hover:bg-white/5"
                 >
@@ -127,7 +143,17 @@ export function Orders() {
               </div>
             </div>
           ))}
-        </div>
+          </div>
+        ) : (
+          <div className="bg-white/50 hover:bg-white/80 dark:bg-white/5 dark:hover:bg-white/10 backdrop-blur-xl border border-white/60 dark:border-white/10 shadow-[0_8px_30px_rgba(100,130,170,0.06)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] rounded-[1.5rem] p-8 md:p-10 text-center">
+            <Package className="w-12 h-12 text-ash-light dark:text-white/50 mx-auto mb-4" />
+            <h2 className="text-xl font-medium text-graphite dark:text-white mb-2">Заказов пока нет</h2>
+            <p className="text-sm text-ash dark:text-white/60 mb-6">После оформления заказа он появится здесь и сохранится после перезагрузки.</p>
+            <Link to="/catalog" className="inline-flex items-center justify-center rounded-full border border-graphite/20 dark:border-white/20 px-5 py-3 text-[13px] font-medium text-graphite dark:text-white hover:border-graphite dark:hover:border-white transition-colors">
+              В каталог
+            </Link>
+          </div>
+        )}
 
       </div>
 
@@ -145,8 +171,10 @@ export function Orders() {
                 <p className="text-sm text-ash dark:text-white/60 mt-0.5">{selectedOrder.date}</p>
               </div>
               <button 
+                type="button"
                 onClick={() => setSelectedOrder(null)}
                 className="w-10 h-10 rounded-full bg-graphite/5 dark:bg-white/10 flex items-center justify-center text-graphite dark:text-white hover:bg-graphite/10 dark:hover:bg-white/20 transition-colors"
+                aria-label="Закрыть детали заказа"
               >
                 ✕
               </button>
@@ -178,8 +206,11 @@ export function Orders() {
                       </div>
                       <div className="flex-1 py-1 flex flex-col justify-between">
                         <div>
-                          <p className="text-[14.5px] font-medium text-graphite dark:text-white leading-snug group-hover:underline decoration-1 underline-offset-2">{item.name}</p>
-                          <p className="text-[13px] text-ash dark:text-white/60 mt-1">Размер: {item.size}</p>
+                          <p className="text-[14.5px] font-medium text-graphite dark:text-white leading-snug group-hover:underline decoration-1 underline-offset-2">
+                            {item.name}{(item.quantity ?? 1) > 1 ? ` × ${item.quantity}` : ''}
+                          </p>
+                          {item.size && <p className="text-[13px] text-ash dark:text-white/60 mt-1">Размер: {item.size}</p>}
+                          {item.color && <p className="text-[13px] text-ash dark:text-white/60 mt-1">Цвет: {item.color}</p>}
                         </div>
                         <p className="font-serif text-[15px] text-graphite dark:text-white">{item.price.toLocaleString('ru-RU')} ₽</p>
                       </div>
@@ -204,7 +235,7 @@ export function Orders() {
                   <div className="flex gap-3">
                     <CreditCard className="w-5 h-5 text-ash dark:text-white/60 mt-0.5" />
                     <div>
-                      <p className="text-[14px] text-graphite dark:text-white font-medium">Оплачено картой</p>
+                      <p className="text-[14px] text-graphite dark:text-white font-medium">{selectedOrder.paymentMethod ?? 'Оплачено картой'}</p>
                       <p className="text-[13px] text-ash dark:text-white/60 mt-0.5">**** 4592</p>
                     </div>
                   </div>
@@ -219,7 +250,11 @@ export function Orders() {
                 </div>
                 <div className="flex justify-between items-center mb-4">
                   <span className="text-sm text-graphite/70 dark:text-white/70">Доставка</span>
-                  <span className="text-sm font-medium text-graphite dark:text-white">Бесплатно</span>
+                  <span className="text-sm font-medium text-graphite dark:text-white">
+                    {selectedOrder.deliveryCost !== undefined
+                      ? (selectedOrder.deliveryCost ? `${selectedOrder.deliveryCost.toLocaleString('ru-RU')} ₽` : 'Бесплатно')
+                      : 'Бесплатно'}
+                  </span>
                 </div>
                 <div className="h-px bg-graphite/10 dark:bg-white/20 w-full mb-4"></div>
                 <div className="flex justify-between items-center">
