@@ -8,7 +8,7 @@ This is the backend for the ZAMK curated marketplace. It's built as a modular mo
 - **Database**: PostgreSQL (`github.com/jackc/pgx/v5`)
 - **Redis**: `github.com/redis/go-redis/v9`
 - **Config**: Environment variables + `.env` (`github.com/joho/godotenv`)
-- **Storage**: S3-compatible (MinIO for local dev)
+- **Storage**: Both local MinIO for development and external S3-compatible provider for production-like verification are supported.
 
 ## Setup Local Infrastructure
 
@@ -20,6 +20,21 @@ This is the backend for the ZAMK curated marketplace. It's built as a modular mo
 2. Start the local infrastructure (PostgreSQL, Redis, MinIO) via Docker Compose:
    ```bash
    docker compose up -d
+   ```
+
+3. Configure S3/MinIO in `.env`:
+   For local development, the default `.env.example` already contains the local MinIO credentials.
+   For external S3-compatible providers, configure `.env` with your real credentials using placeholders like:
+   ```env
+   S3_ENDPOINT=your-s3-endpoint
+   S3_PORT=443
+   S3_REGION=default
+   S3_BUCKET=your-bucket
+   S3_ACCESS_KEY=your-access-key
+   S3_SECRET_KEY=your-secret-key
+   S3_USE_SSL=true
+   S3_PUBLIC_BASE_URL=https://your-public-bucket-url
+   S3_UPLOAD_MAX_SIZE_MB=10
    ```
 
 ## Database Migrations
