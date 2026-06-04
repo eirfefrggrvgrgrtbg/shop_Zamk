@@ -1,0 +1,293 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-milk: var(--color-milk);
+  --color-ice: var(--color-ice);
+  --color-paper: var(--color-paper);
+  --color-surface: var(--color-surface);
+  --color-surface-hover: var(--color-surface-hover);
+
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-primary-soft: var(--color-primary-soft);
+
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-lavender: var(--color-lavender);
+
+  --color-graphite: var(--color-graphite);
+  --color-graphite-light: var(--color-graphite-light);
+  --color-ash: var(--color-ash);
+  --color-ash-light: var(--color-ash-light);
+
+  --color-border-lighter: var(--color-border-lighter);
+  --color-border-soft: var(--color-border-soft);
+
+  --color-success: #10B981;
+  --color-error: #EF4444;
+
+  --color-white: var(--color-white);
+  --col-white: var(--color-white);
+  --color-black: var(--color-black);
+
+  --font-sans: 'Manrope', 'Inter', 'Segoe UI', sans-serif;
+  --font-serif: 'Cormorant Garamond', 'Times New Roman', serif;
+}
+
+@layer base {
+  :root {
+    --shadow-glass: 0 16px 48px rgba(130, 158, 186, 0.07);
+    --shadow-glass-strong: 0 24px 70px rgba(130, 158, 186, 0.12);
+    --shadow-capsule: 0 20px 50px rgba(124, 156, 191, 0.08);
+    --shadow-studio: 0 20px 60px rgba(130, 158, 186, 0.09);
+    --text-shadow-hero: 0 8px 24px rgba(95, 120, 146, 0.12);
+    --mist-grid-color: rgba(124, 156, 191, 0.07);
+
+    --color-milk: #FBFCFE;
+    --color-ice: #EEF4FA;
+    --color-paper: #FFFFFF;
+    --color-surface: #FFFFFF;
+    --color-surface-hover: #F6FAFD;
+
+    --color-primary: #1C2733;
+    --color-primary-hover: #273646;
+    --color-primary-soft: #1A222C0A;
+
+    --color-accent: #88AFDA;
+    --color-accent-hover: #789FCA;
+    --color-lavender: #B6B4CE;
+
+    --color-graphite: #1C2733;
+    --color-graphite-light: #5F7085;
+    --color-ash: #95A5BA;
+    --color-ash-light: #CBD9E6;
+
+    --color-border-lighter: #DFE8F2;
+    --color-border-soft: #C9D6E3;
+    
+    --color-white: #FFFFFF;
+    --color-black: #000000;
+  }
+  
+  .dark {
+      --shadow-glass: 0 16px 48px rgba(0, 0, 0, 0.52);
+      --shadow-glass-strong: 0 24px 70px rgba(0, 0, 0, 0.62);
+      --shadow-capsule: 0 20px 50px rgba(0, 0, 0, 0.6);
+      --shadow-studio: 0 20px 60px rgba(0, 0, 0, 0.5);
+      --text-shadow-hero: 0 8px 24px rgba(0, 0, 0, 0.8);
+      --mist-grid-color: rgba(255, 255, 255, 0.02);
+
+    --color-milk: #0B0C0E;
+    --color-ice: #08090A;
+    --color-paper: #0A0B0D;
+    --color-surface: #111214;
+    --color-surface-hover: #151719;
+
+    --color-primary: #FFFFFF;
+    --color-primary-hover: #EAEAEA;
+    --color-primary-soft: #FFFFFF10;
+
+    --color-accent: #789BBF;
+    --color-accent-hover: #8EAEDB;
+    --color-lavender: #82809C;
+
+    --color-graphite: #F4F6F8;
+    --color-graphite-light: #AAB9C8;
+    --color-ash: #93A5B8;
+    --color-ash-light: #5B6B7D;
+
+    --color-border-lighter: #1A1C20;
+    --color-border-soft: #25282D;
+
+    --color-white: #FFFFFF;
+    --color-black: #000000;
+  }
+
+  html {
+    transition: all 0.5s ease;
+  }
+  
+  * {
+    transition: background-color 0.5s ease, border-color 0.5s ease, color 0.5s ease, box-shadow 0.5s ease;
+  }
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-ice text-graphite font-sans antialiased selection:bg-accent/20 selection:text-graphite;
+    min-height: 100vh;
+    background: transparent;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif tracking-tight text-graphite;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-ash-light/50 rounded-full hover:bg-ash/50 transition-colors;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/88 dark:bg-black/30 border border-border-lighter dark:border-white/16 rounded-[2.2rem] backdrop-blur-xl;
+    box-shadow: var(--shadow-glass);
+  }
+
+  .glass-panel-strong {
+    @apply bg-white/92 dark:bg-black/35 border border-border-lighter dark:border-white/18 rounded-[2.5rem] backdrop-blur-xl;
+    box-shadow: var(--shadow-glass-strong);
+  }
+
+  .capsule {
+    @apply relative overflow-hidden rounded-[2rem] bg-white dark:bg-[#1a1a1c] transition-all duration-500;
+  }
+
+  .capsule:hover {
+    @apply -translate-y-1;
+    box-shadow: var(--shadow-capsule);
+  }
+
+  .studio-shell {
+    @apply rounded-[2.5rem] bg-white/88 dark:bg-black/32 border border-border-lighter dark:border-white/16 backdrop-blur-xl;
+    box-shadow: var(--shadow-studio);
+  }
+
+  .studio-label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.16em] text-ash dark:text-white/62;
+  }
+
+  .studio-title {
+    @apply text-3xl md:text-4xl font-serif text-graphite dark:text-white leading-tight;
+    text-shadow: var(--text-shadow-hero);
+  }
+
+  .studio-subtitle {
+    @apply text-sm md:text-base text-graphite-light dark:text-white/70 leading-relaxed;
+  }
+
+  .studio-cloud {
+    @apply absolute rounded-full pointer-events-none;
+    filter: blur(50px);
+  }
+
+  .studio-border {
+    @apply border border-border-lighter dark:border-white/10;
+  }
+
+  .studio-pill {
+    @apply rounded-full border border-border-soft dark:border-white/22 bg-white/80 dark:bg-black/28;
+  }
+
+  .dark .seller-setting-input {
+    background-color: rgba(0, 0, 0, 0.24);
+    color: #ffffff;
+    caret-color: #ffffff;
+  }
+
+  .dark .seller-setting-input:-webkit-autofill,
+  .dark .seller-setting-input:-webkit-autofill:hover,
+  .dark .seller-setting-input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #ffffff;
+    box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.72) inset;
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .shimmer-bg {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.5) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  .mist-grid {
+    background-image:
+      linear-gradient(var(--mist-grid-color) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124, 156, 191, 0.07) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+#noise-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.2;
+}
+
+/* ====================================================
+   Page Peel View Transitions for Theme Toggle
+==================================================== */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* The existing theme stays at the bottom */
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+/* The new theme sweeps in as a triangle from the top left corner */
+::view-transition-new(root) {
+  z-index: 2;
+  clip-path: polygon(0 0, 0 0, 0 0);
+  animation: page-peel-sweep 0.7s cubic-bezier(0.25, 1, 0.4, 1) forwards;
+}
+
+@keyframes page-peel-sweep {
+  0% {
+    clip-path: polygon(0 0, 0 0, 0 0);
+  }
+  100% {
+    /* 300% handles ultra-wide aspect ratios to ensure it sweeps the entire diagonal */
+    clip-path: polygon(0 0, 300% 0, 0 300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+  }
+}
+
