@@ -32,19 +32,19 @@ func (r *Repository) CreateProduct(ctx context.Context, p *Product) error {
 		INSERT INTO products (
 			id, seller_id, category_id, brand_id, title, slug, description,
 			status, gender, color, material, care_instructions,
-			price_cents, old_price_cents, currency, main_image_url,
+			price_cents, old_price_cents, currency, main_image_url, main_image_object_key,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7,
 			$8, $9, $10, $11, $12,
-			$13, $14, $15, $16,
-			$17, $18
+			$13, $14, $15, $16, $17,
+			$18, $19
 		)
 	`
 	_, err := r.db.Exec(ctx, query,
 		p.ID, p.SellerID, p.CategoryID, p.BrandID, p.Title, p.Slug, p.Description,
 		p.Status, p.Gender, p.Color, p.Material, p.CareInstructions,
-		p.PriceCents, p.OldPriceCents, p.Currency, p.MainImageURL,
+		p.PriceCents, p.OldPriceCents, p.Currency, p.MainImageURL, p.MainImageObjectKey,
 		p.CreatedAt, p.UpdatedAt,
 	)
 	if err != nil {
@@ -61,14 +61,14 @@ func (r *Repository) UpdateProduct(ctx context.Context, p *Product) error {
 		UPDATE products
 		SET category_id = $1, brand_id = $2, title = $3, slug = $4, description = $5,
 			gender = $6, color = $7, material = $8, care_instructions = $9,
-			price_cents = $10, old_price_cents = $11, main_image_url = $12,
+			price_cents = $10, old_price_cents = $11, main_image_url = $12, main_image_object_key = $13,
 			updated_at = now()
-		WHERE id = $13
+		WHERE id = $14
 	`
 	res, err := r.db.Exec(ctx, query,
 		p.CategoryID, p.BrandID, p.Title, p.Slug, p.Description,
 		p.Gender, p.Color, p.Material, p.CareInstructions,
-		p.PriceCents, p.OldPriceCents, p.MainImageURL,
+		p.PriceCents, p.OldPriceCents, p.MainImageURL, p.MainImageObjectKey,
 		p.ID,
 	)
 	if err != nil {
@@ -95,7 +95,7 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 	query := `
 		SELECT id, seller_id, category_id, brand_id, title, slug, description,
 			status, gender, color, material, care_instructions,
-			price_cents, old_price_cents, currency, main_image_url,
+			price_cents, old_price_cents, currency, main_image_url, main_image_object_key,
 			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
 		FROM products
 		WHERE ` + condition + `
@@ -104,7 +104,7 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 	err := r.db.QueryRow(ctx, query, args...).Scan(
 		&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
 		&p.Status, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
-		&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
+		&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL, &p.MainImageObjectKey,
 		&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
 	)
 	if err != nil {
@@ -233,11 +233,11 @@ func (r *Repository) ReplaceProductImages(ctx context.Context, productID uuid.UU
 
 	for _, img := range images {
 		query := `
-			INSERT INTO product_images (id, product_id, image_url, alt_text, sort_order, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO product_images (id, product_id, image_url, object_key, alt_text, sort_order, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 		`
 		_, err := r.db.Exec(ctx, query,
-			img.ID, img.ProductID, img.ImageURL, img.AltText, img.SortOrder, img.CreatedAt,
+			img.ID, img.ProductID, img.ImageURL, img.ObjectKey, img.AltText, img.SortOrder, img.CreatedAt,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert image: %w", err)
@@ -248,7 +248,7 @@ func (r *Repository) ReplaceProductImages(ctx context.Context, productID uuid.UU
 
 func (r *Repository) GetProductImages(ctx context.Context, productID uuid.UUID) ([]ProductImage, error) {
 	query := `
-		SELECT id, product_id, image_url, alt_text, sort_order, created_at
+		SELECT id, product_id, image_url, object_key, alt_text, sort_order, created_at
 		FROM product_images
 		WHERE product_id = $1
 		ORDER BY sort_order ASC
@@ -262,12 +262,42 @@ func (r *Repository) GetProductImages(ctx context.Context, productID uuid.UUID) 
 	var images []ProductImage
 	for rows.Next() {
 		var i ProductImage
-		if err := rows.Scan(&i.ID, &i.ProductID, &i.ImageURL, &i.AltText, &i.SortOrder, &i.CreatedAt); err != nil {
+		if err := rows.Scan(&i.ID, &i.ProductID, &i.ImageURL, &i.ObjectKey, &i.AltText, &i.SortOrder, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		images = append(images, i)
 	}
 	return images, nil
+}
+
+func (r *Repository) AddProductImage(ctx context.Context, img *ProductImage) error {
+	query := `
+		INSERT INTO product_images (id, product_id, image_url, object_key, alt_text, sort_order, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+	_, err := r.db.Exec(ctx, query,
+		img.ID, img.ProductID, img.ImageURL, img.ObjectKey, img.AltText, img.SortOrder, img.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to add product image: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) SetMainImage(ctx context.Context, productID uuid.UUID, imageURL string, objectKey string) error {
+	query := `
+		UPDATE products
+		SET main_image_url = $1, main_image_object_key = $2, updated_at = now()
+		WHERE id = $3
+	`
+	res, err := r.db.Exec(ctx, query, imageURL, objectKey, productID)
+	if err != nil {
+		return fmt.Errorf("failed to set main image: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrProductNotFound
+	}
+	return nil
 }
 
 // ---------------------------------------------------------

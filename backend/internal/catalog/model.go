@@ -24,6 +24,7 @@ type Brand struct {
 	Slug        string    `json:"slug"`
 	Description *string   `json:"description,omitempty"`
 	LogoURL     *string   `json:"logoUrl,omitempty"`
+	LogoObjectKey *string `json:"logoObjectKey,omitempty"`
 	IsActive    bool      `json:"isActive"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`

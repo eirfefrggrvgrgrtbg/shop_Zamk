@@ -34,6 +34,7 @@ type Product struct {
 	OldPriceCents     *int64     `json:"oldPriceCents,omitempty"`
 	Currency          string     `json:"currency"`
 	MainImageURL      *string    `json:"mainImageUrl,omitempty"`
+	MainImageObjectKey *string   `json:"mainImageObjectKey,omitempty"`
 	CreatedAt         time.Time  `json:"createdAt"`
 	UpdatedAt         time.Time  `json:"updatedAt"`
 	SubmittedAt       *time.Time `json:"submittedAt,omitempty"`
@@ -74,6 +75,7 @@ type ProductImage struct {
 	ID         uuid.UUID `json:"id"`
 	ProductID  uuid.UUID `json:"productId"`
 	ImageURL   string    `json:"imageUrl"`
+	ObjectKey  *string   `json:"objectKey,omitempty"`
 	AltText    *string   `json:"altText,omitempty"`
 	SortOrder  int       `json:"sortOrder"`
 	CreatedAt  time.Time `json:"createdAt"`

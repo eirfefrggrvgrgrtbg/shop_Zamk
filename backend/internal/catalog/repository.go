@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 )
@@ -79,11 +80,11 @@ func (r *Repository) ListCategories(ctx context.Context) ([]Category, error) {
 
 func (r *Repository) CreateBrand(ctx context.Context, b *Brand) error {
 	query := `
-		INSERT INTO brands (id, name, slug, description, logo_url, is_active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO brands (id, name, slug, description, logo_url, logo_object_key, is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 	_, err := r.db.Exec(ctx, query,
-		b.ID, b.Name, b.Slug, b.Description, b.LogoURL, b.IsActive, b.CreatedAt, b.UpdatedAt,
+		b.ID, b.Name, b.Slug, b.Description, b.LogoURL, b.LogoObjectKey, b.IsActive, b.CreatedAt, b.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create brand: %w", err)
@@ -93,13 +94,13 @@ func (r *Repository) CreateBrand(ctx context.Context, b *Brand) error {
 
 func (r *Repository) GetBrandBySlug(ctx context.Context, slug string) (*Brand, error) {
 	query := `
-		SELECT id, name, slug, description, logo_url, is_active, created_at, updated_at
+		SELECT id, name, slug, description, logo_url, logo_object_key, is_active, created_at, updated_at
 		FROM brands
 		WHERE slug = $1
 	`
 	var b Brand
 	err := r.db.QueryRow(ctx, query, slug).Scan(
-		&b.ID, &b.Name, &b.Slug, &b.Description, &b.LogoURL, &b.IsActive, &b.CreatedAt, &b.UpdatedAt,
+		&b.ID, &b.Name, &b.Slug, &b.Description, &b.LogoURL, &b.LogoObjectKey, &b.IsActive, &b.CreatedAt, &b.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -110,9 +111,28 @@ func (r *Repository) GetBrandBySlug(ctx context.Context, slug string) (*Brand, e
 	return &b, nil
 }
 
+func (r *Repository) GetBrandByID(ctx context.Context, id uuid.UUID) (*Brand, error) {
+	query := `
+		SELECT id, name, slug, description, logo_url, logo_object_key, is_active, created_at, updated_at
+		FROM brands
+		WHERE id = $1
+	`
+	var b Brand
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&b.ID, &b.Name, &b.Slug, &b.Description, &b.LogoURL, &b.LogoObjectKey, &b.IsActive, &b.CreatedAt, &b.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBrandNotFound
+		}
+		return nil, fmt.Errorf("failed to get brand by id: %w", err)
+	}
+	return &b, nil
+}
+
 func (r *Repository) ListBrands(ctx context.Context) ([]Brand, error) {
 	query := `
-		SELECT id, name, slug, description, logo_url, is_active, created_at, updated_at
+		SELECT id, name, slug, description, logo_url, logo_object_key, is_active, created_at, updated_at
 		FROM brands
 		ORDER BY name ASC
 	`
@@ -125,10 +145,26 @@ func (r *Repository) ListBrands(ctx context.Context) ([]Brand, error) {
 	var brands []Brand
 	for rows.Next() {
 		var b Brand
-		if err := rows.Scan(&b.ID, &b.Name, &b.Slug, &b.Description, &b.LogoURL, &b.IsActive, &b.CreatedAt, &b.UpdatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &b.Slug, &b.Description, &b.LogoURL, &b.LogoObjectKey, &b.IsActive, &b.CreatedAt, &b.UpdatedAt); err != nil {
 			return nil, err
 		}
 		brands = append(brands, b)
 	}
 	return brands, rows.Err()
+}
+
+func (r *Repository) UpdateBrandLogo(ctx context.Context, brandID uuid.UUID, logoURL string, logoObjectKey string) error {
+	query := `
+		UPDATE brands
+		SET logo_url = $1, logo_object_key = $2, updated_at = now()
+		WHERE id = $3
+	`
+	res, err := r.db.Exec(ctx, query, logoURL, logoObjectKey, brandID)
+	if err != nil {
+		return fmt.Errorf("failed to update brand logo: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrBrandNotFound
+	}
+	return nil
 }

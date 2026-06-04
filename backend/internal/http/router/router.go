@@ -24,6 +24,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/reviews"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
 
@@ -45,6 +46,7 @@ func New(
 	returnsHandler *returns.Handler,
 	payoutsHandler *payouts.Handler,
 	reviewsHandler *reviews.Handler,
+	storageHandler *storage.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -111,6 +113,7 @@ func New(
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireRole(users.RoleSeller))
 		r.Get("/", sellersHandler.GetSellerMe)
+		r.Post("/logo/upload", storageHandler.UploadSellerProfileImage)
 	})
 
 	// ---------------------------------------------------------
@@ -165,6 +168,7 @@ func New(
 		r.Patch("/{id}", productsHandler.UpdateProduct)
 		r.Delete("/{id}", productsHandler.DeleteDraftProduct)
 		r.Post("/{id}/submit-moderation", productsHandler.SubmitForModeration)
+		r.Post("/{id}/images/upload", storageHandler.UploadSellerProductImage)
 	})
 
 	r.Route("/api/seller/inventory", func(r chi.Router) {
@@ -219,8 +223,10 @@ func New(
 		r.Post("/categories", catalogHandler.CreateCategory)
 		r.Get("/brands", catalogHandler.ListBrands)
 		r.Post("/brands", catalogHandler.CreateBrand)
+		r.Post("/brands/{id}/logo/upload", storageHandler.UploadAdminBrandLogo)
 
 		r.Get("/products", productsHandler.ListAdminProducts)
+		r.Post("/products/{id}/images/upload", storageHandler.UploadAdminProductImage)
 		r.Get("/moderation/products", productsHandler.ListModerationProducts)
 		r.Post("/moderation/products/{id}/approve", productsHandler.AdminApproveProduct)
 		r.Post("/moderation/products/{id}/reject", productsHandler.AdminRejectProduct)

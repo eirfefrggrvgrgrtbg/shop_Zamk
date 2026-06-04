@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"os"
 	"strconv"
 )
@@ -34,6 +36,45 @@ func doReq(method, url string, body any, token string) (int, map[string]any) {
 	resBody, _ := io.ReadAll(res.Body)
 	if len(resBody) > 0 {
 		json.Unmarshal(resBody, &data)
+	}
+	return res.StatusCode, data
+}
+
+func doUploadReq(url string, fieldName, filename string, fileContent []byte, extraFields map[string]string, token string) (int, map[string]any) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fieldName, filename))
+	h.Set("Content-Type", "image/png")
+	part, _ := writer.CreatePart(h)
+	part.Write(fileContent)
+
+	for k, v := range extraFields {
+		writer.WriteField(k, v)
+	}
+	writer.Close()
+
+	req, _ := http.NewRequest("POST", url, body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	res, err := client.Do(req)
+	if err != nil {
+		fmt.Println("HTTP Error:", err)
+		os.Exit(1)
+	}
+	defer res.Body.Close()
+
+	var data map[string]any
+	resBody, _ := io.ReadAll(res.Body)
+	if len(resBody) > 0 {
+		json.Unmarshal(resBody, &data)
+	}
+	if res.StatusCode >= 400 {
+		fmt.Printf("doUploadReq error %d: %s\n", res.StatusCode, string(resBody))
 	}
 	return res.StatusCode, data
 }
@@ -1033,6 +1074,51 @@ func main() {
 	}
 	if data["rating"] == nil {
 		fmt.Println("Product is missing rating summary:", data)
+		os.Exit(1)
+	}
+
+	fmt.Println("76. Create a draft product for image upload test...")
+	status, data = doReq("POST", "http://localhost:8080/api/seller/products", map[string]any{
+		"title":       "Upload Test Product",
+		"priceCents":  1000,
+		"currency":    "RUB",
+		"status":      "draft",
+	}, sellerToken)
+	if status != 201 {
+		fmt.Println("Create test product failed:", status, data)
+		os.Exit(1)
+	}
+	testProductId := data["id"].(string)
+
+	fmt.Println("77. Seller uploads product image (JPG)...")
+	testImage := []byte("fake_image_content_for_test")
+	status, data = doUploadReq("http://localhost:8080/api/seller/products/"+testProductId+"/images/upload", "image", "test.jpg", testImage, map[string]string{
+		"isMain": "true",
+	}, sellerToken)
+	if status != 200 {
+		fmt.Println("Seller upload image failed:", status, data)
+		os.Exit(1)
+	}
+	fmt.Println("Image uploaded. URL:", data["imageUrl"])
+
+	fmt.Println("78. Seller tries to upload invalid file (SVG)...")
+	status, data = doUploadReq("http://localhost:8080/api/seller/products/"+testProductId+"/images/upload", "image", "test.svg", testImage, nil, sellerToken)
+	if status != 400 {
+		fmt.Println("Expected 400 for SVG upload, got:", status, data)
+		os.Exit(1)
+	}
+
+	fmt.Println("79. Admin uploads brand logo...")
+	status, data = doUploadReq("http://localhost:8080/api/admin/brands/"+brandId+"/logo/upload", "logo", "logo.png", testImage, nil, adminToken)
+	if status != 200 {
+		fmt.Println("Admin brand logo upload failed:", status, data)
+		os.Exit(1)
+	}
+
+	fmt.Println("80. Cross-seller isolation check...")
+	status, data = doUploadReq("http://localhost:8080/api/seller/products/"+testProductId+"/images/upload", "image", "test.png", testImage, nil, custToken)
+	if status != 403 {
+		fmt.Println("Expected 403 for cross-seller upload, got:", status, data)
 		os.Exit(1)
 	}
 

@@ -50,11 +50,15 @@ type JWTConfig struct {
 }
 
 type S3Config struct {
-	Endpoint  string
-	Bucket    string
-	AccessKey string
-	SecretKey string
-	UseSSL    bool
+	Endpoint       string
+	Port           string
+	Region         string
+	Bucket         string
+	AccessKey      string
+	SecretKey      string
+	UseSSL         bool
+	PublicBaseURL  string
+	UploadMaxSizeMB int
 }
 
 type CORSConfig struct {
@@ -106,11 +110,15 @@ func Load() (*Config, error) {
 			RefreshTokenTTLDays:   getEnvAsInt("JWT_REFRESH_TTL_DAYS", 30),
 		},
 		S3: S3Config{
-			Endpoint:  getEnv("S3_ENDPOINT", "localhost:9000"),
-			Bucket:    getEnv("S3_BUCKET", "zamk-products"),
-			AccessKey: getEnv("S3_ACCESS_KEY", "zamk_minio"),
-			SecretKey: getEnv("S3_SECRET_KEY", "zamk_minio_password"),
-			UseSSL:    getEnvAsBool("S3_USE_SSL", false),
+			Endpoint:       getEnv("S3_ENDPOINT", "localhost"),
+			Port:           getEnv("S3_PORT", "9000"),
+			Region:         getEnv("S3_REGION", ""),
+			Bucket:         getEnv("S3_BUCKET", "zamk-products"),
+			AccessKey:      getEnv("S3_ACCESS_KEY", "zamk_minio"),
+			SecretKey:      getEnv("S3_SECRET_KEY", "zamk_minio_password"),
+			UseSSL:         getEnvAsBool("S3_USE_SSL", false),
+			PublicBaseURL:  getEnv("S3_PUBLIC_BASE_URL", "http://localhost:9000/zamk-products"),
+			UploadMaxSizeMB: getEnvAsInt("S3_UPLOAD_MAX_SIZE_MB", 10),
 		},
 		CORS: CORSConfig{
 			AllowedOrigins: strings.Split(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173"), ","),

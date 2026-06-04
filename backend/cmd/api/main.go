@@ -28,6 +28,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/reviews"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
 
@@ -124,8 +125,16 @@ func main() {
 	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, cfg.Worker.ReturnWindowDays)
 	returnsHandler := returns.NewHandler(returnsService)
 
+	storageProvider, err := storage.NewS3Client(&cfg.S3)
+	if err != nil {
+		logger.Error("failed to create storage provider", "error", err)
+		os.Exit(1)
+	}
+	storageService := storage.NewService(storageProvider, productsRepo, catalogRepo, sellersRepo)
+	storageHandler := storage.NewHandler(storageService, &cfg.S3)
+
 	// Create router
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler)
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler)
 
 	// Start HTTP server
 	srv := &http.Server{
