@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronRight, Heart, Minus, Plus, Ruler, ShoppingBag, Star, Truck, RefreshCw, Shield, ChevronDown } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -9,7 +9,9 @@ import { useCart } from '../contexts/CartContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatPrice, cn } from '../lib/utils';
-import { PRODUCTS, getProductById, getBrandById, getProductsByBrand, getSellerById } from '../lib/mock-data';
+import { PRODUCTS, getProductsByBrand, getSellerById } from '../lib/mock-data';
+import { fetchProductById, fetchProductReviews } from '../api/publicCatalog';
+import type { Product, Review } from '../lib/mock-data';
 import { SectionHeader } from '../components/editorial/StudioKit';
 
 // Размерная сетка
@@ -50,8 +52,12 @@ function AccordionSection({ title, children, defaultOpen = false }: { title: str
 
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
-  const product = getProductById(id || '');
-    const seller = product ? getSellerById(product.sellerId || '') : null;
+  
+  const [product, setProduct] = useState<Product | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [activeImage, setActiveImage] = useState(0);
   const [activeSize, setActiveSize] = useState<string | null>(null);
   const [activeColor, setActiveColor] = useState(0);
@@ -60,15 +66,48 @@ export function ProductDetail() {
   const [sizeError, setSizeError] = useState('');
   const [activeTab, setActiveTab] = useState<'description' | 'specs' | 'reviews'>('description');
 
+  useEffect(() => {
+    async function loadProduct() {
+      if (!id) return;
+      try {
+        setIsLoading(true);
+        const data = await fetchProductById(id);
+        setProduct(data);
+        setError(null);
+        
+        try {
+          const revs = await fetchProductReviews(id);
+          setReviews(revs);
+        } catch (e) {
+          console.warn("Failed to fetch reviews", e);
+        }
+      } catch (err) {
+        console.error('Failed to load product:', err);
+        setError('Не удалось загрузить товар');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadProduct();
+  }, [id]);
+
   const { addItem } = useCart();
   const { toggleFavorite, isFavorite } = useFavorites();
   const { showToast } = useToast();
 
-  if (!product) {
+  if (isLoading) {
+    return (
+      <div className="relative z-10 min-h-screen pt-36 pb-20 flex justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-black border-t-transparent rounded-full dark:border-white dark:border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (error || !product) {
     return (
       <div className="relative z-10 min-h-screen pt-36 pb-20">
         <div className="container mx-auto px-4 sm:px-6 max-w-4xl text-center">
-          <h1 className="text-4xl font-serif text-graphite dark:text-white">Товар не найден</h1>
+          <h1 className="text-4xl font-serif text-graphite dark:text-white">{error || 'Товар не найден'}</h1>
           <Link to="/catalog" className="inline-block mt-6">
             <Button>Вернуться в каталог</Button>
           </Link>
@@ -77,10 +116,11 @@ export function ProductDetail() {
     );
   }
 
+  const seller = product ? getSellerById(product.sellerId || '') : null;
   const images = product.images || [product.image];
   const relatedProducts = PRODUCTS.filter((item) => item.category === product.category && item.id !== product.id).slice(0, 4);
   const brandProducts = getProductsByBrand(product.brandId).filter((item) => item.id !== product.id).slice(0, 4);
-  const brand = getBrandById(product.brandId);
+  // We use brandId for link but use string brand for name
   const liked = isFavorite(product.id);
   const specs = getProductSpecs(product);
   const requiresSizeSelection = Boolean(product.sizes && product.sizes.length > 0 && !product.sizes.includes('Единый'));
@@ -415,11 +455,11 @@ export function ProductDetail() {
         </div>
 
         {/* Reviews Section */}
-        {product.reviews && product.reviews.length > 0 && (
+        {reviews && reviews.length > 0 && (
           <section className="mt-16">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-serif text-graphite dark:text-white">
-                Отзывы ({product.reviewsCount})
+                Отзывы ({product.reviewsCount || reviews.length})
               </h2>
               {product.rating && (
                 <div className="flex items-center gap-2">
@@ -442,7 +482,7 @@ export function ProductDetail() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {product.reviews.map((review) => (
+              {reviews.map((review) => (
                 <div key={review.id} className="p-5 rounded-xl bg-white dark:bg-[#1a1a1c] border border-border-lighter dark:border-white/10">
                   <div className="flex items-start justify-between mb-3">
                     <div>

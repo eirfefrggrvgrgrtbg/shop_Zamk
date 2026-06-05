@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight, SlidersHorizontal, X, Check } from 'lucide-react';
 import { ProductCard } from '../components/product/ProductCard';
 import { Drawer } from '../components/ui/Drawer';
 import { SortDropdown } from '../components/editorial/StudioKit';
-import { BRANDS, CATEGORIES, PRODUCTS } from '../lib/mock-data';
+import { BRANDS, CATEGORIES } from '../lib/mock-data';
+import { fetchProducts } from '../api/publicCatalog';
+import type { Product } from '../lib/mock-data';
 import { cn } from '../lib/utils';
 
 const SORT_OPTIONS = [
@@ -97,13 +99,33 @@ export function Catalog() {
   const [priceRange, setPriceRange] = useState<[number, number]>(DEFAULT_PRICE_RANGE);
   const [sortBy, setSortBy] = useState('new');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [apiProducts, setApiProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadProducts() {
+      try {
+        setIsLoading(true);
+        const data = await fetchProducts();
+        setApiProducts(data);
+        setError(null);
+      } catch (err) {
+        console.error('Failed to load products:', err);
+        setError('Не удалось загрузить товары. Попробуйте позже.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadProducts();
+  }, []);
 
   const hasActivePriceFilter = priceRange[0] !== DEFAULT_PRICE_RANGE[0] || priceRange[1] !== DEFAULT_PRICE_RANGE[1];
   const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeStyles.length > 0 || activeSizes.length > 0 || activeColors.length > 0 || activeMaterials.length > 0 || hasActivePriceFilter;
   const activeFiltersCount = activeStyles.length + activeSizes.length + activeColors.length + activeMaterials.length + (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
 
   const filteredProducts = useMemo(() => {
-    let result = [...PRODUCTS];
+    let result = [...apiProducts];
 
     if (activeCategory !== 'all') {
       result = result.filter((item) => item.category === activeCategory);
@@ -435,7 +457,17 @@ export function Catalog() {
               </div>
             )}
 
-            {filteredProducts.length > 0 ? (
+            {isLoading ? (
+              <div className="text-center py-16 px-4">
+                <div className="animate-spin w-8 h-8 mx-auto border-2 border-black border-t-transparent rounded-full dark:border-white dark:border-t-transparent" />
+                <h3 className="mt-4 text-graphite dark:text-white">Загрузка товаров...</h3>
+              </div>
+            ) : error ? (
+              <div className="text-center py-16 px-4">
+                <h3 className="text-xl font-serif text-error mb-2">Ошибка</h3>
+                <p className="text-sm text-ash">{error}</p>
+              </div>
+            ) : filteredProducts.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
                 {filteredProducts.map((product) => (
                   <ProductCard key={product.id} product={product} />

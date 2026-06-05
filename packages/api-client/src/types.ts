@@ -13,16 +13,18 @@ export interface UserDTO {
 
 export interface ProductSummary {
   id: string;
-  name: string;
+  title: string;
   slug: string;
   shortDescription?: string;
   priceCents: number;
-  imageUrl?: string;
+  oldPriceCents?: number;
+  mainImageUrl?: string;
   categoryId?: string;
   brandId?: string;
   sellerId?: string;
   createdAt: string;
   status: string;
+  inStock?: boolean;
   // Included from rating summary usually
   rating?: RatingSummary;
 }

@@ -1,5 +1,5 @@
 import { request } from './client';
-import { Cart, Order, ReturnRequest, ReturnResponse, ReviewCreateRequest } from './types';
+import type { Cart, Order, ReturnRequest, ReturnResponse, ReviewCreateRequest } from './types';
 
 export const getCart = async (): Promise<Cart> => {
   return request<Cart>('GET', '/customer/cart');

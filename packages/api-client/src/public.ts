@@ -1,8 +1,13 @@
 import { request } from './client';
-import { ProductSummary, ProductDetail, Category, Brand, PublicReview, RatingSummary } from './types';
+import type { ProductSummary, ProductDetail, Category, Brand, PublicReview, RatingSummary } from './types';
 
-export const getProducts = async (params?: any): Promise<ProductSummary[]> => {
-  return request<ProductSummary[]>('GET', '/products', { params });
+export interface ProductListResponse {
+  items: ProductSummary[];
+  totalCount: number;
+}
+
+export const getProducts = async (params?: any): Promise<ProductListResponse> => {
+  return request<ProductListResponse>('GET', '/products', { params });
 };
 
 export const getProduct = async (idOrSlug: string): Promise<ProductDetail> => {

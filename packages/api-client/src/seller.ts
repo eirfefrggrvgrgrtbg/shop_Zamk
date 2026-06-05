@@ -1,5 +1,5 @@
 import { request } from './client';
-import { SellerMe, SellerProduct, InventoryItem, SellerOrder, SellerReturn, SellerReview, SellerBalance, Payout } from './types';
+import type { SellerMe, SellerProduct, InventoryItem, SellerOrder, SellerReturn, SellerReview, SellerBalance, Payout } from './types';
 
 export const getSellerMe = async (): Promise<SellerMe> => {
   return request<SellerMe>('GET', '/seller/me');

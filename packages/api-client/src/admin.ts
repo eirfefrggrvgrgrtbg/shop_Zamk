@@ -1,5 +1,5 @@
 import { request } from './client';
-import { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand } from './types';
+import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand } from './types';
 
 export const getAdminSellers = async (): Promise<AdminSeller[]> => {
   return request<AdminSeller[]>('GET', '/admin/sellers');
