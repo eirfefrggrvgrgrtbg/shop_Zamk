@@ -4,6 +4,7 @@ import {
   adjustInventoryStock,
   getAdminInventory,
   getAdminInventoryErrorMessage,
+  getAdminInventoryItem,
   getAdminInventoryMovements,
   receiveInventoryStock,
   writeOffInventoryStock,
@@ -51,7 +52,8 @@ export function AdminInventory() {
     try {
       setIsMovementsLoading(true);
       setError(null);
-      setSelectedItem(item);
+      const detail = await getAdminInventoryItem(item.id);
+      setSelectedItem(detail);
       const data = await getAdminInventoryMovements(item.id);
       setMovements(data);
     } catch (err: unknown) {

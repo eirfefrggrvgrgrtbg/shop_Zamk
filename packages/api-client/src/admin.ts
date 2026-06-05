@@ -87,8 +87,8 @@ export const createAdminInventoryWriteOff = async (data: { productVariantId: str
   return request<AdminInventoryItem>('POST', '/admin/inventory/write-offs', { body: data });
 };
 
-export const getAdminOrders = async (): Promise<AdminOrder[]> => {
-  return request<AdminOrder[]>('GET', '/admin/orders');
+export const getAdminOrders = async (): Promise<{ items: AdminOrder[]; totalCount: number }> => {
+  return request<{ items: AdminOrder[]; totalCount: number }>('GET', '/admin/orders');
 };
 
 export const getAdminOrder = async (id: string): Promise<AdminOrder> => {
@@ -99,8 +99,8 @@ export const updateAdminOrderStatus = async (id: string, data: { status: string;
   return request<void>('PATCH', `/admin/orders/${id}/status`, { body: data });
 };
 
-export const getAdminPayments = async (): Promise<AdminPayment[]> => {
-  return request<AdminPayment[]>('GET', '/admin/payments');
+export const getAdminPayments = async (): Promise<{ items: AdminPayment[]; totalCount: number }> => {
+  return request<{ items: AdminPayment[]; totalCount: number }>('GET', '/admin/payments');
 };
 
 export const getAdminPayment = async (id: string): Promise<AdminPayment> => {
