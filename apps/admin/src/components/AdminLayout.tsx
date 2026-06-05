@@ -15,7 +15,9 @@ import {
   LogOut,
   Bell,
   LayoutGrid,
-  Tag
+  Tag,
+  CreditCard,
+  Truck
 } from 'lucide-react';
 
 import { useAdminAuth } from '../contexts/AdminAuthContext';
@@ -33,6 +35,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { name: 'Products', path: '/products', icon: Package },
     { name: 'Moderation', path: '/moderation', icon: ShieldAlert },
     { name: 'Orders', path: '/orders', icon: ShoppingCart },
+    { name: 'Payments', path: '/payments', icon: CreditCard },
+    { name: 'Shipments', path: '/shipments', icon: Truck },
     { name: 'Inventory', path: '/inventory', icon: Boxes },
     { name: 'Returns', path: '/returns', icon: RotateCcw },
     { name: 'Payouts', path: '/payouts', icon: Wallet },

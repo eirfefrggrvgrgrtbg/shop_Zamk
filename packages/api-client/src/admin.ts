@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand } from './types';
+import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement } from './types';
 
 export const getAdminSellers = async (): Promise<AdminSeller[]> => {
   return request<AdminSeller[]>('GET', '/admin/sellers');
@@ -63,20 +63,64 @@ export const adminBlockProduct = async (id: string, comment?: string): Promise<v
   return request<void>('POST', `/admin/moderation/products/${id}/block`, { body: { comment } });
 };
 
-export const getAdminInventory = async (): Promise<any[]> => {
-  return request<any[]>('GET', '/admin/inventory');
+export const getAdminInventory = async (): Promise<{ items: AdminInventoryItem[]; totalCount: number }> => {
+  return request<{ items: AdminInventoryItem[]; totalCount: number }>('GET', '/admin/inventory');
+};
+
+export const getAdminInventoryItem = async (id: string): Promise<AdminInventoryItem> => {
+  return request<AdminInventoryItem>('GET', `/admin/inventory/${id}`);
+};
+
+export const getAdminInventoryMovements = async (id: string): Promise<{ items: AdminInventoryMovement[]; totalCount: number }> => {
+  return request<{ items: AdminInventoryMovement[]; totalCount: number }>('GET', `/admin/inventory/${id}/movements`);
+};
+
+export const createAdminInventoryReceipt = async (data: { productVariantId: string; quantity: number; reason?: string }): Promise<AdminInventoryItem> => {
+  return request<AdminInventoryItem>('POST', '/admin/inventory/receipts', { body: data });
+};
+
+export const createAdminInventoryAdjustment = async (data: { productVariantId: string; quantity: number; reason: string }): Promise<AdminInventoryItem> => {
+  return request<AdminInventoryItem>('POST', '/admin/inventory/adjustments', { body: data });
+};
+
+export const createAdminInventoryWriteOff = async (data: { productVariantId: string; quantity: number; reason: string }): Promise<AdminInventoryItem> => {
+  return request<AdminInventoryItem>('POST', '/admin/inventory/write-offs', { body: data });
 };
 
 export const getAdminOrders = async (): Promise<AdminOrder[]> => {
   return request<AdminOrder[]>('GET', '/admin/orders');
 };
 
+export const getAdminOrder = async (id: string): Promise<AdminOrder> => {
+  return request<AdminOrder>('GET', `/admin/orders/${id}`);
+};
+
+export const updateAdminOrderStatus = async (id: string, data: { status: string; comment?: string }): Promise<void> => {
+  return request<void>('PATCH', `/admin/orders/${id}/status`, { body: data });
+};
+
 export const getAdminPayments = async (): Promise<AdminPayment[]> => {
   return request<AdminPayment[]>('GET', '/admin/payments');
 };
 
+export const getAdminPayment = async (id: string): Promise<AdminPayment> => {
+  return request<AdminPayment>('GET', `/admin/payments/${id}`);
+};
+
 export const getAdminShipments = async (): Promise<AdminShipment[]> => {
   return request<AdminShipment[]>('GET', '/admin/shipments');
+};
+
+export const getAdminShipment = async (id: string): Promise<AdminShipment> => {
+  return request<AdminShipment>('GET', `/admin/shipments/${id}`);
+};
+
+export const createAdminShipment = async (orderId: string, data: { carrier?: string; trackingNumber?: string; trackingUrl?: string }): Promise<AdminShipment> => {
+  return request<AdminShipment>('POST', `/admin/orders/${orderId}/shipment`, { body: data });
+};
+
+export const updateAdminShipmentStatus = async (id: string, data: { status: string; carrier?: string; trackingNumber?: string; trackingUrl?: string; comment?: string }): Promise<void> => {
+  return request<void>('PATCH', `/admin/shipments/${id}/status`, { body: data });
 };
 
 export const getAdminReturns = async (): Promise<AdminReturn[]> => {

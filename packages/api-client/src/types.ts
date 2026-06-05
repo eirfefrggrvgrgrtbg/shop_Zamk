@@ -307,18 +307,73 @@ export interface ModerationProduct {
 
 export interface AdminOrder {
   id: string;
+  userId?: string;
   status: string;
+  totalPriceCents: number;
+  currency: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  deliveryAddress?: string;
+  createdAt: string;
+  updatedAt?: string;
+  cancelledAt?: string;
+  items?: OrderItem[];
 }
 
 export interface AdminPayment {
   id: string;
+  orderId: string;
+  provider: string;
+  providerPaymentId?: string;
   amountCents: number;
+  currency: string;
   status: string;
+  createdAt: string;
+  updatedAt?: string;
+  paidAt?: string;
+  failedAt?: string;
+  cancelledAt?: string;
 }
 
 export interface AdminShipment {
   id: string;
+  orderId: string;
   status: string;
+  carrier?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  shippedAt?: string;
+  deliveredAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AdminInventoryItem {
+  id: string;
+  productId: string;
+  productVariantId: string;
+  sellerId?: string;
+  totalStock: number;
+  reservedStock: number;
+  availableStock: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AdminInventoryMovement {
+  id: string;
+  inventoryItemId: string;
+  productId: string;
+  productVariantId: string;
+  sellerId?: string;
+  type: string;
+  quantity: number;
+  reason?: string;
+  actorUserId?: string;
+  referenceType?: string;
+  referenceId?: string;
+  createdAt: string;
 }
 
 export interface AdminReturn {

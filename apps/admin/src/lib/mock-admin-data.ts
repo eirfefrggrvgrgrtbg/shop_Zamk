@@ -25,16 +25,6 @@ export interface Order {
   createdAt: string;
 }
 
-export interface InventoryItem {
-  id: string;
-  productTitle: string;
-  sellerName: string;
-  variant: string;
-  totalStock: number;
-  reservedStock: number;
-  availableStock: number;
-}
-
 export interface ReturnRequest {
   id: string;
   orderId: string;
@@ -77,12 +67,6 @@ export const mockOrders: Order[] = [
   { id: 'ORD-001', customerName: 'Ivan Ivanov', status: 'delivered', total: 15000, paymentStatus: 'paid', createdAt: '2026-05-25T14:30:00Z' },
   { id: 'ORD-002', customerName: 'Anna Smith', status: 'processing', total: 6800, paymentStatus: 'paid', createdAt: '2026-06-03T09:15:00Z' },
   { id: 'ORD-003', customerName: 'John Doe', status: 'pending', total: 2500, paymentStatus: 'unpaid', createdAt: '2026-06-03T11:00:00Z' },
-];
-
-export const mockInventory: InventoryItem[] = [
-  { id: 'inv1', productTitle: 'Basic White Tee', sellerName: 'ZAMK Selected', variant: 'Size M', totalStock: 50, reservedStock: 5, availableStock: 45 },
-  { id: 'inv2', productTitle: 'Basic White Tee', sellerName: 'ZAMK Selected', variant: 'Size L', totalStock: 70, reservedStock: 2, availableStock: 68 },
-  { id: 'inv3', productTitle: 'Black Denim Jacket', sellerName: 'Cool Streetwear', variant: 'Size S', totalStock: 15, reservedStock: 10, availableStock: 5 },
 ];
 
 export const mockReturns: ReturnRequest[] = [

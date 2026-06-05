@@ -7,6 +7,8 @@ import { AdminSellers } from './pages/AdminSellers';
 import { AdminProducts } from './pages/AdminProducts';
 import { AdminModeration } from './pages/AdminModeration';
 import { AdminOrders } from './pages/AdminOrders';
+import { AdminPayments } from './pages/AdminPayments';
+import { AdminShipments } from './pages/AdminShipments';
 import { AdminInventory } from './pages/AdminInventory';
 import { AdminReturns } from './pages/AdminReturns';
 import { AdminPayouts } from './pages/AdminPayouts';
@@ -38,6 +40,8 @@ export default function App() {
           <Route path="/products" element={<AdminProtectedRoute><AdminLayout><AdminProducts /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/moderation" element={<AdminProtectedRoute><AdminLayout><AdminModeration /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/orders" element={<AdminProtectedRoute><AdminLayout><AdminOrders /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/payments" element={<AdminProtectedRoute><AdminLayout><AdminPayments /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/shipments" element={<AdminProtectedRoute><AdminLayout><AdminShipments /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/inventory" element={<AdminProtectedRoute><AdminLayout><AdminInventory /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/returns" element={<AdminProtectedRoute><AdminLayout><AdminReturns /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/payouts" element={<AdminProtectedRoute><AdminLayout><AdminPayouts /></AdminLayout></AdminProtectedRoute>} />
