@@ -123,20 +123,52 @@ export const updateAdminShipmentStatus = async (id: string, data: { status: stri
   return request<void>('PATCH', `/admin/shipments/${id}/status`, { body: data });
 };
 
-export const getAdminReturns = async (): Promise<AdminReturn[]> => {
-  return request<AdminReturn[]>('GET', '/admin/returns');
+export const getAdminReturns = async (): Promise<{ items: AdminReturn[]; totalCount: number }> => {
+  return request<{ items: AdminReturn[]; totalCount: number }>('GET', '/admin/returns');
 };
 
-export const getAdminRefunds = async (): Promise<AdminRefund[]> => {
-  return request<AdminRefund[]>('GET', '/admin/refunds');
+export const getAdminReturn = async (id: string): Promise<AdminReturn> => {
+  return request<AdminReturn>('GET', `/admin/returns/${id}`);
 };
 
-export const getAdminPayouts = async (): Promise<AdminPayout[]> => {
-  return request<AdminPayout[]>('GET', '/admin/payouts');
+export const updateAdminReturnStatus = async (id: string, data: { status: string; adminComment?: string; itemRestock?: Array<{ returnItemId: string; restock: boolean }> }): Promise<void> => {
+  return request<void>('PATCH', `/admin/returns/${id}/status`, { body: data });
 };
 
-export const getAdminReviews = async (): Promise<AdminReview[]> => {
-  return request<AdminReview[]>('GET', '/admin/reviews');
+export const createAdminRefundForReturn = async (returnId: string, data: { reason?: string }): Promise<AdminRefund> => {
+  return request<AdminRefund>('POST', `/admin/returns/${returnId}/refund`, { body: data });
+};
+
+export const getAdminRefunds = async (): Promise<{ items: AdminRefund[]; totalCount: number }> => {
+  return request<{ items: AdminRefund[]; totalCount: number }>('GET', '/admin/refunds');
+};
+
+export const getAdminRefund = async (id: string): Promise<AdminRefund> => {
+  return request<AdminRefund>('GET', `/admin/refunds/${id}`);
+};
+
+export const getAdminPayouts = async (): Promise<{ items: AdminPayout[]; totalCount: number }> => {
+  return request<{ items: AdminPayout[]; totalCount: number }>('GET', '/admin/payouts');
+};
+
+export const getAdminPayout = async (id: string): Promise<{ id?: string; payout?: AdminPayout } | AdminPayout> => {
+  return request<{ id?: string; payout?: AdminPayout } | AdminPayout>('GET', `/admin/payouts/${id}`);
+};
+
+export const updateAdminPayoutStatus = async (id: string, data: { status: string; comment?: string }): Promise<void> => {
+  return request<void>('PATCH', `/admin/payouts/${id}/status`, { body: data });
+};
+
+export const getAdminReviews = async (): Promise<{ items: AdminReview[]; totalCount: number }> => {
+  return request<{ items: AdminReview[]; totalCount: number }>('GET', '/admin/reviews');
+};
+
+export const getAdminReview = async (id: string): Promise<AdminReview> => {
+  return request<AdminReview>('GET', `/admin/reviews/${id}`);
+};
+
+export const moderateAdminReview = async (id: string, action: 'approve' | 'reject' | 'hide' | 'block', comment?: string): Promise<void> => {
+  return request<void>('POST', `/admin/reviews/${id}/${action}`, { body: { comment } });
 };
 
 export const uploadAdminProductImage = async (productId: string, file: File): Promise<{ imageUrl: string }> => {

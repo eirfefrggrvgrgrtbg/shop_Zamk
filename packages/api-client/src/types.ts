@@ -378,23 +378,78 @@ export interface AdminInventoryMovement {
 
 export interface AdminReturn {
   id: string;
+  orderId: string;
+  userId?: string;
   status: string;
+  reason?: string;
+  comment?: string;
+  adminComment?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  completedAt?: string;
+  items?: AdminReturnItem[];
+}
+
+export interface AdminReturnItem {
+  id: string;
+  returnId?: string;
+  orderItemId: string;
+  productTitle?: string;
+  quantity: number;
+  reason?: string;
+  condition?: string;
+  restock?: boolean;
+  createdAt?: string;
 }
 
 export interface AdminRefund {
   id: string;
+  returnId?: string;
+  paymentId?: string;
+  orderId: string;
   amountCents: number;
+  currency: string;
   status: string;
+  provider?: string;
+  providerRefundId?: string;
+  reason?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  processedAt?: string;
+  failedAt?: string;
 }
 
 export interface AdminPayout {
   id: string;
+  sellerId: string;
+  sellerName?: string;
   amountCents: number;
+  currency: string;
   status: string;
+  requestedAt?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  paidAt?: string;
+  adminUserId?: string;
+  comment?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AdminReview {
   id: string;
+  productId: string;
+  productTitle?: string;
+  sellerId?: string;
+  sellerName?: string;
   rating: number;
+  title?: string;
+  comment?: string;
   status: string;
+  createdAt?: string;
+  publishedAt?: string;
+  rejectedAt?: string;
+  moderationComment?: string;
 }
