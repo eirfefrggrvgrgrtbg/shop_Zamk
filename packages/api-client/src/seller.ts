@@ -69,8 +69,8 @@ export const getSellerPayouts = async (): Promise<Payout[]> => {
   return request<Payout[]>('GET', '/seller/payouts');
 };
 
-export const requestSellerPayout = async (amountCents: number): Promise<Payout> => {
-  return request<Payout>('POST', '/seller/payouts', { body: { amountCents } });
+export const requestSellerPayout = async (amountCents: number, comment?: string): Promise<Payout> => {
+  return request<Payout>('POST', '/seller/payouts/request', { body: { amountCents, comment } });
 };
 
 export const uploadSellerLogo = async (file: File): Promise<{ logoUrl: string }> => {

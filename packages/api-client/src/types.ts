@@ -205,6 +205,9 @@ export interface SellerReview {
 export interface SellerBalance {
   availableBalanceCents: number;
   pendingBalanceCents: number;
+  requestedPayoutsCents?: number;
+  paidPayoutsCents?: number;
+  currency?: string;
 }
 
 export interface Payout {
@@ -212,6 +215,10 @@ export interface Payout {
   amountCents: number;
   status: string;
   requestedAt: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  paidAt?: string;
+  comment?: string;
 }
 
 // ---------------------------------------------------------
