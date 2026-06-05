@@ -12,6 +12,8 @@ import { AdminReturns } from './pages/AdminReturns';
 import { AdminPayouts } from './pages/AdminPayouts';
 import { AdminAuditLogs } from './pages/AdminAuditLogs';
 import { AdminSettings } from './pages/AdminSettings';
+import { AdminCategories } from './pages/AdminCategories';
+import { AdminBrands } from './pages/AdminBrands';
 import { AdminChangePassword } from './pages/AdminChangePassword';
 import { AdminAuthProvider } from './contexts/AdminAuthContext';
 import { AdminProtectedRoute } from './components/AdminProtectedRoute';
@@ -31,6 +33,8 @@ export default function App() {
           <Route path="/dashboard" element={<AdminProtectedRoute><AdminLayout><AdminDashboard /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/users" element={<AdminProtectedRoute><AdminLayout><AdminUsers /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/sellers" element={<AdminProtectedRoute><AdminLayout><AdminSellers /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/categories" element={<AdminProtectedRoute><AdminLayout><AdminCategories /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/brands" element={<AdminProtectedRoute><AdminLayout><AdminBrands /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/products" element={<AdminProtectedRoute><AdminLayout><AdminProducts /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/moderation" element={<AdminProtectedRoute><AdminLayout><AdminModeration /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/orders" element={<AdminProtectedRoute><AdminLayout><AdminOrders /></AdminLayout></AdminProtectedRoute>} />

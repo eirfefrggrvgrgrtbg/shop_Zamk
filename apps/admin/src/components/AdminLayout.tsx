@@ -13,7 +13,9 @@ import {
   ClipboardList,
   Settings,
   LogOut,
-  Bell
+  Bell,
+  LayoutGrid,
+  Tag
 } from 'lucide-react';
 
 import { useAdminAuth } from '../contexts/AdminAuthContext';
@@ -26,6 +28,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Users', path: '/users', icon: Users },
     { name: 'Sellers', path: '/sellers', icon: Store },
+    { name: 'Categories', path: '/categories', icon: LayoutGrid },
+    { name: 'Brands', path: '/brands', icon: Tag },
     { name: 'Products', path: '/products', icon: Package },
     { name: 'Moderation', path: '/moderation', icon: ShieldAlert },
     { name: 'Orders', path: '/orders', icon: ShoppingCart },

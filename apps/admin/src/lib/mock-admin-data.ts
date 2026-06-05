@@ -7,15 +7,7 @@ export interface User {
   createdAt: string;
 }
 
-export interface Seller {
-  id: string;
-  brandName: string;
-  contactEmail: string;
-  status: 'active' | 'pending' | 'suspended';
-  productsCount: number;
-  pendingProductsCount: number;
-  totalSales: number;
-}
+
 
 export interface Product {
   id: string;
@@ -81,11 +73,7 @@ export const mockUsers: User[] = [
   { id: 'u4', name: 'Spammer Guy', email: 'spam@example.com', role: 'customer', status: 'blocked', createdAt: '2026-06-01T08:15:00Z' },
 ];
 
-export const mockSellers: Seller[] = [
-  { id: 's1', brandName: 'ZAMK Selected', contactEmail: 'brand1@example.com', status: 'active', productsCount: 150, pendingProductsCount: 2, totalSales: 2500000 },
-  { id: 's2', brandName: 'Cool Streetwear', contactEmail: 'contact@coolstreet.com', status: 'active', productsCount: 45, pendingProductsCount: 0, totalSales: 450000 },
-  { id: 's3', brandName: 'New Brand', contactEmail: 'hello@newbrand.com', status: 'pending', productsCount: 0, pendingProductsCount: 5, totalSales: 0 },
-];
+
 
 export const mockProducts: Product[] = [
   { id: 'p1', title: 'Basic White Tee', sellerName: 'ZAMK Selected', status: 'published', price: 2500, stock: 120, category: 'T-Shirts', createdAt: '2026-05-20T10:00:00Z' },

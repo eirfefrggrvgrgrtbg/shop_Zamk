@@ -1,10 +1,10 @@
 import { Users, Store, Package, ShoppingCart, RotateCcw, Wallet } from 'lucide-react';
-import { mockUsers, mockSellers, mockProducts, mockOrders, mockReturns, mockPayouts, mockAuditLogs } from '../lib/mock-admin-data';
+import { mockUsers, mockProducts, mockOrders, mockReturns, mockPayouts, mockAuditLogs } from '../lib/mock-admin-data';
 
 export function AdminDashboard() {
   const stats = [
     { name: 'Total Users', value: mockUsers.length, icon: Users, color: 'bg-blue-500' },
-    { name: 'Active Sellers', value: mockSellers.filter(s => s.status === 'active').length, icon: Store, color: 'bg-indigo-500' },
+    { name: 'Active Sellers', value: 0, icon: Store, color: 'bg-indigo-500' },
     { name: 'Pending Moderation', value: mockProducts.filter(p => p.status === 'moderation').length, icon: Package, color: 'bg-yellow-500' },
     { name: 'Active Orders', value: mockOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length, icon: ShoppingCart, color: 'bg-green-500' },
     { name: 'Pending Returns', value: mockReturns.filter(r => r.status === 'pending').length, icon: RotateCcw, color: 'bg-red-500' },

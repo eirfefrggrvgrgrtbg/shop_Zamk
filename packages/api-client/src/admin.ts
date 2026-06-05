@@ -5,12 +5,28 @@ export const getAdminSellers = async (): Promise<AdminSeller[]> => {
   return request<AdminSeller[]>('GET', '/admin/sellers');
 };
 
+export const createAdminSeller = async (data: any): Promise<{ seller: AdminSeller; temporaryPassword?: string }> => {
+  return request<{ seller: AdminSeller; temporaryPassword?: string }>('POST', '/admin/sellers', { body: data });
+};
+
+export const updateAdminSellerStatus = async (id: string, status: string): Promise<AdminSeller> => {
+  return request<AdminSeller>('PATCH', `/admin/sellers/${id}/status`, { body: { status } });
+};
+
 export const getAdminCategories = async (): Promise<Category[]> => {
   return request<Category[]>('GET', '/admin/categories');
 };
 
+export const createAdminCategory = async (data: any): Promise<Category> => {
+  return request<Category>('POST', '/admin/categories', { body: data });
+};
+
 export const getAdminBrands = async (): Promise<Brand[]> => {
   return request<Brand[]>('GET', '/admin/brands');
+};
+
+export const createAdminBrand = async (data: any): Promise<Brand> => {
+  return request<Brand>('POST', '/admin/brands', { body: data });
 };
 
 export const uploadAdminBrandLogo = async (brandId: string, file: File): Promise<{ logoUrl: string }> => {
