@@ -10,29 +10,33 @@ import { SellerAnalytics } from './pages/SellerAnalytics';
 import { SellerPayouts } from './pages/SellerPayouts';
 import { SellerTemplates } from './pages/SellerTemplates';
 import { SellerSettings } from './pages/SellerSettings';
+import { AuthProvider } from './contexts/AuthContext';
+import { SellerProtectedRoute } from './components/SellerProtectedRoute';
 
 import './index.css';
 
 export default function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/login" element={<SellerLogin />} />
-        
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        
-        <Route path="/dashboard" element={<SellerLayout><SellerDashboard /></SellerLayout>} />
-        <Route path="/products" element={<SellerLayout><SellerProducts /></SellerLayout>} />
-        <Route path="/products/new" element={<SellerLayout><SellerProductNew /></SellerLayout>} />
-        <Route path="/products/:id/edit" element={<SellerLayout><SellerProductEdit /></SellerLayout>} />
-        <Route path="/orders" element={<SellerLayout><SellerOrders /></SellerLayout>} />
-        <Route path="/analytics" element={<SellerLayout><SellerAnalytics /></SellerLayout>} />
-        <Route path="/payouts" element={<SellerLayout><SellerPayouts /></SellerLayout>} />
-        <Route path="/templates" element={<SellerLayout><SellerTemplates /></SellerLayout>} />
-        <Route path="/settings" element={<SellerLayout><SellerSettings /></SellerLayout>} />
+    <AuthProvider>
+      <Router>
+        <Routes>
+          <Route path="/login" element={<SellerLogin />} />
+          
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          
+          <Route path="/dashboard" element={<SellerProtectedRoute><SellerLayout><SellerDashboard /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/products" element={<SellerProtectedRoute><SellerLayout><SellerProducts /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/products/new" element={<SellerProtectedRoute><SellerLayout><SellerProductNew /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/products/:id/edit" element={<SellerProtectedRoute><SellerLayout><SellerProductEdit /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/orders" element={<SellerProtectedRoute><SellerLayout><SellerOrders /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/analytics" element={<SellerProtectedRoute><SellerLayout><SellerAnalytics /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/payouts" element={<SellerProtectedRoute><SellerLayout><SellerPayouts /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/templates" element={<SellerProtectedRoute><SellerLayout><SellerTemplates /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/settings" element={<SellerProtectedRoute><SellerLayout><SellerSettings /></SellerLayout></SellerProtectedRoute>} />
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </Router>
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }

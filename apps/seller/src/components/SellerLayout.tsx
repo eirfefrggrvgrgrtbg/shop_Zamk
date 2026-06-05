@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   LayoutDashboard, 
   Package, 
@@ -15,6 +16,7 @@ import { cn } from '../lib/utils';
 
 export function SellerLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const { logout } = useAuth();
 
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -56,10 +58,10 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="p-4 border-t border-gray-200">
-          <Link to="/login" className="flex items-center px-3 py-2 text-sm font-medium text-red-600 rounded-md hover:bg-red-50 transition-colors">
+          <button onClick={() => logout()} className="w-full flex items-center px-3 py-2 text-sm font-medium text-red-600 rounded-md hover:bg-red-50 transition-colors">
             <LogOut className="mr-3 h-5 w-5 flex-shrink-0 text-red-400" />
             Logout
-          </Link>
+          </button>
         </div>
       </aside>
 
