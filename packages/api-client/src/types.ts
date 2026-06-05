@@ -181,18 +181,25 @@ export interface SellerOrder {
   status: string;
   totalPriceCents: number;
   createdAt: string;
+  items?: OrderItem[];
 }
 
 export interface SellerReturn {
   id: string;
   status: string;
+  reason?: string;
+  condition?: string;
+  items?: any[];
 }
 
 export interface SellerReview {
   id: string;
   rating: number;
   content: string;
+  title?: string;
   status: string;
+  createdAt?: string;
+  productId?: string;
 }
 
 export interface SellerBalance {

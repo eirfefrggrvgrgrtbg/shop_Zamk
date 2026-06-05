@@ -35,16 +35,30 @@ export const getSellerOrders = async (): Promise<SellerOrder[]> => {
   return request<SellerOrder[]>('GET', '/seller/orders');
 };
 
-export const getSellerShipments = async (): Promise<any[]> => {
-  return request<any[]>('GET', '/seller/shipments');
+export const getSellerOrder = async (id: string): Promise<SellerOrder> => {
+  return request<SellerOrder>('GET', `/seller/orders/${id}`);
 };
+
+export const getSellerShipment = async (orderId: string): Promise<any> => {
+  return request<any>('GET', `/seller/orders/${orderId}/shipment`);
+};
+
+
 
 export const getSellerReturns = async (): Promise<SellerReturn[]> => {
   return request<SellerReturn[]>('GET', '/seller/returns');
 };
 
+export const getSellerReturn = async (id: string): Promise<SellerReturn> => {
+  return request<SellerReturn>('GET', `/seller/returns/${id}`);
+};
+
 export const getSellerReviews = async (): Promise<SellerReview[]> => {
   return request<SellerReview[]>('GET', '/seller/reviews');
+};
+
+export const getSellerReview = async (id: string): Promise<SellerReview> => {
+  return request<SellerReview>('GET', `/seller/reviews/${id}`);
 };
 
 export const getSellerBalance = async (): Promise<SellerBalance> => {

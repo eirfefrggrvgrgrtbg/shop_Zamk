@@ -10,7 +10,10 @@ import {
   Wallet, 
   FileText, 
   Settings,
-  LogOut
+  LogOut,
+  Archive,
+  RotateCcw,
+  MessageSquare
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -23,6 +26,9 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
     { name: 'Products', path: '/products', icon: Package },
     { name: 'Add product', path: '/products/new', icon: Plus },
     { name: 'Orders', path: '/orders', icon: ShoppingCart },
+    { name: 'Inventory', path: '/inventory', icon: Archive },
+    { name: 'Returns', path: '/returns', icon: RotateCcw },
+    { name: 'Reviews', path: '/reviews', icon: MessageSquare },
     { name: 'Analytics', path: '/analytics', icon: BarChart2 },
     { name: 'Payouts', path: '/payouts', icon: Wallet },
     { name: 'Templates', path: '/templates', icon: FileText },
