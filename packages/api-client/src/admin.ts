@@ -43,6 +43,26 @@ export const getModerationProducts = async (): Promise<ModerationProduct[]> => {
   return request<ModerationProduct[]>('GET', '/admin/moderation/products');
 };
 
+export const adminApproveProduct = async (id: string, comment?: string): Promise<void> => {
+  return request<void>('POST', `/admin/moderation/products/${id}/approve`, { body: { comment } });
+};
+
+export const adminRejectProduct = async (id: string, comment: string): Promise<void> => {
+  return request<void>('POST', `/admin/moderation/products/${id}/reject`, { body: { comment } });
+};
+
+export const adminPublishProduct = async (id: string, comment?: string): Promise<void> => {
+  return request<void>('POST', `/admin/moderation/products/${id}/publish`, { body: { comment } });
+};
+
+export const adminHideProduct = async (id: string, comment?: string): Promise<void> => {
+  return request<void>('POST', `/admin/moderation/products/${id}/hide`, { body: { comment } });
+};
+
+export const adminBlockProduct = async (id: string, comment?: string): Promise<void> => {
+  return request<void>('POST', `/admin/moderation/products/${id}/block`, { body: { comment } });
+};
+
 export const getAdminInventory = async (): Promise<any[]> => {
   return request<any[]>('GET', '/admin/inventory');
 };
@@ -78,5 +98,5 @@ export const getAdminReviews = async (): Promise<AdminReview[]> => {
 export const uploadAdminProductImage = async (productId: string, file: File): Promise<{ imageUrl: string }> => {
   const formData = new FormData();
   formData.append('image', file);
-  return request<{ imageUrl: string }>('POST', `/admin/products/${productId}/images`, { body: formData });
+  return request<{ imageUrl: string }>('POST', `/admin/products/${productId}/images/upload`, { body: formData });
 };

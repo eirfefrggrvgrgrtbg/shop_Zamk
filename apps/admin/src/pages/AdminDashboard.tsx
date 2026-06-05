@@ -1,11 +1,11 @@
 import { Users, Store, Package, ShoppingCart, RotateCcw, Wallet } from 'lucide-react';
-import { mockUsers, mockProducts, mockOrders, mockReturns, mockPayouts, mockAuditLogs } from '../lib/mock-admin-data';
+import { mockUsers, mockOrders, mockReturns, mockPayouts, mockAuditLogs } from '../lib/mock-admin-data';
 
 export function AdminDashboard() {
   const stats = [
     { name: 'Total Users', value: mockUsers.length, icon: Users, color: 'bg-blue-500' },
     { name: 'Active Sellers', value: 0, icon: Store, color: 'bg-indigo-500' },
-    { name: 'Pending Moderation', value: mockProducts.filter(p => p.status === 'moderation').length, icon: Package, color: 'bg-yellow-500' },
+    { name: 'Pending Moderation', value: 0, icon: Package, color: 'bg-yellow-500' },
     { name: 'Active Orders', value: mockOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length, icon: ShoppingCart, color: 'bg-green-500' },
     { name: 'Pending Returns', value: mockReturns.filter(r => r.status === 'pending').length, icon: RotateCcw, color: 'bg-red-500' },
     { name: 'Pending Payouts', value: mockPayouts.filter(p => p.status === 'pending').length, icon: Wallet, color: 'bg-purple-500' },
@@ -32,21 +32,9 @@ export function AdminDashboard() {
           <h2 className="text-lg font-medium text-gray-900 mb-4">Pending Moderation</h2>
           <div className="flow-root">
             <ul className="-my-5 divide-y divide-gray-200">
-              {mockProducts.filter(p => p.status === 'moderation').map(product => (
-                <li key={product.id} className="py-4">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{product.title}</p>
-                      <p className="text-sm text-gray-500 truncate">{product.sellerName}</p>
-                    </div>
-                    <div>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                        Review Needed
-                      </span>
-                    </div>
-                  </div>
-                </li>
-              ))}
+              <div className="p-4 text-center text-sm text-gray-500 border-b">
+                Data will be loaded from real API in later phases.
+              </div>
             </ul>
           </div>
         </div>

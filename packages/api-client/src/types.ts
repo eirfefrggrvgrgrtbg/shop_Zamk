@@ -231,16 +231,78 @@ export interface AdminSeller {
   status: string;
 }
 
+export interface AdminProductVariant {
+  id: string;
+  productId: string;
+  sku?: string;
+  size?: string;
+  color?: string;
+  barcode?: string;
+  priceCents?: number;
+  isActive: boolean;
+  inStock?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminProductImage {
+  id: string;
+  productId: string;
+  imageUrl: string;
+  objectKey?: string;
+  altText?: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
 export interface AdminProduct {
   id: string;
-  name: string;
+  sellerId: string;
+  categoryId?: string;
+  brandId?: string;
+  title: string;
+  slug: string;
+  description?: string;
   status: string;
+  gender?: string;
+  color?: string;
+  material?: string;
+  careInstructions?: string;
+  priceCents: number;
+  oldPriceCents?: number;
+  currency: string;
+  mainImageUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  publishedAt?: string;
+  rejectedAt?: string;
+  moderationComment?: string;
+  inStock?: boolean;
+  variants?: AdminProductVariant[];
+  images?: AdminProductImage[];
 }
 
 export interface ModerationProduct {
   id: string;
-  name: string;
+  sellerId: string;
+  categoryId?: string;
+  brandId?: string;
+  title: string;
+  slug: string;
+  description?: string;
   status: string;
+  priceCents: number;
+  oldPriceCents?: number;
+  currency: string;
+  mainImageUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+  submittedAt?: string;
+  moderationComment?: string;
+  variants?: AdminProductVariant[];
+  images?: AdminProductImage[];
 }
 
 export interface AdminOrder {

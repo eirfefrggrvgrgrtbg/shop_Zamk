@@ -7,17 +7,13 @@ export interface User {
   createdAt: string;
 }
 
-
-
-export interface Product {
+export interface AdminUser {
   id: string;
-  title: string;
-  sellerName: string;
-  status: 'published' | 'moderation' | 'rejected' | 'archived';
-  price: number;
-  stock: number;
-  category: string;
-  createdAt: string;
+  name: string;
+  email: string;
+  role: 'superadmin' | 'moderator' | 'support';
+  status: 'active' | 'inactive';
+  lastLogin: string;
 }
 
 export interface Order {
@@ -75,11 +71,7 @@ export const mockUsers: User[] = [
 
 
 
-export const mockProducts: Product[] = [
-  { id: 'p1', title: 'Basic White Tee', sellerName: 'ZAMK Selected', status: 'published', price: 2500, stock: 120, category: 'T-Shirts', createdAt: '2026-05-20T10:00:00Z' },
-  { id: 'p2', title: 'Black Denim Jacket', sellerName: 'Cool Streetwear', status: 'published', price: 12500, stock: 15, category: 'Outerwear', createdAt: '2026-05-21T11:00:00Z' },
-  { id: 'p3', title: 'Oversized Hoodie', sellerName: 'New Brand', status: 'moderation', price: 6800, stock: 50, category: 'Hoodies', createdAt: '2026-06-02T09:00:00Z' },
-];
+// mockProducts removed
 
 export const mockOrders: Order[] = [
   { id: 'ORD-001', customerName: 'Ivan Ivanov', status: 'delivered', total: 15000, paymentStatus: 'paid', createdAt: '2026-05-25T14:30:00Z' },
