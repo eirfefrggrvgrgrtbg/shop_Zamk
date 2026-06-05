@@ -13,6 +13,14 @@ export const createSellerProduct = async (input: any): Promise<SellerProduct> =>
   return request<SellerProduct>('POST', '/seller/products', { body: input });
 };
 
+export const getSellerProduct = async (id: string): Promise<SellerProduct> => {
+  return request<SellerProduct>('GET', `/seller/products/${id}`);
+};
+
+export const updateSellerProduct = async (id: string, input: any): Promise<SellerProduct> => {
+  return request<SellerProduct>('PATCH', `/seller/products/${id}`, { body: input });
+};
+
 export const uploadSellerProductImage = async (productId: string, file: File): Promise<{ imageUrl: string }> => {
   const formData = new FormData();
   formData.append('image', file);

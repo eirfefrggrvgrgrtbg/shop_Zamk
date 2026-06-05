@@ -11,7 +11,9 @@ import {
   Trash2,
   Wallet,
 } from 'lucide-react';
-import { upsertSellerProduct, type SellerProduct, type SellerProductSize, type SellerProductStatus } from '../lib/seller-products';
+import { type SellerProductSize, type SellerProductStatus } from '../lib/seller-products';
+import { createSellerProduct, uploadSellerProductImage } from '@zamk/api-client/src/seller';
+import { request } from '@zamk/api-client/src/client'; // for submit to moderation if not exported
 import { cn } from '../lib/utils';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
@@ -93,48 +95,7 @@ function calculateQuality(draft: DraftProduct) {
   return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }
 
-function sellerProductFromDraft(draft: DraftProduct, status: SellerProductStatus): SellerProduct {
-  const price = asNumber(draft.price);
-  const cost = asNumber(draft.cost);
-  const oldPrice = asNumber(draft.oldPrice);
-  const quality = calculateQuality(draft);
-  const initials = draft.title
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('') || 'ZT';
-
-  return {
-    id: `seller-product-${Date.now()}`,
-    title: draft.title.trim() || 'Новый товар',
-    sku: draft.sku.trim(),
-    category: draft.category.trim(),
-    brand: draft.brand.trim(),
-    price,
-    oldPrice: oldPrice || undefined,
-    cost,
-    status,
-    issue: quality < 65 ? 'weak_card' : 'no_issue',
-    views: 0,
-    orders: 0,
-    rating: 0,
-    returns: 0,
-    revenue: 0,
-    adsSpend: 0,
-    ctr: 0,
-    conversion: 0,
-    quality,
-    mainPhoto: initials,
-    photos: draft.photos,
-    description: draft.description.trim(),
-    material: draft.material.trim(),
-    color: draft.color.trim(),
-    season: draft.season.trim(),
-    sizes: draft.sizes,
-    updatedAt: 'Только что',
-  };
-}
+// removed local sellerProductFromDraft
 
 function Field({
   label,
@@ -177,8 +138,10 @@ function QualityCheck({ label, passed }: { label: string; passed: boolean }) {
 export function SellerProductNew() {
   const [draft, setDraft] = useState<DraftProduct>(initialDraft);
   const [activeStep, setActiveStep] = useState<StepId>('base');
-  const [photoInput, setPhotoInput] = useState('');
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [savedStatus, setSavedStatus] = useState<SellerProductStatus | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
   const quality = useMemo(() => calculateQuality(draft), [draft]);
   const price = asNumber(draft.price);
   const cost = asNumber(draft.cost);
@@ -198,20 +161,75 @@ export function SellerProductNew() {
     setSavedStatus(null);
   };
 
-  const addPhoto = () => {
-    const value = photoInput.trim();
-    if (!value) return;
-    updateDraft('photos', [...draft.photos, value]);
-    setPhotoInput('');
-  };
-
   const removePhoto = (photo: string) => {
     updateDraft('photos', draft.photos.filter((item) => item !== photo));
+    setPhotoFiles((current) => current.filter((f) => f.name !== photo));
   };
 
-  const saveProduct = (status: SellerProductStatus) => {
-    upsertSellerProduct(sellerProductFromDraft(draft, status));
-    setSavedStatus(status);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    
+    const validFiles = files.filter(f => ['image/jpeg', 'image/png', 'image/webp'].includes(f.type));
+    if (validFiles.length < files.length) {
+      alert('Некоторые файлы пропущены. Разрешены только JPG, PNG, WEBP.');
+    }
+
+    setPhotoFiles(curr => [...curr, ...validFiles]);
+    updateDraft('photos', [...draft.photos, ...validFiles.map(f => f.name)]);
+  };
+
+  const saveProduct = async (status: SellerProductStatus) => {
+    setIsSaving(true);
+    setError('');
+    try {
+      const priceCents = asNumber(draft.price) * 100;
+      const oldPriceCents = asNumber(draft.oldPrice) ? asNumber(draft.oldPrice) * 100 : undefined;
+      
+      const variants = draft.sizes
+        .filter(s => s.size.trim() !== '')
+        .map(s => ({
+          size: s.size,
+          sku: `${draft.sku}-${s.size}`,
+          color: draft.color,
+          inStock: s.stock > 0,
+          isActive: true
+        }));
+
+      const payload = {
+        title: draft.title || 'Новый товар',
+        slug: draft.sku || `slug-${Date.now()}`,
+        description: draft.description,
+        priceCents,
+        oldPriceCents,
+        currency: 'RUB',
+        material: draft.material,
+        color: draft.color,
+        // map categories and brands properly in a real app, assuming UUIDs or null for now
+        variants
+      };
+
+      const product = await createSellerProduct(payload);
+
+      // Upload images
+      for (const file of photoFiles) {
+        try {
+          await uploadSellerProductImage(product.id, file);
+        } catch (imgErr) {
+          console.error('Image upload failed', imgErr);
+        }
+      }
+
+      if (status === 'moderation') {
+        await request('POST', `/seller/products/${product.id}/submit-moderation`);
+      }
+
+      setSavedStatus(status);
+    } catch (err: any) {
+      setError(err.message || 'Ошибка сохранения');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -282,10 +300,18 @@ export function SellerProductNew() {
             {activeStep === 'media' && (
               <div>
                 <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-                  <Field label="Фото или пометка превью" value={photoInput} onChange={setPhotoInput} placeholder="front, model, detail или URL" />
-                  <button type="button" onClick={addPhoto} className="h-12 self-end rounded-full bg-graphite px-6 text-sm font-semibold text-white dark:bg-white dark:text-black">
-                    Добавить
-                  </button>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/jpeg, image/png, image/webp"
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-slate-500
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-full file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-graphite file:text-white
+                      hover:file:bg-black cursor-pointer dark:file:bg-white dark:file:text-black"
+                  />
                 </div>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {draft.photos.map((photo) => (
@@ -372,23 +398,31 @@ export function SellerProductNew() {
 
             {savedStatus && (
               <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 dark:border-emerald-300/16 dark:bg-emerald-400/10 dark:text-emerald-300">
-                Товар сохранён: {savedStatus === 'draft' ? 'черновик' : 'на модерации'}.
+                Товар сохранён: {savedStatus === 'draft' ? 'черновик' : 'отправлен на модерацию'}.
+              </div>
+            )}
+
+            {error && (
+              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-300/16 dark:bg-red-400/10 dark:text-red-300">
+                {error}
               </div>
             )}
 
             <div className="mt-6 flex flex-col gap-3">
               <button
                 type="button"
+                disabled={isSaving}
                 onClick={() => saveProduct('draft')}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-border-lighter bg-white/75 px-6 text-sm font-semibold text-graphite transition-colors hover:bg-white dark:border-white/16 dark:bg-white/8 dark:text-white dark:hover:bg-white/12"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-border-lighter bg-white/75 px-6 text-sm font-semibold text-graphite transition-colors hover:bg-white disabled:opacity-50 dark:border-white/16 dark:bg-white/8 dark:text-white dark:hover:bg-white/12"
               >
                 <Save className="h-4 w-4" />
                 Сохранить черновик
               </button>
               <button
                 type="button"
+                disabled={isSaving}
                 onClick={() => saveProduct('moderation')}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-graphite px-6 text-sm font-semibold text-white transition-colors hover:bg-graphite-light dark:bg-white dark:text-black dark:hover:bg-white/86"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-graphite px-6 text-sm font-semibold text-white transition-colors hover:bg-graphite-light disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-white/86"
               >
                 <Rocket className="h-4 w-4" />
                 Отправить на модерацию

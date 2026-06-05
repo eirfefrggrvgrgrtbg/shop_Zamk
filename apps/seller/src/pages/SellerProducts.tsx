@@ -6,6 +6,7 @@ import {
   BarChart3,
   Copy,
   Eye,
+  Edit2,
   PackagePlus,
   PauseCircle,
   Search,
@@ -15,13 +16,14 @@ import {
 } from 'lucide-react';
 import {
   issueLabels,
-  loadSellerProducts,
-  saveSellerProducts,
   statusLabels,
   type SellerProduct,
   type SellerProductIssue,
   type SellerProductStatus,
 } from '../lib/seller-products';
+import { getSellerProducts } from '@zamk/api-client/src/seller';
+import { request } from '@zamk/api-client/src/client';
+import { adaptProductList } from '../api/adapter';
 import { cn } from '../lib/utils';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
@@ -123,9 +125,22 @@ function QualityMeter({ value }: { value: number }) {
 }
 
 function ProductAvatar({ product }: { product: SellerProduct }) {
+  if (product.mainPhoto && product.mainPhoto.startsWith('http')) {
+    return (
+      <img src={product.mainPhoto} alt={product.title} className="h-14 w-14 shrink-0 rounded-2xl object-cover shadow-sm" />
+    );
+  }
+  
+  const initials = product.title
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'ПР';
+
   return (
     <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-graphite to-accent text-sm font-bold text-white shadow-sm dark:from-white dark:to-accent dark:text-black">
-      {product.mainPhoto}
+      {initials}
     </div>
   );
 }
@@ -181,20 +196,46 @@ function ProductDetailPanel({ product }: { product: SellerProduct }) {
       </div>
 
       <p className="mt-5 text-sm leading-relaxed text-graphite-light dark:text-white/68">{product.description}</p>
+      
+      <div className="mt-6 flex flex-col">
+        <Link 
+          to={`/products/${product.id}/edit`}
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-border-lighter bg-white/75 px-6 text-sm font-semibold text-graphite transition-colors hover:bg-white dark:border-white/16 dark:bg-white/8 dark:text-white dark:hover:bg-white/12"
+        >
+          <Edit2 className="h-4 w-4" />
+          Редактировать товар
+        </Link>
+      </div>
     </aside>
   );
 }
 
 export function SellerProducts() {
-  const [products, setProducts] = useState<SellerProduct[]>(() => loadSellerProducts());
+  const [products, setProducts] = useState<SellerProduct[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<SellerProductStatus | 'all'>('all');
   const [issue, setIssue] = useState<SellerProductIssue | 'all'>('all');
-  const [selectedId, setSelectedId] = useState(products[0]?.id || '');
+  const [selectedId, setSelectedId] = useState('');
 
   useEffect(() => {
-    saveSellerProducts(products);
-  }, [products]);
+    async function load() {
+      try {
+        const rawProducts = await getSellerProducts();
+        const adapted = adaptProductList(rawProducts);
+        setProducts(adapted);
+        if (adapted.length > 0) {
+          setSelectedId(adapted[0].id);
+        }
+      } catch (err: any) {
+        setError(err.message || 'Ошибка загрузки товаров');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    load();
+  }, []);
 
   const filteredProducts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -213,27 +254,32 @@ export function SellerProducts() {
   const moderationCount = products.filter((product) => product.status === 'moderation').length;
   const revenue = products.reduce((sum, product) => sum + product.revenue, 0);
 
-  const updateProductStatus = (id: string, nextStatus: SellerProductStatus) => {
-    setProducts((current) => current.map((product) => (product.id === id ? { ...product, status: nextStatus, updatedAt: 'Только что' } : product)));
+  const updateProductStatus = async (id: string, nextStatus: SellerProductStatus) => {
+    try {
+      // Map UI status back to backend status for the PATCH
+      let apiStatus = nextStatus === 'paused' ? 'hidden' : 'draft';
+      // It's dangerous for seller to try to set 'published' directly. Backend will reject it.
+      // So we just send 'hidden' or 'draft'.
+      await request('PATCH', `/seller/products/${id}`, { body: { status: apiStatus } });
+      
+      // Update local state for immediate feedback
+      setProducts((current) => current.map((product) => (product.id === id ? { ...product, status: nextStatus, updatedAt: 'Только что' } : product)));
+    } catch (err: any) {
+      alert(err.message || 'Ошибка обновления статуса');
+    }
   };
 
-  const duplicateProduct = (product: SellerProduct) => {
-    const copy: SellerProduct = {
-      ...product,
-      id: `seller-product-${Date.now()}`,
-      title: `${product.title} копия`,
-      sku: `${product.sku}-COPY`,
-      status: 'draft',
-      issue: 'no_issue',
-      views: 0,
-      orders: 0,
-      revenue: 0,
-      adsSpend: 0,
-      updatedAt: 'Только что',
-    };
-    setProducts((current) => [copy, ...current]);
-    setSelectedId(copy.id);
+  const duplicateProduct = () => {
+    alert('Дублирование будет подключено через API');
   };
+
+  if (isLoading) {
+    return <div className="min-h-screen pt-24 pb-24 md:pt-28 md:pb-20 flex justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div></div>;
+  }
+
+  if (error) {
+    return <div className="min-h-screen pt-24 pb-24 md:pt-28 md:pb-20 flex justify-center text-red-500">{error}</div>;
+  }
 
   return (
     <div className="relative z-10 min-h-screen pt-24 pb-24 md:pt-28 md:pb-20">
@@ -360,7 +406,7 @@ export function SellerProducts() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => duplicateProduct(product)}
+                              onClick={() => duplicateProduct()}
                               className="rounded-full border border-border-lighter p-2 text-graphite-light transition-colors hover:text-graphite dark:border-white/16 dark:text-white/62 dark:hover:text-white"
                               aria-label="Дублировать товар"
                             >

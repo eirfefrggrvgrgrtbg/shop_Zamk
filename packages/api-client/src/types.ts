@@ -33,6 +33,8 @@ export interface ProductDetail extends ProductSummary {
   description: string;
   images: string[];
   variants?: ProductVariant[];
+  material?: string;
+  color?: string;
 }
 
 export interface ProductVariant {
@@ -164,12 +166,8 @@ export interface SellerMe {
   };
 }
 
-export interface SellerProduct {
-  id: string;
-  name: string;
-  priceCents: number;
-  status: string;
-  // Add other fields as necessary
+export interface SellerProduct extends ProductDetail {
+  // Any extra fields specific to SellerProduct can go here.
 }
 
 export interface InventoryItem {
