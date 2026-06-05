@@ -16,8 +16,11 @@ import {
   Bell
 } from 'lucide-react';
 
+import { useAdminAuth } from '../contexts/AdminAuthContext';
+
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const { logout, user } = useAdminAuth();
 
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -58,10 +61,10 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="p-4 border-t border-slate-800">
-          <Link to="/login" className="flex items-center px-3 py-2 text-sm font-medium text-slate-300 rounded-md hover:bg-slate-800 transition-colors">
+          <button onClick={() => logout()} className="w-full flex items-center px-3 py-2 text-sm font-medium text-slate-300 rounded-md hover:bg-slate-800 transition-colors">
             <LogOut className="mr-3 h-5 w-5 flex-shrink-0 text-slate-400" />
             Logout
-          </Link>
+          </button>
         </div>
       </aside>
 
@@ -77,8 +80,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
               <Bell className="h-6 w-6" />
               <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
             </button>
-            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
-              A
+            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold uppercase" title={user?.email}>
+              {user?.email?.charAt(0) || 'A'}
             </div>
           </div>
         </header>
