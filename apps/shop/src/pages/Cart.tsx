@@ -3,7 +3,7 @@ import { Minus, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ProductCard } from '../components/product/ProductCard';
-import { getCartItemKey, useCart } from '../contexts/CartContext';
+import { useCart } from '../contexts/CartContext';
 import { formatPrice } from '../lib/utils';
 import { getProductEffectivePrice } from '../lib/orders';
 import { PRODUCTS } from '../lib/mock-data';
@@ -13,7 +13,7 @@ export function Cart() {
   const { items, updateQuantity, removeItem, totalPrice } = useCart();
   const delivery = totalPrice >= 10000 ? 0 : 590;
   const finalTotal = totalPrice + delivery;
-  const recommendations = PRODUCTS.filter((product) => !items.find((item) => item.product.id === product.id)).slice(0, 4);
+  const recommendations = PRODUCTS.filter((product) => !items.find((item) => item.productId === product.id)).slice(0, 4);
 
   if (items.length === 0) {
     return (
@@ -66,39 +66,39 @@ export function Cart() {
 
         <div className='mt-10 grid grid-cols-1 lg:grid-cols-12 gap-6'>
           <div className='lg:col-span-8 space-y-4'>
-            {items.map((item) => (
-              <article key={getCartItemKey(item.product.id, item.selectedSize, item.selectedColor)} className='bg-white/60 dark:bg-white/5 border border-border-soft dark:border-white/10 rounded-2xl p-4 md:p-5 flex gap-4 backdrop-blur-md shadow-sm'>
-                <Link to={`/product/${item.product.id}`} className='h-full w-28 md:w-32 overflow-hidden rounded-[0.45rem] border border-border-lighter dark:border-white/10 shrink-0'>
-                  <img src={item.product.image} alt={item.product.name} className='h-full w-full object-cover' />
+            {items.map((item) => {
+              const productName = item.title || item.product?.name || 'Неизвестный товар';
+              const productImage = item.product?.image || 'https://wsrv.nl/?url=images.unsplash.com/photo-1591047139829-d91aecb6caea&w=800&output=webp';
+              const productBrand = item.product?.brand || 'ZAMK';
+              const productPrice = item.price || (item.product ? getProductEffectivePrice(item.product) : 0);
+              
+              return (
+              <article key={item.id} className='bg-white/60 dark:bg-white/5 border border-border-soft dark:border-white/10 rounded-2xl p-4 md:p-5 flex gap-4 backdrop-blur-md shadow-sm'>
+                <Link to={`/product/${item.productId}`} className='h-full w-28 md:w-32 overflow-hidden rounded-[0.45rem] border border-border-lighter dark:border-white/10 shrink-0'>
+                  <img src={productImage} alt={productName} className='h-full w-full object-cover' />
                 </Link>
                 <div className='flex-1 flex flex-col'>
-                  <p className='text-xs uppercase tracking-[0.14em] text-ash'>{item.product.brand}</p>
-                  <h3 className='text-lg font-medium text-graphite dark:text-gray-200 leading-tight mt-1'>{item.product.name}</h3>
-                  <p className='mt-2 text-sm text-graphite-light dark:text-gray-400'>{formatPrice(getProductEffectivePrice(item.product))}</p>
-                  {(item.selectedSize || item.selectedColor) && (
-                    <div className='mt-2 flex flex-wrap gap-2 text-xs text-ash'>
-                      {item.selectedSize && <span>Размер: {item.selectedSize}</span>}
-                      {item.selectedColor && <span>Цвет: {item.selectedColor}</span>}
-                    </div>
-                  )}
+                  <p className='text-xs uppercase tracking-[0.14em] text-ash'>{productBrand}</p>
+                  <h3 className='text-lg font-medium text-graphite dark:text-gray-200 leading-tight mt-1'>{productName}</h3>
+                  <p className='mt-2 text-sm text-graphite-light dark:text-gray-400'>{formatPrice(productPrice)}</p>
 
                   <div className='mt-auto pt-4 flex items-center justify-between'>
                     <div className='flex items-center gap-2'>
-                      <button type='button' aria-label={`Уменьшить количество ${item.product.name}`} className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10' onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.selectedSize, item.selectedColor)}>
+                      <button type='button' aria-label={`Уменьшить количество ${productName}`} className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10' onClick={() => updateQuantity(item.id, item.quantity - 1)}>
                         <Minus className='w-3.5 h-3.5' />
                       </button>
                       <span className='w-7 text-center text-sm font-medium text-graphite dark:text-gray-200'>{item.quantity}</span>
-                      <button type='button' aria-label={`Увеличить количество ${item.product.name}`} className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10' onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.selectedSize, item.selectedColor)}>
+                      <button type='button' aria-label={`Увеличить количество ${productName}`} className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10' onClick={() => updateQuantity(item.id, item.quantity + 1)}>
                         <Plus className='w-3.5 h-3.5' />
                       </button>
                     </div>
-                    <button type='button' aria-label={`Удалить ${item.product.name} из корзины`} className='text-ash hover:text-error transition-colors p-2' onClick={() => removeItem(item.product.id, item.selectedSize, item.selectedColor)}>
+                    <button type='button' aria-label={`Удалить ${productName} из корзины`} className='text-ash hover:text-error transition-colors p-2' onClick={() => removeItem(item.id)}>
                       <Trash2 className='w-5 h-5' />
                     </button>
                   </div>
                 </div>
               </article>
-            ))}
+            )})}
           </div>
 
           <aside className='lg:col-span-4'>

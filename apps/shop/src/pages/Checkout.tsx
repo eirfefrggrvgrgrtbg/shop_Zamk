@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Check } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { getCartItemKey, useCart } from '../contexts/CartContext';
+import { useCart } from '../contexts/CartContext';
 import { formatPrice } from '../lib/utils';
-import { createOrderFromCart, getCartLineTotal, saveOrder } from '../lib/orders';
 import { CheckoutPanel, PillFilter, SectionHeader } from '../components/editorial/StudioKit';
+import { createOrder, createPayment } from '@zamk/api-client/src/customer';
+import { useAuth } from '../contexts/AuthContext';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DELIVERY_OPTIONS = {
@@ -19,14 +20,21 @@ export function Checkout() {
   const { items, totalPrice, clearCart } = useCart();
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
+  const { isAuthenticated, user, openAuthModal } = useAuth();
+  const [firstName, setFirstName] = useState(user?.name?.split(' ')[0] || '');
+  const [lastName, setLastName] = useState(user?.name?.split(' ')[1] || '');
+  const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [validationError, setValidationError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
+    if (!isAuthenticated) {
+      openAuthModal('login');
+      return;
+    }
+    
     if (isSubmitting || done) {
       return;
     }
@@ -37,9 +45,10 @@ export function Checkout() {
     const trimmedEmail = email.trim();
     const trimmedPhone = phone.trim();
     const phoneDigits = trimmedPhone.replace(/\D/g, '');
+    const trimmedAddress = address.trim();
 
-    if (!trimmedFirstName || !trimmedEmail || !trimmedPhone) {
-      setValidationError('Укажите имя, email и телефон.');
+    if (!trimmedFirstName || !trimmedEmail || !trimmedPhone || !trimmedAddress) {
+      setValidationError('Укажите имя, email, телефон и адрес доставки.');
       setIsSubmitting(false);
       return;
     }
@@ -56,21 +65,27 @@ export function Checkout() {
       return;
     }
 
-    const order = createOrderFromCart(items, {
-      deliveryCost: totalPrice >= 10000 ? 0 : 590,
-      deliveryService: DELIVERY_OPTIONS[step as keyof typeof DELIVERY_OPTIONS],
-      paymentMethod: 'Карта онлайн',
-    });
+    try {
+      const order = await createOrder({
+        customerName: `${trimmedFirstName} ${lastName}`.trim(),
+        customerEmail: trimmedEmail,
+        customerPhone: trimmedPhone,
+        deliveryAddress: `${DELIVERY_OPTIONS[step as keyof typeof DELIVERY_OPTIONS]}: ${trimmedAddress}`
+      });
 
-    if (!saveOrder(order)) {
-      setValidationError('Не удалось сохранить заказ. Попробуйте ещё раз.');
+      const payment = await createPayment(order.id);
+      
+      setValidationError('');
+      setDone(true);
+      await clearCart();
+      
+      if (payment.paymentUrl) {
+        window.location.href = payment.paymentUrl;
+      }
+    } catch (e: any) {
+      setValidationError(e.message || 'Не удалось сохранить заказ. Попробуйте ещё раз.');
       setIsSubmitting(false);
-      return;
     }
-
-    setValidationError('');
-    setDone(true);
-    clearCart();
   };
 
   if (done) {
@@ -134,6 +149,9 @@ export function Checkout() {
                 <Input placeholder='Фамилия' value={lastName} onChange={(event) => setLastName(event.target.value)} autoComplete='family-name' />
                 <Input placeholder='Эл. почта' type='email' value={email} onChange={(event) => { setEmail(event.target.value); if (validationError) setValidationError(''); }} autoComplete='email' required />
                 <Input placeholder='Телефон' type='tel' value={phone} onChange={(event) => { setPhone(event.target.value); if (validationError) setValidationError(''); }} autoComplete='tel' required />
+                <div className='md:col-span-2'>
+                  <Input placeholder='Полный адрес доставки' value={address} onChange={(event) => { setAddress(event.target.value); if (validationError) setValidationError(''); }} required />
+                </div>
               </div>
               {validationError && (
                 <p className='mt-3 text-sm text-error' role='alert'>
@@ -165,21 +183,17 @@ export function Checkout() {
             <CheckoutPanel>
               <SectionHeader label='Итог' title='Сводка заказа' />
               <div className='space-y-3 text-sm'>
-                {items.map((item) => (
-                  <div key={getCartItemKey(item.product.id, item.selectedSize, item.selectedColor)} className='flex justify-between text-graphite-light dark:text-white/68'>
+                {items.map((item) => {
+                  const productName = item.title || item.product?.name || 'Неизвестный товар';
+                  const itemPrice = item.price ? item.price * item.quantity : 0;
+                  return (
+                  <div key={item.id} className='flex justify-between text-graphite-light dark:text-white/68'>
                     <span>
-                      {item.product.name} × {item.quantity}
-                      {(item.selectedSize || item.selectedColor) && (
-                        <span className='block text-xs text-ash mt-1'>
-                          {item.selectedSize && <span>Размер: {item.selectedSize}</span>}
-                          {item.selectedSize && item.selectedColor ? ' · ' : ''}
-                          {item.selectedColor && <span>Цвет: {item.selectedColor}</span>}
-                        </span>
-                      )}
+                      {productName} × {item.quantity}
                     </span>
-                    <span>{formatPrice(getCartLineTotal(item))}</span>
+                    <span>{formatPrice(itemPrice)}</span>
                   </div>
-                ))}
+                )})}
                 <div className='border-t border-border-lighter dark:border-white/10 pt-3 mt-3 space-y-2'>
                   <div className='flex justify-between text-graphite dark:text-white/84'><span>Товары</span><span>{formatPrice(totalPrice)}</span></div>
                   <div className='flex justify-between text-graphite dark:text-white/84'><span>Доставка</span><span>{delivery ? formatPrice(delivery) : 'Бесплатно'}</span></div>

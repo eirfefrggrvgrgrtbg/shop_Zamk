@@ -5,42 +5,61 @@ export interface User {
   name: string;
   email: string;
   avatar?: string;
+  role?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isAuthModalOpen: boolean;
-  authView: 'login' | 'register' | 'forgot_password';
-  openAuthModal: (view?: 'login' | 'register' | 'forgot_password') => void;
+  isInitializing: boolean;
+  authView: 'login' | 'register' | 'forgot_password' | 'change_password';
+  openAuthModal: (view?: 'login' | 'register' | 'forgot_password' | 'change_password') => void;
   closeAuthModal: () => void;
-  setAuthView: (view: 'login' | 'register' | 'forgot_password') => void;
+  setAuthView: (view: 'login' | 'register' | 'forgot_password' | 'change_password') => void;
   login: (email: string, pass: string) => Promise<void>;
   register: (name: string, email: string, pass: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  logout: () => void;
+  changePassword: (currentPass: string, newPass: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
+
+import { login as apiLogin, register as apiRegister, refresh, me, logout as apiLogout, changePassword as apiChangePassword } from '@zamk/api-client/src/auth';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authView, setAuthView] = useState<'login' | 'register' | 'forgot_password'>('login');
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [authView, setAuthView] = useState<'login' | 'register' | 'forgot_password' | 'change_password'>('login');
 
   useEffect(() => {
-    // Имитация восстановления сессии, например из localStorage
-    const savedUser = localStorage.getItem('zamk_mock_user');
-    if (savedUser) {
+    async function initAuth() {
       try {
-        setUser(JSON.parse(savedUser));
-      } catch (e) {
-        // failed to parse
+        const res = await refresh();
+        if (res.user) {
+          if (res.user.mustChangePassword) {
+            setAuthView('change_password');
+            setIsAuthModalOpen(true);
+          }
+          setUser({
+            id: res.user.id,
+            name: res.user.name || res.user.email.split('@')[0],
+            email: res.user.email,
+            role: res.user.role,
+          });
+        }
+      } catch (err) {
+        // Not authenticated, perfectly fine
+      } finally {
+        setIsInitializing(false);
       }
     }
+    initAuth();
   }, []);
 
-  const openAuthModal = (view: 'login' | 'register' | 'forgot_password' = 'login') => {
+  const openAuthModal = (view: 'login' | 'register' | 'forgot_password' | 'change_password' = 'login') => {
     setAuthView(view);
     setIsAuthModalOpen(true);
   };
@@ -48,36 +67,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const closeAuthModal = () => setIsAuthModalOpen(false);
 
   const login = async (email: string, pass: string) => {
-    return new Promise<void>((resolve, reject) => {
-      setTimeout(() => {
-        // Фейковая авторизация
-        if (email.includes('@') && pass.length >= 6) {
-          const userObj = { id: '1', name: email.split('@')[0], email };
-          setUser(userObj);
-          localStorage.setItem('zamk_mock_user', JSON.stringify(userObj));
-          closeAuthModal();
-          resolve();
-        } else {
-          reject(new Error('Неверный email или пароль'));
-        }
-      }, 800);
-    });
+    try {
+      const res = await apiLogin({ email, password: pass });
+      
+      if (res.user.mustChangePassword) {
+        setAuthView('change_password');
+        setIsAuthModalOpen(true);
+      } else {
+        closeAuthModal();
+      }
+
+      setUser({
+        id: res.user.id,
+        name: res.user.name || res.user.email.split('@')[0],
+        email: res.user.email,
+        role: res.user.role,
+      });
+    } catch (err: any) {
+      throw new Error(err.message || 'Неверный email или пароль');
+    }
   };
 
   const register = async (name: string, email: string, pass: string) => {
-    return new Promise<void>((resolve, reject) => {
-      setTimeout(() => {
-        if (!name || !email.includes('@') || pass.length < 6) {
-          reject(new Error('Пожалуйста, заполните все поля корректно'));
-          return;
-        }
-        const userObj = { id: '2', name, email };
-        setUser(userObj);
-        localStorage.setItem('zamk_mock_user', JSON.stringify(userObj));
-        closeAuthModal();
-        resolve();
-      }, 800);
-    });
+    try {
+      const res = await apiRegister({ name, email, password: pass });
+      
+      setUser({
+        id: res.user.id,
+        name: res.user.name || res.user.email.split('@')[0],
+        email: res.user.email,
+        role: res.user.role,
+      });
+      closeAuthModal();
+    } catch (err: any) {
+      throw new Error(err.message || 'Ошибка регистрации');
+    }
   };
 
   const resetPassword = async (email: string) => {
@@ -92,9 +116,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('zamk_mock_user');
+  const changePassword = async (currentPass: string, newPass: string) => {
+    try {
+      await apiChangePassword({ currentPassword: currentPass, newPassword: newPass });
+      // On success, we generally logout or prompt re-login. The backend might revoke other sessions.
+      // If we are currently in mustChangePassword flow, this sets the password. We should logout and force re-login.
+      await logout();
+      openAuthModal('login');
+    } catch (err: any) {
+      throw new Error(err.message || 'Ошибка изменения пароля');
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await apiLogout();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUser(null);
+    }
   };
 
   return (
@@ -103,6 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: !!user,
         isAuthModalOpen,
+        isInitializing,
         authView,
         openAuthModal,
         closeAuthModal,
@@ -110,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         resetPassword,
+        changePassword,
         logout,
       }}
     >

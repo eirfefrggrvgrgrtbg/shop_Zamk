@@ -83,8 +83,14 @@ export function Favorites() {
                       return;
                     }
 
-                    addItem(product);
-                    showToast('Товар добавлен в корзину');
+                    let variantId = product.variants?.[0]?.id;
+                    if (!variantId) {
+                      variantId = '00000000-0000-0000-0000-000000000000';
+                    }
+
+                    addItem(product.id, variantId, 1)
+                      .then(() => showToast('Товар добавлен в корзину'))
+                      .catch((e: any) => showToast(e.message || 'Ошибка'));
                   }}
                 >
                   <ShoppingBag className='w-4 h-4' /> В корзину

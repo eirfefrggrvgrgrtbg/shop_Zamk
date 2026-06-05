@@ -126,16 +126,32 @@ export function ProductDetail() {
   const requiresSizeSelection = Boolean(product.sizes && product.sizes.length > 0 && !product.sizes.includes('Единый'));
   const selectableSizes = product.sizes ?? [];
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (requiresSizeSelection && !activeSize) {
       setSizeError('Выберите размер перед добавлением в корзину');
       return;
     }
     setSizeError('');
-    for (let i = 0; i < quantity; i++) {
-      addItem(product, activeSize || undefined, product.colors?.[activeColor]?.name);
+    
+    let variantId = product.variants?.[0]?.id;
+    if (product.variants && activeSize) {
+      const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
+      if (match) {
+         variantId = match.id;
+      }
     }
-    showToast('Товар добавлен в корзину');
+    
+    if (!variantId) {
+      // Mock fallback if variants are missing
+      variantId = '00000000-0000-0000-0000-000000000000';
+    }
+
+    try {
+      await addItem(product.id, variantId, quantity);
+      showToast('Товар добавлен в корзину');
+    } catch (e: any) {
+      showToast(e.message || 'Ошибка при добавлении');
+    }
   };
 
   return (

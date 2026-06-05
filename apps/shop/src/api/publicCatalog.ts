@@ -74,8 +74,16 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
     description: p.description || '',
     rating: p.rating?.averageRating,
     reviewsCount: p.rating?.reviewCount,
-    // Provide some default options for UI to not break
-    sizes: ['S', 'M', 'L'], 
+    // Extract sizes and colors from variants, or provide default if none
+    sizes: p.variants?.map(v => v.size).filter(Boolean) as string[] || ['S', 'M', 'L'], 
+    variants: p.variants?.map(v => ({
+      id: v.id,
+      size: v.size,
+      color: v.color,
+      inStock: v.inStock ?? v.isActive,
+      isActive: v.isActive,
+      price: v.priceCents ? v.priceCents / 100 : undefined
+    }))
   };
 }
 

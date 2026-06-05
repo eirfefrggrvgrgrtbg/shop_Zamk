@@ -54,14 +54,50 @@ const MOCK_ORDERS: OrderRecord[] = [
 
 export function Orders() {
   const { isAuthenticated } = useAuth();
-  const [orders, setOrders] = useState<OrderRecord[]>(() => getOrdersWithDefaults(MOCK_ORDERS));
-  const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const syncOrders = () => setOrders(getOrdersWithDefaults(MOCK_ORDERS));
-    window.addEventListener(ORDER_STORAGE_EVENT, syncOrders);
-    return () => window.removeEventListener(ORDER_STORAGE_EVENT, syncOrders);
-  }, []);
+    if (!isAuthenticated) return;
+    
+    let isMounted = true;
+    const fetchOrders = async () => {
+      try {
+        setIsLoading(true);
+        const { getOrders } = await import('@zamk/api-client/src/customer');
+        const data = await getOrders();
+        if (isMounted) {
+          // Map to match the expected format roughly
+          setOrders(data.map(o => ({
+            id: o.id.split('-')[0].toUpperCase() + '-' + o.id.split('-')[1].substring(0, 4),
+            rawId: o.id,
+            date: new Date(o.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
+            status: o.status === 'created' ? 'Создан' : o.status === 'paid' ? 'Оплачен' : o.status === 'shipped' ? 'В пути' : o.status === 'delivered' ? 'Доставлен' : o.status,
+            total: o.totalPriceCents / 100,
+            delivery: {
+              address: o.deliveryAddress,
+              service: 'Курьер'
+            },
+            items: o.items.map((item: any) => ({
+              id: item.productId,
+              name: item.title || 'Товар',
+              price: item.priceCents / 100,
+              quantity: item.quantity,
+              image: 'https://wsrv.nl/?url=images.unsplash.com/photo-1591047139829-d91aecb6caea&w=800&output=webp'
+            }))
+          })));
+        }
+      } catch (e) {
+        console.error('Failed to load orders', e);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+    
+    fetchOrders();
+    return () => { isMounted = false; };
+  }, [isAuthenticated]);
   
   if (!isAuthenticated) {
     return (
@@ -97,7 +133,9 @@ export function Orders() {
         </div>
 
         {/* Список заказов */}
-        {orders.length > 0 ? (
+        {isLoading ? (
+          <div className="py-20 flex justify-center"><div className="animate-spin w-8 h-8 border-2 border-black border-t-transparent rounded-full dark:border-white dark:border-t-transparent" /></div>
+        ) : orders.length > 0 ? (
           <div className="space-y-5">
           {orders.map((order) => (
             <div 
@@ -123,7 +161,7 @@ export function Orders() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                 <div className="flex-1">
                   <p className="text-[14px] text-graphite/70 dark:text-white/70 leading-relaxed font-medium">
-                    {order.items.map((item) => {
+                    {order.items.map((item: any) => {
                       const details = [item.name];
                       if (item.size) details.push(`Размер: ${item.size}`);
                       if (item.color) details.push(`Цвет: ${item.color}`);
@@ -195,7 +233,7 @@ export function Orders() {
               <div>
                 <h4 className="text-[13px] uppercase tracking-[0.05em] text-ash dark:text-white/60 font-medium mb-4">Состав заказа</h4>
                 <div className="space-y-4">
-                  {selectedOrder.items.map((item, idx) => (
+                  {selectedOrder.items.map((item: any, idx: number) => (
                     <Link to={`/product/${item.id}`} key={idx} className="flex gap-4 group cursor-pointer hover:bg-graphite/[0.02] dark:hover:bg-white/5 p-2 -m-2 rounded-xl transition-colors">
                       <div className="w-20 h-24 bg-graphite/5 dark:bg-white/10 rounded-xl overflow-hidden flex-shrink-0">
                         <img 
@@ -262,6 +300,47 @@ export function Orders() {
                   <span className="text-xl font-serif text-graphite dark:text-white">{selectedOrder.total.toLocaleString('ru-RU')} ₽</span>
                 </div>
               </div>
+
+              {selectedOrder.status === 'Доставлен' && (
+                <div className="mt-8 flex gap-3">
+                  <button 
+                    onClick={async () => {
+                      const reason = window.prompt('Укажите причину возврата:');
+                      if (reason) {
+                        try {
+                          const { createReturn } = await import('@zamk/api-client/src/customer');
+                          await createReturn({ orderId: selectedOrder.rawId, reason });
+                          alert('Заявка на возврат успешно создана');
+                        } catch (e: any) {
+                          alert(e.message || 'Ошибка при создании возврата');
+                        }
+                      }
+                    }}
+                    className="flex-1 py-3 border border-error text-error text-[13px] font-medium rounded-full hover:bg-error hover:text-white transition-colors"
+                  >
+                    Оформить возврат
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      const productId = selectedOrder.items[0]?.id; // mock
+                      if (!productId) return;
+                      const content = window.prompt('Ваш отзыв:');
+                      if (content) {
+                        try {
+                          const { createReview } = await import('@zamk/api-client/src/customer');
+                          await createReview({ productId, rating: 5, title: 'Отзыв', content });
+                          alert('Отзыв успешно добавлен');
+                        } catch (e: any) {
+                          alert(e.message || 'Ошибка при добавлении отзыва');
+                        }
+                      }
+                    }}
+                    className="flex-1 py-3 border border-graphite dark:border-white text-graphite dark:text-white text-[13px] font-medium rounded-full hover:bg-graphite hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors"
+                  >
+                    Оставить отзыв
+                  </button>
+                </div>
+              )}
 
             </div>
           </div>

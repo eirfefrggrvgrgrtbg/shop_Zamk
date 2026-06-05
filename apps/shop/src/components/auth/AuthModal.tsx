@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 
 export function AuthModal() {
-  const { isAuthModalOpen, closeAuthModal, authView, setAuthView, login, register, resetPassword } = useAuth();
+  const { isAuthModalOpen, closeAuthModal, authView, setAuthView, login, register, resetPassword, changePassword } = useAuth();
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -13,6 +13,7 @@ export function AuthModal() {
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [name, setName] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -29,6 +30,8 @@ export function AuthModal() {
       } else if (authView === 'forgot_password') {
         await resetPassword(email);
         setSuccess('Ссылка для восстановления отправлена на ваш e-mail.');
+      } else if (authView === 'change_password') {
+        await changePassword(password, newPassword);
       }
     } catch (err: any) {
       setError(err.message || 'Произошла ошибка при отправке');
@@ -40,20 +43,23 @@ export function AuthModal() {
   const isLogin = authView === 'login';
   const isRegister = authView === 'register';
   const isForgot = authView === 'forgot_password';
+  const isChangePass = authView === 'change_password';
 
   return (
     <Modal isOpen={isAuthModalOpen} onClose={closeAuthModal}>
       <div className="p-4 sm:p-6 w-full mt-2 bg-transparent text-graphite dark:text-white relative">
         <div className="text-center mb-8">
           <h2 className="text-2xl font-serif font-medium tracking-wide dark:text-white">
-            {isLogin ? 'Вход' : isRegister ? 'Регистрация' : 'Сброс пароля'}
+            {isLogin ? 'Вход' : isRegister ? 'Регистрация' : isChangePass ? 'Смена пароля' : 'Сброс пароля'}
           </h2>
           <p className="mt-2 text-[13.5px] text-graphite/60 dark:text-white/70 tracking-wide">
             {isLogin 
               ? 'Войдите в личный кабинет' 
               : isRegister 
                 ? 'Присоединяйтесь к ZAMK' 
-                : 'Введите e-mail, и мы отправим ссылку для восстановления'}
+                : isChangePass 
+                  ? 'Пожалуйста, установите новый пароль'
+                  : 'Введите e-mail, и мы отправим ссылку для восстановления'}
           </p>
         </div>
 
@@ -82,24 +88,39 @@ export function AuthModal() {
             </div>
           )}
           
-          <div>
-            <Input 
-              type="email"
-              placeholder="E-mail"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="bg-white/60 dark:bg-white/5 focus:bg-white dark:focus:bg-white/10 backdrop-blur-sm"
-            />
-          </div>
+          {!isChangePass && (
+            <div>
+              <Input 
+                type="email"
+                placeholder="E-mail"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="bg-white/60 dark:bg-white/5 focus:bg-white dark:focus:bg-white/10 backdrop-blur-sm"
+              />
+            </div>
+          )}
           
           {!isForgot && (
             <div>
               <Input 
                 type="password"
-                placeholder="Пароль"
+                placeholder={isChangePass ? "Текущий пароль" : "Пароль"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
+                className="bg-white/60 dark:bg-white/5 focus:bg-white dark:focus:bg-white/10 backdrop-blur-sm"
+              />
+            </div>
+          )}
+
+          {isChangePass && (
+            <div>
+              <Input 
+                type="password"
+                placeholder="Новый пароль"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
                 required
                 className="bg-white/60 dark:bg-white/5 focus:bg-white dark:focus:bg-white/10 backdrop-blur-sm"
               />
@@ -133,28 +154,32 @@ export function AuthModal() {
                   ? 'Войти' 
                   : isRegister 
                     ? 'Создать аккаунт' 
-                    : 'Отправить ссылку'}
+                    : isChangePass 
+                      ? 'Сохранить пароль'
+                      : 'Отправить ссылку'}
             </Button>
           </div>
         </form>
 
-        <div className="mt-8 text-center border-t border-border-lighter dark:border-white/10 pt-6">
-          <button 
-            type="button"
-            onClick={() => {
-              setAuthView(isLogin ? 'register' : 'login');
-              setError('');
-              setSuccess('');
-            }}
-            className="text-[13px] text-graphite/60 dark:text-white/60 hover:text-graphite dark:hover:text-white transition-colors uppercase tracking-[0.04em] font-medium"
-          >
-            {isLogin 
-              ? 'Нет аккаунта? Зарегистрироваться' 
-              : isRegister 
-                ? 'Уже есть аккаунт? Войти' 
-                : 'Вспомнили пароль? Войти'}
-          </button>
-        </div>
+        {!isChangePass && (
+          <div className="mt-8 text-center border-t border-border-lighter dark:border-white/10 pt-6">
+            <button 
+              type="button"
+              onClick={() => {
+                setAuthView(isLogin ? 'register' : 'login');
+                setError('');
+                setSuccess('');
+              }}
+              className="text-[13px] text-graphite/60 dark:text-white/60 hover:text-graphite dark:hover:text-white transition-colors uppercase tracking-[0.04em] font-medium"
+            >
+              {isLogin 
+                ? 'Нет аккаунта? Зарегистрироваться' 
+                : isRegister 
+                  ? 'Уже есть аккаунт? Войти' 
+                  : 'Вспомнили пароль? Войти'}
+            </button>
+          </div>
+        )}
       </div>
     </Modal>
   );

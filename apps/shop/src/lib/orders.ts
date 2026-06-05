@@ -1,4 +1,4 @@
-import type { CartItem } from '../contexts/CartContext';
+import type { Product } from './mock-data';
 
 export interface OrderItem {
   id: string;
@@ -112,11 +112,11 @@ function normalizeOrderRecord(value: unknown): OrderRecord | null {
   };
 }
 
-export function getProductEffectivePrice(product: Pick<CartItem['product'], 'price' | 'discountPrice'>) {
+export function getProductEffectivePrice(product: Pick<Product, 'price' | 'discountPrice'>) {
   return product.discountPrice ?? product.price;
 }
 
-export function getCartLineTotal(item: Pick<CartItem, 'product' | 'quantity'>) {
+export function getCartLineTotal(item: any) {
   return getProductEffectivePrice(item.product) * item.quantity;
 }
 
@@ -159,7 +159,7 @@ export function getOrdersWithDefaults(defaultOrders: OrderRecord[]) {
   return [...defaultOrders, ...storedOrders.filter((order) => !knownIds.has(order.id))];
 }
 
-export function createOrderFromCart(items: CartItem[], options: CreateOrderOptions): OrderRecord {
+export function createOrderFromCart(items: any[], options: CreateOrderOptions): OrderRecord {
   const orderItems = items.map((item) => ({
     id: item.product.id,
     name: item.product.name,

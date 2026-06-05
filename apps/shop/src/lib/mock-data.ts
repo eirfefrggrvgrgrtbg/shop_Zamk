@@ -24,6 +24,14 @@ export interface Product {
   materials?: string;
   sizes?: string[];
   colors?: { name: string; hex: string }[];
+  variants?: {
+    id: string;
+    size?: string;
+    color?: string;
+    inStock?: boolean;
+    isActive?: boolean;
+    price?: number;
+  }[];
   isNew?: boolean;
   isBestseller?: boolean;
   rating?: number;

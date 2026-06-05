@@ -5,7 +5,7 @@ export const getCart = async (): Promise<Cart> => {
   return request<Cart>('GET', '/customer/cart');
 };
 
-export const addToCart = async (input: { productId: string; quantity: number }): Promise<Cart> => {
+export const addToCart = async (input: { productId: string; productVariantId: string; quantity: number }): Promise<Cart> => {
   return request<Cart>('POST', '/customer/cart/items', { body: input });
 };
 
@@ -21,8 +21,8 @@ export const clearCart = async (): Promise<void> => {
   return request<void>('DELETE', '/customer/cart');
 };
 
-export const createOrder = async (): Promise<Order> => {
-  return request<Order>('POST', '/customer/orders');
+export const createOrder = async (input: { customerName: string; customerPhone: string; customerEmail: string; deliveryAddress: string }): Promise<Order> => {
+  return request<Order>('POST', '/customer/orders', { body: input });
 };
 
 export const getOrders = async (): Promise<Order[]> => {

@@ -32,6 +32,19 @@ export interface ProductSummary {
 export interface ProductDetail extends ProductSummary {
   description: string;
   images: string[];
+  variants?: ProductVariant[];
+}
+
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  sku?: string;
+  size?: string;
+  color?: string;
+  barcode?: string;
+  priceCents?: number;
+  isActive: boolean;
+  inStock?: boolean;
 }
 
 export interface Category {
@@ -70,8 +83,12 @@ export interface RatingSummary {
 export interface CartItem {
   id: string;
   productId: string;
+  productVariantId: string;
   quantity: number;
   product?: ProductSummary;
+  title?: string;
+  priceCents?: number;
+  inStock?: boolean;
 }
 
 export interface Cart {
@@ -80,13 +97,38 @@ export interface Cart {
   totalPriceCents: number;
 }
 
+export interface OrderItem {
+  id: string;
+  orderId: string;
+  productId: string;
+  productVariantId: string;
+  sellerId: string;
+  title: string;
+  productSlug: string;
+  variantSize?: string;
+  variantColor?: string;
+  sku?: string;
+  imageUrl?: string;
+  priceCents: number;
+  quantity: number;
+  subtotalPriceCents: number;
+  createdAt: string;
+}
+
 export interface Order {
   id: string;
-  customerId: string;
-  totalPriceCents: number;
+  userId: string;
   status: string;
+  totalPriceCents: number;
+  currency: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  deliveryAddress: string;
   createdAt: string;
-  items: any[]; // refine later
+  updatedAt: string;
+  cancelledAt?: string;
+  items: OrderItem[];
 }
 
 export interface ReturnRequest {
