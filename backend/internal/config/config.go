@@ -7,15 +7,16 @@ import (
 )
 
 type Config struct {
-	App      AppConfig
-	Postgres PostgresConfig
-	Redis    RedisConfig
-	JWT      JWTConfig
-	Auth     AuthConfig
-	S3       S3Config
-	CORS     CORSConfig
-	TBank    TBankConfig
-	Worker   WorkerConfig
+	App       AppConfig
+	Postgres  PostgresConfig
+	Redis     RedisConfig
+	JWT       JWTConfig
+	Auth      AuthConfig
+	S3        S3Config
+	CORS      CORSConfig
+	TBank     TBankConfig
+	Worker    WorkerConfig
+	RateLimit RateLimitConfig
 }
 
 type AppConfig struct {
@@ -88,6 +89,19 @@ type WorkerConfig struct {
 	MarketplaceCommissionBPS       int
 }
 
+type RateLimitConfig struct {
+	Enabled                        bool
+	FailOpenLocal                  bool
+	FailOpenOnRedisError           bool
+	AuthLoginLimitPerMinute        int
+	AuthRegisterLimitPerHour       int
+	AuthRefreshLimitPerMinute      int
+	AuthChangePasswordLimitPerHour int
+	UploadLimitPerMinute           int
+	WebhookLimitPerMinute          int
+	AdminDangerousLimitPerMinute   int
+}
+
 func Load() (*Config, error) {
 	cfg := &Config{
 		App: AppConfig{
@@ -149,10 +163,22 @@ func Load() (*Config, error) {
 			SellerBalanceIntervalSeconds:   getEnvAsInt("WORKER_SELLER_BALANCE_INTERVAL_SECONDS", 300),
 			MarketplaceCommissionBPS:       getEnvAsInt("MARKETPLACE_COMMISSION_BPS", 1500),
 		},
+		RateLimit: RateLimitConfig{
+			Enabled:                        getEnvAsBool("RATE_LIMIT_ENABLED", true),
+			FailOpenLocal:                  getEnvAsBool("RATE_LIMIT_FAIL_OPEN_LOCAL", true),
+			AuthLoginLimitPerMinute:        getEnvAsInt("AUTH_LOGIN_LIMIT_PER_MINUTE", 5),
+			AuthRegisterLimitPerHour:       getEnvAsInt("AUTH_REGISTER_LIMIT_PER_HOUR", 10),
+			AuthRefreshLimitPerMinute:      getEnvAsInt("AUTH_REFRESH_LIMIT_PER_MINUTE", 30),
+			AuthChangePasswordLimitPerHour: getEnvAsInt("AUTH_CHANGE_PASSWORD_LIMIT_PER_HOUR", 5),
+			UploadLimitPerMinute:           getEnvAsInt("UPLOAD_LIMIT_PER_MINUTE", 10),
+			WebhookLimitPerMinute:          getEnvAsInt("WEBHOOK_LIMIT_PER_MINUTE", 120),
+			AdminDangerousLimitPerMinute:   getEnvAsInt("ADMIN_DANGEROUS_ACTION_LIMIT_PER_MINUTE", 30),
+		},
 	}
 
 	cfg.Postgres.DSN = getEnvNonEmpty("POSTGRES_DSN", "postgres://"+cfg.Postgres.User+":"+cfg.Postgres.Password+"@"+cfg.Postgres.Host+":"+cfg.Postgres.Port+"/"+cfg.Postgres.Database+"?sslmode="+cfg.Postgres.SSLMode)
 	cfg.Redis.Addr = getEnvNonEmpty("REDIS_ADDR", cfg.Redis.Host+":"+cfg.Redis.Port)
+	cfg.RateLimit.FailOpenOnRedisError = cfg.App.Env == "local" && cfg.RateLimit.FailOpenLocal
 
 	return cfg, nil
 }

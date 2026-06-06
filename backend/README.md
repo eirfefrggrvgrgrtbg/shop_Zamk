@@ -58,6 +58,31 @@ AUTH_COOKIE_SAMESITE=Lax
 
 Local defaults keep `AUTH_COOKIE_SECURE=false` and an empty cookie domain. In staging and production, use `AUTH_COOKIE_SECURE=true` and configure the cookie domain only if your domain layout requires it. Logout and password-change flows clear the cookie using the same cookie settings.
 
+### Rate Limiting
+
+ZAMK uses Redis-backed fixed-window rate limiting for sensitive endpoints. It is enabled by default:
+
+```env
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_FAIL_OPEN_LOCAL=true
+AUTH_LOGIN_LIMIT_PER_MINUTE=5
+AUTH_REGISTER_LIMIT_PER_HOUR=10
+AUTH_REFRESH_LIMIT_PER_MINUTE=30
+AUTH_CHANGE_PASSWORD_LIMIT_PER_HOUR=5
+UPLOAD_LIMIT_PER_MINUTE=10
+WEBHOOK_LIMIT_PER_MINUTE=120
+ADMIN_DANGEROUS_ACTION_LIMIT_PER_MINUTE=30
+```
+
+Protected endpoint groups:
+
+- auth: login, register, refresh, change-password;
+- uploads: seller product images, seller logo, admin product images, admin brand logo;
+- payment webhook: T-Bank webhook;
+- admin dangerous actions: inventory mutations, product moderation mutations, refund creation, payout status changes, review moderation mutations.
+
+Local behavior can fail open on Redis errors when `APP_ENV=local` and `RATE_LIMIT_FAIL_OPEN_LOCAL=true`. Staging and production fail closed by default so sensitive endpoints return `429` if Redis is unavailable. Rate limit keys hash email/session-like data and never include raw passwords, access tokens, refresh tokens, S3 keys, or TBank secrets.
+
 ## Setup Local Infrastructure
 
 1. Copy the example configuration:

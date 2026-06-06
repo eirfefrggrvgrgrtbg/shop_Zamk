@@ -3,6 +3,7 @@ package router
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -19,6 +20,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payments"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/ratelimit"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
@@ -49,6 +51,19 @@ func New(
 	storageHandler *storage.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
+	rateLimiter := ratelimit.NewMiddleware(
+		ratelimit.New(rdb.Client),
+		cfg.RateLimit.Enabled,
+		cfg.RateLimit.FailOpenOnRedisError,
+		logger,
+	)
+	loginLimit := rateLimiter.Limit(ratelimit.Rule{Group: "auth_login", Limit: cfg.RateLimit.AuthLoginLimitPerMinute, Window: time.Minute, Key: ratelimit.LoginKey})
+	registerLimit := rateLimiter.Limit(ratelimit.Rule{Group: "auth_register", Limit: cfg.RateLimit.AuthRegisterLimitPerHour, Window: time.Hour, Key: ratelimit.RegisterKey})
+	refreshLimit := rateLimiter.Limit(ratelimit.Rule{Group: "auth_refresh", Limit: cfg.RateLimit.AuthRefreshLimitPerMinute, Window: time.Minute, Key: ratelimit.RefreshKey})
+	changePasswordLimit := rateLimiter.Limit(ratelimit.Rule{Group: "auth_change_password", Limit: cfg.RateLimit.AuthChangePasswordLimitPerHour, Window: time.Hour, Key: ratelimit.UserIPKey("auth_change_password")})
+	uploadLimit := rateLimiter.Limit(ratelimit.Rule{Group: "upload", Limit: cfg.RateLimit.UploadLimitPerMinute, Window: time.Minute, Key: ratelimit.UserIPKey("upload")})
+	webhookLimit := rateLimiter.Limit(ratelimit.Rule{Group: "payment_webhook", Limit: cfg.RateLimit.WebhookLimitPerMinute, Window: time.Minute, Key: ratelimit.IPKey("payment_webhook")})
+	adminDangerousLimit := rateLimiter.Limit(ratelimit.Rule{Group: "admin_dangerous", Limit: cfg.RateLimit.AdminDangerousLimitPerMinute, Window: time.Minute, Key: ratelimit.UserIPKey("admin_dangerous")})
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -90,15 +105,15 @@ func New(
 	r.Get("/api/ready", healthHandler.ReadinessCheck)
 
 	r.Route("/api/auth", func(r chi.Router) {
-		r.Post("/register", authHandler.Register)
-		r.Post("/login", authHandler.Login)
-		r.Post("/refresh", authHandler.Refresh)
+		r.With(registerLimit).Post("/register", authHandler.Register)
+		r.With(loginLimit).Post("/login", authHandler.Login)
+		r.With(refreshLimit).Post("/refresh", authHandler.Refresh)
 		r.Post("/logout", authHandler.Logout)
 
 		r.Group(func(r chi.Router) {
 			r.Use(appMiddleware.AuthMiddleware(tokenService))
 			r.Get("/me", authHandler.Me)
-			r.Post("/change-password", authHandler.ChangePassword)
+			r.With(changePasswordLimit).Post("/change-password", authHandler.ChangePassword)
 		})
 	})
 
@@ -114,7 +129,7 @@ func New(
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireRole(users.RoleSeller))
 		r.Get("/", sellersHandler.GetSellerMe)
-		r.Post("/logo/upload", storageHandler.UploadSellerProfileImage)
+		r.With(uploadLimit).Post("/logo/upload", storageHandler.UploadSellerProfileImage)
 	})
 
 	// ---------------------------------------------------------
@@ -154,7 +169,7 @@ func New(
 	// ---------------------------------------------------------
 	// Webhooks
 	// ---------------------------------------------------------
-	r.Post("/api/payments/tbank/webhook", paymentsHandler.HandleTBankWebhook)
+	r.With(webhookLimit).Post("/api/payments/tbank/webhook", paymentsHandler.HandleTBankWebhook)
 
 	// ---------------------------------------------------------
 	// Seller Products, Inventory & Orders
@@ -169,7 +184,7 @@ func New(
 		r.Patch("/{id}", productsHandler.UpdateProduct)
 		r.Delete("/{id}", productsHandler.DeleteDraftProduct)
 		r.Post("/{id}/submit-moderation", productsHandler.SubmitForModeration)
-		r.Post("/{id}/images/upload", storageHandler.UploadSellerProductImage)
+		r.With(uploadLimit).Post("/{id}/images/upload", storageHandler.UploadSellerProductImage)
 	})
 
 	r.Route("/api/seller/inventory", func(r chi.Router) {
@@ -224,23 +239,23 @@ func New(
 		r.Post("/categories", catalogHandler.CreateCategory)
 		r.Get("/brands", catalogHandler.ListBrands)
 		r.Post("/brands", catalogHandler.CreateBrand)
-		r.Post("/brands/{id}/logo/upload", storageHandler.UploadAdminBrandLogo)
+		r.With(uploadLimit).Post("/brands/{id}/logo/upload", storageHandler.UploadAdminBrandLogo)
 
 		r.Get("/products", productsHandler.ListAdminProducts)
-		r.Post("/products/{id}/images/upload", storageHandler.UploadAdminProductImage)
+		r.With(uploadLimit).Post("/products/{id}/images/upload", storageHandler.UploadAdminProductImage)
 		r.Get("/moderation/products", productsHandler.ListModerationProducts)
-		r.Post("/moderation/products/{id}/approve", productsHandler.AdminApproveProduct)
-		r.Post("/moderation/products/{id}/reject", productsHandler.AdminRejectProduct)
-		r.Post("/moderation/products/{id}/publish", productsHandler.AdminPublishProduct)
-		r.Post("/moderation/products/{id}/hide", productsHandler.AdminHideProduct)
-		r.Post("/moderation/products/{id}/block", productsHandler.AdminBlockProduct)
+		r.With(adminDangerousLimit).Post("/moderation/products/{id}/approve", productsHandler.AdminApproveProduct)
+		r.With(adminDangerousLimit).Post("/moderation/products/{id}/reject", productsHandler.AdminRejectProduct)
+		r.With(adminDangerousLimit).Post("/moderation/products/{id}/publish", productsHandler.AdminPublishProduct)
+		r.With(adminDangerousLimit).Post("/moderation/products/{id}/hide", productsHandler.AdminHideProduct)
+		r.With(adminDangerousLimit).Post("/moderation/products/{id}/block", productsHandler.AdminBlockProduct)
 
 		r.Get("/inventory", inventoryHandler.ListAdminInventory)
 		r.Get("/inventory/{id}", inventoryHandler.GetAdminInventoryItem)
 		r.Get("/inventory/{id}/movements", inventoryHandler.ListMovements)
-		r.Post("/inventory/receipts", inventoryHandler.ReceiveStock)
-		r.Post("/inventory/adjustments", inventoryHandler.AdjustStock)
-		r.Post("/inventory/write-offs", inventoryHandler.WriteOffStock)
+		r.With(adminDangerousLimit).Post("/inventory/receipts", inventoryHandler.ReceiveStock)
+		r.With(adminDangerousLimit).Post("/inventory/adjustments", inventoryHandler.AdjustStock)
+		r.With(adminDangerousLimit).Post("/inventory/write-offs", inventoryHandler.WriteOffStock)
 
 		r.Get("/orders", ordersHandler.ListAdminOrders)
 		r.Get("/orders/{id}", ordersHandler.GetAdminOrder)
@@ -257,14 +272,14 @@ func New(
 		r.Get("/returns", returnsHandler.ListAdminReturns)
 		r.Get("/returns/{id}", returnsHandler.GetAdminReturn)
 		r.Patch("/returns/{id}/status", returnsHandler.UpdateAdminReturnStatus)
-		r.Post("/returns/{id}/refund", returnsHandler.CreateAdminRefund)
+		r.With(adminDangerousLimit).Post("/returns/{id}/refund", returnsHandler.CreateAdminRefund)
 
 		r.Get("/refunds", returnsHandler.ListAdminRefunds)
 		r.Get("/refunds/{id}", returnsHandler.GetAdminRefund)
 
 		r.Get("/payouts", payoutsHandler.ListAdminPayouts)
 		r.Get("/payouts/{id}", payoutsHandler.GetAdminPayout)
-		r.Patch("/payouts/{id}/status", payoutsHandler.UpdateAdminPayoutStatus)
+		r.With(adminDangerousLimit).Patch("/payouts/{id}/status", payoutsHandler.UpdateAdminPayoutStatus)
 		r.Post("/payouts/trigger-availability", payoutsHandler.TriggerAvailability)
 	})
 
@@ -274,7 +289,7 @@ func New(
 
 		r.Get("/api/admin/reviews", reviewsHandler.GetAdminReviews)
 		r.Get("/api/admin/reviews/{id}", reviewsHandler.GetAdminReview)
-		r.Post("/api/admin/reviews/{id}/{action}", reviewsHandler.ModerateReview)
+		r.With(adminDangerousLimit).Post("/api/admin/reviews/{id}/{action}", reviewsHandler.ModerateReview)
 	})
 
 	r.Group(func(r chi.Router) {
