@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
@@ -14,16 +15,24 @@ type Handler struct {
 	validator      *validator.Validate
 	cookieDomain   string
 	cookieSecure   bool
+	cookieSameSite http.SameSite
 	cookiePath     string
 	refreshTTLDays int
 }
 
-func NewHandler(service *Service, refreshTTLDays int) *Handler {
+type CookieConfig struct {
+	Domain   string
+	Secure   bool
+	SameSite string
+}
+
+func NewHandler(service *Service, refreshTTLDays int, cookieConfig CookieConfig) *Handler {
 	return &Handler{
 		service:        service,
 		validator:      validator.New(),
-		cookieDomain:   "", // local
-		cookieSecure:   false, // local
+		cookieDomain:   cookieConfig.Domain,
+		cookieSecure:   cookieConfig.Secure,
+		cookieSameSite: parseSameSite(cookieConfig.SameSite),
 		cookiePath:     "/api/auth",
 		refreshTTLDays: refreshTTLDays,
 	}
@@ -198,8 +207,8 @@ func (h *Handler) setRefreshCookie(w http.ResponseWriter, token string) {
 		Domain:   h.cookieDomain,
 		MaxAge:   h.refreshTTLDays * 24 * 60 * 60,
 		HttpOnly: true,
-		Secure:   h.cookieSecure, // TODO: set to true in production via config
-		SameSite: http.SameSiteLaxMode,
+		Secure:   h.cookieSecure,
+		SameSite: h.cookieSameSite,
 	})
 }
 
@@ -212,8 +221,21 @@ func (h *Handler) clearRefreshCookie(w http.ResponseWriter) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   h.cookieSecure,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: h.cookieSameSite,
 	})
+}
+
+func parseSameSite(value string) http.SameSite {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "strict":
+		return http.SameSiteStrictMode
+	case "none":
+		return http.SameSiteNoneMode
+	case "lax", "":
+		return http.SameSiteLaxMode
+	default:
+		return http.SameSiteLaxMode
+	}
 }
 
 func (h *Handler) writeError(w http.ResponseWriter, statusCode int, code, message string) {

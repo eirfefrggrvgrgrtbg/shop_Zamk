@@ -10,6 +10,54 @@ This is the backend for the ZAMK curated marketplace. It's built as a modular mo
 - **Config**: Environment variables + `.env` (`github.com/joho/godotenv`)
 - **Storage**: Both local MinIO for development and external S3-compatible provider for production-like verification are supported.
 
+## Environment and Secrets
+
+Use `.env.example` as the local template:
+
+```bash
+cp .env.example .env
+```
+
+Real `.env` files are ignored and must not be committed. Keep production secrets in your deployment secret store, not in Git.
+
+Backend environment files may contain server-side secrets such as:
+
+- `JWT_ACCESS_SECRET`
+- `JWT_REFRESH_SECRET`
+- `S3_ACCESS_KEY`
+- `S3_SECRET_KEY`
+- `TBANK_PASSWORD`
+
+Frontend environment files must not contain backend secrets. For `apps/shop`, `apps/seller`, and `apps/admin`, the required public value is:
+
+```env
+VITE_API_URL=http://localhost:8080/api
+```
+
+For staging and production, set `VITE_API_URL` to the public API origin, for example `https://api.example.com/api`.
+
+### CORS
+
+`CORS_ALLOWED_ORIGINS` is a comma-separated list of exact frontend origins. Local development can use:
+
+```env
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174,http://localhost:5175
+```
+
+For staging and production, configure exact HTTPS origins for the shop, seller, and admin frontends. Do not use wildcard CORS with credentials.
+
+### Refresh Cookie
+
+Refresh tokens are stored in an `HttpOnly` cookie. Configure cookie behavior with:
+
+```env
+AUTH_COOKIE_DOMAIN=
+AUTH_COOKIE_SECURE=false
+AUTH_COOKIE_SAMESITE=Lax
+```
+
+Local defaults keep `AUTH_COOKIE_SECURE=false` and an empty cookie domain. In staging and production, use `AUTH_COOKIE_SECURE=true` and configure the cookie domain only if your domain layout requires it. Logout and password-change flows clear the cookie using the same cookie settings.
+
 ## Setup Local Infrastructure
 
 1. Copy the example configuration:
@@ -23,8 +71,7 @@ This is the backend for the ZAMK curated marketplace. It's built as a modular mo
    ```
 
 3. Configure S3/MinIO in `.env`:
-   For local development, the default `.env.example` already contains the local MinIO credentials.
-   For external S3-compatible providers, configure `.env` with your real credentials using placeholders like:
+   `.env.example` contains placeholders only. For local MinIO or an external S3-compatible provider, put real credentials only in your ignored `.env` file:
    ```env
    S3_ENDPOINT=your-s3-endpoint
    S3_PORT=443

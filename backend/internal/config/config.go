@@ -11,6 +11,7 @@ type Config struct {
 	Postgres PostgresConfig
 	Redis    RedisConfig
 	JWT      JWTConfig
+	Auth     AuthConfig
 	S3       S3Config
 	CORS     CORSConfig
 	TBank    TBankConfig
@@ -49,15 +50,21 @@ type JWTConfig struct {
 	RefreshTokenTTLDays   int
 }
 
+type AuthConfig struct {
+	CookieDomain   string
+	CookieSecure   bool
+	CookieSameSite string
+}
+
 type S3Config struct {
-	Endpoint       string
-	Port           string
-	Region         string
-	Bucket         string
-	AccessKey      string
-	SecretKey      string
-	UseSSL         bool
-	PublicBaseURL  string
+	Endpoint        string
+	Port            string
+	Region          string
+	Bucket          string
+	AccessKey       string
+	SecretKey       string
+	UseSSL          bool
+	PublicBaseURL   string
 	UploadMaxSizeMB int
 }
 
@@ -109,19 +116,24 @@ func Load() (*Config, error) {
 			AccessTokenTTLMinutes: getEnvAsInt("JWT_ACCESS_TTL_MINUTES", 15),
 			RefreshTokenTTLDays:   getEnvAsInt("JWT_REFRESH_TTL_DAYS", 30),
 		},
+		Auth: AuthConfig{
+			CookieDomain:   getEnv("AUTH_COOKIE_DOMAIN", ""),
+			CookieSecure:   getEnvAsBool("AUTH_COOKIE_SECURE", false),
+			CookieSameSite: getEnv("AUTH_COOKIE_SAMESITE", "Lax"),
+		},
 		S3: S3Config{
-			Endpoint:       getEnv("S3_ENDPOINT", "localhost"),
-			Port:           getEnv("S3_PORT", "9000"),
-			Region:         getEnv("S3_REGION", ""),
-			Bucket:         getEnv("S3_BUCKET", "zamk-products"),
-			AccessKey:      getEnv("S3_ACCESS_KEY", "zamk_minio"),
-			SecretKey:      getEnv("S3_SECRET_KEY", "zamk_minio_password"),
-			UseSSL:         getEnvAsBool("S3_USE_SSL", false),
-			PublicBaseURL:  getEnv("S3_PUBLIC_BASE_URL", "http://localhost:9000/zamk-products"),
+			Endpoint:        getEnv("S3_ENDPOINT", "localhost"),
+			Port:            getEnv("S3_PORT", "9000"),
+			Region:          getEnv("S3_REGION", ""),
+			Bucket:          getEnv("S3_BUCKET", "zamk-products"),
+			AccessKey:       getEnv("S3_ACCESS_KEY", "zamk_minio"),
+			SecretKey:       getEnv("S3_SECRET_KEY", "zamk_minio_password"),
+			UseSSL:          getEnvAsBool("S3_USE_SSL", false),
+			PublicBaseURL:   getEnv("S3_PUBLIC_BASE_URL", "http://localhost:9000/zamk-products"),
 			UploadMaxSizeMB: getEnvAsInt("S3_UPLOAD_MAX_SIZE_MB", 10),
 		},
 		CORS: CORSConfig{
-			AllowedOrigins: strings.Split(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173"), ","),
+			AllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:5174,http://localhost:5175")),
 		},
 		TBank: TBankConfig{
 			TerminalKey: getEnv("TBANK_TERMINAL_KEY", "STUB"),
@@ -139,14 +151,21 @@ func Load() (*Config, error) {
 		},
 	}
 
-	cfg.Postgres.DSN = "postgres://" + cfg.Postgres.User + ":" + cfg.Postgres.Password + "@" + cfg.Postgres.Host + ":" + cfg.Postgres.Port + "/" + cfg.Postgres.Database + "?sslmode=" + cfg.Postgres.SSLMode
-	cfg.Redis.Addr = cfg.Redis.Host + ":" + cfg.Redis.Port
+	cfg.Postgres.DSN = getEnvNonEmpty("POSTGRES_DSN", "postgres://"+cfg.Postgres.User+":"+cfg.Postgres.Password+"@"+cfg.Postgres.Host+":"+cfg.Postgres.Port+"/"+cfg.Postgres.Database+"?sslmode="+cfg.Postgres.SSLMode)
+	cfg.Redis.Addr = getEnvNonEmpty("REDIS_ADDR", cfg.Redis.Host+":"+cfg.Redis.Port)
 
 	return cfg, nil
 }
 
 func getEnv(key, defaultVal string) string {
 	if val, ok := os.LookupEnv(key); ok {
+		return val
+	}
+	return defaultVal
+}
+
+func getEnvNonEmpty(key, defaultVal string) string {
+	if val, ok := os.LookupEnv(key); ok && strings.TrimSpace(val) != "" {
 		return val
 	}
 	return defaultVal
@@ -168,4 +187,16 @@ func getEnvAsBool(key string, defaultVal bool) bool {
 		}
 	}
 	return defaultVal
+}
+
+func splitCSV(value string) []string {
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }

@@ -29,12 +29,12 @@ import (
 )
 
 func New(
-	cfg *config.Config, 
-	pg *postgres.Client, 
-	rdb *redis.Client, 
-	logger *slog.Logger, 
-	authHandler *auth.Handler, 
-	tokenService *auth.TokenService, 
+	cfg *config.Config,
+	pg *postgres.Client,
+	rdb *redis.Client,
+	logger *slog.Logger,
+	authHandler *auth.Handler,
+	tokenService *auth.TokenService,
 	sellersHandler *sellers.Handler,
 	catalogHandler *catalog.Handler,
 	productsHandler *products.Handler,
@@ -55,13 +55,14 @@ func New(
 	r.Use(middleware.Logger) // basic logging
 	r.Use(middleware.Recoverer)
 
-	// Simple CORS middleware for development
+	// CORS allows credentials only for exact configured origins. Wildcards are
+	// intentionally ignored because they are unsafe with refresh cookies.
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			origin := req.Header.Get("Origin")
 			allowed := false
 			for _, o := range cfg.CORS.AllowedOrigins {
-				if o == origin {
+				if o != "*" && o == origin {
 					allowed = true
 					break
 				}

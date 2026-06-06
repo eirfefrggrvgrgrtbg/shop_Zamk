@@ -71,7 +71,11 @@ func main() {
 	authRepo := auth.NewRepository(pgClient)
 	tokenService := auth.NewTokenService(cfg.JWT.AccessTokenSecret, cfg.JWT.RefreshTokenSecret, cfg.JWT.AccessTokenTTLMinutes)
 	authService := auth.NewService(authRepo, userRepo, tokenService, cfg.JWT.RefreshTokenTTLDays)
-	authHandler := auth.NewHandler(authService, cfg.JWT.RefreshTokenTTLDays)
+	authHandler := auth.NewHandler(authService, cfg.JWT.RefreshTokenTTLDays, auth.CookieConfig{
+		Domain:   cfg.Auth.CookieDomain,
+		Secure:   cfg.Auth.CookieSecure,
+		SameSite: cfg.Auth.CookieSameSite,
+	})
 
 	sellersRepo := sellers.NewRepository(pgClient.Pool)
 	sellersService := sellers.NewService(sellersRepo, userRepo, pgClient)
@@ -113,7 +117,7 @@ func main() {
 	paymentsHandler := payments.NewHandler(paymentsService)
 
 	returnsRepo := returns.NewRepository(pgClient.Pool)
-	
+
 	payoutsRepo := payouts.NewRepository(pgClient.Pool)
 	payoutsService := payouts.NewService(payoutsRepo, pgClient, returnsRepo, ordersRepo, cfg)
 	payoutsHandler := payouts.NewHandler(payoutsService)
