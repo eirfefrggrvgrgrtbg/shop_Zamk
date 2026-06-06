@@ -179,23 +179,25 @@ func (r *Repository) GetReservationByIDForUpdate(ctx context.Context, id uuid.UU
 
 // Listing operations
 
-func (r *Repository) ListInventory(ctx context.Context) ([]Item, error) {
+func (r *Repository) ListInventory(ctx context.Context, limit, offset int) ([]Item, error) {
 	query := `
 		SELECT id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at
 		FROM inventory_items
 		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
 	`
-	return r.listInventoryItems(ctx, query)
+	return r.listInventoryItems(ctx, query, limit, offset)
 }
 
-func (r *Repository) ListInventoryBySeller(ctx context.Context, sellerID uuid.UUID) ([]Item, error) {
+func (r *Repository) ListInventoryBySeller(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]Item, error) {
 	query := `
 		SELECT id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at
 		FROM inventory_items
 		WHERE seller_id = $1
 		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
 	`
-	return r.listInventoryItems(ctx, query, sellerID)
+	return r.listInventoryItems(ctx, query, sellerID, limit, offset)
 }
 
 func (r *Repository) listInventoryItems(ctx context.Context, query string, args ...any) ([]Item, error) {
@@ -217,14 +219,15 @@ func (r *Repository) listInventoryItems(ctx context.Context, query string, args 
 	return items, nil
 }
 
-func (r *Repository) ListMovementsByInventoryItemID(ctx context.Context, itemID uuid.UUID) ([]StockMovement, error) {
+func (r *Repository) ListMovementsByInventoryItemID(ctx context.Context, itemID uuid.UUID, limit, offset int) ([]StockMovement, error) {
 	query := `
 		SELECT id, inventory_item_id, product_id, product_variant_id, seller_id, type, quantity, reason, actor_user_id, reference_type, reference_id, created_at
 		FROM stock_movements
 		WHERE inventory_item_id = $1
 		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
 	`
-	rows, err := r.db.Query(ctx, query, itemID)
+	rows, err := r.db.Query(ctx, query, itemID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list stock movements: %w", err)
 	}

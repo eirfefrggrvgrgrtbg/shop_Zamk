@@ -124,16 +124,16 @@ func (s *Service) GetCustomerReturn(ctx context.Context, userID, returnID uuid.U
 	return ret, items, nil
 }
 
-func (s *Service) ListCustomerReturns(ctx context.Context, userID uuid.UUID) ([]Return, error) {
-	return s.repo.ListReturnsByCustomer(ctx, userID)
+func (s *Service) ListCustomerReturns(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Return, error) {
+	return s.repo.ListReturnsByCustomer(ctx, userID, limit, offset)
 }
 
 func (s *Service) GetAdminReturn(ctx context.Context, returnID uuid.UUID) (*Return, []ReturnItem, error) {
 	return s.repo.GetReturn(ctx, returnID)
 }
 
-func (s *Service) ListAdminReturns(ctx context.Context) ([]Return, error) {
-	return s.repo.ListAllReturns(ctx)
+func (s *Service) ListAdminReturns(ctx context.Context, limit, offset int) ([]Return, error) {
+	return s.repo.ListAllReturns(ctx, limit, offset)
 }
 
 func (s *Service) UpdateReturnStatus(ctx context.Context, adminID, returnID uuid.UUID, req UpdateReturnStatusRequest) error {
@@ -303,12 +303,12 @@ func (s *Service) CreateRefund(ctx context.Context, adminID, returnID uuid.UUID,
 	return ref, nil
 }
 
-func (s *Service) ListSellerReturns(ctx context.Context, userID uuid.UUID) ([]SellerReturnItem, error) {
+func (s *Service) ListSellerReturns(ctx context.Context, userID uuid.UUID, limit, offset int) ([]SellerReturnItem, error) {
 	sellerID, err := s.ordersRepo.GetSellerIDByUserID(ctx, userID)
 	if err != nil {
 		return nil, ErrUnauthorized
 	}
-	return s.repo.GetSellerReturnItems(ctx, sellerID)
+	return s.repo.GetSellerReturnItems(ctx, sellerID, limit, offset)
 }
 
 func (s *Service) GetSellerReturn(ctx context.Context, userID, returnID uuid.UUID) ([]SellerReturnItem, error) {
@@ -326,8 +326,8 @@ func (s *Service) GetSellerReturn(ctx context.Context, userID, returnID uuid.UUI
 	return items, nil
 }
 
-func (s *Service) ListAdminRefunds(ctx context.Context) ([]Refund, error) {
-	return s.repo.ListAllRefunds(ctx)
+func (s *Service) ListAdminRefunds(ctx context.Context, limit, offset int) ([]Refund, error) {
+	return s.repo.ListAllRefunds(ctx, limit, offset)
 }
 
 func (s *Service) GetAdminRefund(ctx context.Context, id uuid.UUID) (*Refund, error) {

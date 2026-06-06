@@ -109,12 +109,13 @@ func (r *Repository) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]Or
 	return items, nil
 }
 
-func (r *Repository) ListCustomerOrders(ctx context.Context, userID uuid.UUID) ([]Order, error) {
+func (r *Repository) ListCustomerOrders(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Order, error) {
 	query := `
 		SELECT id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, created_at, updated_at, cancelled_at
 		FROM orders WHERE user_id = $1 ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
 	`
-	rows, err := r.db.Query(ctx, query, userID)
+	rows, err := r.db.Query(ctx, query, userID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -142,12 +143,13 @@ func (r *Repository) ListCustomerOrders(ctx context.Context, userID uuid.UUID) (
 	return orders, nil
 }
 
-func (r *Repository) ListAdminOrders(ctx context.Context) ([]Order, error) {
+func (r *Repository) ListAdminOrders(ctx context.Context, limit, offset int) ([]Order, error) {
 	query := `
 		SELECT id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, created_at, updated_at, cancelled_at
 		FROM orders ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
 	`
-	rows, err := r.db.Query(ctx, query)
+	rows, err := r.db.Query(ctx, query, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -175,15 +177,16 @@ func (r *Repository) ListAdminOrders(ctx context.Context) ([]Order, error) {
 	return orders, nil
 }
 
-func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID) ([]SellerOrder, error) {
+func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerOrder, error) {
 	query := `
 		SELECT DISTINCT o.id, o.status, o.created_at
 		FROM orders o
 		JOIN order_items oi ON o.id = oi.order_id
 		WHERE oi.seller_id = $1
 		ORDER BY o.created_at DESC
+		LIMIT $2 OFFSET $3
 	`
-	rows, err := r.db.Query(ctx, query, sellerID)
+	rows, err := r.db.Query(ctx, query, sellerID, limit, offset)
 	if err != nil {
 		return nil, err
 	}

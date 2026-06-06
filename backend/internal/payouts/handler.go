@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
 )
 
@@ -59,7 +60,8 @@ func (h *Handler) ListSellerPayouts(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := val.(uuid.UUID)
 
-	payouts, err := h.service.ListSellerPayouts(r.Context(), userID)
+	page := pagination.FromRequest(r)
+	payouts, err := h.service.ListSellerPayouts(r.Context(), userID, page.Limit, page.Offset)
 	if err != nil {
 		if errors.Is(err, ErrUnauthorized) {
 			h.writeError(w, http.StatusForbidden, "forbidden", "Must be a seller")
@@ -114,7 +116,8 @@ func (h *Handler) RequestPayout(w http.ResponseWriter, r *http.Request) {
 // Admin Endpoints
 
 func (h *Handler) ListAdminPayouts(w http.ResponseWriter, r *http.Request) {
-	payouts, err := h.service.ListAdminPayouts(r.Context())
+	page := pagination.FromRequest(r)
+	payouts, err := h.service.ListAdminPayouts(r.Context(), page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list payouts")
 		return

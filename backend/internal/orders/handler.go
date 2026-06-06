@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
 )
 
@@ -128,7 +129,8 @@ func (h *Handler) ListCustomerOrders(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := val.(uuid.UUID)
 
-	orders, err := h.service.ListCustomerOrders(r.Context(), userID)
+	page := pagination.FromRequest(r)
+	orders, err := h.service.ListCustomerOrders(r.Context(), userID, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list orders")
 		return
@@ -170,7 +172,8 @@ func (h *Handler) GetAdminOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListAdminOrders(w http.ResponseWriter, r *http.Request) {
-	orders, err := h.service.ListAdminOrders(r.Context())
+	page := pagination.FromRequest(r)
+	orders, err := h.service.ListAdminOrders(r.Context(), page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list orders")
 		return
@@ -268,7 +271,8 @@ func (h *Handler) ListSellerOrders(w http.ResponseWriter, r *http.Request) {
 	}
 	sellerID := val.(uuid.UUID)
 
-	orders, err := h.service.ListSellerOrders(r.Context(), sellerID)
+	page := pagination.FromRequest(r)
+	orders, err := h.service.ListSellerOrders(r.Context(), sellerID, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list orders")
 		return

@@ -135,8 +135,8 @@ func (s *Service) ModerateReview(ctx context.Context, adminID, reviewID uuid.UUI
 	})
 }
 
-func (s *Service) GetCustomerReviews(ctx context.Context, userID uuid.UUID) ([]ProductReview, error) {
-	return s.repo.ListReviews(ctx, map[string]interface{}{"user_id": userID})
+func (s *Service) GetCustomerReviews(ctx context.Context, userID uuid.UUID, limit, offset int) ([]ProductReview, error) {
+	return s.repo.ListReviews(ctx, map[string]interface{}{"user_id": userID}, limit, offset)
 }
 
 func (s *Service) GetCustomerReviewByID(ctx context.Context, userID, reviewID uuid.UUID) (*ProductReview, error) {
@@ -150,24 +150,24 @@ func (s *Service) GetCustomerReviewByID(ctx context.Context, userID, reviewID uu
 	return rev, nil
 }
 
-func (s *Service) GetAdminReviews(ctx context.Context, status string) ([]ProductReview, error) {
+func (s *Service) GetAdminReviews(ctx context.Context, status string, limit, offset int) ([]ProductReview, error) {
 	filters := make(map[string]interface{})
 	if status != "" {
 		filters["status"] = status
 	}
-	return s.repo.ListReviews(ctx, filters)
+	return s.repo.ListReviews(ctx, filters, limit, offset)
 }
 
 func (s *Service) GetAdminReviewByID(ctx context.Context, reviewID uuid.UUID) (*ProductReview, error) {
 	return s.repo.GetReviewByID(ctx, nil, reviewID)
 }
 
-func (s *Service) GetSellerReviews(ctx context.Context, userID uuid.UUID) ([]ProductReview, error) {
+func (s *Service) GetSellerReviews(ctx context.Context, userID uuid.UUID, limit, offset int) ([]ProductReview, error) {
 	seller, _, err := s.sellerRepo.GetSellerByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.ListReviews(ctx, map[string]interface{}{"seller_id": seller.ID})
+	return s.repo.ListReviews(ctx, map[string]interface{}{"seller_id": seller.ID}, limit, offset)
 }
 
 func (s *Service) GetSellerReviewByID(ctx context.Context, userID, reviewID uuid.UUID) (*ProductReview, error) {
@@ -185,8 +185,8 @@ func (s *Service) GetSellerReviewByID(ctx context.Context, userID, reviewID uuid
 	return rev, nil
 }
 
-func (s *Service) GetPublicProductReviews(ctx context.Context, productID uuid.UUID) ([]ProductReview, error) {
-	return s.repo.ListReviews(ctx, map[string]interface{}{"product_id": productID, "status": "published"})
+func (s *Service) GetPublicProductReviews(ctx context.Context, productID uuid.UUID, limit, offset int) ([]ProductReview, error) {
+	return s.repo.ListReviews(ctx, map[string]interface{}{"product_id": productID, "status": "published"}, limit, offset)
 }
 
 func (s *Service) GetRatingSummary(ctx context.Context, productID uuid.UUID) (*RatingSummaryResponse, error) {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
 )
 
@@ -27,7 +28,8 @@ func NewHandler(service *Service) *Handler {
 // ---------------------------------------------------------
 
 func (h *Handler) ListAdminInventory(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.service.ListAdminInventory(r.Context())
+	page := pagination.FromRequest(r)
+	resp, err := h.service.ListAdminInventory(r.Context(), page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list inventory")
 		return
@@ -162,7 +164,8 @@ func (h *Handler) ListMovements(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.service.ListMovements(r.Context(), id)
+	page := pagination.FromRequest(r)
+	resp, err := h.service.ListMovements(r.Context(), id, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list movements")
 		return
@@ -184,7 +187,8 @@ func (h *Handler) ListSellerInventory(w http.ResponseWriter, r *http.Request) {
 	}
 	sellerID := val.(uuid.UUID)
 
-	resp, err := h.service.ListSellerInventory(r.Context(), sellerID)
+	page := pagination.FromRequest(r)
+	resp, err := h.service.ListSellerInventory(r.Context(), sellerID, page.Limit, page.Offset)
 	if err != nil {
 		if errors.Is(err, ErrSellerMismatch) {
 			h.writeError(w, http.StatusForbidden, "forbidden", "Not a seller")
@@ -246,7 +250,8 @@ func (h *Handler) ListSellerMovements(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.service.ListSellerMovements(r.Context(), sellerID, id)
+	page := pagination.FromRequest(r)
+	resp, err := h.service.ListSellerMovements(r.Context(), sellerID, id, page.Limit, page.Offset)
 	if err != nil {
 		if errors.Is(err, ErrSellerMismatch) {
 			h.writeError(w, http.StatusForbidden, "forbidden", "Cannot access this inventory item")

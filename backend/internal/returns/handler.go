@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
 )
 
@@ -113,7 +114,8 @@ func (h *Handler) ListCustomerReturns(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := val.(uuid.UUID)
 
-	returns, err := h.service.ListCustomerReturns(r.Context(), userID)
+	page := pagination.FromRequest(r)
+	returns, err := h.service.ListCustomerReturns(r.Context(), userID, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list returns")
 		return
@@ -135,7 +137,8 @@ func (h *Handler) ListCustomerReturns(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------
 
 func (h *Handler) ListAdminReturns(w http.ResponseWriter, r *http.Request) {
-	returns, err := h.service.ListAdminReturns(r.Context())
+	page := pagination.FromRequest(r)
+	returns, err := h.service.ListAdminReturns(r.Context(), page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list returns")
 		return
@@ -261,7 +264,8 @@ func (h *Handler) CreateAdminRefund(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListAdminRefunds(w http.ResponseWriter, r *http.Request) {
-	refunds, err := h.service.ListAdminRefunds(r.Context())
+	page := pagination.FromRequest(r)
+	refunds, err := h.service.ListAdminRefunds(r.Context(), page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list refunds")
 		return
@@ -306,7 +310,8 @@ func (h *Handler) ListSellerReturns(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := val.(uuid.UUID)
 
-	items, err := h.service.ListSellerReturns(r.Context(), userID)
+	page := pagination.FromRequest(r)
+	items, err := h.service.ListSellerReturns(r.Context(), userID, page.Limit, page.Offset)
 	if err != nil {
 		if errors.Is(err, ErrUnauthorized) {
 			h.writeError(w, http.StatusForbidden, "forbidden", "Must be a seller")

@@ -68,8 +68,8 @@ func (s *Service) getSellerForUser(ctx context.Context, userID uuid.UUID) (*sell
 // Admin Operations
 // ---------------------------------------------------------
 
-func (s *Service) ListAdminInventory(ctx context.Context) (InventoryListResponse, error) {
-	items, err := s.repo.ListInventory(ctx)
+func (s *Service) ListAdminInventory(ctx context.Context, limit, offset int) (InventoryListResponse, error) {
+	items, err := s.repo.ListInventory(ctx, limit, offset)
 	if err != nil {
 		return InventoryListResponse{}, err
 	}
@@ -87,8 +87,8 @@ func (s *Service) GetAdminInventoryItem(ctx context.Context, id uuid.UUID) (Item
 	return *i, nil
 }
 
-func (s *Service) ListMovements(ctx context.Context, itemID uuid.UUID) (StockMovementsListResponse, error) {
-	movs, err := s.repo.ListMovementsByInventoryItemID(ctx, itemID)
+func (s *Service) ListMovements(ctx context.Context, itemID uuid.UUID, limit, offset int) (StockMovementsListResponse, error) {
+	movs, err := s.repo.ListMovementsByInventoryItemID(ctx, itemID, limit, offset)
 	if err != nil {
 		return StockMovementsListResponse{}, err
 	}
@@ -289,13 +289,13 @@ func (s *Service) WriteOffStock(ctx context.Context, adminUserID uuid.UUID, req 
 // Seller Operations
 // ---------------------------------------------------------
 
-func (s *Service) ListSellerInventory(ctx context.Context, currentUserID uuid.UUID) (InventoryListResponse, error) {
+func (s *Service) ListSellerInventory(ctx context.Context, currentUserID uuid.UUID, limit, offset int) (InventoryListResponse, error) {
 	seller, err := s.getSellerForUser(ctx, currentUserID)
 	if err != nil {
 		return InventoryListResponse{}, err
 	}
 
-	items, err := s.repo.ListInventoryBySeller(ctx, seller.ID)
+	items, err := s.repo.ListInventoryBySeller(ctx, seller.ID, limit, offset)
 	if err != nil {
 		return InventoryListResponse{}, err
 	}
@@ -321,7 +321,7 @@ func (s *Service) GetSellerInventoryItem(ctx context.Context, currentUserID uuid
 	return *i, nil
 }
 
-func (s *Service) ListSellerMovements(ctx context.Context, currentUserID uuid.UUID, itemID uuid.UUID) (StockMovementsListResponse, error) {
+func (s *Service) ListSellerMovements(ctx context.Context, currentUserID uuid.UUID, itemID uuid.UUID, limit, offset int) (StockMovementsListResponse, error) {
 	seller, err := s.getSellerForUser(ctx, currentUserID)
 	if err != nil {
 		return StockMovementsListResponse{}, err
@@ -335,7 +335,7 @@ func (s *Service) ListSellerMovements(ctx context.Context, currentUserID uuid.UU
 		return StockMovementsListResponse{}, ErrSellerMismatch
 	}
 
-	movs, err := s.repo.ListMovementsByInventoryItemID(ctx, itemID)
+	movs, err := s.repo.ListMovementsByInventoryItemID(ctx, itemID, limit, offset)
 	if err != nil {
 		return StockMovementsListResponse{}, err
 	}

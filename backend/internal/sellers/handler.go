@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
 )
 
@@ -45,8 +46,8 @@ func (h *Handler) CreateSellerByAdmin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListSellers(w http.ResponseWriter, r *http.Request) {
-	// Simple unpaginated limit for MVP
-	res, err := h.service.ListSellers(r.Context(), 50, 0)
+	page := pagination.FromRequest(r)
+	res, err := h.service.ListSellers(r.Context(), page.Limit, page.Offset)
 	if err != nil {
 		h.respondError(w, http.StatusInternalServerError, "failed to list sellers")
 		return

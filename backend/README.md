@@ -128,6 +128,18 @@ To run migrations down:
 migrate -path migrations -database "postgres://zamk:zamk_password@localhost:5433/zamk?sslmode=disable" down
 ```
 
+### Performance Indexes and Pagination
+
+Phase 13C adds performance indexes for high-traffic lookup and list paths across auth sessions, products, inventory, orders, payments, shipments, returns/refunds, payouts/ledger, and reviews. The indexes are intentionally non-concurrent because local `golang-migrate` runs migrations transactionally; for large production tables, plan a separate online migration using `CREATE INDEX CONCURRENTLY`.
+
+Large list endpoints accept optional `limit` and `offset` query parameters. Defaults are `limit=50` and `offset=0`; `limit` is capped at `100`. Existing response shapes are preserved: endpoints that returned `{ "items": [...], "totalCount": n }` still do so, and endpoints that returned arrays still return arrays.
+
+Known query debt:
+
+- `totalCount` currently reflects the returned page length, not a full table count.
+- Products and order lists still hydrate variants/images/items after the bounded page; the cap prevents unbounded N+1 amplification, but future cursor pagination and batch hydration would be better for large catalogs.
+- Categories and brands remain unpaginated because they are small reference dictionaries and frontend contracts expect the current shape.
+
 ## Running the Applications
 
 ### Run the API Server

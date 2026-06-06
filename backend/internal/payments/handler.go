@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
 )
 
@@ -88,7 +89,8 @@ func (h *Handler) HandleTBankWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListAdminPayments(w http.ResponseWriter, r *http.Request) {
-	payments, err := h.service.repo.ListAdminPayments(r.Context())
+	page := pagination.FromRequest(r)
+	payments, err := h.service.repo.ListAdminPayments(r.Context(), page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list payments")
 		return

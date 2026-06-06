@@ -86,12 +86,13 @@ func (r *Repository) CreatePaymentEventTx(ctx context.Context, tx pgx.Tx, e *Pay
 	return tx.QueryRow(ctx, query, e.ID, e.PaymentID, e.Provider, e.ProviderPaymentID, e.EventType, e.RawPayload, e.SignatureValid, e.ProcessedAt).Scan(&e.CreatedAt)
 }
 
-func (r *Repository) ListAdminPayments(ctx context.Context) ([]Payment, error) {
+func (r *Repository) ListAdminPayments(ctx context.Context, limit, offset int) ([]Payment, error) {
 	query := `
 		SELECT id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_url, idempotency_key, created_at, updated_at, paid_at, failed_at, cancelled_at
 		FROM payments ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
 	`
-	rows, err := r.db.Query(ctx, query)
+	rows, err := r.db.Query(ctx, query, limit, offset)
 	if err != nil {
 		return nil, err
 	}

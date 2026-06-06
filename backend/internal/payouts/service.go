@@ -195,12 +195,12 @@ func (s *Service) GetSellerBalance(ctx context.Context, userID uuid.UUID) (*Bala
 	return s.repo.GetSellerBalances(ctx, sellerID)
 }
 
-func (s *Service) ListSellerPayouts(ctx context.Context, userID uuid.UUID) ([]Payout, error) {
+func (s *Service) ListSellerPayouts(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Payout, error) {
 	sellerID, err := s.orders.GetSellerIDByUserID(ctx, userID)
 	if err != nil {
 		return nil, ErrUnauthorized
 	}
-	return s.repo.ListSellerPayouts(ctx, sellerID)
+	return s.repo.ListSellerPayouts(ctx, sellerID, limit, offset)
 }
 
 func (s *Service) RequestPayout(ctx context.Context, userID uuid.UUID, req PayoutRequestDto) (*Payout, error) {
@@ -253,8 +253,8 @@ func (s *Service) RequestPayout(ctx context.Context, userID uuid.UUID, req Payou
 	return payout, nil
 }
 
-func (s *Service) ListAdminPayouts(ctx context.Context) ([]Payout, error) {
-	return s.repo.ListAllPayouts(ctx)
+func (s *Service) ListAdminPayouts(ctx context.Context, limit, offset int) ([]Payout, error) {
+	return s.repo.ListAllPayouts(ctx, limit, offset)
 }
 
 func (s *Service) GetAdminPayout(ctx context.Context, id uuid.UUID) (*Payout, error) {

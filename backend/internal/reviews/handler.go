@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
 )
 
@@ -69,7 +70,8 @@ func (h *Handler) GetCustomerReviews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := val.(uuid.UUID)
-	reviews, err := h.svc.GetCustomerReviews(r.Context(), userID)
+	page := pagination.FromRequest(r)
+	reviews, err := h.svc.GetCustomerReviews(r.Context(), userID, page.Limit, page.Offset)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -111,7 +113,8 @@ func (h *Handler) GetCustomerReview(w http.ResponseWriter, r *http.Request) {
 // Admin Endpoints
 func (h *Handler) GetAdminReviews(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
-	reviews, err := h.svc.GetAdminReviews(r.Context(), status)
+	page := pagination.FromRequest(r)
+	reviews, err := h.svc.GetAdminReviews(r.Context(), status, page.Limit, page.Offset)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -205,7 +208,8 @@ func (h *Handler) GetSellerReviews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := val.(uuid.UUID)
-	reviews, err := h.svc.GetSellerReviews(r.Context(), userID)
+	page := pagination.FromRequest(r)
+	reviews, err := h.svc.GetSellerReviews(r.Context(), userID, page.Limit, page.Offset)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -252,7 +256,8 @@ func (h *Handler) GetPublicProductReviews(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	reviews, err := h.svc.GetPublicProductReviews(r.Context(), id)
+	page := pagination.FromRequest(r)
+	reviews, err := h.svc.GetPublicProductReviews(r.Context(), id, page.Limit, page.Offset)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return

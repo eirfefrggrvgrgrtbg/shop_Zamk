@@ -176,12 +176,13 @@ func (r *Repository) UpdatePayoutTx(ctx context.Context, tx pgx.Tx, payout *Payo
 	return tx.QueryRow(ctx, query, payout.Status, payout.ApprovedAt, payout.RejectedAt, payout.PaidAt, payout.AdminUserID, payout.Comment, payout.ID).Scan(&payout.UpdatedAt)
 }
 
-func (r *Repository) ListSellerPayouts(ctx context.Context, sellerID uuid.UUID) ([]Payout, error) {
+func (r *Repository) ListSellerPayouts(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]Payout, error) {
 	query := `
 		SELECT id, seller_id, status, amount_cents, currency, requested_at, approved_at, rejected_at, paid_at, admin_user_id, comment, created_at, updated_at
 		FROM payouts WHERE seller_id = $1 ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
 	`
-	rows, err := r.db.Query(ctx, query, sellerID)
+	rows, err := r.db.Query(ctx, query, sellerID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -201,12 +202,13 @@ func (r *Repository) ListSellerPayouts(ctx context.Context, sellerID uuid.UUID) 
 	return list, nil
 }
 
-func (r *Repository) ListAllPayouts(ctx context.Context) ([]Payout, error) {
+func (r *Repository) ListAllPayouts(ctx context.Context, limit, offset int) ([]Payout, error) {
 	query := `
 		SELECT id, seller_id, status, amount_cents, currency, requested_at, approved_at, rejected_at, paid_at, admin_user_id, comment, created_at, updated_at
 		FROM payouts ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
 	`
-	rows, err := r.db.Query(ctx, query)
+	rows, err := r.db.Query(ctx, query, limit, offset)
 	if err != nil {
 		return nil, err
 	}

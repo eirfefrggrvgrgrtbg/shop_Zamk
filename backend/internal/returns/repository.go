@@ -100,12 +100,13 @@ func (r *Repository) GetReturn(ctx context.Context, id uuid.UUID) (*Return, []Re
 	return &ret, items, nil
 }
 
-func (r *Repository) ListReturnsByCustomer(ctx context.Context, userID uuid.UUID) ([]Return, error) {
+func (r *Repository) ListReturnsByCustomer(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Return, error) {
 	query := `
 		SELECT id, order_id, user_id, status, reason, comment, admin_comment, created_at, updated_at, approved_at, rejected_at, completed_at
 		FROM returns WHERE user_id = $1 ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
 	`
-	rows, err := r.db.Query(ctx, query, userID)
+	rows, err := r.db.Query(ctx, query, userID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -125,12 +126,13 @@ func (r *Repository) ListReturnsByCustomer(ctx context.Context, userID uuid.UUID
 	return list, nil
 }
 
-func (r *Repository) ListAllReturns(ctx context.Context) ([]Return, error) {
+func (r *Repository) ListAllReturns(ctx context.Context, limit, offset int) ([]Return, error) {
 	query := `
 		SELECT id, order_id, user_id, status, reason, comment, admin_comment, created_at, updated_at, approved_at, rejected_at, completed_at
 		FROM returns ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
 	`
-	rows, err := r.db.Query(ctx, query)
+	rows, err := r.db.Query(ctx, query, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +152,7 @@ func (r *Repository) ListAllReturns(ctx context.Context) ([]Return, error) {
 	return list, nil
 }
 
-func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUID) ([]SellerReturnItem, error) {
+func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerReturnItem, error) {
 	query := `
 		SELECT ri.id, ri.return_id, r.order_id, ri.order_item_id, r.status, ri.quantity, ri.reason, ri.condition
 		FROM return_items ri
@@ -158,8 +160,9 @@ func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUI
 		JOIN order_items oi ON oi.id = ri.order_item_id
 		WHERE oi.seller_id = $1
 		ORDER BY r.created_at DESC
+		LIMIT $2 OFFSET $3
 	`
-	rows, err := r.db.Query(ctx, query, sellerID)
+	rows, err := r.db.Query(ctx, query, sellerID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -246,12 +249,13 @@ func (r *Repository) GetRefund(ctx context.Context, id uuid.UUID) (*Refund, erro
 	return &ref, nil
 }
 
-func (r *Repository) ListAllRefunds(ctx context.Context) ([]Refund, error) {
+func (r *Repository) ListAllRefunds(ctx context.Context, limit, offset int) ([]Refund, error) {
 	query := `
 		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, provider, provider_refund_id, reason, created_at, updated_at, processed_at, failed_at
 		FROM refunds ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
 	`
-	rows, err := r.db.Query(ctx, query)
+	rows, err := r.db.Query(ctx, query, limit, offset)
 	if err != nil {
 		return nil, err
 	}

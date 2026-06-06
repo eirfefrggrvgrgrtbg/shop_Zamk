@@ -195,8 +195,8 @@ func (s *Service) GetAdminShipment(ctx context.Context, shipmentID uuid.UUID) (*
 	return s.repo.GetShipment(ctx, shipmentID)
 }
 
-func (s *Service) ListAdminShipments(ctx context.Context) ([]Shipment, error) {
-	return s.repo.ListShipments(ctx)
+func (s *Service) ListAdminShipments(ctx context.Context, limit, offset int) ([]Shipment, error) {
+	return s.repo.ListShipments(ctx, limit, offset)
 }
 
 func (s *Service) GetCustomerShipment(ctx context.Context, userID, orderID uuid.UUID) (*Shipment, error) {

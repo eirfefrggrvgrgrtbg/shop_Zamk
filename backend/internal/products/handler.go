@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
 )
 
@@ -108,7 +109,8 @@ func (h *Handler) ListSellerProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.service.ListSellerProducts(r.Context(), userID)
+	page := pagination.FromRequest(r)
+	resp, err := h.service.ListSellerProducts(r.Context(), userID, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list products")
 		return
@@ -249,7 +251,8 @@ func (h *Handler) SubmitForModeration(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------
 
 func (h *Handler) ListAdminProducts(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.service.ListAdminProducts(r.Context())
+	page := pagination.FromRequest(r)
+	resp, err := h.service.ListAdminProducts(r.Context(), page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list products")
 		return
@@ -260,7 +263,8 @@ func (h *Handler) ListAdminProducts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListModerationProducts(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.service.ListProductsForModeration(r.Context())
+	page := pagination.FromRequest(r)
+	resp, err := h.service.ListProductsForModeration(r.Context(), page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list products")
 		return
@@ -373,7 +377,8 @@ func (h *Handler) handleAdminModerationAction(w http.ResponseWriter, r *http.Req
 // ---------------------------------------------------------
 
 func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.service.ListPublicProducts(r.Context())
+	page := pagination.FromRequest(r)
+	resp, err := h.service.ListPublicProducts(r.Context(), page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list products")
 		return

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
 )
 
@@ -54,7 +55,8 @@ func (h *Handler) CreateShipment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListAdminShipments(w http.ResponseWriter, r *http.Request) {
-	shipments, err := h.svc.ListAdminShipments(r.Context())
+	page := pagination.FromRequest(r)
+	shipments, err := h.svc.ListAdminShipments(r.Context(), page.Limit, page.Offset)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

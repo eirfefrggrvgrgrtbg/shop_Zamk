@@ -265,13 +265,13 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 	return *p, nil
 }
 
-func (s *Service) ListSellerProducts(ctx context.Context, currentUserID uuid.UUID) (ProductListResponse, error) {
+func (s *Service) ListSellerProducts(ctx context.Context, currentUserID uuid.UUID, limit, offset int) (ProductListResponse, error) {
 	seller, err := s.getSellerForUser(ctx, currentUserID)
 	if err != nil {
 		return ProductListResponse{}, err
 	}
 
-	items, err := s.repo.ListProductsBySeller(ctx, seller.ID)
+	items, err := s.repo.ListProductsBySeller(ctx, seller.ID, limit, offset)
 	if err != nil {
 		return ProductListResponse{}, err
 	}
@@ -345,8 +345,8 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 // Admin Moderation Operations
 // ---------------------------------------------------------
 
-func (s *Service) ListAdminProducts(ctx context.Context) (ProductListResponse, error) {
-	items, err := s.repo.ListAllProducts(ctx)
+func (s *Service) ListAdminProducts(ctx context.Context, limit, offset int) (ProductListResponse, error) {
+	items, err := s.repo.ListAllProducts(ctx, limit, offset)
 	if err != nil {
 		return ProductListResponse{}, err
 	}
@@ -356,8 +356,8 @@ func (s *Service) ListAdminProducts(ctx context.Context) (ProductListResponse, e
 	return ProductListResponse{Items: items, TotalCount: len(items)}, nil
 }
 
-func (s *Service) ListProductsForModeration(ctx context.Context) (ProductListResponse, error) {
-	items, err := s.repo.ListProductsForModeration(ctx)
+func (s *Service) ListProductsForModeration(ctx context.Context, limit, offset int) (ProductListResponse, error) {
+	items, err := s.repo.ListProductsForModeration(ctx, limit, offset)
 	if err != nil {
 		return ProductListResponse{}, err
 	}
@@ -442,8 +442,8 @@ func (s *Service) BlockProduct(ctx context.Context, adminUserID, productID uuid.
 // Public Operations
 // ---------------------------------------------------------
 
-func (s *Service) ListPublicProducts(ctx context.Context) (ProductListResponse, error) {
-	items, err := s.repo.ListPublishedProducts(ctx)
+func (s *Service) ListPublicProducts(ctx context.Context, limit, offset int) (ProductListResponse, error) {
+	items, err := s.repo.ListPublishedProducts(ctx, limit, offset)
 	if err != nil {
 		return ProductListResponse{}, err
 	}

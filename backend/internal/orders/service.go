@@ -246,24 +246,24 @@ func (s *Service) GetCustomerOrder(ctx context.Context, userID, orderID uuid.UUI
 	return order, nil
 }
 
-func (s *Service) ListCustomerOrders(ctx context.Context, userID uuid.UUID) ([]Order, error) {
-	return s.repo.ListCustomerOrders(ctx, userID)
+func (s *Service) ListCustomerOrders(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Order, error) {
+	return s.repo.ListCustomerOrders(ctx, userID, limit, offset)
 }
 
 func (s *Service) GetAdminOrder(ctx context.Context, orderID uuid.UUID) (*Order, error) {
 	return s.repo.GetOrder(ctx, orderID)
 }
 
-func (s *Service) ListAdminOrders(ctx context.Context) ([]Order, error) {
-	return s.repo.ListAdminOrders(ctx)
+func (s *Service) ListAdminOrders(ctx context.Context, limit, offset int) ([]Order, error) {
+	return s.repo.ListAdminOrders(ctx, limit, offset)
 }
 
-func (s *Service) ListSellerOrders(ctx context.Context, userID uuid.UUID) ([]SellerOrder, error) {
+func (s *Service) ListSellerOrders(ctx context.Context, userID uuid.UUID, limit, offset int) ([]SellerOrder, error) {
 	sellerID, err := s.repo.GetSellerIDByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.ListSellerOrders(ctx, sellerID)
+	return s.repo.ListSellerOrders(ctx, sellerID, limit, offset)
 }
 
 func (s *Service) GetSellerOrder(ctx context.Context, userID, orderID uuid.UUID) (*SellerOrder, error) {

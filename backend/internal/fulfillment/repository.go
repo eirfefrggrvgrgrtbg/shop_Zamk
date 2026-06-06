@@ -81,12 +81,13 @@ func (r *Repository) GetShipmentByOrderID(ctx context.Context, orderID uuid.UUID
 	return &s, nil
 }
 
-func (r *Repository) ListShipments(ctx context.Context) ([]Shipment, error) {
+func (r *Repository) ListShipments(ctx context.Context, limit, offset int) ([]Shipment, error) {
 	query := `
 		SELECT id, order_id, status, carrier, tracking_number, tracking_url, shipped_at, delivered_at, created_at, updated_at
 		FROM shipments ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
 	`
-	rows, err := r.db.Query(ctx, query)
+	rows, err := r.db.Query(ctx, query, limit, offset)
 	if err != nil {
 		return nil, err
 	}

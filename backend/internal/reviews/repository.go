@@ -114,7 +114,7 @@ func (r *Repository) LogModeration(ctx context.Context, tx postgres.DBTX, log *P
 	return err
 }
 
-func (r *Repository) ListReviews(ctx context.Context, filters map[string]interface{}) ([]ProductReview, error) {
+func (r *Repository) ListReviews(ctx context.Context, filters map[string]interface{}, limit, offset int) ([]ProductReview, error) {
 	// A simple query builder for demonstration
 	query := `
 		SELECT id, product_id, product_variant_id, order_id, order_item_id, user_id, seller_id,
@@ -146,7 +146,8 @@ func (r *Repository) ListReviews(ctx context.Context, filters map[string]interfa
 		argIdx++
 	}
 	
-	query += ` ORDER BY created_at DESC`
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
+	args = append(args, limit, offset)
 
 	rows, err := r.db.Pool.Query(ctx, query, args...)
 	if err != nil {

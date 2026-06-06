@@ -324,7 +324,7 @@ func (r *Repository) AddModerationLog(ctx context.Context, log *ProductModeratio
 // For simplicity in Phase 4, we use basic lists without pagination arguments in SQL yet, 
 // but we structure them to be easily extensible.
 
-func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUID) ([]Product, error) {
+func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]Product, error) {
 	query := `
 		SELECT id, seller_id, category_id, brand_id, title, slug, description,
 			status, gender, color, material, care_instructions,
@@ -333,11 +333,12 @@ func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUI
 		FROM products
 		WHERE seller_id = $1
 		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
 	`
-	return r.listProductsQuery(ctx, query, sellerID)
+	return r.listProductsQuery(ctx, query, sellerID, limit, offset)
 }
 
-func (r *Repository) ListAllProducts(ctx context.Context) ([]Product, error) {
+func (r *Repository) ListAllProducts(ctx context.Context, limit, offset int) ([]Product, error) {
 	query := `
 		SELECT id, seller_id, category_id, brand_id, title, slug, description,
 			status, gender, color, material, care_instructions,
@@ -345,11 +346,12 @@ func (r *Repository) ListAllProducts(ctx context.Context) ([]Product, error) {
 			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
 		FROM products
 		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
 	`
-	return r.listProductsQuery(ctx, query)
+	return r.listProductsQuery(ctx, query, limit, offset)
 }
 
-func (r *Repository) ListProductsForModeration(ctx context.Context) ([]Product, error) {
+func (r *Repository) ListProductsForModeration(ctx context.Context, limit, offset int) ([]Product, error) {
 	query := `
 		SELECT id, seller_id, category_id, brand_id, title, slug, description,
 			status, gender, color, material, care_instructions,
@@ -358,11 +360,12 @@ func (r *Repository) ListProductsForModeration(ctx context.Context) ([]Product, 
 		FROM products
 		WHERE status = 'pending_moderation'
 		ORDER BY submitted_at ASC
+		LIMIT $1 OFFSET $2
 	`
-	return r.listProductsQuery(ctx, query)
+	return r.listProductsQuery(ctx, query, limit, offset)
 }
 
-func (r *Repository) ListPublishedProducts(ctx context.Context) ([]Product, error) {
+func (r *Repository) ListPublishedProducts(ctx context.Context, limit, offset int) ([]Product, error) {
 	query := `
 		SELECT id, seller_id, category_id, brand_id, title, slug, description,
 			status, gender, color, material, care_instructions,
@@ -371,8 +374,9 @@ func (r *Repository) ListPublishedProducts(ctx context.Context) ([]Product, erro
 		FROM products
 		WHERE status = 'published'
 		ORDER BY published_at DESC
+		LIMIT $1 OFFSET $2
 	`
-	return r.listProductsQuery(ctx, query)
+	return r.listProductsQuery(ctx, query, limit, offset)
 }
 
 func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug string) (*Product, error) {
