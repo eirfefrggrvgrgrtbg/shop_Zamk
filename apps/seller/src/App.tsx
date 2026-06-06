@@ -16,8 +16,6 @@ import { SellerSettings } from './pages/SellerSettings';
 import { AuthProvider } from './contexts/AuthContext';
 import { SellerProtectedRoute } from './components/SellerProtectedRoute';
 
-import './index.css';
-
 export default function App() {
   return (
     <AuthProvider>

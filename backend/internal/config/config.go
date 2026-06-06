@@ -147,7 +147,7 @@ func Load() (*Config, error) {
 			UploadMaxSizeMB: getEnvAsInt("S3_UPLOAD_MAX_SIZE_MB", 10),
 		},
 		CORS: CORSConfig{
-			AllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:5174,http://localhost:5175")),
+			AllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002")),
 		},
 		TBank: TBankConfig{
 			TerminalKey: getEnv("TBANK_TERMINAL_KEY", "STUB"),

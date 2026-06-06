@@ -22,8 +22,6 @@ import { AdminChangePassword } from './pages/AdminChangePassword';
 import { AdminAuthProvider } from './contexts/AdminAuthContext';
 import { AdminProtectedRoute } from './components/AdminProtectedRoute';
 
-import './styles/index.css';
-
 export default function App() {
   return (
     <AdminAuthProvider>
