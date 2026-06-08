@@ -2,6 +2,52 @@
 
 This is a monorepo for the ZAMK project.
 
+## Local Dev Quick Start
+
+### URLs
+
+- Shop: `http://127.0.0.1:3000`
+- Seller: `http://127.0.0.1:3001`
+- Admin: `http://127.0.0.1:3002`
+- API health: `http://127.0.0.1:8080/api/health`
+- API ready: `http://127.0.0.1:8080/api/ready`
+
+### Local Dev Accounts
+
+These credentials are local-only test data created by `go run ./cmd/dev-seed`.
+
+- Admin: `admin@zamk.local` / `Admin12345!`
+- Seller: `seller@zamk.local` / `Seller12345!`
+- Customer: `customer@zamk.local` / `Customer12345!`
+
+### Commands
+
+```bash
+# 1. Start local infrastructure
+cd backend
+docker compose up -d
+
+# 2. Apply migrations
+migrate -path migrations -database "postgres://zamk:zamk_password@localhost:5433/zamk?sslmode=disable" up
+
+# 3. Seed deterministic local test accounts and catalog data
+go run ./cmd/dev-seed
+
+# 4. Start backend API
+go run ./cmd/api
+
+# 5. Optional worker
+go run ./cmd/worker
+```
+
+In separate terminals from the repository root:
+
+```bash
+npm run dev:shop
+npm run dev:seller
+npm run dev:admin
+```
+
 ## Structure
 
 - `apps/shop` - Public store for customers.
@@ -9,8 +55,8 @@ This is a monorepo for the ZAMK project.
 - `apps/admin` - Separate admin panel.
 - `packages/ui` - Shared UI components (future).
 - `packages/shared` - Shared types, contexts, utils (future).
-- `packages/api-client` - Future API client.
-- `backend` - Backend placeholder (planned in Go).
+- `packages/api-client` - Shared frontend API client.
+- `backend` - Go backend API, worker, migrations, and local dev commands.
 
 ## Backend Phase 7: Payments
 - **Payments (`internal/payments`)**: T-Bank-compatible payment provider, webhook validation, and idempotency logic. Webhooks safely convert reservations to sales.
@@ -44,6 +90,7 @@ Run the worker using `go run ./cmd/worker`.
 - `npm run dev:shop` - Start the shop app
 - `npm run dev:seller` - Start the seller app
 - `npm run dev:admin` - Start the admin app
+- `npm run dev:seed` - Seed deterministic local dev accounts/catalog data
 
 - `npm run build:shop` - Build the shop app
 - `npm run build:seller` - Build the seller app
@@ -53,6 +100,5 @@ Run the worker using `go run ./cmd/worker`.
 
 ## Notes
 
-- Backend is not yet implemented.
-- apps/seller and apps/admin currently use placeholder pages. 
-- Some seller pages remain within apps/shop temporarily as tech debt.
+- Do not commit `backend/.env`.
+- The `dev-seed` command refuses to run when `APP_ENV=production`.

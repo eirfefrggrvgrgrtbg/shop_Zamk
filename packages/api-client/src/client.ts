@@ -23,11 +23,12 @@ export const request = async <T>(
   path: string,
   options: RequestOptions = {}
 ): Promise<T> => {
+  const { body: inputBody, params, headers: optionHeaders, ...fetchOptions } = options;
   let url = `${config.baseURL}${path}`;
 
-  if (options.params) {
+  if (params) {
     const searchParams = new URLSearchParams();
-    for (const [key, value] of Object.entries(options.params)) {
+    for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null) {
         searchParams.append(key, String(value));
       }
@@ -38,15 +39,15 @@ export const request = async <T>(
     }
   }
 
-  const headers = new Headers(options.headers || {});
+  const headers = new Headers(optionHeaders || {});
 
   // Determine if body is JSON or FormData
   let body: BodyInit | null = null;
-  if (options.body instanceof FormData) {
-    body = options.body;
+  if (inputBody instanceof FormData) {
+    body = inputBody;
     // Don't set Content-Type for FormData, the browser sets it automatically with the boundary
-  } else if (options.body) {
-    body = JSON.stringify(options.body);
+  } else if (inputBody !== undefined && inputBody !== null) {
+    body = JSON.stringify(inputBody);
     headers.set('Content-Type', 'application/json');
   }
 
@@ -57,11 +58,11 @@ export const request = async <T>(
 
   try {
     const response = await fetch(url, {
+      ...fetchOptions,
       method,
       headers,
       body,
-      credentials: 'include', // Important for refresh token httpOnly cookies
-      ...options,
+      credentials: fetchOptions.credentials ?? 'include', // Important for refresh token httpOnly cookies
     });
 
     let data: any = null;
@@ -82,7 +83,8 @@ export const request = async <T>(
     if (!response.ok) {
       // Handle standard backend error shape
       if (data && data.error && typeof data.error === 'object') {
-        throw new ApiError(data.error.message || 'API Error', data.error.code, response.status);
+        const code = data.error.code;
+        throw new ApiError(getSafeErrorMessage(code, data.error.message), code, response.status);
       }
       throw new ApiError(`HTTP Error ${response.status}`, 'HTTP_ERROR', response.status);
     }
@@ -96,5 +98,19 @@ export const request = async <T>(
       error instanceof Error ? error.message : 'Network Error',
       'NETWORK_ERROR'
     );
+  }
+};
+
+const getSafeErrorMessage = (code?: string, fallback?: string): string => {
+  switch (code) {
+    case 'invalid_request':
+    case 'validation_error':
+      return 'Проверьте заполнение формы';
+    case 'duplicate_email':
+      return 'Пользователь с таким email уже существует';
+    case 'invalid_credentials':
+      return 'Неверный email или пароль';
+    default:
+      return fallback || 'API Error';
   }
 };

@@ -9,6 +9,7 @@
     "dev:shop": "npm run dev --workspace=shop",
     "dev:seller": "npm run dev --workspace=seller",
     "dev:admin": "npm run dev --workspace=admin",
+    "dev:seed": "cd backend && go run ./cmd/dev-seed",
     "build:shop": "npm run build --workspace=shop",
     "build:seller": "npm run build --workspace=seller",
     "build:admin": "npm run build --workspace=admin",
