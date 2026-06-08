@@ -9,7 +9,7 @@ import {
   BarChart2, 
   Wallet, 
   FileText, 
-  Settings,
+  Store,
   LogOut,
   Archive,
   RotateCcw,
@@ -23,6 +23,7 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { name: 'Панель продавца', path: '/dashboard', icon: LayoutDashboard },
+    { name: 'Профиль магазина', path: '/settings', icon: Store },
     { name: 'Товары', path: '/products', icon: Package },
     { name: 'Добавить товар', path: '/products/new', icon: Plus },
     { name: 'Заказы', path: '/orders', icon: ShoppingCart },
@@ -32,7 +33,6 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
     { name: 'Аналитика', path: '/analytics', icon: BarChart2 },
     { name: 'Выплаты', path: '/payouts', icon: Wallet },
     { name: 'Шаблоны', path: '/templates', icon: FileText },
-    { name: 'Настройки', path: '/settings', icon: Settings },
   ];
 
   return (

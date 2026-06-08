@@ -33,3 +33,11 @@ type SellerMeResponse struct {
 	SellerUser SellerUser `json:"sellerUser"`
 	User       users.User `json:"user"`
 }
+
+type UpdateSellerProfileRequest struct {
+	BrandName    *string `json:"brandName,omitempty"`
+	Description  *string `json:"description,omitempty"`
+	ContactEmail *string `json:"contactEmail,omitempty"`
+	ContactPhone *string `json:"contactPhone,omitempty"`
+	Slug         *string `json:"slug,omitempty"`
+}

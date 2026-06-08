@@ -106,6 +106,41 @@ func (h *Handler) GetSellerMe(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, res)
 }
 
+func (h *Handler) UpdateSellerProfile(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value("userID")
+	if val == nil {
+		h.respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	userID, ok := val.(uuid.UUID)
+	if !ok {
+		h.respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req UpdateSellerProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	res, err := h.service.UpdateSellerProfile(r.Context(), userID, &req)
+	if err != nil {
+		if errors.Is(err, ErrSellerUserNotFound) || errors.Is(err, ErrSellerNotFound) {
+			h.respondError(w, http.StatusNotFound, "seller profile not found")
+			return
+		}
+		if errors.Is(err, ErrDuplicateSlug) {
+			h.respondError(w, http.StatusConflict, "slug already taken")
+			return
+		}
+		h.respondError(w, http.StatusInternalServerError, "failed to update seller profile")
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, res)
+}
+
 func (h *Handler) respondJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { SellerMe, SellerProduct, InventoryItem, SellerOrder, SellerReturn, SellerReview, SellerBalance, Payout } from './types';
+import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, InventoryItem, SellerOrder, SellerReturn, SellerReview, SellerBalance, Payout } from './types';
 
 export const getSellerMe = async (): Promise<SellerMe> => {
   return request<SellerMe>('GET', '/seller/me');
@@ -73,8 +73,12 @@ export const requestSellerPayout = async (amountCents: number, comment?: string)
   return request<Payout>('POST', '/seller/payouts/request', { body: { amountCents, comment } });
 };
 
+export const updateSellerMe = async (req: UpdateSellerProfileRequest): Promise<SellerMe> => {
+  return request<SellerMe>('PATCH', '/seller/me', { body: req });
+};
+
 export const uploadSellerLogo = async (file: File): Promise<{ logoUrl: string }> => {
   const formData = new FormData();
   formData.append('logo', file);
-  return request<{ logoUrl: string }>('POST', '/seller/me/logo', { body: formData });
+  return request<{ logoUrl: string }>('POST', '/seller/me/logo/upload', { body: formData });
 };

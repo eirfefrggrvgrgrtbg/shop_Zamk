@@ -157,13 +157,32 @@ export interface ReviewCreateRequest {
 
 export interface SellerMe {
   user: UserDTO;
+  sellerUser: {
+    id: string;
+    sellerId: string;
+    userId: string;
+    role: string;
+  };
   seller: {
     id: string;
-    name: string;
-    description: string;
+    brandName: string;
+    slug: string;
+    description?: string;
+    contactEmail: string;
+    contactPhone?: string;
     logoUrl?: string;
     status: string;
+    createdAt: string;
+    updatedAt: string;
   };
+}
+
+export interface UpdateSellerProfileRequest {
+  brandName?: string;
+  description?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  slug?: string;
 }
 
 export interface SellerProduct extends ProductDetail {

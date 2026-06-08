@@ -154,6 +154,31 @@ func (r *Repository) ListSellers(ctx context.Context, limit, offset int) ([]Sell
 	return items, rows.Err()
 }
 
+func (r *Repository) UpdateSellerProfile(ctx context.Context, sellerID uuid.UUID, req *UpdateSellerProfileRequest) error {
+	query := `
+		UPDATE sellers
+		SET
+			brand_name    = COALESCE($1, brand_name),
+			description   = COALESCE($2, description),
+			contact_email = COALESCE($3, contact_email),
+			contact_phone = COALESCE($4, contact_phone),
+			slug          = COALESCE($5, slug),
+			updated_at    = now()
+		WHERE id = $6
+	`
+	res, err := r.db.Exec(ctx, query,
+		req.BrandName, req.Description, req.ContactEmail, req.ContactPhone, req.Slug,
+		sellerID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update seller profile: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrSellerNotFound
+	}
+	return nil
+}
+
 func (r *Repository) UpdateSellerLogo(ctx context.Context, sellerID uuid.UUID, logoURL string, logoObjectKey string) error {
 	query := `
 		UPDATE sellers

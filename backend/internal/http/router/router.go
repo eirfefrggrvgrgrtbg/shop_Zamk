@@ -129,6 +129,7 @@ func New(
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireRole(users.RoleSeller))
 		r.Get("/", sellersHandler.GetSellerMe)
+		r.Patch("/", sellersHandler.UpdateSellerProfile)
 		r.With(uploadLimit).Post("/logo/upload", storageHandler.UploadSellerProfileImage)
 	})
 

@@ -141,6 +141,26 @@ func (s *Service) UpdateSellerStatus(ctx context.Context, id uuid.UUID, req *Upd
 	return s.repo.UpdateSellerStatus(ctx, id, req.Status)
 }
 
+func (s *Service) UpdateSellerProfile(ctx context.Context, currentUserID uuid.UUID, req *UpdateSellerProfileRequest) (*SellerMeResponse, error) {
+	seller, _, err := s.repo.GetSellerByUserID(ctx, currentUserID)
+	if err != nil {
+		return nil, err
+	}
+
+	if req.Slug != nil && *req.Slug != "" {
+		existing, slugErr := s.repo.GetSellerBySlug(ctx, *req.Slug)
+		if slugErr == nil && existing != nil && existing.ID != seller.ID {
+			return nil, ErrDuplicateSlug
+		}
+	}
+
+	if err := s.repo.UpdateSellerProfile(ctx, seller.ID, req); err != nil {
+		return nil, err
+	}
+
+	return s.GetSellerMe(ctx, currentUserID)
+}
+
 func (s *Service) GetSellerMe(ctx context.Context, currentUserID uuid.UUID) (*SellerMeResponse, error) {
 	seller, sellerUser, err := s.repo.GetSellerByUserID(ctx, currentUserID)
 	if err != nil {
