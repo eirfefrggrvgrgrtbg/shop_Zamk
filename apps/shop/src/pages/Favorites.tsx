@@ -85,7 +85,8 @@ export function Favorites() {
 
                     let variantId = product.variants?.[0]?.id;
                     if (!variantId) {
-                      variantId = '00000000-0000-0000-0000-000000000000';
+                      showToast('Для товара пока нет доступного варианта');
+                      return;
                     }
 
                     addItem(product.id, variantId, 1)

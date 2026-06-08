@@ -29,23 +29,23 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const { logout, user } = useAdminAuth();
 
   const navItems = [
-    { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Users', path: '/users', icon: Users },
-    { name: 'Sellers', path: '/sellers', icon: Store },
-    { name: 'Categories', path: '/categories', icon: LayoutGrid },
-    { name: 'Brands', path: '/brands', icon: Tag },
-    { name: 'Products', path: '/products', icon: Package },
-    { name: 'Moderation', path: '/moderation', icon: ShieldAlert },
-    { name: 'Orders', path: '/orders', icon: ShoppingCart },
-    { name: 'Payments', path: '/payments', icon: CreditCard },
-    { name: 'Shipments', path: '/shipments', icon: Truck },
-    { name: 'Inventory', path: '/inventory', icon: Boxes },
-    { name: 'Returns', path: '/returns', icon: RotateCcw },
-    { name: 'Refunds', path: '/refunds', icon: ReceiptText },
-    { name: 'Payouts', path: '/payouts', icon: Wallet },
-    { name: 'Reviews', path: '/reviews', icon: Star },
-    { name: 'Audit Logs', path: '/audit-logs', icon: ClipboardList },
-    { name: 'Settings', path: '/settings', icon: Settings },
+    { name: 'Панель управления', path: '/dashboard', icon: LayoutDashboard },
+    { name: 'Пользователи', path: '/users', icon: Users },
+    { name: 'Продавцы', path: '/sellers', icon: Store },
+    { name: 'Категории', path: '/categories', icon: LayoutGrid },
+    { name: 'Бренды', path: '/brands', icon: Tag },
+    { name: 'Товары', path: '/products', icon: Package },
+    { name: 'Модерация', path: '/moderation', icon: ShieldAlert },
+    { name: 'Заказы', path: '/orders', icon: ShoppingCart },
+    { name: 'Платежи', path: '/payments', icon: CreditCard },
+    { name: 'Отгрузки', path: '/shipments', icon: Truck },
+    { name: 'Остатки', path: '/inventory', icon: Boxes },
+    { name: 'Возвраты', path: '/returns', icon: RotateCcw },
+    { name: 'Возмещения', path: '/refunds', icon: ReceiptText },
+    { name: 'Выплаты', path: '/payouts', icon: Wallet },
+    { name: 'Отзывы', path: '/reviews', icon: Star },
+    { name: 'Журнал действий', path: '/audit-logs', icon: ClipboardList },
+    { name: 'Настройки', path: '/settings', icon: Settings },
   ];
 
   return (
@@ -75,7 +75,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         <div className="p-4 border-t border-slate-800">
           <button onClick={() => logout()} className="w-full flex items-center px-3 py-2 text-sm font-medium text-slate-300 rounded-md hover:bg-slate-800 transition-colors">
             <LogOut className="mr-3 h-5 w-5 flex-shrink-0 text-slate-400" />
-            Logout
+            Выйти
           </button>
         </div>
       </aside>
@@ -85,7 +85,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         {/* Top Header */}
         <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6 shrink-0">
           <h1 className="text-xl font-semibold text-gray-800">
-            {navItems.find(item => location.pathname.startsWith(item.path))?.name || 'Admin Panel'}
+            {navItems.find(item => location.pathname.startsWith(item.path))?.name || 'Панель администратора'}
           </h1>
           <div className="flex items-center space-x-4">
             <button className="text-gray-400 hover:text-gray-600 transition-colors relative">

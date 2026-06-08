@@ -4,15 +4,12 @@ import { ChevronRight, Heart, Minus, Plus, Ruler, ShoppingBag, Star, Truck, Refr
 import { motion } from 'framer-motion';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
-import { ProductCard } from '../components/product/ProductCard';
 import { useCart } from '../contexts/CartContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatPrice, cn } from '../lib/utils';
-import { PRODUCTS, getProductsByBrand, getSellerById } from '../lib/mock-data';
 import { fetchProductById, fetchProductReviews } from '../api/publicCatalog';
 import type { Product, Review } from '../lib/mock-data';
-import { SectionHeader } from '../components/editorial/StudioKit';
 
 // Размерная сетка
 const SIZE_CHART = {
@@ -116,10 +113,7 @@ export function ProductDetail() {
     );
   }
 
-  const seller = product ? getSellerById(product.sellerId || '') : null;
   const images = product.images || [product.image];
-  const relatedProducts = PRODUCTS.filter((item) => item.category === product.category && item.id !== product.id).slice(0, 4);
-  const brandProducts = getProductsByBrand(product.brandId).filter((item) => item.id !== product.id).slice(0, 4);
   // We use brandId for link but use string brand for name
   const liked = isFavorite(product.id);
   const specs = getProductSpecs(product);
@@ -142,8 +136,8 @@ export function ProductDetail() {
     }
     
     if (!variantId) {
-      // Mock fallback if variants are missing
-      variantId = '00000000-0000-0000-0000-000000000000';
+      showToast('Для товара пока нет доступного варианта');
+      return;
     }
 
     try {
@@ -376,30 +370,9 @@ export function ProductDetail() {
             </div>
 
             
-              {/* Seller Block */}
-              {seller && (
-                <Link to={`/seller/${seller.slug}`} className="block mt-8 p-4 rounded-[14px] bg-white dark:bg-white/[0.02] border border-border-lighter dark:border-white/10 hover:border-graphite/20 dark:hover:border-white/20 transition-all group shadow-sm hover:shadow-md">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full overflow-hidden shrink-0">
-                      <img src={seller.avatar} alt={seller.name} className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="text-sm font-semibold text-graphite dark:text-white truncate pr-4 group-hover:underline decoration-1 underline-offset-4">{seller.name}</h3>
-                        <ChevronRight className="w-4 h-4 text-graphite/40 group-hover:text-graphite dark:text-white/40 dark:group-hover:text-white transition-transform group-hover:translate-x-0.5" />
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <div className="flex items-center text-graphite dark:text-white font-medium">
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-400 mr-1" />
-                          {seller.rating.toFixed(1)}
-                        </div>
-                        <span className="text-graphite/20 dark:text-white/20">•</span>
-                        <span className="text-ash truncate">{seller.reviewCount} отзывов</span>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              )}
+              <div className="mt-8 rounded-[14px] border border-dashed border-border-lighter bg-white p-4 text-sm text-ash dark:border-white/10 dark:bg-white/[0.02]">
+                Данные о продавце пока не подключены к публичному API.
+              </div>
 
               {/* Benefits */}
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -540,31 +513,10 @@ export function ProductDetail() {
           </section>
         )}
 
-        {/* Brand Products */}
-        {brandProducts.length > 0 && (
-          <motion.section className="mt-16" initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
-            <SectionHeader label={product.brand} title="Ещё от бренда" />
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {brandProducts.map((item) => (
-                <ProductCard key={item.id} product={item} />
-              ))}
-            </div>
-          </motion.section>
-        )}
-
-        {/* Related Products */}
-        {relatedProducts.length > 0 && (
-          <motion.section className="mt-16" initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
-            <SectionHeader label="Похожие товары" title="Вам может понравиться" />
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {relatedProducts.map((item) => (
-                <ProductCard key={item.id} product={item} />
-              ))}
-            </div>
-          </motion.section>
-        )}
+        <motion.section className="mt-16 rounded-3xl border border-dashed border-border-lighter bg-white/60 p-8 text-center text-ash dark:border-white/10 dark:bg-white/5" initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+          Рекомендации товаров пока не подключены.
+        </motion.section>
       </div>
-
       {/* Size Chart Modal */}
       <Modal isOpen={showSizeChart} onClose={() => setShowSizeChart(false)} title="Размерная сетка">
         <div className="overflow-x-auto">

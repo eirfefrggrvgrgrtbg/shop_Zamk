@@ -25,7 +25,7 @@ export function AdminModeration() {
       const data = await getModerationProducts();
       setProducts(data);
     } catch (err: unknown) {
-      setError(getAdminProductErrorMessage(err, 'Failed to load moderation products.'));
+      setError(getAdminProductErrorMessage(err, 'Не удалось загрузить товары на модерации.'));
     } finally {
       setIsLoading(false);
     }
@@ -41,7 +41,7 @@ export function AdminModeration() {
       await approveProduct(id);
       await fetchModerationProducts();
     } catch (err: unknown) {
-      setError(getAdminProductErrorMessage(err, 'Failed to approve product.'));
+      setError(getAdminProductErrorMessage(err, 'Не удалось одобрить товар.'));
     }
   };
 
@@ -57,7 +57,7 @@ export function AdminModeration() {
       setRejectComment('');
       await fetchModerationProducts();
     } catch (err: unknown) {
-      setError(getAdminProductErrorMessage(err, 'Failed to reject product.'));
+      setError(getAdminProductErrorMessage(err, 'Не удалось отклонить товар.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -87,7 +87,7 @@ export function AdminModeration() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Moderation Queue</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Очередь модерации</h1>
       </div>
       
       <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
@@ -122,11 +122,11 @@ export function AdminModeration() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Товар</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
-                      <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                      <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -176,8 +176,8 @@ export function AdminModeration() {
                           {formatDate(product.submittedAt || product.createdAt)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button onClick={() => handleApprove(product.id)} className="text-blue-600 hover:text-blue-900 mr-4">Approve</button>
-                          <button onClick={() => setRejectModal({ isOpen: true, productId: product.id })} className="text-red-600 hover:text-red-900">Reject</button>
+                          <button onClick={() => handleApprove(product.id)} className="text-blue-600 hover:text-blue-900 mr-4">Одобрить</button>
+                          <button onClick={() => setRejectModal({ isOpen: true, productId: product.id })} className="text-red-600 hover:text-red-900">Отклонить</button>
                         </td>
                       </tr>
                     ))}
@@ -205,7 +205,7 @@ export function AdminModeration() {
                   onChange={e => setRejectComment(e.target.value)} 
                   rows={3}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" 
-                  placeholder="Explain why the product is rejected so the seller can fix it..."
+                  placeholder="Объясните, что продавцу нужно исправить..."
                 />
               </div>
               <div className="mt-5 flex justify-end space-x-3">

@@ -70,14 +70,14 @@ type AdminProductListResponse = AdminProduct[] | ModerationProduct[] | {
 };
 
 const statusLabels: Record<AdminProductStatus, string> = {
-  draft: 'Draft',
-  pending_moderation: 'Pending moderation',
-  approved: 'Approved',
-  published: 'Published',
-  rejected: 'Rejected',
-  hidden: 'Hidden',
-  blocked: 'Blocked',
-  out_of_stock: 'Out of stock',
+  draft: 'Черновик',
+  pending_moderation: 'На модерации',
+  approved: 'Одобрен',
+  published: 'Опубликован',
+  rejected: 'Отклонён',
+  hidden: 'Скрыт',
+  blocked: 'Заблокирован',
+  out_of_stock: 'Нет в наличии',
 };
 
 const unwrapProducts = (response: AdminProductListResponse): Array<AdminProduct | ModerationProduct> => {
@@ -129,7 +129,7 @@ export const mapAdminProduct = (product: AdminProduct | ModerationProduct): Admi
 
   return {
     id: product.id,
-    title: product.title || String(flexibleProduct.name ?? 'Untitled product'),
+    title: product.title || String(flexibleProduct.name ?? 'Без названия'),
     description: product.description,
     sellerId: product.sellerId,
     sellerName: typeof flexibleProduct.sellerName === 'string' ? flexibleProduct.sellerName : undefined,
@@ -191,19 +191,19 @@ export const uploadAdminProductImage = async (productId: string, file: File): Pr
 export const getAdminProductErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiError) {
     if (error.status === 403) {
-      return 'You do not have permission to perform this admin action.';
+      return 'Недостаточно прав для этого действия.';
     }
     if (error.status === 400 || error.code === 'validation_error') {
-      return 'Please check the request and try again.';
+      return 'Проверьте данные и повторите попытку.';
     }
     if (error.status === 409) {
-      return 'This product changed while you were working. Refresh and try again.';
+      return 'Товар изменился. Обновите страницу и повторите попытку.';
     }
     if (error.status === 422 || error.code === 'invalid_status') {
-      return 'This product cannot move to that status from its current state.';
+      return 'Товар нельзя перевести в этот статус из текущего состояния.';
     }
     if (error.code === 'NETWORK_ERROR') {
-      return 'Network error. Check that the backend API is running and try again.';
+      return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
     }
   }
 

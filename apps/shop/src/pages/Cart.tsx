@@ -2,18 +2,15 @@ import { Link } from 'react-router-dom';
 import { Minus, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
-import { ProductCard } from '../components/product/ProductCard';
 import { useCart } from '../contexts/CartContext';
 import { formatPrice } from '../lib/utils';
 import { getProductEffectivePrice } from '../lib/orders';
-import { PRODUCTS } from '../lib/mock-data';
 import { InfoPanel, SectionHeader } from '../components/editorial/StudioKit';
 
 export function Cart() {
   const { items, updateQuantity, removeItem, totalPrice } = useCart();
   const delivery = totalPrice >= 10000 ? 0 : 590;
   const finalTotal = totalPrice + delivery;
-  const recommendations = PRODUCTS.filter((product) => !items.find((item) => item.productId === product.id)).slice(0, 4);
 
   if (items.length === 0) {
     return (
@@ -128,10 +125,8 @@ export function Cart() {
 
         <section className='mt-14'>
           <SectionHeader label='Рекомендации' title='Может дополнить корзину' />
-          <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
-            {recommendations.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
+          <div className='rounded-3xl border border-dashed border-border-lighter bg-white/60 p-8 text-center text-sm text-ash dark:border-white/10 dark:bg-white/5'>
+            Рекомендации товаров пока не подключены.
           </div>
         </section>
       </div>

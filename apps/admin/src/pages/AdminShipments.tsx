@@ -31,7 +31,7 @@ export function AdminShipments() {
       setError(null);
       setShipments(await getAdminShipments());
     } catch (err: unknown) {
-      setError(getAdminShipmentErrorMessage(err, 'Failed to load shipments.'));
+      setError(getAdminShipmentErrorMessage(err, 'Не удалось загрузить отгрузки.'));
     } finally {
       setIsLoading(false);
     }
@@ -49,7 +49,7 @@ export function AdminShipments() {
       setTrackingUrl(shipment.trackingUrl || '');
       setComment('');
     } catch (err: unknown) {
-      setError(getAdminShipmentErrorMessage(err, 'Failed to load shipment details.'));
+      setError(getAdminShipmentErrorMessage(err, 'Не удалось загрузить детали отгрузки.'));
     } finally {
       setIsDetailLoading(false);
     }
@@ -77,7 +77,7 @@ export function AdminShipments() {
       await fetchShipments();
       await fetchShipmentDetail(shipment.id);
     } catch (err: unknown) {
-      setError(getAdminShipmentErrorMessage(err, 'Failed to create shipment.'));
+      setError(getAdminShipmentErrorMessage(err, 'Не удалось создать отгрузку.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -100,7 +100,7 @@ export function AdminShipments() {
       await fetchShipments();
       await fetchShipmentDetail(selectedShipment.id);
     } catch (err: unknown) {
-      setError(getAdminShipmentErrorMessage(err, 'Failed to update shipment.'));
+      setError(getAdminShipmentErrorMessage(err, 'Не удалось обновить отгрузку.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -125,7 +125,7 @@ export function AdminShipments() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Shipments</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Отгрузки</h1>
       </div>
 
       {error && (
@@ -169,10 +169,10 @@ export function AdminShipments() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shipment</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Заказ</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tracking</th>
-                      <th className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                      <th className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -209,7 +209,7 @@ export function AdminShipments() {
             {isDetailLoading && <span className="text-sm text-gray-500">Loading...</span>}
           </div>
           <dl className="mt-4 grid gap-4 md:grid-cols-4">
-            <div><dt className="text-sm font-medium text-gray-500">Order</dt><dd className="mt-1 text-sm text-gray-900">{selectedShipment.orderId}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Заказ</dt><dd className="mt-1 text-sm text-gray-900">{selectedShipment.orderId}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Shipped</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.shippedAt)}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Delivered</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.deliveredAt)}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Updated</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.updatedAt)}</dd></div>

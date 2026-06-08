@@ -95,7 +95,7 @@ export const request = async <T>(
       throw error;
     }
     throw new ApiError(
-      error instanceof Error ? error.message : 'Network Error',
+      'Не удалось подключиться к серверу. Проверьте, запущен ли backend.',
       'NETWORK_ERROR'
     );
   }
@@ -104,8 +104,9 @@ export const request = async <T>(
 const getSafeErrorMessage = (code?: string, fallback?: string): string => {
   switch (code) {
     case 'invalid_request':
-    case 'validation_error':
       return 'Проверьте заполнение формы';
+    case 'validation_error':
+      return fallback?.toLowerCase().includes('password') ? 'Проверьте пароль' : 'Проверьте правильность заполнения формы.';
     case 'duplicate_email':
       return 'Пользователь с таким email уже существует';
     case 'invalid_credentials':

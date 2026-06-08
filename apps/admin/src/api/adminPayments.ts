@@ -57,9 +57,9 @@ export const getAdminPayment = async (id: string): Promise<AdminPaymentView> => 
 
 export const getAdminPaymentErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiError) {
-    if (error.status === 403) return 'You do not have permission to view payments.';
+    if (error.status === 403) return 'Недостаточно прав для просмотра платежей.';
     if (error.status === 404) return 'Payment was not found.';
-    if (error.code === 'NETWORK_ERROR') return 'Network error. Check that the backend API is running and try again.';
+    if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
   }
   return fallback;
 };

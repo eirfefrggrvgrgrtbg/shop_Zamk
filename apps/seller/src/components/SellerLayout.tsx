@@ -22,17 +22,17 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
   const { logout } = useAuth();
 
   const navItems = [
-    { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Products', path: '/products', icon: Package },
-    { name: 'Add product', path: '/products/new', icon: Plus },
-    { name: 'Orders', path: '/orders', icon: ShoppingCart },
-    { name: 'Inventory', path: '/inventory', icon: Archive },
-    { name: 'Returns', path: '/returns', icon: RotateCcw },
-    { name: 'Reviews', path: '/reviews', icon: MessageSquare },
-    { name: 'Analytics', path: '/analytics', icon: BarChart2 },
-    { name: 'Payouts', path: '/payouts', icon: Wallet },
-    { name: 'Templates', path: '/templates', icon: FileText },
-    { name: 'Settings', path: '/settings', icon: Settings },
+    { name: 'Панель продавца', path: '/dashboard', icon: LayoutDashboard },
+    { name: 'Товары', path: '/products', icon: Package },
+    { name: 'Добавить товар', path: '/products/new', icon: Plus },
+    { name: 'Заказы', path: '/orders', icon: ShoppingCart },
+    { name: 'Остатки', path: '/inventory', icon: Archive },
+    { name: 'Возвраты', path: '/returns', icon: RotateCcw },
+    { name: 'Отзывы', path: '/reviews', icon: MessageSquare },
+    { name: 'Аналитика', path: '/analytics', icon: BarChart2 },
+    { name: 'Выплаты', path: '/payouts', icon: Wallet },
+    { name: 'Шаблоны', path: '/templates', icon: FileText },
+    { name: 'Настройки', path: '/settings', icon: Settings },
   ];
 
   return (
@@ -66,7 +66,7 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
         <div className="p-4 border-t border-gray-200">
           <button onClick={() => logout()} className="w-full flex items-center px-3 py-2 text-sm font-medium text-red-600 rounded-md hover:bg-red-50 transition-colors">
             <LogOut className="mr-3 h-5 w-5 flex-shrink-0 text-red-400" />
-            Logout
+            Выйти
           </button>
         </div>
       </aside>

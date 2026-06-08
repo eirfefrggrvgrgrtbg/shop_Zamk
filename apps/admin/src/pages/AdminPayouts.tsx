@@ -26,7 +26,7 @@ export function AdminPayouts() {
       setError(null);
       setPayouts(await getAdminPayouts());
     } catch (err: unknown) {
-      setError(getAdminPayoutErrorMessage(err, 'Failed to load payouts.'));
+      setError(getAdminPayoutErrorMessage(err, 'Не удалось загрузить выплаты.'));
     } finally {
       setIsLoading(false);
     }
@@ -41,7 +41,7 @@ export function AdminPayouts() {
       setStatusDraft('');
       setComment('');
     } catch (err: unknown) {
-      setError(getAdminPayoutErrorMessage(err, 'Failed to load payout details.'));
+      setError(getAdminPayoutErrorMessage(err, 'Не удалось загрузить детали выплаты.'));
     } finally {
       setIsDetailLoading(false);
     }
@@ -63,7 +63,7 @@ export function AdminPayouts() {
       await fetchPayouts();
       await fetchPayoutDetail(selectedPayout.id);
     } catch (err: unknown) {
-      setError(getAdminPayoutErrorMessage(err, 'Failed to update payout status.'));
+      setError(getAdminPayoutErrorMessage(err, 'Не удалось обновить статус выплаты.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -123,11 +123,11 @@ export function AdminPayouts() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payout ID</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Продавец</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requested</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
+                    <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -173,9 +173,9 @@ export function AdminPayouts() {
             {isDetailLoading && <span className="text-sm text-gray-500">Loading...</span>}
           </div>
           <dl className="mt-4 grid gap-4 md:grid-cols-4">
-            <div><dt className="text-sm font-medium text-gray-500">Seller</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayout.sellerName || selectedPayout.sellerId}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Продавец</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayout.sellerName || selectedPayout.sellerId}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Amount</dt><dd className="mt-1 text-sm text-gray-900">{formatMoney(selectedPayout)}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Status</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayout.statusLabel}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Статус</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayout.statusLabel}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Requested</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedPayout.requestedAt)}</dd></div>
           </dl>
 

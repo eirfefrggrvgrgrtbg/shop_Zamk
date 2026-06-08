@@ -35,7 +35,7 @@ export function AdminChangePassword() {
         navigate('/login');
       }, 3000);
     } catch (err: any) {
-      setError(err.message || 'Failed to change password');
+      setError(err.message || 'Не удалось изменить пароль');
     } finally {
       setIsSubmitting(false);
     }

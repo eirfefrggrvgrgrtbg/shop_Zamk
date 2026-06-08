@@ -26,11 +26,11 @@ export interface AdminPayoutView {
 }
 
 const labels: Record<string, string> = {
-  requested: 'Requested',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  paid: 'Paid',
-  cancelled: 'Cancelled',
+  requested: 'Запрошена',
+  approved: 'Одобрена',
+  rejected: 'Отклонена',
+  paid: 'Выплачена',
+  cancelled: 'Отменена',
 };
 
 const unwrapItems = <T>(response: ListResponse<T>): T[] => Array.isArray(response) ? response : response.items ?? [];
@@ -84,10 +84,10 @@ export const updateAdminPayoutStatus = async (id: string, status: string, commen
 
 export const getAdminPayoutErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiError) {
-    if (error.status === 403) return 'You do not have permission to manage payouts.';
-    if (error.status === 400 || error.code === 'invalid_status_transition') return 'Payout action was rejected by backend rules.';
-    if (error.status === 404) return 'Payout was not found.';
-    if (error.code === 'NETWORK_ERROR') return 'Network error. Check that the backend API is running and try again.';
+    if (error.status === 403) return 'Недостаточно прав для управления выплатами.';
+    if (error.status === 400 || error.code === 'invalid_status_transition') return 'Backend отклонил действие по выплате.';
+    if (error.status === 404) return 'Выплата не найдена.';
+    if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
   }
   return fallback;
 };

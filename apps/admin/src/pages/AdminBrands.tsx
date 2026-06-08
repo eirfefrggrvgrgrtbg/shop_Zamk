@@ -28,7 +28,7 @@ export function AdminBrands() {
         setBrands(data || []);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load brands');
+      setError(err.message || 'Не удалось загрузить бренды');
     } finally {
       setIsLoading(false);
     }
@@ -49,7 +49,7 @@ export function AdminBrands() {
       setSlug('');
       fetchBrands();
     } catch (err: any) {
-      setCreateError(err.message || 'Failed to create brand');
+      setCreateError(err.message || 'Не удалось создать бренд');
     } finally {
       setIsCreating(false);
     }
@@ -64,7 +64,7 @@ export function AdminBrands() {
       await uploadAdminBrandLogo(brandId, file);
       fetchBrands();
     } catch (err: any) {
-      alert(err.message || 'Failed to upload logo');
+      alert(err.message || 'Не удалось загрузить логотип');
     } finally {
       setUploadingBrandId(null);
       e.target.value = '';
@@ -74,7 +74,7 @@ export function AdminBrands() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Brands</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Бренды</h1>
         <button 
           onClick={() => setIsCreateModalOpen(true)}
           className="mt-3 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
@@ -111,9 +111,9 @@ export function AdminBrands() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Logo</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Логотип</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slug</th>
-                      <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                      <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">

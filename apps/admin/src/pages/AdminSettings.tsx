@@ -2,7 +2,7 @@ export function AdminSettings() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Настройки</h1>
       </div>
 
       <div className="bg-white shadow overflow-hidden sm:rounded-lg">

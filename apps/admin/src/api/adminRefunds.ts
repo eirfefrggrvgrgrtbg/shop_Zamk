@@ -54,9 +54,9 @@ export const getAdminRefund = async (id: string): Promise<AdminRefundView> => {
 
 export const getAdminRefundErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiError) {
-    if (error.status === 403) return 'You do not have permission to view refunds.';
+    if (error.status === 403) return 'Недостаточно прав для просмотра возмещений.';
     if (error.status === 404) return 'Refund was not found.';
-    if (error.code === 'NETWORK_ERROR') return 'Network error. Check that the backend API is running and try again.';
+    if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
   }
   return fallback;
 };

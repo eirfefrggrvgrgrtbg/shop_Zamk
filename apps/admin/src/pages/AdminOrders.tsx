@@ -34,7 +34,7 @@ export function AdminOrders() {
       const data = await getAdminOrders();
       setOrders(data);
     } catch (err: unknown) {
-      setError(getAdminOrderErrorMessage(err, 'Failed to load orders.'));
+      setError(getAdminOrderErrorMessage(err, 'Не удалось загрузить заказы.'));
     } finally {
       setIsLoading(false);
     }
@@ -49,7 +49,7 @@ export function AdminOrders() {
       setStatusDraft('');
       setStatusComment('');
     } catch (err: unknown) {
-      setError(getAdminOrderErrorMessage(err, 'Failed to load order details.'));
+      setError(getAdminOrderErrorMessage(err, 'Не удалось загрузить детали заказа.'));
     } finally {
       setIsDetailLoading(false);
     }
@@ -77,7 +77,7 @@ export function AdminOrders() {
       await fetchOrders();
       await fetchOrderDetail(selectedOrder.id);
     } catch (err: unknown) {
-      setError(getAdminOrderErrorMessage(err, 'Failed to update order status.'));
+      setError(getAdminOrderErrorMessage(err, 'Не удалось обновить статус заказа.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -102,7 +102,7 @@ export function AdminOrders() {
       await fetchOrders();
       await fetchOrderDetail(selectedOrder.id);
     } catch (err: unknown) {
-      setError(getAdminShipmentErrorMessage(err, 'Failed to create shipment.'));
+      setError(getAdminShipmentErrorMessage(err, 'Не удалось создать отгрузку.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -129,7 +129,7 @@ export function AdminOrders() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Заказы</h1>
       </div>
 
       {error && (
@@ -163,7 +163,7 @@ export function AdminOrders() {
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status / Payment</th>
-                    <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                    <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -223,7 +223,7 @@ export function AdminOrders() {
               <p className="mt-1 text-sm text-gray-900">{selectedOrder.deliveryAddress || '-'}</p>
             </div>
             <div>
-              <h3 className="text-sm font-medium text-gray-700">Status</h3>
+              <h3 className="text-sm font-medium text-gray-700">Статус</h3>
               <span className={`mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(selectedOrder.status)}`}>
                 {selectedOrder.statusLabel}
               </span>
@@ -261,7 +261,7 @@ export function AdminOrders() {
                   <option key={status} value={status}>{getOrderStatusLabel(status)}</option>
                 ))}
               </select>
-              <textarea rows={2} value={statusComment} onChange={(event) => setStatusComment(event.target.value)} placeholder="Comment, optional" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              <textarea rows={2} value={statusComment} onChange={(event) => setStatusComment(event.target.value)} placeholder="Комментарий, необязательно" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
               <button type="submit" disabled={isSubmitting || !statusDraft} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
                 Update status
               </button>
@@ -270,9 +270,9 @@ export function AdminOrders() {
 
             <form onSubmit={handleCreateShipment} className="space-y-4">
               <h3 className="text-sm font-medium text-gray-700">Create shipment</h3>
-              <input value={shipmentCarrier} onChange={(event) => setShipmentCarrier(event.target.value)} placeholder="Carrier" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-              <input value={shipmentTrackingNumber} onChange={(event) => setShipmentTrackingNumber(event.target.value)} placeholder="Tracking number" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-              <input value={shipmentTrackingUrl} onChange={(event) => setShipmentTrackingUrl(event.target.value)} placeholder="Tracking URL" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              <input value={shipmentCarrier} onChange={(event) => setShipmentCarrier(event.target.value)} placeholder="Перевозчик" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              <input value={shipmentTrackingNumber} onChange={(event) => setShipmentTrackingNumber(event.target.value)} placeholder="Трек-номер" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              <input value={shipmentTrackingUrl} onChange={(event) => setShipmentTrackingUrl(event.target.value)} placeholder="Ссылка отслеживания" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
               <button type="submit" disabled={isSubmitting || selectedOrder.status !== 'paid'} className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
                 Create shipment
               </button>

@@ -20,7 +20,7 @@ export function AdminPayments() {
       setError(null);
       setPayments(await getAdminPayments());
     } catch (err: unknown) {
-      setError(getAdminPaymentErrorMessage(err, 'Failed to load payments.'));
+      setError(getAdminPaymentErrorMessage(err, 'Не удалось загрузить платежи.'));
     } finally {
       setIsLoading(false);
     }
@@ -32,7 +32,7 @@ export function AdminPayments() {
       setError(null);
       setSelectedPayment(await getAdminPayment(id));
     } catch (err: unknown) {
-      setError(getAdminPaymentErrorMessage(err, 'Failed to load payment details.'));
+      setError(getAdminPaymentErrorMessage(err, 'Не удалось загрузить детали платежа.'));
     } finally {
       setIsDetailLoading(false);
     }
@@ -61,7 +61,7 @@ export function AdminPayments() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Платежи</h1>
       </div>
 
       <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
@@ -95,11 +95,11 @@ export function AdminPayments() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Заказ</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provider</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                      <th className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                      <th className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -137,7 +137,7 @@ export function AdminPayments() {
             {isDetailLoading && <span className="text-sm text-gray-500">Loading...</span>}
           </div>
           <dl className="mt-4 grid gap-4 md:grid-cols-3">
-            <div><dt className="text-sm font-medium text-gray-500">Order</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayment.orderId}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Заказ</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayment.orderId}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Provider</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayment.provider}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Provider payment ID</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayment.providerPaymentId || '-'}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Amount</dt><dd className="mt-1 text-sm text-gray-900">{formatMoney(selectedPayment)}</dd></div>

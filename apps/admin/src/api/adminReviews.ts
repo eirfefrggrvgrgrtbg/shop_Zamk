@@ -68,10 +68,10 @@ export const moderateAdminReview = async (id: string, action: ReviewAction, comm
 
 export const getAdminReviewErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiError) {
-    if (error.status === 403) return 'You do not have permission to moderate reviews.';
+    if (error.status === 403) return 'Недостаточно прав для модерации отзывов.';
     if (error.status === 400) return 'Review action was rejected by backend rules.';
     if (error.status === 404) return 'Review was not found.';
-    if (error.code === 'NETWORK_ERROR') return 'Network error. Check that the backend API is running and try again.';
+    if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
   }
   return fallback;
 };

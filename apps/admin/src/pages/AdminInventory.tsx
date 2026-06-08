@@ -42,7 +42,7 @@ export function AdminInventory() {
         setSelectedItem(refreshed);
       }
     } catch (err: unknown) {
-      setError(getAdminInventoryErrorMessage(err, 'Failed to load inventory.'));
+      setError(getAdminInventoryErrorMessage(err, 'Не удалось загрузить остатки.'));
     } finally {
       setIsLoading(false);
     }
@@ -57,7 +57,7 @@ export function AdminInventory() {
       const data = await getAdminInventoryMovements(item.id);
       setMovements(data);
     } catch (err: unknown) {
-      setError(getAdminInventoryErrorMessage(err, 'Failed to load inventory movements.'));
+      setError(getAdminInventoryErrorMessage(err, 'Не удалось загрузить движения остатков.'));
     } finally {
       setIsMovementsLoading(false);
     }
@@ -104,7 +104,7 @@ export function AdminInventory() {
       await fetchInventory();
       await fetchMovements(selectedItem);
     } catch (err: unknown) {
-      setError(getAdminInventoryErrorMessage(err, `Failed to ${actionLabels[action].toLowerCase()}.`));
+      setError(getAdminInventoryErrorMessage(err, `Не удалось выполнить действие: ${actionLabels[action].toLowerCase()}.`));
     } finally {
       setIsSubmitting(false);
     }
@@ -115,7 +115,7 @@ export function AdminInventory() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Inventory</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Остатки</h1>
       </div>
 
       {error && (
@@ -145,11 +145,11 @@ export function AdminInventory() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product / Variant</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Продавец</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Available</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reserved</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Stock</th>
-                    <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                    <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">

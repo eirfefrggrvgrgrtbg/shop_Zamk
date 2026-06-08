@@ -25,8 +25,8 @@ export async function fetchCategories(): Promise<UICategory[]> {
     id: c.id,
     slug: c.slug,
     name: c.name,
-    icon: '✦', // Default icon since backend doesn't provide one yet
-    count: 0 // Mock count
+    icon: '✦',
+    count: 0
   }));
 }
 
@@ -40,16 +40,16 @@ export async function fetchProducts(params?: any): Promise<UIProduct[]> {
   return res.items.map(p => ({
     id: p.id,
     name: p.title,
-    brand: p.brandId ? (cachedBrands[p.brandId] || 'Unknown Brand') : 'Unknown Brand',
+    brand: p.brandId ? (cachedBrands[p.brandId] || 'Неизвестный бренд') : 'Неизвестный бренд',
     brandId: p.brandId || '',
     price: p.priceCents / 100,
     oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
-    image: p.mainImageUrl || 'https://wsrv.nl/?url=images.unsplash.com/photo-1591047139829-d91aecb6caea&w=800&output=webp',
+    image: p.mainImageUrl || '',
     category: p.categoryId || 'all',
     sellerId: p.sellerId,
     rating: p.rating?.averageRating,
     reviewsCount: p.rating?.reviewCount,
-    isNew: true, // Assuming new if recently created or mock
+    isNew: false,
   }));
 }
 
@@ -63,19 +63,18 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
   return {
     id: p.id,
     name: p.title,
-    brand: p.brandId ? (cachedBrands[p.brandId] || 'Unknown Brand') : 'Unknown Brand',
+    brand: p.brandId ? (cachedBrands[p.brandId] || 'Неизвестный бренд') : 'Неизвестный бренд',
     brandId: p.brandId || '',
     price: p.priceCents / 100,
     oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
-    image: p.mainImageUrl || 'https://wsrv.nl/?url=images.unsplash.com/photo-1591047139829-d91aecb6caea&w=800&output=webp',
+    image: p.mainImageUrl || '',
     images: p.images || (p.mainImageUrl ? [p.mainImageUrl] : []),
     category: p.categoryId || 'all',
     sellerId: p.sellerId,
     description: p.description || '',
     rating: p.rating?.averageRating,
     reviewsCount: p.rating?.reviewCount,
-    // Extract sizes and colors from variants, or provide default if none
-    sizes: p.variants?.map(v => v.size).filter(Boolean) as string[] || ['S', 'M', 'L'], 
+    sizes: p.variants?.map(v => v.size).filter(Boolean) as string[] || [],
     variants: p.variants?.map(v => ({
       id: v.id,
       size: v.size,

@@ -29,7 +29,7 @@ export function AdminReturns() {
       setError(null);
       setReturns(await getAdminReturns());
     } catch (err: unknown) {
-      setError(getAdminReturnErrorMessage(err, 'Failed to load returns.'));
+      setError(getAdminReturnErrorMessage(err, 'Не удалось загрузить возвраты.'));
     } finally {
       setIsLoading(false);
     }
@@ -45,7 +45,7 @@ export function AdminReturns() {
       setAdminComment('');
       setRefundReason('');
     } catch (err: unknown) {
-      setError(getAdminReturnErrorMessage(err, 'Failed to load return details.'));
+      setError(getAdminReturnErrorMessage(err, 'Не удалось загрузить детали возврата.'));
     } finally {
       setIsDetailLoading(false);
     }
@@ -71,7 +71,7 @@ export function AdminReturns() {
       await fetchReturnDetail(selectedReturn.id);
       setSuccess('Return status updated.');
     } catch (err: unknown) {
-      setError(getAdminReturnErrorMessage(err, 'Failed to update return status.'));
+      setError(getAdminReturnErrorMessage(err, 'Не удалось обновить статус возврата.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -91,7 +91,7 @@ export function AdminReturns() {
       await fetchReturnDetail(selectedReturn.id);
       setSuccess('Refund created by backend.');
     } catch (err: unknown) {
-      setError(getAdminReturnErrorMessage(err, 'Failed to create refund.'));
+      setError(getAdminReturnErrorMessage(err, 'Не удалось создать возмещение.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -152,8 +152,8 @@ export function AdminReturns() {
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
+                    <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -200,8 +200,8 @@ export function AdminReturns() {
           </div>
 
           <dl className="mt-4 grid gap-4 md:grid-cols-4">
-            <div><dt className="text-sm font-medium text-gray-500">Order</dt><dd className="mt-1 text-sm text-gray-900">{selectedReturn.orderId}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Status</dt><dd className="mt-1 text-sm text-gray-900">{selectedReturn.statusLabel}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Заказ</dt><dd className="mt-1 text-sm text-gray-900">{selectedReturn.orderId}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Статус</dt><dd className="mt-1 text-sm text-gray-900">{selectedReturn.statusLabel}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Reason</dt><dd className="mt-1 text-sm text-gray-900">{selectedReturn.reason || '-'}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Created</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedReturn.createdAt)}</dd></div>
           </dl>

@@ -101,10 +101,10 @@ export const updateAdminShipmentStatus = async (id: string, input: ShipmentStatu
 
 export const getAdminShipmentErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiError) {
-    if (error.status === 403) return 'You do not have permission to manage shipments.';
+    if (error.status === 403) return 'Недостаточно прав для управления отгрузками.';
     if (error.status === 400) return 'Shipment action was rejected by backend rules.';
     if (error.status === 404) return 'Shipment was not found.';
-    if (error.code === 'NETWORK_ERROR') return 'Network error. Check that the backend API is running and try again.';
+    if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
   }
   return fallback;
 };

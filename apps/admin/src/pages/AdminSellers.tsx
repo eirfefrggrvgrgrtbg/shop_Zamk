@@ -34,7 +34,7 @@ export function AdminSellers() {
         setSellers(data || []);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load sellers');
+      setError(err.message || 'Не удалось загрузить продавцов');
     } finally {
       setIsLoading(false);
     }
@@ -70,7 +70,7 @@ export function AdminSellers() {
       setPassword('');
       fetchSellers();
     } catch (err: any) {
-      setCreateError(err.message || 'Failed to create seller');
+      setCreateError(err.message || 'Не удалось создать продавца');
     } finally {
       setIsCreating(false);
     }
@@ -93,7 +93,7 @@ export function AdminSellers() {
       // Optimistic update
       setSellers(sellers.map(s => s.id === id ? { ...s, status: newStatus } : s));
     } catch (err: any) {
-      alert(err.message || 'Failed to update status');
+      alert(err.message || 'Не удалось обновить статус');
       fetchSellers();
     }
   };
@@ -101,7 +101,7 @@ export function AdminSellers() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Sellers</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Продавцы</h1>
         <button 
           onClick={() => setIsCreateModalOpen(true)}
           className="mt-3 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
@@ -138,8 +138,8 @@ export function AdminSellers() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name / ID</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
+                      <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -191,23 +191,23 @@ export function AdminSellers() {
             
             <form onSubmit={handleCreateSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Brand Name</label>
+                <label className="block text-sm font-medium text-gray-700">Название бренда</label>
                 <input required type="text" value={brandName} onChange={e => setBrandName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Contact Email</label>
+                <label className="block text-sm font-medium text-gray-700">Контактная почта</label>
                 <input required type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Owner Name</label>
+                <label className="block text-sm font-medium text-gray-700">Имя владельца</label>
                 <input required type="text" value={ownerName} onChange={e => setOwnerName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Owner Email</label>
+                <label className="block text-sm font-medium text-gray-700">Почта владельца</label>
                 <input required type="email" value={ownerEmail} onChange={e => setOwnerEmail(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Temporary Password</label>
+                <label className="block text-sm font-medium text-gray-700">Временный пароль</label>
                 <input required type="text" minLength={8} value={password} onChange={e => setPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
               </div>
               <div className="mt-5 flex justify-end space-x-3">

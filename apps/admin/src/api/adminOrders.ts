@@ -30,14 +30,14 @@ export interface OrderStatusUpdateInput {
 type ListResponse<T> = T[] | { items?: T[]; totalCount?: number };
 
 const orderStatusLabels: Record<string, string> = {
-  awaiting_payment: 'Awaiting payment',
-  paid: 'Paid',
-  assembling: 'Assembling',
-  packed: 'Packed',
-  shipped: 'Shipped',
-  delivered: 'Delivered',
-  cancelled: 'Cancelled',
-  failed: 'Failed',
+  awaiting_payment: 'Ожидает оплаты',
+  paid: 'Оплачен',
+  assembling: 'Собирается',
+  packed: 'Упакован',
+  shipped: 'Отгружен',
+  delivered: 'Доставлен',
+  cancelled: 'Отменён',
+  failed: 'Ошибка',
 };
 
 const unwrapItems = <T>(response: ListResponse<T>): T[] => {
@@ -97,22 +97,22 @@ export const getOrderStatusLabel = (status: string): string => {
 
 export const updateAdminOrderStatus = async (id: string, input: OrderStatusUpdateInput): Promise<void> => {
   if (input.status === 'paid') {
-    throw new Error('Admin cannot manually set paid status.');
+    throw new Error('Администратор не может вручную установить статус оплаты.');
   }
   await apiUpdateAdminOrderStatus(id, input);
 };
 
 export const getAdminOrderErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiError) {
-    if (error.status === 403) return 'You do not have permission to manage orders.';
+    if (error.status === 403) return 'Недостаточно прав для управления заказами.';
     if (error.status === 400 || error.code === 'validation_error' || error.code === 'invalid_status') {
-      return 'Order status update was rejected by backend rules.';
+      return 'Backend отклонил изменение статуса заказа.';
     }
-    if (error.status === 404) return 'Order was not found.';
-    if (error.code === 'NETWORK_ERROR') return 'Network error. Check that the backend API is running and try again.';
+    if (error.status === 404) return 'Заказ не найден.';
+    if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
   }
   if (error instanceof Error && error.message.includes('paid')) {
-    return 'Admin cannot manually set paid status. Payment webhook owns that transition.';
+    return 'Администратор не может вручную установить статус оплаты. Этот переход выполняет платёжный webhook.';
   }
   return fallback;
 };

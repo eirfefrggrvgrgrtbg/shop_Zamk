@@ -31,7 +31,7 @@ export function AdminProducts() {
       const data = await getAdminProducts();
       setProducts(data);
     } catch (err: unknown) {
-      setError(getAdminProductErrorMessage(err, 'Failed to load products.'));
+      setError(getAdminProductErrorMessage(err, 'Не удалось загрузить товары.'));
     } finally {
       setIsLoading(false);
     }
@@ -52,7 +52,7 @@ export function AdminProducts() {
       if (action === 'approve') await approveProduct(id);
       await fetchProducts();
     } catch (err: unknown) {
-      setError(getAdminProductErrorMessage(err, `Failed to ${action} product.`));
+      setError(getAdminProductErrorMessage(err, `Не удалось выполнить действие с товаром: ${action}.`));
     } finally {
       setActionProductId(null);
     }
@@ -75,7 +75,7 @@ export function AdminProducts() {
       setActionComment('');
       await fetchProducts();
     } catch (err: unknown) {
-      setError(getAdminProductErrorMessage(err, `Failed to ${actionModal.type} product.`));
+      setError(getAdminProductErrorMessage(err, `Не удалось выполнить действие с товаром: ${actionModal.type}.`));
     } finally {
       setIsSubmitting(false);
     }
@@ -91,7 +91,7 @@ export function AdminProducts() {
       await uploadAdminProductImage(productId, file);
       await fetchProducts();
     } catch (err: unknown) {
-      setError(getAdminProductErrorMessage(err, 'Failed to upload product image.'));
+      setError(getAdminProductErrorMessage(err, 'Не удалось загрузить изображение товара.'));
     } finally {
       setUploadingProductId(null);
       event.currentTarget.value = '';
@@ -152,12 +152,12 @@ export function AdminProducts() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Товар</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Продавец</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category / Brand</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                      <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                      <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">

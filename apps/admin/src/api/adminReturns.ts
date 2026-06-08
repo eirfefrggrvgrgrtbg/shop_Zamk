@@ -33,13 +33,13 @@ export interface ReturnStatusInput {
 }
 
 const labels: Record<string, string> = {
-  requested: 'Requested',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  item_received: 'Item received',
-  refunded: 'Refunded',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
+  requested: 'Запрошен',
+  approved: 'Одобрен',
+  rejected: 'Отклонён',
+  item_received: 'Товар получен',
+  refunded: 'Возмещён',
+  completed: 'Завершён',
+  cancelled: 'Отменён',
 };
 
 const unwrapItems = <T>(response: ListResponse<T>): T[] => Array.isArray(response) ? response : response.items ?? [];
@@ -100,10 +100,10 @@ export const createAdminRefund = async (returnId: string, reason?: string): Prom
 
 export const getAdminReturnErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiError) {
-    if (error.status === 403) return 'You do not have permission to manage returns.';
-    if (error.status === 400 || error.code === 'invalid_transition' || error.code === 'validation_error') return 'Return action was rejected by backend rules.';
-    if (error.status === 404) return 'Return was not found.';
-    if (error.code === 'NETWORK_ERROR') return 'Network error. Check that the backend API is running and try again.';
+    if (error.status === 403) return 'Недостаточно прав для управления возвратами.';
+    if (error.status === 400 || error.code === 'invalid_transition' || error.code === 'validation_error') return 'Backend отклонил действие по возврату.';
+    if (error.status === 404) return 'Возврат не найден.';
+    if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
   }
   return fallback;
 };

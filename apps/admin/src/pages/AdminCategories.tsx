@@ -26,7 +26,7 @@ export function AdminCategories() {
         setCategories(data || []);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load categories');
+      setError(err.message || 'Не удалось загрузить категории');
     } finally {
       setIsLoading(false);
     }
@@ -47,7 +47,7 @@ export function AdminCategories() {
       setSlug('');
       fetchCategories();
     } catch (err: any) {
-      setCreateError(err.message || 'Failed to create category');
+      setCreateError(err.message || 'Не удалось создать категорию');
     } finally {
       setIsCreating(false);
     }

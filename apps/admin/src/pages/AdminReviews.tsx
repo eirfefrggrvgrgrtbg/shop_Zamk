@@ -24,7 +24,7 @@ export function AdminReviews() {
       setError(null);
       setReviews(await getAdminReviews());
     } catch (err: unknown) {
-      setError(getAdminReviewErrorMessage(err, 'Failed to load reviews.'));
+      setError(getAdminReviewErrorMessage(err, 'Не удалось загрузить отзывы.'));
     } finally {
       setIsLoading(false);
     }
@@ -36,7 +36,7 @@ export function AdminReviews() {
       setError(null);
       setSelectedReview(await getAdminReview(id));
     } catch (err: unknown) {
-      setError(getAdminReviewErrorMessage(err, 'Failed to load review details.'));
+      setError(getAdminReviewErrorMessage(err, 'Не удалось загрузить детали отзыва.'));
     } finally {
       setIsDetailLoading(false);
     }
@@ -57,7 +57,7 @@ export function AdminReviews() {
       setModal(null);
       setComment('');
     } catch (err: unknown) {
-      setError(getAdminReviewErrorMessage(err, `Failed to ${action} review.`));
+      setError(getAdminReviewErrorMessage(err, `Не удалось выполнить действие с отзывом: ${action}.`));
     } finally {
       setIsSubmitting(false);
     }
@@ -82,7 +82,7 @@ export function AdminReviews() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Reviews</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Отзывы</h1>
       </div>
 
       {error && (
@@ -95,13 +95,13 @@ export function AdminReviews() {
       {isLoading ? (
         <div className="text-center py-10">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-500">Loading reviews...</p>
+          <p className="mt-2 text-sm text-gray-500">Загрузка отзывов...</p>
         </div>
       ) : reviews.length === 0 ? (
         <div className="text-center py-10 bg-white rounded-lg shadow">
           <Star className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No reviews</h3>
-          <p className="mt-1 text-sm text-gray-500">No reviews are available yet.</p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Нет отзывов</h3>
+          <p className="mt-1 text-sm text-gray-500">Отзывы пока отсутствуют.</p>
         </div>
       ) : (
         <div className="flex flex-col">
@@ -111,11 +111,11 @@ export function AdminReviews() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Review</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Отзыв</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Товар</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rating</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
+                      <th className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -133,11 +133,11 @@ export function AdminReviews() {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button onClick={() => fetchReviewDetail(review.id)} className="text-indigo-600 hover:text-indigo-900 mr-4">View</button>
-                          {review.status === 'pending_moderation' && <button onClick={() => submitAction('approve', review.id)} className="text-green-600 hover:text-green-900 mr-4">Approve</button>}
-                          {review.status === 'pending_moderation' && <button onClick={() => setModal({ action: 'reject', reviewId: review.id })} className="text-red-600 hover:text-red-900 mr-4">Reject</button>}
-                          {review.status === 'published' && <button onClick={() => submitAction('hide', review.id)} className="text-gray-600 hover:text-gray-900 mr-4">Hide</button>}
-                          {review.status !== 'blocked' && <button onClick={() => setModal({ action: 'block', reviewId: review.id })} className="text-red-600 hover:text-red-900">Block</button>}
+                          <button onClick={() => fetchReviewDetail(review.id)} className="text-indigo-600 hover:text-indigo-900 mr-4">Открыть</button>
+                          {review.status === 'pending_moderation' && <button onClick={() => submitAction('approve', review.id)} className="text-green-600 hover:text-green-900 mr-4">Одобрить</button>}
+                          {review.status === 'pending_moderation' && <button onClick={() => setModal({ action: 'reject', reviewId: review.id })} className="text-red-600 hover:text-red-900 mr-4">Отклонить</button>}
+                          {review.status === 'published' && <button onClick={() => submitAction('hide', review.id)} className="text-gray-600 hover:text-gray-900 mr-4">Скрыть</button>}
+                          {review.status !== 'blocked' && <button onClick={() => setModal({ action: 'block', reviewId: review.id })} className="text-red-600 hover:text-red-900">Заблокировать</button>}
                         </td>
                       </tr>
                     ))}
@@ -153,14 +153,14 @@ export function AdminReviews() {
         <div className="bg-white shadow sm:rounded-lg p-6">
           <div className="sm:flex sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-lg font-medium text-gray-900">Review details</h2>
+              <h2 className="text-lg font-medium text-gray-900">Детали отзыва</h2>
               <p className="mt-1 text-sm text-gray-500">{selectedReview.id}</p>
             </div>
             {isDetailLoading && <span className="text-sm text-gray-500">Loading...</span>}
           </div>
           <dl className="mt-4 grid gap-4 md:grid-cols-4">
-            <div><dt className="text-sm font-medium text-gray-500">Product</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.productTitle || selectedReview.productId}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Seller</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.sellerName || selectedReview.sellerId || '-'}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Товар</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.productTitle || selectedReview.productId}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Продавец</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.sellerName || selectedReview.sellerId || '-'}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Rating</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.rating}/5</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Created</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedReview.createdAt)}</dd></div>
             <div className="md:col-span-2"><dt className="text-sm font-medium text-gray-500">Comment</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.comment || '-'}</dd></div>
@@ -174,9 +174,9 @@ export function AdminReviews() {
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4 capitalize">{modal.action} Review</h2>
             <form onSubmit={(event) => { event.preventDefault(); submitAction(modal.action, modal.reviewId, comment); }} className="space-y-4">
-              <textarea required={modal.action === 'reject' || modal.action === 'block'} value={comment} onChange={(event) => setComment(event.target.value)} rows={3} placeholder="Reason / comment" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              <textarea required={modal.action === 'reject' || modal.action === 'block'} value={comment} onChange={(event) => setComment(event.target.value)} rows={3} placeholder="Причина / комментарий" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
               <div className="flex justify-end space-x-3">
-                <button type="button" onClick={() => setModal(null)} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button type="button" onClick={() => setModal(null)} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Отмена</button>
                 <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50 capitalize">
                   {isSubmitting ? 'Submitting...' : modal.action}
                 </button>

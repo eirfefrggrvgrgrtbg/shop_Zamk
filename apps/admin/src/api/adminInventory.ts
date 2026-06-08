@@ -135,10 +135,10 @@ export const writeOffInventoryStock = async (input: InventoryMutationInput): Pro
 
 export const getAdminInventoryErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiError) {
-    if (error.status === 403) return 'You do not have permission to manage inventory.';
+    if (error.status === 403) return 'Недостаточно прав для управления остатками.';
     if (error.status === 400 || error.code === 'validation_error') return 'Check the inventory request and try again.';
     if (error.code === 'invalid_adjustment' || error.code === 'invalid_write_off') return 'Inventory operation was rejected by backend stock rules.';
-    if (error.code === 'NETWORK_ERROR') return 'Network error. Check that the backend API is running and try again.';
+    if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
   }
   return fallback;
 };
