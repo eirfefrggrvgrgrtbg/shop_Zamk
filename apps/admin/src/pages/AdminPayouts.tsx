@@ -89,11 +89,16 @@ export function AdminPayouts() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Seller Payouts</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Выплаты продавцам</h1>
+          <p className="mt-1 text-sm text-gray-500">Деньги, которые платформа переводит продавцам за выполненные заказы</p>
+        </div>
       </div>
 
       <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
-        <p className="text-sm text-blue-700">No bank payout is triggered here. Mark paid only after an offline/manual transfer is already complete.</p>
+        <p className="text-sm text-blue-700">
+          Банковский перевод здесь не инициируется автоматически. Отметьте выплату как «Выплачено» только после того, как перевод уже был выполнен вручную.
+        </p>
       </div>
 
       {error && (
@@ -106,13 +111,13 @@ export function AdminPayouts() {
       {isLoading ? (
         <div className="text-center py-10">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-500">Loading payouts...</p>
+          <p className="mt-2 text-sm text-gray-500">Загрузка выплат...</p>
         </div>
       ) : payouts.length === 0 ? (
         <div className="text-center py-10 bg-white rounded-lg shadow">
           <Wallet className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No payouts</h3>
-          <p className="mt-1 text-sm text-gray-500">No payout requests are available yet.</p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Заявок на выплату нет</h3>
+          <p className="mt-1 text-sm text-gray-500">Продавцы ещё не запрашивали выплату средств.</p>
         </div>
       ) : (
       <div className="flex flex-col">
@@ -122,10 +127,10 @@ export function AdminPayouts() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payout ID</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID выплаты</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Продавец</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requested</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Запрошено</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Сумма</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
                     <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                   </tr>
@@ -151,7 +156,7 @@ export function AdminPayouts() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onClick={() => fetchPayoutDetail(payout.id)} className="text-indigo-600 hover:text-indigo-900">View / Manage</button>
+                        <button onClick={() => fetchPayoutDetail(payout.id)} className="text-indigo-600 hover:text-indigo-900">Детали / Управление</button>
                       </td>
                     </tr>
                   ))}
@@ -167,28 +172,28 @@ export function AdminPayouts() {
         <div className="bg-white shadow sm:rounded-lg p-6">
           <div className="sm:flex sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-lg font-medium text-gray-900">Payout details</h2>
+              <h2 className="text-lg font-medium text-gray-900">Детали выплаты</h2>
               <p className="mt-1 text-sm text-gray-500">{selectedPayout.id}</p>
             </div>
-            {isDetailLoading && <span className="text-sm text-gray-500">Loading...</span>}
+            {isDetailLoading && <span className="text-sm text-gray-500">Загрузка...</span>}
           </div>
           <dl className="mt-4 grid gap-4 md:grid-cols-4">
             <div><dt className="text-sm font-medium text-gray-500">Продавец</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayout.sellerName || selectedPayout.sellerId}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Amount</dt><dd className="mt-1 text-sm text-gray-900">{formatMoney(selectedPayout)}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Сумма</dt><dd className="mt-1 text-sm text-gray-900">{formatMoney(selectedPayout)}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Статус</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayout.statusLabel}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Requested</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedPayout.requestedAt)}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Дата запроса</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedPayout.requestedAt)}</dd></div>
           </dl>
 
           <form onSubmit={handleStatusUpdate} className="mt-6 grid gap-4 md:grid-cols-2">
             <select required value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)} className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-              <option value="">Select next status</option>
+              <option value="">Выберите новый статус</option>
               {getPayoutStatusTargets(selectedPayout.status).map((status) => (
                 <option key={status} value={status}>{getPayoutStatusLabel(status)}</option>
               ))}
             </select>
-            <input value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Comment, optional" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <input value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Комментарий (необязательно)" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
             <button type="submit" disabled={isSubmitting || !statusDraft} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-              Update payout
+              Обновить статус выплаты
             </button>
           </form>
         </div>

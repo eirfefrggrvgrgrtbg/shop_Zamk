@@ -106,9 +106,13 @@ export function SellerDashboard() {
             balance,
           });
         }
-      } catch {
+      } catch (err: any) {
         if (!cancelled) {
-          setError('Не удалось загрузить данные продавца. Проверьте, запущен ли backend.');
+          if (err?.status === 401 || err?.code === 'unauthorized') {
+            setError('Сессия истекла. Обновите страницу и войдите снова.');
+          } else {
+            setError('Не удалось загрузить данные. Проверьте, запущен ли backend и выполнен ли вход.');
+          }
         }
       } finally {
         if (!cancelled) {

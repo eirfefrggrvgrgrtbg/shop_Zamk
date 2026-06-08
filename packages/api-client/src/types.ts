@@ -74,8 +74,8 @@ export interface PublicReview {
 }
 
 export interface RatingSummary {
-  averageRating: number;
-  reviewCount: number;
+  average: number;
+  count: number;
 }
 
 // ---------------------------------------------------------

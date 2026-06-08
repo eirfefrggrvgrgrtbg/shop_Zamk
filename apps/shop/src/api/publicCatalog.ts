@@ -49,8 +49,8 @@ export async function fetchProducts(params?: any): Promise<UIProduct[]> {
     image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
     category: p.categoryId || 'Категория не указана',
     sellerId: p.sellerId,
-    rating: p.rating?.averageRating,
-    reviewsCount: p.rating?.reviewCount,
+    rating: p.rating?.average,
+    reviewsCount: p.rating?.count,
     isNew: false,
   }));
 }
@@ -74,8 +74,8 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
     category: p.categoryId || 'Категория не указана',
     sellerId: p.sellerId,
     description: p.description || '',
-    rating: p.rating?.averageRating,
-    reviewsCount: p.rating?.reviewCount,
+    rating: p.rating?.average,
+    reviewsCount: p.rating?.count,
     sizes: p.variants?.map(v => v.size).filter(Boolean) as string[] || [],
     variants: p.variants?.map(v => ({
       id: v.id,

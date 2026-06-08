@@ -1,586 +1,507 @@
-# Phase 13 Implementation Plan: Production Hardening / Security / Deploy Preparation
+# Phase 13D Implementation Plan: Docker / Deploy Configs
 
 ## Scope
 
-This plan prepares ZAMK for staging and production hardening after the completed Phase 12A-12E work.
+This is a planning-only phase for Docker and deployment configuration. Do not implement Dockerfiles, Compose files, proxy configs, CI workflows, or code changes until this plan is approved.
 
-This phase is planning only:
+Non-goals:
 
-- Do not add new business features.
-- Do not change backend business logic unless a later approved phase finds a real production blocker.
-- Do not change the commission model now.
-- Keep `MARKETPLACE_COMMISSION_BPS=1500` as the current MVP value.
-- Do not refactor working flows without a targeted hardening reason.
+- Do not change backend business logic.
+- Do not change frontend business logic.
+- Do not add new marketplace features.
+- Do not change `MARKETPLACE_COMMISSION_BPS=1500`.
+- Do not start monitoring/logging Phase 13E.
 
-## Current Baseline
+## 1. Deployment Architecture
 
-Verified baseline:
-
-- Backend core is implemented.
-- `apps/shop`, `apps/seller`, and `apps/admin` are connected to backend APIs.
-- External S3-compatible storage works.
-- Full system smoke test passed.
-- Frontend builds and backend tests/build pass.
-- Git working tree was clean before this plan.
-
-Observed planning notes from current code:
-
-- `backend/.env` exists locally and contains real environment data. It must remain uncommitted.
-- Root `.gitignore` ignores `*.local`, but does not explicitly ignore `.env` files. Add explicit `.env` ignore rules in Phase 13A.
-- `backend/.env.example` still uses some old variable names (`PORT`, `DB_URL`, `REDIS_URL`, `JWT_SECRET`, `JWT_EXPIRATION_HOURS`) while current config code reads names like `APP_PORT`, `POSTGRES_*`, `REDIS_*`, `JWT_ACCESS_SECRET`, and `JWT_REFRESH_SECRET`. Align examples in Phase 13A.
-- Refresh cookies are already `HttpOnly`, but current auth handler hardcodes local cookie defaults: `Secure=false`, empty domain, `SameSite=Lax`. Make these configurable for production.
-- TBank provider has a `STUB` mode for local/e2e. Production must use real/sandbox provider credentials and webhook verification.
-- Rate limiting is not visible in current middleware and should be added before production exposure.
-
-## 1. Environment Separation
-
-Define three separate environments:
-
-- `local`: developer workstation, Docker Compose or local services, non-production S3 or sandbox bucket.
-- `staging`: production-like infrastructure, staging domains, sandbox payments, staging S3 bucket, staging database.
-- `production`: real customer traffic, production domains, real payment credentials, production S3 bucket, backups and monitoring enabled.
-
-Required files and ownership:
-
-- `backend/.env.local`: local backend values. Not committed.
-- `backend/.env.staging.example`: committed placeholders only.
-- `backend/.env.production.example`: committed placeholders only.
-- `apps/shop/.env.local`: local frontend API URL. Not committed.
-- `apps/seller/.env.local`: local frontend API URL. Not committed.
-- `apps/admin/.env.local`: local frontend API URL. Not committed.
-- `apps/*/.env.staging.example` and `apps/*/.env.production.example`: committed placeholders only.
-
-Production secrets storage:
-
-- Do not commit real secrets.
-- Store production secrets in deployment provider secret storage, Vault, Doppler, 1Password Secrets Automation, GitHub Actions environments, or encrypted server-side secret files with restricted permissions.
-- Limit read access to production secrets to deploy/runtime only.
-- Rotate secrets on suspected exposure and before production launch.
-
-Backend variables to standardize:
-
-- `APP_ENV`: `local`, `staging`, `production`.
-- `APP_PORT`: runtime HTTP port.
-- `POSTGRES_DSN` or `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_SSLMODE`.
-- `REDIS_ADDR` or `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DB`.
-- `JWT_ACCESS_SECRET`: long random secret, production only in secret storage.
-- `JWT_REFRESH_SECRET`: separate long random secret, production only in secret storage.
-- `CORS_ALLOWED_ORIGINS`: exact frontend origins per environment.
-- `S3_ENDPOINT`: provider endpoint.
-- `S3_BUCKET`: environment-specific bucket, e.g. `zamk-media-staging` and `zamk-media`.
-- `S3_ACCESS_KEY`: backend-side only.
-- `S3_SECRET_KEY`: backend-side only.
-- `S3_PUBLIC_BASE_URL`: public CDN/bucket URL.
-- `TBANK_TERMINAL_KEY`: staging sandbox or production key.
-- `TBANK_PASSWORD`: backend-side only.
-- `TBANK_SUCCESS_URL`: environment-specific shop success URL.
-- `TBANK_FAIL_URL`: environment-specific shop failure URL.
-- `RETURN_WINDOW_DAYS`: keep business-approved value, currently 14.
-- `MARKETPLACE_COMMISSION_BPS`: keep `1500` for MVP. Revisit only in final commission phase.
-
-Frontend variables:
-
-- `VITE_API_URL`: environment-specific API base URL only.
-- No backend secrets in frontend `.env` files.
-
-Values that differ by environment:
-
-- Domains and `VITE_API_URL`.
-- CORS origins.
-- Cookie secure/domain policy.
-- Database and Redis endpoints.
-- S3 bucket and public base URL.
-- TBank sandbox vs production credentials.
-- Logging verbosity.
-- Rate limit thresholds.
-
-## 2. Secrets Audit
-
-Phase 13A must audit and harden secrets handling:
-
-- Confirm `backend/.env` is ignored and never committed.
-- Add explicit root `.gitignore` rules for `.env`, `.env.*`, with exceptions for `*.env.example` if needed.
-- Search git history for accidental secrets before public/private production deployment.
-- Ensure frontend `.env` files contain only `VITE_API_URL` and other public values.
-- Ensure S3 keys exist only backend-side.
-- Ensure TBank secrets exist only backend-side.
-- Ensure JWT access/refresh secrets are separate and sufficiently long random values.
-- Ensure `.env.example` files contain placeholders only, never real endpoints/secrets unless public and safe.
-- Avoid logging full provider webhook payloads if they contain sensitive values.
-
-Recommended checks:
-
-- Secret scan in CI using `gitleaks` or `trufflehog`.
-- Manual review of committed `.env.example` files.
-- Manual review of deployment logs for accidental env dumps.
-
-## 3. CORS Hardening
-
-Production CORS must use explicit origins:
-
-- `https://shop.<domain>`
-- `https://seller.<domain>`
-- `https://admin.<domain>`
-
-Rules:
-
-- Do not use wildcard `*` with credentials.
-- Allow credentials only for exact trusted frontend origins.
-- Restrict methods and headers to what the API needs.
-- Confirm preflight behavior for auth, uploads, and admin mutations.
-- Keep staging origins separate from production origins.
-
-Cookie-related CORS checks:
-
-- Confirm refresh cookie is accepted from each frontend domain.
-- Confirm `SameSite` policy supports the chosen subdomain layout.
-- Confirm `Secure=true` for HTTPS environments.
-
-## 4. Cookie / Session Hardening
-
-Current state:
-
-- Refresh cookie is `HttpOnly`.
-- Logout clears the refresh cookie.
-- Refresh rotation exists through backend session flow.
-- Password change clears cookie and revokes sessions.
-- Local defaults are hardcoded for cookie domain and secure flag.
-
-Plan:
-
-- Add config for `AUTH_COOKIE_DOMAIN`.
-- Add config for `AUTH_COOKIE_SECURE`.
-- Add config for `AUTH_COOKIE_SAMESITE` if needed.
-- Use `Secure=true` in staging and production.
-- Choose cookie domain deliberately:
-  - If API and frontends share a parent domain, use a parent cookie domain only if required.
-  - Prefer the narrowest valid cookie scope.
-- Keep `HttpOnly=true`.
-- Validate `SameSite=Lax` is sufficient for same-site subdomains. Use `SameSite=None; Secure` only if cross-site embedding/cross-site auth is required.
-- Confirm logout clears cookie with the same domain/path/secure attributes used to set it.
-- Confirm refresh rotation rejects reused/expired refresh tokens.
-- Confirm `mustChangePassword` password change revokes old sessions.
-
-## 5. Rate Limiting
-
-Add Redis-backed rate limiting in Phase 13B. Do not implement in this planning phase.
-
-Targets:
-
-- `POST /api/auth/login`: strict IP + email based limits.
-- `POST /api/auth/register`: IP based and email/domain based limits.
-- `POST /api/auth/refresh`: token/session/IP based limits.
-- `POST /api/auth/change-password`: user + IP limits.
-- `POST /api/payments/tbank/webhook`: provider/IP/signature-aware limit with careful false-positive handling.
-- Upload endpoints:
-  - seller product image upload;
-  - seller profile image upload;
-  - admin product image upload;
-  - admin brand logo upload.
-- Admin dangerous actions:
-  - inventory write-offs/adjustments;
-  - product block/hide;
-  - return refund creation;
-  - payout approve/paid.
-
-Design notes:
-
-- Use Redis atomic counters or sliding windows.
-- Return safe `429` errors.
-- Log rate-limit events without secrets.
-- Keep thresholds configurable per environment.
-
-## 6. Upload Security
-
-Current behavior verified by smoke:
-
-- SVG upload is rejected.
-- Product image upload works with external S3.
-- S3 credentials are not needed in frontend.
-
-Plan:
-
-- Keep extension validation.
-- Keep MIME validation and verify it checks actual content, not only client-provided headers.
-- Enforce `S3_UPLOAD_MAX_SIZE_MB`.
-- Store object keys server-side and avoid exposing internal object keys in public UI.
-- Bucket policy:
-  - public read only for public assets;
-  - write/delete only via backend credentials;
-  - no frontend direct credentials.
-- Separate staging and production buckets.
-- Add future antivirus scanning for user-provided uploads.
-- Add future image optimization/resizing.
-- Add CDN in front of public media.
-- Add object lifecycle policy for unused draft images if needed.
-
-## 7. Payment Hardening
-
-Current behavior verified by smoke:
-
-- Frontend does not set order `paid`.
-- Admin is blocked from manually setting `paid`.
-- Valid webhook changes payment/order state.
-- Invalid webhook does not mark payment paid.
-- Duplicate webhook is idempotent and does not double-deduct stock.
-
-Plan before staging:
-
-- Ensure sandbox TBank credentials are configured outside code.
-- Ensure provider secrets are never logged.
-- Ensure webhook body logging is redacted or disabled for sensitive fields.
-- Add alerting for repeated invalid webhook signatures.
-- Confirm idempotency constraints at database level.
-
-Plan before production:
-
-- Replace local/e2e `STUB` usage with real TBank provider config.
-- Run real TBank sandbox certification flow.
-- Verify production callback URL with HTTPS.
-- Confirm webhook signature verification against real provider payloads.
-- Confirm payment amount/order ID validation.
-- Confirm no manual path can set paid outside verified webhook.
-
-## 8. Worker Hardening
-
-Current architecture:
-
-- `cmd/worker` is separate from API.
-- Worker handles expired awaiting-payment orders.
-- Worker handles seller funds availability.
-- Worker has graceful signal handling.
-
-Plan:
-
-- Confirm worker is deployed as a separate process/service.
-- Add health/readiness endpoint or process monitoring for worker.
-- Ensure no double processing across multiple worker instances.
-- Review critical queries for `SELECT FOR UPDATE` and `SKIP LOCKED` where concurrent workers may run.
-- Keep batch sizes configurable.
-- Add retry strategy for transient DB/Redis failures.
-- Add structured logs for each worker job:
-  - checked count;
-  - processed count;
-  - failed count;
-  - duration.
-- Add metrics for expired orders and seller balance availability conversions.
-- Confirm graceful shutdown cancels loops cleanly.
-
-## 9. Database Hardening
-
-Migrations:
-
-- Use one migration tool consistently.
-- Run migrations in CI against an empty DB.
-- Run migration dry-run or staging migration before production.
-- Never edit already-applied production migrations; add new migrations only.
-
-Backups:
-
-- Configure automatic PostgreSQL backups.
-- Define RPO/RTO targets.
-- Run restore test before production.
-- Store backups separately from the main DB host.
-
-Review areas:
-
-- Indexes for high-volume tables:
-  - users by email;
-  - products by status/seller/category/brand;
-  - orders by user/status/created_at;
-  - order items by seller/product;
-  - inventory by product variant/seller;
-  - payments by order/provider payment ID/status;
-  - returns/refunds by order/status;
-  - reviews by product/status;
-  - payouts/ledger by seller/status/created_at.
-- Pagination for all large admin/seller/customer lists.
-- N+1 query hotspots in list/detail APIs.
-- Transaction isolation risks in:
-  - stock reservation/sale conversion;
-  - refunds/restock;
-  - payout requests and status changes;
-  - worker availability conversion.
-- DB constraints:
-  - uniqueness;
-  - foreign keys;
-  - status enums/checks where appropriate;
-  - non-negative money/stock constraints.
-
-## 10. Observability
-
-Plan:
-
-- Keep structured JSON logs.
-- Ensure request IDs are generated and propagated.
-- Log auth/admin/payment/upload failures safely.
-- Add audit logs for admin actions:
-  - seller status changes;
-  - category/brand changes;
-  - product moderation;
-  - inventory adjustments/write-offs;
-  - order/shipment status changes;
-  - return/refund decisions;
-  - payout approval/paid.
-- Payment webhook logs must not include secrets, full card data, or raw tokens.
-- Add metrics:
-  - orders count by status;
-  - payment success/failure count;
-  - webhook invalid signature count;
-  - stock movements;
-  - refunds;
-  - payout requests/approved/paid;
-  - upload failures;
-  - auth login failures/rate-limit hits.
-- Add alerting later for:
-  - API 5xx spike;
-  - payment webhook failures;
-  - worker failures;
-  - DB connection failures;
-  - low disk/backups failing.
-
-## 11. RBAC / Security Audit Matrix
-
-Customer:
-
-- Can manage only own cart.
-- Can view only own orders.
-- Can create returns only for own delivered orders and valid quantities.
-- Can create reviews only for own delivered purchases.
-- Cannot access seller/admin endpoints.
-
-Seller:
-
-- Can manage only own products.
-- Can read own inventory only.
-- Cannot mutate stock directly.
-- Can view own order items only.
-- Must not see customer phone/email/address.
-- Can view own returns/reviews.
-- Can view own balance/payouts and request payouts within available balance.
-- Cannot access admin endpoints.
-
-Admin:
-
-- Can manage sellers/categories/brands/products/moderation.
-- Can manage inventory, orders, shipments, returns, refunds, reviews, payouts.
-- Cannot manually set order `paid`; payment webhook owns that transition.
-- Dangerous actions should require UI confirmation and backend validation.
-
-Public:
-
-- Can see only published products.
-- Can see only published reviews/rating summaries.
-- Cannot see draft/pending/hidden/blocked data.
-
-## 12. Frontend Security
-
-Plan:
-
-- Confirm refresh token is never stored in `localStorage` or `sessionStorage`.
-- Keep access token in memory only.
-- Keep all backend secrets out of frontend builds.
-- Keep `VITE_API_URL` as the only required frontend runtime variable for now.
-- Do not expose S3 object keys in public UI if they are internal implementation details.
-- Treat protected routes as UX only. Backend remains source of truth.
-- Keep frontend error messages safe and user-friendly.
-- Confirm admin/seller/customer apps do not rely on client-side role checks for authorization.
-- Add dependency audit to CI.
-
-## 13. Deploy Architecture
-
-Recommended layout:
+Target domain layout:
 
 - Shop frontend: `https://shop.<domain>`
 - Seller frontend: `https://seller.<domain>`
 - Admin frontend: `https://admin.<domain>`
 - Backend API: `https://api.<domain>`
-- Storage bucket: `zamk-media` for production, separate bucket for staging.
+- Media storage: external S3-compatible bucket configured through backend runtime env.
 
-Frontend hosting:
+Target services:
 
-- Static hosting via Nginx/Caddy, object hosting, or managed frontend hosting.
-- Build each app separately.
-- Configure `VITE_API_URL=https://api.<domain>/api`.
+- `api`: backend HTTP API from `backend/cmd/api`.
+- `worker`: backend background worker from `backend/cmd/worker`.
+- `shop`: static frontend build from `apps/shop`.
+- `seller`: static frontend build from `apps/seller`.
+- `admin`: static frontend build from `apps/admin`.
+- `postgres`: managed PostgreSQL preferred; private container acceptable for staging preview only.
+- `redis`: managed Redis preferred; private container acceptable for staging preview only.
+- `reverse-proxy`: Caddy or Nginx terminates HTTPS and routes domains.
 
-Backend:
+Recommended production shape:
 
-- Run API as a service.
-- Run worker as a separate service.
-- Use process manager/systemd/Docker/Kubernetes depending on deployment target.
+- Use managed PostgreSQL and managed Redis when possible.
+- Run `api`, `worker`, and frontend static servers as separate services.
+- Keep S3 external. Do not run MinIO in production compose.
+- Put all runtime services on private networks except reverse proxy.
+- Expose only HTTPS ports publicly.
 
-Database:
+## 2. Backend Docker Strategy
 
-- Prefer managed PostgreSQL where possible.
-- If VPS PostgreSQL is used, configure backups, monitoring, firewall, and restricted access.
+Planned file: `backend/Dockerfile`.
 
-Redis:
+Recommended design: one backend image, two service commands.
 
-- Managed Redis or VPS Redis with auth, persistence policy, firewall, and monitoring.
+- Build `/app/api` from `./cmd/api`.
+- Build `/app/worker` from `./cmd/worker`.
+- Compose or deployment config chooses command per service:
+  - API service command: `/app/api`
+  - Worker service command: `/app/worker`
 
-Reverse proxy:
+Requirements:
 
-- Nginx or Caddy.
-- HTTPS certificates with automatic renewal.
-- gzip/brotli compression.
-- Security headers:
-  - `Strict-Transport-Security`;
-  - `X-Content-Type-Options`;
-  - `X-Frame-Options` or CSP `frame-ancestors`;
-  - `Referrer-Policy`;
-  - carefully designed `Content-Security-Policy`.
+- Multi-stage build.
+- Go build stage using repo backend module.
+- Minimal runtime image, preferably distroless or Alpine if shell/debug convenience is needed.
+- Non-root runtime user if practical.
+- No `.env` copied into the image.
+- No secrets baked into image layers or build args.
+- Runtime config supplied by environment variables or secret store.
+- Healthcheck for API can call `GET /api/health`; worker health should be process/restart-policy based until a dedicated worker health endpoint exists.
 
-## 14. CI/CD Plan
+One image is preferred over two images because API and worker share the same codebase, dependencies, and release version. Separate images can be reconsidered only if worker dependencies diverge materially.
 
-Pipeline stages:
+## 3. Frontend Docker Strategy
 
-1. Install dependencies.
-2. Run frontend typecheck/build:
+Options:
+
+- Separate Dockerfiles:
+  - `apps/shop/Dockerfile`
+  - `apps/seller/Dockerfile`
+  - `apps/admin/Dockerfile`
+- Or one root frontend Dockerfile using build args:
+  - `APP_NAME=shop|seller|admin`
+  - `VITE_API_URL=https://api.<domain>/api`
+
+Recommended initial approach: separate app Dockerfiles for clarity, with the same pattern.
+
+Requirements:
+
+- Build static assets with Node.
+- Pass `VITE_API_URL` at build time.
+- Serve generated `dist` via Nginx or Caddy static server.
+- Build shop, seller, and admin independently.
+- Frontend images must contain no backend secrets, S3 keys, TBank credentials, or JWT secrets.
+- Only public frontend config should be embedded, currently `VITE_API_URL`.
+
+If runtime API URL switching is required later, add an explicit runtime config script. Do not introduce it in 13D unless needed.
+
+## 4. Compose / Staging Preview Strategy
+
+Planned file options:
+
+- Root `docker-compose.yml` for local/staging-like preview.
+- Or `docker-compose.prod.yml` for production-like deployment.
+
+Recommended service list:
+
+- `api`
+- `worker`
+- `postgres`
+- `redis`
+- `shop`
+- `seller`
+- `admin`
+- `reverse-proxy`
+
+Compose rules:
+
+- Use external S3 through backend env.
+- Keep MinIO only in local dev compose, not production compose.
+- Keep `postgres` and `redis` on private networks.
+- Do not expose PostgreSQL or Redis publicly.
+- Mount volumes only for PostgreSQL/Redis data in preview deployments.
+- Use restart policies for API, worker, proxy, Redis, and PostgreSQL.
+- Add `depends_on` with health conditions where supported, but do not rely on it as the only readiness mechanism.
+
+Production note: Compose can be acceptable for a single-VPS MVP deployment, but managed services and provider-native deployment are safer for production.
+
+## 5. Environment Files
+
+Backend env examples to plan:
+
+- `backend/.env.local`
+- `backend/.env.staging.example`
+- `backend/.env.production.example`
+
+Frontend env examples to plan:
+
+- `apps/shop/.env.production.example`
+- `apps/seller/.env.production.example`
+- `apps/admin/.env.production.example`
+
+Rules:
+
+- Real `.env` files stay ignored.
+- Example files contain placeholders only.
+- Frontend examples contain only:
+  - `VITE_API_URL=https://api.<domain>/api`
+- Backend runtime secrets stay backend-only:
+  - JWT secrets
+  - PostgreSQL credentials/DSN
+  - Redis credentials
+  - S3 access/secret keys
+  - TBank terminal/password
+- Do not pass backend secrets as frontend build args.
+
+Staging and production envs differ by:
+
+- `APP_ENV`
+- API/frontends domains
+- CORS allowed origins
+- cookie secure/domain settings
+- PostgreSQL DSN
+- Redis address/auth
+- S3 bucket and public base URL
+- TBank callback URLs and credentials
+
+## 6. Reverse Proxy
+
+Recommendation: use Caddy first, unless Nginx-specific control is required.
+
+Caddy advantages:
+
+- Automatic HTTPS certificates.
+- Simple domain-based routing.
+- Easy reverse proxy to API.
+- Simple static file serving.
+
+Nginx remains acceptable if full manual control over caching, compression, headers, and TLS config is required.
+
+Proxy responsibilities:
+
+- Route `shop.<domain>` to shop static server.
+- Route `seller.<domain>` to seller static server.
+- Route `admin.<domain>` to admin static server.
+- Route `api.<domain>` to API service.
+- Terminate TLS.
+- Redirect HTTP to HTTPS.
+- Set upload body size large enough for configured image upload max.
+- Enable gzip; brotli if available.
+- Add security headers:
+  - `Strict-Transport-Security`
+  - `X-Content-Type-Options: nosniff`
+  - `Referrer-Policy`
+  - `X-Frame-Options: DENY` or CSP `frame-ancestors 'none'`
+  - basic `Content-Security-Policy`
+
+CSP must be tested against Vite-generated static assets, API calls, S3 media URLs, and payment redirect behavior before enforcing too strictly.
+
+## 7. API Health Checks
+
+Existing backend checks:
+
+- `GET /api/health`
+- `GET /api/ready`
+
+Plan:
+
+- Docker API healthcheck should use `/api/health` for process liveness.
+- Deployment readiness should use `/api/ready` because it verifies dependencies.
+- Reverse proxy should only route to healthy API instances where platform supports it.
+- CI/CD deploy step should call `/api/ready` after startup.
+
+Worker monitoring:
+
+- Start with process-level health: container running, restart policy, logs.
+- Later Phase 13E can add worker metrics/heartbeat.
+- Avoid exposing a worker HTTP port unless there is a clear operational need.
+
+## 8. Migrations Strategy
+
+Production app startup must not auto-run migrations.
+
+Allowed migration approaches:
+
+- Separate migration job/container using the same backend image plus `migrate` binary.
+- Manual migration command before deploy.
+- CI/CD migration step before switching traffic.
+
+Recommended initial strategy:
+
+- Add migration job in deployment docs/config.
+- Run migrations on staging first.
+- Run smoke test after staging migration.
+- For production, run migrations before new API/worker rollout.
+- Keep migrations backward-compatible where possible.
+
+Rules:
+
+- Do not edit old migrations.
+- Add new migrations only.
+- Keep down migrations for reversible schema changes.
+- Document irreversible migrations explicitly before approval.
+- Keep DB backups before production migration.
+
+Important Phase 13C follow-up:
+
+- Migration `000013_add_performance_indexes` must be runtime-applied and rollback-verified before staging.
+- Previous local verification was blocked because PostgreSQL/Docker were unavailable.
+- Phase 13D implementation should include a clean migration verification step once local or staging DB is available.
+
+## 9. Worker Deployment
+
+Worker must run as a separate service/process from API.
+
+Initial plan:
+
+- Deploy one worker replica.
+- Use same backend image as API.
+- Command: `/app/worker`.
+- Restart policy: unless stopped / on failure depending on target platform.
+- Runtime env same DB/Redis/S3/payment config as API where needed.
+- Logs collected separately from API logs.
+- Graceful shutdown via SIGTERM/SIGINT.
+
+Scaling rule:
+
+- Do not run multiple worker replicas until `SKIP LOCKED` and idempotency are verified for all worker jobs in staging.
+- Phase 13C confirmed key worker paths use `SKIP LOCKED`, but staging concurrency verification is still required before scaling.
+
+## 10. PostgreSQL Deployment
+
+Preferred: managed PostgreSQL.
+
+Benefits:
+
+- Backups.
+- Monitoring.
+- Point-in-time restore.
+- Managed upgrades.
+- Easier restricted networking.
+
+If VPS PostgreSQL is used:
+
+- Use persistent volumes.
+- Do not expose port publicly.
+- Restrict network to API/worker/migration job.
+- Enable regular backups.
+- Store backups outside the DB host.
+- Test restore before production.
+- Monitor disk usage and connection count.
+- Use strong credentials from secret store.
+
+Production must define:
+
+- Backup schedule.
+- Retention period.
+- Restore procedure.
+- Maintenance window.
+
+## 11. Redis Deployment
+
+Preferred: managed Redis.
+
+Acceptable MVP alternative: private Redis container.
+
+Rules:
+
+- Require password/auth where supported.
+- Keep Redis private network only.
+- Do not expose Redis publicly.
+- Decide persistence policy explicitly.
+- Rate limiting depends on Redis, so production availability matters.
+
+Redis usage:
+
+- Rate limiting from Phase 13B.
+- Runtime state if future backend features use it.
+
+Failure policy:
+
+- Production sensitive endpoints should fail closed according to Phase 13B config.
+- Local/staging behavior can be tuned separately.
+
+## 12. S3 Deployment
+
+External S3-compatible storage is already used and should remain external.
+
+Plan:
+
+- Separate buckets for staging and production.
+- Public-read only for media objects that must be publicly visible.
+- Write/delete only through backend credentials.
+- No S3 credentials in frontend images, env files, logs, or static assets.
+- Configure bucket CORS only if browsers directly load media or if future direct-upload flow is added.
+- Keep `S3_PUBLIC_BASE_URL` environment-specific.
+- Add CDN later if traffic or latency requires it.
+
+Bucket naming questions:
+
+- Staging bucket name.
+- Production bucket name.
+- Public media base URL.
+- Whether CDN domain will replace raw bucket URL.
+
+## 13. CI/CD Deployment Flow
+
+Recommended pipeline:
+
+1. Install root dependencies.
+2. Run backend tests and build:
+   - `cd backend && go test ./...`
+   - `cd backend && go build ./cmd/...`
+3. Run frontend builds:
    - `npm run build:shop`
    - `npm run build:seller`
    - `npm run build:admin`
    - `npm run build`
-3. Run backend checks:
-   - `go test ./...`
-   - `go build ./cmd/...`
-4. Run migrations against a temporary DB.
-5. Run secret scanning.
-6. Build Docker images or deploy artifacts.
-7. Push images/artifacts to registry.
-8. Deploy to staging.
+4. Run secret scan.
+5. Build Docker images:
+   - backend image
+   - shop image
+   - seller image
+   - admin image
+6. Push images to registry.
+7. Run migrations on staging.
+8. Deploy staging.
 9. Run staging smoke test.
-10. Manual approval for production.
-11. Deploy production.
-12. Run production health checks.
+10. Manual approval.
+11. Run production migrations.
+12. Deploy production.
+13. Run health checks.
+14. Roll back if checks fail.
 
-Rollback plan:
+CI should not print secret values. Deployment logs should show variable names and service status only.
 
-- Keep previous backend image/artifact.
-- Keep previous frontend artifacts.
-- Ensure migrations are backward-compatible where possible.
-- For destructive DB changes, require explicit rollback/restore plan.
-- Document manual rollback steps.
+## 14. Rollback Strategy
 
-## 15. Pre-Production Checklist
+Application rollback:
 
-Before staging:
+- Keep previous backend image tag.
+- Keep previous frontend image/artifact tags.
+- Roll back API and worker together when backend version changes affect shared data contracts.
+- Roll back frontends independently only if API compatibility remains intact.
 
-- All builds pass.
-- Backend tests pass.
-- Smoke test passes.
-- Real external S3 upload passes.
-- `.env.example` files use current variable names and placeholders only.
-- `backend/.env` and all local env files are ignored.
-- CORS staging origins configured.
-- Secure cookie settings configurable.
-- Rate limiting implemented for auth/upload/webhook/dangerous admin actions.
-- TBank sandbox credentials configured.
+Migration rollback:
 
-Before production:
+- Prefer backward-compatible migrations.
+- For additive migrations, application rollback usually does not require DB rollback.
+- For destructive migrations, require explicit approval and DB backup before deploy.
+- Use down migration only when verified and safe.
+- DB restore is last resort for severe data corruption.
 
-- Real payment sandbox/certification passed.
-- Backups configured.
-- Restore test completed.
-- Admin user creation procedure documented.
-- Production domains configured.
-- Production CORS origins set exactly.
-- Secure cookies enabled.
-- HTTPS configured.
-- Logs checked for secrets.
-- Monitoring baseline enabled.
-- Alerting for critical failures configured.
-- Production S3 bucket policy reviewed.
-- Worker deployed and monitored.
-- Rollback plan documented and tested at least once in staging.
+Operational rollback steps:
 
-## 16. Known Technical Debt
+- Stop or pause worker first if background jobs could continue processing incompatible state.
+- Roll API back to previous image.
+- Roll worker back to matching previous image.
+- Roll frontend static images/artifacts back.
+- Run `/api/ready`.
+- Run focused smoke test.
 
-- Commission model is still MVP: `MARKETPLACE_COMMISSION_BPS=1500`. It must be revisited at the end of the project, not now.
-- Dashboard analytics still contain placeholders/mock-derived sections.
-- Admin product image upload UI may need UX polish if still inconvenient for production operations.
-- Real TBank production integration is not finalized until sandbox/certification and production credentials are configured.
-- No real delivery provider integration yet.
-- No antivirus scanning for uploads.
-- No image optimization pipeline.
-- No CDN in front of public media yet.
-- No legal/accounting document generation.
-- No automatic bank payouts; admin `paid` remains an offline/manual transfer marker.
-- Advanced pagination/filtering is not everywhere yet.
-- Rate limiting is not implemented yet.
-- Worker observability and retry strategy need hardening.
+## 15. Staging Smoke Test After Deploy
 
-## 17. Recommended Execution Order
+Minimum staging smoke:
 
-Phase 13A - Secrets/env/CORS/cookie hardening:
+- `GET https://api.<domain>/api/health`
+- `GET https://api.<domain>/api/ready`
+- Admin login.
+- Seller login.
+- Public catalog load.
+- Product detail load.
+- S3 image load through public media URL.
+- Customer login/register.
+- Add to cart and checkout.
+- Payment sandbox/webhook success path.
+- Shipment status update.
+- Customer return request.
+- Customer review creation.
+- Admin return/refund flow.
+- Admin review moderation.
+- Seller balance/payout visibility.
+- Admin payout approve/paid flow if staging ledger state allows it.
 
-- Align env variable names and `.env.example` files.
-- Harden `.gitignore`.
-- Add production cookie config.
-- Configure exact CORS origins.
-- Run secret scan.
+Security sanity:
 
-Phase 13B - Rate limiting and security middleware:
+- Customer cannot access seller/admin.
+- Seller cannot access admin.
+- Frontend bundles contain no backend secrets.
+- Refresh token not stored in local/session storage.
+- CORS only allows staging frontend origins.
 
-- Add Redis-backed rate limits.
-- Add safe `429` handling.
-- Add security headers at reverse proxy or API layer.
+## 16. Phase 13D Implementation Breakdown After Approval
 
-Phase 13C - DB indexes/pagination/query review:
+13D-1 Backend Docker and Compose skeleton:
 
-- Review indexes.
-- Review large list pagination.
-- Review transaction isolation and concurrency.
-- Review N+1 hotspots.
+- Add `backend/Dockerfile`.
+- Build both `api` and `worker` binaries.
+- Add compose services for API and worker.
+- Add basic service env wiring.
 
-Phase 13D - Docker/deploy configs:
+13D-2 Frontend Dockerfiles/static serving:
 
-- Add production Dockerfiles/compose or target deploy manifests.
-- Split API and worker services.
-- Add reverse proxy config.
-- Add deployment docs.
+- Add frontend Dockerfiles or shared frontend Dockerfile.
+- Build each app with `VITE_API_URL`.
+- Serve static assets via Nginx/Caddy image.
 
-Phase 13E - Monitoring/logging:
+13D-3 Reverse proxy config:
 
-- Add metrics.
-- Add request IDs and audit log coverage.
-- Add alerts.
-- Add dashboard baseline.
+- Add Caddyfile or Nginx config.
+- Route four domains.
+- Add HTTPS, upload size, compression, and headers.
 
-Phase 13F - Final commission model revision:
+13D-4 Migration job and deploy docs:
 
-- Revisit marketplace commission model near project end.
-- Decide whether `MARKETPLACE_COMMISSION_BPS=1500` remains correct.
-- Only then change commission business rules if approved.
+- Add migration job plan/config.
+- Document staging and production migration commands.
+- Include verification for `000013_add_performance_indexes`.
 
-## Criticality Summary
+13D-5 CI/CD draft workflow:
 
-Critical before staging:
+- Add draft workflow for tests/builds/secret scan/images/staging deploy.
+- Keep production deploy behind manual approval.
 
-- Correct env examples and explicit ignored secret files.
-- Exact CORS for staging domains.
-- Configurable secure refresh cookie settings.
-- TBank sandbox config.
-- Rate limiting for auth/webhook/uploads.
-- Migration and smoke test on staging.
+## 17. Known Risks and Open Questions
 
-Critical before production:
+Hosting:
 
-- Secret scan and secret storage completed.
-- Secure cookies and HTTPS.
-- Real payment sandbox/certification complete.
-- Backup and restore test complete.
-- Worker monitored.
-- Observability baseline and critical alerts.
-- Production S3 bucket policy reviewed.
-- Rollback plan ready.
+- Where will production run: VPS, managed app platform, Kubernetes, or another provider?
+- Will staging use the same provider as production?
 
-Can remain after MVP:
+Domains:
 
-- CDN.
-- Antivirus/image optimization.
-- Real delivery provider.
-- Automatic bank payouts.
-- Legal/accounting document generation.
-- Advanced analytics dashboards.
-- Full advanced pagination/filtering everywhere.
-- Final commission revision, as long as MVP commission is explicitly accepted for launch.
+- What base domain will be used?
+- Are `shop`, `seller`, `admin`, and `api` subdomains available?
+
+Reverse proxy:
+
+- Choose Caddy or Nginx.
+- Caddy is recommended for simpler HTTPS automation.
+- Nginx may be preferred if the deployment already standardizes on it.
+
+Database:
+
+- Managed PostgreSQL or VPS PostgreSQL?
+- Backup retention and restore target?
+- Who has production DB access?
+
+Redis:
+
+- Managed Redis or private container Redis?
+- Persistence requirement for rate limit data?
+- Redis password/auth mechanism?
+
+Payments:
+
+- Final TBank staging and production callback URLs.
+- TBank production terminal readiness.
+
+S3:
+
+- Staging bucket name.
+- Production bucket name.
+- Public media base URL.
+- CDN requirement and domain.
+
+Operations:
+
+- Container registry choice.
+- Deployment runner location.
+- Secret store choice.
+- Rollback owner and approval process.

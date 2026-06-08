@@ -61,11 +61,16 @@ export function AdminPayments() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Платежи</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Платежи покупателей</h1>
+          <p className="mt-1 text-sm text-gray-500">Входящие оплаты от покупателей за заказы</p>
+        </div>
       </div>
 
       <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
-        <p className="text-sm text-blue-700">Payments are read-only in admin. Paid/succeeded transitions are owned by payment webhooks.</p>
+        <p className="text-sm text-blue-700">
+          Раздел только для просмотра. Статус платежа обновляется автоматически через платёжные вебхуки. Ручное изменение статуса недоступно.
+        </p>
       </div>
 
       {error && (
@@ -78,13 +83,13 @@ export function AdminPayments() {
       {isLoading ? (
         <div className="text-center py-10">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-500">Loading payments...</p>
+          <p className="mt-2 text-sm text-gray-500">Загрузка платежей...</p>
         </div>
       ) : payments.length === 0 ? (
         <div className="text-center py-10 bg-white rounded-lg shadow">
           <CreditCard className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No payments</h3>
-          <p className="mt-1 text-sm text-gray-500">No payment records are available yet.</p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Платежей нет</h3>
+          <p className="mt-1 text-sm text-gray-500">Платёжные записи появятся после первых оплаченных заказов.</p>
         </div>
       ) : (
         <div className="flex flex-col">
@@ -94,11 +99,11 @@ export function AdminPayments() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID платежа</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Заказ</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provider</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Провайдер</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Сумма</th>
                       <th className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
                   </thead>
@@ -115,7 +120,7 @@ export function AdminPayments() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatMoney(payment)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button onClick={() => fetchPaymentDetail(payment.id)} className="text-indigo-600 hover:text-indigo-900">View</button>
+                          <button onClick={() => fetchPaymentDetail(payment.id)} className="text-indigo-600 hover:text-indigo-900">Детали</button>
                         </td>
                       </tr>
                     ))}
@@ -131,18 +136,18 @@ export function AdminPayments() {
         <div className="bg-white shadow sm:rounded-lg p-6">
           <div className="sm:flex sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-lg font-medium text-gray-900">Payment details</h2>
+              <h2 className="text-lg font-medium text-gray-900">Детали платежа</h2>
               <p className="mt-1 text-sm text-gray-500">{selectedPayment.id}</p>
             </div>
-            {isDetailLoading && <span className="text-sm text-gray-500">Loading...</span>}
+            {isDetailLoading && <span className="text-sm text-gray-500">Загрузка...</span>}
           </div>
           <dl className="mt-4 grid gap-4 md:grid-cols-3">
             <div><dt className="text-sm font-medium text-gray-500">Заказ</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayment.orderId}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Provider</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayment.provider}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Provider payment ID</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayment.providerPaymentId || '-'}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Amount</dt><dd className="mt-1 text-sm text-gray-900">{formatMoney(selectedPayment)}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Created</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedPayment.createdAt)}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Paid / Failed / Cancelled</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedPayment.paidAt || selectedPayment.failedAt || selectedPayment.cancelledAt)}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Провайдер</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayment.provider}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">ID у провайдера</dt><dd className="mt-1 text-sm text-gray-900">{selectedPayment.providerPaymentId || '-'}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Сумма</dt><dd className="mt-1 text-sm text-gray-900">{formatMoney(selectedPayment)}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Создан</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedPayment.createdAt)}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Оплачен / Ошибка / Отменён</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedPayment.paidAt || selectedPayment.failedAt || selectedPayment.cancelledAt)}</dd></div>
           </dl>
         </div>
       )}

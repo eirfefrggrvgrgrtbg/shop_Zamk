@@ -56,6 +56,9 @@ export const request = async <T>(
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
   try {
     const response = await fetch(url, {
       ...fetchOptions,
@@ -63,7 +66,9 @@ export const request = async <T>(
       headers,
       body,
       credentials: fetchOptions.credentials ?? 'include', // Important for refresh token httpOnly cookies
+      signal: fetchOptions.signal ?? controller.signal,
     });
+    clearTimeout(timeoutId);
 
     let data: any = null;
     const contentType = response.headers.get('content-type');
@@ -91,8 +96,15 @@ export const request = async <T>(
 
     return data as T;
   } catch (error) {
+    clearTimeout(timeoutId);
     if (error instanceof ApiError) {
       throw error;
+    }
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiError(
+        'Сервер не отвечает. Проверьте, запущен ли backend.',
+        'TIMEOUT_ERROR'
+      );
     }
     throw new ApiError(
       'Не удалось подключиться к серверу. Проверьте, запущен ли backend.',

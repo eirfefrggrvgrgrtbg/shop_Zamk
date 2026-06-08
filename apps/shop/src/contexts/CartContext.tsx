@@ -63,9 +63,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           category: 'Категория не указана'
         } as Product : undefined
       }));
-      
+
+      // Backend does not return totalPriceCents — compute from items to stay consistent
+      const computedTotal = cart.items.reduce(
+        (sum, item) => sum + (item.priceCents ?? 0) * item.quantity,
+        0
+      );
+
       setItems(mappedItems);
-      setTotalPrice(cart.totalPriceCents ? cart.totalPriceCents / 100 : 0);
+      setTotalPrice(computedTotal / 100);
     } catch (e) {
       console.error('Failed to load cart', e);
     } finally {

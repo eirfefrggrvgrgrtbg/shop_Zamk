@@ -288,7 +288,15 @@ export function SellerProductNew() {
             {activeStep === 'base' && (
               <div className="grid gap-4 md:grid-cols-2">
                 <Field label="Название товара" value={draft.title} onChange={(value) => updateDraft('title', value)} placeholder="Например, Жакет мягкой линии" />
-                <Field label="Артикул" value={draft.sku} onChange={(value) => updateDraft('sku', value)} />
+                <label className="block">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">
+                    Артикул
+                    <span className="ml-2 font-normal normal-case tracking-normal text-ash/70 dark:text-white/40">
+                      — внутренний код товара. Генерируется автоматически, можно изменить.
+                    </span>
+                  </span>
+                  <input value={draft.sku} onChange={(e) => updateDraft('sku', e.target.value)} className="seller-setting-input mt-2 w-full rounded-2xl border border-border-lighter bg-white/78 px-4 h-12 text-sm text-graphite outline-none transition-all focus:border-graphite/30 focus:bg-white dark:border-white/16 dark:bg-black/24 dark:text-white dark:focus:border-white/32 dark:focus:bg-black/32" />
+                </label>
                 <Field label="Категория" value={draft.category} onChange={(value) => updateDraft('category', value)} />
                 <Field label="Бренд" value={draft.brand} onChange={(value) => updateDraft('brand', value)} />
                 <div className="md:col-span-2">

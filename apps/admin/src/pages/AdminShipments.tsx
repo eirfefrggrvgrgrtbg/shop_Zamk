@@ -125,7 +125,10 @@ export function AdminShipments() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Отгрузки</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Доставка / Отгрузки</h1>
+          <p className="mt-1 text-sm text-gray-500">Отслеживание статуса доставки по каждому заказу</p>
+        </div>
       </div>
 
       {error && (
@@ -136,29 +139,29 @@ export function AdminShipments() {
       )}
 
       <div className="bg-white shadow sm:rounded-lg p-6">
-        <h2 className="text-lg font-medium text-gray-900">Create shipment</h2>
-        <p className="mt-1 text-sm text-gray-500">Manual carrier and tracking only. Backend validates that the order is paid and eligible.</p>
+        <h2 className="text-lg font-medium text-gray-900">Создать отгрузку вручную</h2>
+        <p className="mt-1 text-sm text-gray-500">Только ручной ввод перевозчика и трекинга. Бэкенд проверяет, что заказ оплачен и подходит для отправки.</p>
         <form onSubmit={handleCreateShipment} className="mt-4 grid gap-4 md:grid-cols-4">
-          <input required value={createOrderId} onChange={(event) => setCreateOrderId(event.target.value)} placeholder="Order ID" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-          <input value={carrier} onChange={(event) => setCarrier(event.target.value)} placeholder="Carrier" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-          <input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} placeholder="Tracking number" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+          <input required value={createOrderId} onChange={(event) => setCreateOrderId(event.target.value)} placeholder="ID заказа" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+          <input value={carrier} onChange={(event) => setCarrier(event.target.value)} placeholder="Служба доставки" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+          <input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} placeholder="Номер отслеживания" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
           <button type="submit" disabled={isSubmitting} className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
-            Create
+            Создать
           </button>
-          <input value={trackingUrl} onChange={(event) => setTrackingUrl(event.target.value)} placeholder="Tracking URL" className="md:col-span-3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+          <input value={trackingUrl} onChange={(event) => setTrackingUrl(event.target.value)} placeholder="Ссылка для отслеживания" className="md:col-span-3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
         </form>
       </div>
 
       {isLoading ? (
         <div className="text-center py-10">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-500">Loading shipments...</p>
+          <p className="mt-2 text-sm text-gray-500">Загрузка отгрузок...</p>
         </div>
       ) : shipments.length === 0 ? (
         <div className="text-center py-10 bg-white rounded-lg shadow">
           <Truck className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No shipments</h3>
-          <p className="mt-1 text-sm text-gray-500">No shipments are available yet.</p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Отгрузок нет</h3>
+          <p className="mt-1 text-sm text-gray-500">Отгрузки появятся после первых оплаченных и отправленных заказов.</p>
         </div>
       ) : (
         <div className="flex flex-col">
@@ -168,10 +171,10 @@ export function AdminShipments() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shipment</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID отгрузки</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Заказ</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tracking</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Трекинг</th>
                       <th className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
                   </thead>
@@ -187,7 +190,7 @@ export function AdminShipments() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{[shipment.carrier, shipment.trackingNumber].filter(Boolean).join(' / ') || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button onClick={() => fetchShipmentDetail(shipment.id)} className="text-indigo-600 hover:text-indigo-900">View / Update</button>
+                          <button onClick={() => fetchShipmentDetail(shipment.id)} className="text-indigo-600 hover:text-indigo-900">Детали / Изменить</button>
                         </td>
                       </tr>
                     ))}
@@ -203,16 +206,16 @@ export function AdminShipments() {
         <div className="bg-white shadow sm:rounded-lg p-6">
           <div className="sm:flex sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-lg font-medium text-gray-900">Shipment details</h2>
+              <h2 className="text-lg font-medium text-gray-900">Детали отгрузки</h2>
               <p className="mt-1 text-sm text-gray-500">{selectedShipment.id}</p>
             </div>
-            {isDetailLoading && <span className="text-sm text-gray-500">Loading...</span>}
+            {isDetailLoading && <span className="text-sm text-gray-500">Загрузка...</span>}
           </div>
           <dl className="mt-4 grid gap-4 md:grid-cols-4">
             <div><dt className="text-sm font-medium text-gray-500">Заказ</dt><dd className="mt-1 text-sm text-gray-900">{selectedShipment.orderId}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Shipped</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.shippedAt)}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Delivered</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.deliveredAt)}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Updated</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.updatedAt)}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Отправлен</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.shippedAt)}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Доставлен</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.deliveredAt)}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Обновлён</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.updatedAt)}</dd></div>
           </dl>
 
           <form onSubmit={handleUpdateShipment} className="mt-6 grid gap-4 md:grid-cols-2">
@@ -221,12 +224,12 @@ export function AdminShipments() {
                 <option key={status} value={status}>{getShipmentStatusLabel(status)}</option>
               ))}
             </select>
-            <input value={carrier} onChange={(event) => setCarrier(event.target.value)} placeholder="Carrier" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-            <input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} placeholder="Tracking number" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-            <input value={trackingUrl} onChange={(event) => setTrackingUrl(event.target.value)} placeholder="Tracking URL" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-            <textarea rows={2} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Comment, optional" className="md:col-span-2 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <input value={carrier} onChange={(event) => setCarrier(event.target.value)} placeholder="Служба доставки" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} placeholder="Номер отслеживания" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <input value={trackingUrl} onChange={(event) => setTrackingUrl(event.target.value)} placeholder="Ссылка для отслеживания" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <textarea rows={2} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Комментарий (необязательно)" className="md:col-span-2 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
             <button type="submit" disabled={isSubmitting} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-              Update shipment
+              Обновить отгрузку
             </button>
           </form>
         </div>

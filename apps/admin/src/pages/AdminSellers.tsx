@@ -82,8 +82,9 @@ export function AdminSellers() {
   };
 
   const handleStatusChange = async (id: string, newStatus: string) => {
-    const confirmMsg = newStatus === 'blocked' || newStatus === 'archived' 
-      ? `Are you sure you want to change seller status to ${newStatus}?` 
+    const statusLabels: Record<string, string> = { blocked: 'заблокирован', archived: 'в архив' };
+    const confirmMsg = newStatus === 'blocked' || newStatus === 'archived'
+      ? `Вы уверены, что хотите перевести продавца в статус «${statusLabels[newStatus] ?? newStatus}»?`
       : null;
       
     if (confirmMsg && !window.confirm(confirmMsg)) return;
@@ -101,13 +102,16 @@ export function AdminSellers() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Продавцы</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Продавцы</h1>
+          <p className="mt-1 text-sm text-gray-500">Управление доступом продавцов на платформе</p>
+        </div>
         <button 
           onClick={() => setIsCreateModalOpen(true)}
           className="mt-3 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
         >
           <Plus className="-ml-1 mr-2 h-5 w-5" />
-          Create Seller
+          Создать доступ продавца
         </button>
       </div>
 
@@ -121,13 +125,13 @@ export function AdminSellers() {
       {isLoading ? (
         <div className="text-center py-10">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-500">Loading sellers...</p>
+          <p className="mt-2 text-sm text-gray-500">Загрузка продавцов...</p>
         </div>
       ) : sellers.length === 0 ? (
         <div className="text-center py-10 bg-white rounded-lg shadow">
           <Store className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No sellers</h3>
-          <p className="mt-1 text-sm text-gray-500">Get started by creating a new seller.</p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Продавцов нет</h3>
+          <p className="mt-1 text-sm text-gray-500">Создайте первый доступ продавца.</p>
         </div>
       ) : (
         <div className="flex flex-col">
@@ -137,7 +141,7 @@ export function AdminSellers() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name / ID</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название / ID</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
                       <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
@@ -160,10 +164,10 @@ export function AdminSellers() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           {seller.status !== 'active' && (
-                            <button onClick={() => handleStatusChange(seller.id, 'active')} className="text-green-600 hover:text-green-900 mr-4">Approve/Activate</button>
+                            <button onClick={() => handleStatusChange(seller.id, 'active')} className="text-green-600 hover:text-green-900 mr-4">Активировать</button>
                           )}
                           {seller.status !== 'blocked' && (
-                            <button onClick={() => handleStatusChange(seller.id, 'blocked')} className="text-red-600 hover:text-red-900">Block</button>
+                            <button onClick={() => handleStatusChange(seller.id, 'blocked')} className="text-red-600 hover:text-red-900">Заблокировать</button>
                           )}
                         </td>
                       </tr>
@@ -176,11 +180,14 @@ export function AdminSellers() {
         </div>
       )}
 
-      {/* Create Seller Modal */}
+      {/* Создать доступ продавца */}
       {isCreateModalOpen && !tempPassword && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Create New Seller</h2>
+            <h2 className="text-xl font-bold mb-1">Создать доступ продавца</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Продавец получит логин и временный пароль. Профиль магазина он заполнит самостоятельно после первого входа.
+            </p>
             
             {createError && (
               <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded flex items-start">
@@ -191,29 +198,32 @@ export function AdminSellers() {
             
             <form onSubmit={handleCreateSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Название бренда</label>
-                <input required type="text" value={brandName} onChange={e => setBrandName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Контактная почта</label>
-                <input required type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                <label className="block text-sm font-medium text-gray-700">
+                  Название магазина <span className="text-gray-400 font-normal">(временное, продавец сможет изменить)</span>
+                </label>
+                <input required type="text" value={brandName} onChange={e => setBrandName(e.target.value)} placeholder="Например: New Shop" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Имя владельца</label>
                 <input required type="text" value={ownerName} onChange={e => setOwnerName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Почта владельца</label>
+                <label className="block text-sm font-medium text-gray-700">Email для входа</label>
                 <input required type="email" value={ownerEmail} onChange={e => setOwnerEmail(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700">Контактная почта <span className="text-gray-400 font-normal">(для уведомлений)</span></label>
+                <input type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700">Временный пароль</label>
-                <input required type="text" minLength={8} value={password} onChange={e => setPassword(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                <input required type="text" minLength={8} value={password} onChange={e => setPassword(e.target.value)} placeholder="Минимум 8 символов" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                <p className="mt-1 text-xs text-gray-400">Продавцу потребуется сменить пароль при первом входе.</p>
               </div>
               <div className="mt-5 flex justify-end space-x-3">
-                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Отмена</button>
                 <button type="submit" disabled={isCreating} className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
-                  {isCreating ? 'Creating...' : 'Create'}
+                  {isCreating ? 'Создание...' : 'Создать доступ'}
                 </button>
               </div>
             </form>
@@ -227,16 +237,16 @@ export function AdminSellers() {
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center text-green-600 mb-4">
               <CheckCircle2 className="h-8 w-8 mr-2" />
-              <h2 className="text-xl font-bold">Seller Created</h2>
+              <h2 className="text-xl font-bold">Продавец создан</h2>
             </div>
             <p className="text-sm text-gray-600 mb-4">
-              Please provide the following temporary credentials to the seller securely. This password will not be shown again.
+              Сохраните временный пароль и передайте его продавцу надёжным способом. Пароль больше не будет показан.
             </p>
             <div className="bg-gray-100 p-4 rounded text-center mb-6 border border-gray-200">
               <code className="text-lg font-mono font-bold text-gray-900">{tempPassword}</code>
             </div>
             <button onClick={closeTempPasswordModal} className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700">
-              I have copied the password securely
+              Пароль скопирован, закрыть
             </button>
           </div>
         </div>
