@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
 )
+
+var emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
 type Handler struct {
 	service *Service
@@ -121,6 +124,11 @@ func (h *Handler) UpdateSellerProfile(w http.ResponseWriter, r *http.Request) {
 	var req UpdateSellerProfileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.ContactEmail != nil && *req.ContactEmail != "" && !emailRegex.MatchString(*req.ContactEmail) {
+		h.respondError(w, http.StatusBadRequest, "invalid contact email format")
 		return
 	}
 

@@ -125,6 +125,12 @@ export function SellerSettings() {
 
   const isProfileEmpty = sellerData && !sellerData.seller.description && !sellerData.seller.contactPhone;
 
+  const generateSlugFromName = () => {
+    const name = form.brandName ?? '';
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    handleChange('slug', slug);
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -241,7 +247,16 @@ export function SellerSettings() {
                 className="flex-1 px-3 py-2 text-sm focus:outline-none"
               />
             </div>
-            <p className="mt-1 text-xs text-gray-400">Только латиница, цифры и дефис.</p>
+            <div className="mt-1 flex items-center justify-between">
+              <p className="text-xs text-gray-400">Только латиница, цифры и дефис.</p>
+              <button
+                type="button"
+                onClick={generateSlugFromName}
+                className="text-xs text-gray-500 underline hover:text-gray-700"
+              >
+                Сгенерировать из названия
+              </button>
+            </div>
           </div>
 
           <div>
