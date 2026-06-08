@@ -1,20 +1,64 @@
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ProductCard } from '../components/product/ProductCard';
 import { InfoPanel, SectionHeader } from '../components/editorial/StudioKit';
-import { getBrandById, getProductsByBrand } from '../lib/mock-data';
+import { fetchBrands, fetchProducts } from '../api/publicCatalog';
+import type { Brand, Product } from '../types/catalog';
 
 export function BrandDetail() {
   const { id } = useParams<{ id: string }>();
-  const brand = getBrandById(id || '');
-  const products = getProductsByBrand(id || '');
+  const [brand, setBrand] = useState<Brand | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  if (!brand) {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBrand() {
+      if (!id) return;
+      setIsLoading(true);
+      setError('');
+
+      try {
+        const [brands, apiProducts] = await Promise.all([fetchBrands(), fetchProducts()]);
+        if (!cancelled) {
+          setBrand(brands.find((item) => item.id === id) ?? null);
+          setProducts(apiProducts.filter((product) => product.brandId === id));
+        }
+      } catch {
+        if (!cancelled) {
+          setError('Не удалось загрузить бренд. Проверьте, запущен ли backend.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadBrand();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <div className='relative z-10 min-h-screen pt-36'>
+        <div className='container mx-auto px-4 sm:px-6 max-w-4xl text-center text-ash'>Загрузка бренда...</div>
+      </div>
+    );
+  }
+
+  if (error || !brand) {
     return (
       <div className='relative z-10 min-h-screen pt-36'>
         <div className='container mx-auto px-4 sm:px-6 max-w-4xl text-center'>
-          <h1 className='text-4xl font-serif text-graphite dark:text-white'>Бренд не найден</h1>
+          <h1 className='text-4xl font-serif text-graphite dark:text-white'>{error || 'Бренд не найден'}</h1>
           <Link to='/brands' className='inline-block mt-6'>
             <Button>К брендам</Button>
           </Link>
@@ -37,33 +81,31 @@ export function BrandDetail() {
             <div className='relative z-10 h-full px-5 md:px-10 flex flex-col items-start justify-center gap-2 md:flex-row md:items-center md:justify-between md:gap-7'>
               <h2 className='font-serif text-[clamp(2.2rem,6.2vw,6.4rem)] text-white/43 dark:text-white/30 leading-[0.8] tracking-[-0.03em]'>{brand.country}</h2>
               <h3 className='font-serif text-[clamp(2.1rem,5.9vw,6.2rem)] text-white/42 dark:text-white/30 leading-[0.82] tracking-[-0.03em] text-center'>{brand.name}</h3>
-              <div className='h-[124px] w-[96px] md:h-[154px] md:w-[118px] overflow-hidden border border-border-lighter dark:border-white/20 bg-white/50 dark:bg-black/30'>
-                <img src={brand.image} alt={brand.name} className='h-full w-full object-cover grayscale' />
+              <div className='flex h-[124px] w-[96px] md:h-[154px] md:w-[118px] items-center justify-center overflow-hidden border border-border-lighter dark:border-white/20 bg-white/50 dark:bg-black/30'>
+                {brand.image ? <img src={brand.image} alt={brand.name} className='h-full w-full object-cover grayscale' /> : <span className='text-4xl font-serif text-ash'>{brand.name.slice(0, 1)}</span>}
               </div>
             </div>
           </div>
         </section>
 
         <div className='mt-8 grid grid-cols-1 md:grid-cols-2 gap-5'>
-          <InfoPanel title='История бренда'>
-            {brand.history || brand.description}
-          </InfoPanel>
-          <InfoPanel title='Философия'>
-            {brand.philosophy || `Проект из ${brand.origin || brand.country}, исследующий формы и материалы. Акцент на архитектурный крой, тактильные материалы и функциональность.`}
-          </InfoPanel>
+          <InfoPanel title='Описание бренда'>{brand.description || 'Информация пока не указана.'}</InfoPanel>
+          <InfoPanel title='Детали'>{brand.origin || brand.country || 'Информация пока не указана.'}</InfoPanel>
         </div>
 
         <section className='mt-12'>
-          <SectionHeader
-            label='Товары бренда'
-            title={`${brand.name} в каталоге`}
-            description={`Доступно ${products.length} позиций`}
-          />
-          <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
+          <SectionHeader label='Товары бренда' title={`${brand.name} в каталоге`} description={products.length > 0 ? `Доступно ${products.length} позиций` : 'Товары бренда пока не найдены'} />
+          {products.length > 0 ? (
+            <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
+              {products.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          ) : (
+            <div className='rounded-3xl border border-dashed border-border-lighter bg-white/60 p-8 text-center text-sm text-ash dark:border-white/10 dark:bg-white/5'>
+              Товары бренда пока не найдены.
+            </div>
+          )}
         </section>
       </div>
     </div>

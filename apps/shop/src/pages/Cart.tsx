@@ -5,6 +5,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useCart } from '../contexts/CartContext';
 import { formatPrice } from '../lib/utils';
 import { getProductEffectivePrice } from '../lib/orders';
+import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
 import { InfoPanel, SectionHeader } from '../components/editorial/StudioKit';
 
 export function Cart() {
@@ -65,8 +66,8 @@ export function Cart() {
           <div className='lg:col-span-8 space-y-4'>
             {items.map((item) => {
               const productName = item.title || item.product?.name || 'Неизвестный товар';
-              const productImage = item.product?.image || 'https://wsrv.nl/?url=images.unsplash.com/photo-1591047139829-d91aecb6caea&w=800&output=webp';
-              const productBrand = item.product?.brand || 'ZAMK';
+              const productImage = item.product?.image || PRODUCT_PLACEHOLDER_IMAGE;
+              const productBrand = item.product?.brand || 'Бренд не указан';
               const productPrice = item.price || (item.product ? getProductEffectivePrice(item.product) : 0);
               
               return (

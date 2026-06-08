@@ -5,7 +5,7 @@ import { cn } from '../../lib/utils';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
-import { type Brand, type Category, type Product } from '../../lib/mock-data';
+import { type Brand, type Category, type Product } from '../../types/catalog';
 import { ProductCard } from '../product/ProductCard';
 
 interface HeroBlockProps {
@@ -259,7 +259,13 @@ export function BrandCard({ brand }: { brand: Brand }) {
   return (
     <Link to={`/brand/${brand.id}`} className='group block overflow-hidden rounded-[2rem] border border-border-lighter dark:border-white/16 bg-white/85 dark:bg-black/30 backdrop-blur-xl p-2 shadow-sm transition-all hover:-translate-y-1 hover:shadow-cloud dark:hover:shadow-none'>
       <div className='relative h-56 overflow-hidden rounded-[1.6rem]'>
-        <img src={brand.image} alt={brand.name} className='h-full w-full object-cover transition-transform duration-700 group-hover:scale-105' />
+        {brand.image ? (
+          <img src={brand.image} alt={brand.name} className='h-full w-full object-cover transition-transform duration-700 group-hover:scale-105' />
+        ) : (
+          <div className='flex h-full w-full items-center justify-center bg-ice text-4xl font-serif text-ash dark:bg-white/10'>
+            {brand.name.slice(0, 1)}
+          </div>
+        )}
         <div className='absolute inset-0 bg-gradient-to-t from-graphite/40 to-transparent' />
       </div>
       <div className='p-5'>
@@ -276,7 +282,7 @@ export function CategoryCard({ category }: { category: Category }) {
     <Link to={`/catalog?category=${category.slug}`} className='block rounded-[2rem] border border-border-lighter dark:border-white/16 bg-white/85 dark:bg-black/30 backdrop-blur-xl p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-cloud dark:hover:shadow-none'>
       <p className='text-2xl'>{category.icon}</p>
       <h3 className='mt-4 text-xl font-serif text-graphite dark:text-white'>{category.name}</h3>
-      <p className='mt-1 text-sm text-ash'>{category.count} позиций</p>
+      <p className='mt-1 text-sm text-ash'>{category.count === undefined ? 'Нет данных' : `${category.count} позиций`}</p>
     </Link>
   );
 }

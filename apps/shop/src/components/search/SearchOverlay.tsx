@@ -3,17 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Loader2, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useSearch } from '../../contexts/SearchContext';
-import { PRODUCTS, type Product } from '../../lib/mock-data';
-
-const TOP_QUERIES = [
-  'деконструированные жакеты',
-  'кожаные тренчи',
-  'Maison Margiela',
-  'авангардный трикотаж'
-];
-
-// Отбираем 4 продукта для кураторского выбора чтобы красиво заполнить сетку
-const RECOMMENDED_PRODUCTS = PRODUCTS.slice(0, 4);
+import { fetchProducts } from '../../api/publicCatalog';
+import type { Product } from '../../types/catalog';
 
 // Настройки анимации списков (Stagger effect)
 const containerVariants = {
@@ -38,7 +29,9 @@ export function SearchOverlay() {
   const { isSearchOpen, closeSearch } = useSearch();
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
   const [results, setResults] = useState<Product[]>([]);
+  const [error, setError] = useState('');
 
   // Scroll lock
   useEffect(() => {
@@ -52,6 +45,37 @@ export function SearchOverlay() {
     return () => { document.body.style.overflow = ''; };
   }, [isSearchOpen]);
 
+
+  useEffect(() => {
+    if (!isSearchOpen || products.length > 0) return;
+    let cancelled = false;
+
+    async function loadProducts() {
+      setIsLoading(true);
+      setError('');
+      try {
+        const data = await fetchProducts();
+        if (!cancelled) {
+          setProducts(data);
+        }
+      } catch {
+        if (!cancelled) {
+          setError('Не удалось подключиться к серверу');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadProducts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSearchOpen, products.length]);
+
   // Handle escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -61,28 +85,20 @@ export function SearchOverlay() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isSearchOpen, closeSearch]);
 
-  // Fake Network Request for Search
   useEffect(() => {
     const cleanQuery = query.trim().toLowerCase();
     if (!cleanQuery) {
       setResults([]);
-      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
-    const timer = setTimeout(() => {
-      const filtered = PRODUCTS.filter(p => 
-        p.name.toLowerCase().includes(cleanQuery) || 
-        p.brand.toLowerCase().includes(cleanQuery) ||
-        p.category.toLowerCase().includes(cleanQuery)
-      );
-      setResults(filtered);
-      setIsLoading(false);
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [query]);
+    const filtered = products.filter((product) =>
+      product.name.toLowerCase().includes(cleanQuery) ||
+      product.brand.toLowerCase().includes(cleanQuery) ||
+      product.category.toLowerCase().includes(cleanQuery)
+    );
+    setResults(filtered);
+  }, [query, products]);
 
   return (
     <AnimatePresence>
@@ -118,9 +134,11 @@ export function SearchOverlay() {
             <div className="flex-1 overflow-y-auto mt-10 pb-20 scrollbar-hide">
               <AnimatePresence mode="wait">
                 {query.trim() === '' ? (
-                  <SearchSuggestions 
-                    onQueryClick={setQuery} 
-                    onProductClick={closeSearch} 
+                  <SearchSuggestions
+                    products={products.slice(0, 4)}
+                    error={error}
+                    isLoading={isLoading}
+                    onProductClick={closeSearch}
                   />
                 ) : (
                   <SearchResults 
@@ -175,7 +193,7 @@ function SearchInput({ query, setQuery, isLoading }: { query: string, setQuery: 
   );
 }
 
-function SearchSuggestions({ onQueryClick, onProductClick }: { onQueryClick: (q: string) => void, onProductClick: () => void }) {
+function SearchSuggestions({ products, error, isLoading, onProductClick }: { products: Product[], error: string, isLoading: boolean, onProductClick: () => void }) {
   return (
     <motion.div
       key="default-view"
@@ -185,36 +203,23 @@ function SearchSuggestions({ onQueryClick, onProductClick }: { onQueryClick: (q:
       exit="exit"
       className="flex flex-col gap-10 md:gap-14"
     >
-      {/* ВЕРХНЯЯ ЧАСТЬ: Топ запросы (одна строка) */}
-      <div className="flex flex-col gap-4">
-        <motion.h3 variants={itemVariants} className="text-[11px] md:text-xs font-semibold tracking-[0.15em] uppercase text-graphite/40">
-          Популярное
-        </motion.h3>
-        <ul className="flex items-center gap-x-6 md:gap-x-12 overflow-x-auto scrollbar-hide pb-2">
-          {TOP_QUERIES.map((q, idx) => (
-            <motion.li key={idx} variants={itemVariants} className="shrink-0">
-              <button
-                type="button"
-                onClick={() => onQueryClick(q)}
-                className="text-lg md:text-[1.35rem] leading-tight font-light text-graphite/60 hover:text-graphite transition-colors whitespace-nowrap"
-              >
-                {q}
-              </button>
-            </motion.li>
-          ))}
-        </ul>
-      </div>
-
-      {/* НИЖНЯЯ ЧАСТЬ: Кураторский выбор */}
       <div className="flex flex-col gap-6 md:gap-8">
         <motion.h3 variants={itemVariants} className="text-[11px] md:text-xs font-semibold tracking-[0.15em] uppercase text-graphite/40">
-          Кураторский выбор
+          Товары из каталога
         </motion.h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 md:gap-8">
-          {RECOMMENDED_PRODUCTS.map((product) => (
-            <ProductCard key={product.id} product={product} onClick={onProductClick} />
-          ))}
-        </div>
+        {isLoading ? (
+          <p className="text-graphite/45">Загрузка товаров...</p>
+        ) : error ? (
+          <p className="text-graphite/45">{error}</p>
+        ) : products.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 md:gap-8">
+            {products.map((product) => (
+              <ProductCard key={product.id} product={product} onClick={onProductClick} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-graphite/45">Нет данных</p>
+        )}
       </div>
     </motion.div>
   );

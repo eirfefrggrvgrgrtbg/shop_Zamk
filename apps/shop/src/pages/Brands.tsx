@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchBrands } from '../api/publicCatalog';
-import type { Brand } from '../lib/mock-data';
+import type { Brand } from '../types/catalog';
 
 export function Brands() {
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -46,7 +46,7 @@ export function Brands() {
           </p>
           <div className="flex items-end justify-between">
             <h1 className="text-4xl md:text-5xl font-serif text-graphite dark:text-white tracking-tight leading-none">
-              Продавцы
+              Бренды
             </h1>
           </div>
         </section>

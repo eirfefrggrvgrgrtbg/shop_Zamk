@@ -1,4 +1,4 @@
-import type { Product } from './mock-data';
+import type { Product } from '../types/catalog';
 
 export interface OrderItem {
   id: string;
@@ -150,13 +150,6 @@ function readStoredOrders(): OrderRecord[] {
   } catch {
     return [];
   }
-}
-
-export function getOrdersWithDefaults(defaultOrders: OrderRecord[]) {
-  const storedOrders = readStoredOrders();
-  const knownIds = new Set(defaultOrders.map((order) => order.id));
-
-  return [...defaultOrders, ...storedOrders.filter((order) => !knownIds.has(order.id))];
 }
 
 export function createOrderFromCart(items: any[], options: CreateOrderOptions): OrderRecord {

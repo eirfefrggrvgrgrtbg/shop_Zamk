@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Heart, Star } from 'lucide-react';
-import type { Product } from '../../lib/mock-data';
+import type { Product } from '../../types/catalog';
 import { formatPrice } from '../../lib/utils';
 import { useFavorites } from '../../contexts/FavoritesContext';
 
@@ -17,8 +17,8 @@ export function ProductCard({ product }: ProductCardProps) {
     ? Math.round((1 - product.discountPrice / product.price) * 100)
     : 0;
 
-  const displayRating = product.rating || 0;
-  const displayReviewsCount = product.reviewsCount || Math.floor(product.rating ? product.rating * 10 : 25);
+  const displayRating = product.rating ?? 0;
+  const displayReviewsCount = product.reviewsCount ?? 0;
 
   return (
     <div className="group relative flex flex-col items-center w-full transition-all duration-500 hover:-translate-y-2">
@@ -29,7 +29,7 @@ export function ProductCard({ product }: ProductCardProps) {
           <div className="w-[1px] h-16 bg-black/60 dark:bg-white/40 shadow-sm"></div>
           {/* Бирка */}
           <div className="px-2 py-1 bg-black text-white dark:bg-white dark:text-black text-[9px] uppercase font-bold tracking-widest shadow-md transform -rotate-[6deg] -ml-1 mt-[-2px]">
-            New
+            Новинка
           </div>
         </div>
       )}
@@ -121,20 +121,23 @@ export function ProductCard({ product }: ProductCardProps) {
             )}
           </div>
               
-          {/* Звезды рейтинга (text) */}
-          <div className="flex items-center gap-1.5 mt-2">
-            <div className="flex text-[11px] tracking-tighter">
-              <span className="text-black dark:text-gray-100">
-                {'★'.repeat(Math.round(displayRating))}
-              </span>
-              <span className="text-gray-300 dark:text-zinc-600">
-                {'★'.repeat(5 - Math.round(displayRating))}
+          {displayReviewsCount > 0 ? (
+            <div className="flex items-center gap-1.5 mt-2">
+              <div className="flex text-[11px] tracking-tighter">
+                <span className="text-black dark:text-gray-100">
+                  {'★'.repeat(Math.round(displayRating))}
+                </span>
+                <span className="text-gray-300 dark:text-zinc-600">
+                  {'★'.repeat(5 - Math.round(displayRating))}
+                </span>
+              </div>
+              <span className="text-[9px] opacity-80 lowercase">
+                {displayReviewsCount} отзывов
               </span>
             </div>
-            <span className="text-[9px] opacity-80 lowercase">
-              {displayReviewsCount} отзывов
-            </span>
-          </div>
+          ) : (
+            <p className="mt-2 text-[9px] uppercase tracking-widest opacity-60">Нет отзывов</p>
+          )}
 
           {/* Декоративный штрихкод */}
           <div className="flex flex-col items-center w-full mt-4 pt-3 border-t border-dashed border-gray-400 dark:border-zinc-500">
@@ -146,7 +149,7 @@ export function ProductCard({ product }: ProductCardProps) {
               }}
             ></div>
             <p className="text-[8px] uppercase tracking-widest opacity-70 mt-1.5">
-              [clean barcond item {String(product.id).split('-').pop()?.padStart(4, '0') || '2028'}]
+              Артикул {String(product.id).split('-').pop()?.padStart(4, '0') || product.id.slice(0, 4)}
             </p>
           </div>
         </div>

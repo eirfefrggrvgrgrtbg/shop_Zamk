@@ -4,9 +4,8 @@ import { ChevronDown, ChevronRight, SlidersHorizontal, X, Check } from 'lucide-r
 import { ProductCard } from '../components/product/ProductCard';
 import { Drawer } from '../components/ui/Drawer';
 import { SortDropdown } from '../components/editorial/StudioKit';
-import { BRANDS, CATEGORIES } from '../lib/mock-data';
-import { fetchProducts } from '../api/publicCatalog';
-import type { Product } from '../lib/mock-data';
+import { fetchBrands, fetchCategories, fetchProducts } from '../api/publicCatalog';
+import type { Brand, Category, Product } from '../types/catalog';
 import { cn } from '../lib/utils';
 
 const SORT_OPTIONS = [
@@ -100,6 +99,8 @@ export function Catalog() {
   const [sortBy, setSortBy] = useState('new');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [apiProducts, setApiProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,8 +108,14 @@ export function Catalog() {
     async function loadProducts() {
       try {
         setIsLoading(true);
-        const data = await fetchProducts();
-        setApiProducts(data);
+        const [products, apiCategories, apiBrands] = await Promise.all([
+          fetchProducts(),
+          fetchCategories(),
+          fetchBrands(),
+        ]);
+        setApiProducts(products);
+        setCategories(apiCategories);
+        setBrands(apiBrands);
         setError(null);
       } catch (err) {
         console.error('Failed to load products:', err);
@@ -120,6 +127,7 @@ export function Catalog() {
     loadProducts();
   }, []);
 
+  const categoryOptions: Category[] = [{ id: 'all', slug: 'all', name: 'Все товары', icon: '✦' }, ...categories];
   const hasActivePriceFilter = priceRange[0] !== DEFAULT_PRICE_RANGE[0] || priceRange[1] !== DEFAULT_PRICE_RANGE[1];
   const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeStyles.length > 0 || activeSizes.length > 0 || activeColors.length > 0 || activeMaterials.length > 0 || hasActivePriceFilter;
   const activeFiltersCount = activeStyles.length + activeSizes.length + activeColors.length + activeMaterials.length + (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
@@ -231,15 +239,19 @@ export function Catalog() {
       {/* Категории */}
       <FilterSection title="Категории" defaultOpen={activeCategory !== 'all'}>
         <div className="flex flex-col gap-1">
-          {CATEGORIES.map((category) => (
-            <FilterCheckbox
-              key={category.id}
-              label={category.name}
-              count={category.count}
-              isActive={activeCategory === category.id}
-              onClick={() => setActiveCategory(category.id)}
-            />
-          ))}
+          {categories.length === 0 ? (
+            <p className="py-2 text-xs text-black/45 dark:text-white/45">Категории пока не добавлены</p>
+          ) : (
+            categoryOptions.map((category) => (
+              <FilterCheckbox
+                key={category.id}
+                label={category.name}
+                count={category.count}
+                isActive={activeCategory === category.id}
+                onClick={() => setActiveCategory(category.id)}
+              />
+            ))
+          )}
         </div>
       </FilterSection>
 
@@ -296,14 +308,18 @@ export function Catalog() {
             isActive={activeBrand === null}
             onClick={() => setActiveBrand(null)}
           />
-          {BRANDS.map((brand) => (
-            <FilterCheckbox
-              key={brand.id}
-              label={brand.name}
-              isActive={activeBrand === brand.id}
-              onClick={() => setActiveBrand(brand.id)}
-            />
-          ))}
+          {brands.length === 0 ? (
+            <p className="py-2 text-xs text-black/45 dark:text-white/45">Бренды пока не добавлены</p>
+          ) : (
+            brands.map((brand) => (
+              <FilterCheckbox
+                key={brand.id}
+                label={brand.name}
+                isActive={activeBrand === brand.id}
+                onClick={() => setActiveBrand(brand.id)}
+              />
+            ))
+          )}
         </div>
       </FilterSection>
 
@@ -426,13 +442,13 @@ export function Catalog() {
               <div className="flex flex-wrap gap-2 mb-4">
                 {activeCategory !== 'all' && (
                   <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
-                    {CATEGORIES.find(c => c.id === activeCategory)?.name}
+                    {categoryOptions.find(c => c.id === activeCategory)?.name}
                     <button type="button" aria-label="Снять фильтр категории" onClick={() => setActiveCategory('all')} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
                 {activeBrand && (
                   <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
-                    {BRANDS.find(b => b.id === activeBrand)?.name}
+                    {brands.find(b => b.id === activeBrand)?.name}
                     <button type="button" aria-label="Снять фильтр бренда" onClick={() => setActiveBrand(null)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}

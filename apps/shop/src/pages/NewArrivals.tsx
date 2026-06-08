@@ -1,12 +1,46 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { ProductCard } from '../components/product/ProductCard';
 import { Button } from '../components/ui/Button';
-import { PRODUCTS } from '../lib/mock-data';
+import { fetchProducts } from '../api/publicCatalog';
 import { SectionHeader } from '../components/editorial/StudioKit';
+import type { Product } from '../types/catalog';
 
 export function NewArrivals() {
-  const items = PRODUCTS.filter((product) => product.isNew);
+  const [items, setItems] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProducts() {
+      setIsLoading(true);
+      setError('');
+
+      try {
+        const data = await fetchProducts();
+        if (!cancelled) {
+          setItems(data.slice(0, 12));
+        }
+      } catch {
+        if (!cancelled) {
+          setError('Не удалось загрузить новинки. Проверьте, запущен ли backend.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadProducts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className='relative z-10 min-h-screen pt-16 md:pt-20 pb-20'>
@@ -29,12 +63,16 @@ export function NewArrivals() {
 
         <section className='mt-10'>
           <SectionHeader
-            label='Архив'
-            title='Новые релизы'
-            description='Чистые карточки и большое количество воздуха вместо перегруженной витрины.'
+            label='Каталог'
+            title='Свежие поступления'
+            description='Показываем реальные опубликованные товары из API без mock-подборок.'
           />
 
-          {items.length > 0 ? (
+          {isLoading ? (
+            <div className='glass-panel-strong p-12 text-center text-ash'>Загрузка товаров...</div>
+          ) : error ? (
+            <div className='glass-panel-strong p-12 text-center text-error'>{error}</div>
+          ) : items.length > 0 ? (
             <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
               {items.map((product) => (
                 <ProductCard key={product.id} product={product} />
@@ -42,8 +80,8 @@ export function NewArrivals() {
             </div>
           ) : (
             <div className='glass-panel-strong p-12 text-center'>
-              <h3 className='text-3xl font-serif text-graphite'>Скоро новая поставка</h3>
-              <p className='mt-3 text-sm text-graphite-light'>Команда ZAMK уже формирует следующий дроп.</p>
+              <h3 className='text-3xl font-serif text-graphite'>Нет данных</h3>
+              <p className='mt-3 text-sm text-graphite-light'>Товары появятся после публикации в каталоге.</p>
               <Link to='/catalog' className='inline-block mt-6'>
                 <Button className='gap-2'>
                   Перейти в каталог <ArrowRight className='w-4 h-4' />

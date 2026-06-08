@@ -1,11 +1,13 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { BrandCard, CategoryCard, SectionHeader } from '../components/editorial/StudioKit';
 import { ProductCard } from '../components/product/ProductCard';
 import { Button } from '../components/ui/Button';
-import { BRANDS, CATEGORIES, COLLECTIONS, PRODUCTS, getNewProducts } from '../lib/mock-data';
+import { fetchBrands, fetchCategories, fetchProducts } from '../api/publicCatalog';
 import { HeroSection } from '../components/home/HeroSection';
+import type { Brand, Category, Product } from '../types/catalog';
 
 const reveal = {
   initial: { opacity: 0, y: 24 },
@@ -14,134 +16,155 @@ const reveal = {
   transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] as const },
 };
 
+function EmptyHomeSection({ text }: { text: string }) {
+  return (
+    <div className="rounded-[2rem] border border-dashed border-border-lighter bg-white/70 p-8 text-center text-sm text-ash dark:border-white/10 dark:bg-white/5">
+      {text}
+    </div>
+  );
+}
+
 export function Home() {
-  const newProducts = getNewProducts();
-  const editorPick = PRODUCTS.slice(0, 4);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHomeData() {
+      setIsLoading(true);
+      setError('');
+
+      try {
+        const [apiProducts, apiBrands, apiCategories] = await Promise.all([
+          fetchProducts(),
+          fetchBrands(),
+          fetchCategories(),
+        ]);
+
+        if (!cancelled) {
+          setProducts(apiProducts);
+          setBrands(apiBrands);
+          setCategories(apiCategories);
+        }
+      } catch {
+        if (!cancelled) {
+          setError('Не удалось загрузить данные витрины. Проверьте, запущен ли backend.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadHomeData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const featuredProducts = products.slice(0, 4);
+  const recentProducts = [...products]
+    .sort((left, right) => Number(right.id > left.id) - Number(left.id > right.id))
+    .slice(0, 4);
 
   return (
     <div className="relative z-10 min-h-screen pb-20">
-
-      {/* ═══════════════════════════════════════════════════════
-          HERO SECTION — Minimalist design with typography art
-      ═══════════════════════════════════════════════════════ */}
       <HeroSection />
 
-      {/* ═══════════════════════════════════════════════════════
-          CONTENT SECTIONS
-      ═══════════════════════════════════════════════════════ */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 flex flex-col gap-16 md:gap-20 pt-2">
+        {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
-        {/* New partners */}
-        <motion.section {...reveal}>
-          <SectionHeader
-            label="Партнёры"
-            title="Продавцы"
-            action={
-              <Link to="/sellers">
-                <Button variant="secondary" className="gap-2">
-                  Смотреть все <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-            }
-          />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {BRANDS.slice(0, 3).map((brand) => (
-              <BrandCard key={brand.id} brand={brand} />
-            ))}
+        {isLoading ? (
+          <div className="rounded-[2rem] border border-border-lighter bg-white/70 p-8 text-center text-sm text-ash dark:border-white/10 dark:bg-white/5">
+            Загрузка витрины...
           </div>
-        </motion.section>
-
-        {/* Collections */}
-        <motion.section {...reveal}>
-          <SectionHeader
-            label="Подборки"
-            title="Кураторские наборы"
-            description="Собранные сценарии гардероба: от новых релизов до архивных находок с характером."
-            action={
-              <Link to="/collections">
-                <Button variant="secondary" className="gap-2">
-                  Все подборки <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-            }
-          />
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {COLLECTIONS.map((collection) => (
-              <Link
-                key={collection.id}
-                to={`/catalog?collection=${collection.id}`}
-                className="group block overflow-hidden rounded-[2rem] border border-border-lighter dark:border-white/10 bg-white/88 dark:bg-white/5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(120,150,185,0.14)] dark:hover:shadow-[0_16px_40px_rgba(0,0,0,0.52)]"
-              >
-                <div className="relative overflow-hidden aspect-[16/10]">
-                  <img
-                    src={collection.image}
-                    alt={collection.title}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-                  <div className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-black/30 px-3 py-1 text-[10px] uppercase tracking-[0.14em] text-white/85 backdrop-blur-sm">
-                    <Sparkles className="w-3 h-3" /> Кураторский срез
-                  </div>
-                  <div className="absolute right-4 bottom-4 rounded-full border border-white/30 bg-black/30 px-3 py-1 text-xs text-white/90 backdrop-blur-sm">
-                    {collection.itemCount} позиций
-                  </div>
+        ) : (
+          <>
+            <motion.section {...reveal}>
+              <SectionHeader
+                label="Партнёры"
+                title="Бренды"
+                action={
+                  <Link to="/brands">
+                    <Button variant="secondary" className="gap-2">
+                      Смотреть все <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                }
+              />
+              {brands.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {brands.slice(0, 3).map((brand) => (
+                    <BrandCard key={brand.id} brand={brand} />
+                  ))}
                 </div>
+              ) : (
+                <EmptyHomeSection text="Бренды пока не добавлены" />
+              )}
+            </motion.section>
 
-                <div className="p-5 md:p-6">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-ash dark:text-white/50">{collection.subtitle}</p>
-                  <h3 className="mt-2 text-[27px] leading-[0.95] font-serif text-graphite dark:text-white">{collection.title}</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-graphite-light dark:text-white/70 line-clamp-2">
-                    {collection.description}
-                  </p>
+            <motion.section {...reveal}>
+              <SectionHeader
+                label="Подборки"
+                title="Кураторские наборы"
+                description="Коллекции пока не подключены к backend."
+                action={
+                  <Link to="/collections">
+                    <Button variant="secondary" className="gap-2">
+                      Открыть раздел <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                }
+              />
+              <EmptyHomeSection text="Коллекции пока не подключены" />
+            </motion.section>
 
-                  <div className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-graphite dark:text-white">
-                    Открыть подборку
-                    <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
-                  </div>
+            <motion.section {...reveal}>
+              <SectionHeader label="Новинки" title="Свежие поступления" />
+              {recentProducts.length > 0 ? (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+                  {recentProducts.map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
                 </div>
-              </Link>
-            ))}
-          </div>
-        </motion.section>
+              ) : (
+                <EmptyHomeSection text="Нет данных" />
+              )}
+            </motion.section>
 
-        {/* New arrivals */}
-        <motion.section {...reveal}>
-          <SectionHeader
-            label="Новинки"
-            title="Свежие поступления"
-          />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
-            {newProducts.slice(0, 4).map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        </motion.section>
+            <motion.section {...reveal} className="glass-panel p-7 md:p-10">
+              <SectionHeader label="Каталог" title="Товары из API" />
+              {featuredProducts.length > 0 ? (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+                  {featuredProducts.map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyHomeSection text="Товары пока не добавлены" />
+              )}
+            </motion.section>
 
-        {/* Editor picks */}
-        <motion.section {...reveal} className="glass-panel p-7 md:p-10">
-          <SectionHeader
-            label="Выбор редакции"
-            title="Собрано редакцией"
-          />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
-            {editorPick.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        </motion.section>
-
-        {/* Categories */}
-        <motion.section {...reveal}>
-          <SectionHeader
-            label="Каталог"
-            title="Категории"
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {CATEGORIES.filter((c) => c.id !== 'all').map((category) => (
-              <CategoryCard key={category.id} category={category} />
-            ))}
-          </div>
-        </motion.section>
+            <motion.section {...reveal}>
+              <SectionHeader label="Каталог" title="Категории" />
+              {categories.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {categories.map((category) => (
+                    <CategoryCard key={category.id} category={category} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyHomeSection text="Категории пока не добавлены" />
+              )}
+            </motion.section>
+          </>
+        )}
       </div>
     </div>
   );

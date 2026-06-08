@@ -3,54 +3,7 @@ import { Link } from 'react-router-dom';
 import { Package, ChevronRight, ArrowLeft, MapPin, CreditCard, Truck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Drawer } from '../components/ui/Drawer';
-import { ORDER_STORAGE_EVENT, type OrderRecord, getOrdersWithDefaults } from '../lib/orders';
-
-const MOCK_ORDERS: OrderRecord[] = [
-  {
-    id: 'ZMK-10293',
-    date: '20 марта 2026',
-    status: 'В пути',
-    statusColor: 'text-blue-600 bg-blue-50/80 border border-blue-100',
-    total: 32500,
-    delivery: {
-      address: 'Москва, ул. Тверская 12, кв. 44',
-      service: 'Курьер СДЭК'
-    },
-    items: [
-      { id: 'p8', name: 'Пальто-кокон северной серии', size: 'M', price: 34900, image: 'https://wsrv.nl/?url=images.unsplash.com/photo-1539533113208-f6df8cc8b543&w=800&output=webp' },
-      { id: 'p4', name: 'Свитер объемной вязки', size: 'L', price: 12500, image: 'https://wsrv.nl/?url=images.unsplash.com/photo-1576566588028-4147f3842f27&w=800&output=webp' }
-    ]
-  },
-  {
-    id: 'ZMK-08112',
-    date: '15 февраля 2026',
-    status: 'Доставлен',
-    statusColor: 'text-graphite bg-graphite/5 border border-graphite/10',
-    total: 18900,
-    delivery: {
-      address: 'Санкт-Петербург, Невский пр. 45, кв. 12',
-      service: 'Пункт выдачи Boxberry'
-    },
-    items: [
-      { id: 'p12', name: 'Тренч с деконструкцией', size: 'M', price: 28900, image: 'https://wsrv.nl/?url=images.unsplash.com/photo-1585487000143-6519d58aef14&w=800&output=webp' }
-    ]
-  },
-  {
-    id: 'ZMK-05441',
-    date: '10 января 2026',
-    status: 'Доставлен',
-    statusColor: 'text-graphite bg-graphite/5 border border-graphite/10',
-    total: 45000,
-    delivery: {
-      address: 'Москва, Пятницкая 10',
-      service: 'Курьер ZAMK VIP'
-    },
-    items: [
-      { id: 'p1', name: 'Анорак ледяной линии', size: 'L', price: 14900, image: 'https://wsrv.nl/?url=images.unsplash.com/photo-1591047139829-d91aecb6caea&w=800&output=webp' },
-      { id: 'p5', name: 'Кроссовки аэр-сетки', size: '42', price: 21500, image: 'https://wsrv.nl/?url=images.unsplash.com/photo-1542291026-7eec264c27ff&w=800&output=webp' }
-    ]
-  }
-];
+import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
 
 export function Orders() {
   const { isAuthenticated } = useAuth();
@@ -84,7 +37,7 @@ export function Orders() {
               name: item.title || 'Товар',
               price: item.priceCents / 100,
               quantity: item.quantity,
-              image: 'https://wsrv.nl/?url=images.unsplash.com/photo-1591047139829-d91aecb6caea&w=800&output=webp'
+              image: item.imageUrl || PRODUCT_PLACEHOLDER_IMAGE
             }))
           })));
         }
@@ -322,7 +275,7 @@ export function Orders() {
                   </button>
                   <button 
                     onClick={async () => {
-                      const productId = selectedOrder.items[0]?.id; // mock
+                      const productId = selectedOrder.items[0]?.id;
                       if (!productId) return;
                       const content = window.prompt('Ваш отзыв:');
                       if (content) {

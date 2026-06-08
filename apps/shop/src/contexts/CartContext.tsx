@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import type { Product } from '../lib/mock-data';
+import type { Product } from '../types/catalog';
 import { useAuth } from './AuthContext';
 import { getCart, addToCart, updateCartItem as apiUpdateCartItem, removeFromCart as apiRemoveFromCart, clearCart as apiClearCart } from '@zamk/api-client/src/customer';
 import type { CartItem as ApiCartItem, Cart as ApiCart } from '@zamk/api-client/src/types';
@@ -59,8 +59,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           name: item.product.title,
           price: item.product.priceCents / 100,
           image: item.product.mainImageUrl || '',
-          brand: 'Brand',
-          category: 'Category'
+          brand: 'Бренд не указан',
+          category: 'Категория не указана'
         } as Product : undefined
       }));
       

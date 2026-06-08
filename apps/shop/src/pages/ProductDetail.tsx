@@ -9,7 +9,7 @@ import { useFavorites } from '../contexts/FavoritesContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatPrice, cn } from '../lib/utils';
 import { fetchProductById, fetchProductReviews } from '../api/publicCatalog';
-import type { Product, Review } from '../lib/mock-data';
+import type { Product, Review } from '../types/catalog';
 
 // Размерная сетка
 const SIZE_CHART = {
@@ -24,14 +24,13 @@ const SIZE_CHART = {
   ],
 };
 
-// Характеристики товара
-const getProductSpecs = (product: any) => [
-  { label: 'Артикул', value: product.id.toUpperCase() },
-  { label: 'Бренд', value: product.brand },
-  { label: 'Категория', value: product.category === 'clothing' ? 'Одежда' : product.category === 'bags' ? 'Сумки' : product.category === 'shoes' ? 'Обувь' : product.category === 'accessories' ? 'Аксессуары' : 'Украшения' },
-  { label: 'Сезон', value: 'Демисезон' },
-  { label: 'Страна производства', value: 'Италия' },
-];
+const getProductSpecs = (product: Product) =>
+  [
+    { label: 'Артикул', value: product.id.toUpperCase() },
+    { label: 'Бренд', value: product.brand || 'Бренд не указан' },
+    { label: 'Категория', value: product.category || 'Категория не указана' },
+    product.materials ? { label: 'Материал', value: product.materials } : null,
+  ].filter((spec): spec is { label: string; value: string } => Boolean(spec));
 
 // Аккордеон секция
 function AccordionSection({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
@@ -136,7 +135,7 @@ export function ProductDetail() {
     }
     
     if (!variantId) {
-      showToast('Для товара пока нет доступного варианта');
+      showToast('Для товара не указан вариант. Добавление в корзину недоступно.');
       return;
     }
 
@@ -175,7 +174,7 @@ export function ProductDetail() {
               {/* Badges */}
               {product.isNew && (
                 <span className="absolute top-4 left-4 px-3 py-1 rounded bg-graphite text-white dark:text-black text-xs font-semibold uppercase">
-                  New
+                  Новинка
                 </span>
               )}
               {product.discountPrice && (
@@ -403,19 +402,15 @@ export function ProductDetail() {
             <div className="mt-6 border-t border-border-lighter dark:border-white/10">
               <AccordionSection title="Описание" defaultOpen={true}>
                 <p className="text-sm text-graphite-light dark:text-white/70 leading-relaxed">
-                  {product.description || 'Минималистичная вещь для капсульного гардероба в эстетике современного минимализма. Качественные материалы и безупречный крой.'}
+                  {product.description || 'Информация пока не указана.'}
                 </p>
               </AccordionSection>
 
               <AccordionSection title="Состав и уход">
                 <p className="text-sm text-graphite-light dark:text-white/70 leading-relaxed mb-3">
-                  {product.materials || 'Высококачественные материалы с акцентом на долговечность и комфорт.'}
+                  {product.materials || 'Информация пока не указана.'}
                 </p>
-                <ul className="text-sm text-graphite-light dark:text-white/70 space-y-1">
-                  <li>• Машинная стирка при 30°C</li>
-                  <li>• Не отбеливать</li>
-                  <li>• Гладить при низкой температуре</li>
-                </ul>
+                {!product.materials && <p className="text-xs text-ash">Данные появятся позже.</p>}
               </AccordionSection>
 
               <AccordionSection title="Характеристики">

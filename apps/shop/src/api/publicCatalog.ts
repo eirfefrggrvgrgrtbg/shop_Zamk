@@ -1,5 +1,8 @@
-import { getProducts, getProduct, getCategories, getBrands, getProductReviews, getProductRatingSummary } from '@zamk/api-client/src/public';
-import type { Product as UIProduct, Brand as UIBrand, Category as UICategory, Review as UIReview } from '../lib/mock-data';
+import { getProducts, getProduct, getCategories, getBrands, getProductReviews } from '@zamk/api-client/src/public';
+import type { Product as UIProduct, Brand as UIBrand, Category as UICategory, Review as UIReview } from '../types/catalog';
+
+export const PRODUCT_PLACEHOLDER_IMAGE =
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200"><rect width="900" height="1200" fill="%23f1f5f9"/><rect x="140" y="220" width="620" height="760" rx="42" fill="none" stroke="%23cbd5e1" stroke-width="12" stroke-dasharray="28 24"/><text x="450" y="610" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" fill="%2364758b">Нет изображения</text></svg>';
 
 // Cache for brands to map brandId to brand name
 let cachedBrands: Record<string, string> = {};
@@ -9,8 +12,8 @@ export async function fetchBrands(): Promise<UIBrand[]> {
   const mapped = brands.map(b => ({
     id: b.id,
     name: b.name,
-    description: '',
-    country: '',
+    description: 'Описание бренда пока не указано.',
+    country: 'Страна не указана',
     image: b.logoUrl || ''
   }));
   
@@ -26,7 +29,6 @@ export async function fetchCategories(): Promise<UICategory[]> {
     slug: c.slug,
     name: c.name,
     icon: '✦',
-    count: 0
   }));
 }
 
@@ -40,12 +42,12 @@ export async function fetchProducts(params?: any): Promise<UIProduct[]> {
   return res.items.map(p => ({
     id: p.id,
     name: p.title,
-    brand: p.brandId ? (cachedBrands[p.brandId] || 'Неизвестный бренд') : 'Неизвестный бренд',
+    brand: p.brandId ? (cachedBrands[p.brandId] || 'Бренд не указан') : 'Бренд не указан',
     brandId: p.brandId || '',
     price: p.priceCents / 100,
     oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
-    image: p.mainImageUrl || '',
-    category: p.categoryId || 'all',
+    image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
+    category: p.categoryId || 'Категория не указана',
     sellerId: p.sellerId,
     rating: p.rating?.averageRating,
     reviewsCount: p.rating?.reviewCount,
@@ -63,13 +65,13 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
   return {
     id: p.id,
     name: p.title,
-    brand: p.brandId ? (cachedBrands[p.brandId] || 'Неизвестный бренд') : 'Неизвестный бренд',
+    brand: p.brandId ? (cachedBrands[p.brandId] || 'Бренд не указан') : 'Бренд не указан',
     brandId: p.brandId || '',
     price: p.priceCents / 100,
     oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
-    image: p.mainImageUrl || '',
+    image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
     images: p.images || (p.mainImageUrl ? [p.mainImageUrl] : []),
-    category: p.categoryId || 'all',
+    category: p.categoryId || 'Категория не указана',
     sellerId: p.sellerId,
     description: p.description || '',
     rating: p.rating?.averageRating,
