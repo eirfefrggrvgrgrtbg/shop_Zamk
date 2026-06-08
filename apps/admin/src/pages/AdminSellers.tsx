@@ -25,14 +25,7 @@ export function AdminSellers() {
       setIsLoading(true);
       setError(null);
       const data = await getAdminSellers();
-      // Ensure data is an array (API might return items wrapped in { items: [] } depending on backend list response format, 
-      // but according to our adapter and types it expects an array directly, wait let's check DTO: ListSellersResponse has Items)
-      // Actually backend DTO says `ListSellersResponse { Items []Seller }` so we might need to handle both just in case.
-      if (data && (data as any).items) {
-        setSellers((data as any).items);
-      } else {
-        setSellers(data || []);
-      }
+      setSellers(data.items ?? []);
     } catch (err: any) {
       setError(err.message || 'Не удалось загрузить продавцов');
     } finally {
@@ -150,8 +143,8 @@ export function AdminSellers() {
                     {sellers.map((seller) => (
                       <tr key={seller.id}>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{seller.name}</div>
-                          <div className="text-xs text-gray-500">ID: {seller.id}</div>
+                          <div className="text-sm font-medium text-gray-900">{seller.brandName}</div>
+                          <div className="text-xs text-gray-500">/{seller.slug}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

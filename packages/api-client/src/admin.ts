@@ -1,8 +1,9 @@
 import { request } from './client';
 import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement } from './types';
 
-export const getAdminSellers = async (): Promise<AdminSeller[]> => {
-  return request<AdminSeller[]>('GET', '/admin/sellers');
+// P0 fix: backend returns { items, totalCount } not bare array
+export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCount: number }> => {
+  return request<{ items: AdminSeller[]; totalCount: number }>('GET', '/admin/sellers');
 };
 
 export const createAdminSeller = async (data: any): Promise<{ seller: AdminSeller; temporaryPassword?: string }> => {
@@ -29,10 +30,11 @@ export const createAdminBrand = async (data: any): Promise<Brand> => {
   return request<Brand>('POST', '/admin/brands', { body: data });
 };
 
+// P0 fix: was /logo, backend route is /logo/upload
 export const uploadAdminBrandLogo = async (brandId: string, file: File): Promise<{ logoUrl: string }> => {
   const formData = new FormData();
   formData.append('logo', file);
-  return request<{ logoUrl: string }>('POST', `/admin/brands/${brandId}/logo`, { body: formData });
+  return request<{ logoUrl: string }>('POST', `/admin/brands/${brandId}/logo/upload`, { body: formData });
 };
 
 export const getAdminProducts = async (): Promise<AdminProduct[]> => {

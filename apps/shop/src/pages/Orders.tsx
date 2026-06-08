@@ -34,6 +34,7 @@ export function Orders() {
             },
             items: o.items.map((item: any) => ({
               id: item.productId,
+              orderItemId: item.id,  // P0 fix: store raw order item ID for return/review
               name: item.title || 'Товар',
               price: item.priceCents / 100,
               quantity: item.quantity,
@@ -262,7 +263,14 @@ export function Orders() {
                       if (reason) {
                         try {
                           const { createReturn } = await import('@zamk/api-client/src/customer');
-                          await createReturn({ orderId: selectedOrder.rawId, reason });
+                          // P0 fix: orderId in path, items[] required by backend
+                          await createReturn(selectedOrder.rawId, {
+                            reason,
+                            items: selectedOrder.items.map((item: any) => ({
+                              orderItemId: item.orderItemId,
+                              quantity: item.quantity ?? 1,
+                            })),
+                          });
                           alert('Заявка на возврат успешно создана');
                         } catch (e: any) {
                           alert(e.message || 'Ошибка при создании возврата');
@@ -275,13 +283,14 @@ export function Orders() {
                   </button>
                   <button 
                     onClick={async () => {
-                      const productId = selectedOrder.items[0]?.id;
-                      if (!productId) return;
-                      const content = window.prompt('Ваш отзыв:');
-                      if (content) {
+                      const firstItem = selectedOrder.items[0];
+                      if (!firstItem?.orderItemId) return;
+                      const comment = window.prompt('Ваш отзыв:');
+                      if (comment) {
                         try {
                           const { createReview } = await import('@zamk/api-client/src/customer');
-                          await createReview({ productId, rating: 5, title: 'Отзыв', content });
+                          // P0 fix: orderId + orderItemId in path, field is comment not content
+                          await createReview(selectedOrder.rawId, firstItem.orderItemId, { rating: 5, title: 'Отзыв', comment });
                           alert('Отзыв успешно добавлен');
                         } catch (e: any) {
                           alert(e.message || 'Ошибка при добавлении отзыва');

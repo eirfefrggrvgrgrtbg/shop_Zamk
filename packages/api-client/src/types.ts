@@ -133,9 +133,17 @@ export interface Order {
   items: OrderItem[];
 }
 
+export interface ReturnItemRequest {
+  orderItemId: string;
+  quantity: number;
+  reason?: string;
+  condition?: string;
+}
+
 export interface ReturnRequest {
-  orderId: string;
   reason: string;
+  comment?: string;
+  items: ReturnItemRequest[];
 }
 
 export interface ReturnResponse {
@@ -145,10 +153,9 @@ export interface ReturnResponse {
 }
 
 export interface ReviewCreateRequest {
-  productId: string;
   rating: number;
-  title: string;
-  content: string;
+  title?: string;
+  comment?: string;
 }
 
 // ---------------------------------------------------------
@@ -214,7 +221,7 @@ export interface SellerReturn {
 export interface SellerReview {
   id: string;
   rating: number;
-  content: string;
+  comment?: string;
   title?: string;
   status: string;
   createdAt?: string;
@@ -246,7 +253,8 @@ export interface Payout {
 
 export interface AdminSeller {
   id: string;
-  name: string;
+  brandName: string;
+  slug: string;
   status: string;
 }
 

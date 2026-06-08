@@ -21,18 +21,21 @@ export const updateSellerProduct = async (id: string, input: any): Promise<Selle
   return request<SellerProduct>('PATCH', `/seller/products/${id}`, { body: input });
 };
 
+// P0 fix: was /images, backend route is /images/upload
 export const uploadSellerProductImage = async (productId: string, file: File): Promise<{ imageUrl: string }> => {
   const formData = new FormData();
   formData.append('image', file);
-  return request<{ imageUrl: string }>('POST', `/seller/products/${productId}/images`, { body: formData });
+  return request<{ imageUrl: string }>('POST', `/seller/products/${productId}/images/upload`, { body: formData });
 };
 
-export const getSellerInventory = async (): Promise<InventoryItem[]> => {
-  return request<InventoryItem[]>('GET', '/seller/inventory');
+// P0 fix: backend returns { items, totalCount } not bare array
+export const getSellerInventory = async (): Promise<{ items: InventoryItem[]; totalCount: number }> => {
+  return request<{ items: InventoryItem[]; totalCount: number }>('GET', '/seller/inventory');
 };
 
-export const getSellerOrders = async (): Promise<SellerOrder[]> => {
-  return request<SellerOrder[]>('GET', '/seller/orders');
+// P0 fix: backend returns { items, totalCount } not bare array
+export const getSellerOrders = async (): Promise<{ items: SellerOrder[]; totalCount: number }> => {
+  return request<{ items: SellerOrder[]; totalCount: number }>('GET', '/seller/orders');
 };
 
 export const getSellerOrder = async (id: string): Promise<SellerOrder> => {
@@ -43,18 +46,18 @@ export const getSellerShipment = async (orderId: string): Promise<any> => {
   return request<any>('GET', `/seller/orders/${orderId}/shipment`);
 };
 
-
-
-export const getSellerReturns = async (): Promise<SellerReturn[]> => {
-  return request<SellerReturn[]>('GET', '/seller/returns');
+// P0 fix: backend returns { items, totalCount } not bare array
+export const getSellerReturns = async (): Promise<{ items: SellerReturn[]; totalCount: number }> => {
+  return request<{ items: SellerReturn[]; totalCount: number }>('GET', '/seller/returns');
 };
 
 export const getSellerReturn = async (id: string): Promise<SellerReturn> => {
   return request<SellerReturn>('GET', `/seller/returns/${id}`);
 };
 
-export const getSellerReviews = async (): Promise<SellerReview[]> => {
-  return request<SellerReview[]>('GET', '/seller/reviews');
+// P0 fix: backend returns { items, totalCount } not bare array
+export const getSellerReviews = async (): Promise<{ items: SellerReview[]; totalCount: number }> => {
+  return request<{ items: SellerReview[]; totalCount: number }>('GET', '/seller/reviews');
 };
 
 export const getSellerReview = async (id: string): Promise<SellerReview> => {

@@ -33,14 +33,17 @@ export const getOrder = async (orderId: string): Promise<Order> => {
   return request<Order>('GET', `/customer/orders/${orderId}`);
 };
 
+// P0 fix: was /pay, backend route is /payment
 export const createPayment = async (orderId: string): Promise<{ paymentUrl: string }> => {
-  return request<{ paymentUrl: string }>('POST', `/customer/orders/${orderId}/pay`);
+  return request<{ paymentUrl: string }>('POST', `/customer/orders/${orderId}/payment`);
 };
 
-export const createReturn = async (input: ReturnRequest): Promise<ReturnResponse> => {
-  return request<ReturnResponse>('POST', '/customer/returns', { body: input });
+// P0 fix: path is /customer/orders/{orderId}/returns, body requires items[]
+export const createReturn = async (orderId: string, input: ReturnRequest): Promise<ReturnResponse> => {
+  return request<ReturnResponse>('POST', `/customer/orders/${orderId}/returns`, { body: input });
 };
 
-export const createReview = async (input: ReviewCreateRequest): Promise<any> => {
-  return request('POST', '/customer/reviews', { body: input });
+// P0 fix: path is /customer/orders/{orderId}/items/{orderItemId}/review, field is comment not content
+export const createReview = async (orderId: string, orderItemId: string, input: ReviewCreateRequest): Promise<any> => {
+  return request('POST', `/customer/orders/${orderId}/items/${orderItemId}/review`, { body: input });
 };

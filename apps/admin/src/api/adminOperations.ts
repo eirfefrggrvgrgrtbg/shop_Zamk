@@ -18,8 +18,8 @@ import {
 } from '@zamk/api-client/src/admin';
 import type { AdminSeller, Category, Brand, AdminProduct, ModerationProduct } from '@zamk/api-client/src/types';
 
-// Sellers
-export const getAdminSellers = async (): Promise<AdminSeller[]> => {
+// Sellers — P0 fix: apiGetSellers now returns { items, totalCount }
+export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCount: number }> => {
   return await apiGetSellers();
 };
 
