@@ -104,14 +104,28 @@ export const request = async <T>(
 const getSafeErrorMessage = (code?: string, fallback?: string): string => {
   switch (code) {
     case 'invalid_request':
-      return 'Проверьте заполнение формы';
+      return 'Проверьте правильность заполнения формы';
     case 'validation_error':
-      return fallback?.toLowerCase().includes('password') ? 'Проверьте пароль' : 'Проверьте правильность заполнения формы.';
+      return fallback?.toLowerCase().includes('password')
+        ? 'Проверьте пароль (минимум 8 символов)'
+        : 'Проверьте правильность заполнения формы';
     case 'duplicate_email':
       return 'Пользователь с таким email уже существует';
     case 'invalid_credentials':
       return 'Неверный email или пароль';
+    case 'unauthorized':
+      return 'Необходима авторизация. Войдите в аккаунт';
+    case 'forbidden':
+      return 'Доступ запрещён';
+    case 'not_found':
+      return 'Ресурс не найден';
+    case 'internal_error':
+      return 'Произошла ошибка на сервере. Попробуйте позже';
+    case 'bad_request':
+      return fallback || 'Некорректный запрос';
     default:
-      return fallback || 'API Error';
+      return fallback && !fallback.toLowerCase().startsWith('http')
+        ? fallback
+        : 'Произошла ошибка. Попробуйте позже';
   }
 };
