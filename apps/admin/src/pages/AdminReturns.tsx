@@ -69,7 +69,7 @@ export function AdminReturns() {
       });
       await fetchReturns();
       await fetchReturnDetail(selectedReturn.id);
-      setSuccess('Return status updated.');
+      setSuccess('Статус возврата обновлён.');
     } catch (err: unknown) {
       setError(getAdminReturnErrorMessage(err, 'Не удалось обновить статус возврата.'));
     } finally {
@@ -80,7 +80,7 @@ export function AdminReturns() {
   const handleCreateRefund = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedReturn) return;
-    if (!window.confirm('Create refund for this return? Backend will calculate the amount.')) return;
+    if (!window.confirm('Создать возмещение для этого возврата? Бэкенд рассчитает сумму.')) return;
 
     try {
       setIsSubmitting(true);
@@ -89,7 +89,7 @@ export function AdminReturns() {
       await createAdminRefund(selectedReturn.id, refundReason);
       await fetchReturns();
       await fetchReturnDetail(selectedReturn.id);
-      setSuccess('Refund created by backend.');
+      setSuccess('Возмещение создано бэкендом.');
     } catch (err: unknown) {
       setError(getAdminReturnErrorMessage(err, 'Не удалось создать возмещение.'));
     } finally {
@@ -118,7 +118,7 @@ export function AdminReturns() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Return Requests</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Возвраты</h1>
       </div>
 
       {error && (
@@ -132,13 +132,13 @@ export function AdminReturns() {
       {isLoading ? (
         <div className="text-center py-10">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-500">Loading returns...</p>
+          <p className="mt-2 text-sm text-gray-500">Загрузка возвратов...</p>
         </div>
       ) : returns.length === 0 ? (
         <div className="text-center py-10 bg-white rounded-lg shadow">
           <RotateCcw className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No returns</h3>
-          <p className="mt-1 text-sm text-gray-500">No return requests are available yet.</p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Возвратов нет</h3>
+          <p className="mt-1 text-sm text-gray-500">Заявок на возврат пока нет.</p>
         </div>
       ) : (
       <div className="flex flex-col">
@@ -148,10 +148,10 @@ export function AdminReturns() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Request ID</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID возврата</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID заказа</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Покупатель</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Причина</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
                     <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                   </tr>
@@ -177,7 +177,7 @@ export function AdminReturns() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onClick={() => fetchReturnDetail(req.id)} className="text-indigo-600 hover:text-indigo-900">View / Manage</button>
+                        <button onClick={() => fetchReturnDetail(req.id)} className="text-indigo-600 hover:text-indigo-900">Открыть</button>
                       </td>
                     </tr>
                   ))}
@@ -193,23 +193,23 @@ export function AdminReturns() {
         <div className="bg-white shadow sm:rounded-lg p-6">
           <div className="sm:flex sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-lg font-medium text-gray-900">Return details</h2>
+              <h2 className="text-lg font-medium text-gray-900">Детали возврата</h2>
               <p className="mt-1 text-sm text-gray-500">{selectedReturn.id}</p>
             </div>
-            {isDetailLoading && <span className="text-sm text-gray-500">Loading...</span>}
+            {isDetailLoading && <span className="text-sm text-gray-500">Загрузка...</span>}
           </div>
 
           <dl className="mt-4 grid gap-4 md:grid-cols-4">
             <div><dt className="text-sm font-medium text-gray-500">Заказ</dt><dd className="mt-1 text-sm text-gray-900">{selectedReturn.orderId}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Статус</dt><dd className="mt-1 text-sm text-gray-900">{selectedReturn.statusLabel}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Reason</dt><dd className="mt-1 text-sm text-gray-900">{selectedReturn.reason || '-'}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Created</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedReturn.createdAt)}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Причина</dt><dd className="mt-1 text-sm text-gray-900">{selectedReturn.reason || '—'}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Создан</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedReturn.createdAt)}</dd></div>
           </dl>
 
           <div className="mt-6">
-            <h3 className="text-sm font-medium text-gray-700">Items</h3>
+            <h3 className="text-sm font-medium text-gray-700">Позиции</h3>
             {selectedReturn.items.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500">No items returned for this return.</p>
+              <p className="mt-2 text-sm text-gray-500">Нет данных</p>
             ) : (
               <div className="mt-2 overflow-hidden border border-gray-200 sm:rounded-lg">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -220,7 +220,7 @@ export function AdminReturns() {
                         <td className="px-4 py-2 text-sm text-gray-500">x{item.quantity}</td>
                         <td className="px-4 py-2 text-sm text-gray-500">{item.reason || '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-500">{item.condition || '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-500">Restock: {item.restock ? 'yes' : 'no'}</td>
+                        <td className="px-4 py-2 text-sm text-gray-500">Возврат на склад: {item.restock ? 'да' : 'нет'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -231,25 +231,25 @@ export function AdminReturns() {
 
           <div className="mt-6 grid gap-6 md:grid-cols-2">
             <form onSubmit={handleStatusUpdate} className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-700">Update return status</h3>
+              <h3 className="text-sm font-medium text-gray-700">Изменить статус возврата</h3>
               <select required value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                <option value="">Select next status</option>
+                <option value="">Выберите статус</option>
                 {getReturnStatusTargets(selectedReturn.status).map((status) => (
                   <option key={status} value={status}>{getReturnStatusLabel(status)}</option>
                 ))}
               </select>
-              <textarea rows={3} required={statusDraft === 'rejected'} value={adminComment} onChange={(event) => setAdminComment(event.target.value)} placeholder="Admin comment / rejection reason" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              <textarea rows={3} required={statusDraft === 'rejected'} value={adminComment} onChange={(event) => setAdminComment(event.target.value)} placeholder="Комментарий администратора / причина отклонения" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
               <button type="submit" disabled={isSubmitting || !statusDraft} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                Update status
+                Обновить статус
               </button>
             </form>
 
             <form onSubmit={handleCreateRefund} className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-700">Create refund</h3>
-              <p className="text-xs text-gray-500">Refund amount is calculated by backend from return items and paid order data.</p>
-              <textarea rows={3} value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="Refund reason, optional" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              <h3 className="text-sm font-medium text-gray-700">Создать возмещение</h3>
+              <p className="text-xs text-gray-500">Сумма возмещения рассчитывается бэкендом на основе позиций возврата и оплаченного заказа.</p>
+              <textarea rows={3} value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="Причина возмещения (необязательно)" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
               <button type="submit" disabled={isSubmitting || selectedReturn.status !== 'item_received'} className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
-                Create refund
+                Создать возмещение
               </button>
             </form>
           </div>

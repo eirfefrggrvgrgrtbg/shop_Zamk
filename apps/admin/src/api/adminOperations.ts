@@ -1,3 +1,34 @@
+/**
+ * API LAYER AUDIT — adminOperations.ts
+ *
+ * This file is a thin wrapper around @zamk/api-client/src/admin.ts for the pages that
+ * don't have their own dedicated api/ file. Below is the layer mapping:
+ *
+ * Pages that use THIS file (adminOperations.ts):
+ *   - AdminSellers.tsx        → getAdminSellers, createAdminSeller, updateAdminSellerStatus
+ *   - AdminCategories.tsx     → getAdminCategories, createAdminCategory
+ *   - AdminBrands.tsx         → getAdminBrands, createAdminBrand, uploadAdminBrandLogo
+ *   - AdminCatalog.tsx        → all of the above
+ *   - AdminProducts.tsx       → getAdminProducts, getModerationProducts, approve/reject/publish etc.
+ *   - AdminModeration.tsx     → getModerationProducts, approve/reject/publish/hide/block
+ *   - AdminDashboard.tsx      → getAdminSellers (via adminOperations), getAdminProducts, getModerationProducts
+ *
+ * Pages that use DEDICATED api/ files (not this file):
+ *   - AdminOrders.tsx         → apps/admin/src/api/adminOrders.ts
+ *   - AdminPayments.tsx       → apps/admin/src/api/adminPayments.ts
+ *   - AdminPayouts.tsx        → apps/admin/src/api/adminPayouts.ts
+ *   - AdminShipments.tsx      → apps/admin/src/api/adminShipments.ts
+ *   - AdminReturns.tsx        → apps/admin/src/api/adminReturns.ts
+ *   - AdminRefunds.tsx        → apps/admin/src/api/adminRefunds.ts
+ *   - AdminReviews.tsx        → apps/admin/src/api/adminReviews.ts
+ *   - AdminInventory.tsx      → apps/admin/src/api/adminInventory.ts
+ *
+ * Known mismatches / TODOs:
+ *   TODO: getAdminProducts returns AdminProduct[] but backend may wrap in {items, totalCount}
+ *         — not breaking now but should be verified after backend pagination is enforced.
+ *   TODO: getAdminCategories/getAdminBrands also may need { items } unwrap in the future.
+ */
+
 import {
   getAdminSellers as apiGetSellers,
   createAdminSeller as apiCreateSeller,
@@ -23,7 +54,9 @@ export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCo
   return await apiGetSellers();
 };
 
-export const createAdminSeller = async (data: any): Promise<{ seller: AdminSeller; temporaryPassword?: string }> => {
+// Backend never returns plaintext password; temporaryPasswordReturned is a boolean flag only.
+// Frontend displays the locally-typed password after successful creation.
+export const createAdminSeller = async (data: any): Promise<{ seller: AdminSeller; temporaryPasswordReturned: boolean }> => {
   return await apiCreateSeller(data);
 };
 

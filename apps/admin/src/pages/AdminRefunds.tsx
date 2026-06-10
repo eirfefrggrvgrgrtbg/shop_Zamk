@@ -96,10 +96,10 @@ export function AdminRefunds() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Возмещение</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Return / Order</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provider</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Возврат / Заказ</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Провайдер</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Сумма</th>
                       <th className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
                   </thead>
@@ -116,7 +116,7 @@ export function AdminRefunds() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatMoney(refund)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button onClick={() => fetchRefundDetail(refund.id)} className="text-indigo-600 hover:text-indigo-900">View</button>
+                          <button onClick={() => fetchRefundDetail(refund.id)} className="text-indigo-600 hover:text-indigo-900">Открыть</button>
                         </td>
                       </tr>
                     ))}
@@ -132,16 +132,16 @@ export function AdminRefunds() {
         <div className="bg-white shadow sm:rounded-lg p-6">
           <div className="sm:flex sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-lg font-medium text-gray-900">Refund details</h2>
+              <h2 className="text-lg font-medium text-gray-900">Детали возмещения</h2>
               <p className="mt-1 text-sm text-gray-500">{selectedRefund.id}</p>
             </div>
-            {isDetailLoading && <span className="text-sm text-gray-500">Loading...</span>}
+            {isDetailLoading && <span className="text-sm text-gray-500">Загрузка...</span>}
           </div>
           <dl className="mt-4 grid gap-4 md:grid-cols-4">
-            <div><dt className="text-sm font-medium text-gray-500">Amount</dt><dd className="mt-1 text-sm text-gray-900">{formatMoney(selectedRefund)}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Provider refund ID</dt><dd className="mt-1 text-sm text-gray-900">{selectedRefund.providerRefundId || '-'}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Reason</dt><dd className="mt-1 text-sm text-gray-900">{selectedRefund.reason || '-'}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Processed / Failed</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedRefund.processedAt || selectedRefund.failedAt)}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Сумма</dt><dd className="mt-1 text-sm text-gray-900">{formatMoney(selectedRefund)}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">ID у провайдера</dt><dd className="mt-1 text-sm text-gray-900">{selectedRefund.providerRefundId || '—'}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Причина</dt><dd className="mt-1 text-sm text-gray-900">{selectedRefund.reason || '—'}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Обработано / Ошибка</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedRefund.processedAt || selectedRefund.failedAt)}</dd></div>
           </dl>
         </div>
       )}

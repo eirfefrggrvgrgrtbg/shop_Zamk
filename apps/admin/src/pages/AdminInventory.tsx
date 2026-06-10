@@ -14,9 +14,9 @@ import type { AdminInventoryMovementView, AdminInventoryView } from '../api/admi
 type InventoryAction = 'receipt' | 'adjustment' | 'write_off';
 
 const actionLabels: Record<InventoryAction, string> = {
-  receipt: 'Receive stock',
-  adjustment: 'Adjust stock',
-  write_off: 'Write off stock',
+  receipt: 'Приёмка',
+  adjustment: 'Корректировка',
+  write_off: 'Списание',
 };
 
 export function AdminInventory() {
@@ -78,14 +78,14 @@ export function AdminInventory() {
 
     const parsedQuantity = Number(quantity);
     if (!Number.isFinite(parsedQuantity) || parsedQuantity === 0) {
-      setError('Quantity must be a non-zero number.');
+      setError('Количество должно быть ненулевым числом.');
       return;
     }
     if ((action === 'receipt' || action === 'write_off') && parsedQuantity <= 0) {
-      setError('Receipt and write-off quantity must be greater than zero.');
+      setError('Для приёмки и списания количество должно быть больше нуля.');
       return;
     }
-    if (action === 'write_off' && !window.confirm('Are you sure you want to write off this stock?')) {
+    if (action === 'write_off' && !window.confirm('Вы уверены, что хотите списать этот товар?')) {
       return;
     }
 
@@ -115,7 +115,7 @@ export function AdminInventory() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Остатки</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Остатки / Склад</h1>
       </div>
 
       {error && (
@@ -128,13 +128,13 @@ export function AdminInventory() {
       {isLoading ? (
         <div className="text-center py-10">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-500">Loading inventory...</p>
+          <p className="mt-2 text-sm text-gray-500">Загрузка остатков...</p>
         </div>
       ) : inventory.length === 0 ? (
         <div className="text-center py-10 bg-white rounded-lg shadow">
           <Boxes className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No inventory</h3>
-          <p className="mt-1 text-sm text-gray-500">No stock records are available yet.</p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Нет данных</h3>
+          <p className="mt-1 text-sm text-gray-500">Записи об остатках пока отсутствуют.</p>
         </div>
       ) : (
       <div className="flex flex-col">
@@ -144,11 +144,11 @@ export function AdminInventory() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product / Variant</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Товар / Вариант</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Продавец</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Available</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reserved</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Stock</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Доступно</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Зарезервировано</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Всего</th>
                     <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                   </tr>
                 </thead>
@@ -178,7 +178,7 @@ export function AdminInventory() {
                         {item.totalStock}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onClick={() => fetchMovements(item)} className="text-indigo-600 hover:text-indigo-900">View / Adjust</button>
+                        <button onClick={() => fetchMovements(item)} className="text-indigo-600 hover:text-indigo-900">Просмотр / Изменить</button>
                       </td>
                     </tr>
                   ))}
@@ -193,47 +193,47 @@ export function AdminInventory() {
       {selectedItem && (
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="bg-white shadow sm:rounded-lg p-6">
-            <h2 className="text-lg font-medium text-gray-900">Inventory action</h2>
-            <p className="mt-1 text-sm text-gray-500">Variant: {selectedItem.variant}</p>
+            <h2 className="text-lg font-medium text-gray-900">Операция с остатками</h2>
+            <p className="mt-1 text-sm text-gray-500">Вариант: {selectedItem.variant}</p>
             <form onSubmit={handleSubmit} className="mt-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Action</label>
+                <label className="block text-sm font-medium text-gray-700">Действие</label>
                 <select value={action} onChange={(event) => setAction(event.target.value as InventoryAction)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                  <option value="receipt">Receive stock</option>
-                  <option value="adjustment">Adjust stock</option>
-                  <option value="write_off">Write off stock</option>
+                  <option value="receipt">Приёмка</option>
+                  <option value="adjustment">Корректировка</option>
+                  <option value="write_off">Списание</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Quantity</label>
+                <label className="block text-sm font-medium text-gray-700">Количество</label>
                 <input required type="number" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-                {action === 'adjustment' && <p className="mt-1 text-xs text-gray-500">Use a positive or negative delta. Backend validates stock limits.</p>}
+                {action === 'adjustment' && <p className="mt-1 text-xs text-gray-500">Укажите положительную или отрицательную дельту. Бэкенд проверяет лимиты.</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Reason</label>
+                <label className="block text-sm font-medium text-gray-700">Причина</label>
                 <textarea required={action !== 'receipt'} rows={3} value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
               </div>
               <button type="submit" disabled={isSubmitting} className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50">
-                {isSubmitting ? 'Submitting...' : actionLabels[action]}
+                {isSubmitting ? 'Отправка...' : actionLabels[action]}
               </button>
             </form>
           </div>
 
           <div className="bg-white shadow sm:rounded-lg p-6">
-            <h2 className="text-lg font-medium text-gray-900">Movements</h2>
+            <h2 className="text-lg font-medium text-gray-900">Движения остатков</h2>
             {isMovementsLoading ? (
-              <p className="mt-4 text-sm text-gray-500">Loading movements...</p>
+              <p className="mt-4 text-sm text-gray-500">Загрузка движений...</p>
             ) : movements.length === 0 ? (
-              <p className="mt-4 text-sm text-gray-500">No movements for this inventory item.</p>
+              <p className="mt-4 text-sm text-gray-500">Нет данных о движениях для этого товара.</p>
             ) : (
               <div className="mt-4 overflow-hidden border border-gray-200 sm:rounded-lg">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Qty</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Reason</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Created</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Тип</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Кол-во</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Причина</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Создано</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">

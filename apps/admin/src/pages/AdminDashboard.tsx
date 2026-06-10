@@ -106,25 +106,9 @@ export function AdminDashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Модерация</h2>
-          <div className="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500">
-            {isLoading ? 'Загрузка...' : stats.pendingModeration > 0 ? `Товаров на модерации: ${stats.pendingModeration}` : 'Нет данных'}
-          </div>
-        </div>
-
-        <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Журнал действий</h2>
-          <div className="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500">
-            Журнал действий пока не подключён.
-          </div>
-        </div>
-      </div>
-      
-      <div className="bg-gray-50 border-l-4 border-gray-300 p-4 mt-6">
-        <p className="text-sm text-gray-700">
-          Неподключённые агрегированные метрики не заполняются демо-данными. Данные появятся после подключения backend-агрегаций.
+      <div className="bg-gray-50 border-l-4 border-gray-300 p-4">
+        <p className="text-sm text-gray-600">
+          Сводные показатели загружены из API (подсчёт по спискам). Сводные показатели будут расширены после подключения агрегированных endpoint'ов.
         </p>
       </div>
     </div>

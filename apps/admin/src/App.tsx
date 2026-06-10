@@ -18,6 +18,7 @@ import { AdminAuditLogs } from './pages/AdminAuditLogs';
 import { AdminSettings } from './pages/AdminSettings';
 import { AdminCategories } from './pages/AdminCategories';
 import { AdminBrands } from './pages/AdminBrands';
+import { AdminCatalog } from './pages/AdminCatalog';
 import { AdminChangePassword } from './pages/AdminChangePassword';
 import { AdminAuthProvider } from './contexts/AdminAuthContext';
 import { AdminProtectedRoute } from './components/AdminProtectedRoute';
@@ -35,6 +36,8 @@ export default function App() {
           <Route path="/dashboard" element={<AdminProtectedRoute><AdminLayout><AdminDashboard /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/users" element={<AdminProtectedRoute><AdminLayout><AdminUsers /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/sellers" element={<AdminProtectedRoute><AdminLayout><AdminSellers /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/catalog" element={<AdminProtectedRoute><AdminLayout><AdminCatalog /></AdminLayout></AdminProtectedRoute>} />
+          {/* Legacy routes kept for direct navigation; sidebar uses /catalog */}
           <Route path="/categories" element={<AdminProtectedRoute><AdminLayout><AdminCategories /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/brands" element={<AdminProtectedRoute><AdminLayout><AdminBrands /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/products" element={<AdminProtectedRoute><AdminLayout><AdminProducts /></AdminLayout></AdminProtectedRoute>} />

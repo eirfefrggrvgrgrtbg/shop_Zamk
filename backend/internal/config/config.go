@@ -161,7 +161,8 @@ func Load() (*Config, error) {
 			OrderPaymentTimeoutMinutes:     getEnvAsInt("ORDER_PAYMENT_TIMEOUT_MINUTES", 30),
 			ReturnWindowDays:               getEnvAsInt("RETURN_WINDOW_DAYS", 14),
 			SellerBalanceIntervalSeconds:   getEnvAsInt("WORKER_SELLER_BALANCE_INTERVAL_SECONDS", 300),
-			MarketplaceCommissionBPS:       getEnvAsInt("MARKETPLACE_COMMISSION_BPS", 1500),
+			// TODO: implement penalty commission (18% = 1800 bps) after violation engine is built
+			MarketplaceCommissionBPS:       getEnvAsInt("MARKETPLACE_COMMISSION_BPS", 900),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:                        getEnvAsBool("RATE_LIMIT_ENABLED", true),

@@ -6,8 +6,10 @@ export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCo
   return request<{ items: AdminSeller[]; totalCount: number }>('GET', '/admin/sellers');
 };
 
-export const createAdminSeller = async (data: any): Promise<{ seller: AdminSeller; temporaryPassword?: string }> => {
-  return request<{ seller: AdminSeller; temporaryPassword?: string }>('POST', '/admin/sellers', { body: data });
+// Backend never returns plaintext temporaryPassword — only a boolean flag.
+// Frontend must show the locally-typed password to the admin after creation.
+export const createAdminSeller = async (data: any): Promise<{ seller: AdminSeller; temporaryPasswordReturned: boolean }> => {
+  return request<{ seller: AdminSeller; temporaryPasswordReturned: boolean }>('POST', '/admin/sellers', { body: data });
 };
 
 export const updateAdminSellerStatus = async (id: string, status: string): Promise<AdminSeller> => {

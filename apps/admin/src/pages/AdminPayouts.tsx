@@ -54,7 +54,7 @@ export function AdminPayouts() {
   const handleStatusUpdate = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedPayout || !statusDraft) return;
-    if (statusDraft === 'paid' && !window.confirm('Mark payout as paid? This should only be used after offline transfer is complete.')) return;
+    if (statusDraft === 'paid' && !window.confirm('Отметить выплату как выплаченную? Это ручное подтверждение. Реальный банковский перевод выполняется вне системы.')) return;
 
     try {
       setIsSubmitting(true);
@@ -91,13 +91,13 @@ export function AdminPayouts() {
       <div className="sm:flex sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Выплаты продавцам</h1>
-          <p className="mt-1 text-sm text-gray-500">Деньги, которые платформа переводит продавцам за выполненные заказы</p>
+          <p className="mt-1 text-sm text-gray-500">Выплаты продавцам за реализованные товары. Базовая комиссия ZAMK — 9%. При 2 нарушениях комиссия может быть повышена до 18% на 1 месяц (система нарушений будет подключена отдельно).</p>
         </div>
       </div>
 
-      <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
-        <p className="text-sm text-blue-700">
-          Банковский перевод здесь не инициируется автоматически. Отметьте выплату как «Выплачено» только после того, как перевод уже был выполнен вручную.
+      <div className="bg-amber-50 border-l-4 border-amber-400 p-4">
+        <p className="text-sm text-amber-800">
+          Кнопка «Отметить как выплачено» — ручное подтверждение. Реальный банковский перевод выполняется вне системы.
         </p>
       </div>
 

@@ -47,7 +47,8 @@ export function AdminReviews() {
   }, []);
 
   const submitAction = async (action: ReviewAction, reviewId: string, actionComment?: string) => {
-    if ((action === 'hide' || action === 'block') && !window.confirm(`Are you sure you want to ${action} this review?`)) return;
+    const actionRu = action === 'hide' ? 'скрыть' : 'заблокировать';
+    if ((action === 'hide' || action === 'block') && !window.confirm(`Вы уверены, что хотите ${actionRu} этот отзыв?`)) return;
     try {
       setIsSubmitting(true);
       setError(null);
@@ -113,7 +114,7 @@ export function AdminReviews() {
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Отзыв</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Товар</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rating</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Рейтинг</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
                       <th className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
@@ -156,15 +157,15 @@ export function AdminReviews() {
               <h2 className="text-lg font-medium text-gray-900">Детали отзыва</h2>
               <p className="mt-1 text-sm text-gray-500">{selectedReview.id}</p>
             </div>
-            {isDetailLoading && <span className="text-sm text-gray-500">Loading...</span>}
+            {isDetailLoading && <span className="text-sm text-gray-500">Загрузка...</span>}
           </div>
           <dl className="mt-4 grid gap-4 md:grid-cols-4">
             <div><dt className="text-sm font-medium text-gray-500">Товар</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.productTitle || selectedReview.productId}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Продавец</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.sellerName || selectedReview.sellerId || '-'}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Rating</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.rating}/5</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Created</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedReview.createdAt)}</dd></div>
-            <div className="md:col-span-2"><dt className="text-sm font-medium text-gray-500">Comment</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.comment || '-'}</dd></div>
-            <div className="md:col-span-2"><dt className="text-sm font-medium text-gray-500">Moderation comment</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.moderationComment || '-'}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Продавец</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.sellerName || selectedReview.sellerId || '—'}</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Рейтинг</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.rating}/5</dd></div>
+            <div><dt className="text-sm font-medium text-gray-500">Создан</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedReview.createdAt)}</dd></div>
+            <div className="md:col-span-2"><dt className="text-sm font-medium text-gray-500">Комментарий</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.comment || '—'}</dd></div>
+            <div className="md:col-span-2"><dt className="text-sm font-medium text-gray-500">Комментарий модератора</dt><dd className="mt-1 text-sm text-gray-900">{selectedReview.moderationComment || '—'}</dd></div>
           </dl>
         </div>
       )}
@@ -172,13 +173,13 @@ export function AdminReviews() {
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4 capitalize">{modal.action} Review</h2>
+            <h2 className="text-xl font-bold mb-4">{modal.action === 'reject' ? 'Отклонить отзыв' : 'Заблокировать отзыв'}</h2>
             <form onSubmit={(event) => { event.preventDefault(); submitAction(modal.action, modal.reviewId, comment); }} className="space-y-4">
               <textarea required={modal.action === 'reject' || modal.action === 'block'} value={comment} onChange={(event) => setComment(event.target.value)} rows={3} placeholder="Причина / комментарий" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
               <div className="flex justify-end space-x-3">
                 <button type="button" onClick={() => setModal(null)} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Отмена</button>
-                <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50 capitalize">
-                  {isSubmitting ? 'Submitting...' : modal.action}
+                <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                  {isSubmitting ? 'Отправка...' : (modal.action === 'reject' ? 'Отклонить' : 'Заблокировать')}
                 </button>
               </div>
             </form>

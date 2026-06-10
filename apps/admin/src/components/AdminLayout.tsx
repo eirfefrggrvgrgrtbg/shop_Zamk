@@ -2,7 +2,6 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Users,
   Store,
   Package,
   ShieldAlert,
@@ -10,12 +9,9 @@ import {
   Boxes,
   RotateCcw,
   Wallet,
-  ClipboardList,
-  Settings,
   LogOut,
   Bell,
-  LayoutGrid,
-  Tag,
+  BookOpen,
   CreditCard,
   Truck,
   ReceiptText,
@@ -28,24 +24,21 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { logout, user } = useAdminAuth();
 
+  // Sidebar nav — Users, AuditLog, Settings removed from sidebar (still accessible via direct URL)
   const navItems = [
-    { name: 'Панель управления', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Пользователи', path: '/users', icon: Users },
+    { name: 'Главная', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Продавцы', path: '/sellers', icon: Store },
-    { name: 'Категории', path: '/categories', icon: LayoutGrid },
-    { name: 'Бренды', path: '/brands', icon: Tag },
     { name: 'Товары', path: '/products', icon: Package },
     { name: 'Модерация', path: '/moderation', icon: ShieldAlert },
+    { name: 'Категории и бренды', path: '/catalog', icon: BookOpen },
     { name: 'Заказы', path: '/orders', icon: ShoppingCart },
-    { name: 'Платежи', path: '/payments', icon: CreditCard },
-    { name: 'Отгрузки', path: '/shipments', icon: Truck },
-    { name: 'Остатки', path: '/inventory', icon: Boxes },
+    { name: 'Доставка / Отгрузки', path: '/shipments', icon: Truck },
+    { name: 'Остатки / Склад', path: '/inventory', icon: Boxes },
+    { name: 'Платежи покупателей', path: '/payments', icon: CreditCard },
     { name: 'Возвраты', path: '/returns', icon: RotateCcw },
     { name: 'Возмещения', path: '/refunds', icon: ReceiptText },
-    { name: 'Выплаты', path: '/payouts', icon: Wallet },
+    { name: 'Выплаты продавцам', path: '/payouts', icon: Wallet },
     { name: 'Отзывы', path: '/reviews', icon: Star },
-    { name: 'Журнал действий', path: '/audit-logs', icon: ClipboardList },
-    { name: 'Настройки', path: '/settings', icon: Settings },
   ];
 
   return (

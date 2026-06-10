@@ -56,13 +56,13 @@ export function AdminCategories() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Categories</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Категории</h1>
         <button 
           onClick={() => setIsCreateModalOpen(true)}
           className="mt-3 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
         >
           <Plus className="-ml-1 mr-2 h-5 w-5" />
-          Create Category
+          Создать категорию
         </button>
       </div>
 
@@ -76,13 +76,13 @@ export function AdminCategories() {
       {isLoading ? (
         <div className="text-center py-10">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-500">Loading categories...</p>
+          <p className="mt-2 text-sm text-gray-500">Загрузка категорий...</p>
         </div>
       ) : categories.length === 0 ? (
         <div className="text-center py-10 bg-white rounded-lg shadow">
           <LayoutGrid className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No categories</h3>
-          <p className="mt-1 text-sm text-gray-500">Get started by creating a new category.</p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Категорий нет</h3>
+          <p className="mt-1 text-sm text-gray-500">Создайте первую категорию.</p>
         </div>
       ) : (
         <div className="flex flex-col">
@@ -92,7 +92,7 @@ export function AdminCategories() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slug</th>
                     </tr>
                   </thead>
@@ -119,7 +119,7 @@ export function AdminCategories() {
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Create New Category</h2>
+            <h2 className="text-xl font-bold mb-4">Создать категорию</h2>
             
             {createError && (
               <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded flex items-start">
@@ -130,7 +130,7 @@ export function AdminCategories() {
             
             <form onSubmit={handleCreateSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Category Name</label>
+                <label className="block text-sm font-medium text-gray-700">Название категории</label>
                 <input required type="text" value={name} onChange={e => { setName(e.target.value); setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-')); }} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
               </div>
               <div>
@@ -138,9 +138,9 @@ export function AdminCategories() {
                 <input required type="text" value={slug} onChange={e => setSlug(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
               </div>
               <div className="mt-5 flex justify-end space-x-3">
-                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Отмена</button>
                 <button type="submit" disabled={isCreating} className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
-                  {isCreating ? 'Creating...' : 'Create'}
+                  {isCreating ? 'Создание...' : 'Создать'}
                 </button>
               </div>
             </form>

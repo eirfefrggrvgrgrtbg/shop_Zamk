@@ -7,6 +7,15 @@ import {
 } from '../api/adminPayments';
 import type { AdminPaymentView } from '../api/adminPayments';
 
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  pending: 'Ожидает',
+  succeeded: 'Успешно',
+  failed: 'Ошибка',
+  refunded: 'Возмещён',
+  cancelled: 'Отменён',
+  paid: 'Оплачен',
+};
+
 export function AdminPayments() {
   const [payments, setPayments] = useState<AdminPaymentView[]>([]);
   const [selectedPayment, setSelectedPayment] = useState<AdminPaymentView | null>(null);
@@ -115,7 +124,7 @@ export function AdminPayments() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{payment.provider}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(payment.status)}`}>
-                            {payment.status}
+                            {PAYMENT_STATUS_LABELS[payment.status] ?? payment.status}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatMoney(payment)}</td>

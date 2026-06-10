@@ -74,7 +74,7 @@ func (s *Service) CreateSellerByAdmin(ctx context.Context, req *CreateSellerRequ
 		Description:  req.Description,
 		ContactEmail: req.ContactEmail,
 		ContactPhone: req.ContactPhone,
-		Status:       StatusActive,
+		Status:       StatusPending, // New sellers start as pending; admin must activate them
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}

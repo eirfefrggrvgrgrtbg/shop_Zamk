@@ -138,6 +138,12 @@ export function AdminShipments() {
         </div>
       )}
 
+      <div className="bg-amber-50 border-l-4 border-amber-400 p-4">
+        <p className="text-sm text-amber-800">
+          Создание отгрузки вручную — временное решение. В следующей версии отгрузки будут создаваться из детали заказа.
+        </p>
+      </div>
+
       <div className="bg-white shadow sm:rounded-lg p-6">
         <h2 className="text-lg font-medium text-gray-900">Создать отгрузку вручную</h2>
         <p className="mt-1 text-sm text-gray-500">Только ручной ввод перевозчика и трекинга. Бэкенд проверяет, что заказ оплачен и подходит для отправки.</p>
