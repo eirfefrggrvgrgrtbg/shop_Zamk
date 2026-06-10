@@ -151,6 +151,18 @@ func New(
 		r.With(uploadLimit).Post("/logo/upload", storageHandler.UploadSellerProfileImage)
 	})
 
+	r.Route("/api/seller/warnings", func(r chi.Router) {
+		r.Use(appMiddleware.AuthMiddleware(tokenService))
+		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Get("/", sellersHandler.GetMyWarnings)
+	})
+
+	r.Route("/api/seller/violations", func(r chi.Router) {
+		r.Use(appMiddleware.AuthMiddleware(tokenService))
+		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Get("/", sellersHandler.GetMyViolations)
+	})
+
 	r.Route("/api/public", func(r chi.Router) {
 		r.Get("/categories", catalogHandler.ListCategories)
 		r.Get("/brands", catalogHandler.ListBrands)

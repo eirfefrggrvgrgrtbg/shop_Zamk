@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, InventoryItem, SellerOrder, SellerReturn, SellerReview, SellerBalance, Payout } from './types';
+import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, InventoryItem, SellerOrder, SellerReturn, SellerReview, SellerBalance, Payout, SellerWarning, SellerViolation } from './types';
 
 export const getSellerMe = async (): Promise<SellerMe> => {
   return request<SellerMe>('GET', '/seller/me');
@@ -84,4 +84,12 @@ export const uploadSellerLogo = async (file: File): Promise<{ logoUrl: string }>
   const formData = new FormData();
   formData.append('logo', file);
   return request<{ logoUrl: string }>('POST', '/seller/me/logo/upload', { body: formData });
+};
+
+export const getSellerWarnings = async (): Promise<SellerWarning[]> => {
+  return request<SellerWarning[]>('GET', '/seller/warnings');
+};
+
+export const getSellerViolations = async (): Promise<SellerViolation[]> => {
+  return request<SellerViolation[]>('GET', '/seller/violations');
 };

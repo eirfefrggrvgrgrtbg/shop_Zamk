@@ -80,7 +80,10 @@ export function SellerPayouts() {
     <div className="p-8 max-w-6xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-bold mb-2">Финансы и выплаты</h1>
-        <p className="text-gray-600">Здесь вы можете управлять балансом и запрашивать выплаты.</p>
+        <p className="text-gray-600 mb-4">Здесь вы можете управлять балансом и запрашивать выплаты.</p>
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+          <p className="font-medium">Базовая комиссия платформы составляет 9%. Штрафные санкции (при наличии) могут временно увеличить комиссию.</p>
+        </div>
       </div>
 
       {/* Balance Cards */}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -14,6 +14,7 @@ import {
   Archive,
   RotateCcw,
   MessageSquare,
+  AlertTriangle,
   Menu,
   X
 } from 'lucide-react';
@@ -23,6 +24,15 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sellerStatus, setSellerStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    import('@zamk/api-client/src/seller').then(({ getSellerMe }) => {
+      getSellerMe()
+        .then((data) => setSellerStatus(data.seller.status))
+        .catch(console.error);
+    });
+  }, []);
 
   const navItems = [
     { name: 'Панель продавца', path: '/dashboard', icon: LayoutDashboard },
@@ -35,6 +45,7 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
     { name: 'Отзывы', path: '/reviews', icon: MessageSquare },
     { name: 'Аналитика', path: '/analytics', icon: BarChart2 },
     { name: 'Выплаты', path: '/payouts', icon: Wallet },
+    { name: 'Предупреждения', path: '/warnings', icon: AlertTriangle },
     { name: 'Шаблоны', path: '/templates', icon: FileText },
   ];
 
@@ -116,6 +127,26 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         <main className="flex-1 overflow-y-auto">
+          {sellerStatus === 'pending' && (
+            <div className="bg-yellow-50 p-4 text-sm text-yellow-800 border-b border-yellow-200">
+              Магазин на проверке. Заполните профиль магазина. После проверки администратор активирует продавца.
+            </div>
+          )}
+          {sellerStatus === 'active' && (
+            <div className="bg-green-50 p-4 text-sm text-green-800 border-b border-green-200">
+              Магазин активен. Вы можете добавлять товары и отправлять их на модерацию.
+            </div>
+          )}
+          {sellerStatus === 'blocked' && (
+            <div className="bg-red-50 p-4 text-sm text-red-800 border-b border-red-200">
+              Магазин заблокирован. Обратитесь к администрации.
+            </div>
+          )}
+          {sellerStatus === 'archived' && (
+            <div className="bg-gray-50 p-4 text-sm text-gray-800 border-b border-gray-200">
+              Магазин архивирован.
+            </div>
+          )}
           {children}
         </main>
       </div>

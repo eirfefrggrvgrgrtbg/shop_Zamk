@@ -42,9 +42,11 @@ const statusFilterOptions: Array<{ value: SellerProductStatus | 'all'; label: st
   { value: 'published', label: statusLabels.published },
   { value: 'draft', label: statusLabels.draft },
   { value: 'moderation', label: statusLabels.moderation },
-  { value: 'needs_changes', label: statusLabels.needs_changes },
-  { value: 'low_stock', label: statusLabels.low_stock },
-  { value: 'paused', label: statusLabels.paused },
+  { value: 'approved', label: statusLabels.approved },
+  { value: 'rejected', label: statusLabels.rejected },
+  { value: 'hidden', label: statusLabels.hidden },
+  { value: 'blocked', label: statusLabels.blocked },
+  { value: 'out_of_stock', label: statusLabels.out_of_stock },
 ];
 
 const issueFilterOptions: Array<{ value: SellerProductIssue | 'all'; label: string }> = [
@@ -69,15 +71,20 @@ function ProductBadge({ children, tone = 'neutral' }: { children: React.ReactNod
 
 function getStatusTone(status: SellerProductStatus) {
   const tones: Record<SellerProductStatus, 'neutral' | 'good' | 'warning' | 'danger' | 'info'> = {
-    published: 'good',
     draft: 'neutral',
     moderation: 'info',
+    approved: 'good',
+    published: 'good',
+    rejected: 'danger',
+    hidden: 'warning',
+    blocked: 'danger',
+    out_of_stock: 'warning',
     needs_changes: 'warning',
     low_stock: 'warning',
-    paused: 'danger',
+    paused: 'warning',
   };
 
-  return tones[status];
+  return tones[status] || 'neutral';
 }
 
 function getIssueTone(issue: SellerProductIssue) {

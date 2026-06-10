@@ -1,17 +1,12 @@
 import { SellerProduct, SellerProductSize, SellerProductStatus } from '../lib/seller-products';
 
 function mapStatus(apiStatus: string): SellerProductStatus {
-  switch (apiStatus) {
-    case 'published': return 'published';
-    case 'draft': return 'draft';
-    case 'pending_moderation': return 'moderation';
-    case 'approved': return 'published'; // UI has no "approved", map to published or draft? Let's say moderation for now. Actually UI has 'published', 'draft', 'moderation', 'needs_changes', 'low_stock', 'paused'
-    case 'rejected': return 'needs_changes';
-    case 'hidden': return 'paused';
-    case 'blocked': return 'paused';
-    case 'out_of_stock': return 'low_stock';
-    default: return 'draft';
+  const allowed: SellerProductStatus[] = ['draft', 'moderation', 'approved', 'published', 'rejected', 'hidden', 'blocked', 'out_of_stock'];
+  if (apiStatus === 'pending_moderation') return 'moderation';
+  if (allowed.includes(apiStatus as SellerProductStatus)) {
+    return apiStatus as SellerProductStatus;
   }
+  return 'draft';
 }
 
 export function adaptProductList(apiProducts: any[]): SellerProduct[] {

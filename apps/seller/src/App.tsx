@@ -13,6 +13,7 @@ import { SellerAnalytics } from './pages/SellerAnalytics';
 import { SellerPayouts } from './pages/SellerPayouts';
 import { SellerTemplates } from './pages/SellerTemplates';
 import { SellerSettings } from './pages/SellerSettings';
+import { SellerWarnings } from './pages/SellerWarnings';
 import { AuthProvider } from './contexts/AuthContext';
 import { SellerProtectedRoute } from './components/SellerProtectedRoute';
 
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/analytics" element={<SellerProtectedRoute><SellerLayout><SellerAnalytics /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/payouts" element={<SellerProtectedRoute><SellerLayout><SellerPayouts /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/templates" element={<SellerProtectedRoute><SellerLayout><SellerTemplates /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/warnings" element={<SellerProtectedRoute><SellerLayout><SellerWarnings /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/settings" element={<SellerProtectedRoute><SellerLayout><SellerSettings /></SellerLayout></SellerProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

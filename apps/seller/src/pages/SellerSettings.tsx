@@ -248,7 +248,7 @@ export function SellerSettings() {
               />
             </div>
             <div className="mt-1 flex items-center justify-between">
-              <p className="text-xs text-gray-400">Только латиница, цифры и дефис.</p>
+              <p className="text-xs text-gray-400">Только латиница, цифры и дефис. Используется в публичном адресе магазина.</p>
               <button
                 type="button"
                 onClick={generateSlugFromName}

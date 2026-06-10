@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Archive, BarChart2, Package, RotateCcw, ShoppingCart, Wallet } from 'lucide-react';
+import { Archive, BarChart2, Package, RotateCcw, ShoppingCart, Wallet, AlertTriangle } from 'lucide-react';
 import {
   getSellerBalance,
   getSellerInventory,
   getSellerOrders,
   getSellerProducts,
   getSellerReturns,
+  getSellerMe,
+  getSellerWarnings,
+  getSellerViolations,
 } from '@zamk/api-client/src/seller';
-import type { InventoryItem, SellerBalance, SellerOrder, SellerProduct, SellerReturn } from '@zamk/api-client/src/types';
+import type { InventoryItem, SellerBalance, SellerOrder, SellerProduct, SellerReturn, SellerMe, SellerWarning, SellerViolation } from '@zamk/api-client/src/types';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
   style: 'currency',
@@ -24,6 +27,9 @@ type DashboardState = {
   returns: SellerReturn[];
   inventory: InventoryItem[];
   balance: SellerBalance | null;
+  sellerMe: SellerMe | null;
+  warnings: SellerWarning[];
+  violations: SellerViolation[];
 };
 
 const initialState: DashboardState = {
@@ -32,6 +38,9 @@ const initialState: DashboardState = {
   returns: [],
   inventory: [],
   balance: null,
+  sellerMe: null,
+  warnings: [],
+  violations: [],
 };
 
 const unwrapItems = <T,>(response: T[] | { items?: T[] } | null): T[] => {
@@ -89,12 +98,15 @@ export function SellerDashboard() {
       setError('');
 
       try {
-        const [products, orders, returns, inventory, balance] = await Promise.all([
+        const [products, orders, returns, inventory, balance, sellerMe, warnings, violations] = await Promise.all([
           getSellerProducts(),
           getSellerOrders(),
           getSellerReturns(),
           getSellerInventory(),
           getSellerBalance().catch(() => null),
+          getSellerMe().catch(() => null),
+          getSellerWarnings().catch(() => []),
+          getSellerViolations().catch(() => []),
         ]);
 
         if (!cancelled) {
@@ -104,6 +116,9 @@ export function SellerDashboard() {
             returns: unwrapItems(returns),
             inventory: unwrapItems(inventory),
             balance,
+            sellerMe,
+            warnings,
+            violations,
           });
         }
       } catch (err: any) {
@@ -131,6 +146,21 @@ export function SellerDashboard() {
   const activeOrders = data.orders.filter((order) => !['delivered', 'cancelled'].includes(order.status)).length;
   const totalStock = data.inventory.reduce((sum, item) => sum + (item.quantityAvailable ?? 0), 0);
 
+  const checklist = [
+    { id: 'brandName', label: 'Название магазина', done: !!data.sellerMe?.seller.brandName },
+    { id: 'slug', label: 'Адрес магазина / slug', done: !!data.sellerMe?.seller.slug },
+    { id: 'description', label: 'Описание магазина', done: !!data.sellerMe?.seller.description },
+    { id: 'contact', label: 'Контактная почта или телефон', done: !!(data.sellerMe?.seller.contactEmail || data.sellerMe?.seller.contactPhone) },
+    { id: 'logo', label: 'Логотип магазина', done: !!data.sellerMe?.seller.logoUrl },
+    { id: 'first_product', label: 'Первый товар', done: data.products.length > 0 },
+  ];
+  
+  const completedCount = checklist.filter(c => c.done).length;
+  const progressPercent = Math.round((completedCount / checklist.length) * 100);
+  const isProfileComplete = completedCount === checklist.length;
+  const activeWarnings = data.warnings.filter(w => w.status === 'active').length;
+  const activeViolations = data.violations.filter(v => v.status === 'active').length;
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="mx-auto max-w-7xl space-y-8">
@@ -154,12 +184,41 @@ export function SellerDashboard() {
           </div>
         ) : (
           <>
+            {!isProfileComplete && data.sellerMe && (
+              <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-gray-900">Заполненность профиля</h2>
+                  <span className="text-sm font-medium text-gray-600">Профиль заполнен на {progressPercent}%</span>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {checklist.map(item => (
+                    <div key={item.id} className="flex items-center gap-3">
+                      <div className={`flex h-6 w-6 items-center justify-center rounded-full border ${item.done ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300'}`}>
+                        {item.done && (
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className={item.done ? 'text-gray-900' : 'text-gray-500'}>{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-6">
+                  <Link to="/settings" className="inline-flex rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800">
+                    Заполнить профиль магазина
+                  </Link>
+                </div>
+              </section>
+            )}
+
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
               <MetricCard title="Товары" value={String(data.products.length)} description="Реальное количество товаров продавца" icon={Package} />
               <MetricCard title="Активные заказы" value={String(activeOrders)} description="Заказы кроме доставленных и отменённых" icon={ShoppingCart} />
               <MetricCard title="Возвраты" value={String(data.returns.length)} description="Реальные возвраты продавца" icon={RotateCcw} />
               <MetricCard title="Остатки" value={String(totalStock)} description="Сумма доступных остатков" icon={Archive} />
               <MetricCard title="Доступно к выплате" value={formatMoney(data.balance?.availableBalanceCents)} description="Баланс из API выплат" icon={Wallet} />
+              <MetricCard title="Предупреждения / нарушения" value={`${activeWarnings} / ${activeViolations}`} description="Активные предупреждения и нарушения" icon={AlertTriangle} />
             </section>
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

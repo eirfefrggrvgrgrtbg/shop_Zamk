@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -12,8 +12,9 @@ import {
   Wallet,
 } from 'lucide-react';
 import { type SellerProductSize, type SellerProductStatus } from '../lib/seller-products';
-import { createSellerProduct, uploadSellerProductImage } from '@zamk/api-client/src/seller';
+import { createSellerProduct, uploadSellerProductImage, getSellerMe } from '@zamk/api-client/src/seller';
 import { request } from '@zamk/api-client/src/client'; // for submit to moderation if not exported
+import type { SellerMe } from '@zamk/api-client/src/types';
 import { cn } from '../lib/utils';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
@@ -142,6 +143,11 @@ export function SellerProductNew() {
   const [savedStatus, setSavedStatus] = useState<SellerProductStatus | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const [sellerMe, setSellerMe] = useState<SellerMe | null>(null);
+
+  useEffect(() => {
+    getSellerMe().then(setSellerMe).catch(console.error);
+  }, []);
   const quality = useMemo(() => calculateQuality(draft), [draft]);
   const price = asNumber(draft.price);
   const cost = asNumber(draft.cost);
@@ -290,12 +296,17 @@ export function SellerProductNew() {
                 <Field label="Название товара" value={draft.title} onChange={(value) => updateDraft('title', value)} placeholder="Например, Жакет мягкой линии" />
                 <label className="block">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">
-                    Артикул
+                    Артикул <span className="text-red-500">*</span>
                     <span className="ml-2 font-normal normal-case tracking-normal text-ash/70 dark:text-white/40">
-                      — внутренний код товара. Генерируется автоматически, можно изменить.
+                      — внутренний код варианта товара. Можно сгенерировать автоматически.
                     </span>
                   </span>
-                  <input value={draft.sku} onChange={(e) => updateDraft('sku', e.target.value)} className="seller-setting-input mt-2 w-full rounded-2xl border border-border-lighter bg-white/78 px-4 h-12 text-sm text-graphite outline-none transition-all focus:border-graphite/30 focus:bg-white dark:border-white/16 dark:bg-black/24 dark:text-white dark:focus:border-white/32 dark:focus:bg-black/32" />
+                  <div className="flex gap-2 mt-2">
+                    <input value={draft.sku} onChange={(e) => updateDraft('sku', e.target.value)} className="seller-setting-input flex-1 rounded-2xl border border-border-lighter bg-white/78 px-4 h-12 text-sm text-graphite outline-none transition-all focus:border-graphite/30 focus:bg-white dark:border-white/16 dark:bg-black/24 dark:text-white dark:focus:border-white/32 dark:focus:bg-black/32" />
+                    <button type="button" onClick={() => updateDraft('sku', `ZMK-${Date.now().toString().slice(-5)}`)} className="rounded-2xl border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                      Сгенерировать
+                    </button>
+                  </div>
                 </label>
                 <Field label="Категория" value={draft.category} onChange={(value) => updateDraft('category', value)} />
                 <Field label="Бренд" value={draft.brand} onChange={(value) => updateDraft('brand', value)} />
@@ -428,13 +439,19 @@ export function SellerProductNew() {
               </button>
               <button
                 type="button"
-                disabled={isSaving}
+                disabled={isSaving || sellerMe?.seller.status === 'pending'}
                 onClick={() => saveProduct('moderation')}
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-graphite px-6 text-sm font-semibold text-white transition-colors hover:bg-graphite-light disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-white/86"
+                title={sellerMe?.seller.status === 'pending' ? 'Магазин на проверке. Вы можете создавать только черновики.' : ''}
               >
                 <Rocket className="h-4 w-4" />
                 Отправить на модерацию
               </button>
+              {sellerMe?.seller.status === 'pending' && (
+                <p className="text-center text-xs text-amber-600">
+                  Магазин на проверке. Отправка на модерацию недоступна.
+                </p>
+              )}
               <Link to="/seller-products" className="inline-flex h-12 items-center justify-center gap-2 rounded-full px-6 text-sm font-semibold text-graphite-light transition-colors hover:text-graphite dark:text-white/64 dark:hover:text-white">
                 Перейти к списку товаров
               </Link>
