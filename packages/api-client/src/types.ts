@@ -553,3 +553,91 @@ export interface AdminReview {
   rejectedAt?: string;
   moderationComment?: string;
 }
+
+// ---------------------------------------------------------
+// PHASE E: SELLER MANAGEMENT DTOs
+// ---------------------------------------------------------
+
+export interface SellerStatusHistoryItem {
+  id: string;
+  oldStatus?: string;
+  newStatus: string;
+  reason?: string;
+  actorUserId?: string;
+  createdAt: string;
+}
+
+export interface SellerWarning {
+  id: string;
+  sellerId: string;
+  type: string;
+  title: string;
+  message: string;
+  severity: 'low' | 'medium' | 'high';
+  status: 'active' | 'resolved' | 'cancelled';
+  actorUserId?: string;
+  createdAt: string;
+  resolvedAt?: string;
+  resolutionNote?: string;
+}
+
+export interface SellerViolation {
+  id: string;
+  sellerId: string;
+  type: string;
+  title: string;
+  description: string;
+  severity: 'low' | 'medium' | 'high';
+  status: 'active' | 'resolved' | 'cancelled';
+  countsForPenalty: boolean;
+  actorUserId?: string;
+  createdAt: string;
+  resolvedAt?: string;
+  resolutionNote?: string;
+}
+
+export interface SellerDetail {
+  id: string;
+  brandName: string;
+  slug?: string;
+  description?: string;
+  logoUrl?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  owner: {
+    id: string;
+    name: string;
+    email: string;
+    status: string;
+  };
+  counts: {
+    warningsActive: number;
+    violationsActive: number;
+    activePenaltyViolations: number;
+  };
+  commissionPolicy: {
+    baseCommissionBps: number;
+    penaltyCommissionBps: number;
+    penaltyRule: string;
+    currentAppliedCommissionBps: number;
+    automaticPenaltyEnabled: boolean;
+  };
+}
+
+export interface CreateWarningRequest {
+  type: string;
+  title: string;
+  message: string;
+  severity: 'low' | 'medium' | 'high';
+}
+
+export interface CreateViolationRequest {
+  type: string;
+  title: string;
+  description: string;
+  severity: 'low' | 'medium' | 'high';
+  countsForPenalty: boolean;
+}

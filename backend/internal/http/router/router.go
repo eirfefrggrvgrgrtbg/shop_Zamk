@@ -129,7 +129,18 @@ func New(
 		r.Use(appMiddleware.RequireRole(users.RoleAdmin))
 		r.With(perm("sellers.create_access")).Post("/", sellersHandler.CreateSellerByAdmin)
 		r.With(perm("sellers.read")).Get("/", sellersHandler.ListSellers)
+		r.With(perm("sellers.read")).Get("/{id}", sellersHandler.GetAdminSellerDetail)
 		r.With(perm("sellers.update_status")).Patch("/{id}/status", sellersHandler.UpdateSellerStatus)
+		r.With(perm("sellers.verify")).Post("/{id}/verify", sellersHandler.VerifySeller)
+		r.With(perm("sellers.read")).Get("/{id}/status-history", sellersHandler.GetSellerStatusHistory)
+		r.With(perm("sellers.read")).Get("/{id}/warnings", sellersHandler.ListSellerWarnings)
+		r.With(perm("sellers.warn")).Post("/{id}/warnings", sellersHandler.CreateSellerWarning)
+		r.With(perm("sellers.warn")).Patch("/{id}/warnings/{warningId}/resolve", sellersHandler.ResolveSellerWarning)
+		r.With(perm("sellers.warn")).Patch("/{id}/warnings/{warningId}/cancel", sellersHandler.CancelSellerWarning)
+		r.With(perm("sellers.read")).Get("/{id}/violations", sellersHandler.ListSellerViolations)
+		r.With(perm("sellers.warn")).Post("/{id}/violations", sellersHandler.CreateSellerViolation)
+		r.With(perm("sellers.warn")).Patch("/{id}/violations/{violationId}/resolve", sellersHandler.ResolveSellerViolation)
+		r.With(perm("sellers.warn")).Patch("/{id}/violations/{violationId}/cancel", sellersHandler.CancelSellerViolation)
 	})
 
 	r.Route("/api/seller/me", func(r chi.Router) {

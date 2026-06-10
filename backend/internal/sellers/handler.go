@@ -92,15 +92,20 @@ func (h *Handler) UpdateSellerStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req UpdateSellerStatusRequest
+	var req UpdateSellerStatusWithReasonRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	if err := h.service.UpdateSellerStatus(r.Context(), sellerID, &req); err != nil {
+	actorID, _ := r.Context().Value("userID").(uuid.UUID)
+	if err := h.service.UpdateSellerStatusWithHistory(r.Context(), sellerID, req.Status, req.Reason, actorID); err != nil {
 		if errors.Is(err, ErrSellerNotFound) {
 			h.respondError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		if errors.Is(err, ErrReasonRequired) {
+			h.respondError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 		h.respondError(w, http.StatusBadRequest, err.Error())
@@ -108,7 +113,6 @@ func (h *Handler) UpdateSellerStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.auditRepo != nil {
-		actorID, _ := r.Context().Value("userID").(uuid.UUID)
 		actorEmail, _ := r.Context().Value("email").(string)
 		actorRole, _ := r.Context().Value("role").(string)
 		sid := sellerID
@@ -120,7 +124,7 @@ func (h *Handler) UpdateSellerStatus(w http.ResponseWriter, r *http.Request) {
 				Action:      "seller.status_update",
 				EntityType:  "seller",
 				EntityID:    &sid,
-				Metadata:    staff.SanitizeMetadata(map[string]any{"newStatus": req.Status}),
+				Metadata:    staff.SanitizeMetadata(map[string]any{"newStatus": req.Status, "reason": req.Reason}),
 			})
 		}()
 	}

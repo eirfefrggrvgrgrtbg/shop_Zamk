@@ -43,3 +43,26 @@ type SellerUser struct {
 	Role      SellerRole `json:"role"`
 	CreatedAt time.Time  `json:"createdAt"`
 }
+
+// SellerDetail is the internal aggregate used by GetSellerDetailByID.
+type SellerDetail struct {
+	ID           uuid.UUID
+	BrandName    string
+	Slug         string
+	Description  *string
+	ContactEmail string
+	ContactPhone *string
+	LogoURL      *string
+	Status       SellerStatus
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+
+	OwnerID     uuid.UUID
+	OwnerName   string
+	OwnerEmail  string
+	OwnerStatus string
+
+	WarningsActive          int
+	ViolationsActive        int
+	ActivePenaltyViolations int
+}

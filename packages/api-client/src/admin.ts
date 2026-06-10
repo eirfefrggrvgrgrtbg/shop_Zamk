@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest } from './types';
+import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest } from './types';
 
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCount: number }> => {
@@ -12,8 +12,8 @@ export const createAdminSeller = async (data: any): Promise<{ seller: AdminSelle
   return request<{ seller: AdminSeller; temporaryPasswordReturned: boolean }>('POST', '/admin/sellers', { body: data });
 };
 
-export const updateAdminSellerStatus = async (id: string, status: string): Promise<AdminSeller> => {
-  return request<AdminSeller>('PATCH', `/admin/sellers/${id}/status`, { body: { status } });
+export const updateAdminSellerStatus = async (id: string, status: string, reason?: string): Promise<void> => {
+  return request<void>('PATCH', `/admin/sellers/${id}/status`, { body: { status, reason } });
 };
 
 export const getAdminCategories = async (): Promise<Category[]> => {
@@ -206,3 +206,38 @@ export const resetStaffPassword = async (userId: string, data: ResetStaffPasswor
 
 export const listAuditLogs = async (limit = 50, offset = 0): Promise<{ items: any[]; total: number; limit: number; offset: number }> =>
   request('GET', `/admin/audit-logs?limit=${limit}&offset=${offset}`);
+
+// ---- Phase E: Seller Management ----
+
+export const getAdminSellerDetail = (id: string) =>
+  request<SellerDetail>('GET', `/admin/sellers/${id}`);
+
+export const verifyAdminSeller = (id: string) =>
+  request<{ sellerId: string; status: string }>('POST', `/admin/sellers/${id}/verify`);
+
+export const getSellerStatusHistory = (id: string) =>
+  request<{ items: SellerStatusHistoryItem[] }>('GET', `/admin/sellers/${id}/status-history`);
+
+export const listSellerWarnings = (id: string) =>
+  request<{ items: SellerWarning[] }>('GET', `/admin/sellers/${id}/warnings`);
+
+export const createSellerWarning = (id: string, data: CreateWarningRequest) =>
+  request<SellerWarning>('POST', `/admin/sellers/${id}/warnings`, { body: data });
+
+export const resolveSellerWarning = (sellerId: string, warningId: string, note?: string) =>
+  request<void>('PATCH', `/admin/sellers/${sellerId}/warnings/${warningId}/resolve`, { body: { resolutionNote: note } });
+
+export const cancelSellerWarning = (sellerId: string, warningId: string) =>
+  request<void>('PATCH', `/admin/sellers/${sellerId}/warnings/${warningId}/cancel`, { body: {} });
+
+export const listSellerViolations = (id: string) =>
+  request<{ items: SellerViolation[] }>('GET', `/admin/sellers/${id}/violations`);
+
+export const createSellerViolation = (id: string, data: CreateViolationRequest) =>
+  request<SellerViolation>('POST', `/admin/sellers/${id}/violations`, { body: data });
+
+export const resolveSellerViolation = (sellerId: string, violationId: string, note?: string) =>
+  request<void>('PATCH', `/admin/sellers/${sellerId}/violations/${violationId}/resolve`, { body: { resolutionNote: note } });
+
+export const cancelSellerViolation = (sellerId: string, violationId: string) =>
+  request<void>('PATCH', `/admin/sellers/${sellerId}/violations/${violationId}/cancel`, { body: {} });

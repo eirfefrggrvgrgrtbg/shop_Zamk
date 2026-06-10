@@ -60,8 +60,8 @@ export const createAdminSeller = async (data: any): Promise<{ seller: AdminSelle
   return await apiCreateSeller(data);
 };
 
-export const updateAdminSellerStatus = async (id: string, status: string): Promise<AdminSeller> => {
-  return await apiUpdateSellerStatus(id, status);
+export const updateAdminSellerStatus = async (id: string, status: string, reason?: string): Promise<void> => {
+  await apiUpdateSellerStatus(id, status, reason);
 };
 
 // Categories
