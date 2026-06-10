@@ -28,6 +28,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/reviews"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
@@ -137,8 +138,16 @@ func main() {
 	storageService := storage.NewService(storageProvider, productsRepo, catalogRepo, sellersRepo)
 	storageHandler := storage.NewHandler(storageService, &cfg.S3)
 
+	// Staff RBAC
+	staffRepo := staff.NewRepository(pgClient.Pool)
+	staffAuditRepo := staff.NewAuditRepository(pgClient.Pool)
+	staffService := staff.NewService(staffRepo)
+	staffHandler := staff.NewHandler(staffService, staffAuditRepo, userRepo)
+	sellersHandler = sellersHandler.WithAudit(staffAuditRepo)
+	payoutsHandler = payoutsHandler.WithAudit(staffAuditRepo)
+
 	// Create router
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler)
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo)
 
 	// Start HTTP server
 	srv := &http.Server{

@@ -26,6 +26,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/reviews"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
@@ -49,6 +50,8 @@ func New(
 	payoutsHandler *payouts.Handler,
 	reviewsHandler *reviews.Handler,
 	storageHandler *storage.Handler,
+	staffHandler *staff.Handler,
+	auditRepo *staff.AuditRepository,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	rateLimiter := ratelimit.NewMiddleware(
@@ -67,11 +70,9 @@ func New(
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger) // basic logging
+	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// CORS allows credentials only for exact configured origins. Wildcards are
-	// intentionally ignored because they are unsafe with refresh cookies.
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			origin := req.Header.Get("Origin")
@@ -133,9 +134,6 @@ func New(
 		r.With(uploadLimit).Post("/logo/upload", storageHandler.UploadSellerProfileImage)
 	})
 
-	// ---------------------------------------------------------
-	// Catalog and Products (Public)
-	// ---------------------------------------------------------
 	r.Route("/api/public", func(r chi.Router) {
 		r.Get("/categories", catalogHandler.ListCategories)
 		r.Get("/brands", catalogHandler.ListBrands)
@@ -143,9 +141,6 @@ func New(
 		r.Get("/products/{idOrSlug}", productsHandler.GetPublicProduct)
 	})
 
-	// ---------------------------------------------------------
-	// Customer Cart & Orders
-	// ---------------------------------------------------------
 	r.Route("/api/customer", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireRole(users.RoleCustomer))
@@ -167,14 +162,8 @@ func New(
 		r.Get("/returns/{id}", returnsHandler.GetCustomerReturn)
 	})
 
-	// ---------------------------------------------------------
-	// Webhooks
-	// ---------------------------------------------------------
 	r.With(webhookLimit).Post("/api/payments/tbank/webhook", paymentsHandler.HandleTBankWebhook)
 
-	// ---------------------------------------------------------
-	// Seller Products, Inventory & Orders
-	// ---------------------------------------------------------
 	r.Route("/api/seller/products", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireRole(users.RoleSeller))
@@ -229,12 +218,14 @@ func New(
 		r.Post("/request", payoutsHandler.RequestPayout)
 	})
 
-	// ---------------------------------------------------------
-	// Admin Categories, Brands, and Products
-	// ---------------------------------------------------------
 	r.Route("/api/admin", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireRole(users.RoleAdmin))
+
+		// Staff RBAC endpoints (Phase B) — auth+role guard only, no RequirePermission yet
+		r.Get("/me", staffHandler.GetAdminMe)
+		r.Get("/staff/roles", staffHandler.GetStaffRoles)
+		r.Get("/audit-logs", staffHandler.GetAuditLogs)
 
 		r.Get("/categories", catalogHandler.ListCategories)
 		r.Post("/categories", catalogHandler.CreateCategory)
@@ -312,6 +303,8 @@ func New(
 
 	r.Get("/api/public/products/{idOrSlug}/reviews", reviewsHandler.GetPublicProductReviews)
 	r.Get("/api/public/products/{idOrSlug}/rating-summary", reviewsHandler.GetPublicRatingSummary)
+
+	_ = auditRepo
 
 	return r
 }

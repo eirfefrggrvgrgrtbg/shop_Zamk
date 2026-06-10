@@ -1,24 +1,34 @@
 package sellers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"regexp"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
+
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 )
 
 var emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
 type Handler struct {
-	service *Service
+	service   *Service
+	auditRepo *staff.AuditRepository
 }
 
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
+}
+
+// WithAudit attaches an audit repository for fire-and-forget audit logging.
+func (h *Handler) WithAudit(ar *staff.AuditRepository) *Handler {
+	h.auditRepo = ar
+	return h
 }
 
 func (h *Handler) CreateSellerByAdmin(w http.ResponseWriter, r *http.Request) {
@@ -28,8 +38,6 @@ func (h *Handler) CreateSellerByAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Basic validation could be done here (e.g. using validator package).
-	// For MVP we just do simple checks.
 	if req.BrandName == "" || req.ContactEmail == "" || req.OwnerEmail == "" || req.TemporaryPassword == "" {
 		h.respondError(w, http.StatusBadRequest, "missing required fields")
 		return
@@ -43,6 +51,24 @@ func (h *Handler) CreateSellerByAdmin(w http.ResponseWriter, r *http.Request) {
 		}
 		h.respondError(w, http.StatusInternalServerError, "failed to create seller")
 		return
+	}
+
+	if h.auditRepo != nil {
+		actorID, _ := r.Context().Value("userID").(uuid.UUID)
+		actorEmail, _ := r.Context().Value("email").(string)
+		actorRole, _ := r.Context().Value("role").(string)
+		sellerID := res.Seller.ID
+		go func() {
+			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
+				ActorUserID: actorID,
+				ActorEmail:  actorEmail,
+				ActorRole:   actorRole,
+				Action:      "seller.create_access",
+				EntityType:  "seller",
+				EntityID:    &sellerID,
+				Metadata:    staff.SanitizeMetadata(map[string]any{"ownerEmail": req.OwnerEmail, "brandName": req.BrandName}),
+			})
+		}()
 	}
 
 	h.respondJSON(w, http.StatusCreated, res)
@@ -79,6 +105,24 @@ func (h *Handler) UpdateSellerStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		h.respondError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+
+	if h.auditRepo != nil {
+		actorID, _ := r.Context().Value("userID").(uuid.UUID)
+		actorEmail, _ := r.Context().Value("email").(string)
+		actorRole, _ := r.Context().Value("role").(string)
+		sid := sellerID
+		go func() {
+			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
+				ActorUserID: actorID,
+				ActorEmail:  actorEmail,
+				ActorRole:   actorRole,
+				Action:      "seller.status_update",
+				EntityType:  "seller",
+				EntityID:    &sid,
+				Metadata:    staff.SanitizeMetadata(map[string]any{"newStatus": req.Status}),
+			})
+		}()
 	}
 
 	w.WriteHeader(http.StatusNoContent)

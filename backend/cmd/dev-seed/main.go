@@ -11,6 +11,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
@@ -127,6 +128,19 @@ func main() {
 	}); err != nil {
 		logger.Error("failed to seed local dev data", "error", err)
 		os.Exit(1)
+	}
+
+	// Assign owner staff role to admin@zamk.local
+	staffRepo := staff.NewRepository(pgClient.Pool)
+	var adminUserID uuid.UUID
+	if err2 := pgClient.Pool.QueryRow(ctx, `SELECT id FROM users WHERE email = $1`, adminEmail).Scan(&adminUserID); err2 != nil {
+		logger.Warn("could not find admin user for staff seed", "error", err2)
+	} else {
+		if err2 := staffRepo.EnsureOwnerForSeed(ctx, adminUserID); err2 != nil {
+			logger.Warn("could not assign owner role to admin", "error", err2)
+		} else {
+			logger.Info("admin@zamk.local assigned owner role")
+		}
 	}
 
 	fmt.Println("Local dev seed complete.")

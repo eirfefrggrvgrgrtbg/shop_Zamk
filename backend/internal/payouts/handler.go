@@ -1,22 +1,32 @@
 package payouts
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
+
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 )
 
 type Handler struct {
-	service *Service
+	service   *Service
+	auditRepo *staff.AuditRepository
 }
 
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
+}
+
+// WithAudit attaches an audit repository for fire-and-forget audit logging.
+func (h *Handler) WithAudit(ar *staff.AuditRepository) *Handler {
+	h.auditRepo = ar
+	return h
 }
 
 func (h *Handler) writeError(w http.ResponseWriter, status int, code, message string) {
@@ -188,6 +198,24 @@ func (h *Handler) UpdateAdminPayoutStatus(w http.ResponseWriter, r *http.Request
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update payout status")
 		return
+	}
+
+	if h.auditRepo != nil {
+		actorEmail, _ := r.Context().Value("email").(string)
+		actorRole, _ := r.Context().Value("role").(string)
+		pid := payoutID
+		actorID := adminUserID
+		go func() {
+			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
+				ActorUserID: actorID,
+				ActorEmail:  actorEmail,
+				ActorRole:   actorRole,
+				Action:      "payout.status_update",
+				EntityType:  "payout",
+				EntityID:    &pid,
+				Metadata:    staff.SanitizeMetadata(map[string]any{"newStatus": req.Status}),
+			})
+		}()
 	}
 
 	w.WriteHeader(http.StatusNoContent)
