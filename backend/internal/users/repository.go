@@ -77,6 +77,18 @@ func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*User, erro
 	return &u, nil
 }
 
+func (r *Repository) UpdateUserStatus(ctx context.Context, id uuid.UUID, status string) error {
+	query := `UPDATE users SET status = $1, updated_at = now() WHERE id = $2`
+	res, err := r.db.Exec(ctx, query, status, id)
+	if err != nil {
+		return fmt.Errorf("failed to update user status: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *Repository) UpdatePasswordAndMustChange(ctx context.Context, id uuid.UUID, passwordHash string, mustChange bool) error {
 	query := `
 		UPDATE users

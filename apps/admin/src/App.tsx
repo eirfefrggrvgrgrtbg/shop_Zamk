@@ -20,6 +20,8 @@ import { AdminCategories } from './pages/AdminCategories';
 import { AdminBrands } from './pages/AdminBrands';
 import { AdminCatalog } from './pages/AdminCatalog';
 import { AdminChangePassword } from './pages/AdminChangePassword';
+import { AdminRoles } from './pages/AdminRoles';
+import { AdminStaff } from './pages/AdminStaff';
 import { AdminAuthProvider } from './contexts/AdminAuthContext';
 import { AdminProtectedRoute } from './components/AdminProtectedRoute';
 
@@ -51,6 +53,9 @@ export default function App() {
           <Route path="/payouts" element={<AdminProtectedRoute><AdminLayout><AdminPayouts /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/reviews" element={<AdminProtectedRoute><AdminLayout><AdminReviews /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/audit-logs" element={<AdminProtectedRoute><AdminLayout><AdminAuditLogs /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/audit" element={<AdminProtectedRoute><AdminLayout><AdminAuditLogs /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/roles" element={<AdminProtectedRoute><AdminLayout><AdminRoles /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/staff" element={<AdminProtectedRoute><AdminLayout><AdminStaff /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/settings" element={<AdminProtectedRoute><AdminLayout><AdminSettings /></AdminLayout></AdminProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -22,6 +22,11 @@ func NewRepository(db postgres.DBTX) *Repository {
 	return &Repository{db: db}
 }
 
+// WithTx returns a Repository bound to a transaction.
+func (r *Repository) WithTx(tx postgres.DBTX) *Repository {
+	return &Repository{db: tx}
+}
+
 // GetStaffMemberByUserID fetches the staff member record and their role.
 func (r *Repository) GetStaffMemberByUserID(ctx context.Context, userID uuid.UUID) (*StaffMember, *StaffRole, error) {
 	query := `
@@ -114,6 +119,120 @@ func (r *Repository) ListRolePermissions(ctx context.Context) (map[string][]stri
 		result[code] = append(result[code], perm)
 	}
 	return result, rows.Err()
+}
+
+// ListStaffMembers returns all staff members joined with their users and roles.
+func (r *Repository) ListStaffMembers(ctx context.Context) ([]StaffMemberView, error) {
+	query := `
+		SELECT sm.user_id, u.name, u.email, u.status AS user_status, u.must_change_password,
+		       sm.status AS staff_status, sm.created_at, sm.updated_at,
+		       sr.code AS role_code, sr.name AS role_name, sr.id AS role_id
+		FROM staff_members sm
+		JOIN users u ON u.id = sm.user_id
+		JOIN staff_roles sr ON sr.id = sm.staff_role_id
+		ORDER BY sm.created_at DESC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list staff members: %w", err)
+	}
+	defer rows.Close()
+
+	var members []StaffMemberView
+	for rows.Next() {
+		var m StaffMemberView
+		if err := rows.Scan(
+			&m.UserID, &m.Name, &m.Email, &m.UserStatus, &m.MustChangePassword,
+			&m.StaffStatus, &m.CreatedAt, &m.UpdatedAt,
+			&m.RoleCode, &m.RoleName, &m.RoleID,
+		); err != nil {
+			return nil, fmt.Errorf("scan staff member: %w", err)
+		}
+		members = append(members, m)
+	}
+	return members, rows.Err()
+}
+
+// GetRoleByCode returns a StaffRole by its code.
+func (r *Repository) GetRoleByCode(ctx context.Context, code string) (*StaffRole, error) {
+	query := `
+		SELECT id, code, name, description, is_system, created_at, updated_at
+		FROM staff_roles
+		WHERE code = $1
+	`
+	var role StaffRole
+	err := r.db.QueryRow(ctx, query, code).Scan(
+		&role.ID, &role.Code, &role.Name, &role.Description, &role.IsSystem, &role.CreatedAt, &role.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrRoleNotFound
+		}
+		return nil, fmt.Errorf("get role by code: %w", err)
+	}
+	return &role, nil
+}
+
+// InsertStaffMember inserts a new row in staff_members.
+func (r *Repository) InsertStaffMember(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, createdBy *uuid.UUID) error {
+	query := `
+		INSERT INTO staff_members (user_id, staff_role_id, status, created_by, created_at, updated_at)
+		VALUES ($1, $2, 'active', $3, now(), now())
+	`
+	_, err := r.db.Exec(ctx, query, userID, roleID, createdBy)
+	if err != nil {
+		return fmt.Errorf("insert staff member: %w", err)
+	}
+	return nil
+}
+
+// UpdateStaffRole updates the staff_role_id for a given user in staff_members.
+func (r *Repository) UpdateStaffRole(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) error {
+	query := `
+		UPDATE staff_members
+		SET staff_role_id = $1, updated_at = now()
+		WHERE user_id = $2
+	`
+	res, err := r.db.Exec(ctx, query, roleID, userID)
+	if err != nil {
+		return fmt.Errorf("update staff role: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrStaffMemberNotFound
+	}
+	return nil
+}
+
+// UpdateStaffStatus updates the status column in staff_members for a given user.
+func (r *Repository) UpdateStaffStatus(ctx context.Context, userID uuid.UUID, status string) error {
+	query := `
+		UPDATE staff_members
+		SET status = $1, updated_at = now()
+		WHERE user_id = $2
+	`
+	res, err := r.db.Exec(ctx, query, status, userID)
+	if err != nil {
+		return fmt.Errorf("update staff status: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrStaffMemberNotFound
+	}
+	return nil
+}
+
+// CountActiveOwners counts active staff members that have the 'owner' role.
+func (r *Repository) CountActiveOwners(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM staff_members sm
+		JOIN staff_roles sr ON sr.id = sm.staff_role_id
+		WHERE sm.status = 'active' AND sr.code = 'owner'
+	`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count active owners: %w", err)
+	}
+	return count, nil
 }
 
 // EnsureOwnerForSeed upserts the given user as owner — used only by dev-seed.

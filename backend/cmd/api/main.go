@@ -141,7 +141,7 @@ func main() {
 	// Staff RBAC
 	staffRepo := staff.NewRepository(pgClient.Pool)
 	staffAuditRepo := staff.NewAuditRepository(pgClient.Pool)
-	staffService := staff.NewService(staffRepo)
+	staffService := staff.NewService(staffRepo, userRepo, pgClient)
 	staffHandler := staff.NewHandler(staffService, staffAuditRepo, userRepo)
 	sellersHandler = sellersHandler.WithAudit(staffAuditRepo)
 	payoutsHandler = payoutsHandler.WithAudit(staffAuditRepo)

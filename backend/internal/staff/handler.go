@@ -2,15 +2,17 @@ package staff
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
 
-// Handler serves the /api/admin/me, /api/admin/staff/roles and /api/admin/audit-logs endpoints.
+// Handler serves the /api/admin/* staff-related endpoints.
 type Handler struct {
 	service   *Service
 	auditRepo *AuditRepository
@@ -134,6 +136,261 @@ func (h *Handler) GetAuditLogs(w http.ResponseWriter, r *http.Request) {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+// ListStaffMembers returns all staff members.
+// GET /api/admin/staff/members
+func (h *Handler) ListStaffMembers(w http.ResponseWriter, r *http.Request) {
+	members, err := h.service.ListStaffMembers(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list staff members")
+		return
+	}
+	if members == nil {
+		members = []StaffMemberView{}
+	}
+	h.writeJSON(w, http.StatusOK, map[string]any{"items": members})
+}
+
+// CreateStaffMember creates a new admin user with a staff role.
+// POST /api/admin/staff/members
+func (h *Handler) CreateStaffMember(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := userIDFromCtx(r)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+
+	var req struct {
+		Name              string `json:"name"`
+		Email             string `json:"email"`
+		Phone             string `json:"phone"`
+		RoleCode          string `json:"roleCode"`
+		TemporaryPassword string `json:"temporaryPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	// Validate required fields
+	if req.Name == "" {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "name is required")
+		return
+	}
+	if req.Email == "" {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "email is required")
+		return
+	}
+	if req.RoleCode == "" {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "roleCode is required")
+		return
+	}
+	if len(req.TemporaryPassword) < 8 {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "temporaryPassword must be at least 8 characters")
+		return
+	}
+
+	result, err := h.service.CreateStaffMember(r.Context(), CreateStaffMemberInput{
+		Name:              req.Name,
+		Email:             req.Email,
+		Phone:             req.Phone,
+		RoleCode:          req.RoleCode,
+		TemporaryPassword: req.TemporaryPassword,
+		CreatedByUserID:   actorID,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrDuplicateEmail):
+			h.writeError(w, http.StatusConflict, "duplicate_email", "Email already in use")
+		case errors.Is(err, ErrRoleNotFound):
+			h.writeError(w, http.StatusBadRequest, "role_not_found", "Unknown role code")
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create staff member")
+		}
+		return
+	}
+
+	// Audit — never include password in metadata
+	_ = h.auditRepo.RecordAudit(r.Context(), AuditEvent{
+		ActorUserID: actorID,
+		Action:      "staff.create_access",
+		EntityType:  "staff_member",
+		EntityID:    &result.UserID,
+		IP:          r.RemoteAddr,
+		Metadata:    map[string]any{"email": result.Email, "roleCode": result.RoleCode},
+	})
+
+	h.writeJSON(w, http.StatusCreated, map[string]any{
+		"userId":                    result.UserID,
+		"email":                     result.Email,
+		"roleCode":                  result.RoleCode,
+		"temporaryPasswordReturned": false,
+	})
+}
+
+// UpdateStaffRole updates a staff member's role.
+// PATCH /api/admin/staff/members/{userId}/role
+func (h *Handler) UpdateStaffRole(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := userIDFromCtx(r)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+
+	targetID, err := uuid.Parse(chi.URLParam(r, "userId"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid userId")
+		return
+	}
+
+	var req struct {
+		RoleCode string `json:"roleCode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+	if req.RoleCode == "" {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "roleCode is required")
+		return
+	}
+
+	if err := h.service.UpdateStaffRole(r.Context(), UpdateStaffRoleInput{
+		TargetUserID: targetID,
+		NewRoleCode:  req.RoleCode,
+		ActorUserID:  actorID,
+	}); err != nil {
+		switch {
+		case errors.Is(err, ErrTargetNotStaff):
+			h.writeError(w, http.StatusNotFound, "not_found", "Staff member not found")
+		case errors.Is(err, ErrCannotDemoteOwner):
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
+		case errors.Is(err, ErrCannotPromoteToOwner):
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
+		case errors.Is(err, ErrRoleNotFound):
+			h.writeError(w, http.StatusBadRequest, "role_not_found", "Unknown role code")
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update role")
+		}
+		return
+	}
+
+	_ = h.auditRepo.RecordAudit(r.Context(), AuditEvent{
+		ActorUserID: actorID,
+		Action:      "staff.role_update",
+		EntityType:  "staff_member",
+		EntityID:    &targetID,
+		IP:          r.RemoteAddr,
+		Metadata:    map[string]any{"newRoleCode": req.RoleCode},
+	})
+
+	h.writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+// UpdateStaffStatus updates a staff member's status.
+// PATCH /api/admin/staff/members/{userId}/status
+func (h *Handler) UpdateStaffStatus(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := userIDFromCtx(r)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+
+	targetID, err := uuid.Parse(chi.URLParam(r, "userId"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid userId")
+		return
+	}
+
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+	if req.Status != "active" && req.Status != "blocked" && req.Status != "archived" {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "status must be active, blocked, or archived")
+		return
+	}
+
+	if err := h.service.UpdateStaffStatus(r.Context(), UpdateStaffStatusInput{
+		TargetUserID: targetID,
+		NewStatus:    req.Status,
+		ActorUserID:  actorID,
+	}); err != nil {
+		switch {
+		case errors.Is(err, ErrTargetNotStaff):
+			h.writeError(w, http.StatusNotFound, "not_found", "Staff member not found")
+		case errors.Is(err, ErrCannotBlockLastOwner):
+			h.writeError(w, http.StatusConflict, "last_owner", err.Error())
+		case errors.Is(err, ErrCannotDemoteOwner):
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update status")
+		}
+		return
+	}
+
+	_ = h.auditRepo.RecordAudit(r.Context(), AuditEvent{
+		ActorUserID: actorID,
+		Action:      "staff.status_update",
+		EntityType:  "staff_member",
+		EntityID:    &targetID,
+		IP:          r.RemoteAddr,
+		Metadata:    map[string]any{"newStatus": req.Status},
+	})
+
+	h.writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+// ResetStaffPassword resets a staff member's password.
+// POST /api/admin/staff/members/{userId}/reset-password
+func (h *Handler) ResetStaffPassword(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := userIDFromCtx(r)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+
+	targetID, err := uuid.Parse(chi.URLParam(r, "userId"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid userId")
+		return
+	}
+
+	var req struct {
+		TemporaryPassword string `json:"temporaryPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+	if len(req.TemporaryPassword) < 8 {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "temporaryPassword must be at least 8 characters")
+		return
+	}
+
+	if err := h.service.ResetStaffPassword(r.Context(), ResetStaffPasswordInput{
+		TargetUserID:      targetID,
+		TemporaryPassword: req.TemporaryPassword,
+	}); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to reset password")
+		return
+	}
+
+	// Audit — NO password in metadata
+	_ = h.auditRepo.RecordAudit(r.Context(), AuditEvent{
+		ActorUserID: actorID,
+		Action:      "staff.reset_password",
+		EntityType:  "staff_member",
+		EntityID:    &targetID,
+		IP:          r.RemoteAddr,
+		Metadata:    map[string]any{},
+	})
+
+	h.writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
 func userIDFromCtx(r *http.Request) (uuid.UUID, bool) {

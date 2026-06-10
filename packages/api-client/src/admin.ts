@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement } from './types';
+import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest } from './types';
 
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCount: number }> => {
@@ -180,3 +180,29 @@ export const uploadAdminProductImage = async (productId: string, file: File): Pr
   formData.append('image', file);
   return request<{ imageUrl: string }>('POST', `/admin/products/${productId}/images/upload`, { body: formData });
 };
+
+// ---- Staff Management (Phase C) ----
+
+export const getAdminMe = async (): Promise<AdminMeResponse> =>
+  request<AdminMeResponse>('GET', '/admin/me');
+
+export const listStaffRoles = async (): Promise<{ items: StaffRoleWithPermissions[] }> =>
+  request<{ items: StaffRoleWithPermissions[] }>('GET', '/admin/staff/roles');
+
+export const listStaffMembers = async (): Promise<{ items: StaffMemberView[] }> =>
+  request<{ items: StaffMemberView[] }>('GET', '/admin/staff/members');
+
+export const createStaffMember = async (data: CreateStaffMemberRequest): Promise<CreateStaffMemberResponse> =>
+  request<CreateStaffMemberResponse>('POST', '/admin/staff/members', { body: data });
+
+export const updateStaffRole = async (userId: string, data: UpdateStaffRoleRequest): Promise<void> =>
+  request<void>('PATCH', `/admin/staff/members/${userId}/role`, { body: data });
+
+export const updateStaffStatus = async (userId: string, data: UpdateStaffStatusRequest): Promise<void> =>
+  request<void>('PATCH', `/admin/staff/members/${userId}/status`, { body: data });
+
+export const resetStaffPassword = async (userId: string, data: ResetStaffPasswordRequest): Promise<void> =>
+  request<void>('POST', `/admin/staff/members/${userId}/reset-password`, { body: data });
+
+export const listAuditLogs = async (limit = 50, offset = 0): Promise<{ items: any[]; total: number; limit: number; offset: number }> =>
+  request('GET', `/admin/audit-logs?limit=${limit}&offset=${offset}`);

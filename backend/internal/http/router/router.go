@@ -222,10 +222,17 @@ func New(
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireRole(users.RoleAdmin))
 
-		// Staff RBAC endpoints (Phase B) — auth+role guard only, no RequirePermission yet
+		// Staff RBAC endpoints (Phase B/C) — auth+role guard only, no RequirePermission yet
 		r.Get("/me", staffHandler.GetAdminMe)
 		r.Get("/staff/roles", staffHandler.GetStaffRoles)
 		r.Get("/audit-logs", staffHandler.GetAuditLogs)
+
+		// Staff member management (Phase C)
+		r.Get("/staff/members", staffHandler.ListStaffMembers)
+		r.Post("/staff/members", staffHandler.CreateStaffMember)
+		r.Patch("/staff/members/{userId}/role", staffHandler.UpdateStaffRole)
+		r.Patch("/staff/members/{userId}/status", staffHandler.UpdateStaffStatus)
+		r.Post("/staff/members/{userId}/reset-password", staffHandler.ResetStaffPassword)
 
 		r.Get("/categories", catalogHandler.ListCategories)
 		r.Post("/categories", catalogHandler.CreateCategory)

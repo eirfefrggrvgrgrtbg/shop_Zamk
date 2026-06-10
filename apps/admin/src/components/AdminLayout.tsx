@@ -15,17 +15,26 @@ import {
   CreditCard,
   Truck,
   ReceiptText,
-  Star
+  Star,
+  Users,
+  Shield,
+  ClipboardList,
 } from 'lucide-react';
 
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 
+interface NavItem {
+  name: string;
+  path: string;
+  icon: React.ElementType;
+  permission?: string;
+}
+
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const { logout, user } = useAdminAuth();
+  const { logout, user, hasPermission } = useAdminAuth();
 
-  // Sidebar nav — Users, AuditLog, Settings removed from sidebar (still accessible via direct URL)
-  const navItems = [
+  const baseNavItems: NavItem[] = [
     { name: 'Главная', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Продавцы', path: '/sellers', icon: Store },
     { name: 'Товары', path: '/products', icon: Package },
@@ -41,6 +50,18 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { name: 'Отзывы', path: '/reviews', icon: Star },
   ];
 
+  const staffNavItems: NavItem[] = [
+    { name: 'Доступы и роли', path: '/roles', icon: Shield, permission: 'roles.read' },
+    { name: 'Сотрудники', path: '/staff', icon: Users, permission: 'staff.read' },
+    { name: 'Журнал действий', path: '/audit', icon: ClipboardList, permission: 'audit.read' },
+  ];
+
+  const visibleStaffItems = staffNavItems.filter(item =>
+    !item.permission || hasPermission(item.permission)
+  );
+
+  const allNavItems = [...baseNavItems, ...visibleStaffItems];
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
@@ -49,7 +70,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           <Link to="/dashboard" className="text-xl font-bold tracking-wider">ZAMK Admin</Link>
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {baseNavItems.map((item) => {
             const isActive = location.pathname === item.path || (location.pathname.startsWith(item.path + '/') && item.path !== '/');
             return (
               <Link
@@ -64,6 +85,29 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+
+          {visibleStaffItems.length > 0 && (
+            <>
+              <div className="pt-4 pb-1">
+                <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Администрирование</p>
+              </div>
+              {visibleStaffItems.map((item) => {
+                const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`flex items-center px-3 py-2 text-sm font-medium rounded-md group transition-colors ${
+                      isActive ? "bg-slate-800 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <item.icon className={`mr-3 h-5 w-5 flex-shrink-0 ${isActive ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-300"}`} />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </>
+          )}
         </nav>
         <div className="p-4 border-t border-slate-800">
           <button onClick={() => logout()} className="w-full flex items-center px-3 py-2 text-sm font-medium text-slate-300 rounded-md hover:bg-slate-800 transition-colors">
@@ -78,7 +122,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         {/* Top Header */}
         <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6 shrink-0">
           <h1 className="text-xl font-semibold text-gray-800">
-            {navItems.find(item => location.pathname.startsWith(item.path))?.name || 'Панель администратора'}
+            {allNavItems.find(item => location.pathname.startsWith(item.path))?.name || 'Панель администратора'}
           </h1>
           <div className="flex items-center space-x-4">
             <button className="text-gray-400 hover:text-gray-600 transition-colors relative">

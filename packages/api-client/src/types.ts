@@ -465,6 +465,79 @@ export interface AdminPayout {
   updatedAt?: string;
 }
 
+// ---------------------------------------------------------
+// STAFF MANAGEMENT DTOs (Phase C)
+// ---------------------------------------------------------
+
+export interface StaffMemberView {
+  userId: string;
+  name: string;
+  email: string;
+  userStatus: string;
+  mustChangePassword: boolean;
+  staffStatus: string;
+  roleCode: string;
+  roleName: string;
+  roleId: string;
+  permissions: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StaffRoleWithPermissions {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  isSystem: boolean;
+  permissions: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminMeResponse {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    status: string;
+  };
+  staff: {
+    roleCode: string;
+    roleName: string;
+    status: string;
+    permissions: string[];
+  } | null;
+}
+
+export interface CreateStaffMemberRequest {
+  name: string;
+  email: string;
+  phone?: string;
+  roleCode: string;
+  temporaryPassword: string;
+}
+
+export interface CreateStaffMemberResponse {
+  userId: string;
+  email: string;
+  roleCode: string;
+  temporaryPasswordReturned: boolean;
+}
+
+export interface UpdateStaffRoleRequest {
+  roleCode: string;
+}
+
+export interface UpdateStaffStatusRequest {
+  status: 'active' | 'blocked' | 'archived';
+}
+
+export interface ResetStaffPasswordRequest {
+  temporaryPassword: string;
+}
+
 export interface AdminReview {
   id: string;
   productId: string;
