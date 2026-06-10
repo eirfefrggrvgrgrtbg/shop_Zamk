@@ -27,27 +27,35 @@ interface NavItem {
   name: string;
   path: string;
   icon: React.ElementType;
-  permission?: string;
+  permission?: string | string[];
 }
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const { logout, user, hasPermission } = useAdminAuth();
+  const { logout, user, staff, hasPermission, hasAnyPermission } = useAdminAuth();
+
+  const isPermissionVisible = (permission?: string | string[]) => {
+    if (!permission) return true;
+    // If staff is null (legacy admin with no staff row), hide all permission-gated items
+    if (staff === null) return false;
+    if (Array.isArray(permission)) return hasAnyPermission(permission);
+    return hasPermission(permission);
+  };
 
   const baseNavItems: NavItem[] = [
     { name: 'Главная', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Продавцы', path: '/sellers', icon: Store },
-    { name: 'Товары', path: '/products', icon: Package },
-    { name: 'Модерация', path: '/moderation', icon: ShieldAlert },
-    { name: 'Категории и бренды', path: '/catalog', icon: BookOpen },
-    { name: 'Заказы', path: '/orders', icon: ShoppingCart },
-    { name: 'Доставка / Отгрузки', path: '/shipments', icon: Truck },
-    { name: 'Остатки / Склад', path: '/inventory', icon: Boxes },
-    { name: 'Платежи покупателей', path: '/payments', icon: CreditCard },
-    { name: 'Возвраты', path: '/returns', icon: RotateCcw },
-    { name: 'Возмещения', path: '/refunds', icon: ReceiptText },
-    { name: 'Выплаты продавцам', path: '/payouts', icon: Wallet },
-    { name: 'Отзывы', path: '/reviews', icon: Star },
+    { name: 'Продавцы', path: '/sellers', icon: Store, permission: 'sellers.read' },
+    { name: 'Товары', path: '/products', icon: Package, permission: 'products.read' },
+    { name: 'Модерация', path: '/moderation', icon: ShieldAlert, permission: 'products.moderate' },
+    { name: 'Категории и бренды', path: '/catalog', icon: BookOpen, permission: ['categories.read', 'brands.read'] },
+    { name: 'Заказы', path: '/orders', icon: ShoppingCart, permission: 'orders.read' },
+    { name: 'Доставка / Отгрузки', path: '/shipments', icon: Truck, permission: 'shipments.read' },
+    { name: 'Остатки / Склад', path: '/inventory', icon: Boxes, permission: 'inventory.read' },
+    { name: 'Платежи покупателей', path: '/payments', icon: CreditCard, permission: 'payments.read' },
+    { name: 'Возвраты', path: '/returns', icon: RotateCcw, permission: 'returns.read' },
+    { name: 'Возмещения', path: '/refunds', icon: ReceiptText, permission: 'refunds.read' },
+    { name: 'Выплаты продавцам', path: '/payouts', icon: Wallet, permission: 'payouts.read' },
+    { name: 'Отзывы', path: '/reviews', icon: Star, permission: 'reviews.read' },
   ];
 
   const staffNavItems: NavItem[] = [
@@ -56,11 +64,10 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { name: 'Журнал действий', path: '/audit', icon: ClipboardList, permission: 'audit.read' },
   ];
 
-  const visibleStaffItems = staffNavItems.filter(item =>
-    !item.permission || hasPermission(item.permission)
-  );
+  const visibleBaseItems = baseNavItems.filter(item => isPermissionVisible(item.permission));
+  const visibleStaffItems = staffNavItems.filter(item => isPermissionVisible(item.permission));
 
-  const allNavItems = [...baseNavItems, ...visibleStaffItems];
+  const allNavItems = [...visibleBaseItems, ...visibleStaffItems];
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -70,7 +77,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           <Link to="/dashboard" className="text-xl font-bold tracking-wider">ZAMK Admin</Link>
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          {baseNavItems.map((item) => {
+          {visibleBaseItems.map((item) => {
             const isActive = location.pathname === item.path || (location.pathname.startsWith(item.path + '/') && item.path !== '/');
             return (
               <Link

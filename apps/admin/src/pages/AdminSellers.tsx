@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getAdminSellers, createAdminSeller, updateAdminSellerStatus } from '../api/adminOperations';
 import type { AdminSeller } from '@zamk/api-client/src/types';
 import { AlertCircle, Plus, CheckCircle2, Store } from 'lucide-react';
+import { PermissionGuard } from '../components/PermissionGuard';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Ожидает активации',
@@ -115,13 +116,15 @@ export function AdminSellers() {
           <h1 className="text-2xl font-bold text-gray-900">Продавцы</h1>
           <p className="mt-1 text-sm text-gray-500">Управление доступом продавцов на платформе</p>
         </div>
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="mt-3 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
-        >
-          <Plus className="-ml-1 mr-2 h-5 w-5" />
-          Создать доступ продавца
-        </button>
+        <PermissionGuard permission="sellers.create_access">
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="mt-3 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+          >
+            <Plus className="-ml-1 mr-2 h-5 w-5" />
+            Создать доступ продавца
+          </button>
+        </PermissionGuard>
       </div>
 
       {error && (
@@ -168,15 +171,17 @@ export function AdminSellers() {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-3">
-                          {seller.status !== 'active' && (
-                            <button onClick={() => handleStatusChange(seller.id, 'active')} className="text-green-600 hover:text-green-900">Активировать</button>
-                          )}
-                          {seller.status === 'pending' && (
-                            <button onClick={() => handleStatusChange(seller.id, 'blocked')} className="text-red-600 hover:text-red-900">Отклонить</button>
-                          )}
-                          {seller.status === 'active' && (
-                            <button onClick={() => handleStatusChange(seller.id, 'blocked')} className="text-red-600 hover:text-red-900">Заблокировать</button>
-                          )}
+                          <PermissionGuard permission="sellers.update_status">
+                            {seller.status !== 'active' && (
+                              <button onClick={() => handleStatusChange(seller.id, 'active')} className="text-green-600 hover:text-green-900">Активировать</button>
+                            )}
+                            {seller.status === 'pending' && (
+                              <button onClick={() => handleStatusChange(seller.id, 'blocked')} className="text-red-600 hover:text-red-900">Отклонить</button>
+                            )}
+                            {seller.status === 'active' && (
+                              <button onClick={() => handleStatusChange(seller.id, 'blocked')} className="text-red-600 hover:text-red-900">Заблокировать</button>
+                            )}
+                          </PermissionGuard>
                         </td>
                       </tr>
                     ))}

@@ -86,10 +86,15 @@ export const request = async <T>(
     }
 
     if (!response.ok) {
-      // Handle standard backend error shape
+      // Handle nested error shape: { error: { code, message } }
       if (data && data.error && typeof data.error === 'object') {
         const code = data.error.code;
         throw new ApiError(getSafeErrorMessage(code, data.error.message), code, response.status);
+      }
+      // Handle flat error shape: { error: "code", message: "..." }
+      if (data && typeof data.error === 'string') {
+        const code = data.error;
+        throw new ApiError(getSafeErrorMessage(code, data.message), code, response.status);
       }
       throw new ApiError(`HTTP Error ${response.status}`, 'HTTP_ERROR', response.status);
     }
@@ -115,6 +120,8 @@ export const request = async <T>(
 
 const getSafeErrorMessage = (code?: string, fallback?: string): string => {
   switch (code) {
+    case 'insufficient_permissions':
+      return 'Недостаточно прав для выполнения действия.';
     case 'invalid_request':
       return 'Проверьте правильность заполнения формы';
     case 'validation_error':

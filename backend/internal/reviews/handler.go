@@ -1,20 +1,36 @@
 package reviews
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
-	svc *Service
+	svc       *Service
+	auditRepo *staff.AuditRepository
+	staffSvc  *staff.Service
 }
 
 func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
+}
+
+// WithAudit attaches an audit repository for fire-and-forget audit logging.
+func (h *Handler) WithAudit(ar *staff.AuditRepository) *Handler {
+	h.auditRepo = ar
+	return h
+}
+
+// WithStaffSvc attaches a staff service for handler-level permission checks.
+func (h *Handler) WithStaffSvc(svc *staff.Service) *Handler {
+	h.staffSvc = svc
+	return h
 }
 
 // Customer Endpoints
@@ -161,6 +177,34 @@ func (h *Handler) ModerateReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handler-level dynamic permission check based on action
+	if h.staffSvc != nil {
+		permMap := map[string]string{
+			"approve": "reviews.approve",
+			"reject":  "reviews.reject",
+			"hide":    "reviews.hide",
+			"block":   "reviews.block",
+		}
+		requiredPerm, known := permMap[action]
+		if !known {
+			http.Error(w, "invalid action", http.StatusBadRequest)
+			return
+		}
+		ok, permErr := h.staffSvc.HasPermission(r.Context(), adminID, requiredPerm)
+		if permErr != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "internal_error", "message": "Permission check failed"})
+			return
+		}
+		if !ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]string{"error": "insufficient_permissions", "message": "Недостаточно прав"})
+			return
+		}
+	}
+
 	var req AdminModerationRequest
 	if r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -195,6 +239,22 @@ func (h *Handler) ModerateReview(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
+	}
+
+	// Audit on success
+	if h.auditRepo != nil {
+		rid := id
+		actorID := adminID
+		auditAction := "review." + action
+		go func() {
+			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
+				ActorUserID: actorID,
+				Action:      auditAction,
+				EntityType:  "review",
+				EntityID:    &rid,
+				Metadata:    staff.SanitizeMetadata(map[string]any{"action": action}),
+			})
+		}()
 	}
 
 	w.WriteHeader(http.StatusOK)

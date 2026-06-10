@@ -89,9 +89,13 @@ func (s *testService) HasPermission(ctx context.Context, userID uuid.UUID, permi
 }
 
 var (
-	ownerRoleID    = uuid.MustParse("a0000000-0000-0000-0000-000000000001")
+	ownerRoleID     = uuid.MustParse("a0000000-0000-0000-0000-000000000001")
 	moderatorRoleID = uuid.MustParse("a0000000-0000-0000-0000-000000000002")
-	testUserID     = uuid.MustParse("b0000000-0000-0000-0000-000000000001")
+	financeRoleID   = uuid.MustParse("a0000000-0000-0000-0000-000000000003")
+	supportRoleID   = uuid.MustParse("a0000000-0000-0000-0000-000000000004")
+	contentRoleID   = uuid.MustParse("a0000000-0000-0000-0000-000000000005")
+	warehouseRoleID = uuid.MustParse("a0000000-0000-0000-0000-000000000006")
+	testUserID      = uuid.MustParse("b0000000-0000-0000-0000-000000000001")
 )
 
 func makeOwnerPerms() []string {
@@ -127,6 +131,43 @@ func makeModeratorPerms() []string {
 		"reviews.read", "reviews.approve", "reviews.reject", "reviews.hide", "reviews.block",
 		"complaints.read", "complaints.resolve",
 		"sellers.read",
+	}
+}
+
+func makeFinancePerms() []string {
+	return []string{
+		"payouts.read", "payouts.approve", "payouts.reject", "payouts.mark_paid",
+		"payments.read",
+		"refunds.read", "refunds.create",
+		"orders.read",
+		"returns.read",
+		"analytics.read", "exports.excel",
+	}
+}
+
+func makeSupportPerms() []string {
+	return []string{
+		"orders.read",
+		"returns.read",
+		"complaints.read", "complaints.resolve",
+		"support.read", "support.respond", "support.close",
+		"sellers.read",
+	}
+}
+
+func makeContentManagerPerms() []string {
+	return []string{
+		"categories.read", "categories.create", "categories.update", "categories.delete",
+		"brands.read", "brands.create", "brands.update", "brands.delete",
+		"products.read",
+	}
+}
+
+func makeWarehousePerms() []string {
+	return []string{
+		"inventory.read", "inventory.receipt", "inventory.adjust", "inventory.write_off", "inventory.movements.read",
+		"shipments.read", "shipments.create", "shipments.update_status",
+		"orders.read",
 	}
 }
 
@@ -366,6 +407,101 @@ func TestHasPermission(t *testing.T) {
 			permission: "audit.read",
 			want:       false,
 			wantErr:    true,
+		},
+		// Phase D: Finance role
+		{
+			name: "finance → payouts.approve true",
+			stub: &stubRepo{
+				member: &StaffMember{UserID: testUserID, StaffRoleID: financeRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+				role:   &StaffRole{ID: financeRoleID, Code: "finance_manager", Name: "Финансовый менеджер", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+				perms:  makeFinancePerms(),
+			},
+			permission: "payouts.approve",
+			want:       true,
+		},
+		{
+			name: "finance → products.moderate false",
+			stub: &stubRepo{
+				member: &StaffMember{UserID: testUserID, StaffRoleID: financeRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+				role:   &StaffRole{ID: financeRoleID, Code: "finance_manager", Name: "Финансовый менеджер", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+				perms:  makeFinancePerms(),
+			},
+			permission: "products.moderate",
+			want:       false,
+		},
+		// Phase D: Support role
+		{
+			name: "support → orders.read true",
+			stub: &stubRepo{
+				member: &StaffMember{UserID: testUserID, StaffRoleID: supportRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+				role:   &StaffRole{ID: supportRoleID, Code: "support", Name: "Поддержка", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+				perms:  makeSupportPerms(),
+			},
+			permission: "orders.read",
+			want:       true,
+		},
+		{
+			name: "support → orders.update_status false",
+			stub: &stubRepo{
+				member: &StaffMember{UserID: testUserID, StaffRoleID: supportRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+				role:   &StaffRole{ID: supportRoleID, Code: "support", Name: "Поддержка", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+				perms:  makeSupportPerms(),
+			},
+			permission: "orders.update_status",
+			want:       false,
+		},
+		// Phase D: Content manager role
+		{
+			name: "content manager → categories.create true",
+			stub: &stubRepo{
+				member: &StaffMember{UserID: testUserID, StaffRoleID: contentRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+				role:   &StaffRole{ID: contentRoleID, Code: "content_manager", Name: "Контент-менеджер", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+				perms:  makeContentManagerPerms(),
+			},
+			permission: "categories.create",
+			want:       true,
+		},
+		{
+			name: "content manager → products.approve false",
+			stub: &stubRepo{
+				member: &StaffMember{UserID: testUserID, StaffRoleID: contentRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+				role:   &StaffRole{ID: contentRoleID, Code: "content_manager", Name: "Контент-менеджер", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+				perms:  makeContentManagerPerms(),
+			},
+			permission: "products.approve",
+			want:       false,
+		},
+		// Phase D: Warehouse role
+		{
+			name: "warehouse → inventory.receipt true",
+			stub: &stubRepo{
+				member: &StaffMember{UserID: testUserID, StaffRoleID: warehouseRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+				role:   &StaffRole{ID: warehouseRoleID, Code: "logistics", Name: "Логистика", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+				perms:  makeWarehousePerms(),
+			},
+			permission: "inventory.receipt",
+			want:       true,
+		},
+		{
+			name: "warehouse → payouts.read false",
+			stub: &stubRepo{
+				member: &StaffMember{UserID: testUserID, StaffRoleID: warehouseRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+				role:   &StaffRole{ID: warehouseRoleID, Code: "logistics", Name: "Логистика", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+				perms:  makeWarehousePerms(),
+			},
+			permission: "payouts.read",
+			want:       false,
+		},
+		// Phase D: owner has payouts.mark_paid
+		{
+			name: "owner → payouts.mark_paid true",
+			stub: &stubRepo{
+				member: &StaffMember{UserID: testUserID, StaffRoleID: ownerRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+				role:   &StaffRole{ID: ownerRoleID, Code: "owner", Name: "Владелец", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+				perms:  makeOwnerPerms(),
+			},
+			permission: "payouts.mark_paid",
+			want:       true,
 		},
 	}
 

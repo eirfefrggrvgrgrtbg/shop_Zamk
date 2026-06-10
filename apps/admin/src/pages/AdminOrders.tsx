@@ -14,6 +14,7 @@ import {
   createAdminShipment,
   getAdminShipmentErrorMessage,
 } from '../api/adminShipments';
+import { PermissionGuard } from '../components/PermissionGuard';
 
 export function AdminOrders() {
   const navigate = useNavigate();
@@ -313,67 +314,77 @@ export function AdminOrders() {
 
                   {/* Status update */}
                   {getAllowedOrderStatusTargets(selectedOrder.status).length > 0 && (
-                    <form onSubmit={handleStatusUpdate} className="space-y-3 border-t pt-4">
-                      <p className="text-xs font-medium text-gray-500 uppercase">Изменить статус</p>
-                      <select
-                        required
-                        value={statusDraft}
-                        onChange={(e) => setStatusDraft(e.target.value)}
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
-                      >
-                        <option value="">Выберите статус</option>
-                        {getAllowedOrderStatusTargets(selectedOrder.status).map((status) => (
-                          <option key={status} value={status}>{getOrderStatusLabel(status)}</option>
-                        ))}
-                      </select>
-                      <textarea
-                        rows={2}
-                        value={statusComment}
-                        onChange={(e) => setStatusComment(e.target.value)}
-                        placeholder="Комментарий (необязательно)"
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
-                      />
-                      <p className="text-xs text-gray-500">Статус «Оплачен» устанавливается только платёжным вебхуком и не отображается здесь.</p>
-                      <button
-                        type="submit"
-                        disabled={isSubmitting || !statusDraft}
-                        className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                      >
-                        {isSubmitting ? 'Обновление...' : 'Обновить статус'}
-                      </button>
-                    </form>
+                    <PermissionGuard
+                      permission="orders.update_status"
+                      fallback={<p className="text-xs text-gray-400 border-t pt-4">У вас нет прав для изменения статуса заказа.</p>}
+                    >
+                      <form onSubmit={handleStatusUpdate} className="space-y-3 border-t pt-4">
+                        <p className="text-xs font-medium text-gray-500 uppercase">Изменить статус</p>
+                        <select
+                          required
+                          value={statusDraft}
+                          onChange={(e) => setStatusDraft(e.target.value)}
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                        >
+                          <option value="">Выберите статус</option>
+                          {getAllowedOrderStatusTargets(selectedOrder.status).map((status) => (
+                            <option key={status} value={status}>{getOrderStatusLabel(status)}</option>
+                          ))}
+                        </select>
+                        <textarea
+                          rows={2}
+                          value={statusComment}
+                          onChange={(e) => setStatusComment(e.target.value)}
+                          placeholder="Комментарий (необязательно)"
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                        />
+                        <p className="text-xs text-gray-500">Статус «Оплачен» устанавливается только платёжным вебхуком и не отображается здесь.</p>
+                        <button
+                          type="submit"
+                          disabled={isSubmitting || !statusDraft}
+                          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                        >
+                          {isSubmitting ? 'Обновление...' : 'Обновить статус'}
+                        </button>
+                      </form>
+                    </PermissionGuard>
                   )}
 
                   {/* Create shipment */}
                   {selectedOrder.status === 'paid' && (
-                    <form onSubmit={handleCreateShipment} className="space-y-3 border-t pt-4">
-                      <p className="text-xs font-medium text-gray-500 uppercase">Создать отгрузку</p>
-                      <input
-                        value={shipmentCarrier}
-                        onChange={(e) => setShipmentCarrier(e.target.value)}
-                        placeholder="Служба доставки"
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
-                      />
-                      <input
-                        value={shipmentTrackingNumber}
-                        onChange={(e) => setShipmentTrackingNumber(e.target.value)}
-                        placeholder="Трек-номер"
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
-                      />
-                      <input
-                        value={shipmentTrackingUrl}
-                        onChange={(e) => setShipmentTrackingUrl(e.target.value)}
-                        placeholder="Ссылка для отслеживания"
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
-                      />
-                      <button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                      >
-                        {isSubmitting ? 'Создание...' : 'Создать отгрузку'}
-                      </button>
-                    </form>
+                    <PermissionGuard
+                      permission="shipments.create"
+                      fallback={<p className="text-xs text-gray-400 border-t pt-4">У вас нет прав для создания отгрузки.</p>}
+                    >
+                      <form onSubmit={handleCreateShipment} className="space-y-3 border-t pt-4">
+                        <p className="text-xs font-medium text-gray-500 uppercase">Создать отгрузку</p>
+                        <input
+                          value={shipmentCarrier}
+                          onChange={(e) => setShipmentCarrier(e.target.value)}
+                          placeholder="Служба доставки"
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                        />
+                        <input
+                          value={shipmentTrackingNumber}
+                          onChange={(e) => setShipmentTrackingNumber(e.target.value)}
+                          placeholder="Трек-номер"
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                        />
+                        <input
+                          value={shipmentTrackingUrl}
+                          onChange={(e) => setShipmentTrackingUrl(e.target.value)}
+                          placeholder="Ссылка для отслеживания"
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isSubmitting}
+                          className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                        >
+                          {isSubmitting ? 'Создание...' : 'Создать отгрузку'}
+                        </button>
+                      </form>
+                    </PermissionGuard>
                   )}
 
                   {/* Navigate to shipments */}

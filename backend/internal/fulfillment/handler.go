@@ -1,6 +1,7 @@
 package fulfillment
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -8,15 +9,23 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
-	svc *Service
+	svc       *Service
+	auditRepo *staff.AuditRepository
 }
 
 func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
+}
+
+// WithAudit attaches an audit repository for fire-and-forget audit logging.
+func (h *Handler) WithAudit(ar *staff.AuditRepository) *Handler {
+	h.auditRepo = ar
+	return h
 }
 
 func (h *Handler) CreateShipment(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +125,21 @@ func (h *Handler) UpdateShipmentStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if h.auditRepo != nil {
+		sid := id
+		actorID := adminID
+		newStatus := req.Status
+		go func() {
+			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
+				ActorUserID: actorID,
+				Action:      "shipment.status_update",
+				EntityType:  "shipment",
+				EntityID:    &sid,
+				Metadata:    staff.SanitizeMetadata(map[string]any{"newStatus": newStatus}),
+			})
+		}()
 	}
 
 	w.WriteHeader(http.StatusOK)

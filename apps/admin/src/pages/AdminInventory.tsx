@@ -10,6 +10,7 @@ import {
   writeOffInventoryStock,
 } from '../api/adminInventory';
 import type { AdminInventoryMovementView, AdminInventoryView } from '../api/adminInventory';
+import { PermissionGuard } from '../components/PermissionGuard';
 
 type InventoryAction = 'receipt' | 'adjustment' | 'write_off';
 
@@ -195,28 +196,33 @@ export function AdminInventory() {
           <div className="bg-white shadow sm:rounded-lg p-6">
             <h2 className="text-lg font-medium text-gray-900">Операция с остатками</h2>
             <p className="mt-1 text-sm text-gray-500">Вариант: {selectedItem.variant}</p>
-            <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Действие</label>
-                <select value={action} onChange={(event) => setAction(event.target.value as InventoryAction)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                  <option value="receipt">Приёмка</option>
-                  <option value="adjustment">Корректировка</option>
-                  <option value="write_off">Списание</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Количество</label>
-                <input required type="number" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-                {action === 'adjustment' && <p className="mt-1 text-xs text-gray-500">Укажите положительную или отрицательную дельту. Бэкенд проверяет лимиты.</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Причина</label>
-                <textarea required={action !== 'receipt'} rows={3} value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-              </div>
-              <button type="submit" disabled={isSubmitting} className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50">
-                {isSubmitting ? 'Отправка...' : actionLabels[action]}
-              </button>
-            </form>
+            <PermissionGuard
+              permission={['inventory.receipt', 'inventory.adjust', 'inventory.write_off']}
+              fallback={<p className="mt-4 text-sm text-gray-500">У вас нет прав для выполнения операций со складом.</p>}
+            >
+              <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Действие</label>
+                  <select value={action} onChange={(event) => setAction(event.target.value as InventoryAction)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <PermissionGuard permission="inventory.receipt"><option value="receipt">Приёмка</option></PermissionGuard>
+                    <PermissionGuard permission="inventory.adjust"><option value="adjustment">Корректировка</option></PermissionGuard>
+                    <PermissionGuard permission="inventory.write_off"><option value="write_off">Списание</option></PermissionGuard>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Количество</label>
+                  <input required type="number" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                  {action === 'adjustment' && <p className="mt-1 text-xs text-gray-500">Укажите положительную или отрицательную дельту. Бэкенд проверяет лимиты.</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Причина</label>
+                  <textarea required={action !== 'receipt'} rows={3} value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                </div>
+                <button type="submit" disabled={isSubmitting} className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50">
+                  {isSubmitting ? 'Отправка...' : actionLabels[action]}
+                </button>
+              </form>
+            </PermissionGuard>
           </div>
 
           <div className="bg-white shadow sm:rounded-lg p-6">

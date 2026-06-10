@@ -1,6 +1,7 @@
 package orders
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -8,12 +9,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
 	service   *Service
 	validator *validator.Validate
+	auditRepo *staff.AuditRepository
 }
 
 func NewHandler(service *Service) *Handler {
@@ -21,6 +24,12 @@ func NewHandler(service *Service) *Handler {
 		service:   service,
 		validator: validator.New(),
 	}
+}
+
+// WithAudit attaches an audit repository for fire-and-forget audit logging.
+func (h *Handler) WithAudit(ar *staff.AuditRepository) *Handler {
+	h.auditRepo = ar
+	return h
 }
 
 // ---------------------------------------------------------
@@ -225,6 +234,21 @@ func (h *Handler) UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update order status")
 		return
+	}
+
+	if h.auditRepo != nil {
+		oid := orderID
+		actorID := adminID
+		newStatus := req.Status
+		go func() {
+			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
+				ActorUserID: actorID,
+				Action:      "order.status_update",
+				EntityType:  "order",
+				EntityID:    &oid,
+				Metadata:    staff.SanitizeMetadata(map[string]any{"newStatus": newStatus}),
+			})
+		}()
 	}
 
 	w.WriteHeader(http.StatusNoContent)

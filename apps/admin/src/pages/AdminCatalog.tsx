@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getAdminCategories, createAdminCategory, getAdminBrands, createAdminBrand, uploadAdminBrandLogo } from '../api/adminOperations';
 import type { Category, Brand } from '@zamk/api-client/src/types';
 import { AlertCircle, Plus, LayoutGrid, Tag, Upload } from 'lucide-react';
+import { PermissionGuard } from '../components/PermissionGuard';
 
 type Tab = 'categories' | 'brands';
 
@@ -155,13 +156,15 @@ export function AdminCatalog() {
       {activeTab === 'categories' && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <button
-              onClick={() => setCatCreateOpen(true)}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
-            >
-              <Plus className="-ml-1 mr-2 h-5 w-5" />
-              Создать категорию
-            </button>
+            <PermissionGuard permission="categories.create">
+              <button
+                onClick={() => setCatCreateOpen(true)}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                <Plus className="-ml-1 mr-2 h-5 w-5" />
+                Создать категорию
+              </button>
+            </PermissionGuard>
           </div>
 
           {catError && (
@@ -251,13 +254,15 @@ export function AdminCatalog() {
       {activeTab === 'brands' && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <button
-              onClick={() => setBrandCreateOpen(true)}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
-            >
-              <Plus className="-ml-1 mr-2 h-5 w-5" />
-              Создать бренд
-            </button>
+            <PermissionGuard permission="brands.create">
+              <button
+                onClick={() => setBrandCreateOpen(true)}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                <Plus className="-ml-1 mr-2 h-5 w-5" />
+                Создать бренд
+              </button>
+            </PermissionGuard>
           </div>
 
           {brandError && (
@@ -302,6 +307,7 @@ export function AdminCatalog() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{brand.slug}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <PermissionGuard permission="brands.update">
                         <label className="cursor-pointer text-indigo-600 hover:text-indigo-900 flex items-center justify-end">
                           <Upload className="h-4 w-4 mr-1" />
                           {uploadingBrandId === brand.id ? 'Загрузка...' : 'Загрузить логотип'}
@@ -313,6 +319,7 @@ export function AdminCatalog() {
                             onChange={(e) => handleLogoUpload(brand.id, e)}
                           />
                         </label>
+                        </PermissionGuard>
                       </td>
                     </tr>
                   ))}

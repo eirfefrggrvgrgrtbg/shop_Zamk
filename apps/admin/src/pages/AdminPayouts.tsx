@@ -9,6 +9,7 @@ import {
   updateAdminPayoutStatus,
 } from '../api/adminPayouts';
 import type { AdminPayoutView } from '../api/adminPayouts';
+import { PermissionGuard } from '../components/PermissionGuard';
 
 export function AdminPayouts() {
   const [payouts, setPayouts] = useState<AdminPayoutView[]>([]);
@@ -184,18 +185,23 @@ export function AdminPayouts() {
             <div><dt className="text-sm font-medium text-gray-500">Дата запроса</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedPayout.requestedAt)}</dd></div>
           </dl>
 
-          <form onSubmit={handleStatusUpdate} className="mt-6 grid gap-4 md:grid-cols-2">
-            <select required value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)} className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-              <option value="">Выберите новый статус</option>
-              {getPayoutStatusTargets(selectedPayout.status).map((status) => (
-                <option key={status} value={status}>{getPayoutStatusLabel(status)}</option>
-              ))}
-            </select>
-            <input value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Комментарий (необязательно)" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-            <button type="submit" disabled={isSubmitting || !statusDraft} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-              Обновить статус выплаты
-            </button>
-          </form>
+          <PermissionGuard
+            permission={['payouts.approve', 'payouts.reject', 'payouts.mark_paid']}
+            fallback={<p className="mt-6 text-sm text-gray-500">У вас нет прав для изменения статуса выплаты.</p>}
+          >
+            <form onSubmit={handleStatusUpdate} className="mt-6 grid gap-4 md:grid-cols-2">
+              <select required value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)} className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <option value="">Выберите новый статус</option>
+                {getPayoutStatusTargets(selectedPayout.status).map((status) => (
+                  <option key={status} value={status}>{getPayoutStatusLabel(status)}</option>
+                ))}
+              </select>
+              <input value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Комментарий (необязательно)" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              <button type="submit" disabled={isSubmitting || !statusDraft} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                Обновить статус выплаты
+              </button>
+            </form>
+          </PermissionGuard>
         </div>
       )}
     </div>

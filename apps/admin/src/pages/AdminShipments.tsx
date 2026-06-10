@@ -10,6 +10,7 @@ import {
   updateAdminShipmentStatus,
 } from '../api/adminShipments';
 import type { AdminShipmentView } from '../api/adminShipments';
+import { PermissionGuard } from '../components/PermissionGuard';
 
 export function AdminShipments() {
   const [shipments, setShipments] = useState<AdminShipmentView[]>([]);
@@ -144,19 +145,21 @@ export function AdminShipments() {
         </p>
       </div>
 
-      <div className="bg-white shadow sm:rounded-lg p-6">
-        <h2 className="text-lg font-medium text-gray-900">Создать отгрузку вручную</h2>
-        <p className="mt-1 text-sm text-gray-500">Только ручной ввод перевозчика и трекинга. Бэкенд проверяет, что заказ оплачен и подходит для отправки.</p>
-        <form onSubmit={handleCreateShipment} className="mt-4 grid gap-4 md:grid-cols-4">
-          <input required value={createOrderId} onChange={(event) => setCreateOrderId(event.target.value)} placeholder="ID заказа" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-          <input value={carrier} onChange={(event) => setCarrier(event.target.value)} placeholder="Служба доставки" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-          <input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} placeholder="Номер отслеживания" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-          <button type="submit" disabled={isSubmitting} className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
-            Создать
-          </button>
-          <input value={trackingUrl} onChange={(event) => setTrackingUrl(event.target.value)} placeholder="Ссылка для отслеживания" className="md:col-span-3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-        </form>
-      </div>
+      <PermissionGuard permission="shipments.create">
+        <div className="bg-white shadow sm:rounded-lg p-6">
+          <h2 className="text-lg font-medium text-gray-900">Создать отгрузку вручную</h2>
+          <p className="mt-1 text-sm text-gray-500">Только ручной ввод перевозчика и трекинга. Бэкенд проверяет, что заказ оплачен и подходит для отправки.</p>
+          <form onSubmit={handleCreateShipment} className="mt-4 grid gap-4 md:grid-cols-4">
+            <input required value={createOrderId} onChange={(event) => setCreateOrderId(event.target.value)} placeholder="ID заказа" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <input value={carrier} onChange={(event) => setCarrier(event.target.value)} placeholder="Служба доставки" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} placeholder="Номер отслеживания" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <button type="submit" disabled={isSubmitting} className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+              Создать
+            </button>
+            <input value={trackingUrl} onChange={(event) => setTrackingUrl(event.target.value)} placeholder="Ссылка для отслеживания" className="md:col-span-3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+          </form>
+        </div>
+      </PermissionGuard>
 
       {isLoading ? (
         <div className="text-center py-10">
@@ -224,20 +227,25 @@ export function AdminShipments() {
             <div><dt className="text-sm font-medium text-gray-500">Обновлён</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.updatedAt)}</dd></div>
           </dl>
 
-          <form onSubmit={handleUpdateShipment} className="mt-6 grid gap-4 md:grid-cols-2">
-            <select required value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)} className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-              {getShipmentStatuses().map((status) => (
-                <option key={status} value={status}>{getShipmentStatusLabel(status)}</option>
-              ))}
-            </select>
-            <input value={carrier} onChange={(event) => setCarrier(event.target.value)} placeholder="Служба доставки" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-            <input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} placeholder="Номер отслеживания" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-            <input value={trackingUrl} onChange={(event) => setTrackingUrl(event.target.value)} placeholder="Ссылка для отслеживания" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-            <textarea rows={2} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Комментарий (необязательно)" className="md:col-span-2 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-            <button type="submit" disabled={isSubmitting} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-              Обновить отгрузку
-            </button>
-          </form>
+          <PermissionGuard
+            permission="shipments.update_status"
+            fallback={<p className="mt-6 text-sm text-gray-500">У вас нет прав для изменения статуса отгрузки.</p>}
+          >
+            <form onSubmit={handleUpdateShipment} className="mt-6 grid gap-4 md:grid-cols-2">
+              <select required value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)} className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                {getShipmentStatuses().map((status) => (
+                  <option key={status} value={status}>{getShipmentStatusLabel(status)}</option>
+                ))}
+              </select>
+              <input value={carrier} onChange={(event) => setCarrier(event.target.value)} placeholder="Служба доставки" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              <input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} placeholder="Номер отслеживания" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              <input value={trackingUrl} onChange={(event) => setTrackingUrl(event.target.value)} placeholder="Ссылка для отслеживания" className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              <textarea rows={2} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Комментарий (необязательно)" className="md:col-span-2 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+              <button type="submit" disabled={isSubmitting} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                Обновить отгрузку
+              </button>
+            </form>
+          </PermissionGuard>
         </div>
       )}
     </div>

@@ -10,6 +10,7 @@ import {
 import type { StaffMemberView, StaffRoleWithPermissions } from '@zamk/api-client/src/types';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 import { AlertCircle, Plus, CheckCircle2, Users, RefreshCw, Copy } from 'lucide-react';
+import { PermissionGuard } from '../components/PermissionGuard';
 
 // ---- Constants ----
 
@@ -258,13 +259,15 @@ export function AdminStaff() {
           <h1 className="text-2xl font-bold text-gray-900">Сотрудники</h1>
           <p className="mt-1 text-sm text-gray-500">Управление доступом сотрудников платформы</p>
         </div>
-        <button
-          onClick={() => { setIsCreateOpen(true); setCreateError(null); }}
-          className="mt-3 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
-        >
-          <Plus className="-ml-1 mr-2 h-5 w-5" />
-          Создать доступ
-        </button>
+        <PermissionGuard permission="staff.create">
+          <button
+            onClick={() => { setIsCreateOpen(true); setCreateError(null); }}
+            className="mt-3 sm:mt-0 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+          >
+            <Plus className="-ml-1 mr-2 h-5 w-5" />
+            Создать доступ
+          </button>
+        </PermissionGuard>
       </div>
 
       {error && (
@@ -327,33 +330,39 @@ export function AdminStaff() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
-                        {canModify && (
-                          <button
-                            onClick={() => openChangeRole(m)}
-                            className="text-indigo-600 hover:text-indigo-900"
-                          >
-                            Сменить роль
+                        <PermissionGuard permission="staff.update">
+                          {canModify && (
+                            <button
+                              onClick={() => openChangeRole(m)}
+                              className="text-indigo-600 hover:text-indigo-900"
+                            >
+                              Сменить роль
+                            </button>
+                          )}
+                        </PermissionGuard>
+                        <PermissionGuard permission="staff.block">
+                          {m.staffStatus !== 'active' && !isCurrentUser && canModify && (
+                            <button onClick={() => handleStatusChange(m, 'active')} className="text-green-600 hover:text-green-900">
+                              Восстановить
+                            </button>
+                          )}
+                          {m.staffStatus === 'active' && !isCurrentUser && canModify && (
+                            <button onClick={() => handleStatusChange(m, 'blocked')} className="text-red-600 hover:text-red-900">
+                              Заблокировать
+                            </button>
+                          )}
+                          {m.staffStatus !== 'archived' && !isCurrentUser && canModify && (
+                            <button onClick={() => handleStatusChange(m, 'archived')} className="text-gray-500 hover:text-gray-800">
+                              Архивировать
+                            </button>
+                          )}
+                        </PermissionGuard>
+                        <PermissionGuard permission="staff.update">
+                          <button onClick={() => openResetPassword(m)} className="text-gray-500 hover:text-gray-800 flex items-center gap-1">
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            Пароль
                           </button>
-                        )}
-                        {m.staffStatus !== 'active' && !isCurrentUser && canModify && (
-                          <button onClick={() => handleStatusChange(m, 'active')} className="text-green-600 hover:text-green-900">
-                            Восстановить
-                          </button>
-                        )}
-                        {m.staffStatus === 'active' && !isCurrentUser && canModify && (
-                          <button onClick={() => handleStatusChange(m, 'blocked')} className="text-red-600 hover:text-red-900">
-                            Заблокировать
-                          </button>
-                        )}
-                        {m.staffStatus !== 'archived' && !isCurrentUser && canModify && (
-                          <button onClick={() => handleStatusChange(m, 'archived')} className="text-gray-500 hover:text-gray-800">
-                            Архивировать
-                          </button>
-                        )}
-                        <button onClick={() => openResetPassword(m)} className="text-gray-500 hover:text-gray-800 flex items-center gap-1">
-                          <RefreshCw className="h-3.5 w-3.5" />
-                          Пароль
-                        </button>
+                        </PermissionGuard>
                       </div>
                     </td>
                   </tr>

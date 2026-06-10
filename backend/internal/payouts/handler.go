@@ -17,6 +17,7 @@ import (
 type Handler struct {
 	service   *Service
 	auditRepo *staff.AuditRepository
+	staffSvc  *staff.Service
 }
 
 func NewHandler(service *Service) *Handler {
@@ -26,6 +27,12 @@ func NewHandler(service *Service) *Handler {
 // WithAudit attaches an audit repository for fire-and-forget audit logging.
 func (h *Handler) WithAudit(ar *staff.AuditRepository) *Handler {
 	h.auditRepo = ar
+	return h
+}
+
+// WithStaffSvc attaches a staff service for handler-level permission checks.
+func (h *Handler) WithStaffSvc(svc *staff.Service) *Handler {
+	h.staffSvc = svc
 	return h
 }
 
@@ -184,6 +191,30 @@ func (h *Handler) UpdateAdminPayoutStatus(w http.ResponseWriter, r *http.Request
 	if req.Status != "approved" && req.Status != "rejected" && req.Status != "paid" && req.Status != "cancelled" {
 		h.writeError(w, http.StatusBadRequest, "invalid_status", "Invalid status")
 		return
+	}
+
+	// Handler-level dynamic permission check based on target status
+	if h.staffSvc != nil {
+		var requiredPerm string
+		switch req.Status {
+		case "approved":
+			requiredPerm = "payouts.approve"
+		case "rejected":
+			requiredPerm = "payouts.reject"
+		case "paid", "mark_paid":
+			requiredPerm = "payouts.mark_paid"
+		default:
+			requiredPerm = "payouts.approve"
+		}
+		ok, permErr := h.staffSvc.HasPermission(r.Context(), adminUserID, requiredPerm)
+		if permErr != nil {
+			h.writeError(w, http.StatusInternalServerError, "internal_error", "Permission check failed")
+			return
+		}
+		if !ok {
+			h.writeError(w, http.StatusForbidden, "insufficient_permissions", "Недостаточно прав")
+			return
+		}
 	}
 
 	err = h.service.UpdatePayoutStatus(r.Context(), payoutID, adminUserID, req)

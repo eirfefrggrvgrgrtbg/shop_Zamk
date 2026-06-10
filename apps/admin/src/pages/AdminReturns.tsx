@@ -10,6 +10,7 @@ import {
   updateAdminReturnStatus,
 } from '../api/adminReturns';
 import type { AdminReturnView } from '../api/adminReturns';
+import { PermissionGuard } from '../components/PermissionGuard';
 
 export function AdminReturns() {
   const [returns, setReturns] = useState<AdminReturnView[]>([]);
@@ -230,28 +231,38 @@ export function AdminReturns() {
           </div>
 
           <div className="mt-6 grid gap-6 md:grid-cols-2">
-            <form onSubmit={handleStatusUpdate} className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-700">Изменить статус возврата</h3>
-              <select required value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                <option value="">Выберите статус</option>
-                {getReturnStatusTargets(selectedReturn.status).map((status) => (
-                  <option key={status} value={status}>{getReturnStatusLabel(status)}</option>
-                ))}
-              </select>
-              <textarea rows={3} required={statusDraft === 'rejected'} value={adminComment} onChange={(event) => setAdminComment(event.target.value)} placeholder="Комментарий администратора / причина отклонения" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-              <button type="submit" disabled={isSubmitting || !statusDraft} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                Обновить статус
-              </button>
-            </form>
+            <PermissionGuard
+              permission="returns.update_status"
+              fallback={<p className="text-sm text-gray-500">У вас нет прав для изменения статуса возврата.</p>}
+            >
+              <form onSubmit={handleStatusUpdate} className="space-y-4">
+                <h3 className="text-sm font-medium text-gray-700">Изменить статус возврата</h3>
+                <select required value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                  <option value="">Выберите статус</option>
+                  {getReturnStatusTargets(selectedReturn.status).map((status) => (
+                    <option key={status} value={status}>{getReturnStatusLabel(status)}</option>
+                  ))}
+                </select>
+                <textarea rows={3} required={statusDraft === 'rejected'} value={adminComment} onChange={(event) => setAdminComment(event.target.value)} placeholder="Комментарий администратора / причина отклонения" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                <button type="submit" disabled={isSubmitting || !statusDraft} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                  Обновить статус
+                </button>
+              </form>
+            </PermissionGuard>
 
-            <form onSubmit={handleCreateRefund} className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-700">Создать возмещение</h3>
-              <p className="text-xs text-gray-500">Сумма возмещения рассчитывается бэкендом на основе позиций возврата и оплаченного заказа.</p>
-              <textarea rows={3} value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="Причина возмещения (необязательно)" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-              <button type="submit" disabled={isSubmitting || selectedReturn.status !== 'item_received'} className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
-                Создать возмещение
-              </button>
-            </form>
+            <PermissionGuard
+              permission="refunds.create"
+              fallback={<p className="text-sm text-gray-500">У вас нет прав для создания возмещения.</p>}
+            >
+              <form onSubmit={handleCreateRefund} className="space-y-4">
+                <h3 className="text-sm font-medium text-gray-700">Создать возмещение</h3>
+                <p className="text-xs text-gray-500">Сумма возмещения рассчитывается бэкендом на основе позиций возврата и оплаченного заказа.</p>
+                <textarea rows={3} value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="Причина возмещения (необязательно)" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                <button type="submit" disabled={isSubmitting || selectedReturn.status !== 'item_received'} className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+                  Создать возмещение
+                </button>
+              </form>
+            </PermissionGuard>
           </div>
         </div>
       )}

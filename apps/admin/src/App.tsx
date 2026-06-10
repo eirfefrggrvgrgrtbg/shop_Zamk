@@ -37,25 +37,25 @@ export default function App() {
           
           <Route path="/dashboard" element={<AdminProtectedRoute><AdminLayout><AdminDashboard /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/users" element={<AdminProtectedRoute><AdminLayout><AdminUsers /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/sellers" element={<AdminProtectedRoute><AdminLayout><AdminSellers /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/catalog" element={<AdminProtectedRoute><AdminLayout><AdminCatalog /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/sellers" element={<AdminProtectedRoute permission="sellers.read"><AdminLayout><AdminSellers /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/catalog" element={<AdminProtectedRoute permission={['categories.read', 'brands.read']}><AdminLayout><AdminCatalog /></AdminLayout></AdminProtectedRoute>} />
           {/* Legacy routes kept for direct navigation; sidebar uses /catalog */}
-          <Route path="/categories" element={<AdminProtectedRoute><AdminLayout><AdminCategories /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/brands" element={<AdminProtectedRoute><AdminLayout><AdminBrands /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/products" element={<AdminProtectedRoute><AdminLayout><AdminProducts /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/moderation" element={<AdminProtectedRoute><AdminLayout><AdminModeration /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/orders" element={<AdminProtectedRoute><AdminLayout><AdminOrders /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/payments" element={<AdminProtectedRoute><AdminLayout><AdminPayments /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/shipments" element={<AdminProtectedRoute><AdminLayout><AdminShipments /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/inventory" element={<AdminProtectedRoute><AdminLayout><AdminInventory /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/returns" element={<AdminProtectedRoute><AdminLayout><AdminReturns /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/refunds" element={<AdminProtectedRoute><AdminLayout><AdminRefunds /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/payouts" element={<AdminProtectedRoute><AdminLayout><AdminPayouts /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/reviews" element={<AdminProtectedRoute><AdminLayout><AdminReviews /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/audit-logs" element={<AdminProtectedRoute><AdminLayout><AdminAuditLogs /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/audit" element={<AdminProtectedRoute><AdminLayout><AdminAuditLogs /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/roles" element={<AdminProtectedRoute><AdminLayout><AdminRoles /></AdminLayout></AdminProtectedRoute>} />
-          <Route path="/staff" element={<AdminProtectedRoute><AdminLayout><AdminStaff /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/categories" element={<AdminProtectedRoute permission="categories.read"><AdminLayout><AdminCategories /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/brands" element={<AdminProtectedRoute permission="brands.read"><AdminLayout><AdminBrands /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/products" element={<AdminProtectedRoute permission="products.read"><AdminLayout><AdminProducts /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/moderation" element={<AdminProtectedRoute permission="products.moderate"><AdminLayout><AdminModeration /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/orders" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminOrders /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/payments" element={<AdminProtectedRoute permission="payments.read"><AdminLayout><AdminPayments /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/shipments" element={<AdminProtectedRoute permission="shipments.read"><AdminLayout><AdminShipments /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/inventory" element={<AdminProtectedRoute permission="inventory.read"><AdminLayout><AdminInventory /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/returns" element={<AdminProtectedRoute permission="returns.read"><AdminLayout><AdminReturns /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/refunds" element={<AdminProtectedRoute permission="refunds.read"><AdminLayout><AdminRefunds /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/payouts" element={<AdminProtectedRoute permission="payouts.read"><AdminLayout><AdminPayouts /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/reviews" element={<AdminProtectedRoute permission="reviews.read"><AdminLayout><AdminReviews /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/audit-logs" element={<AdminProtectedRoute permission="audit.read"><AdminLayout><AdminAuditLogs /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/audit" element={<AdminProtectedRoute permission="audit.read"><AdminLayout><AdminAuditLogs /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/roles" element={<AdminProtectedRoute permission="roles.read"><AdminLayout><AdminRoles /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/staff" element={<AdminProtectedRoute permission="staff.read"><AdminLayout><AdminStaff /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/settings" element={<AdminProtectedRoute><AdminLayout><AdminSettings /></AdminLayout></AdminProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

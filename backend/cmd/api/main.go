@@ -144,10 +144,16 @@ func main() {
 	staffService := staff.NewService(staffRepo, userRepo, pgClient)
 	staffHandler := staff.NewHandler(staffService, staffAuditRepo, userRepo)
 	sellersHandler = sellersHandler.WithAudit(staffAuditRepo)
-	payoutsHandler = payoutsHandler.WithAudit(staffAuditRepo)
+	payoutsHandler = payoutsHandler.WithAudit(staffAuditRepo).WithStaffSvc(staffService)
+	productsHandler = productsHandler.WithAudit(staffAuditRepo)
+	inventoryHandler = inventoryHandler.WithAudit(staffAuditRepo)
+	ordersHandler = ordersHandler.WithAudit(staffAuditRepo)
+	fulfillmentHandler = fulfillmentHandler.WithAudit(staffAuditRepo)
+	returnsHandler = returnsHandler.WithAudit(staffAuditRepo)
+	reviewsHandler = reviewsHandler.WithAudit(staffAuditRepo).WithStaffSvc(staffService)
 
 	// Create router
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo)
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService)
 
 	// Start HTTP server
 	srv := &http.Server{

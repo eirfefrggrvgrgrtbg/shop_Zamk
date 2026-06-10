@@ -9,12 +9,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
 	service   *Service
 	validator *validator.Validate
+	auditRepo *staff.AuditRepository
 }
 
 func NewHandler(service *Service) *Handler {
@@ -22,6 +24,12 @@ func NewHandler(service *Service) *Handler {
 		service:   service,
 		validator: validator.New(),
 	}
+}
+
+// WithAudit attaches an audit repository for fire-and-forget audit logging.
+func (h *Handler) WithAudit(ar *staff.AuditRepository) *Handler {
+	h.auditRepo = ar
+	return h
 }
 
 // ---------------------------------------------------------
@@ -275,25 +283,25 @@ func (h *Handler) ListModerationProducts(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) AdminApproveProduct(w http.ResponseWriter, r *http.Request) {
-	h.handleAdminModerationAction(w, r, func(ctx context.Context, adminID, productID uuid.UUID, comment *string) error {
+	h.handleAdminModerationAction(w, r, "product.approve", func(ctx context.Context, adminID, productID uuid.UUID, comment *string) error {
 		return h.service.ApproveProduct(ctx, adminID, productID, comment)
 	})
 }
 
 func (h *Handler) AdminPublishProduct(w http.ResponseWriter, r *http.Request) {
-	h.handleAdminModerationAction(w, r, func(ctx context.Context, adminID, productID uuid.UUID, comment *string) error {
+	h.handleAdminModerationAction(w, r, "product.publish", func(ctx context.Context, adminID, productID uuid.UUID, comment *string) error {
 		return h.service.PublishProduct(ctx, adminID, productID, comment)
 	})
 }
 
 func (h *Handler) AdminHideProduct(w http.ResponseWriter, r *http.Request) {
-	h.handleAdminModerationAction(w, r, func(ctx context.Context, adminID, productID uuid.UUID, comment *string) error {
+	h.handleAdminModerationAction(w, r, "product.hide", func(ctx context.Context, adminID, productID uuid.UUID, comment *string) error {
 		return h.service.HideProduct(ctx, adminID, productID, comment)
 	})
 }
 
 func (h *Handler) AdminBlockProduct(w http.ResponseWriter, r *http.Request) {
-	h.handleAdminModerationAction(w, r, func(ctx context.Context, adminID, productID uuid.UUID, comment *string) error {
+	h.handleAdminModerationAction(w, r, "product.block", func(ctx context.Context, adminID, productID uuid.UUID, comment *string) error {
 		return h.service.BlockProduct(ctx, adminID, productID, comment)
 	})
 }
@@ -332,11 +340,26 @@ func (h *Handler) AdminRejectProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Audit on success
+	if h.auditRepo != nil {
+		pid := productID
+		actorID := userID
+		go func() {
+			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
+				ActorUserID: actorID,
+				Action:      "product.reject",
+				EntityType:  "product",
+				EntityID:    &pid,
+				Metadata:    staff.SanitizeMetadata(map[string]any{"action": "reject"}),
+			})
+		}()
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-func (h *Handler) handleAdminModerationAction(w http.ResponseWriter, r *http.Request, action func(context.Context, uuid.UUID, uuid.UUID, *string) error) {
+func (h *Handler) handleAdminModerationAction(w http.ResponseWriter, r *http.Request, auditAction string, action func(context.Context, uuid.UUID, uuid.UUID, *string) error) {
 	userID, ok := h.getUserID(w, r)
 	if !ok {
 		return
@@ -366,6 +389,21 @@ func (h *Handler) handleAdminModerationAction(w http.ResponseWriter, r *http.Req
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to perform moderation action")
 		return
+	}
+
+	// Audit on success
+	if h.auditRepo != nil && auditAction != "" {
+		pid := productID
+		actorID := userID
+		go func() {
+			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
+				ActorUserID: actorID,
+				Action:      auditAction,
+				EntityType:  "product",
+				EntityID:    &pid,
+				Metadata:    staff.SanitizeMetadata(map[string]any{"action": auditAction}),
+			})
+		}()
 	}
 
 	w.Header().Set("Content-Type", "application/json")

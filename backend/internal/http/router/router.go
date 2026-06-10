@@ -52,6 +52,7 @@ func New(
 	storageHandler *storage.Handler,
 	staffHandler *staff.Handler,
 	auditRepo *staff.AuditRepository,
+	staffSvc *staff.Service,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	rateLimiter := ratelimit.NewMiddleware(
@@ -67,6 +68,11 @@ func New(
 	uploadLimit := rateLimiter.Limit(ratelimit.Rule{Group: "upload", Limit: cfg.RateLimit.UploadLimitPerMinute, Window: time.Minute, Key: ratelimit.UserIPKey("upload")})
 	webhookLimit := rateLimiter.Limit(ratelimit.Rule{Group: "payment_webhook", Limit: cfg.RateLimit.WebhookLimitPerMinute, Window: time.Minute, Key: ratelimit.IPKey("payment_webhook")})
 	adminDangerousLimit := rateLimiter.Limit(ratelimit.Rule{Group: "admin_dangerous", Limit: cfg.RateLimit.AdminDangerousLimitPerMinute, Window: time.Minute, Key: ratelimit.UserIPKey("admin_dangerous")})
+
+	// Shorthand permission middleware builder
+	perm := func(p string) func(http.Handler) http.Handler {
+		return appMiddleware.RequirePermission(staffSvc, p)
+	}
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -121,9 +127,9 @@ func New(
 	r.Route("/api/admin/sellers", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireRole(users.RoleAdmin))
-		r.Post("/", sellersHandler.CreateSellerByAdmin)
-		r.Get("/", sellersHandler.ListSellers)
-		r.Patch("/{id}/status", sellersHandler.UpdateSellerStatus)
+		r.With(perm("sellers.create_access")).Post("/", sellersHandler.CreateSellerByAdmin)
+		r.With(perm("sellers.read")).Get("/", sellersHandler.ListSellers)
+		r.With(perm("sellers.update_status")).Patch("/{id}/status", sellersHandler.UpdateSellerStatus)
 	})
 
 	r.Route("/api/seller/me", func(r chi.Router) {
@@ -222,72 +228,82 @@ func New(
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireRole(users.RoleAdmin))
 
-		// Staff RBAC endpoints (Phase B/C) — auth+role guard only, no RequirePermission yet
+		// /api/admin/me — no fine-grained permission required, role=admin is enough
 		r.Get("/me", staffHandler.GetAdminMe)
-		r.Get("/staff/roles", staffHandler.GetStaffRoles)
-		r.Get("/audit-logs", staffHandler.GetAuditLogs)
 
-		// Staff member management (Phase C)
-		r.Get("/staff/members", staffHandler.ListStaffMembers)
-		r.Post("/staff/members", staffHandler.CreateStaffMember)
-		r.Patch("/staff/members/{userId}/role", staffHandler.UpdateStaffRole)
-		r.Patch("/staff/members/{userId}/status", staffHandler.UpdateStaffStatus)
-		r.Post("/staff/members/{userId}/reset-password", staffHandler.ResetStaffPassword)
+		// Staff RBAC endpoints
+		r.With(perm("roles.read")).Get("/staff/roles", staffHandler.GetStaffRoles)
+		r.With(perm("audit.read")).Get("/audit-logs", staffHandler.GetAuditLogs)
+		r.With(perm("staff.read")).Get("/staff/members", staffHandler.ListStaffMembers)
+		r.With(perm("staff.create")).Post("/staff/members", staffHandler.CreateStaffMember)
+		r.With(perm("staff.update")).Patch("/staff/members/{userId}/role", staffHandler.UpdateStaffRole)
+		r.With(perm("staff.block")).Patch("/staff/members/{userId}/status", staffHandler.UpdateStaffStatus)
+		r.With(perm("staff.update")).Post("/staff/members/{userId}/reset-password", staffHandler.ResetStaffPassword)
 
-		r.Get("/categories", catalogHandler.ListCategories)
-		r.Post("/categories", catalogHandler.CreateCategory)
-		r.Get("/brands", catalogHandler.ListBrands)
-		r.Post("/brands", catalogHandler.CreateBrand)
-		r.With(uploadLimit).Post("/brands/{id}/logo/upload", storageHandler.UploadAdminBrandLogo)
+		// Catalog
+		r.With(perm("categories.read")).Get("/categories", catalogHandler.ListCategories)
+		r.With(perm("categories.create")).Post("/categories", catalogHandler.CreateCategory)
+		r.With(perm("brands.read")).Get("/brands", catalogHandler.ListBrands)
+		r.With(perm("brands.create")).Post("/brands", catalogHandler.CreateBrand)
+		r.With(uploadLimit, perm("brands.update")).Post("/brands/{id}/logo/upload", storageHandler.UploadAdminBrandLogo)
 
-		r.Get("/products", productsHandler.ListAdminProducts)
-		r.With(uploadLimit).Post("/products/{id}/images/upload", storageHandler.UploadAdminProductImage)
-		r.Get("/moderation/products", productsHandler.ListModerationProducts)
-		r.With(adminDangerousLimit).Post("/moderation/products/{id}/approve", productsHandler.AdminApproveProduct)
-		r.With(adminDangerousLimit).Post("/moderation/products/{id}/reject", productsHandler.AdminRejectProduct)
-		r.With(adminDangerousLimit).Post("/moderation/products/{id}/publish", productsHandler.AdminPublishProduct)
-		r.With(adminDangerousLimit).Post("/moderation/products/{id}/hide", productsHandler.AdminHideProduct)
-		r.With(adminDangerousLimit).Post("/moderation/products/{id}/block", productsHandler.AdminBlockProduct)
+		// Products
+		r.With(perm("products.read")).Get("/products", productsHandler.ListAdminProducts)
+		r.With(uploadLimit, perm("products.moderate")).Post("/products/{id}/images/upload", storageHandler.UploadAdminProductImage)
+		r.With(perm("products.moderate")).Get("/moderation/products", productsHandler.ListModerationProducts)
+		r.With(adminDangerousLimit, perm("products.approve")).Post("/moderation/products/{id}/approve", productsHandler.AdminApproveProduct)
+		r.With(adminDangerousLimit, perm("products.reject")).Post("/moderation/products/{id}/reject", productsHandler.AdminRejectProduct)
+		r.With(adminDangerousLimit, perm("products.publish")).Post("/moderation/products/{id}/publish", productsHandler.AdminPublishProduct)
+		r.With(adminDangerousLimit, perm("products.hide")).Post("/moderation/products/{id}/hide", productsHandler.AdminHideProduct)
+		r.With(adminDangerousLimit, perm("products.block")).Post("/moderation/products/{id}/block", productsHandler.AdminBlockProduct)
 
-		r.Get("/inventory", inventoryHandler.ListAdminInventory)
-		r.Get("/inventory/{id}", inventoryHandler.GetAdminInventoryItem)
-		r.Get("/inventory/{id}/movements", inventoryHandler.ListMovements)
-		r.With(adminDangerousLimit).Post("/inventory/receipts", inventoryHandler.ReceiveStock)
-		r.With(adminDangerousLimit).Post("/inventory/adjustments", inventoryHandler.AdjustStock)
-		r.With(adminDangerousLimit).Post("/inventory/write-offs", inventoryHandler.WriteOffStock)
+		// Inventory
+		r.With(perm("inventory.read")).Get("/inventory", inventoryHandler.ListAdminInventory)
+		r.With(perm("inventory.read")).Get("/inventory/{id}", inventoryHandler.GetAdminInventoryItem)
+		r.With(perm("inventory.movements.read")).Get("/inventory/{id}/movements", inventoryHandler.ListMovements)
+		r.With(adminDangerousLimit, perm("inventory.receipt")).Post("/inventory/receipts", inventoryHandler.ReceiveStock)
+		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/adjustments", inventoryHandler.AdjustStock)
+		r.With(adminDangerousLimit, perm("inventory.write_off")).Post("/inventory/write-offs", inventoryHandler.WriteOffStock)
 
-		r.Get("/orders", ordersHandler.ListAdminOrders)
-		r.Get("/orders/{id}", ordersHandler.GetAdminOrder)
-		r.Patch("/orders/{id}/status", ordersHandler.UpdateOrderStatus)
-		r.Post("/orders/{id}/shipment", fulfillmentHandler.CreateShipment)
+		// Orders
+		r.With(perm("orders.read")).Get("/orders", ordersHandler.ListAdminOrders)
+		r.With(perm("orders.read")).Get("/orders/{id}", ordersHandler.GetAdminOrder)
+		r.With(perm("orders.update_status")).Patch("/orders/{id}/status", ordersHandler.UpdateOrderStatus)
+		r.With(perm("shipments.create")).Post("/orders/{id}/shipment", fulfillmentHandler.CreateShipment)
 
-		r.Get("/payments", paymentsHandler.ListAdminPayments)
-		r.Get("/payments/{id}", paymentsHandler.GetAdminPayment)
+		// Payments
+		r.With(perm("payments.read")).Get("/payments", paymentsHandler.ListAdminPayments)
+		r.With(perm("payments.read")).Get("/payments/{id}", paymentsHandler.GetAdminPayment)
 
-		r.Get("/shipments", fulfillmentHandler.ListAdminShipments)
-		r.Get("/shipments/{id}", fulfillmentHandler.GetAdminShipment)
-		r.Patch("/shipments/{id}/status", fulfillmentHandler.UpdateShipmentStatus)
+		// Shipments
+		r.With(perm("shipments.read")).Get("/shipments", fulfillmentHandler.ListAdminShipments)
+		r.With(perm("shipments.read")).Get("/shipments/{id}", fulfillmentHandler.GetAdminShipment)
+		r.With(perm("shipments.update_status")).Patch("/shipments/{id}/status", fulfillmentHandler.UpdateShipmentStatus)
 
-		r.Get("/returns", returnsHandler.ListAdminReturns)
-		r.Get("/returns/{id}", returnsHandler.GetAdminReturn)
-		r.Patch("/returns/{id}/status", returnsHandler.UpdateAdminReturnStatus)
-		r.With(adminDangerousLimit).Post("/returns/{id}/refund", returnsHandler.CreateAdminRefund)
+		// Returns
+		r.With(perm("returns.read")).Get("/returns", returnsHandler.ListAdminReturns)
+		r.With(perm("returns.read")).Get("/returns/{id}", returnsHandler.GetAdminReturn)
+		r.With(perm("returns.update_status")).Patch("/returns/{id}/status", returnsHandler.UpdateAdminReturnStatus)
+		r.With(adminDangerousLimit, perm("refunds.create")).Post("/returns/{id}/refund", returnsHandler.CreateAdminRefund)
 
-		r.Get("/refunds", returnsHandler.ListAdminRefunds)
-		r.Get("/refunds/{id}", returnsHandler.GetAdminRefund)
+		// Refunds
+		r.With(perm("refunds.read")).Get("/refunds", returnsHandler.ListAdminRefunds)
+		r.With(perm("refunds.read")).Get("/refunds/{id}", returnsHandler.GetAdminRefund)
 
-		r.Get("/payouts", payoutsHandler.ListAdminPayouts)
-		r.Get("/payouts/{id}", payoutsHandler.GetAdminPayout)
+		// Payouts — UpdateAdminPayoutStatus uses handler-level dynamic permission check
+		r.With(perm("payouts.read")).Get("/payouts", payoutsHandler.ListAdminPayouts)
+		r.With(perm("payouts.read")).Get("/payouts/{id}", payoutsHandler.GetAdminPayout)
 		r.With(adminDangerousLimit).Patch("/payouts/{id}/status", payoutsHandler.UpdateAdminPayoutStatus)
-		r.Post("/payouts/trigger-availability", payoutsHandler.TriggerAvailability)
+		r.With(perm("payouts.read")).Post("/payouts/trigger-availability", payoutsHandler.TriggerAvailability)
 	})
 
 	r.Group(func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireRole(users.RoleAdmin))
 
-		r.Get("/api/admin/reviews", reviewsHandler.GetAdminReviews)
-		r.Get("/api/admin/reviews/{id}", reviewsHandler.GetAdminReview)
+		r.With(perm("reviews.read")).Get("/api/admin/reviews", reviewsHandler.GetAdminReviews)
+		r.With(perm("reviews.read")).Get("/api/admin/reviews/{id}", reviewsHandler.GetAdminReview)
+		// ModerateReview uses handler-level dynamic permission (approve/reject/hide/block)
 		r.With(adminDangerousLimit).Post("/api/admin/reviews/{id}/{action}", reviewsHandler.ModerateReview)
 	})
 
