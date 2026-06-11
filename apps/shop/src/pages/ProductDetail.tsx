@@ -475,32 +475,34 @@ export function ProductDetail() {
         </div>
 
         {/* Reviews Section */}
-        {reviews && reviews.length > 0 && (
-          <section className="mt-16">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-serif text-graphite dark:text-white">
-                Отзывы ({product.reviewsCount || reviews.length})
-              </h2>
-              {product.rating && (
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <Star
-                        key={star}
-                        className={cn(
-                          "w-5 h-5",
-                          star <= Math.round(product.rating!)
-                            ? "fill-amber-400 text-amber-400"
-                            : "fill-gray-200 text-gray-200 dark:fill-gray-600 dark:text-gray-600"
-                        )}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-lg font-medium text-graphite dark:text-white">{product.rating.toFixed(1)}</span>
+        <section className="mt-16">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-serif text-graphite dark:text-white">
+              Отзывы ({product.reviewsCount || (reviews ? reviews.length : 0)})
+            </h2>
+            {product.rating && (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={cn(
+                        "w-5 h-5",
+                        star <= Math.round(product.rating!)
+                          ? "fill-amber-400 text-amber-400"
+                          : "fill-gray-200 text-gray-200 dark:fill-gray-600 dark:text-gray-600"
+                      )}
+                    />
+                  ))}
                 </div>
-              )}
-            </div>
+                <span className="text-lg font-medium text-graphite dark:text-white">{product.rating.toFixed(1)}</span>
+              </div>
+            )}
+          </div>
 
+          {!reviews || reviews.length === 0 ? (
+            <p className="text-ash dark:text-white/60">Пока нет отзывов.</p>
+          ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {reviews.map((review) => (
                 <div key={review.id} className="p-5 rounded-xl bg-white dark:bg-[#1a1a1c] border border-border-lighter dark:border-white/10">
@@ -541,8 +543,8 @@ export function ProductDetail() {
                 </div>
               ))}
             </div>
-          </section>
-        )}
+          )}
+        </section>
 
         <motion.section className="mt-16 rounded-3xl border border-dashed border-border-lighter bg-white/60 p-8 text-center text-ash dark:border-white/10 dark:bg-white/5" initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
           Рекомендации товаров пока не подключены.

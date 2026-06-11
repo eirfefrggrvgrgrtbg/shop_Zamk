@@ -4,23 +4,28 @@ import { Package, ChevronRight, ArrowLeft, MapPin, CreditCard, Truck } from 'luc
 import { useAuth } from '../contexts/AuthContext';
 import { Drawer } from '../components/ui/Drawer';
 import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
+import { ReturnModal } from '../components/orders/ReturnModal';
+import { ReviewModal } from '../components/orders/ReviewModal';
 
 export function Orders() {
   const { isAuthenticated } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
+  const [returnsMap, setReturnsMap] = useState<Record<string, any[]>>({});
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    
-    let isMounted = true;
-    const fetchOrders = async () => {
-      try {
-        setIsLoading(true);
-        const { getOrders } = await import('@zamk/api-client/src/customer');
-        const data = await getOrders();
-        if (isMounted) {
+  // Modal states
+  const [returnModal, setReturnModal] = useState<{isOpen: boolean, item: any | null}>({isOpen: false, item: null});
+  const [reviewModal, setReviewModal] = useState<{isOpen: boolean, item: any | null}>({isOpen: false, item: null});
+
+  const loadData = async () => {
+    try {
+      setIsLoading(true);
+      const { getOrders, getCustomerReturns } = await import('@zamk/api-client/src/customer');
+      const [data, returnsData] = await Promise.all([
+        getOrders(),
+        getCustomerReturns().catch(() => ({ items: [] }))
+      ]);
           const mapOrderStatus = (s: string) => {
             switch (s) {
               case 'awaiting_payment': return 'Ожидает оплаты';
@@ -36,8 +41,34 @@ export function Orders() {
             }
           };
 
+          const mapReturnStatus = (s: string) => {
+            switch (s) {
+              case 'requested': return 'Запрошен';
+              case 'approved': return 'Одобрен';
+              case 'rejected': return 'Отклонён';
+              case 'item_received': return 'Получен';
+              case 'refunded': return 'Возмещён';
+              case 'completed': return 'Завершён';
+              case 'cancelled': return 'Отменён';
+              default: return s;
+            }
+          };
+
+          const rMap: Record<string, any[]> = {};
+          if (returnsData && returnsData.items) {
+            returnsData.items.forEach((r: any) => {
+              const rData = r.return || r;
+              if (!rMap[rData.orderId]) rMap[rData.orderId] = [];
+              rMap[rData.orderId].push({
+                ...rData,
+                statusText: mapReturnStatus(rData.status)
+              });
+            });
+          }
+          setReturnsMap(rMap);
+
           // Map to match the expected format roughly
-          setOrders(data.map(o => ({
+          setOrders(data.map((o: any) => ({
             id: o.id.split('-')[0].toUpperCase() + '-' + o.id.split('-')[1].substring(0, 4),
             rawId: o.id,
             date: new Date(o.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
@@ -45,27 +76,31 @@ export function Orders() {
             total: o.totalPriceCents / 100,
             delivery: {
               address: o.deliveryAddress,
-              service: 'Курьер'
+              service: 'СДЭК',
             },
-            items: o.items.map((item: any) => ({
-              id: item.productId,
-              orderItemId: item.id,  // P0 fix: store raw order item ID for return/review
-              name: item.title || 'Товар',
-              price: item.priceCents / 100,
-              quantity: item.quantity,
-              image: item.imageUrl || PRODUCT_PLACEHOLDER_IMAGE
-            }))
+            items: o.items?.map((i: any) => ({
+              orderItemId: i.id,
+              productId: i.productId,
+              id: i.productVariantId,
+              name: i.productTitle || 'Товар',
+              price: i.priceCents / 100,
+              size: i.size,
+              color: i.color,
+              quantity: i.quantity,
+              image: i.imageUrl || PRODUCT_PLACEHOLDER_IMAGE,
+            })) || []
           })));
-        }
-      } catch (e) {
-        console.error('Failed to load orders', e);
+        
+      } catch (err) {
+        console.error('Failed to load orders', err);
       } finally {
-        if (isMounted) setIsLoading(false);
+        setIsLoading(false);
       }
-    };
-    
-    fetchOrders();
-    return () => { isMounted = false; };
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    loadData();
   }, [isAuthenticated]);
   
   if (!isAuthenticated) {
@@ -202,27 +237,80 @@ export function Orders() {
                 <h4 className="text-[13px] uppercase tracking-[0.05em] text-ash dark:text-white/60 font-medium mb-4">Состав заказа</h4>
                 <div className="space-y-4">
                   {selectedOrder.items.map((item: any, idx: number) => (
-                    <Link to={`/product/${item.id}`} key={idx} className="flex gap-4 group cursor-pointer hover:bg-graphite/[0.02] dark:hover:bg-white/5 p-2 -m-2 rounded-xl transition-colors">
-                      <div className="w-20 h-24 bg-graphite/5 dark:bg-white/10 rounded-xl overflow-hidden flex-shrink-0">
-                        <img 
-                          src={item.image} 
-                          alt={item.name} 
-                          className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700" 
-                        />
-                      </div>
-                      <div className="flex-1 py-1 flex flex-col justify-between">
-                        <div>
-                          <p className="text-[14.5px] font-medium text-graphite dark:text-white leading-snug group-hover:underline decoration-1 underline-offset-2">
-                            {item.name}{(item.quantity ?? 1) > 1 ? ` × ${item.quantity}` : ''}
-                          </p>
-                          {item.size && <p className="text-[13px] text-ash dark:text-white/60 mt-1">Размер: {item.size}</p>}
-                          {item.color && <p className="text-[13px] text-ash dark:text-white/60 mt-1">Цвет: {item.color}</p>}
+                    <div key={idx} className="flex flex-col gap-2 p-2 -m-2 rounded-xl transition-colors hover:bg-graphite/[0.02] dark:hover:bg-white/5">
+                      <Link to={`/product/${item.productId}`} className="flex gap-4 group cursor-pointer">
+                        <div className="w-20 h-24 bg-graphite/5 dark:bg-white/10 rounded-xl overflow-hidden flex-shrink-0">
+                          <img 
+                            src={item.image} 
+                            alt={item.name} 
+                            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700" 
+                          />
                         </div>
-                        <p className="font-serif text-[15px] text-graphite dark:text-white">{item.price.toLocaleString('ru-RU')} ₽</p>
-                      </div>
-                    </Link>
+                        <div className="flex-1 py-1 flex flex-col justify-between">
+                          <div>
+                            <p className="text-[14.5px] font-medium text-graphite dark:text-white leading-snug group-hover:underline decoration-1 underline-offset-2">
+                              {item.name}{(item.quantity ?? 1) > 1 ? ` × ${item.quantity}` : ''}
+                            </p>
+                            {item.size && <p className="text-[13px] text-ash dark:text-white/60 mt-1">Размер: {item.size}</p>}
+                            {item.color && <p className="text-[13px] text-ash dark:text-white/60 mt-1">Цвет: {item.color}</p>}
+                          </div>
+                          <p className="font-serif text-[15px] text-graphite dark:text-white">{item.price.toLocaleString('ru-RU')} ₽</p>
+                        </div>
+                      </Link>
+                      {selectedOrder.status === 'Доставлен' && (
+                        <div className="flex gap-2 mt-2 ml-24">
+                          <button 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setReturnModal({ isOpen: true, item: { orderItemId: item.orderItemId, maxQuantity: item.quantity, productName: item.name } });
+                            }}
+                            className="text-[12px] font-medium text-error hover:underline transition-colors"
+                          >
+                            Оформить возврат
+                          </button>
+                          <span className="text-ash/30">•</span>
+                          <button 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setReviewModal({ isOpen: true, item: { orderItemId: item.orderItemId, productName: item.name } });
+                            }}
+                            className="text-[12px] font-medium text-primary hover:underline transition-colors"
+                          >
+                            Оставить отзыв
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
+              </div>
+
+              <div className="h-px bg-graphite/5 dark:bg-white/10 w-full"></div>
+
+              {/* Возвраты и возмещения */}
+              <div>
+                <h4 className="text-[13px] uppercase tracking-[0.05em] text-ash dark:text-white/60 font-medium mb-4">Возвраты и возмещения</h4>
+                {returnsMap[selectedOrder.rawId] && returnsMap[selectedOrder.rawId].length > 0 ? (
+                  <div className="space-y-3">
+                    {returnsMap[selectedOrder.rawId].map((ret: any, idx: number) => (
+                      <div key={idx} className="p-3 bg-graphite/5 dark:bg-white/10 rounded-xl">
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="text-[13px] font-medium text-graphite dark:text-white">Возврат #{ret.id.split('-')[0].toUpperCase()}</span>
+                          <span className="text-[11px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-graphite/10 dark:bg-white/20 text-graphite dark:text-white/80">
+                            {ret.statusText}
+                          </span>
+                        </div>
+                        {ret.adminComment && (
+                          <p className="text-[12px] text-ash dark:text-white/60 mt-2 p-2 bg-white/50 dark:bg-black/20 rounded">
+                            Комментарий: {ret.adminComment}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-ash dark:text-white/60">По этому заказу пока нет возвратов.</p>
+                )}
               </div>
 
               <div className="h-px bg-graphite/5 dark:bg-white/10 w-full"></div>
@@ -268,60 +356,31 @@ export function Orders() {
                   <span className="text-xl font-serif text-graphite dark:text-white">{selectedOrder.total.toLocaleString('ru-RU')} ₽</span>
                 </div>
               </div>
-
-              {selectedOrder.status === 'Доставлен' && (
-                <div className="mt-8 flex gap-3">
-                  <button 
-                    onClick={async () => {
-                      const reason = window.prompt('Укажите причину возврата:');
-                      if (reason) {
-                        try {
-                          const { createReturn } = await import('@zamk/api-client/src/customer');
-                          // P0 fix: orderId in path, items[] required by backend
-                          await createReturn(selectedOrder.rawId, {
-                            reason,
-                            items: selectedOrder.items.map((item: any) => ({
-                              orderItemId: item.orderItemId,
-                              quantity: item.quantity ?? 1,
-                            })),
-                          });
-                          alert('Заявка на возврат успешно создана');
-                        } catch (e: any) {
-                          alert(e.message || 'Ошибка при создании возврата');
-                        }
-                      }
-                    }}
-                    className="flex-1 py-3 border border-error text-error text-[13px] font-medium rounded-full hover:bg-error hover:text-white transition-colors"
-                  >
-                    Оформить возврат
-                  </button>
-                  <button 
-                    onClick={async () => {
-                      const firstItem = selectedOrder.items[0];
-                      if (!firstItem?.orderItemId) return;
-                      const comment = window.prompt('Ваш отзыв:');
-                      if (comment) {
-                        try {
-                          const { createReview } = await import('@zamk/api-client/src/customer');
-                          // P0 fix: orderId + orderItemId in path, field is comment not content
-                          await createReview(selectedOrder.rawId, firstItem.orderItemId, { rating: 5, title: 'Отзыв', comment });
-                          alert('Отзыв успешно добавлен');
-                        } catch (e: any) {
-                          alert(e.message || 'Ошибка при добавлении отзыва');
-                        }
-                      }
-                    }}
-                    className="flex-1 py-3 border border-graphite dark:border-white text-graphite dark:text-white text-[13px] font-medium rounded-full hover:bg-graphite hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors"
-                  >
-                    Оставить отзыв
-                  </button>
-                </div>
-              )}
-
             </div>
           </div>
         )}
       </Drawer>
+
+      {/* Modals */}
+      {selectedOrder && returnModal.isOpen && returnModal.item && (
+        <ReturnModal 
+          isOpen={returnModal.isOpen} 
+          onClose={() => setReturnModal({ isOpen: false, item: null })} 
+          orderId={selectedOrder.rawId} 
+          item={returnModal.item}
+          onSuccess={loadData}
+        />
+      )}
+      {selectedOrder && reviewModal.isOpen && reviewModal.item && (
+        <ReviewModal 
+          isOpen={reviewModal.isOpen} 
+          onClose={() => setReviewModal({ isOpen: false, item: null })} 
+          orderId={selectedOrder.rawId} 
+          orderItemId={reviewModal.item.orderItemId}
+          productName={reviewModal.item.productName}
+          onSuccess={loadData}
+        />
+      )}
     </div>
   );
 }

@@ -43,7 +43,18 @@ export const createReturn = async (orderId: string, input: ReturnRequest): Promi
   return request<ReturnResponse>('POST', `/customer/orders/${orderId}/returns`, { body: input });
 };
 
-// P0 fix: path is /customer/orders/{orderId}/items/{orderItemId}/review, field is comment not content
 export const createReview = async (orderId: string, orderItemId: string, input: ReviewCreateRequest): Promise<any> => {
   return request('POST', `/customer/orders/${orderId}/items/${orderItemId}/review`, { body: input });
+};
+
+export const getCustomerReturns = async (): Promise<any> => {
+  return request('GET', '/customer/returns');
+};
+
+export const getCustomerReturn = async (returnId: string): Promise<any> => {
+  return request('GET', `/customer/returns/${returnId}`);
+};
+
+export const getCustomerReviews = async (): Promise<any> => {
+  return request('GET', '/customer/reviews');
 };

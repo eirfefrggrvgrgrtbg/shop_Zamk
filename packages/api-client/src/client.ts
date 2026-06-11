@@ -146,11 +146,21 @@ const getSafeErrorMessage = (code?: string, fallback?: string): string => {
       return 'Товар недоступен для заказа';
     case 'insufficient_stock':
       return 'Недостаточно товара на складе';
+    case 'invalid_return':
+      if (fallback?.includes('window expired')) return 'Срок возврата истёк';
+      if (fallback?.includes('not delivered')) return 'Заказ ещё не доставлен';
+      if (fallback?.includes('quantity')) return 'Недопустимое количество для возврата';
+      return 'Недопустимый возврат';
     case 'bad_request':
       return fallback || 'Некорректный запрос';
     default:
-      return fallback && !fallback.toLowerCase().startsWith('http')
-        ? fallback
-        : 'Произошла ошибка. Попробуйте позже';
+      if (fallback) {
+        const lower = fallback.toLowerCase();
+        if (lower.includes('duplicate review')) return 'Вы уже оставили отзыв на этот товар';
+        if (lower.includes('not purchased')) return 'Вы можете оставить отзыв только на купленный товар';
+        if (lower.includes('not delivered')) return 'Заказ ещё не доставлен';
+        if (!lower.startsWith('http')) return fallback;
+      }
+      return 'Произошла ошибка. Попробуйте позже';
   }
 };
