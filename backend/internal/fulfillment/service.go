@@ -2,6 +2,7 @@ package fulfillment
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -107,6 +108,12 @@ func (s *Service) UpdateShipmentStatus(ctx context.Context, adminID, shipmentID 
 		}
 
 		oldStatus := shipment.Status
+		if oldStatus == "delivered" {
+			return errors.New("cannot change status of delivered shipment")
+		}
+		if oldStatus == "cancelled" {
+			return errors.New("cannot change status of cancelled shipment")
+		}
 		if req.Status == "delivered" && oldStatus != "delivered" {
 			wasDelivered = true
 		}

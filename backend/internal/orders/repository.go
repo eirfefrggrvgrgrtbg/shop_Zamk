@@ -179,9 +179,10 @@ func (r *Repository) ListAdminOrders(ctx context.Context, limit, offset int) ([]
 
 func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerOrder, error) {
 	query := `
-		SELECT DISTINCT o.id, o.status, o.created_at
+		SELECT DISTINCT o.id, o.status, o.created_at, o.delivery_address, o.customer_name, o.customer_phone, s.status
 		FROM orders o
 		JOIN order_items oi ON o.id = oi.order_id
+		LEFT JOIN shipments s ON o.id = s.order_id
 		WHERE oi.seller_id = $1
 		ORDER BY o.created_at DESC
 		LIMIT $2 OFFSET $3
@@ -195,7 +196,7 @@ func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, l
 	var orders []SellerOrder
 	for rows.Next() {
 		var o SellerOrder
-		if err := rows.Scan(&o.ID, &o.Status, &o.CreatedAt); err != nil {
+		if err := rows.Scan(&o.ID, &o.Status, &o.CreatedAt, &o.DeliveryAddress, &o.CustomerName, &o.CustomerPhone, &o.ShipmentStatus); err != nil {
 			return nil, err
 		}
 		orders = append(orders, o)
@@ -235,14 +236,15 @@ func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, l
 
 func (r *Repository) GetSellerOrder(ctx context.Context, sellerID, orderID uuid.UUID) (*SellerOrder, error) {
 	query := `
-		SELECT o.id, o.status, o.created_at
+		SELECT o.id, o.status, o.created_at, o.delivery_address, o.customer_name, o.customer_phone, s.status
 		FROM orders o
 		JOIN order_items oi ON o.id = oi.order_id
+		LEFT JOIN shipments s ON o.id = s.order_id
 		WHERE o.id = $1 AND oi.seller_id = $2
 		LIMIT 1
 	`
 	var o SellerOrder
-	err := r.db.QueryRow(ctx, query, orderID, sellerID).Scan(&o.ID, &o.Status, &o.CreatedAt)
+	err := r.db.QueryRow(ctx, query, orderID, sellerID).Scan(&o.ID, &o.Status, &o.CreatedAt, &o.DeliveryAddress, &o.CustomerName, &o.CustomerPhone, &o.ShipmentStatus)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrOrderNotFound

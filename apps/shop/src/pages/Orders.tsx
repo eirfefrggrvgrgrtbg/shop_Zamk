@@ -87,7 +87,6 @@ function OrdersContent() {
             total: o.totalPriceCents / 100,
             delivery: {
               address: o.deliveryAddress,
-              service: 'СДЭК',
             },
             items: o.items?.map((i: any) => ({
               orderItemId: i.id,
@@ -317,7 +316,6 @@ function OrdersContent() {
                     <MapPin className="w-5 h-5 text-ash dark:text-white/60 mt-0.5" />
                     <div>
                       <p className="text-[14px] text-graphite dark:text-white font-medium">{selectedOrder.delivery.address}</p>
-                      <p className="text-[13px] text-ash dark:text-white/60 mt-0.5">{selectedOrder.delivery.service}</p>
                     </div>
                   </div>
                   <div className="flex gap-3">

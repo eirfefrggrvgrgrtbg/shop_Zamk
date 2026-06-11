@@ -32,5 +32,9 @@ type SellerOrder struct {
 	ID              uuid.UUID     `json:"id"`
 	Status          string        `json:"status"`
 	CreatedAt       time.Time     `json:"createdAt"`
+	DeliveryAddress string        `json:"deliveryAddress"`
+	CustomerName    string        `json:"customerName"`
+	CustomerPhone   string        `json:"customerPhone"`
+	ShipmentStatus  *string       `json:"shipmentStatus,omitempty"`
 	Items           []OrderItem   `json:"items"`
 }

@@ -361,19 +361,7 @@ export function AdminOrders() {
                         <input
                           value={shipmentCarrier}
                           onChange={(e) => setShipmentCarrier(e.target.value)}
-                          placeholder="Служба доставки"
-                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
-                        />
-                        <input
-                          value={shipmentTrackingNumber}
-                          onChange={(e) => setShipmentTrackingNumber(e.target.value)}
-                          placeholder="Трек-номер"
-                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
-                        />
-                        <input
-                          value={shipmentTrackingUrl}
-                          onChange={(e) => setShipmentTrackingUrl(e.target.value)}
-                          placeholder="Ссылка для отслеживания"
+                          placeholder="Служба доставки (опционально)"
                           className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
                         />
                         <button

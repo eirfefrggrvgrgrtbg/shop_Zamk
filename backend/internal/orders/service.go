@@ -218,6 +218,16 @@ func (s *Service) UpdateOrderStatus(ctx context.Context, adminID, orderID uuid.U
 		return err
 	}
 
+	if order.Status == "cancelled" {
+		return errors.New("cannot change status of cancelled order")
+	}
+	if order.Status == "delivered" && req.Status != "returned" && req.Status != "refunded" {
+		return errors.New("cannot change status of delivered order except to return/refund")
+	}
+	if order.Status == "awaiting_payment" && (req.Status == "shipped" || req.Status == "delivered" || req.Status == "packed") {
+		return errors.New("unpaid order cannot skip to packed/shipped/delivered")
+	}
+
 	return s.db.RunInTx(ctx, func(tx pgx.Tx) error {
 		if err := s.repo.UpdateOrderStatusTx(ctx, tx, orderID, req.Status); err != nil {
 			return err
