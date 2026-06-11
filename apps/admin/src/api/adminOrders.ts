@@ -2,9 +2,10 @@ import {
   getAdminOrder as apiGetAdminOrder,
   getAdminOrders as apiGetAdminOrders,
   updateAdminOrderStatus as apiUpdateAdminOrderStatus,
+  getAdminOrderFulfillments as apiGetAdminOrderFulfillments,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
-import type { AdminOrder, OrderItem } from '@zamk/api-client/src/types';
+import type { AdminOrder, OrderItem, AdminFulfillment } from '@zamk/api-client/src/types';
 
 export interface AdminOrderView {
   id: string;
@@ -72,6 +73,11 @@ export const getAdminOrders = async (): Promise<AdminOrderView[]> => {
 
 export const getAdminOrder = async (id: string): Promise<AdminOrderView> => {
   return mapAdminOrder(await apiGetAdminOrder(id));
+};
+
+export const getAdminOrderFulfillments = async (id: string): Promise<AdminFulfillment[]> => {
+  const response = await apiGetAdminOrderFulfillments(id) as unknown as ListResponse<AdminFulfillment>;
+  return unwrapItems(response);
 };
 
 export const getAllowedOrderStatusTargets = (status: string): string[] => {

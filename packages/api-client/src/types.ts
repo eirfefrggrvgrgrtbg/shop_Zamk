@@ -412,6 +412,7 @@ export interface AdminPayment {
 export interface AdminShipment {
   id: string;
   orderId: string;
+  fulfillmentId?: string | null;
   status: string;
   carrier?: string;
   trackingNumber?: string;
@@ -420,6 +421,37 @@ export interface AdminShipment {
   deliveredAt?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface AdminFulfillmentItem {
+  orderItemId: string;
+  productId: string;
+  productTitle: string;
+  variantId?: string | null;
+  sku?: string | null;
+  quantity: number;
+  unitPriceCents: number;
+  lineTotalCents: number;
+  imageUrl?: string | null;
+}
+
+export interface AdminFulfillment {
+  id: string;
+  orderId: string;
+  sellerId: string;
+  sellerName?: string | null;
+  status: string;
+  subtotalCents: number;
+  commissionBps: number;
+  sellerAmountCents: number;
+  createdAt: string;
+  updatedAt: string;
+  shipmentId?: string | null;
+  shipmentStatus?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  deliveryAddress?: string | null;
+  items: AdminFulfillmentItem[];
 }
 
 export interface AdminInventoryItem {

@@ -10,6 +10,7 @@ import type { AdminShipment } from '@zamk/api-client/src/types';
 export interface AdminShipmentView {
   id: string;
   orderId: string;
+  fulfillmentId?: string | null;
   status: string;
   statusLabel: string;
   carrier?: string;
@@ -58,6 +59,7 @@ export const mapAdminShipment = (shipment: AdminShipment): AdminShipmentView => 
   return {
     id: shipment.id,
     orderId: shipment.orderId,
+    fulfillmentId: shipment.fulfillmentId,
     status: shipment.status,
     statusLabel: getShipmentStatusLabel(shipment.status),
     carrier: shipment.carrier,

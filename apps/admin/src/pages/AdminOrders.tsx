@@ -8,8 +8,10 @@ import {
   getAllowedOrderStatusTargets,
   getOrderStatusLabel,
   updateAdminOrderStatus,
+  getAdminOrderFulfillments,
 } from '../api/adminOrders';
 import type { AdminOrderView } from '../api/adminOrders';
+import type { AdminFulfillment } from '@zamk/api-client/src/types';
 import {
   createAdminShipment,
   getAdminShipmentErrorMessage,
@@ -20,16 +22,40 @@ export function AdminOrders() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<AdminOrderView[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<AdminOrderView | null>(null);
+  const [fulfillments, setFulfillments] = useState<AdminFulfillment[]>([]);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [isFulfillmentsLoading, setIsFulfillmentsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fulfillmentsError, setFulfillmentsError] = useState<string | null>(null);
   const [statusDraft, setStatusDraft] = useState('');
   const [statusComment, setStatusComment] = useState('');
   const [shipmentCarrier, setShipmentCarrier] = useState('');
   const [shipmentTrackingNumber, setShipmentTrackingNumber] = useState('');
   const [shipmentTrackingUrl, setShipmentTrackingUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fulfillmentStatusLabels: Record<string, string> = {
+    awaiting_payment: 'Ожидает оплаты',
+    paid: 'Оплачен',
+    assembling: 'Собирается',
+    packed: 'Упакован',
+    shipped: 'Отправлен',
+    delivered: 'Доставлен',
+    cancelled: 'Отменён',
+    returned: 'Возврат',
+    refunded: 'Возмещён'
+  };
+
+  const shipmentStatusLabels: Record<string, string> = {
+    pending: 'Ожидает подготовки',
+    assembling: 'Собирается',
+    packed: 'Упакован',
+    shipped: 'Отправлен',
+    delivered: 'Доставлен',
+    cancelled: 'Отменён'
+  };
 
   const fetchOrders = async () => {
     try {
@@ -47,8 +73,11 @@ export function AdminOrders() {
   const openOrderPanel = async (id: string) => {
     setIsPanelOpen(true);
     setSelectedOrder(null);
+    setFulfillments([]);
     setIsDetailLoading(true);
+    setIsFulfillmentsLoading(true);
     setError(null);
+    setFulfillmentsError(null);
     setStatusDraft('');
     setStatusComment('');
     try {
@@ -58,6 +87,15 @@ export function AdminOrders() {
       setError(getAdminOrderErrorMessage(err, 'Не удалось загрузить детали заказа.'));
     } finally {
       setIsDetailLoading(false);
+    }
+    
+    try {
+      const fData = await getAdminOrderFulfillments(id);
+      setFulfillments(fData);
+    } catch (err: unknown) {
+      setFulfillmentsError('Не удалось загрузить сборки продавцов.');
+    } finally {
+      setIsFulfillmentsLoading(false);
     }
   };
 
@@ -310,6 +348,76 @@ export function AdminOrders() {
                     <div className="mt-2 text-right text-sm font-semibold text-gray-900">
                       Итого: {(selectedOrder.totalPriceCents / 100).toFixed(2)} ₽
                     </div>
+                  </div>
+
+                  {/* Fulfillments */}
+                  <div className="border-t pt-4">
+                    <p className="text-xs font-medium text-gray-500 uppercase mb-3">Сборки по продавцам</p>
+                    {isFulfillmentsLoading ? (
+                      <p className="text-sm text-gray-500">Загружаем сборки продавцов...</p>
+                    ) : fulfillmentsError ? (
+                      <p className="text-sm text-red-600">{fulfillmentsError}</p>
+                    ) : fulfillments.length === 0 ? (
+                      <p className="text-sm text-gray-500">Сборки по продавцам не найдены.</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {fulfillments.map(f => (
+                          <div key={f.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{f.sellerName || 'Неизвестный продавец'}</p>
+                                <p className="text-xs text-gray-500">Сборка #{f.id.substring(0, 8)}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs font-medium bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                                  {fulfillmentStatusLabels[f.status] || f.status}
+                                </p>
+                                {f.shipmentStatus && (
+                                  <p className="mt-1 text-xs text-gray-600">
+                                    Доставка: {shipmentStatusLabels[f.shipmentStatus] || f.shipmentStatus}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="mt-3">
+                              <table className="min-w-full divide-y divide-gray-200 text-xs">
+                                <thead className="bg-white">
+                                  <tr>
+                                    <th className="px-2 py-1 text-left font-medium text-gray-500">Товар</th>
+                                    <th className="px-2 py-1 text-center font-medium text-gray-500">Кол-во</th>
+                                    <th className="px-2 py-1 text-right font-medium text-gray-500">Сумма</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 bg-white">
+                                  {f.items.map(item => (
+                                    <tr key={item.orderItemId}>
+                                      <td className="px-2 py-1 text-gray-900">{item.productTitle} {item.sku ? `(${item.sku})` : ''}</td>
+                                      <td className="px-2 py-1 text-center text-gray-500">×{item.quantity}</td>
+                                      <td className="px-2 py-1 text-right text-gray-900">{(item.lineTotalCents / 100).toFixed(2)} ₽</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            
+                            <div className="mt-2 text-right space-y-1">
+                              <p className="text-xs text-gray-500">
+                                Подытог: {(f.subtotalCents / 100).toFixed(2)} ₽
+                              </p>
+                              {f.commissionBps > 0 && (
+                                <p className="text-xs text-gray-500">
+                                  Комиссия ({f.commissionBps / 100}%): {((f.subtotalCents - f.sellerAmountCents) / 100).toFixed(2)} ₽
+                                </p>
+                              )}
+                              <p className="text-xs font-medium text-gray-900">
+                                Выручка продавца: {(f.sellerAmountCents / 100).toFixed(2)} ₽
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Status update */}

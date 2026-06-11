@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest } from './types';
+import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment } from './types';
 
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCount: number }> => {
@@ -101,6 +101,24 @@ export const getAdminOrder = async (id: string): Promise<AdminOrder> => {
 
 export const updateAdminOrderStatus = async (id: string, data: { status: string; comment?: string }): Promise<void> => {
   return request<void>('PATCH', `/admin/orders/${id}/status`, { body: data });
+};
+
+export const getAdminOrderFulfillments = async (orderId: string): Promise<{ items: AdminFulfillment[]; totalCount: number }> => {
+  return request<{ items: AdminFulfillment[]; totalCount: number }>('GET', `/admin/orders/${orderId}/fulfillments`);
+};
+
+export const getAdminFulfillments = async (params?: { limit?: number; offset?: number; status?: string }): Promise<{ items: AdminFulfillment[]; totalCount: number }> => {
+  const query = new URLSearchParams();
+  if (params?.limit) query.append('limit', params.limit.toString());
+  if (params?.offset) query.append('offset', params.offset.toString());
+  if (params?.status) query.append('status', params.status);
+  
+  const qStr = query.toString() ? `?${query.toString()}` : '';
+  return request<{ items: AdminFulfillment[]; totalCount: number }>('GET', `/admin/order-fulfillments${qStr}`);
+};
+
+export const getAdminFulfillment = async (id: string): Promise<AdminFulfillment> => {
+  return request<AdminFulfillment>('GET', `/admin/order-fulfillments/${id}`);
 };
 
 export const getAdminPayments = async (): Promise<{ items: AdminPayment[]; totalCount: number }> => {

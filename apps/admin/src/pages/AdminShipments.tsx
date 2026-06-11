@@ -181,7 +181,7 @@ export function AdminShipments() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID отгрузки</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Заказ</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Основание</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Трекинг</th>
                       <th className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
@@ -190,8 +190,20 @@ export function AdminShipments() {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {shipments.map((shipment) => (
                       <tr key={shipment.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{shipment.id}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{shipment.orderId}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{shipment.id.substring(0,8)}...</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {shipment.fulfillmentId ? (
+                            <>
+                              <span className="font-medium text-gray-900">Сборка: {shipment.fulfillmentId.substring(0, 8)}...</span><br/>
+                              <span className="text-xs text-gray-400">Заказ: {shipment.orderId.substring(0, 8)}...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded font-medium">Старая отгрузка заказа</span><br/>
+                              Заказ: {shipment.orderId.substring(0, 8)}...
+                            </>
+                          )}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(shipment.status)}`}>
                             {shipment.statusLabel}
@@ -221,7 +233,16 @@ export function AdminShipments() {
             {isDetailLoading && <span className="text-sm text-gray-500">Загрузка...</span>}
           </div>
           <dl className="mt-4 grid gap-4 md:grid-cols-4">
-            <div><dt className="text-sm font-medium text-gray-500">Заказ</dt><dd className="mt-1 text-sm text-gray-900">{selectedShipment.orderId}</dd></div>
+            <div>
+              <dt className="text-sm font-medium text-gray-500">Основание</dt>
+              <dd className="mt-1 text-sm text-gray-900">
+                {selectedShipment.fulfillmentId ? (
+                  <>Сборка: <span className="font-mono">{selectedShipment.fulfillmentId}</span><br/><span className="text-xs text-gray-500">Заказ: {selectedShipment.orderId}</span></>
+                ) : (
+                  <><span className="text-yellow-600 font-medium">Старая отгрузка заказа</span><br/><span className="text-xs text-gray-500">Заказ: {selectedShipment.orderId}</span></>
+                )}
+              </dd>
+            </div>
             <div><dt className="text-sm font-medium text-gray-500">Отправлен</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.shippedAt)}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Доставлен</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.deliveredAt)}</dd></div>
             <div><dt className="text-sm font-medium text-gray-500">Обновлён</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedShipment.updatedAt)}</dd></div>
