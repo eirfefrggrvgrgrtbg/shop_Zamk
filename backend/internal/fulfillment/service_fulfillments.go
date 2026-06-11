@@ -6,11 +6,19 @@ import (
 	"github.com/google/uuid"
 )
 
-func (s *Service) ListSellerFulfillments(ctx context.Context, sellerID uuid.UUID, limit, offset int, status *string) ([]Fulfillment, error) {
+func (s *Service) ListSellerFulfillments(ctx context.Context, userID uuid.UUID, limit, offset int, status *string) ([]Fulfillment, error) {
+	sellerID, err := s.ordersRepo.GetSellerIDByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	return s.repo.ListSellerFulfillments(ctx, sellerID, limit, offset, status)
 }
 
-func (s *Service) GetSellerFulfillment(ctx context.Context, sellerID, fulfillmentID uuid.UUID) (*Fulfillment, error) {
+func (s *Service) GetSellerFulfillment(ctx context.Context, userID, fulfillmentID uuid.UUID) (*Fulfillment, error) {
+	sellerID, err := s.ordersRepo.GetSellerIDByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	return s.repo.GetSellerFulfillment(ctx, sellerID, fulfillmentID)
 }
 

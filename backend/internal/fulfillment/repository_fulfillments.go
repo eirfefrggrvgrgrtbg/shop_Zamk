@@ -129,7 +129,7 @@ func (r *Repository) ListAdminFulfillments(ctx context.Context, limit, offset in
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			s.status as shipment_status, s.id as shipment_id,
 			o.delivery_address, o.customer_name, o.customer_phone,
-			sel.name as seller_name
+			sel.brand_name as seller_name
 		FROM order_fulfillments f
 		JOIN orders o ON o.id = f.order_id
 		JOIN sellers sel ON sel.id = f.seller_id
@@ -185,7 +185,7 @@ func (r *Repository) GetAdminFulfillment(ctx context.Context, id uuid.UUID) (*Fu
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			s.status as shipment_status, s.id as shipment_id,
 			o.delivery_address, o.customer_name, o.customer_phone,
-			sel.name as seller_name
+			sel.brand_name as seller_name
 		FROM order_fulfillments f
 		JOIN orders o ON o.id = f.order_id
 		JOIN sellers sel ON sel.id = f.seller_id
@@ -219,7 +219,7 @@ func (r *Repository) GetOrderFulfillments(ctx context.Context, orderID uuid.UUID
 		SELECT 
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			s.status as shipment_status, s.id as shipment_id,
-			sel.name as seller_name
+			sel.brand_name as seller_name
 		FROM order_fulfillments f
 		JOIN sellers sel ON sel.id = f.seller_id
 		LEFT JOIN shipments s ON (s.fulfillment_id = f.id) OR (s.fulfillment_id IS NULL AND s.order_id = f.order_id AND (SELECT COUNT(*) FROM order_fulfillments WHERE order_id = f.order_id) = 1)
