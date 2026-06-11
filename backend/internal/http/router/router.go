@@ -189,6 +189,7 @@ func New(
 		r.Post("/orders", ordersHandler.CreateOrder)
 		r.Get("/orders", ordersHandler.ListCustomerOrders)
 		r.Get("/orders/{id}", ordersHandler.GetCustomerOrder)
+		r.Get("/orders/{orderId}/fulfillments", fulfillmentHandler.GetCustomerOrderFulfillments)
 		r.Post("/orders/{id}/cancel", ordersHandler.CancelCustomerOrder)
 		r.Post("/orders/{id}/payment", paymentsHandler.CreatePayment)
 		r.Get("/orders/{id}/shipment", fulfillmentHandler.GetCustomerShipment)
@@ -242,6 +243,14 @@ func New(
 		r.Get("/", ordersHandler.ListSellerOrders)
 		r.Get("/{id}", ordersHandler.GetSellerOrder)
 		r.Get("/{id}/shipment", fulfillmentHandler.GetSellerShipment)
+	})
+
+	r.Route("/api/seller/fulfillments", func(r chi.Router) {
+		r.Use(appMiddleware.AuthMiddleware(tokenService))
+		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+
+		r.Get("/", fulfillmentHandler.ListSellerFulfillments)
+		r.Get("/{id}", fulfillmentHandler.GetSellerFulfillment)
 	})
 
 	r.Route("/api/seller/returns", func(r chi.Router) {
@@ -311,6 +320,7 @@ func New(
 		// Orders
 		r.With(perm("orders.read")).Get("/orders", ordersHandler.ListAdminOrders)
 		r.With(perm("orders.read")).Get("/orders/{id}", ordersHandler.GetAdminOrder)
+		r.With(perm("orders.read")).Get("/orders/{orderId}/fulfillments", fulfillmentHandler.GetAdminOrderFulfillments)
 		r.With(perm("orders.update_status")).Patch("/orders/{id}/status", ordersHandler.UpdateOrderStatus)
 		r.With(perm("shipments.create")).Post("/orders/{id}/shipment", fulfillmentHandler.CreateShipment)
 
@@ -322,6 +332,10 @@ func New(
 		r.With(perm("shipments.read")).Get("/shipments", fulfillmentHandler.ListAdminShipments)
 		r.With(perm("shipments.read")).Get("/shipments/{id}", fulfillmentHandler.GetAdminShipment)
 		r.With(perm("shipments.update_status")).Patch("/shipments/{id}/status", fulfillmentHandler.UpdateShipmentStatus)
+
+		// Fulfillments
+		r.With(perm("orders.read")).Get("/order-fulfillments", fulfillmentHandler.ListAdminFulfillments)
+		r.With(perm("orders.read")).Get("/order-fulfillments/{id}", fulfillmentHandler.GetAdminFulfillment)
 
 		// Returns
 		r.With(perm("returns.read")).Get("/returns", returnsHandler.ListAdminReturns)

@@ -108,6 +108,6 @@ To ensure a safe rollout without downtime:
 ## 14. Implementation Phases
 * **Phase B1 (Design)**: Architecture plan created.
 * **Phase C1 (Schema & Backfill)**: Database schema migration added (`order_fulfillments`). `order_items` and `shipments` relations added as nullable. Backfill strategy executed via SQL. **Note**: Runtime APIs still use the existing order/shipment model. `shipments.order_id` remains during the transition. `order_items.order_fulfillment_id` is nullable during transition. API migration will happen in a later phase. No runtime behavior change is expected after Phase C1.
-* **Phase C2**: Switch backend APIs to fulfillments. Migrate shipments fully to `fulfillment_id`.
+* **Phase C2 (API Read Layer)**: Read endpoints added for seller (`/api/seller/fulfillments`), admin (`/api/admin/order-fulfillments`), and customer (`/api/customer/orders/{orderId}/fulfillments`). Existing endpoints remain backward compatible. UI still unchanged. Shipment write model remains legacy. Seller fulfillment actions still disabled. Seller/Admin/Customer UI migration will happen later.
 * **Phase C3**: Frontend UI Updates (Admin per-seller shipment UI, Seller fulfillment actions, Buyer grouped order UI).
 * **Phase C4**: Finalizing edge cases (Audit Logging, Refunds, Ledger alignment, NOT NULL enforcement).
