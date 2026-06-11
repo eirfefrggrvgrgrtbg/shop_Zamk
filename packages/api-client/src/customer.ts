@@ -70,3 +70,31 @@ export const addFavorite = async (productId: string): Promise<any> => {
 export const removeFavorite = async (productId: string): Promise<any> => {
   return request('DELETE', `/customer/favorites/${productId}`);
 };
+
+export const getProfile = async (): Promise<any> => {
+  return request('GET', '/customer/profile');
+};
+
+export const updateProfile = async (data: { name: string; phone: string }): Promise<any> => {
+  return request('PATCH', '/customer/profile', { body: data });
+};
+
+export const getAddresses = async (): Promise<any> => {
+  return request('GET', '/customer/addresses');
+};
+
+export const createAddress = async (data: any): Promise<any> => {
+  return request('POST', '/customer/addresses', { body: data });
+};
+
+export const updateAddress = async (id: string, data: any): Promise<any> => {
+  return request('PATCH', `/customer/addresses/${id}`, { body: data });
+};
+
+export const deleteAddress = async (id: string): Promise<any> => {
+  return request('DELETE', `/customer/addresses/${id}`);
+};
+
+export const setDefaultAddress = async (id: string): Promise<any> => {
+  return request('POST', `/customer/addresses/${id}/default`);
+};

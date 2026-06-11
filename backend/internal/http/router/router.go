@@ -30,6 +30,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
 )
 
 func New(
@@ -55,6 +56,8 @@ func New(
 	auditRepo *staff.AuditRepository,
 	staffSvc *staff.Service,
 	favoritesHandler *favorites.Handler,
+	usersHandler *users.Handler,
+	addressesHandler *addresses.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	rateLimiter := ratelimit.NewMiddleware(
@@ -196,6 +199,15 @@ func New(
 		r.Get("/favorites", favoritesHandler.ListFavorites)
 		r.Post("/favorites/{productId}", favoritesHandler.AddFavorite)
 		r.Delete("/favorites/{productId}", favoritesHandler.RemoveFavorite)
+
+		r.Get("/profile", usersHandler.GetProfile)
+		r.Patch("/profile", usersHandler.UpdateProfile)
+
+		r.Get("/addresses", addressesHandler.ListAddresses)
+		r.Post("/addresses", addressesHandler.CreateAddress)
+		r.Patch("/addresses/{id}", addressesHandler.UpdateAddress)
+		r.Delete("/addresses/{id}", addressesHandler.DeleteAddress)
+		r.Post("/addresses/{id}/default", addressesHandler.SetDefault)
 	})
 
 	r.With(webhookLimit).Post("/api/payments/tbank/webhook", paymentsHandler.HandleTBankWebhook)

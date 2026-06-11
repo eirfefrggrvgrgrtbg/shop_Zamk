@@ -27,11 +27,11 @@ func (r *Repository) WithTx(tx pgx.Tx) *Repository {
 
 func (r *Repository) CreateUser(ctx context.Context, u *User) error {
 	query := `
-		INSERT INTO users (id, name, email, password_hash, role, status, must_change_password, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO users (id, name, email, phone, password_hash, role, status, must_change_password, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 	_, err := r.db.Exec(ctx, query,
-		u.ID, u.Name, u.Email, u.PasswordHash, u.Role, u.Status, u.MustChangePassword, u.CreatedAt, u.UpdatedAt,
+		u.ID, u.Name, u.Email, u.Phone, u.PasswordHash, u.Role, u.Status, u.MustChangePassword, u.CreatedAt, u.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
@@ -41,13 +41,13 @@ func (r *Repository) CreateUser(ctx context.Context, u *User) error {
 
 func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	query := `
-		SELECT id, name, email, password_hash, role, status, must_change_password, created_at, updated_at
+		SELECT id, name, email, phone, password_hash, role, status, must_change_password, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`
 	var u User
 	err := r.db.QueryRow(ctx, query, email).Scan(
-		&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt,
+		&u.ID, &u.Name, &u.Email, &u.Phone, &u.PasswordHash, &u.Role, &u.Status, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -60,13 +60,13 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, e
 
 func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) {
 	query := `
-		SELECT id, name, email, password_hash, role, status, must_change_password, created_at, updated_at
+		SELECT id, name, email, phone, password_hash, role, status, must_change_password, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
 	var u User
 	err := r.db.QueryRow(ctx, query, id).Scan(
-		&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt,
+		&u.ID, &u.Name, &u.Email, &u.Phone, &u.PasswordHash, &u.Role, &u.Status, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -98,6 +98,22 @@ func (r *Repository) UpdatePasswordAndMustChange(ctx context.Context, id uuid.UU
 	res, err := r.db.Exec(ctx, query, passwordHash, mustChange, id)
 	if err != nil {
 		return fmt.Errorf("failed to update password: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *Repository) UpdateCustomerProfile(ctx context.Context, id uuid.UUID, name, phone string) error {
+	query := `
+		UPDATE users
+		SET name = $1, phone = $2, updated_at = now()
+		WHERE id = $3 AND role = 'customer'
+	`
+	res, err := r.db.Exec(ctx, query, name, phone, id)
+	if err != nil {
+		return fmt.Errorf("failed to update customer profile: %w", err)
 	}
 	if res.RowsAffected() == 0 {
 		return ErrNotFound

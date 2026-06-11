@@ -10,7 +10,7 @@ import { Lock, LogOut } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { getOrders } from '@zamk/api-client/src/customer';
+import { getOrders, getProfile, updateProfile } from '@zamk/api-client/src/customer';
 
 const STATUS_LABELS: Record<string, string> = {
   active: 'Активен',
@@ -41,11 +41,43 @@ function ProfileContent() {
   const [passwordError, setPasswordError] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
 
+  const [editName, setEditName] = useState(user?.name || '');
+  const [editPhone, setEditPhone] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
   useEffect(() => {
     getOrders()
       .then((orders) => setOrdersCount(orders.length))
       .catch(() => setOrdersCount(0));
+
+    getProfile()
+      .then((data) => {
+        setEditName(data.name || '');
+        setEditPhone(data.phone || '');
+      })
+      .catch(console.error);
   }, []);
+
+  const handleSaveProfile = async () => {
+    setProfileError('');
+    setProfileSuccess(false);
+    if (!editName.trim()) {
+      setProfileError('Имя обязательно');
+      return;
+    }
+    try {
+      setIsSavingProfile(true);
+      await updateProfile({ name: editName, phone: editPhone });
+      setProfileSuccess(true);
+      setTimeout(() => setProfileSuccess(false), 3000);
+    } catch (err: any) {
+      setProfileError(err.message || 'Не удалось обновить профиль');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   const handleChangePassword = async () => {
     setPasswordError('');
@@ -93,16 +125,45 @@ function ProfileContent() {
 
         <div className='mt-4 grid grid-cols-1 md:grid-cols-2 gap-5 max-w-[980px] mx-auto'>
           <ProfilePanel title='Аккаунт'>
-            <p className='text-graphite-light dark:text-gray-300'>{user?.name}</p>
-            <p className='text-sm text-ash mt-1'>{user?.email}</p>
-            {user?.status && (
-              <p className='text-sm text-ash mt-2'>
-                Статус: <span className="text-graphite dark:text-gray-200">{STATUS_LABELS[user.status] || user.status}</span>
-              </p>
-            )}
-            <p className='text-xs text-ash mt-3'>
-              Редактирование имени и телефона пока недоступно — данные берутся из учётной записи.
-            </p>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Имя</label>
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Ваше имя"
+                  className="bg-white/50 dark:bg-white/5 border-white/40 dark:border-white/20"
+                />
+              </div>
+              <div>
+                <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Телефон</label>
+                <Input
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="+7 (999) 000-00-00"
+                  className="bg-white/50 dark:bg-white/5 border-white/40 dark:border-white/20"
+                />
+              </div>
+              <div>
+                <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Email</label>
+                <Input
+                  value={user?.email || ''}
+                  readOnly
+                  disabled
+                  className="bg-white/30 dark:bg-white/5 border-white/20 dark:border-white/10 opacity-70 cursor-not-allowed"
+                />
+              </div>
+              {user?.status && (
+                <p className='text-sm text-ash mt-2'>
+                  Статус: <span className="text-graphite dark:text-gray-200">{STATUS_LABELS[user.status] || user.status}</span>
+                </p>
+              )}
+              {profileError && <p className="text-sm text-red-500 mt-1">{profileError}</p>}
+              {profileSuccess && <p className="text-sm text-green-600 dark:text-green-400 mt-1">Профиль обновлён.</p>}
+              <Button onClick={handleSaveProfile} disabled={isSavingProfile} className="mt-2 self-start w-auto px-6">
+                {isSavingProfile ? 'Сохранение...' : 'Сохранить изменения'}
+              </Button>
+            </div>
           </ProfilePanel>
 
           <ProfilePanel title='Статистика'>

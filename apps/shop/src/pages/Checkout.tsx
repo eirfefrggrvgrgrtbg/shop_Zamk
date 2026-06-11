@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Check } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -29,6 +29,25 @@ export function Checkout() {
   const [validationError, setValidationError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>('new');
+
+  useEffect(() => {
+    import('@zamk/api-client/src/customer').then(({ getAddresses }) => {
+      if (isAuthenticated) {
+        getAddresses().then(data => {
+          setSavedAddresses(data || []);
+          const def = (data || []).find((a: any) => a.isDefault);
+          if (def) {
+            setSelectedAddressId(def.id);
+          } else if (data && data.length > 0) {
+            setSelectedAddressId(data[0].id);
+          }
+        }).catch(console.error);
+      }
+    });
+  }, [isAuthenticated]);
+
   const handleCheckout = async () => {
     if (!isAuthenticated) {
       openAuthModal('login');
@@ -41,13 +60,21 @@ export function Checkout() {
 
     setIsSubmitting(true);
 
-    const trimmedFirstName = firstName.trim();
     const trimmedEmail = email.trim();
-    const trimmedPhone = phone.trim();
-    const phoneDigits = trimmedPhone.replace(/\D/g, '');
-    const trimmedAddress = address.trim();
+    let finalName = `${firstName.trim()} ${lastName.trim()}`.trim();
+    let finalPhone = phone.trim();
+    let finalAddress = address.trim();
 
-    if (!trimmedFirstName || !trimmedEmail || !trimmedPhone || !trimmedAddress) {
+    if (selectedAddressId !== 'new') {
+      const addr = savedAddresses.find(a => a.id === selectedAddressId);
+      if (addr) {
+        finalName = addr.recipientName;
+        finalPhone = addr.phone;
+        finalAddress = `г. ${addr.city}, ул. ${addr.street}, д. ${addr.house}${addr.apartment ? `, кв. ${addr.apartment}` : ''}`;
+      }
+    }
+
+    if (!finalName || !trimmedEmail || !finalPhone || !finalAddress) {
       setValidationError('Укажите имя, email, телефон и адрес доставки.');
       setIsSubmitting(false);
       return;
@@ -59,6 +86,7 @@ export function Checkout() {
       return;
     }
 
+    const phoneDigits = finalPhone.replace(/\D/g, '');
     if (phoneDigits.length < 7) {
       setValidationError('Укажите корректный телефон, минимум 7 цифр.');
       setIsSubmitting(false);
@@ -67,10 +95,10 @@ export function Checkout() {
 
     try {
       const order = await createOrder({
-        customerName: `${trimmedFirstName} ${lastName}`.trim(),
+        customerName: finalName,
         customerEmail: trimmedEmail,
-        customerPhone: trimmedPhone,
-        deliveryAddress: `${DELIVERY_OPTIONS[step as keyof typeof DELIVERY_OPTIONS]}: ${trimmedAddress}`
+        customerPhone: finalPhone,
+        deliveryAddress: `${DELIVERY_OPTIONS[step as keyof typeof DELIVERY_OPTIONS]}: ${finalAddress}`
       });
 
       const payment = await createPayment(order.id);
@@ -143,16 +171,55 @@ export function Checkout() {
         <div className='mt-8 grid grid-cols-1 lg:grid-cols-12 gap-6'>
           <div className='lg:col-span-8 space-y-5'>
             <CheckoutPanel>
-              <SectionHeader label='Шаг 1' title='Контактные данные' />
-              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-                <Input placeholder='Имя' value={firstName} onChange={(event) => { setFirstName(event.target.value); if (validationError) setValidationError(''); }} autoComplete='given-name' required />
-                <Input placeholder='Фамилия' value={lastName} onChange={(event) => setLastName(event.target.value)} autoComplete='family-name' />
-                <Input placeholder='Эл. почта' type='email' value={email} onChange={(event) => { setEmail(event.target.value); if (validationError) setValidationError(''); }} autoComplete='email' required />
-                <Input placeholder='Телефон' type='tel' value={phone} onChange={(event) => { setPhone(event.target.value); if (validationError) setValidationError(''); }} autoComplete='tel' required />
-                <div className='md:col-span-2'>
-                  <Input placeholder='Полный адрес доставки' value={address} onChange={(event) => { setAddress(event.target.value); if (validationError) setValidationError(''); }} required />
+              <SectionHeader label='Шаг 1' title='Контактные данные и адрес' />
+              
+              {isAuthenticated && savedAddresses.length > 0 && (
+                <div className="mb-4">
+                  <label className="text-sm font-medium text-graphite dark:text-white mb-2 block">Сохранённый адрес</label>
+                  <select 
+                    className="w-full bg-white dark:bg-white/5 border border-border-lighter dark:border-white/10 rounded-lg p-3 text-sm text-graphite dark:text-white outline-none focus:ring-1 focus:ring-graphite/20 dark:focus:ring-white/30"
+                    value={selectedAddressId}
+                    onChange={(e) => setSelectedAddressId(e.target.value)}
+                  >
+                    {savedAddresses.map(a => (
+                      <option key={a.id} value={a.id}>{a.label || a.city + ', ' + a.street} ({a.recipientName})</option>
+                    ))}
+                    <option value="new">Ввести новый адрес...</option>
+                  </select>
                 </div>
-              </div>
+              )}
+
+              {selectedAddressId === 'new' || savedAddresses.length === 0 ? (
+                <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                  <Input placeholder='Имя' value={firstName} onChange={(event) => { setFirstName(event.target.value); if (validationError) setValidationError(''); }} autoComplete='given-name' required />
+                  <Input placeholder='Фамилия' value={lastName} onChange={(event) => setLastName(event.target.value)} autoComplete='family-name' />
+                  <Input placeholder='Эл. почта' type='email' value={email} onChange={(event) => { setEmail(event.target.value); if (validationError) setValidationError(''); }} autoComplete='email' required />
+                  <Input placeholder='Телефон' type='tel' value={phone} onChange={(event) => { setPhone(event.target.value); if (validationError) setValidationError(''); }} autoComplete='tel' required />
+                  <div className='md:col-span-2'>
+                    <Input placeholder='Полный адрес доставки' value={address} onChange={(event) => { setAddress(event.target.value); if (validationError) setValidationError(''); }} required />
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-ice/50 dark:bg-white/5 rounded-xl border border-border-lighter dark:border-white/10 text-sm text-graphite dark:text-white mt-4">
+                  {(() => {
+                    const a = savedAddresses.find(x => x.id === selectedAddressId);
+                    if (!a) return null;
+                    return (
+                      <>
+                        <p className="font-medium text-[15px] mb-1">{a.recipientName}</p>
+                        <p className="text-graphite/70 dark:text-white/70 mb-2">{a.phone}</p>
+                        <p className="text-graphite-light dark:text-white/80 leading-relaxed">
+                          г. {a.city}, ул. {a.street}, д. {a.house}{a.apartment ? `, кв. ${a.apartment}` : ''}
+                        </p>
+                      </>
+                    );
+                  })()}
+                  <div className="mt-4 pt-4 border-t border-border-lighter dark:border-white/10">
+                    <Input placeholder='Эл. почта для получения чека' type='email' value={email} onChange={(e) => { setEmail(e.target.value); if (validationError) setValidationError(''); }} required />
+                  </div>
+                </div>
+              )}
+              
               {validationError && (
                 <p className='mt-3 text-sm text-error' role='alert'>
                   {validationError}
