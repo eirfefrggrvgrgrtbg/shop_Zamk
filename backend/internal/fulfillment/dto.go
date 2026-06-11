@@ -13,3 +13,15 @@ type UpdateShipmentStatusRequest struct {
 	TrackingUrl    *string `json:"trackingUrl"`
 	Comment        *string `json:"comment"`
 }
+
+type CustomerFulfillmentResponse struct {
+	ID              string            `json:"id"`
+	OrderID         string            `json:"orderId"`
+	SellerName      *string           `json:"sellerName,omitempty"`
+	Status          string            `json:"status"`
+	SubtotalCents   int64             `json:"subtotalCents"`
+	CreatedAt       string            `json:"createdAt"`
+	UpdatedAt       string            `json:"updatedAt"`
+	ShipmentStatus  *string           `json:"shipmentStatus,omitempty"`
+	Items           []FulfillmentItem `json:"items"`
+}

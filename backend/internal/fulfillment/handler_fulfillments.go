@@ -162,6 +162,24 @@ func (h *Handler) GetCustomerOrderFulfillments(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	var safeFulfillments []CustomerFulfillmentResponse
+	for _, f := range fulfillments {
+		safeFulfillments = append(safeFulfillments, CustomerFulfillmentResponse{
+			ID:             f.ID.String(),
+			OrderID:        f.OrderID.String(),
+			SellerName:     f.SellerName,
+			Status:         f.Status,
+			SubtotalCents:  f.SubtotalCents,
+			CreatedAt:      f.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:      f.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ShipmentStatus: f.ShipmentStatus,
+			Items:          f.Items,
+		})
+	}
+	if safeFulfillments == nil {
+		safeFulfillments = make([]CustomerFulfillmentResponse, 0)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(fulfillments)
+	json.NewEncoder(w).Encode(safeFulfillments)
 }
