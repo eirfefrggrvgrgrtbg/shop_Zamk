@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, type ReactNode, useEffect } from 'react';
+import { consumeAuthReturnPath } from '../components/account/CustomerProtectedRoute';
 
 export interface User {
   id: string;
@@ -6,6 +7,7 @@ export interface User {
   email: string;
   avatar?: string;
   role?: string;
+  status?: string;
 }
 
 interface AuthContextType {
@@ -28,11 +30,29 @@ import { login as apiLogin, register as apiRegister, refresh, me, logout as apiL
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function mapApiUser(apiUser: { id: string; name?: string; email: string; role?: string; status?: string }): User {
+  return {
+    id: apiUser.id,
+    name: apiUser.name || apiUser.email.split('@')[0],
+    email: apiUser.email,
+    role: apiUser.role,
+    status: apiUser.status,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [authView, setAuthView] = useState<'login' | 'register' | 'forgot_password' | 'change_password'>('login');
+
+  const redirectAfterAuth = () => {
+    const returnPath = consumeAuthReturnPath();
+    const current = window.location.pathname + window.location.search;
+    if (returnPath && returnPath !== current) {
+      window.location.assign(returnPath);
+    }
+  };
 
   useEffect(() => {
     async function initAuth() {
@@ -43,12 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAuthView('change_password');
             setIsAuthModalOpen(true);
           }
-          setUser({
-            id: res.user.id,
-            name: res.user.name || res.user.email.split('@')[0],
-            email: res.user.email,
-            role: res.user.role,
-          });
+          setUser(mapApiUser(res.user));
         }
       } catch (err) {
         // Not authenticated, perfectly fine
@@ -75,14 +90,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsAuthModalOpen(true);
       } else {
         closeAuthModal();
+        redirectAfterAuth();
       }
 
-      setUser({
-        id: res.user.id,
-        name: res.user.name || res.user.email.split('@')[0],
-        email: res.user.email,
-        role: res.user.role,
-      });
+      setUser(mapApiUser(res.user));
     } catch (err: any) {
       throw new Error(err.message || 'Неверный email или пароль');
     }
@@ -92,13 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const res = await apiRegister({ name, email, password: pass });
       
-      setUser({
-        id: res.user.id,
-        name: res.user.name || res.user.email.split('@')[0],
-        email: res.user.email,
-        role: res.user.role,
-      });
+      setUser(mapApiUser(res.user));
       closeAuthModal();
+      redirectAfterAuth();
     } catch (err: any) {
       throw new Error(err.message || 'Ошибка регистрации');
     }

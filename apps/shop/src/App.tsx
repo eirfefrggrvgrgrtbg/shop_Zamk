@@ -17,6 +17,7 @@ import { BrandDetail } from './pages/BrandDetail';
 import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
 import { Profile } from './pages/Profile';
+import { CustomerReviews } from './pages/CustomerReviews';
 import { Orders } from './pages/Orders';
 import { Settings } from './pages/Settings';
 import { Favorites } from './pages/Favorites';
@@ -58,7 +59,9 @@ function App() {
                     <Route path="/cart" element={<Cart />} />
                     <Route path="/checkout" element={<Checkout />} />
                     <Route path="/favorites" element={<Favorites />} />
+                    <Route path="/account" element={<Profile />} />
                     <Route path="/profile" element={<Profile />} />
+                    <Route path="/reviews" element={<CustomerReviews />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/orders" element={<Orders />} />
                     <Route path="/brands" element={<Brands />} />

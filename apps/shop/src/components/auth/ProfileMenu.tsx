@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link } from 'react-router-dom';
-import { LogOut, Settings, ShoppingBag, User } from 'lucide-react';
+import { LogOut, Settings, ShoppingBag, User, Heart, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export function ProfileMenu() {
@@ -9,7 +9,6 @@ export function ProfileMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Закрытие по клику вне меню
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -20,9 +19,12 @@ export function ProfileMenu() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const linkClass =
+    'flex items-center gap-3 px-5 py-2.5 text-[13.5px] text-graphite/70 dark:text-white/70 hover:bg-white/60 dark:hover:bg-white/10 hover:text-graphite dark:hover:text-white transition-all';
+
   return (
     <div className="relative" ref={menuRef}>
-      <button 
+      <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 p-1.5 rounded-full hover:bg-white/40 dark:hover:bg-white/10 transition-colors"
       >
@@ -33,7 +35,7 @@ export function ProfileMenu() {
 
       <AnimatePresence>
         {isOpen && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -44,36 +46,32 @@ export function ProfileMenu() {
               <p className="text-[14px] font-medium text-graphite dark:text-white truncate">{user?.name}</p>
               <p className="text-[12px] text-graphite/50 dark:text-white/50 truncate mt-0.5">{user?.email}</p>
             </div>
-            
+
             <div className="py-2 flex flex-col">
-              <Link 
-                to="/profile" 
-                onClick={() => setIsOpen(false)}
-                className="flex items-center gap-3 px-5 py-2.5 text-[13.5px] text-graphite/70 dark:text-white/70 hover:bg-white/60 dark:hover:bg-white/10 hover:text-graphite dark:hover:text-white transition-all"
-              >
+              <Link to="/account" onClick={() => setIsOpen(false)} className={linkClass}>
                 <User className="w-[15px] h-[15px]" />
-                Мой профиль
+                Профиль
               </Link>
-              <Link 
-                to="/orders"
-                onClick={() => setIsOpen(false)}
-                className="flex items-center gap-3 px-5 py-2.5 text-[13.5px] text-graphite/70 dark:text-white/70 hover:bg-white/60 dark:hover:bg-white/10 hover:text-graphite dark:hover:text-white transition-all"
-              >
+              <Link to="/orders" onClick={() => setIsOpen(false)} className={linkClass}>
                 <ShoppingBag className="w-[15px] h-[15px]" />
-                Мои заказы
+                Заказы
               </Link>
-              <Link 
-                to="/settings" // Предполагаем, что может быть
-                onClick={() => setIsOpen(false)}
-                className="flex items-center gap-3 px-5 py-2.5 text-[13.5px] text-graphite/70 dark:text-white/70 hover:bg-white/60 dark:hover:bg-white/10 hover:text-graphite dark:hover:text-white transition-all"
-              >
+              <Link to="/favorites" onClick={() => setIsOpen(false)} className={linkClass}>
+                <Heart className="w-[15px] h-[15px]" />
+                Избранное
+              </Link>
+              <Link to="/reviews" onClick={() => setIsOpen(false)} className={linkClass}>
+                <Star className="w-[15px] h-[15px]" />
+                Отзывы
+              </Link>
+              <Link to="/settings" onClick={() => setIsOpen(false)} className={linkClass}>
                 <Settings className="w-[15px] h-[15px]" />
                 Настройки
               </Link>
             </div>
-            
+
             <div className="pt-2 pb-1 border-t border-border-lighter dark:border-white/10 flex flex-col bg-white/30 dark:bg-white/5">
-              <button 
+              <button
                 onClick={() => {
                   logout();
                   setIsOpen(false);

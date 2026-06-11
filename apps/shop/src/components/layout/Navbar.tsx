@@ -157,7 +157,7 @@ export function Navbar() {
             </Link>
 
             {isAuthenticated ? (
-              <Link to="/profile" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
+              <Link to="/account" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
                 Профиль
               </Link>
             ) : (
@@ -194,7 +194,7 @@ export function Navbar() {
           </Link>
           
           {isAuthenticated ? (
-            <Link to="/profile" className={`p-2 rounded-full transition-colors ${location.pathname === '/profile' ? 'text-primary dark:text-white bg-primary/10 dark:bg-white/10' : 'text-ash dark:text-gray-400'}`}>
+            <Link to="/account" className={`p-2 rounded-full transition-colors ${(location.pathname === '/account' || location.pathname === '/profile') ? 'text-primary dark:text-white bg-primary/10 dark:bg-white/10' : 'text-ash dark:text-gray-400'}`}>
               <User className="w-5 h-5" />
             </Link>
           ) : (

@@ -1,14 +1,25 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Package, ChevronRight, ArrowLeft, MapPin, CreditCard, Truck } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { Package, ChevronRight, MapPin, CreditCard, Truck } from 'lucide-react';
 import { Drawer } from '../components/ui/Drawer';
 import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
 import { ReturnModal } from '../components/orders/ReturnModal';
 import { ReviewModal } from '../components/orders/ReviewModal';
+import { AccountNav } from '../components/account/AccountNav';
+import { CustomerProtectedRoute } from '../components/account/CustomerProtectedRoute';
 
 export function Orders() {
-  const { isAuthenticated } = useAuth();
+  return (
+    <CustomerProtectedRoute
+      title="Мои заказы"
+      description="Войдите в аккаунт, чтобы просматривать историю заказов."
+    >
+      <OrdersContent />
+    </CustomerProtectedRoute>
+  );
+}
+
+function OrdersContent() {
   const [orders, setOrders] = useState<any[]>([]);
   const [returnsMap, setReturnsMap] = useState<Record<string, any[]>>({});
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
@@ -99,22 +110,8 @@ export function Orders() {
   };
 
   useEffect(() => {
-    if (!isAuthenticated) return;
     loadData();
-  }, [isAuthenticated]);
-  
-  if (!isAuthenticated) {
-    return (
-      <div className="pt-32 pb-20 min-h-[70vh] flex flex-col items-center justify-center text-center px-4">
-        <Package className="w-12 h-12 text-ash-light dark:text-white/50 mb-4" />
-        <h2 className="text-xl font-medium text-graphite dark:text-white mb-2">Доступ закрыт</h2>
-        <p className="text-sm text-ash dark:text-white/60 mb-6">Войдите в аккаунт, чтобы просматривать историю заказов</p>
-        <Link to="/" className="text-[13px] font-medium border-b border-graphite dark:border-white pb-0.5 uppercase tracking-wide dark:text-white">
-          Вернуться на главную
-        </Link>
-      </div>
-    );
-  }
+  }, []);
 
   return (
     <div className='relative z-10 min-h-screen pt-24 md:pt-32 pb-20'>
@@ -122,11 +119,8 @@ export function Orders() {
         
         {/* Шапка страницы */}
         <div className="mb-10 md:mb-12">
-          <Link to="/profile" className="inline-flex items-center gap-2 text-[13px] text-ash dark:text-white/60 hover:text-graphite dark:hover:text-white transition-colors mb-6 font-medium uppercase tracking-[0.04em]">
-            <ArrowLeft className="w-[14px] h-[14px]" />
-            Мой профиль
-          </Link>
-          <div className="flex items-end justify-between">
+          <AccountNav />
+          <div className="flex items-end justify-between mt-4">
             <h1 className="text-4xl md:text-5xl font-serif text-graphite dark:text-white tracking-tight leading-none">
               Мои заказы
             </h1>

@@ -1,4 +1,5 @@
 import { getProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller } from '@zamk/api-client/src/public';
+import type { ProductSummary } from '@zamk/api-client/src/types';
 import type { Product as UIProduct, Brand as UIBrand, Category as UICategory, Review as UIReview } from '../types/catalog';
 
 export const PRODUCT_PLACEHOLDER_IMAGE =
@@ -6,6 +7,40 @@ export const PRODUCT_PLACEHOLDER_IMAGE =
 
 // Cache for brands to map brandId to brand name
 let cachedBrands: Record<string, string> = {};
+
+export function mapProductSummaryToCatalog(
+  p: ProductSummary & { title?: string; priceCents?: number; oldPriceCents?: number; mainImageUrl?: string },
+  brandName?: string
+): UIProduct {
+  const priceCents = p.priceCents ?? 0;
+  const oldPriceCents = p.oldPriceCents;
+  const price = priceCents / 100;
+  const oldPrice = oldPriceCents ? oldPriceCents / 100 : undefined;
+
+  return {
+    id: p.id,
+    name: p.title,
+    brand: brandName || (p.brandId ? (cachedBrands[p.brandId] || 'Бренд не указан') : 'Бренд не указан'),
+    brandId: p.brandId || '',
+    price,
+    oldPrice,
+    discountPrice: oldPrice && oldPrice > price ? price : undefined,
+    image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
+    images: p.mainImageUrl ? [p.mainImageUrl] : [],
+    category: p.categoryId || 'Категория не указана',
+    sellerId: p.sellerId,
+    rating: p.rating?.average,
+    reviewsCount: p.rating?.count,
+    isNew: false,
+  };
+}
+
+export async function mapFavoritesToCatalog(items: ProductSummary[]): Promise<UIProduct[]> {
+  if (Object.keys(cachedBrands).length === 0) {
+    await fetchBrands().catch(() => {});
+  }
+  return items.map((p) => mapProductSummaryToCatalog(p));
+}
 
 export async function fetchBrands(): Promise<UIBrand[]> {
   const brands = await getBrands();

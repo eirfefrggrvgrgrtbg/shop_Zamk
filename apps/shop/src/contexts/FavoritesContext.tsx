@@ -1,61 +1,111 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-
-const FAVORITES_STORAGE_KEY = 'zamk_favorites';
-
-function readStoredFavorites(): string[] {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
-  try {
-    const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
-  } catch {
-    return [];
-  }
-}
+import { getFavorites, addFavorite, removeFavorite } from '@zamk/api-client/src/customer';
+import { mapFavoritesToCatalog } from '../api/publicCatalog';
+import { setAuthReturnPath } from '../components/account/CustomerProtectedRoute';
+import { useAuth } from './AuthContext';
+import type { Product } from '../types/catalog';
 
 interface FavoritesContextType {
-  favorites: string[];
-  toggleFavorite: (productId: string) => void;
+  favorites: Product[];
+  favoriteIds: string[];
+  toggleFavorite: (productId: string) => Promise<void>;
   isFavorite: (productId: string) => boolean;
   clearFavorites: () => void;
+  isLoading: boolean;
+  error: string | null;
+  reloadFavorites: () => Promise<void>;
 }
 
 const FavoritesContext = createContext<FavoritesContextType | undefined>(undefined);
 
 export function FavoritesProvider({ children }: { children: React.ReactNode }) {
-  const [favorites, setFavorites] = useState<string[]>(readStoredFavorites);
+  const { user, openAuthModal } = useAuth();
+  const [favorites, setFavorites] = useState<Product[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadFavorites = useCallback(async () => {
     try {
-      window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
-    } catch {
-      // Keep the in-memory wishlist working if storage is unavailable.
+      setIsLoading(true);
+      setError(null);
+      const data = await getFavorites();
+      const mapped = await mapFavoritesToCatalog(data || []);
+      setFavorites(mapped);
+      setFavoriteIds(mapped.map((p) => p.id));
+    } catch (err) {
+      console.error('Failed to load favorites', err);
+      setError('Не удалось загрузить избранное.');
+      setFavorites([]);
+      setFavoriteIds([]);
+    } finally {
+      setIsLoading(false);
     }
-  }, [favorites]);
-
-  const toggleFavorite = useCallback((productId: string) => {
-    setFavorites(prev =>
-      prev.includes(productId)
-        ? prev.filter(id => id !== productId)
-        : [...prev, productId]
-    );
   }, []);
 
-  const isFavorite = useCallback((productId: string) => {
-    return favorites.includes(productId);
-  }, [favorites]);
+  useEffect(() => {
+    if (user) {
+      loadFavorites();
+    } else {
+      setFavorites([]);
+      setFavoriteIds([]);
+      setError(null);
+      setIsLoading(false);
+    }
+  }, [user, loadFavorites]);
 
-  const clearFavorites = useCallback(() => setFavorites([]), []);
+  const toggleFavorite = useCallback(async (productId: string) => {
+    if (!user) {
+      setAuthReturnPath(window.location.pathname + window.location.search);
+      openAuthModal('login');
+      return;
+    }
+
+    const isFav = favoriteIds.includes(productId);
+
+    setFavoriteIds((prev) =>
+      isFav ? prev.filter((id) => id !== productId) : [...prev, productId]
+    );
+    if (isFav) {
+      setFavorites((prev) => prev.filter((p) => p.id !== productId));
+    }
+
+    try {
+      if (isFav) {
+        await removeFavorite(productId);
+      } else {
+        await addFavorite(productId);
+        await loadFavorites();
+      }
+    } catch (err) {
+      console.error('Failed to toggle favorite', err);
+      await loadFavorites();
+    }
+  }, [user, favoriteIds, openAuthModal, loadFavorites]);
+
+  const isFavorite = useCallback((productId: string) => {
+    return favoriteIds.includes(productId);
+  }, [favoriteIds]);
+
+  const clearFavorites = useCallback(() => {
+    setFavorites([]);
+    setFavoriteIds([]);
+    setError(null);
+  }, []);
 
   return (
-    <FavoritesContext.Provider value={{ favorites, toggleFavorite, isFavorite, clearFavorites }}>
+    <FavoritesContext.Provider
+      value={{
+        favorites,
+        favoriteIds,
+        toggleFavorite,
+        isFavorite,
+        clearFavorites,
+        isLoading,
+        error,
+        reloadFavorites: loadFavorites,
+      }}
+    >
       {children}
     </FavoritesContext.Provider>
   );

@@ -29,6 +29,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
 )
 
 func New(
@@ -53,6 +54,7 @@ func New(
 	staffHandler *staff.Handler,
 	auditRepo *staff.AuditRepository,
 	staffSvc *staff.Service,
+	favoritesHandler *favorites.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	rateLimiter := ratelimit.NewMiddleware(
@@ -190,6 +192,10 @@ func New(
 		r.Post("/orders/{id}/returns", returnsHandler.CreateCustomerReturn)
 		r.Get("/returns", returnsHandler.ListCustomerReturns)
 		r.Get("/returns/{id}", returnsHandler.GetCustomerReturn)
+
+		r.Get("/favorites", favoritesHandler.ListFavorites)
+		r.Post("/favorites/{productId}", favoritesHandler.AddFavorite)
+		r.Delete("/favorites/{productId}", favoritesHandler.RemoveFavorite)
 	})
 
 	r.With(webhookLimit).Post("/api/payments/tbank/webhook", paymentsHandler.HandleTBankWebhook)

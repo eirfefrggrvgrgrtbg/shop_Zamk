@@ -3,13 +3,17 @@ import { Heart, Star } from 'lucide-react';
 import type { Product } from '../../types/catalog';
 import { formatPrice } from '../../lib/utils';
 import { useFavorites } from '../../contexts/FavoritesContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 
 interface ProductCardProps {
   product: Product;
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const { user } = useAuth();
   const { toggleFavorite, isFavorite } = useFavorites();
+  const { showToast } = useToast();
   const favorited = isFavorite(product.id);
 
   // Вычисляем процент скидки
@@ -77,6 +81,9 @@ export function ProductCard({ product }: ProductCardProps) {
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              if (!user) {
+                showToast('Войдите, чтобы добавить товар в избранное.');
+              }
               toggleFavorite(product.id);
             }}
             aria-label={favorited ? 'Убрать из избранного' : 'Добавить в избранное'}

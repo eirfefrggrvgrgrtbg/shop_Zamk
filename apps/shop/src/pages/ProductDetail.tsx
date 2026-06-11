@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { useCart } from '../contexts/CartContext';
 import { useFavorites } from '../contexts/FavoritesContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatPrice, cn } from '../lib/utils';
 import { fetchProductById, fetchProductReviews } from '../api/publicCatalog';
@@ -88,6 +89,7 @@ export function ProductDetail() {
   }, [id]);
 
   const { addItem } = useCart();
+  const { user } = useAuth();
   const { toggleFavorite, isFavorite } = useFavorites();
   const { showToast } = useToast();
 
@@ -393,8 +395,13 @@ export function ProductDetail() {
                 className="h-12 w-12"
                 aria-label={liked ? 'Убрать из избранного' : 'Добавить в избранное'}
                 onClick={() => {
+                  if (!user) {
+                    showToast('Войдите, чтобы добавить товар в избранное.');
+                  }
                   toggleFavorite(product.id);
-                  showToast(liked ? 'Удалено из избранного' : 'Добавлено в избранное');
+                  if (user) {
+                    showToast(liked ? 'Удалено из избранного' : 'Добавлено в избранное');
+                  }
                 }}
               >
                 <Heart className={cn("w-5 h-5", liked && "fill-current text-red-500")} />

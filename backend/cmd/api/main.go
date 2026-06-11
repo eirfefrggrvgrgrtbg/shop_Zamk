@@ -31,6 +31,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
 )
 
 func main() {
@@ -152,8 +153,12 @@ func main() {
 	returnsHandler = returnsHandler.WithAudit(staffAuditRepo)
 	reviewsHandler = reviewsHandler.WithAudit(staffAuditRepo).WithStaffSvc(staffService)
 
+	favoritesRepo := favorites.NewRepository(pgClient.Pool)
+	favoritesService := favorites.NewService(favoritesRepo)
+	favoritesHandler := favorites.NewHandler(favoritesService)
+
 	// Create router
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService)
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler)
 
 	// Start HTTP server
 	srv := &http.Server{

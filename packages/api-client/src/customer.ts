@@ -58,3 +58,15 @@ export const getCustomerReturn = async (returnId: string): Promise<any> => {
 export const getCustomerReviews = async (): Promise<any> => {
   return request('GET', '/customer/reviews');
 };
+
+export const getFavorites = async (): Promise<any> => {
+  return request('GET', '/customer/favorites');
+};
+
+export const addFavorite = async (productId: string): Promise<any> => {
+  return request('POST', `/customer/favorites/${productId}`);
+};
+
+export const removeFavorite = async (productId: string): Promise<any> => {
+  return request('DELETE', `/customer/favorites/${productId}`);
+};
