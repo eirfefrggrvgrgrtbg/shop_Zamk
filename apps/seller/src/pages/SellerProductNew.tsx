@@ -428,29 +428,37 @@ export function SellerProductNew() {
             )}
 
             <div className="mt-6 flex flex-col gap-3">
-              <button
-                type="button"
-                disabled={isSaving}
-                onClick={() => saveProduct('draft')}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-border-lighter bg-white/75 px-6 text-sm font-semibold text-graphite transition-colors hover:bg-white disabled:opacity-50 dark:border-white/16 dark:bg-white/8 dark:text-white dark:hover:bg-white/12"
-              >
-                <Save className="h-4 w-4" />
-                Сохранить черновик
-              </button>
-              <button
-                type="button"
-                disabled={isSaving || sellerMe?.seller.status === 'pending'}
-                onClick={() => saveProduct('moderation')}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-graphite px-6 text-sm font-semibold text-white transition-colors hover:bg-graphite-light disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-white/86"
-                title={sellerMe?.seller.status === 'pending' ? 'Магазин на проверке. Вы можете создавать только черновики.' : ''}
-              >
-                <Rocket className="h-4 w-4" />
-                Отправить на модерацию
-              </button>
-              {sellerMe?.seller.status === 'pending' && (
-                <p className="text-center text-xs text-amber-600">
-                  Магазин на проверке. Отправка на модерацию недоступна.
-                </p>
+              {sellerMe?.seller.status === 'blocked' || sellerMe?.seller.status === 'archived' ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 text-center">
+                  Действия с товарами недоступны из-за статуса магазина.
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => saveProduct('draft')}
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-border-lighter bg-white/75 px-6 text-sm font-semibold text-graphite transition-colors hover:bg-white disabled:opacity-50 dark:border-white/16 dark:bg-white/8 dark:text-white dark:hover:bg-white/12"
+                  >
+                    <Save className="h-4 w-4" />
+                    Сохранить черновик
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSaving || sellerMe?.seller.status === 'pending'}
+                    onClick={() => saveProduct('moderation')}
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-graphite px-6 text-sm font-semibold text-white transition-colors hover:bg-graphite-light disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-white/86"
+                    title={sellerMe?.seller.status === 'pending' ? 'Отправка на модерацию будет доступна после проверки магазина.' : ''}
+                  >
+                    <Rocket className="h-4 w-4" />
+                    Отправить на модерацию
+                  </button>
+                  {sellerMe?.seller.status === 'pending' && (
+                    <p className="text-center text-xs text-amber-600">
+                      Отправка на модерацию будет доступна после проверки магазина.
+                    </p>
+                  )}
+                </>
               )}
               <Link to="/seller-products" className="inline-flex h-12 items-center justify-center gap-2 rounded-full px-6 text-sm font-semibold text-graphite-light transition-colors hover:text-graphite dark:text-white/64 dark:hover:text-white">
                 Перейти к списку товаров

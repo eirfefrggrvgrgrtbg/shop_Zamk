@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -102,6 +104,10 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusForbidden, "forbidden", "Seller profile not found")
 			return
 		}
+		if errors.Is(err, ErrSellerBlocked) {
+			h.writeError(w, http.StatusForbidden, "seller_blocked", "Магазин заблокирован или архивирован. Действие недоступно.")
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create product")
 		return
 	}
@@ -187,6 +193,14 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusConflict, "duplicate_slug", "Product slug already exists")
 			return
 		}
+		if errors.Is(err, ErrSellerBlocked) {
+			h.writeError(w, http.StatusForbidden, "seller_blocked", "Магазин заблокирован или архивирован. Действие недоступно.")
+			return
+		}
+		if errors.Is(err, ErrProductNotEditable) {
+			h.writeError(w, http.StatusConflict, "product_not_editable", "Действие с товаром недоступно в его текущем статусе.")
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update product")
 		return
 	}
@@ -211,11 +225,51 @@ func (h *Handler) DeleteDraftProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Product not found or not in draft/rejected state")
 			return
 		}
+		if errors.Is(err, ErrSellerBlocked) {
+			h.writeError(w, http.StatusForbidden, "seller_blocked", "Магазин заблокирован или архивирован. Действие недоступно.")
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to delete product")
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) GetModerationHistory(w http.ResponseWriter, r *http.Request) {
+	userID, ok := h.getUserID(w, r)
+	if !ok {
+		return
+	}
+	productID, ok := h.parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+
+	logs, err := h.service.GetProductModerationHistory(r.Context(), userID, productID)
+	if err != nil {
+		if errors.Is(err, ErrProductNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Product not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve moderation history")
+		return
+	}
+
+	items := make([]ModerationHistoryItem, 0, len(logs))
+	for _, l := range logs {
+		items = append(items, ModerationHistoryItem{
+			ID:         l.ID,
+			ProductID:  l.ProductID,
+			FromStatus: l.FromStatus,
+			ToStatus:   l.ToStatus,
+			Comment:    l.Comment,
+			CreatedAt:  l.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ModerationHistoryResponse{Items: items})
 }
 
 func (h *Handler) SubmitForModeration(w http.ResponseWriter, r *http.Request) {
@@ -244,6 +298,14 @@ func (h *Handler) SubmitForModeration(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, ErrInvalidStatusTransition) {
 			h.writeError(w, http.StatusUnprocessableEntity, "invalid_status", err.Error())
+			return
+		}
+		if errors.Is(err, ErrSellerBlocked) {
+			h.writeError(w, http.StatusForbidden, "seller_blocked", "Магазин заблокирован или архивирован. Действие недоступно.")
+			return
+		}
+		if errors.Is(err, ErrSellerNotActive) {
+			h.writeError(w, http.StatusForbidden, "seller_not_active", "Магазин ещё не активирован. Отправка товаров на модерацию будет доступна после проверки.")
 			return
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to submit product")
@@ -336,6 +398,10 @@ func (h *Handler) AdminRejectProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusUnprocessableEntity, "invalid_status", err.Error())
 			return
 		}
+		if errors.Is(err, ErrRejectionReasonRequired) {
+			h.writeError(w, http.StatusBadRequest, "reason_required", err.Error())
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to reject product")
 		return
 	}
@@ -416,7 +482,52 @@ func (h *Handler) handleAdminModerationAction(w http.ResponseWriter, r *http.Req
 
 func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	resp, err := h.service.ListPublicProducts(r.Context(), page.Limit, page.Offset)
+	
+	filter := PublicProductFilter{}
+	q := r.URL.Query().Get("q")
+	if q != "" {
+		filter.Query = &q
+	}
+	
+	if catID := r.URL.Query().Get("categoryId"); catID != "" && catID != "all" {
+		if id, err := uuid.Parse(catID); err == nil {
+			filter.CategoryID = &id
+		}
+	}
+	
+	if brandID := r.URL.Query().Get("brandId"); brandID != "" && brandID != "all" {
+		if id, err := uuid.Parse(brandID); err == nil {
+			filter.BrandID = &id
+		}
+	}
+	
+	if sort := r.URL.Query().Get("sort"); sort != "" {
+		filter.Sort = &sort
+	}
+
+	// We can parse minPriceCents and maxPriceCents, but we need strconv.
+	// Since we haven't imported strconv in handler.go directly, let's just parse it using fmt or simple string parsing, wait, strconv is better.
+	// I will just add strconv import or simply use Sscanf.
+	if minPrice := r.URL.Query().Get("minPriceCents"); minPrice != "" {
+		var min int64
+		if _, err := fmt.Sscanf(minPrice, "%d", &min); err == nil {
+			filter.MinPriceCents = &min
+		}
+	}
+
+	if maxPrice := r.URL.Query().Get("maxPriceCents"); maxPrice != "" {
+		var max int64
+		if _, err := fmt.Sscanf(maxPrice, "%d", &max); err == nil {
+			filter.MaxPriceCents = &max
+		}
+	}
+
+	if inStock := r.URL.Query().Get("inStock"); inStock == "true" {
+		b := true
+		filter.InStock = &b
+	}
+
+	resp, err := h.service.ListPublicProducts(r.Context(), filter, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list products")
 		return

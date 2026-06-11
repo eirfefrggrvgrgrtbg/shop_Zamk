@@ -21,7 +21,7 @@ import {
   type SellerProductIssue,
   type SellerProductStatus,
 } from '../lib/seller-products';
-import { getSellerProducts } from '@zamk/api-client/src/seller';
+import { getSellerProducts, getSellerMe } from '@zamk/api-client/src/seller';
 import { request } from '@zamk/api-client/src/client';
 import { adaptProductList } from '../api/adapter';
 import { cn } from '../lib/utils';
@@ -152,7 +152,7 @@ function ProductAvatar({ product }: { product: SellerProduct }) {
   );
 }
 
-function ProductDetailPanel({ product }: { product: SellerProduct }) {
+function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct; sellerStatus: string }) {
   const totalStock = product.sizes.reduce((sum, item) => sum + item.stock, 0);
   const margin = product.price - product.cost;
   const adShare = product.revenue > 0 ? (product.adsSpend / product.revenue) * 100 : 0;
@@ -168,6 +168,12 @@ function ProductDetailPanel({ product }: { product: SellerProduct }) {
             <ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge>
             <ProductBadge tone={getIssueTone(product.issue)}>{issueLabels[product.issue]}</ProductBadge>
           </div>
+          {product.status === 'rejected' && product.rejectionReason && (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-200">
+              <span className="mb-1 block font-semibold">Причина отклонения:</span>
+              {product.rejectionReason}
+            </div>
+          )}
         </div>
       </div>
 
@@ -205,13 +211,33 @@ function ProductDetailPanel({ product }: { product: SellerProduct }) {
       <p className="mt-5 text-sm leading-relaxed text-graphite-light dark:text-white/68">{product.description}</p>
       
       <div className="mt-6 flex flex-col">
-        <Link 
-          to={`/products/${product.id}/edit`}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-border-lighter bg-white/75 px-6 text-sm font-semibold text-graphite transition-colors hover:bg-white dark:border-white/16 dark:bg-white/8 dark:text-white dark:hover:bg-white/12"
-        >
-          <Edit2 className="h-4 w-4" />
-          Редактировать товар
-        </Link>
+        {sellerStatus === 'blocked' || sellerStatus === 'archived' ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            Действия с товарами недоступны из-за статуса магазина.
+          </div>
+        ) : (
+          <Link 
+            to={`/products/${product.id}/edit`}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-border-lighter bg-white/75 px-6 text-sm font-semibold text-graphite transition-colors hover:bg-white dark:border-white/16 dark:bg-white/8 dark:text-white dark:hover:bg-white/12"
+          >
+            {product.status === 'moderation' || product.status === 'published' || product.status === 'approved' || product.status === 'hidden' || product.status === 'blocked' ? (
+              <>
+                <Eye className="h-4 w-4" />
+                Просмотр товара
+              </>
+            ) : product.status === 'rejected' ? (
+              <>
+                <AlertTriangle className="h-4 w-4 text-red-500" />
+                Исправить и отправить
+              </>
+            ) : (
+              <>
+                <Edit2 className="h-4 w-4" />
+                Продолжить заполнение
+              </>
+            )}
+          </Link>
+        )}
       </div>
     </aside>
   );
@@ -225,11 +251,13 @@ export function SellerProducts() {
   const [status, setStatus] = useState<SellerProductStatus | 'all'>('all');
   const [issue, setIssue] = useState<SellerProductIssue | 'all'>('all');
   const [selectedId, setSelectedId] = useState('');
+  const [sellerStatus, setSellerStatus] = useState<string>('active');
 
   useEffect(() => {
     async function load() {
       try {
-        const rawProducts = await getSellerProducts();
+        const [me, rawProducts] = await Promise.all([getSellerMe(), getSellerProducts()]);
+        setSellerStatus(me.seller.status);
         const adapted = adaptProductList(rawProducts);
         setProducts(adapted);
         if (adapted.length > 0) {
@@ -437,7 +465,7 @@ export function SellerProducts() {
             </div>
           </section>
 
-          {selectedProduct && <ProductDetailPanel product={selectedProduct} />}
+          {selectedProduct && <ProductDetailPanel product={selectedProduct} sellerStatus={sellerStatus} />}
         </div>
       </div>
     </div>

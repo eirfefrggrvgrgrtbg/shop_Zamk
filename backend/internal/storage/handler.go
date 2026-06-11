@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -86,7 +87,7 @@ func (h *Handler) UploadSellerProductImage(w http.ResponseWriter, r *http.Reques
 
 	resp, err := h.service.UploadSellerProductImage(r.Context(), userID, productID, file, header.Filename, header.Size, contentType, int64(h.cfg.UploadMaxSizeMB), opts)
 	if err != nil {
-		if err == ErrProductNotOwned || err == ErrProductNotDraft {
+		if err == ErrProductNotOwned || err == ErrProductNotDraft || err == products.ErrProductNotEditable {
 			h.writeJSONError(w, http.StatusForbidden, err.Error())
 			return
 		}

@@ -20,9 +20,9 @@ export function NewArrivals() {
       setError('');
 
       try {
-        const data = await fetchProducts();
+        const data = await fetchProducts({ sort: 'newest' });
         if (!cancelled) {
-          setItems(data.slice(0, 12));
+          setItems(data.items.slice(0, 12));
         }
       } catch {
         if (!cancelled) {

@@ -161,6 +161,11 @@ export function AdminModeration() {
                                   Variants: {product.variants.map((variant) => variant.label).join(', ')}
                                 </div>
                               )}
+                              {product.moderationComment && (
+                                <div className="mt-2 p-2 bg-red-50 border-l-2 border-red-500 text-sm text-red-700">
+                                  <strong>Предыдущая причина отклонения:</strong> {product.moderationComment}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>

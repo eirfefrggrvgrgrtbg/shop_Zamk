@@ -32,27 +32,30 @@ export async function fetchCategories(): Promise<UICategory[]> {
   }));
 }
 
-export async function fetchProducts(params?: any): Promise<UIProduct[]> {
+export async function fetchProducts(params?: any): Promise<{ items: UIProduct[], totalCount: number }> {
   // ensure brands are loaded for mapping
   if (Object.keys(cachedBrands).length === 0) {
     await fetchBrands().catch(() => {}); // best effort
   }
 
   const res = await getProducts(params);
-  return res.items.map(p => ({
-    id: p.id,
-    name: p.title,
-    brand: p.brandId ? (cachedBrands[p.brandId] || 'Бренд не указан') : 'Бренд не указан',
-    brandId: p.brandId || '',
-    price: p.priceCents / 100,
-    oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
-    image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
-    category: p.categoryId || 'Категория не указана',
-    sellerId: p.sellerId,
-    rating: p.rating?.average,
-    reviewsCount: p.rating?.count,
-    isNew: false,
-  }));
+  return {
+    items: res.items.map(p => ({
+      id: p.id,
+      name: p.title,
+      brand: p.brandId ? (cachedBrands[p.brandId] || 'Бренд не указан') : 'Бренд не указан',
+      brandId: p.brandId || '',
+      price: p.priceCents / 100,
+      oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
+      image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
+      category: p.categoryId || 'Категория не указана',
+      sellerId: p.sellerId,
+      rating: p.rating?.average,
+      reviewsCount: p.rating?.count,
+      isNew: false,
+    })),
+    totalCount: res.totalCount
+  };
 }
 
 export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {

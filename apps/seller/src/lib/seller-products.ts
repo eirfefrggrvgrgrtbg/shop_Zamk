@@ -35,6 +35,7 @@ export interface SellerProduct {
   season: string;
   sizes: SellerProductSize[];
   updatedAt: string;
+  rejectionReason?: string;
 }
 
 export const statusLabels: Record<SellerProductStatus, string> = {

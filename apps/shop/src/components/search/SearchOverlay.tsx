@@ -46,6 +46,7 @@ export function SearchOverlay() {
   }, [isSearchOpen]);
 
 
+  // Fetch default suggestions
   useEffect(() => {
     if (!isSearchOpen || products.length > 0) return;
     let cancelled = false;
@@ -56,7 +57,7 @@ export function SearchOverlay() {
       try {
         const data = await fetchProducts();
         if (!cancelled) {
-          setProducts(data);
+          setProducts(data.items);
         }
       } catch {
         if (!cancelled) {
@@ -85,6 +86,7 @@ export function SearchOverlay() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isSearchOpen, closeSearch]);
 
+  // Debounced search
   useEffect(() => {
     const cleanQuery = query.trim().toLowerCase();
     if (!cleanQuery) {
@@ -92,13 +94,30 @@ export function SearchOverlay() {
       return;
     }
 
-    const filtered = products.filter((product) =>
-      product.name.toLowerCase().includes(cleanQuery) ||
-      product.brand.toLowerCase().includes(cleanQuery) ||
-      product.category.toLowerCase().includes(cleanQuery)
-    );
-    setResults(filtered);
-  }, [query, products]);
+    let cancelled = false;
+    const debounceTimeout = setTimeout(async () => {
+      setIsLoading(true);
+      try {
+        const data = await fetchProducts({ q: cleanQuery });
+        if (!cancelled) {
+          setResults(data.items);
+        }
+      } catch {
+        if (!cancelled) {
+          setError('Не удалось выполнить поиск');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }, 400);
+
+    return () => {
+      clearTimeout(debounceTimeout);
+      cancelled = true;
+    };
+  }, [query]);
 
   return (
     <AnimatePresence>

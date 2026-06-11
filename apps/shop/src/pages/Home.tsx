@@ -39,14 +39,14 @@ export function Home() {
       setError('');
 
       try {
-        const [apiProducts, apiBrands, apiCategories] = await Promise.all([
+        const [productsRes, apiBrands, apiCategories] = await Promise.all([
           fetchProducts(),
           fetchBrands(),
           fetchCategories(),
         ]);
 
         if (!cancelled) {
-          setProducts(apiProducts);
+          setProducts(productsRes.items);
           setBrands(apiBrands);
           setCategories(apiCategories);
         }

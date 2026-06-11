@@ -93,3 +93,7 @@ export const getSellerWarnings = async (): Promise<SellerWarning[]> => {
 export const getSellerViolations = async (): Promise<SellerViolation[]> => {
   return request<SellerViolation[]>('GET', '/seller/violations');
 };
+
+export const getModerationHistory = async (productId: string): Promise<{ items: any[] }> => {
+  return request<{ items: any[] }>('GET', `/seller/products/${productId}/moderation-history`);
+};

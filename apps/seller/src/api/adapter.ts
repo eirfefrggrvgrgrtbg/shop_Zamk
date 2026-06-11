@@ -54,6 +54,7 @@ export function adaptProductList(apiProducts: any[]): SellerProduct[] {
       season: 'Всесезон',
       sizes: sizes,
       updatedAt: new Date(p.updatedAt || p.createdAt).toLocaleString('ru-RU'),
+      rejectionReason: p.moderationComment,
       _raw: p // keep raw data just in case
     };
   });

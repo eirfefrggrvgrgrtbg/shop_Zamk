@@ -78,8 +78,8 @@ func (s *Service) UploadSellerProductImage(ctx context.Context, userID, productI
 		return nil, ErrProductNotOwned
 	}
 
-	if prod.Status != products.StatusDraft && prod.Status != products.StatusRejected {
-		return nil, ErrProductNotDraft
+	if !products.CanEditProduct(seller.Status, prod.Status) {
+		return nil, products.ErrProductNotEditable
 	}
 
 	objectKey := fmt.Sprintf("products/%s/%s/%s%s", seller.ID.String(), productID.String(), uuid.New().String(), ext)

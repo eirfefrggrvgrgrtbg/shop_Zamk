@@ -67,3 +67,26 @@ type ProductListResponse struct {
 	Items      []Product `json:"items"`
 	TotalCount int       `json:"totalCount"`
 }
+
+type ModerationHistoryItem struct {
+	ID         uuid.UUID `json:"id"`
+	ProductID  uuid.UUID `json:"productId"`
+	FromStatus *string   `json:"fromStatus,omitempty"`
+	ToStatus   string    `json:"toStatus"`
+	Comment    *string   `json:"comment,omitempty"`
+	CreatedAt  string    `json:"createdAt"` // Formatting time to ISO8601
+}
+
+type ModerationHistoryResponse struct {
+	Items []ModerationHistoryItem `json:"items"`
+}
+
+type PublicProductFilter struct {
+	Query         *string    `json:"q,omitempty"`
+	CategoryID    *uuid.UUID `json:"categoryId,omitempty"`
+	BrandID       *uuid.UUID `json:"brandId,omitempty"`
+	MinPriceCents *int64     `json:"minPriceCents,omitempty"`
+	MaxPriceCents *int64     `json:"maxPriceCents,omitempty"`
+	InStock       *bool      `json:"inStock,omitempty"`
+	Sort          *string    `json:"sort,omitempty"`
+}

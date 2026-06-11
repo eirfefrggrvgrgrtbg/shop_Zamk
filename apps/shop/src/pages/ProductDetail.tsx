@@ -368,12 +368,15 @@ export function ProductDetail() {
               </Button>
             </div>
 
-            
-              <div className="mt-8 rounded-[14px] border border-dashed border-border-lighter bg-white p-4 text-sm text-ash dark:border-white/10 dark:bg-white/[0.02]">
-                Данные о продавце пока не подключены к публичному API.
+            <div className="mt-8 rounded-[14px] border border-dashed border-border-lighter bg-white p-4 text-sm text-ash dark:border-white/10 dark:bg-white/[0.02] flex items-center justify-between">
+              <div>
+                <p className="text-graphite dark:text-white font-medium">Продавец</p>
+                <p className="text-xs">ID: {product.sellerId}</p>
               </div>
-
-              {/* Benefits */}
+              <Link to={`/seller/${product.sellerId}`} className="text-primary hover:underline font-medium">
+                Перейти в магазин →
+              </Link>
+            </div>
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="flex items-center gap-3 p-3 rounded-lg bg-ice/50 dark:bg-white/5">
                 <Truck className="w-5 h-5 text-graphite dark:text-white" />

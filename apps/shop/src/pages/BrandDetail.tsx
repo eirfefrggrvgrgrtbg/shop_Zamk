@@ -23,10 +23,10 @@ export function BrandDetail() {
       setError('');
 
       try {
-        const [brands, apiProducts] = await Promise.all([fetchBrands(), fetchProducts()]);
+        const [brands, productsRes] = await Promise.all([fetchBrands(), fetchProducts({ brandId: id })]);
         if (!cancelled) {
           setBrand(brands.find((item) => item.id === id) ?? null);
-          setProducts(apiProducts.filter((product) => product.brandId === id));
+          setProducts(productsRes.items);
         }
       } catch {
         if (!cancelled) {

@@ -25,6 +25,8 @@ export interface ProductSummary {
   createdAt: string;
   status: string;
   inStock?: boolean;
+  moderationComment?: string;
+  rejectedAt?: string;
   // Included from rating summary usually
   rating?: RatingSummary;
 }
@@ -190,6 +192,19 @@ export interface UpdateSellerProfileRequest {
   contactEmail?: string;
   contactPhone?: string;
   slug?: string;
+}
+
+export interface ModerationLogEntry {
+  id: string;
+  productId: string;
+  fromStatus?: string;
+  toStatus: string;
+  comment?: string;
+  createdAt: string;
+}
+
+export interface ModerationHistoryResponse {
+  items: ModerationLogEntry[];
 }
 
 export interface SellerProduct extends ProductDetail {

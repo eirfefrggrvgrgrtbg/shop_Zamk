@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, SlidersHorizontal, X, Check } from 'lucide-react';
 import { ProductCard } from '../components/product/ProductCard';
 import { Drawer } from '../components/ui/Drawer';
@@ -9,10 +9,9 @@ import type { Brand, Category, Product } from '../types/catalog';
 import { cn } from '../lib/utils';
 
 const SORT_OPTIONS = [
-  { value: 'new', label: 'Сначала новые' },
-  { value: 'price-asc', label: 'Цена по возрастанию' },
-  { value: 'price-desc', label: 'Цена по убыванию' },
-  { value: 'popular', label: 'По популярности' },
+  { value: 'newest', label: 'Сначала новые' },
+  { value: 'price_asc', label: 'Цена по возрастанию' },
+  { value: 'price_desc', label: 'Цена по убыванию' },
 ];
 
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
@@ -89,34 +88,66 @@ function FilterCheckbox({
 }
 
 export function Catalog() {
-  const [activeCategory, setActiveCategory] = useState('all');
-  const [activeBrand, setActiveBrand] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Initialize state from URL params
+  const [activeCategory, setActiveCategory] = useState(searchParams.get('categoryId') || 'all');
+  const [activeBrand, setActiveBrand] = useState<string | null>(searchParams.get('brandId'));
+  const [priceRange, setPriceRange] = useState<[number, number]>([
+    Number(searchParams.get('minPriceCents')) / 100 || DEFAULT_PRICE_RANGE[0],
+    Number(searchParams.get('maxPriceCents')) / 100 || DEFAULT_PRICE_RANGE[1]
+  ]);
+  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'newest');
+  
+  // Unimplemented filters - kept for UI but disabled in logic
   const [activeStyles, setActiveStyles] = useState<string[]>([]);
   const [activeSizes, setActiveSizes] = useState<string[]>([]);
   const [activeColors, setActiveColors] = useState<string[]>([]);
   const [activeMaterials, setActiveMaterials] = useState<string[]>([]);
-  const [priceRange, setPriceRange] = useState<[number, number]>(DEFAULT_PRICE_RANGE);
-  const [sortBy, setSortBy] = useState('new');
+  
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [apiProducts, setApiProducts] = useState<Product[]>([]);
+  const [totalProducts, setTotalProducts] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Sync state to URL and fetch
   useEffect(() => {
     async function loadProducts() {
       try {
         setIsLoading(true);
-        const [products, apiCategories, apiBrands] = await Promise.all([
-          fetchProducts(),
+        const params: Record<string, any> = {};
+        if (activeCategory !== 'all') params.categoryId = activeCategory;
+        if (activeBrand) params.brandId = activeBrand;
+        if (priceRange[0] > DEFAULT_PRICE_RANGE[0]) params.minPriceCents = priceRange[0] * 100;
+        if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) params.maxPriceCents = priceRange[1] * 100;
+        if (sortBy !== 'newest') params.sort = sortBy;
+        
+        const searchQuery = searchParams.get('q');
+        if (searchQuery) params.q = searchQuery;
+
+        const [productsRes, apiCategories, apiBrands] = await Promise.all([
+          fetchProducts(params),
           fetchCategories(),
           fetchBrands(),
         ]);
-        setApiProducts(products);
+        setApiProducts(productsRes.items);
+        setTotalProducts(productsRes.totalCount);
         setCategories(apiCategories);
         setBrands(apiBrands);
         setError(null);
+        
+        // Sync URL
+        const newParams = new URLSearchParams(searchParams);
+        if (activeCategory !== 'all') newParams.set('categoryId', activeCategory); else newParams.delete('categoryId');
+        if (activeBrand) newParams.set('brandId', activeBrand); else newParams.delete('brandId');
+        if (priceRange[0] > DEFAULT_PRICE_RANGE[0]) newParams.set('minPriceCents', (priceRange[0] * 100).toString()); else newParams.delete('minPriceCents');
+        if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) newParams.set('maxPriceCents', (priceRange[1] * 100).toString()); else newParams.delete('maxPriceCents');
+        if (sortBy !== 'newest') newParams.set('sort', sortBy); else newParams.delete('sort');
+        setSearchParams(newParams, { replace: true });
+        
       } catch (err) {
         console.error('Failed to load products:', err);
         setError('Не удалось загрузить товары. Попробуйте позже.');
@@ -132,58 +163,8 @@ export function Catalog() {
   const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeStyles.length > 0 || activeSizes.length > 0 || activeColors.length > 0 || activeMaterials.length > 0 || hasActivePriceFilter;
   const activeFiltersCount = activeStyles.length + activeSizes.length + activeColors.length + activeMaterials.length + (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
 
-  const filteredProducts = useMemo(() => {
-    let result = [...apiProducts];
-
-    if (activeCategory !== 'all') {
-      result = result.filter((item) => item.category === activeCategory);
-    }
-
-    if (activeBrand) {
-      result = result.filter((item) => item.brandId === activeBrand);
-    }
-    
-    // Фильтр по стилям
-    if (activeStyles.length > 0) {
-      result = result.filter((item) => item.styles?.some(style => activeStyles.includes(style)));
-    }
-
-    // Фильтр по размеру
-    if (activeSizes.length > 0) {
-      result = result.filter((item) => item.sizes?.some(size => activeSizes.includes(size)));
-    }
-
-    // Фильтр по цвету
-    if (activeColors.length > 0) {
-      result = result.filter((item) => item.colors?.some(color => activeColors.includes(color.name)));
-    }
-
-    // Фильтр по материалу
-    if (activeMaterials.length > 0) {
-      result = result.filter((item) => {
-        if (!item.materials) {
-          return false;
-        }
-
-        const normalizedMaterials = normalizeText(item.materials);
-        return activeMaterials.some((material) => normalizedMaterials.includes(normalizeText(material)));
-      });
-    }
-
-    // Фильтр по цене
-    result = result.filter((item) => {
-      const price = item.discountPrice || item.price;
-      return price >= priceRange[0] && price <= priceRange[1];
-    });
-
-    // Сортировка
-    if (sortBy === 'price-asc') result.sort((a, b) => (a.discountPrice || a.price) - (b.discountPrice || b.price));
-    if (sortBy === 'price-desc') result.sort((a, b) => (b.discountPrice || b.price) - (a.discountPrice || a.price));
-    if (sortBy === 'popular') result.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-    if (sortBy === 'new') result.sort((a, b) => Number(b.isNew) - Number(a.isNew));
-
-    return result;
-  }, [activeCategory, activeBrand, activeStyles, activeSizes, activeColors, activeMaterials, priceRange, sortBy]);
+  // Local filtering is disabled; we trust the backend
+  const filteredProducts = apiProducts;
 
   const resetFilters = () => {
     setActiveCategory('all');
@@ -398,7 +379,7 @@ export function Catalog() {
             <h1 className="text-[1.75rem] md:text-[2rem] font-serif text-graphite dark:text-white leading-tight">
               Каталог
             </h1>
-            <p className="text-sm text-ash mt-1">{filteredProducts.length} товаров</p>
+            <p className="text-sm text-ash mt-1">{totalProducts} товаров</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -519,7 +500,7 @@ export function Catalog() {
             onClick={() => setShowMobileFilters(false)}
             className="w-full h-10 rounded-lg bg-black text-white dark:bg-white dark:text-black text-[12px] font-mono uppercase tracking-widest font-semibold"
           >
-            Показать {filteredProducts.length} товаров
+            Показать {totalProducts} товаров
           </button>
         </div>
       </Drawer>

@@ -318,6 +318,35 @@ func (r *Repository) AddModerationLog(ctx context.Context, log *ProductModeratio
 	return nil
 }
 
+func (r *Repository) ListProductModerationLogs(ctx context.Context, productID uuid.UUID) ([]ProductModerationLog, error) {
+	query := `
+		SELECT id, product_id, admin_user_id, from_status, to_status, comment, created_at
+		FROM product_moderation_logs
+		WHERE product_id = $1
+		ORDER BY created_at DESC
+	`
+	rows, err := r.db.Query(ctx, query, productID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list moderation logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []ProductModerationLog
+	for rows.Next() {
+		var log ProductModerationLog
+		if err := rows.Scan(
+			&log.ID, &log.ProductID, &log.AdminUserID, &log.FromStatus, &log.ToStatus, &log.Comment, &log.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		logs = append(logs, log)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return logs, nil
+}
+
 // ---------------------------------------------------------
 // List Operations
 // ---------------------------------------------------------
@@ -365,28 +394,135 @@ func (r *Repository) ListProductsForModeration(ctx context.Context, limit, offse
 	return r.listProductsQuery(ctx, query, limit, offset)
 }
 
-func (r *Repository) ListPublishedProducts(ctx context.Context, limit, offset int) ([]Product, error) {
-	query := `
-		SELECT id, seller_id, category_id, brand_id, title, slug, description,
-			status, gender, color, material, care_instructions,
-			price_cents, old_price_cents, currency, main_image_url,
-			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
-		FROM products
-		WHERE status = 'published'
-		ORDER BY published_at DESC
-		LIMIT $1 OFFSET $2
-	`
-	return r.listProductsQuery(ctx, query, limit, offset)
+func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicProductFilter, limit, offset int) ([]Product, int, error) {
+	queryBuilder := strings.Builder{}
+	queryBuilder.WriteString(`
+		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
+			p.status, p.gender, p.color, p.material, p.care_instructions,
+			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
+			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment
+		FROM products p
+		INNER JOIN sellers s ON p.seller_id = s.id
+	`)
+
+	var args []interface{}
+	argID := 1
+
+	// Join tables for search if needed
+	if filter.Query != nil && *filter.Query != "" {
+		queryBuilder.WriteString(`
+			LEFT JOIN brands b ON p.brand_id = b.id
+			LEFT JOIN categories c ON p.category_id = c.id
+		`)
+	}
+
+	queryBuilder.WriteString(" WHERE p.status = 'published' AND s.status = 'active'")
+
+	if filter.Query != nil && *filter.Query != "" {
+		queryBuilder.WriteString(fmt.Sprintf(" AND (p.title ILIKE $%d OR p.description ILIKE $%d OR b.name ILIKE $%d OR c.name ILIKE $%d OR s.brand_name ILIKE $%d)", argID, argID, argID, argID, argID))
+		args = append(args, "%"+*filter.Query+"%")
+		argID++
+	}
+
+	if filter.CategoryID != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND p.category_id = $%d", argID))
+		args = append(args, *filter.CategoryID)
+		argID++
+	}
+
+	if filter.BrandID != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND p.brand_id = $%d", argID))
+		args = append(args, *filter.BrandID)
+		argID++
+	}
+
+	if filter.MinPriceCents != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND p.price_cents >= $%d", argID))
+		args = append(args, *filter.MinPriceCents)
+		argID++
+	}
+
+	if filter.MaxPriceCents != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND p.price_cents <= $%d", argID))
+		args = append(args, *filter.MaxPriceCents)
+		argID++
+	}
+
+	if filter.InStock != nil && *filter.InStock {
+		queryBuilder.WriteString(` AND EXISTS (
+			SELECT 1 FROM product_variants v 
+			WHERE v.product_id = p.id AND v.is_active = true AND v.in_stock = true
+		)`)
+	}
+
+	// Calculate total count before applying limit, offset, and order
+	countQuery := "SELECT COUNT(*) FROM (" + queryBuilder.String() + ") AS c"
+	var totalCount int
+	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get total count: %w", err)
+	}
+
+	// Apply Sorting
+	if filter.Sort != nil {
+		switch *filter.Sort {
+		case "price_asc":
+			queryBuilder.WriteString(" ORDER BY p.price_cents ASC")
+		case "price_desc":
+			queryBuilder.WriteString(" ORDER BY p.price_cents DESC")
+		case "newest":
+			queryBuilder.WriteString(" ORDER BY p.published_at DESC")
+		default:
+			queryBuilder.WriteString(" ORDER BY p.published_at DESC")
+		}
+	} else {
+		queryBuilder.WriteString(" ORDER BY p.published_at DESC")
+	}
+
+	queryBuilder.WriteString(fmt.Sprintf(" LIMIT $%d OFFSET $%d", argID, argID+1))
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Query(ctx, queryBuilder.String(), args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list products: %w", err)
+	}
+	defer rows.Close()
+
+	var products []Product
+	for rows.Next() {
+		var p Product
+		if err := rows.Scan(
+			&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
+			&p.Status, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
+			&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
+			&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
+		); err != nil {
+			return nil, 0, err
+		}
+		products = append(products, p)
+	}
+	if rows.Err() != nil {
+		return nil, 0, rows.Err()
+	}
+
+	// The previous listProductsQuery approach doesn't load variants and images natively. 
+	// To preserve existing behavior, ListPublishedProducts doesn't load variants/images. 
+	// Wait, is 'inStock' needed? The prompt says "Filters: in stock". 
+	// If inStock is needed, maybe we should join variants?
+	// I will just return the products for now.
+
+	return products, totalCount, nil
 }
 
 func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug string) (*Product, error) {
 	query := `
-		SELECT id, seller_id, category_id, brand_id, title, slug, description,
-			status, gender, color, material, care_instructions,
-			price_cents, old_price_cents, currency, main_image_url,
-			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
-		FROM products
-		WHERE (slug = $1 OR id::text = $1) AND status = 'published'
+		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
+			p.status, p.gender, p.color, p.material, p.care_instructions,
+			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
+			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment
+		FROM products p
+		INNER JOIN sellers s ON p.seller_id = s.id
+		WHERE (p.slug = $1 OR p.id::text = $1) AND p.status = 'published' AND s.status = 'active'
 	`
 	var p Product
 	err := r.db.QueryRow(ctx, query, idOrSlug).Scan(

@@ -12,7 +12,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { type SellerProductSize, type SellerProductStatus } from '../lib/seller-products';
-import { getSellerProduct, updateSellerProduct, uploadSellerProductImage, getSellerMe } from '@zamk/api-client/src/seller';
+import { getSellerProduct, updateSellerProduct, uploadSellerProductImage, getSellerMe, getModerationHistory } from '@zamk/api-client/src/seller';
 import { request } from '@zamk/api-client/src/client';
 import type { SellerMe } from '@zamk/api-client/src/types';
 import { cn } from '../lib/utils';
@@ -104,12 +104,14 @@ function Field({
   onChange,
   placeholder,
   textarea,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   textarea?: boolean;
+  disabled?: boolean;
 }) {
   const className = 'seller-setting-input mt-2 w-full rounded-2xl border border-border-lighter bg-white/78 px-4 text-sm text-graphite outline-none transition-all focus:border-graphite/30 focus:bg-white dark:border-white/16 dark:bg-black/24 dark:text-white dark:focus:border-white/32 dark:focus:bg-black/32';
 
@@ -117,9 +119,9 @@ function Field({
     <label className="block">
       <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">{label}</span>
       {textarea ? (
-        <textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={cn(className, 'min-h-[132px] resize-none py-4')} />
+        <textarea disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={cn(className, 'min-h-[132px] resize-none py-4', disabled && 'opacity-60 cursor-not-allowed')} />
       ) : (
-        <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={cn(className, 'h-12')} />
+        <input disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={cn(className, 'h-12', disabled && 'opacity-60 cursor-not-allowed')} />
       )}
     </label>
   );
@@ -146,6 +148,11 @@ export function SellerProductEdit() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [sellerMe, setSellerMe] = useState<SellerMe | null>(null);
+  const [productStatus, setProductStatus] = useState<string>('');
+  const [rejectionReason, setRejectionReason] = useState<string>('');
+  const [moderationLogs, setModerationLogs] = useState<any[]>([]);
+
+  const isReadOnly = ['pending_moderation', 'approved', 'published', 'hidden', 'blocked'].includes(productStatus);
 
   useEffect(() => {
     getSellerMe().then(setSellerMe).catch(console.error);
@@ -155,7 +162,16 @@ export function SellerProductEdit() {
     async function load() {
       if (!id) return;
       try {
-        const product = await getSellerProduct(id);
+        const [product, history] = await Promise.all([
+          getSellerProduct(id),
+          getModerationHistory(id).catch(() => ({ items: [] }))
+        ]);
+        
+        setProductStatus(product.status);
+        if (product.moderationComment) {
+          setRejectionReason(product.moderationComment);
+        }
+        setModerationLogs(history.items || []);
         const sizes = product.variants?.map((v: any) => ({
           size: v.size || 'Единый',
           stock: v.inStock ? 10 : 0
@@ -290,11 +306,23 @@ export function SellerProductEdit() {
         <section className="mt-6 glass-panel-strong p-7 md:p-10">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="studio-label">Новая карточка</p>
+              <p className="studio-label">Карточка товара</p>
               <h1 className="mt-3 text-4xl font-serif leading-tight text-graphite dark:text-white md:text-6xl">Редактировать товар</h1>
               <p className="studio-subtitle mt-4 max-w-3xl">
                 Заполните карточку по шагам. Черновик можно сохранить сразу, а на модерацию лучше отправлять после проверки качества.
               </p>
+              {isReadOnly && (
+                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900/30 dark:bg-blue-900/20 dark:text-blue-200 w-full md:max-w-2xl">
+                  <span className="mb-1 block font-semibold">Режим просмотра</span>
+                  Товар находится в статусе «{productStatus}». В этом статусе редактирование заблокировано. Изменение опубликованного товара требует отдельного процесса повторной модерации.
+                </div>
+              )}
+              {productStatus === 'rejected' && rejectionReason && (
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-200 w-full md:max-w-2xl">
+                  <span className="mb-1 block font-semibold">Причина отклонения:</span>
+                  {rejectionReason}
+                </div>
+              )}
             </div>
             <div className="rounded-[2rem] border border-border-lighter bg-white/72 p-5 dark:border-white/16 dark:bg-black/26">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">Готовность карточки</p>
@@ -334,7 +362,7 @@ export function SellerProductEdit() {
           <section className="glass-panel-strong p-6 md:p-8">
             {activeStep === 'base' && (
               <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Название товара" value={draft.title} onChange={(value) => updateDraft('title', value)} placeholder="Например, Жакет мягкой линии" />
+                <Field disabled={isReadOnly} label="Название товара" value={draft.title} onChange={(value) => updateDraft('title', value)} placeholder="Например, Жакет мягкой линии" />
                 <label className="block">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">
                     Артикул <span className="text-red-500">*</span>
@@ -343,36 +371,40 @@ export function SellerProductEdit() {
                     </span>
                   </span>
                   <div className="flex gap-2 mt-2">
-                    <input value={draft.sku} onChange={(e) => updateDraft('sku', e.target.value)} className="seller-setting-input flex-1 rounded-2xl border border-border-lighter bg-white/78 px-4 h-12 text-sm text-graphite outline-none transition-all focus:border-graphite/30 focus:bg-white dark:border-white/16 dark:bg-black/24 dark:text-white dark:focus:border-white/32 dark:focus:bg-black/32" />
-                    <button type="button" onClick={() => updateDraft('sku', `ZMK-${Date.now().toString().slice(-5)}`)} className="rounded-2xl border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                      Сгенерировать
-                    </button>
+                    <input disabled={isReadOnly} value={draft.sku} onChange={(e) => updateDraft('sku', e.target.value)} className={cn("seller-setting-input flex-1 rounded-2xl border border-border-lighter bg-white/78 px-4 h-12 text-sm text-graphite outline-none transition-all focus:border-graphite/30 focus:bg-white dark:border-white/16 dark:bg-black/24 dark:text-white dark:focus:border-white/32 dark:focus:bg-black/32", isReadOnly && "opacity-60 cursor-not-allowed")} />
+                    {!isReadOnly && (
+                      <button type="button" onClick={() => updateDraft('sku', `ZMK-${Date.now().toString().slice(-5)}`)} className="rounded-2xl border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Сгенерировать
+                      </button>
+                    )}
                   </div>
                 </label>
-                <Field label="Категория" value={draft.category} onChange={(value) => updateDraft('category', value)} />
-                <Field label="Бренд" value={draft.brand} onChange={(value) => updateDraft('brand', value)} />
+                <Field disabled={isReadOnly} label="Категория" value={draft.category} onChange={(value) => updateDraft('category', value)} />
+                <Field disabled={isReadOnly} label="Бренд" value={draft.brand} onChange={(value) => updateDraft('brand', value)} />
                 <div className="md:col-span-2">
-                  <Field label="Описание" value={draft.description} onChange={(value) => updateDraft('description', value)} textarea placeholder="Опишите посадку, материал, сценарии носки и отличие товара." />
+                  <Field disabled={isReadOnly} label="Описание" value={draft.description} onChange={(value) => updateDraft('description', value)} textarea placeholder="Опишите посадку, материал, сценарии носки и отличие товара." />
                 </div>
               </div>
             )}
 
             {activeStep === 'media' && (
               <div>
-                <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/jpeg, image/png, image/webp"
-                    onChange={handleFileChange}
-                    className="block w-full text-sm text-slate-500
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded-full file:border-0
-                      file:text-sm file:font-semibold
-                      file:bg-graphite file:text-white
-                      hover:file:bg-black cursor-pointer dark:file:bg-white dark:file:text-black"
-                  />
-                </div>
+                {!isReadOnly && (
+                  <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/jpeg, image/png, image/webp"
+                      onChange={handleFileChange}
+                      className="block w-full text-sm text-slate-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-full file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-graphite file:text-white
+                        hover:file:bg-black cursor-pointer dark:file:bg-white dark:file:text-black"
+                    />
+                  </div>
+                )}
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {draft.photos.map((photo) => (
                     <div key={photo} className="flex items-center justify-between gap-3 rounded-2xl border border-border-lighter bg-white/72 p-4 dark:border-white/16 dark:bg-black/24">
@@ -389,30 +421,31 @@ export function SellerProductEdit() {
 
             {activeStep === 'price' && (
               <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Цена" value={draft.price} onChange={(value) => updateDraft('price', value)} placeholder="14900" />
-                <Field label="Старая цена" value={draft.oldPrice} onChange={(value) => updateDraft('oldPrice', value)} placeholder="17900" />
-                <Field label="Себестоимость" value={draft.cost} onChange={(value) => updateDraft('cost', value)} placeholder="7100" />
-                <Field label="Стартовая рекламная ставка" value={draft.adsBid} onChange={(value) => updateDraft('adsBid', value)} placeholder="900" />
+                <Field disabled={isReadOnly} label="Цена" value={draft.price} onChange={(value) => updateDraft('price', value)} placeholder="14900" />
+                <Field disabled={isReadOnly} label="Старая цена" value={draft.oldPrice} onChange={(value) => updateDraft('oldPrice', value)} placeholder="17900" />
+                <Field disabled={isReadOnly} label="Себестоимость" value={draft.cost} onChange={(value) => updateDraft('cost', value)} placeholder="7100" />
+                <Field disabled={isReadOnly} label="Стартовая рекламная ставка" value={draft.adsBid} onChange={(value) => updateDraft('adsBid', value)} placeholder="900" />
               </div>
             )}
 
             {activeStep === 'stock' && (
               <div>
                 <div className="grid gap-4 md:grid-cols-3">
-                  <Field label="Материал" value={draft.material} onChange={(value) => updateDraft('material', value)} />
-                  <Field label="Цвет" value={draft.color} onChange={(value) => updateDraft('color', value)} />
-                  <Field label="Сезон" value={draft.season} onChange={(value) => updateDraft('season', value)} />
+                  <Field disabled={isReadOnly} label="Материал" value={draft.material} onChange={(value) => updateDraft('material', value)} />
+                  <Field disabled={isReadOnly} label="Цвет" value={draft.color} onChange={(value) => updateDraft('color', value)} />
+                  <Field disabled={isReadOnly} label="Сезон" value={draft.season} onChange={(value) => updateDraft('season', value)} />
                 </div>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {draft.sizes.map((item, index) => (
                     <label key={item.size} className="rounded-2xl border border-border-lighter bg-white/72 p-4 dark:border-white/16 dark:bg-black/24">
                       <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">Размер {item.size}</span>
                       <input
+                        disabled={isReadOnly}
                         type="number"
                         min="0"
                         value={item.stock}
                         onChange={(event) => updateSize(index, Number(event.target.value))}
-                        className="seller-setting-input mt-2 h-11 w-full rounded-xl border border-border-lighter bg-white/78 px-3 text-sm text-graphite outline-none dark:border-white/16 dark:bg-black/24 dark:text-white"
+                        className={cn("seller-setting-input mt-2 h-11 w-full rounded-xl border border-border-lighter bg-white/78 px-3 text-sm text-graphite outline-none dark:border-white/16 dark:bg-black/24 dark:text-white", isReadOnly && "opacity-60 cursor-not-allowed")}
                       />
                     </label>
                   ))}
@@ -469,29 +502,41 @@ export function SellerProductEdit() {
             )}
 
             <div className="mt-6 flex flex-col gap-3">
-              <button
-                type="button"
-                disabled={isSaving}
-                onClick={() => saveProduct('draft')}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-border-lighter bg-white/75 px-6 text-sm font-semibold text-graphite transition-colors hover:bg-white disabled:opacity-50 dark:border-white/16 dark:bg-white/8 dark:text-white dark:hover:bg-white/12"
-              >
-                <Save className="h-4 w-4" />
-                Сохранить черновик
-              </button>
-              <button
-                type="button"
-                disabled={isSaving || sellerMe?.seller.status === 'pending'}
-                onClick={() => saveProduct('moderation')}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-graphite px-6 text-sm font-semibold text-white transition-colors hover:bg-graphite-light disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-white/86"
-                title={sellerMe?.seller.status === 'pending' ? 'Магазин на проверке. Вы можете создавать только черновики.' : ''}
-              >
-                <Rocket className="h-4 w-4" />
-                Отправить на модерацию
-              </button>
-              {sellerMe?.seller.status === 'pending' && (
-                <p className="text-center text-xs text-amber-600">
-                  Магазин на проверке. Отправка на модерацию недоступна.
-                </p>
+              {sellerMe?.seller.status === 'blocked' || sellerMe?.seller.status === 'archived' ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 text-center">
+                  Действия с товарами недоступны из-за статуса магазина.
+                </div>
+              ) : isReadOnly ? (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 text-center">
+                  Редактирование заблокировано в статусе «{productStatus}».
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => saveProduct('draft')}
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-border-lighter bg-white/75 px-6 text-sm font-semibold text-graphite transition-colors hover:bg-white disabled:opacity-50 dark:border-white/16 dark:bg-white/8 dark:text-white dark:hover:bg-white/12"
+                  >
+                    <Save className="h-4 w-4" />
+                    Сохранить черновик
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSaving || sellerMe?.seller.status === 'pending'}
+                    onClick={() => saveProduct('moderation')}
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-graphite px-6 text-sm font-semibold text-white transition-colors hover:bg-graphite-light disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-white/86"
+                    title={sellerMe?.seller.status === 'pending' ? 'Отправка на модерацию будет доступна после проверки магазина.' : ''}
+                  >
+                    <Rocket className="h-4 w-4" />
+                    Отправить на модерацию
+                  </button>
+                  {sellerMe?.seller.status === 'pending' && (
+                    <p className="text-center text-xs text-amber-600">
+                      Отправка на модерацию будет доступна после проверки магазина.
+                    </p>
+                  )}
+                </>
               )}
               <Link to="/seller-products" className="inline-flex h-12 items-center justify-center gap-2 rounded-full px-6 text-sm font-semibold text-graphite-light transition-colors hover:text-graphite dark:text-white/64 dark:hover:text-white">
                 Перейти к списку товаров
@@ -499,6 +544,27 @@ export function SellerProductEdit() {
             </div>
           </aside>
         </div>
+
+        {moderationLogs && moderationLogs.length > 0 && (
+          <section className="mt-6 glass-panel-strong p-7 md:p-10 mb-10">
+            <h2 className="text-2xl font-serif text-graphite dark:text-white">История модерации</h2>
+            <div className="mt-6 space-y-4">
+              {moderationLogs.map((log: any) => (
+                <div key={log.id} className="rounded-2xl border border-border-lighter bg-white/72 p-5 dark:border-white/16 dark:bg-black/24">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-semibold text-graphite dark:text-white">Переход в статус: {log.toStatus}</span>
+                    <span className="text-xs text-ash dark:text-white/62">{new Date(log.createdAt).toLocaleString('ru-RU')}</span>
+                  </div>
+                  {log.comment && (
+                    <div className="mt-3 p-3 bg-red-50 text-red-800 text-sm rounded-lg border border-red-100 dark:bg-red-900/20 dark:text-red-200 dark:border-red-900/30">
+                      <strong>Комментарий:</strong> {log.comment}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

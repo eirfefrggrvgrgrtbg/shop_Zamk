@@ -51,6 +51,23 @@ func generateSlug(title string) string {
 	return slug
 }
 
+func CanEditProduct(sellerStatus sellers.SellerStatus, productStatus string) bool {
+	if sellerStatus == sellers.StatusBlocked || sellerStatus == sellers.StatusArchived {
+		return false
+	}
+	if sellerStatus == sellers.StatusPending || sellerStatus == sellers.StatusActive {
+		return productStatus == StatusDraft || productStatus == StatusRejected
+	}
+	return false
+}
+
+func CanSubmitProduct(sellerStatus sellers.SellerStatus, productStatus string) bool {
+	if sellerStatus == sellers.StatusActive {
+		return productStatus == StatusDraft || productStatus == StatusRejected
+	}
+	return false
+}
+
 // ---------------------------------------------------------
 // Seller Operations
 // ---------------------------------------------------------
@@ -59,6 +76,10 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 	seller, err := s.getSellerForUser(ctx, currentUserID)
 	if err != nil {
 		return Product{}, err
+	}
+
+	if seller.Status == sellers.StatusBlocked || seller.Status == sellers.StatusArchived {
+		return Product{}, ErrSellerBlocked
 	}
 
 	slug := req.Title
@@ -154,14 +175,17 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		return Product{}, err
 	}
 
+	if seller.Status == sellers.StatusBlocked || seller.Status == sellers.StatusArchived {
+		return Product{}, ErrSellerBlocked
+	}
+
 	p, err := s.repo.GetProductByIDForSeller(ctx, productID, seller.ID)
 	if err != nil {
 		return Product{}, err
 	}
 
-	// Can only fully update draft or rejected products
-	if p.Status != StatusDraft && p.Status != StatusRejected {
-		return Product{}, fmt.Errorf("%w: can only edit draft or rejected products", ErrInvalidStatusTransition)
+	if !CanEditProduct(seller.Status, p.Status) {
+		return Product{}, fmt.Errorf("%w: cannot edit product in status %s with seller status %s", ErrProductNotEditable, p.Status, seller.Status)
 	}
 
 	if req.Title != nil {
@@ -300,6 +324,10 @@ func (s *Service) DeleteSellerDraftProduct(ctx context.Context, currentUserID, p
 		return err
 	}
 
+	if seller.Status == sellers.StatusBlocked || seller.Status == sellers.StatusArchived {
+		return ErrSellerBlocked
+	}
+
 	return s.repo.DeleteDraftProduct(ctx, productID, seller.ID)
 }
 
@@ -309,12 +337,19 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 		return err
 	}
 
+	if seller.Status == sellers.StatusBlocked || seller.Status == sellers.StatusArchived {
+		return ErrSellerBlocked
+	}
+	if seller.Status == sellers.StatusPending {
+		return ErrSellerNotActive
+	}
+
 	p, err := s.repo.GetProductByIDForSeller(ctx, productID, seller.ID)
 	if err != nil {
 		return err
 	}
 
-	if p.Status != StatusDraft && p.Status != StatusRejected {
+	if !CanSubmitProduct(seller.Status, p.Status) {
 		return fmt.Errorf("%w: can only submit draft or rejected products", ErrInvalidStatusTransition)
 	}
 
@@ -365,6 +400,15 @@ func (s *Service) ListProductsForModeration(ctx context.Context, limit, offset i
 		items = []Product{}
 	}
 	return ProductListResponse{Items: items, TotalCount: len(items)}, nil
+}
+
+func (s *Service) GetProductModerationHistory(ctx context.Context, sellerID, productID uuid.UUID) ([]ProductModerationLog, error) {
+	// First verify the seller owns the product
+	_, err := s.repo.GetProductByIDForSeller(ctx, productID, sellerID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.ListProductModerationLogs(ctx, productID)
 }
 
 func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, productID uuid.UUID, toStatus string, comment *string, allowedFromStatuses []string, timeFieldSetter func(*Product, time.Time)) error {
@@ -418,6 +462,9 @@ func (s *Service) ApproveProduct(ctx context.Context, adminUserID, productID uui
 }
 
 func (s *Service) RejectProduct(ctx context.Context, adminUserID, productID uuid.UUID, comment string) error {
+	if comment == "" {
+		return ErrRejectionReasonRequired
+	}
 	return s.applyModerationTransition(ctx, adminUserID, productID, StatusRejected, &comment, []string{StatusPendingModeration}, func(p *Product, t time.Time) {
 		p.RejectedAt = &t
 	})
@@ -442,8 +489,8 @@ func (s *Service) BlockProduct(ctx context.Context, adminUserID, productID uuid.
 // Public Operations
 // ---------------------------------------------------------
 
-func (s *Service) ListPublicProducts(ctx context.Context, limit, offset int) (ProductListResponse, error) {
-	items, err := s.repo.ListPublishedProducts(ctx, limit, offset)
+func (s *Service) ListPublicProducts(ctx context.Context, filter PublicProductFilter, limit, offset int) (ProductListResponse, error) {
+	items, totalCount, err := s.repo.ListPublishedProducts(ctx, filter, limit, offset)
 	if err != nil {
 		return ProductListResponse{}, err
 	}
@@ -463,7 +510,7 @@ func (s *Service) ListPublicProducts(ctx context.Context, limit, offset int) (Pr
 		}
 	}
 	
-	return ProductListResponse{Items: items, TotalCount: len(items)}, nil
+	return ProductListResponse{Items: items, TotalCount: totalCount}, nil
 }
 
 func (s *Service) GetPublicProduct(ctx context.Context, idOrSlug string) (Product, error) {
