@@ -168,6 +168,7 @@ func New(
 		r.Get("/brands", catalogHandler.ListBrands)
 		r.Get("/products", productsHandler.ListPublicProducts)
 		r.Get("/products/{idOrSlug}", productsHandler.GetPublicProduct)
+		r.Get("/sellers/{idOrSlug}", productsHandler.GetPublicSellerStore)
 	})
 
 	r.Route("/api/customer", func(r chi.Router) {

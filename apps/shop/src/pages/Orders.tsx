@@ -21,12 +21,27 @@ export function Orders() {
         const { getOrders } = await import('@zamk/api-client/src/customer');
         const data = await getOrders();
         if (isMounted) {
+          const mapOrderStatus = (s: string) => {
+            switch (s) {
+              case 'awaiting_payment': return 'Ожидает оплаты';
+              case 'paid': return 'Оплачен';
+              case 'assembling': return 'Собирается';
+              case 'packed': return 'Упакован';
+              case 'shipped': return 'Отправлен';
+              case 'delivered': return 'Доставлен';
+              case 'cancelled': return 'Отменён';
+              case 'returned': return 'Возврат';
+              case 'refunded': return 'Возмещён';
+              default: return s;
+            }
+          };
+
           // Map to match the expected format roughly
           setOrders(data.map(o => ({
             id: o.id.split('-')[0].toUpperCase() + '-' + o.id.split('-')[1].substring(0, 4),
             rawId: o.id,
             date: new Date(o.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
-            status: o.status === 'created' ? 'Создан' : o.status === 'paid' ? 'Оплачен' : o.status === 'shipped' ? 'В пути' : o.status === 'delivered' ? 'Доставлен' : o.status,
+            status: mapOrderStatus(o.status),
             total: o.totalPriceCents / 100,
             delivery: {
               address: o.deliveryAddress,
@@ -139,7 +154,7 @@ export function Orders() {
         ) : (
           <div className="bg-white/50 hover:bg-white/80 dark:bg-white/5 dark:hover:bg-white/10 backdrop-blur-xl border border-white/60 dark:border-white/10 shadow-[0_8px_30px_rgba(100,130,170,0.06)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] rounded-[1.5rem] p-8 md:p-10 text-center">
             <Package className="w-12 h-12 text-ash-light dark:text-white/50 mx-auto mb-4" />
-            <h2 className="text-xl font-medium text-graphite dark:text-white mb-2">Заказов пока нет</h2>
+            <h2 className="text-xl font-medium text-graphite dark:text-white mb-2">У вас пока нет заказов.</h2>
             <p className="text-sm text-ash dark:text-white/60 mb-6">После оформления заказа он появится здесь и сохранится после перезагрузки.</p>
             <Link to="/catalog" className="inline-flex items-center justify-center rounded-full border border-graphite/20 dark:border-white/20 px-5 py-3 text-[13px] font-medium text-graphite dark:text-white hover:border-graphite dark:hover:border-white transition-colors">
               В каталог
@@ -177,10 +192,9 @@ export function Orders() {
               
               {/* Статус */}
               <div className="flex items-center gap-3">
-                <span className={`text-[12px] uppercase tracking-wider font-medium px-4 py-1.5 rounded-full ${selectedOrder.status === 'В пути' ? 'text-blue-600 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50' : 'text-graphite dark:text-white/70 bg-graphite/5 dark:bg-white/10 border border-graphite/10 dark:border-white/20'}`}>
+                <span className={`text-[12px] uppercase tracking-wider font-medium px-4 py-1.5 rounded-full ${selectedOrder.status === 'Отправлен' || selectedOrder.status === 'В пути' ? 'text-blue-600 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50' : 'text-graphite dark:text-white/70 bg-graphite/5 dark:bg-white/10 border border-graphite/10 dark:border-white/20'}`}>
                   {selectedOrder.status}
                 </span>
-                <span className="text-sm text-ash dark:text-white/60">Ожидаемая дата: 25 марта</span>
               </div>
 
               {/* Состав заказа */}

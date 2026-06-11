@@ -97,9 +97,17 @@ export function ProductCard({ product }: ProductCardProps) {
         {/* Контент чека */}
         <div className="flex flex-col text-[11px] leading-relaxed text-black dark:text-gray-100 font-medium">
           <div className="uppercase tracking-widest text-[9px] mb-2 border-b border-dashed border-gray-400 dark:border-zinc-500 pb-2">
-            {product.brand} | ЧЕК
+          <div className="flex gap-2 items-center text-black/60 dark:text-white/60">
+            {product.sellerId ? (
+              <Link to={`/seller/${product.sellerId}`} className="hover:underline hover:text-black dark:hover:text-white transition-colors">
+                {product.brand}
+              </Link>
+            ) : (
+              <span>{product.brand}</span>
+            )}
+            <span> | ЧЕК</span>
           </div>
-          
+          </div>
           <div className="flex w-full gap-2 items-start mt-1">
             <span className="uppercase whitespace-nowrap opacity-80">Товар:</span>
             <Link to={`/product/${product.id}`} className="group/name flex-1 min-w-0">

@@ -140,6 +140,12 @@ const getSafeErrorMessage = (code?: string, fallback?: string): string => {
       return 'Ресурс не найден';
     case 'internal_error':
       return 'Произошла ошибка на сервере. Попробуйте позже';
+    case 'invalid_item':
+      if (fallback?.includes('insufficient')) return 'Недостаточно товара на складе';
+      if (fallback?.includes('variant')) return 'Выбранный вариант недоступен';
+      return 'Товар недоступен для заказа';
+    case 'insufficient_stock':
+      return 'Недостаточно товара на складе';
     case 'bad_request':
       return fallback || 'Некорректный запрос';
     default:

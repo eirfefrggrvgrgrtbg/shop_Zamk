@@ -85,6 +85,7 @@ type PublicProductFilter struct {
 	Query         *string    `json:"q,omitempty"`
 	CategoryID    *uuid.UUID `json:"categoryId,omitempty"`
 	BrandID       *uuid.UUID `json:"brandId,omitempty"`
+	SellerID      *uuid.UUID `json:"sellerId,omitempty"`
 	MinPriceCents *int64     `json:"minPriceCents,omitempty"`
 	MaxPriceCents *int64     `json:"maxPriceCents,omitempty"`
 	InStock       *bool      `json:"inStock,omitempty"`

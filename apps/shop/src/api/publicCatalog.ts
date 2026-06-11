@@ -1,4 +1,4 @@
-import { getProducts, getProduct, getCategories, getBrands, getProductReviews } from '@zamk/api-client/src/public';
+import { getProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller } from '@zamk/api-client/src/public';
 import type { Product as UIProduct, Brand as UIBrand, Category as UICategory, Review as UIReview } from '../types/catalog';
 
 export const PRODUCT_PLACEHOLDER_IMAGE =
@@ -55,6 +55,35 @@ export async function fetchProducts(params?: any): Promise<{ items: UIProduct[],
       isNew: false,
     })),
     totalCount: res.totalCount
+  };
+}
+
+export async function fetchPublicSeller(slugOrId: string, params?: any): Promise<{ seller: any, products: { items: UIProduct[], totalCount: number } }> {
+  if (Object.keys(cachedBrands).length === 0) {
+    await fetchBrands().catch(() => {});
+  }
+
+  const res = await getPublicSeller(slugOrId, params);
+  
+  return {
+    seller: res.seller,
+    products: {
+      items: res.products.items.map((p: any) => ({
+        id: p.id,
+        name: p.title,
+        brand: p.brandId ? (cachedBrands[p.brandId] || 'Бренд не указан') : 'Бренд не указан',
+        brandId: p.brandId || '',
+        price: p.priceCents / 100,
+        oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
+        image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
+        category: p.categoryId || 'Категория не указана',
+        sellerId: p.sellerId,
+        rating: p.rating?.average,
+        reviewsCount: p.rating?.count,
+        isNew: false,
+      })),
+      totalCount: res.products.totalCount
+    }
   };
 }
 

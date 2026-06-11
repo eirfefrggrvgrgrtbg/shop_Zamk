@@ -121,7 +121,7 @@ export function Checkout() {
     );
   }
 
-  const delivery = totalPrice >= 10000 ? 0 : 590;
+  const delivery = 0; // Доставка рассчитывается позже
   const total = totalPrice + delivery;
 
   return (
@@ -176,6 +176,9 @@ export function Checkout() {
                 <PillFilter label='СБП' active={false} />
                 <PillFilter label='При получении' active={false} />
               </div>
+              <p className='mt-4 text-[13px] text-graphite-light dark:text-white/60 bg-ice dark:bg-white/5 p-3 rounded-xl border border-border-lighter dark:border-white/10'>
+                Внимание: Выполняется тестовая оплата для разработки. Реальное списание средств не производится.
+              </p>
             </CheckoutPanel>
           </div>
 
@@ -196,12 +199,12 @@ export function Checkout() {
                 )})}
                 <div className='border-t border-border-lighter dark:border-white/10 pt-3 mt-3 space-y-2'>
                   <div className='flex justify-between text-graphite dark:text-white/84'><span>Товары</span><span>{formatPrice(totalPrice)}</span></div>
-                  <div className='flex justify-between text-graphite dark:text-white/84'><span>Доставка</span><span>{delivery ? formatPrice(delivery) : 'Бесплатно'}</span></div>
+                  <div className='flex justify-between text-graphite dark:text-white/84'><span>Доставка</span><span className='text-xs'>Рассчитывается при оформлении</span></div>
                   <div className='flex justify-between text-base font-semibold text-graphite dark:text-white'><span>Итого</span><span>{formatPrice(total)}</span></div>
                 </div>
               </div>
 
-              <Button type='button' className='w-full mt-5' onClick={handleCheckout}>
+              <Button type='button' className='w-full mt-5' onClick={handleCheckout} disabled={isSubmitting}>
                 Оформить заказ
               </Button>
             </CheckoutPanel>

@@ -29,3 +29,7 @@ export const getProductReviews = async (productId: string, params?: any): Promis
 export const getProductRatingSummary = async (productId: string): Promise<RatingSummary> => {
   return request<RatingSummary>('GET', `/public/products/${productId}/rating-summary`);
 };
+
+export const getPublicSeller = async (slugOrId: string, params?: any): Promise<any> => {
+  return request<any>('GET', `/public/sellers/${slugOrId}`, { params });
+};

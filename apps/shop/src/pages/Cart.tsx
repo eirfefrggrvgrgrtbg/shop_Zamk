@@ -9,9 +9,20 @@ import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
 import { InfoPanel, SectionHeader } from '../components/editorial/StudioKit';
 
 export function Cart() {
-  const { items, updateQuantity, removeItem, totalPrice } = useCart();
-  const delivery = totalPrice >= 10000 ? 0 : 590;
+  const { items, updateQuantity, removeItem, totalPrice, isLoadingCart } = useCart();
+  const delivery = 0; // Доставка рассчитывается при оформлении
   const finalTotal = totalPrice + delivery;
+
+  if (isLoadingCart) {
+    return (
+      <div className='relative z-10 min-h-screen pt-32 md:pt-40 pb-20'>
+        <div className='container mx-auto px-4 sm:px-6 max-w-5xl text-center'>
+          <div className="animate-spin w-8 h-8 border-2 border-black border-t-transparent rounded-full dark:border-white dark:border-t-transparent mx-auto mb-4" />
+          <p className="text-graphite dark:text-white">Загрузка корзины...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -108,7 +119,7 @@ export function Cart() {
                 </div>
                 <div className='flex justify-between'>
                   <span>Доставка</span>
-                  <span className='text-graphite'>{delivery ? formatPrice(delivery) : 'Бесплатно'}</span>
+                  <span className='text-graphite text-xs flex items-center'>Рассчитывается при оформлении</span>
                 </div>
                 <div className='border-t border-border-lighter pt-3 mt-2 flex justify-between text-base font-semibold text-graphite'>
                   <span>Итого</span>

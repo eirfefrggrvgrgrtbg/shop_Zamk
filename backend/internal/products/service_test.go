@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 // To test the logic, we mock the repo which simulates the SQL logic.
@@ -23,6 +25,9 @@ func (m *mockRepo) ListPublishedProducts(ctx context.Context, filter PublicProdu
 			continue
 		}
 		if row.SellerStatus != "active" {
+			continue
+		}
+		if filter.SellerID != nil && row.P.SellerID != *filter.SellerID {
 			continue
 		}
 		result = append(result, row.P)
@@ -68,6 +73,38 @@ func TestPublicVisibility_ListProducts(t *testing.T) {
 
 	if len(items) != 1 {
 		t.Errorf("expected 1 item returned, got %d", len(items))
+	}
+}
+
+func TestPublicVisibility_FilterBySeller(t *testing.T) {
+	seller1 := uuid.New()
+	seller2 := uuid.New()
+
+	repo := &mockRepo{
+		products: []mockProductRow{
+			{P: Product{ID: uuid.New(), SellerID: seller1, Status: StatusPublished}, SellerStatus: "active"},
+			{P: Product{ID: uuid.New(), SellerID: seller1, Status: StatusPublished}, SellerStatus: "active"},
+			{P: Product{ID: uuid.New(), SellerID: seller2, Status: StatusPublished}, SellerStatus: "active"},
+			{P: Product{ID: uuid.New(), SellerID: seller2, Status: StatusDraft}, SellerStatus: "active"},
+		},
+	}
+
+	// Filter by seller1
+	items, _, err := repo.ListPublishedProducts(context.Background(), PublicProductFilter{SellerID: &seller1}, 10, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 2 {
+		t.Errorf("expected 2 items for seller1, got %d", len(items))
+	}
+
+	// Filter by seller2
+	items, _, err = repo.ListPublishedProducts(context.Background(), PublicProductFilter{SellerID: &seller2}, 10, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 1 {
+		t.Errorf("expected 1 published item for seller2, got %d", len(items))
 	}
 }
 

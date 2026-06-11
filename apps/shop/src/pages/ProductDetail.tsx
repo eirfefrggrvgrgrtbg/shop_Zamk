@@ -127,15 +127,22 @@ export function ProductDetail() {
     setSizeError('');
     
     let variantId = product.variants?.[0]?.id;
+    let variantInStock = product.variants?.[0]?.inStock ?? true;
     if (product.variants && activeSize) {
       const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
       if (match) {
          variantId = match.id;
+         variantInStock = match.inStock ?? true;
       }
     }
     
     if (!variantId) {
       showToast('Для товара не указан вариант. Добавление в корзину недоступно.');
+      return;
+    }
+
+    if (!variantInStock) {
+      showToast('Выбранный вариант товара закончился.');
       return;
     }
 
@@ -205,10 +212,16 @@ export function ProductDetail() {
 
           {/* Product Info */}
           <div className="lg:sticky lg:top-28 lg:self-start">
-            {/* Brand */}
-            <Link to={`/brand/${product.brandId}`} className="text-sm text-ash hover:text-graphite dark:hover:text-white transition-colors">
-              {product.brand}
-            </Link>
+            {/* Brand / Seller */}
+            {product.sellerId ? (
+              <Link to={`/seller/${product.sellerId}`} className="text-sm text-ash hover:text-graphite dark:hover:text-white transition-colors">
+                {product.brand}
+              </Link>
+            ) : (
+              <span className="text-sm text-ash">
+                {product.brand}
+              </span>
+            )}
 
             {/* Title */}
             <h1 className="mt-2 text-2xl md:text-3xl font-serif text-graphite dark:text-white leading-tight">
@@ -349,9 +362,29 @@ export function ProductDetail() {
 
             {/* Add to cart */}
             <div className="mt-6 flex gap-3">
-              <Button type="button" variant="primary" className="flex-1 h-12 gap-2" onClick={handleAddToCart}>
+              <Button 
+                type="button" 
+                variant="primary" 
+                className="flex-1 h-12 gap-2" 
+                onClick={handleAddToCart}
+                disabled={(() => {
+                  let vStock = product.variants?.[0]?.inStock ?? true;
+                  if (product.variants && activeSize) {
+                    const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
+                    if (match) vStock = match.inStock ?? true;
+                  }
+                  return !vStock;
+                })()}
+              >
                 <ShoppingBag className="w-5 h-5" />
-                Добавить в корзину
+                {(() => {
+                  let vStock = product.variants?.[0]?.inStock ?? true;
+                  if (product.variants && activeSize) {
+                    const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
+                    if (match) vStock = match.inStock ?? true;
+                  }
+                  return vStock ? 'Добавить в корзину' : 'Нет в наличии';
+                })()}
               </Button>
               <Button
                 type="button"

@@ -11,20 +11,23 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
-	service   *Service
-	validator *validator.Validate
-	auditRepo *staff.AuditRepository
+	service        *Service
+	sellersService *sellers.Service
+	validator      *validator.Validate
+	auditRepo      *staff.AuditRepository
 }
 
-func NewHandler(service *Service) *Handler {
+func NewHandler(service *Service, sellersService *sellers.Service) *Handler {
 	return &Handler{
-		service:   service,
-		validator: validator.New(),
+		service:        service,
+		sellersService: sellersService,
+		validator:      validator.New(),
 	}
 }
 
@@ -556,4 +559,70 @@ func (h *Handler) GetPublicProduct(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(prod)
+}
+
+func (h *Handler) GetPublicSellerStore(w http.ResponseWriter, r *http.Request) {
+	idOrSlug := chi.URLParam(r, "idOrSlug")
+	if idOrSlug == "" {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Missing seller id or slug")
+		return
+	}
+
+	seller, err := h.sellersService.GetPublicSeller(r.Context(), idOrSlug)
+	if err != nil {
+		h.writeError(w, http.StatusNotFound, "not_found", "Seller not found or not available")
+		return
+	}
+
+	filter := PublicProductFilter{SellerID: &seller.ID}
+	
+	if q := r.URL.Query().Get("q"); q != "" {
+		filter.Query = &q
+	}
+	if minPriceStr := r.URL.Query().Get("minPriceCents"); minPriceStr != "" {
+		var p int64
+		fmt.Sscanf(minPriceStr, "%d", &p)
+		filter.MinPriceCents = &p
+	}
+	if maxPriceStr := r.URL.Query().Get("maxPriceCents"); maxPriceStr != "" {
+		var p int64
+		fmt.Sscanf(maxPriceStr, "%d", &p)
+		filter.MaxPriceCents = &p
+	}
+	if inStockStr := r.URL.Query().Get("inStock"); inStockStr == "true" {
+		t := true
+		filter.InStock = &t
+	}
+	if sort := r.URL.Query().Get("sort"); sort != "" {
+		filter.Sort = &sort
+	}
+
+	p := pagination.FromRequest(r)
+	limit, offset := p.Limit, p.Offset
+
+	listResp, err := h.service.ListPublicProducts(r.Context(), filter, limit, offset)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get seller products")
+		return
+	}
+
+	type sellerStoreResponse struct {
+		Seller   any `json:"seller"`
+		Products any `json:"products"`
+	}
+
+	productsData := map[string]any{
+		"items":      listResp.Items,
+		"limit":      limit,
+		"offset":     offset,
+		"totalCount": listResp.TotalCount,
+	}
+
+	resp := sellerStoreResponse{
+		Seller:   seller,
+		Products: productsData,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }

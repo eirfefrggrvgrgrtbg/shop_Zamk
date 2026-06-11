@@ -436,6 +436,12 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 		argID++
 	}
 
+	if filter.SellerID != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND p.seller_id = $%d", argID))
+		args = append(args, *filter.SellerID)
+		argID++
+	}
+
 	if filter.MinPriceCents != nil {
 		queryBuilder.WriteString(fmt.Sprintf(" AND p.price_cents >= $%d", argID))
 		args = append(args, *filter.MinPriceCents)

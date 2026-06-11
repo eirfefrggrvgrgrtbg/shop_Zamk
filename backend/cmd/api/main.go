@@ -104,7 +104,7 @@ func main() {
 
 	productsRepo := products.NewRepository(pgClient.Pool)
 	productsService := products.NewService(productsRepo, sellersRepo, pgClient, reviewsService)
-	productsHandler := products.NewHandler(productsService)
+	productsHandler := products.NewHandler(productsService, sellersService)
 
 	tbankProvider := payments.NewTBankProvider(
 		cfg.TBank.TerminalKey,
