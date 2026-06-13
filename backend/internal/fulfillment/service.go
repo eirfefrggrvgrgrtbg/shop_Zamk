@@ -232,12 +232,10 @@ func (s *Service) UpdateShipmentStatus(ctx context.Context, adminID, shipmentID 
 
 			// Sync order status or fulfillment status
 			orderStatusMap := map[string]string{
-				"pending":    "assembling",
 				"assembling": "assembling",
 				"packed":     "packed",
 				"shipped":    "shipped",
 				"delivered":  "delivered",
-				"cancelled":  "cancelled",
 			}
 
 			if newStatus, ok := orderStatusMap[req.Status]; ok {
