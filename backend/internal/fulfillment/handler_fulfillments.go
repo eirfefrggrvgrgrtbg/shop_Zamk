@@ -1,7 +1,6 @@
 package fulfillment
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -115,15 +114,13 @@ func (h *Handler) MarkSellerFulfillmentAssembling(w http.ResponseWriter, r *http
 
 	if h.auditRepo != nil {
 		fid := fulfillmentID
-		go func() {
-			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
-				ActorUserID: userID,
-				Action:      "fulfillment.status_update",
-				EntityType:  "order_fulfillment",
-				EntityID:    &fid,
-				Metadata:    staff.SanitizeMetadata(map[string]any{"fromStatus": "paid", "toStatus": "assembling", "actorRole": "seller"}),
-			})
-		}()
+		_ = h.auditRepo.RecordAudit(r.Context(), staff.AuditEvent{
+			ActorUserID: userID,
+			Action:      "fulfillment.status_update",
+			EntityType:  "order_fulfillment",
+			EntityID:    &fid,
+			Metadata:    staff.SanitizeMetadata(map[string]any{"fromStatus": "paid", "toStatus": "assembling", "actorRole": "seller"}),
+		})
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -160,15 +157,13 @@ func (h *Handler) MarkSellerFulfillmentPacked(w http.ResponseWriter, r *http.Req
 
 	if h.auditRepo != nil {
 		fid := fulfillmentID
-		go func() {
-			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
-				ActorUserID: userID,
-				Action:      "fulfillment.status_update",
-				EntityType:  "order_fulfillment",
-				EntityID:    &fid,
-				Metadata:    staff.SanitizeMetadata(map[string]any{"fromStatus": "assembling", "toStatus": "packed", "actorRole": "seller"}),
-			})
-		}()
+		_ = h.auditRepo.RecordAudit(r.Context(), staff.AuditEvent{
+			ActorUserID: userID,
+			Action:      "fulfillment.status_update",
+			EntityType:  "order_fulfillment",
+			EntityID:    &fid,
+			Metadata:    staff.SanitizeMetadata(map[string]any{"fromStatus": "assembling", "toStatus": "packed", "actorRole": "seller"}),
+		})
 	}
 
 	w.WriteHeader(http.StatusOK)
