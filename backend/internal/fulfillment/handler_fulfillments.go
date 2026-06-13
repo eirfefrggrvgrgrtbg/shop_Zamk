@@ -164,14 +164,21 @@ func (h *Handler) GetCustomerOrderFulfillments(w http.ResponseWriter, r *http.Re
 
 	var safeFulfillments []CustomerFulfillmentResponse
 	for _, f := range fulfillments {
+		var shipmentIDStr *string
+		if f.ShipmentID != nil {
+			s := f.ShipmentID.String()
+			shipmentIDStr = &s
+		}
+
 		safeFulfillments = append(safeFulfillments, CustomerFulfillmentResponse{
 			ID:             f.ID.String(),
 			OrderID:        f.OrderID.String(),
+			SellerID:       f.SellerID.String(),
 			SellerName:     f.SellerName,
 			Status:         f.Status,
-			SubtotalCents:  f.SubtotalCents,
 			CreatedAt:      f.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt:      f.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ShipmentID:     shipmentIDStr,
 			ShipmentStatus: f.ShipmentStatus,
 			Items:          f.Items,
 		})

@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { Cart, Order, ReturnRequest, ReturnResponse, ReviewCreateRequest } from './types';
+import type { Cart, Order, ReturnRequest, ReturnResponse, ReviewCreateRequest, CustomerFulfillment } from './types';
 
 export const getCart = async (): Promise<Cart> => {
   return request<Cart>('GET', '/customer/cart');
@@ -31,6 +31,10 @@ export const getOrders = async (): Promise<Order[]> => {
 
 export const getOrder = async (orderId: string): Promise<Order> => {
   return request<Order>('GET', `/customer/orders/${orderId}`);
+};
+
+export const getCustomerOrderFulfillments = async (orderId: string): Promise<CustomerFulfillment[]> => {
+  return request<CustomerFulfillment[]>('GET', `/customer/orders/${orderId}/fulfillments`);
 };
 
 // P0 fix: was /pay, backend route is /payment

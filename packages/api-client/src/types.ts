@@ -135,6 +135,31 @@ export interface Order {
   items: OrderItem[];
 }
 
+export interface CustomerFulfillmentItem {
+  orderItemId: string;
+  productId: string;
+  productTitle: string;
+  variantId?: string | null;
+  sku?: string | null;
+  quantity: number;
+  unitPriceCents: number;
+  lineTotalCents: number;
+  imageUrl?: string | null;
+}
+
+export interface CustomerFulfillment {
+  id: string;
+  orderId: string;
+  sellerId: string;
+  sellerName?: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  shipmentId?: string | null;
+  shipmentStatus?: string | null;
+  items: CustomerFulfillmentItem[];
+}
+
 export interface ReturnItemRequest {
   orderItemId: string;
   quantity: number;

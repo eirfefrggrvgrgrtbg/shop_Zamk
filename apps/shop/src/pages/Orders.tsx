@@ -29,6 +29,60 @@ function OrdersContent() {
   const [returnModal, setReturnModal] = useState<{isOpen: boolean, item: any | null}>({isOpen: false, item: null});
   const [reviewModal, setReviewModal] = useState<{isOpen: boolean, item: any | null}>({isOpen: false, item: null});
 
+  const [fulfillments, setFulfillments] = useState<any[]>([]);
+  const [isFulfillmentsLoading, setIsFulfillmentsLoading] = useState(false);
+  const [fulfillmentsError, setFulfillmentsError] = useState<string | null>(null);
+
+  const mapFulfillmentStatus = (s: string) => {
+    switch (s) {
+      case 'awaiting_payment': return 'Ожидает оплаты';
+      case 'paid': return 'Оплачен';
+      case 'assembling': return 'Собирается';
+      case 'packed': return 'Упакован';
+      case 'shipped': return 'Отправлен';
+      case 'delivered': return 'Доставлен';
+      case 'cancelled': return 'Отменён';
+      case 'returned': return 'Возврат';
+      case 'refunded': return 'Возмещён';
+      default: return s;
+    }
+  };
+
+  const mapShipmentStatus = (s: string) => {
+    switch (s) {
+      case 'pending': return 'Ожидает подготовки';
+      case 'assembling': return 'Собирается';
+      case 'packed': return 'Упакован';
+      case 'shipped': return 'Отправлен';
+      case 'delivered': return 'Доставлен';
+      case 'cancelled': return 'Отменён';
+      default: return s;
+    }
+  };
+
+  useEffect(() => {
+    if (selectedOrder) {
+      loadFulfillments(selectedOrder.rawId);
+    } else {
+      setFulfillments([]);
+      setFulfillmentsError(null);
+    }
+  }, [selectedOrder]);
+
+  const loadFulfillments = async (orderId: string) => {
+    setIsFulfillmentsLoading(true);
+    setFulfillmentsError(null);
+    try {
+      const { getCustomerOrderFulfillments } = await import('@zamk/api-client/src/customer');
+      const fData = await getCustomerOrderFulfillments(orderId);
+      setFulfillments(fData || []);
+    } catch (err) {
+      setFulfillmentsError("Не удалось загрузить состав заказа по продавцам.");
+    } finally {
+      setIsFulfillmentsLoading(false);
+    }
+  };
+
   const loadData = async () => {
     try {
       setIsLoading(true);
@@ -225,59 +279,93 @@ function OrdersContent() {
                 </span>
               </div>
 
-              {/* Состав заказа */}
+              {/* Состав заказа по продавцам */}
               <div>
-                <h4 className="text-[13px] uppercase tracking-[0.05em] text-ash dark:text-white/60 font-medium mb-4">Состав заказа</h4>
-                <div className="space-y-4">
-                  {selectedOrder.items.map((item: any, idx: number) => (
-                    <div key={idx} className="flex flex-col gap-2 p-2 -m-2 rounded-xl transition-colors hover:bg-graphite/[0.02] dark:hover:bg-white/5">
-                      <Link to={`/product/${item.productId}`} className="flex gap-4 group cursor-pointer">
-                        <div className="w-20 h-24 bg-graphite/5 dark:bg-white/10 rounded-xl overflow-hidden flex-shrink-0">
-                          <img 
-                            src={item.image} 
-                            alt={item.name} 
-                            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700" 
-                          />
-                        </div>
-                        <div className="flex-1 py-1 flex flex-col justify-between">
+                <h4 className="text-[13px] uppercase tracking-[0.05em] text-ash dark:text-white/60 font-medium mb-4">Состав заказа по продавцам</h4>
+                
+                {isFulfillmentsLoading ? (
+                  <p className="text-[13px] text-ash dark:text-white/60">Загружаем состав заказа...</p>
+                ) : fulfillmentsError ? (
+                  <p className="text-[13px] text-red-500">{fulfillmentsError}</p>
+                ) : fulfillments.length === 0 ? (
+                  <p className="text-[13px] text-ash dark:text-white/60">Состав заказа не найден.</p>
+                ) : (
+                  <div className="space-y-6">
+                    {fulfillments.map((f: any) => (
+                      <div key={f.id} className="bg-graphite/[0.02] dark:bg-white/5 rounded-xl p-4 border border-graphite/5 dark:border-white/10">
+                        {/* Фулфилмент Хедер */}
+                        <div className="flex justify-between items-start mb-4 pb-3 border-b border-graphite/5 dark:border-white/10">
                           <div>
-                            <p className="text-[14.5px] font-medium text-graphite dark:text-white leading-snug group-hover:underline decoration-1 underline-offset-2">
-                              {item.name}{(item.quantity ?? 1) > 1 ? ` × ${item.quantity}` : ''}
-                            </p>
-                            {item.size && <p className="text-[13px] text-ash dark:text-white/60 mt-1">Размер: {item.size}</p>}
-                            {item.color && <p className="text-[13px] text-ash dark:text-white/60 mt-1">Цвет: {item.color}</p>}
+                            <p className="text-[14px] font-medium text-graphite dark:text-white">{f.sellerName || 'Неизвестный магазин'}</p>
+                            <p className="text-[12px] text-ash dark:text-white/60 mt-0.5">Сборка #{f.id.substring(0, 8)}</p>
                           </div>
-                          <p className="font-serif text-[15px] text-graphite dark:text-white">{item.price.toLocaleString('ru-RU')} ₽</p>
+                          <div className="text-right">
+                            <span className="text-[11px] uppercase tracking-wider font-medium px-2 py-0.5 rounded bg-graphite/10 dark:bg-white/20 text-graphite dark:text-white/80">
+                              {mapFulfillmentStatus(f.status)}
+                            </span>
+                            {f.shipmentStatus && (
+                              <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-1">
+                                {mapShipmentStatus(f.shipmentStatus)}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </Link>
-                      {selectedOrder.status === 'Доставлен' && (
-                        <div className="flex gap-2 mt-2 ml-24">
-                          <button 
-                            onClick={(e) => {
-                              e.preventDefault();
-                              setReturnModal({ isOpen: true, item: { orderItemId: item.orderItemId, maxQuantity: item.quantity, productName: item.name } });
-                            }}
-                            className="text-[12px] font-medium text-error hover:underline transition-colors"
-                          >
-                            Оформить возврат
-                          </button>
-                          <span className="text-ash/30">•</span>
-                          <button 
-                            onClick={(e) => {
-                              e.preventDefault();
-                              setReviewModal({ isOpen: true, item: { orderItemId: item.orderItemId, productName: item.name } });
-                            }}
-                            className="text-[12px] font-medium text-primary hover:underline transition-colors"
-                          >
-                            Оставить отзыв
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
 
+                        {/* Товары в сборке */}
+                        <div className="space-y-4">
+                          {f.items.map((item: any, idx: number) => (
+                            <div key={idx} className="flex flex-col gap-2 transition-colors">
+                              <Link to={`/product/${item.productId}`} className="flex gap-4 group cursor-pointer">
+                                <div className="w-16 h-20 bg-graphite/5 dark:bg-white/10 rounded-lg overflow-hidden flex-shrink-0">
+                                  <img 
+                                    src={item.imageUrl || PRODUCT_PLACEHOLDER_IMAGE} 
+                                    alt={item.productTitle} 
+                                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700" 
+                                  />
+                                </div>
+                                <div className="flex-1 py-0.5 flex flex-col justify-between">
+                                  <div>
+                                    <p className="text-[13.5px] font-medium text-graphite dark:text-white leading-snug group-hover:underline decoration-1 underline-offset-2">
+                                      {item.productTitle}{(item.quantity ?? 1) > 1 ? ` × ${item.quantity}` : ''}
+                                    </p>
+                                    {item.sku && <p className="text-[12px] text-ash dark:text-white/60 mt-1">SKU: {item.sku}</p>}
+                                  </div>
+                                  <p className="font-serif text-[14px] text-graphite dark:text-white">{(item.unitPriceCents / 100).toLocaleString('ru-RU')} ₽</p>
+                                </div>
+                              </Link>
+                              
+                              {/* Кнопки возврата / отзыва */}
+                              {selectedOrder.status === 'Доставлен' && (
+                                <div className="flex gap-2 mt-1 ml-20">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setReturnModal({ isOpen: true, item: { orderItemId: item.orderItemId, maxQuantity: item.quantity, productName: item.productTitle } });
+                                    }}
+                                    className="text-[11px] font-medium text-error hover:underline transition-colors"
+                                  >
+                                    Оформить возврат
+                                  </button>
+                                  <span className="text-ash/30">•</span>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setReviewModal({ isOpen: true, item: { orderItemId: item.orderItemId, productName: item.productTitle } });
+                                    }}
+                                    className="text-[11px] font-medium text-primary hover:underline transition-colors"
+                                  >
+                                    Оставить отзыв
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="h-px bg-graphite/5 dark:bg-white/10 w-full"></div>
 
               {/* Возвраты и возмещения */}
