@@ -125,7 +125,36 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 			return err
 		}
 
+		// Group items by seller and create fulfillments
+		sellerTotals := make(map[uuid.UUID]int64)
+		for _, item := range orderItems {
+			sellerTotals[item.SellerID] += item.SubtotalPriceCents
+		}
+
+		sellerFulfillments := make(map[uuid.UUID]*OrderFulfillment)
+		for sellerID, subtotal := range sellerTotals {
+			commissionBps := 900 // Default base commission
+			commissionAmount := (subtotal * int64(commissionBps)) / 10000
+			sellerAmount := subtotal - commissionAmount
+
+			f := &OrderFulfillment{
+				ID:                uuid.New(),
+				OrderID:           orderID,
+				SellerID:          sellerID,
+				Status:            "awaiting_payment",
+				SubtotalCents:     subtotal,
+				CommissionBps:     commissionBps,
+				SellerAmountCents: sellerAmount,
+			}
+			if err := s.repo.CreateOrderFulfillmentTx(ctx, tx, f); err != nil {
+				return err
+			}
+			sellerFulfillments[sellerID] = f
+		}
+
 		for i := range orderItems {
+			f := sellerFulfillments[orderItems[i].SellerID]
+			orderItems[i].OrderFulfillmentID = &f.ID
 			if err := s.repo.CreateOrderItemTx(ctx, tx, &orderItems[i]); err != nil {
 				return err
 			}
@@ -204,7 +233,16 @@ func (s *Service) CancelCustomerOrder(ctx context.Context, userID, orderID uuid.
 			ToStatus:    "cancelled",
 			ActorUserID: &userID,
 		}
-		return s.repo.CreateOrderStatusHistoryTx(ctx, tx, history)
+		if err := s.repo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
+			return err
+		}
+
+		// Cascade cancellation to fulfillments
+		if err := s.repo.MarkOrderFulfillmentsStatusTx(ctx, tx, orderID, order.Status, "cancelled"); err != nil {
+			return err
+		}
+		
+		return nil
 	})
 }
 
@@ -241,7 +279,17 @@ func (s *Service) UpdateOrderStatus(ctx context.Context, adminID, orderID uuid.U
 			ActorUserID: &adminID,
 			Comment:     req.Comment,
 		}
-		return s.repo.CreateOrderStatusHistoryTx(ctx, tx, history)
+		if err := s.repo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
+			return err
+		}
+
+		if req.Status == "cancelled" {
+			if err := s.repo.MarkOrderFulfillmentsStatusTx(ctx, tx, orderID, order.Status, "cancelled"); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	})
 }
 

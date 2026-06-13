@@ -29,11 +29,26 @@ func (r *Repository) CreateOrderTx(ctx context.Context, tx pgx.Tx, order *Order)
 
 func (r *Repository) CreateOrderItemTx(ctx context.Context, tx pgx.Tx, item *OrderItem) error {
 	query := `
-		INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, variant_size, variant_color, sku, image_url, price_cents, quantity, subtotal_price_cents)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		INSERT INTO order_items (id, order_id, order_fulfillment_id, product_id, product_variant_id, seller_id, title, product_slug, variant_size, variant_color, sku, image_url, price_cents, quantity, subtotal_price_cents)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING created_at
 	`
-	return tx.QueryRow(ctx, query, item.ID, item.OrderID, item.ProductID, item.ProductVariantID, item.SellerID, item.Title, item.ProductSlug, item.VariantSize, item.VariantColor, item.Sku, item.ImageURL, item.PriceCents, item.Quantity, item.SubtotalPriceCents).Scan(&item.CreatedAt)
+	return tx.QueryRow(ctx, query, item.ID, item.OrderID, item.OrderFulfillmentID, item.ProductID, item.ProductVariantID, item.SellerID, item.Title, item.ProductSlug, item.VariantSize, item.VariantColor, item.Sku, item.ImageURL, item.PriceCents, item.Quantity, item.SubtotalPriceCents).Scan(&item.CreatedAt)
+}
+
+func (r *Repository) CreateOrderFulfillmentTx(ctx context.Context, tx pgx.Tx, f *OrderFulfillment) error {
+	query := `
+		INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING created_at, updated_at
+	`
+	return tx.QueryRow(ctx, query, f.ID, f.OrderID, f.SellerID, f.Status, f.SubtotalCents, f.CommissionBps, f.SellerAmountCents).Scan(&f.CreatedAt, &f.UpdatedAt)
+}
+
+func (r *Repository) MarkOrderFulfillmentsStatusTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, fromStatus, toStatus string) error {
+	query := `UPDATE order_fulfillments SET status = $1, updated_at = now() WHERE order_id = $2 AND status = $3`
+	_, err := tx.Exec(ctx, query, toStatus, orderID, fromStatus)
+	return err
 }
 
 func (r *Repository) CreateOrderReservationTx(ctx context.Context, tx pgx.Tx, res *OrderReservation) error {

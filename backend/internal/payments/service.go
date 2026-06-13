@@ -157,6 +157,9 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 			if err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid"); err != nil {
 				return err
 			}
+			if err := s.ordersRepo.MarkOrderFulfillmentsStatusTx(ctx, tx, order.ID, "awaiting_payment", "paid"); err != nil {
+				return err
+			}
 
 			history := &orders.OrderStatusHistory{
 				ID:         uuid.New(),

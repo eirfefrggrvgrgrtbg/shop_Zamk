@@ -24,21 +24,34 @@ type Order struct {
 }
 
 type OrderItem struct {
-	ID                 uuid.UUID `json:"id" db:"id"`
-	OrderID            uuid.UUID `json:"orderId" db:"order_id"`
-	ProductID          uuid.UUID `json:"productId" db:"product_id"`
-	ProductVariantID   uuid.UUID `json:"productVariantId" db:"product_variant_id"`
-	SellerID           uuid.UUID `json:"sellerId" db:"seller_id"`
-	Title              string    `json:"title" db:"title"`
-	ProductSlug        string    `json:"productSlug" db:"product_slug"`
-	VariantSize        *string   `json:"variantSize" db:"variant_size"`
-	VariantColor       *string   `json:"variantColor" db:"variant_color"`
-	Sku                *string   `json:"sku" db:"sku"`
-	ImageURL           *string   `json:"imageUrl" db:"image_url"`
-	PriceCents         int64     `json:"priceCents" db:"price_cents"`
-	Quantity           int       `json:"quantity" db:"quantity"`
-	SubtotalPriceCents int64     `json:"subtotalPriceCents" db:"subtotal_price_cents"`
-	CreatedAt          time.Time `json:"createdAt" db:"created_at"`
+	ID                 uuid.UUID  `json:"id" db:"id"`
+	OrderID            uuid.UUID  `json:"orderId" db:"order_id"`
+	OrderFulfillmentID *uuid.UUID `json:"orderFulfillmentId" db:"order_fulfillment_id"`
+	ProductID          uuid.UUID  `json:"productId" db:"product_id"`
+	ProductVariantID   uuid.UUID  `json:"productVariantId" db:"product_variant_id"`
+	SellerID           uuid.UUID  `json:"sellerId" db:"seller_id"`
+	Title              string     `json:"title" db:"title"`
+	ProductSlug        string     `json:"productSlug" db:"product_slug"`
+	VariantSize        *string    `json:"variantSize" db:"variant_size"`
+	VariantColor       *string    `json:"variantColor" db:"variant_color"`
+	Sku                *string    `json:"sku" db:"sku"`
+	ImageURL           *string    `json:"imageUrl" db:"image_url"`
+	PriceCents         int64      `json:"priceCents" db:"price_cents"`
+	Quantity           int        `json:"quantity" db:"quantity"`
+	SubtotalPriceCents int64      `json:"subtotalPriceCents" db:"subtotal_price_cents"`
+	CreatedAt          time.Time  `json:"createdAt" db:"created_at"`
+}
+
+type OrderFulfillment struct {
+	ID                uuid.UUID `json:"id" db:"id"`
+	OrderID           uuid.UUID `json:"orderId" db:"order_id"`
+	SellerID          uuid.UUID `json:"sellerId" db:"seller_id"`
+	Status            string    `json:"status" db:"status"`
+	SubtotalCents     int64     `json:"subtotalCents" db:"subtotal_cents"`
+	CommissionBps     int       `json:"commissionBps" db:"commission_bps"`
+	SellerAmountCents int64     `json:"sellerAmountCents" db:"seller_amount_cents"`
+	CreatedAt         time.Time `json:"createdAt" db:"created_at"`
+	UpdatedAt         time.Time `json:"updatedAt" db:"updated_at"`
 }
 
 type OrderReservation struct {
