@@ -141,6 +141,10 @@ export const createAdminShipment = async (orderId: string, data: { carrier?: str
   return request<AdminShipment>('POST', `/admin/orders/${orderId}/shipment`, { body: data });
 };
 
+export const createAdminFulfillmentShipment = async (fulfillmentId: string, data: { carrier?: string; trackingNumber?: string; trackingUrl?: string }): Promise<AdminShipment> => {
+  return request<AdminShipment>('POST', `/admin/fulfillments/${fulfillmentId}/shipment`, { body: data });
+};
+
 export const updateAdminShipmentStatus = async (id: string, data: { status: string; carrier?: string; trackingNumber?: string; trackingUrl?: string; comment?: string }): Promise<void> => {
   return request<void>('PATCH', `/admin/shipments/${id}/status`, { body: data });
 };

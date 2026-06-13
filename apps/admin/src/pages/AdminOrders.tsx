@@ -14,6 +14,7 @@ import type { AdminOrderView } from '../api/adminOrders';
 import type { AdminFulfillment } from '@zamk/api-client/src/types';
 import {
   createAdminShipment,
+  createAdminFulfillmentShipment,
   getAdminShipmentErrorMessage,
 } from '../api/adminShipments';
 import { PermissionGuard } from '../components/PermissionGuard';
@@ -152,6 +153,22 @@ export function AdminOrders() {
       await openOrderPanel(selectedOrder.id);
     } catch (err: unknown) {
       setError(getAdminShipmentErrorMessage(err, 'Не удалось создать отгрузку.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCreateFulfillmentShipment = async (fulfillmentId: string) => {
+    try {
+      setIsSubmitting(true);
+      setFulfillmentsError(null);
+      await createAdminFulfillmentShipment(fulfillmentId, {});
+      await fetchOrders();
+      if (selectedOrder) {
+        await openOrderPanel(selectedOrder.id);
+      }
+    } catch (err: unknown) {
+      setFulfillmentsError(getAdminShipmentErrorMessage(err, 'Не удалось создать отгрузку для сборки.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -372,10 +389,25 @@ export function AdminOrders() {
                                 <p className="text-xs font-medium bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
                                   {fulfillmentStatusLabels[f.status] || f.status}
                                 </p>
-                                {f.shipmentStatus && (
+                                {f.shipmentStatus ? (
                                   <p className="mt-1 text-xs text-gray-600">
                                     Доставка: {shipmentStatusLabels[f.shipmentStatus] || f.shipmentStatus}
                                   </p>
+                                ) : (
+                                  ['paid', 'assembling', 'packed', 'shipped'].includes(selectedOrder.status) && f.status !== 'cancelled' && (
+                                    <PermissionGuard
+                                      permission="shipments.create"
+                                      fallback={null}
+                                    >
+                                      <button
+                                        onClick={(e) => { e.preventDefault(); handleCreateFulfillmentShipment(f.id); }}
+                                        disabled={isSubmitting}
+                                        className="mt-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                                      >
+                                        Создать отгрузку
+                                      </button>
+                                    </PermissionGuard>
+                                  )
                                 )}
                               </div>
                             </div>
@@ -459,7 +491,7 @@ export function AdminOrders() {
                   )}
 
                   {/* Create shipment */}
-                  {selectedOrder.status === 'paid' && (
+                  {selectedOrder.status === 'paid' && fulfillments.length === 0 && (
                     <PermissionGuard
                       permission="shipments.create"
                       fallback={<p className="text-xs text-gray-400 border-t pt-4">У вас нет прав для создания отгрузки.</p>}

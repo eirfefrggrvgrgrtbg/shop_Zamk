@@ -9,6 +9,7 @@ import (
 type Shipment struct {
 	ID             uuid.UUID  `json:"id"`
 	OrderID        uuid.UUID  `json:"orderId"`
+	FulfillmentID  *uuid.UUID `json:"fulfillmentId,omitempty"`
 	Status         string     `json:"status"`
 	Carrier        *string    `json:"carrier"`
 	TrackingNumber *string    `json:"trackingNumber"`

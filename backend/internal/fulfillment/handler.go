@@ -63,6 +63,41 @@ func (h *Handler) CreateShipment(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(shipment)
 }
 
+func (h *Handler) CreateShipmentForFulfillment(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value("userID")
+	if val == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	adminID := val.(uuid.UUID)
+
+	fulfillmentIDStr := chi.URLParam(r, "id")
+	fulfillmentID, err := uuid.Parse(fulfillmentIDStr)
+	if err != nil {
+		http.Error(w, "invalid fulfillment id", http.StatusBadRequest)
+		return
+	}
+
+	var req CreateShipmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	shipment, err := h.svc.CreateShipmentForFulfillment(r.Context(), adminID, fulfillmentID, req)
+	if err != nil {
+		if errors.Is(err, ErrShipmentExists) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(shipment)
+}
+
 func (h *Handler) ListAdminShipments(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
 	shipments, err := h.svc.ListAdminShipments(r.Context(), page.Limit, page.Offset)

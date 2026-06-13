@@ -258,3 +258,9 @@ func (r *Repository) GetOrderFulfillments(ctx context.Context, orderID uuid.UUID
 
 	return list, nil
 }
+
+func (r *Repository) UpdateFulfillmentStatusTx(ctx context.Context, tx pgx.Tx, fulfillmentID uuid.UUID, status string) error {
+	query := `UPDATE order_fulfillments SET status = $1, updated_at = now() WHERE id = $2`
+	_, err := tx.Exec(ctx, query, status, fulfillmentID)
+	return err
+}

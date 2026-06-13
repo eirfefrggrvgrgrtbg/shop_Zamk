@@ -19,11 +19,11 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 
 func (r *Repository) CreateShipmentTx(ctx context.Context, tx pgx.Tx, s *Shipment) error {
 	query := `
-		INSERT INTO shipments (id, order_id, status, carrier, tracking_number, tracking_url)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO shipments (id, order_id, fulfillment_id, status, carrier, tracking_number, tracking_url)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING created_at, updated_at
 	`
-	return tx.QueryRow(ctx, query, s.ID, s.OrderID, s.Status, s.Carrier, s.TrackingNumber, s.TrackingUrl).Scan(&s.CreatedAt, &s.UpdatedAt)
+	return tx.QueryRow(ctx, query, s.ID, s.OrderID, s.FulfillmentID, s.Status, s.Carrier, s.TrackingNumber, s.TrackingUrl).Scan(&s.CreatedAt, &s.UpdatedAt)
 }
 
 func (r *Repository) CreateShipmentEventTx(ctx context.Context, tx pgx.Tx, e *ShipmentEvent) error {
@@ -47,12 +47,12 @@ func (r *Repository) UpdateShipmentTx(ctx context.Context, tx pgx.Tx, s *Shipmen
 
 func (r *Repository) GetShipment(ctx context.Context, id uuid.UUID) (*Shipment, error) {
 	query := `
-		SELECT id, order_id, status, carrier, tracking_number, tracking_url, shipped_at, delivered_at, created_at, updated_at
+		SELECT id, order_id, fulfillment_id, status, carrier, tracking_number, tracking_url, shipped_at, delivered_at, created_at, updated_at
 		FROM shipments WHERE id = $1
 	`
 	var s Shipment
 	err := r.db.QueryRow(ctx, query, id).Scan(
-		&s.ID, &s.OrderID, &s.Status, &s.Carrier, &s.TrackingNumber, &s.TrackingUrl, &s.ShippedAt, &s.DeliveredAt, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.OrderID, &s.FulfillmentID, &s.Status, &s.Carrier, &s.TrackingNumber, &s.TrackingUrl, &s.ShippedAt, &s.DeliveredAt, &s.CreatedAt, &s.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -65,12 +65,12 @@ func (r *Repository) GetShipment(ctx context.Context, id uuid.UUID) (*Shipment, 
 
 func (r *Repository) GetShipmentByOrderID(ctx context.Context, orderID uuid.UUID) (*Shipment, error) {
 	query := `
-		SELECT id, order_id, status, carrier, tracking_number, tracking_url, shipped_at, delivered_at, created_at, updated_at
+		SELECT id, order_id, fulfillment_id, status, carrier, tracking_number, tracking_url, shipped_at, delivered_at, created_at, updated_at
 		FROM shipments WHERE order_id = $1 LIMIT 1
 	`
 	var s Shipment
 	err := r.db.QueryRow(ctx, query, orderID).Scan(
-		&s.ID, &s.OrderID, &s.Status, &s.Carrier, &s.TrackingNumber, &s.TrackingUrl, &s.ShippedAt, &s.DeliveredAt, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.OrderID, &s.FulfillmentID, &s.Status, &s.Carrier, &s.TrackingNumber, &s.TrackingUrl, &s.ShippedAt, &s.DeliveredAt, &s.CreatedAt, &s.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -83,7 +83,7 @@ func (r *Repository) GetShipmentByOrderID(ctx context.Context, orderID uuid.UUID
 
 func (r *Repository) ListShipments(ctx context.Context, limit, offset int) ([]Shipment, error) {
 	query := `
-		SELECT id, order_id, status, carrier, tracking_number, tracking_url, shipped_at, delivered_at, created_at, updated_at
+		SELECT id, order_id, fulfillment_id, status, carrier, tracking_number, tracking_url, shipped_at, delivered_at, created_at, updated_at
 		FROM shipments ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
 	`
@@ -96,7 +96,7 @@ func (r *Repository) ListShipments(ctx context.Context, limit, offset int) ([]Sh
 	var list []Shipment
 	for rows.Next() {
 		var s Shipment
-		if err := rows.Scan(&s.ID, &s.OrderID, &s.Status, &s.Carrier, &s.TrackingNumber, &s.TrackingUrl, &s.ShippedAt, &s.DeliveredAt, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.OrderID, &s.FulfillmentID, &s.Status, &s.Carrier, &s.TrackingNumber, &s.TrackingUrl, &s.ShippedAt, &s.DeliveredAt, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, s)

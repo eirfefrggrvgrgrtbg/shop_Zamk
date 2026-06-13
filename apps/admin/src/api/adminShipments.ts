@@ -1,5 +1,6 @@
 import {
   createAdminShipment as apiCreateAdminShipment,
+  createAdminFulfillmentShipment as apiCreateAdminFulfillmentShipment,
   getAdminShipment as apiGetAdminShipment,
   getAdminShipments as apiGetAdminShipments,
   updateAdminShipmentStatus as apiUpdateAdminShipmentStatus,
@@ -84,6 +85,15 @@ export const getAdminShipment = async (id: string): Promise<AdminShipmentView> =
 
 export const createAdminShipment = async (input: ShipmentCreateInput): Promise<AdminShipmentView> => {
   const shipment = await apiCreateAdminShipment(input.orderId, {
+    carrier: input.carrier || undefined,
+    trackingNumber: input.trackingNumber || undefined,
+    trackingUrl: input.trackingUrl || undefined,
+  });
+  return mapAdminShipment(shipment);
+};
+
+export const createAdminFulfillmentShipment = async (fulfillmentId: string, input: Omit<ShipmentCreateInput, 'orderId'>): Promise<AdminShipmentView> => {
+  const shipment = await apiCreateAdminFulfillmentShipment(fulfillmentId, {
     carrier: input.carrier || undefined,
     trackingNumber: input.trackingNumber || undefined,
     trackingUrl: input.trackingUrl || undefined,
