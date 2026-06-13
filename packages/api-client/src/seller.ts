@@ -60,6 +60,14 @@ export const getSellerFulfillment = async (id: string): Promise<SellerFulfillmen
   return request<SellerFulfillment>('GET', `/seller/fulfillments/${id}`);
 };
 
+export const markSellerFulfillmentAssembling = async (id: string): Promise<void> => {
+  return request<void>('POST', `/seller/fulfillments/${id}/mark-assembling`);
+};
+
+export const markSellerFulfillmentPacked = async (id: string): Promise<void> => {
+  return request<void>('POST', `/seller/fulfillments/${id}/mark-packed`);
+};
+
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getSellerReturns = async (): Promise<{ items: SellerReturn[]; totalCount: number }> => {
   return request<{ items: SellerReturn[]; totalCount: number }>('GET', '/seller/returns');

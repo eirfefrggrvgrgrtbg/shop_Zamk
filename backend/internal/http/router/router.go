@@ -251,6 +251,8 @@ func New(
 
 		r.Get("/", fulfillmentHandler.ListSellerFulfillments)
 		r.Get("/{id}", fulfillmentHandler.GetSellerFulfillment)
+		r.Post("/{id}/mark-assembling", fulfillmentHandler.MarkSellerFulfillmentAssembling)
+		r.Post("/{id}/mark-packed", fulfillmentHandler.MarkSellerFulfillmentPacked)
 	})
 
 	r.Route("/api/seller/returns", func(r chi.Router) {

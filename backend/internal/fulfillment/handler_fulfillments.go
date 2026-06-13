@@ -1,6 +1,7 @@
 package fulfillment
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 )
 
 type FulfillmentListResponse struct {
@@ -81,6 +83,96 @@ func (h *Handler) GetSellerFulfillment(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(f)
+}
+
+func (h *Handler) MarkSellerFulfillmentAssembling(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value("userID")
+	if val == nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+	userID := val.(uuid.UUID)
+
+	fulfillmentID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid ID")
+		return
+	}
+
+	err = h.svc.MarkSellerFulfillmentAssembling(r.Context(), userID, fulfillmentID)
+	if err != nil {
+		if err.Error() == "Сборка ещё не оплачена." || err.Error() == "Сборка уже отправлена или завершена." || err.Error() == "Сборку нельзя перевести в этот статус." {
+			h.writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		if errors.Is(err, ErrFulfillmentNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	if h.auditRepo != nil {
+		fid := fulfillmentID
+		go func() {
+			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
+				ActorUserID: userID,
+				Action:      "fulfillment.status_update",
+				EntityType:  "order_fulfillment",
+				EntityID:    &fid,
+				Metadata:    staff.SanitizeMetadata(map[string]any{"fromStatus": "paid", "toStatus": "assembling", "actorRole": "seller"}),
+			})
+		}()
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (h *Handler) MarkSellerFulfillmentPacked(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value("userID")
+	if val == nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+	userID := val.(uuid.UUID)
+
+	fulfillmentID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid ID")
+		return
+	}
+
+	err = h.svc.MarkSellerFulfillmentPacked(r.Context(), userID, fulfillmentID)
+	if err != nil {
+		if err.Error() == "Сборка ещё не оплачена." || err.Error() == "Сборка уже отправлена или завершена." || err.Error() == "Сборку нельзя перевести в этот статус." {
+			h.writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		if errors.Is(err, ErrFulfillmentNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	if h.auditRepo != nil {
+		fid := fulfillmentID
+		go func() {
+			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
+				ActorUserID: userID,
+				Action:      "fulfillment.status_update",
+				EntityType:  "order_fulfillment",
+				EntityID:    &fid,
+				Metadata:    staff.SanitizeMetadata(map[string]any{"fromStatus": "assembling", "toStatus": "packed", "actorRole": "seller"}),
+			})
+		}()
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (h *Handler) ListAdminFulfillments(w http.ResponseWriter, r *http.Request) {

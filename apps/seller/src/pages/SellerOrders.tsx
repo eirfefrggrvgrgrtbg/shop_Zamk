@@ -1,7 +1,7 @@
-import { useEffect, useState, useMemo } from 'react';
-import { getSellerFulfillments } from '@zamk/api-client/src/seller';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { getSellerFulfillments, markSellerFulfillmentAssembling, markSellerFulfillmentPacked } from '@zamk/api-client/src/seller';
 import type { SellerFulfillment } from '@zamk/api-client/src/types';
-import { ChevronDown, ChevronUp, Package, MapPin, User, Phone, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Package, MapPin, User, Phone, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
   style: 'currency',
@@ -38,24 +38,58 @@ export function SellerOrders() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
   const [expandedFulfillmentId, setExpandedFulfillmentId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
+  const [actionSuccess, setActionSuccess] = useState('');
+  const [isActionLoading, setIsActionLoading] = useState(false);
+
+  const fetchFulfillments = useCallback(async () => {
+    try {
+      const data = await getSellerFulfillments();
+      setFulfillments(data.items || []);
+    } catch (err: any) {
+      if (err.status === 403) {
+        setError('Недостаточно прав для просмотра заказов.');
+      } else {
+        setError('Не удалось загрузить заказы продавца.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    async function fetchFulfillments() {
-      try {
-        const data = await getSellerFulfillments();
-        setFulfillments(data.items || []);
-      } catch (err: any) {
-        if (err.status === 403) {
-          setError('Недостаточно прав для просмотра заказов.');
-        } else {
-          setError('Не удалось загрузить заказы продавца.');
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    }
     fetchFulfillments();
-  }, []);
+  }, [fetchFulfillments]);
+
+  const handleMarkAssembling = async (id: string) => {
+    setActionError('');
+    setActionSuccess('');
+    setIsActionLoading(true);
+    try {
+      await markSellerFulfillmentAssembling(id);
+      setActionSuccess('Сборка успешно начата.');
+      await fetchFulfillments();
+    } catch (err: any) {
+      setActionError(err.body?.error?.message || 'Не удалось обновить статус.');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleMarkPacked = async (id: string) => {
+    setActionError('');
+    setActionSuccess('');
+    setIsActionLoading(true);
+    try {
+      await markSellerFulfillmentPacked(id);
+      setActionSuccess('Сборка отмечена как упакованная.');
+      await fetchFulfillments();
+    } catch (err: any) {
+      setActionError(err.body?.error?.message || 'Не удалось обновить статус.');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
 
   const filteredFulfillments = useMemo(() => {
     return fulfillments.filter(f => {
@@ -177,11 +211,53 @@ export function SellerOrders() {
 
                 {isExpanded && (
                   <div className="p-5 border-t border-border-soft dark:border-white/10 bg-gray-50/50 dark:bg-black/20">
-                    <div className="mb-6 bg-blue-50 text-blue-800 p-4 rounded-xl border border-blue-100 flex gap-3 text-sm">
-                      <AlertCircle className="w-5 h-5 shrink-0" />
-                      <p>
-                        Статусы сборки и доставки пока управляются администратором. Действия продавца будут подключены после перехода на раздельную сборку.
-                      </p>
+                    {actionError && expandedFulfillmentId === fulfillment.id && (
+                      <div className="mb-6 bg-red-50 text-red-600 p-4 rounded-xl flex gap-3 text-sm">
+                        <AlertCircle className="w-5 h-5 shrink-0" />
+                        <p>{actionError}</p>
+                      </div>
+                    )}
+                    {actionSuccess && expandedFulfillmentId === fulfillment.id && (
+                      <div className="mb-6 bg-green-50 text-green-700 p-4 rounded-xl flex gap-3 text-sm">
+                        <CheckCircle2 className="w-5 h-5 shrink-0" />
+                        <p>{actionSuccess}</p>
+                      </div>
+                    )}
+
+                    <div className="mb-6">
+                      {fulfillment.status === 'paid' && (
+                        <button
+                          onClick={() => handleMarkAssembling(fulfillment.id)}
+                          disabled={isActionLoading}
+                          className="bg-black text-white dark:bg-white dark:text-black px-4 py-2 rounded-xl font-medium disabled:opacity-50"
+                        >
+                          {isActionLoading ? 'Обработка...' : 'Начать сборку'}
+                        </button>
+                      )}
+                      {fulfillment.status === 'assembling' && (
+                        <button
+                          onClick={() => handleMarkPacked(fulfillment.id)}
+                          disabled={isActionLoading}
+                          className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-indigo-700 transition disabled:opacity-50"
+                        >
+                          {isActionLoading ? 'Обработка...' : 'Отметить как упаковано'}
+                        </button>
+                      )}
+                      {fulfillment.status === 'packed' && (
+                        <div className="bg-gray-50 text-gray-700 p-4 rounded-xl border border-gray-200 text-sm">
+                          Сборка упакована. Отгрузку создаст администратор.
+                        </div>
+                      )}
+                      {fulfillment.status === 'shipped' && (
+                        <div className="bg-purple-50 text-purple-800 p-4 rounded-xl border border-purple-100 text-sm">
+                          Сборка отправлена покупателю.
+                        </div>
+                      )}
+                      {fulfillment.status === 'delivered' && (
+                        <div className="bg-green-50 text-green-800 p-4 rounded-xl border border-green-100 text-sm">
+                          Сборка успешно доставлена.
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

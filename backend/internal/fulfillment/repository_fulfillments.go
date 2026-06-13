@@ -123,6 +123,33 @@ func (r *Repository) GetSellerFulfillment(ctx context.Context, sellerID, fulfill
 	return &f, nil
 }
 
+func (r *Repository) GetSellerFulfillmentTx(ctx context.Context, tx pgx.Tx, sellerID, fulfillmentID uuid.UUID) (*Fulfillment, error) {
+	query := `
+		SELECT 
+			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
+			s.status as shipment_status, s.id as shipment_id,
+			o.delivery_address, o.customer_name, o.customer_phone
+		FROM order_fulfillments f
+		JOIN orders o ON o.id = f.order_id
+		LEFT JOIN shipments s ON (s.fulfillment_id = f.id) OR (s.fulfillment_id IS NULL AND s.order_id = f.order_id AND (SELECT COUNT(*) FROM order_fulfillments WHERE order_id = f.order_id) = 1)
+		WHERE f.seller_id = $1 AND f.id = $2
+	`
+	var f Fulfillment
+	err := tx.QueryRow(ctx, query, sellerID, fulfillmentID).Scan(
+		&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt,
+		&f.ShipmentStatus, &f.ShipmentID,
+		&f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrFulfillmentNotFound
+		}
+		return nil, err
+	}
+
+	return &f, nil
+}
+
 func (r *Repository) ListAdminFulfillments(ctx context.Context, limit, offset int, status *string) ([]Fulfillment, error) {
 	query := `
 		SELECT 
