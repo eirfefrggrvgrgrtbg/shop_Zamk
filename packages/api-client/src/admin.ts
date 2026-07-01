@@ -265,7 +265,7 @@ export const cancelSellerViolation = (sellerId: string, violationId: string) =>
   request<void>('PATCH', `/admin/sellers/${sellerId}/violations/${violationId}/cancel`, { body: {} });
 
 // --- Auctions ---
-import { AdminAuction, AdminAuctionLot, AdminAuctionBid } from './types';
+import type { AdminAuction, AdminAuctionLot, AdminAuctionBid } from './types';
 
 export const getAdminAuctions = async (): Promise<{ items: AdminAuction[]; totalCount: number }> => {
   return request<{ items: AdminAuction[]; totalCount: number }>('GET', '/admin/auctions');

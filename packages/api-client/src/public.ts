@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { ProductSummary, ProductDetail, Category, Brand, PublicReview, RatingSummary } from './types';
+import type { ProductSummary, ProductDetail, Category, Brand, PublicReview, RatingSummary, AuctionEvent, AuctionLot } from './types';
 
 export interface ProductListResponse {
   items: ProductSummary[];
@@ -35,22 +35,22 @@ export const getPublicSeller = async (slugOrId: string, params?: any): Promise<a
 };
 
 // --- Auctions ---
-export const getActiveAuctions = async (): Promise<any[]> => {
-  return request<any[]>('GET', '/public/auctions/active');
+export const getActiveAuctions = async (): Promise<AuctionEvent[]> => {
+  return request<AuctionEvent[]>('GET', '/public/auctions/active');
 };
 
-export const getHomepageAuctions = async (): Promise<any[]> => {
-  return request<any[]>('GET', '/public/auctions/homepage');
+export const getHomepageAuctions = async (): Promise<AuctionEvent[]> => {
+  return request<AuctionEvent[]>('GET', '/public/auctions/homepage');
 };
 
-export const getNavHighlightAuctions = async (): Promise<any[]> => {
-  return request<any[]>('GET', '/public/auctions/nav-highlight');
+export const getNavHighlightAuctions = async (): Promise<AuctionEvent[]> => {
+  return request<AuctionEvent[]>('GET', '/public/auctions/nav-highlight');
 };
 
-export const getAuctionLots = async (id: string): Promise<any[]> => {
-  return request<any[]>('GET', `/public/auctions/${id}/lots`);
+export const getAuctionLots = async (id: string): Promise<AuctionLot[]> => {
+  return request<AuctionLot[]>('GET', `/public/auctions/${id}/lots`);
 };
 
-export const getAuctionLot = async (id: string): Promise<any> => {
-  return request<any>('GET', `/public/auction-lots/${id}`);
+export const getAuctionLot = async (id: string): Promise<AuctionLot> => {
+  return request<AuctionLot>('GET', `/public/auction-lots/${id}`);
 };

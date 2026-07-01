@@ -7,6 +7,7 @@ import { ProductCard } from '../components/product/ProductCard';
 import { Button } from '../components/ui/Button';
 import { fetchBrands, fetchCategories, fetchProducts } from '../api/publicCatalog';
 import { HeroSection } from '../components/home/HeroSection';
+import { HomeAuctionBlock } from '../components/home/HomeAuctionBlock';
 import type { Brand, Category, Product } from '../types/catalog';
 
 const reveal = {
@@ -86,6 +87,8 @@ export function Home() {
           </div>
         ) : (
           <>
+            <HomeAuctionBlock />
+
             <motion.section {...reveal}>
               <SectionHeader
                 label="Партнёры"

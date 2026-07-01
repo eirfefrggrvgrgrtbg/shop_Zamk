@@ -10,11 +10,13 @@ import { Input } from '../ui/Input';
 import { ProfileMenu } from '../auth/ProfileMenu';
 import { Sidebar } from './Sidebar';
 import { NotificationBell } from '../notifications/NotificationBell';
+import { getNavHighlightAuctions } from '@zamk/api-client/src/public';
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [hasLiveAuction, setHasLiveAuction] = useState(false);
   const { totalItems } = useCart();
   const { favorites } = useFavorites();
   const { isAuthenticated, openAuthModal } = useAuth();
@@ -24,10 +26,19 @@ export function Navbar() {
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
+    
+    // Check for highlighted auctions
+    getNavHighlightAuctions().then((data) => {
+      if (data && data.length > 0) {
+        setHasLiveAuction(true);
+      }
+    }).catch(console.error);
+
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const navLinks = [
+    { to: '/auction', label: 'Аукцион', highlight: hasLiveAuction },
     { to: '/catalog', label: 'Каталог' },
     { to: '/brands', label: 'Бренды' },
     { to: '/seller-dashboard', label: 'Продавцам' },
@@ -59,13 +70,19 @@ export function Navbar() {
                 <Link
                   key={link.to}
                   to={link.to}
-                  className={`text-[13.5px] font-medium transition-all duration-300 tracking-[0.04em] uppercase ${
-                    location.pathname === link.to
+                  className={`text-[13.5px] font-medium transition-all duration-300 tracking-[0.04em] uppercase relative ${
+                    location.pathname === link.to || (link.to === '/auction' && location.pathname.startsWith('/auction'))
                       ? 'text-graphite dark:text-white'
                       : 'text-graphite/50 dark:text-white/50 hover:text-graphite/80 dark:hover:text-white/80'
                   }`}
                 >
                   {link.label}
+                  {link.highlight && (
+                    <span className="absolute -top-1.5 -right-3 flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                    </span>
+                  )}
                 </Link>
               ))}
             </nav>
@@ -141,6 +158,10 @@ export function Navbar() {
           <nav className="flex flex-col gap-4">
             <Link to="/" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               Главная
+            </Link>
+            <Link to="/auction" className="text-lg font-medium py-2 border-b border-border-lighter flex justify-between items-center" onClick={() => setIsMobileMenuOpen(false)}>
+              Аукцион
+              {hasLiveAuction && <span className="bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">Live</span>}
             </Link>
             <Link to="/catalog" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               Каталог

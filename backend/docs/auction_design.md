@@ -99,3 +99,6 @@ Post-MVP. Allows verified sellers to submit items to platform auctions, subject 
 
 ## AUC-2B Update
 AUC-2B verified admin UI runtime behavior. The admin auction UI uses real backend data, and unclear settings have “?” help tooltips. The next phase is AUC-3 (Public Auction UI), followed by AUC-4 (WebSocket/SSE real-time), AUC-5 (winner order/payment integration), and AUC-6 (full direct-sale catalog integration).
+
+## AUC-3 Update
+AUC-3 verified the Public Auction UI. The customer-facing auction experience is integrated into the shop app with a homepage block, a dedicated `/auction` route, lot detail views `/auction/lots/:id`, and a bid flow with 10s polling and idempotency logic. Type mismatches in the API client were resolved. The next phase is AUC-4 (WebSocket/SSE real-time).

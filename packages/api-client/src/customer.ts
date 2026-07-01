@@ -104,6 +104,11 @@ export const setDefaultAddress = async (id: string): Promise<any> => {
 };
 
 // --- Auctions ---
-export const placeBid = async (lotId: string, data: any): Promise<any> => {
+export interface PlaceBidRequest {
+  amountCents: number;
+  idempotencyKey?: string;
+}
+
+export const placeBid = async (lotId: string, data: PlaceBidRequest): Promise<any> => {
   return request<any>('POST', `/customer/auction-lots/${lotId}/bid`, { body: data });
 };

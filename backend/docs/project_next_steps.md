@@ -8,8 +8,8 @@
   - AUC-2B verified admin UI runtime behavior.
   - Admin auction UI uses real backend data.
   - Unclear settings have “?” help tooltips.
-- [ ] **AUC-3**: Public Auction UI (Frontend shop components for bidding and displaying lots). - Current Phase
-- [ ] **AUC-4**: WebSocket/SSE real-time bidding updates.
+- [x] **AUC-3**: Public Auction UI (Frontend shop components for bidding and displaying lots).
+- [ ] **AUC-4**: WebSocket/SSE real-time bidding updates. - Current Phase
 - [ ] **AUC-5**: Winner order/payment integration.
 - [ ] **AUC-6**: Full direct-sale catalog integration.
 - [ ] **AUC-7**: Runtime E2E stabilization.
