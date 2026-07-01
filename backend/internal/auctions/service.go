@@ -29,13 +29,15 @@ type Service struct {
 	repo          *Repository
 	notifications *notifications.Service
 	rateLimiter   *ratelimit.Limiter
+	hub           *SSEHub
 }
 
-func NewService(repo *Repository, notifs *notifications.Service, limiter *ratelimit.Limiter) *Service {
+func NewService(repo *Repository, notifs *notifications.Service, limiter *ratelimit.Limiter, hub *SSEHub) *Service {
 	return &Service{
 		repo:          repo,
 		notifications: notifs,
 		rateLimiter:   limiter,
+		hub:           hub,
 	}
 }
 
@@ -63,6 +65,7 @@ func (s *Service) PlaceBid(ctx context.Context, lotID, userID uuid.UUID, req Bid
 	}
 
 	var resp BidResponse
+	var auctionID uuid.UUID
 
 	err = s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
 		// 2. Lock lot
@@ -73,6 +76,8 @@ func (s *Service) PlaceBid(ctx context.Context, lotID, userID uuid.UUID, req Bid
 		if lot == nil {
 			return ErrLotUnavailable
 		}
+
+		auctionID = lot.AuctionID
 
 		if lot.Status != LotStatusActive {
 			return ErrLotUnavailable
@@ -235,6 +240,28 @@ func (s *Service) PlaceBid(ctx context.Context, lotID, userID uuid.UUID, req Bid
 		return nil, err
 	}
 
+	// 10. Broadcast Realtime Event (after transaction commit)
+	s.hub.Broadcast(auctionID, AuctionRealtimeEvent{
+		EventType:       "bid_accepted",
+		AuctionID:       auctionID,
+		LotID:           &lotID,
+		BidID:           nil, // we could extract it if needed, but client mainly needs the updated amounts
+		CurrentBidCents: &resp.NewCurrentBid,
+		EndsAt:          &resp.EndsAt,
+		LotStatus:       &resp.LotStatus,
+	})
+
+	if resp.ExtensionApplied {
+		s.hub.Broadcast(auctionID, AuctionRealtimeEvent{
+			EventType:       "lot_extended",
+			AuctionID:       auctionID,
+			LotID:           &lotID,
+			CurrentBidCents: &resp.NewCurrentBid,
+			EndsAt:          &resp.EndsAt,
+			LotStatus:       &resp.LotStatus,
+		})
+	}
+
 	return &resp, nil
 }
 
@@ -255,8 +282,8 @@ func (s *Service) logSuspicious(ctx context.Context, auctionID, lotID, userID *u
 	_ = s.repo.LogSuspiciousEvent(ctx, ev)
 }
 
-func (s *Service) FinalizeAuction(ctx context.Context, auctionID, adminID uuid.UUID) error {
-	return s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
+func (s *Service) FinalizeAuction(ctx context.Context, auctionID uuid.UUID, adminID uuid.UUID) error {
+	err := s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
 		event, err := s.repo.GetEventForUpdate(ctx, tx, auctionID)
 		if err != nil {
 			return err
@@ -330,6 +357,17 @@ func (s *Service) FinalizeAuction(ctx context.Context, auctionID, adminID uuid.U
 		}
 		return s.repo.InsertLogTx(ctx, tx, logEntry)
 	})
+
+	if err == nil {
+		status := AuctionStatusEnded
+		s.hub.Broadcast(auctionID, AuctionRealtimeEvent{
+			EventType:     "auction_status_changed",
+			AuctionID:     auctionID,
+			AuctionStatus: &status,
+		})
+	}
+
+	return err
 }
 
 func (s *Service) UpdateEventAdmin(ctx context.Context, id uuid.UUID, req AdminUpdateAuctionRequest) error {
@@ -363,11 +401,19 @@ func (s *Service) UpdateEventAdmin(ctx context.Context, id uuid.UUID, req AdminU
 }
 
 func (s *Service) UpdateEventStatus(ctx context.Context, id uuid.UUID, status AuctionStatus) error {
-	return s.repo.UpdateEventStatus(ctx, id, status)
+	err := s.repo.UpdateEventStatus(ctx, id, status)
+	if err == nil {
+		s.hub.Broadcast(id, AuctionRealtimeEvent{
+			EventType:     "auction_status_changed",
+			AuctionID:     id,
+			AuctionStatus: &status,
+		})
+	}
+	return err
 }
 
 func (s *Service) CancelAuction(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error {
-	return s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
+	err := s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, "UPDATE auction_events SET status = $1, updated_at = now() WHERE id = $2", AuctionStatusCancelled, id)
 		if err != nil { return err }
 
@@ -385,6 +431,17 @@ func (s *Service) CancelAuction(ctx context.Context, id uuid.UUID, adminID uuid.
 		}
 		return s.repo.InsertLogTx(ctx, tx, logEntry)
 	})
+
+	if err == nil {
+		status := AuctionStatusCancelled
+		s.hub.Broadcast(id, AuctionRealtimeEvent{
+			EventType:     "auction_status_changed",
+			AuctionID:     id,
+			AuctionStatus: &status,
+		})
+	}
+
+	return err
 }
 
 func (s *Service) UpdateLotAdmin(ctx context.Context, id uuid.UUID, req AdminUpdateLotRequest) error {
@@ -409,7 +466,20 @@ func (s *Service) UpdateLotAdmin(ctx context.Context, id uuid.UUID, req AdminUpd
 }
 
 func (s *Service) UpdateLotStatus(ctx context.Context, id uuid.UUID, status LotStatus) error {
-	return s.repo.UpdateLotStatus(ctx, id, status)
+	err := s.repo.UpdateLotStatus(ctx, id, status)
+	if err == nil {
+		// Need auctionID to broadcast
+		lot, _ := s.repo.GetLotByID(ctx, id)
+		if lot != nil {
+			s.hub.Broadcast(lot.AuctionID, AuctionRealtimeEvent{
+				EventType: "lot_status_changed",
+				AuctionID: lot.AuctionID,
+				LotID:     &id,
+				LotStatus: &status,
+			})
+		}
+	}
+	return err
 }
 
 func (s *Service) MoveLotToDirectSale(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error {

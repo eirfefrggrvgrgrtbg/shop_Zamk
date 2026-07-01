@@ -2,8 +2,10 @@ package auctions
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -147,4 +149,60 @@ func (h *PublicHandler) GetAuctionLot(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(lot)
+}
+
+// GET /api/public/auctions/{id}/stream
+func (h *PublicHandler) StreamAuction(w http.ResponseWriter, r *http.Request) {
+	auctionIDStr := chi.URLParam(r, "id")
+	auctionID, err := uuid.Parse(auctionIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid auction ID")
+		return
+	}
+
+	event, err := h.repo.GetEventByID(r.Context(), auctionID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get auction")
+		return
+	}
+	if event == nil || !event.IsPublic || event.Status == AuctionStatusDraft || event.Status == AuctionStatusCancelled {
+		h.writeError(w, http.StatusNotFound, "not_found", "Auction not found")
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		h.writeError(w, http.StatusInternalServerError, "streaming_unsupported", "Streaming unsupported")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	ch := h.service.hub.Subscribe(auctionID)
+	defer h.service.hub.Unsubscribe(auctionID, ch)
+
+	ticker := time.NewTicker(20 * time.Second)
+	defer ticker.Stop()
+
+	// Initial heartbeat
+	fmt.Fprintf(w, "event: ping\ndata: {}\n\n")
+	flusher.Flush()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case ev := <-ch:
+			data, err := json.Marshal(ev)
+			if err == nil {
+				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.EventType, string(data))
+				flusher.Flush()
+			}
+		case <-ticker.C:
+			fmt.Fprintf(w, "event: ping\ndata: {}\n\n")
+			flusher.Flush()
+		}
+	}
 }

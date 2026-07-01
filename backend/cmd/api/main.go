@@ -173,7 +173,8 @@ func main() {
 
 	auctionsRepo := auctions.NewRepository(pgClient.Pool)
 	auctionsLimiter := ratelimit.New(redisClient.Client)
-	auctionsService := auctions.NewService(auctionsRepo, notificationsService, auctionsLimiter)
+	auctionsHub := auctions.NewSSEHub()
+	auctionsService := auctions.NewService(auctionsRepo, notificationsService, auctionsLimiter, auctionsHub)
 	auctionsAdminHandler := auctions.NewAdminHandler(auctionsRepo, auctionsService, logger)
 	auctionsPublicHandler := auctions.NewPublicHandler(auctionsRepo, auctionsService, logger)
 	auctionsCustomerHandler := auctions.NewCustomerHandler(auctionsRepo, auctionsService, logger)

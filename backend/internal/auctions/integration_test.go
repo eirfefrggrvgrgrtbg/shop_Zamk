@@ -39,7 +39,8 @@ func TestAuctionIntegration(t *testing.T) {
 	notifService := notifications.NewService(notifRepo, nil) // nil ws
 	
 	repo := auctions.NewRepository(pgClient.Pool)
-	svc := auctions.NewService(repo, notifService, limiter)
+	hub := auctions.NewSSEHub()
+	svc := auctions.NewService(repo, notifService, limiter, hub)
 
 	// Admin IDs and Customer IDs
 	adminID := uuid.New()
@@ -277,7 +278,8 @@ func TestAuctionConcurrency(t *testing.T) {
 	notifService := notifications.NewService(notifRepo, nil) // nil ws
 	
 	repo := auctions.NewRepository(pgClient.Pool)
-	svc := auctions.NewService(repo, notifService, limiter)
+	hub := auctions.NewSSEHub()
+	svc := auctions.NewService(repo, notifService, limiter, hub)
 
 	// Admin and 5 Customers
 	adminID := uuid.New()

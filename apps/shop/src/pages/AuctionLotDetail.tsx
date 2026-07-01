@@ -9,6 +9,7 @@ import { useToast } from '../contexts/ToastContext';
 import { formatPrice } from '../lib/utils';
 import { Countdown } from '../components/auctions/Countdown';
 import { Button } from '../components/ui/Button';
+import { useAuctionStream } from '../hooks/useAuctionStream';
 
 export function AuctionLotDetail() {
   const { id } = useParams<{ id: string }>();
@@ -57,6 +58,31 @@ export function AuctionLotDetail() {
     const intervalId = setInterval(fetchLotData, 10000);
     return () => clearInterval(intervalId);
   }, [id]);
+
+  const { lastEvent } = useAuctionStream(auction?.id);
+
+  useEffect(() => {
+    if (!lastEvent || !lot || !auction) return;
+
+    if (lastEvent.eventType === 'bid_accepted' && lastEvent.lotId === lot.id) {
+      setLot(prev => prev ? { ...prev, currentBidCents: lastEvent.currentBidCents || prev.currentBidCents, status: (lastEvent.lotStatus as any) || prev.status } : prev);
+      if (lastEvent.endsAt) {
+        setAuction(prev => prev ? { ...prev, endsAt: lastEvent.endsAt as string } : prev);
+      }
+    } else if (lastEvent.eventType === 'lot_extended' && lastEvent.lotId === lot.id) {
+      if (lastEvent.endsAt) {
+        setAuction(prev => prev ? { ...prev, endsAt: lastEvent.endsAt as string } : prev);
+      }
+    } else if (lastEvent.eventType === 'auction_status_changed') {
+      if (lastEvent.auctionStatus) {
+        setAuction(prev => prev ? { ...prev, status: lastEvent.auctionStatus as any } : prev);
+      }
+    } else if (lastEvent.eventType === 'lot_status_changed' && lastEvent.lotId === lot.id) {
+      if (lastEvent.lotStatus) {
+        setLot(prev => prev ? { ...prev, status: lastEvent.lotStatus as any } : prev);
+      }
+    }
+  }, [lastEvent]);
 
   const handlePlaceBid = async () => {
     if (!isAuthenticated) {

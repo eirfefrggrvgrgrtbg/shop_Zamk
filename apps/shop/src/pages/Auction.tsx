@@ -5,6 +5,7 @@ import { getActiveAuctions } from '@zamk/api-client/src/public';
 import type { AuctionEvent } from '@zamk/api-client';
 import { SectionHeader } from '../components/editorial/StudioKit';
 import { AuctionLotCard } from '../components/auctions/AuctionLotCard';
+import { useAuctionStream } from '../hooks/useAuctionStream';
 
 export function AuctionPage() {
   const [auctions, setAuctions] = useState<AuctionEvent[]>([]);
@@ -79,48 +80,88 @@ export function AuctionPage() {
   
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8 md:py-12 mt-16 md:mt-20 min-h-[60vh]">
-      {auctions.map((auction, index) => {
-        const lots = auction.lots || [];
-        
-        return (
-          <motion.div 
-            key={auction.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="mb-16"
-          >
-            <div className="bg-white/40 dark:bg-black/20 p-6 md:p-8 rounded-3xl border border-white/60 dark:border-white/5 backdrop-blur-xl mb-8">
-              <SectionHeader 
-                label={auction.status === 'live' ? 'Идёт сейчас' : 'Скоро начнётся'}
-                title={auction.title}
-                description={auction.description || 'Делайте ставки на эксклюзивные лоты.'}
-              />
-              
-              <div className="mt-6 flex flex-wrap gap-4 text-sm font-medium">
-                <div className="px-4 py-2 bg-white/60 dark:bg-white/10 rounded-full border border-black/5 dark:border-white/10">
-                  <span className="text-gray-500 mr-2">Статус:</span>
-                  <span className={auction.status === 'live' ? 'text-primary dark:text-primary animate-pulse' : 'text-gray-800 dark:text-white'}>
-                    {auction.status === 'live' ? 'LIVE' : auction.status === 'scheduled' ? 'Запланирован' : 'Завершен'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {lots.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
-                {lots.map((lot) => (
-                  <AuctionLotCard key={lot.id} lot={lot} auction={auction} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-gray-500 border border-dashed border-gray-200 dark:border-zinc-800 rounded-2xl">
-                Лоты пока не добавлены
-              </div>
-            )}
-          </motion.div>
-        );
-      })}
+      {auctions.map((auction, index) => (
+        <AuctionSection key={auction.id} initialAuction={auction} index={index} />
+      ))}
     </div>
+  );
+}
+
+function AuctionSection({ initialAuction, index }: { initialAuction: AuctionEvent; index: number }) {
+  const [auction, setAuction] = useState<AuctionEvent>(initialAuction);
+  const { lastEvent } = useAuctionStream(auction.id);
+
+  // Sync polling updates
+  useEffect(() => {
+    setAuction(initialAuction);
+  }, [initialAuction]);
+
+  useEffect(() => {
+    if (!lastEvent) return;
+
+    if (lastEvent.eventType === 'bid_accepted' || lastEvent.eventType === 'lot_extended' || lastEvent.eventType === 'lot_status_changed') {
+      setAuction(prev => {
+        const updatedLots = prev.lots?.map(lot => {
+          if (lot.id === lastEvent.lotId) {
+            return {
+              ...lot,
+              ...(lastEvent.currentBidCents !== undefined ? { currentBidCents: lastEvent.currentBidCents } : {}),
+              ...(lastEvent.lotStatus ? { status: lastEvent.lotStatus as any } : {})
+            };
+          }
+          return lot;
+        });
+
+        return {
+          ...prev,
+          ...(lastEvent.endsAt && (lastEvent.eventType === 'bid_accepted' || lastEvent.eventType === 'lot_extended') ? { endsAt: lastEvent.endsAt } : {}),
+          lots: updatedLots
+        };
+      });
+    } else if (lastEvent.eventType === 'auction_status_changed') {
+      if (lastEvent.auctionStatus) {
+        setAuction(prev => ({ ...prev, status: lastEvent.auctionStatus as any }));
+      }
+    }
+  }, [lastEvent]);
+
+  const lots = auction.lots || [];
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.1 }}
+      className="mb-16"
+    >
+      <div className="bg-white/40 dark:bg-black/20 p-6 md:p-8 rounded-3xl border border-white/60 dark:border-white/5 backdrop-blur-xl mb-8">
+        <SectionHeader 
+          label={auction.status === 'live' ? 'Идёт сейчас' : 'Скоро начнётся'}
+          title={auction.title}
+          description={auction.description || 'Делайте ставки на эксклюзивные лоты.'}
+        />
+        
+        <div className="mt-6 flex flex-wrap gap-4 text-sm font-medium">
+          <div className="px-4 py-2 bg-white/60 dark:bg-white/10 rounded-full border border-black/5 dark:border-white/10">
+            <span className="text-gray-500 mr-2">Статус:</span>
+            <span className={auction.status === 'live' ? 'text-primary dark:text-primary animate-pulse' : 'text-gray-800 dark:text-white'}>
+              {auction.status === 'live' ? 'LIVE' : auction.status === 'scheduled' ? 'Запланирован' : 'Завершен'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {lots.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+          {lots.map((lot) => (
+            <AuctionLotCard key={lot.id} lot={lot} auction={auction} />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12 text-gray-500 border border-dashed border-gray-200 dark:border-zinc-800 rounded-2xl">
+          Лоты пока не добавлены
+        </div>
+      )}
+    </motion.div>
   );
 }

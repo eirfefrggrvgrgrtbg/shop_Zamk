@@ -187,6 +187,7 @@ func New(
 		r.Get("/auctions/homepage", auctionsPublicHandler.GetHomepageAuctions)
 		r.Get("/auctions/nav-highlight", auctionsPublicHandler.GetNavHighlightAuctions)
 		r.Get("/auctions/{id}/lots", auctionsPublicHandler.GetAuctionLots)
+		r.Get("/auctions/{id}/stream", auctionsPublicHandler.StreamAuction)
 		r.Get("/auction-lots/{id}", auctionsPublicHandler.GetAuctionLot)
 	})
 
