@@ -7,6 +7,7 @@ import {
   ShieldAlert,
   ShoppingCart,
   Boxes,
+  Gavel,
   RotateCcw,
   Wallet,
   LogOut,
@@ -45,6 +46,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const baseNavItems: NavItem[] = [
     { name: 'Главная', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Продавцы', path: '/sellers', icon: Store, permission: 'sellers.read' },
+    { name: 'Аукционы', path: '/auctions', icon: Gavel, permission: 'auctions.read' },
     { name: 'Товары', path: '/products', icon: Package, permission: 'products.read' },
     { name: 'Модерация', path: '/moderation', icon: ShieldAlert, permission: 'products.moderate' },
     { name: 'Категории и бренды', path: '/catalog', icon: BookOpen, permission: ['categories.read', 'brands.read'] },

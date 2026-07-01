@@ -265,19 +265,21 @@ export const cancelSellerViolation = (sellerId: string, violationId: string) =>
   request<void>('PATCH', `/admin/sellers/${sellerId}/violations/${violationId}/cancel`, { body: {} });
 
 // --- Auctions ---
-export const getAdminAuctions = async (): Promise<any[]> => {
-  return request<any[]>('GET', '/admin/auctions');
+import { AdminAuction, AdminAuctionLot, AdminAuctionBid } from './types';
+
+export const getAdminAuctions = async (): Promise<{ items: AdminAuction[]; totalCount: number }> => {
+  return request<{ items: AdminAuction[]; totalCount: number }>('GET', '/admin/auctions');
 };
 
-export const getAdminAuction = async (id: string): Promise<any> => {
-  return request<any>('GET', `/admin/auctions/${id}`);
+export const getAdminAuction = async (id: string): Promise<AdminAuction> => {
+  return request<AdminAuction>('GET', `/admin/auctions/${id}`);
 };
 
-export const createAdminAuction = async (data: any): Promise<any> => {
-  return request<any>('POST', '/admin/auctions', { body: data });
+export const createAdminAuction = async (data: Partial<AdminAuction>): Promise<AdminAuction> => {
+  return request<AdminAuction>('POST', '/admin/auctions', { body: data });
 };
 
-export const updateAdminAuction = async (id: string, data: any): Promise<void> => {
+export const updateAdminAuction = async (id: string, data: Partial<AdminAuction>): Promise<void> => {
   return request<void>('PATCH', `/admin/auctions/${id}`, { body: data });
 };
 
@@ -301,16 +303,20 @@ export const finalizeAdminAuction = async (id: string): Promise<void> => {
   return request<void>('POST', `/admin/auctions/${id}/finalize`);
 };
 
-export const createAdminLot = async (auctionId: string, data: any): Promise<any> => {
-  return request<any>('POST', `/admin/auctions/${auctionId}/lots`, { body: data });
+export const getAdminLots = async (auctionId: string): Promise<{ items: AdminAuctionLot[]; totalCount: number }> => {
+  return request<{ items: AdminAuctionLot[]; totalCount: number }>('GET', `/admin/auctions/${auctionId}/lots`);
 };
 
-export const updateAdminLot = async (lotId: string, data: any): Promise<void> => {
+export const createAdminLot = async (auctionId: string, data: Partial<AdminAuctionLot>): Promise<AdminAuctionLot> => {
+  return request<AdminAuctionLot>('POST', `/admin/auctions/${auctionId}/lots`, { body: data });
+};
+
+export const updateAdminLot = async (lotId: string, data: Partial<AdminAuctionLot>): Promise<void> => {
   return request<void>('PATCH', `/admin/auction-lots/${lotId}`, { body: data });
 };
 
-export const getAdminLotBids = async (lotId: string): Promise<any[]> => {
-  return request<any[]>('GET', `/admin/auction-lots/${lotId}/bids`);
+export const getAdminLotBids = async (lotId: string): Promise<{ items: AdminAuctionBid[]; totalCount: number }> => {
+  return request<{ items: AdminAuctionBid[]; totalCount: number }>('GET', `/admin/auction-lots/${lotId}/bids`);
 };
 
 export const markLotUnpaid = async (lotId: string): Promise<void> => {

@@ -4,12 +4,14 @@
 - [x] **AUC-1**: Foundation (DB migration, models, basic repo).
 - [x] **AUC-1B**: Complete core backend logic (handlers, router wiring, complete API client types).
 - [x] **AUC-1C**: Runtime backend verification (Atomic concurrency testing, RBAC migration, Smoke test). Backend runtime readiness is fully verified.
-- [ ] **AUC-2**: Admin UI. Must include small “?” help icons next to unclear settings.
-  - Examples for help icons: "Антиснайпинг", "Шаг ставки", "Публичный аукцион", "Показывать на главной", "Выделить в меню", "Лимит ставок", "Непроданный лот", "Ручное решение", "Перевести в прямую продажу".
-- [ ] **AUC-3**: Public Auction UI (Frontend shop components for bidding and displaying lots).
+- [x] **AUC-2**: Admin UI.
+  - AUC-2B verified admin UI runtime behavior.
+  - Admin auction UI uses real backend data.
+  - Unclear settings have “?” help tooltips.
+- [ ] **AUC-3**: Public Auction UI (Frontend shop components for bidding and displaying lots). - Current Phase
 - [ ] **AUC-4**: WebSocket/SSE real-time bidding updates.
 - [ ] **AUC-5**: Winner order/payment integration.
-- [ ] **AUC-6**: Full direct-sale product integration.
+- [ ] **AUC-6**: Full direct-sale catalog integration.
 - [ ] **AUC-7**: Runtime E2E stabilization.
 
 ## 2. ADMIN — Complete Admin Panel

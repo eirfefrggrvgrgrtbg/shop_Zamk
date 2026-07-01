@@ -904,5 +904,59 @@ export interface AdminUpdateLotRequest {
   canRelaunch?: boolean;
   canMoveToDirectSale?: boolean;
   directSalePriceCents?: number | null;
-  adminNote?: string | null;
 }
+
+export interface AdminAuction {
+  id: string;
+  title: string;
+  description?: string;
+  status: string;
+  startsAt: string;
+  endsAt: string;
+  bidStepCents: number;
+  paymentDeadlineHours: number;
+  antiSnipingEnabled: boolean;
+  antiSnipingTriggerSeconds: number;
+  antiSnipingExtensionSeconds: number;
+  maxBidsPerUserPerLotPerMinute: number;
+  maxRejectedBidsPerUserPerMinute: number;
+  noBidsPolicy: string;
+  unpaidWinnerPolicy: string;
+  isPublic: boolean;
+  showOnHomepage: boolean;
+  highlightInNav: boolean;
+  biddingEnabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  lotsCount?: number;
+}
+
+export interface AdminAuctionLot {
+  id: string;
+  auctionId: string;
+  title: string;
+  description?: string;
+  mainImageUrl?: string;
+  startPriceCents: number;
+  currentBidCents?: number;
+  bidStepCents: number;
+  allowRestart: boolean;
+  allowDirectSale: boolean;
+  directSalePriceCents?: number;
+  adminNote?: string;
+  status: string;
+  currentWinnerUserId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AdminAuctionBid {
+  id: string;
+  auctionId: string;
+  lotId: string;
+  userId: string;
+  amountCents: number;
+  createdAt: string;
+  isLeader?: boolean;
+}
+

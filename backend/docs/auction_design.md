@@ -96,3 +96,6 @@ Post-MVP. Allows verified sellers to submit items to platform auctions, subject 
 - **Concurrency**: High traffic on a single lot requires efficient DB locking.
 - **Latency**: Polling may cause perceived delays in bid updates for users.
 - **Fulfillment**: Converting auction wins into orders must gracefully handle cart merging or isolated checkout.
+
+## AUC-2B Update
+AUC-2B verified admin UI runtime behavior. The admin auction UI uses real backend data, and unclear settings have “?” help tooltips. The next phase is AUC-3 (Public Auction UI), followed by AUC-4 (WebSocket/SSE real-time), AUC-5 (winner order/payment integration), and AUC-6 (full direct-sale catalog integration).

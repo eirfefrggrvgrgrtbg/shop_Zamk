@@ -4,6 +4,9 @@ import { AdminLogin } from './pages/AdminLogin';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminUsers } from './pages/AdminUsers';
 import { AdminSellers } from './pages/AdminSellers';
+import { AdminAuctionsList } from './pages/AdminAuctionsList';
+import { AdminAuctionCreate } from './pages/AdminAuctionCreate';
+import { AdminAuctionDetail } from './pages/AdminAuctionDetail';
 import { AdminProducts } from './pages/AdminProducts';
 import { AdminModeration } from './pages/AdminModeration';
 import { AdminOrders } from './pages/AdminOrders';
@@ -38,6 +41,9 @@ export default function App() {
           <Route path="/dashboard" element={<AdminProtectedRoute><AdminLayout><AdminDashboard /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/users" element={<AdminProtectedRoute><AdminLayout><AdminUsers /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/sellers" element={<AdminProtectedRoute permission="sellers.read"><AdminLayout><AdminSellers /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/auctions" element={<AdminProtectedRoute permission="auctions.read"><AdminLayout><AdminAuctionsList /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/auctions/new" element={<AdminProtectedRoute permission="auctions.create"><AdminLayout><AdminAuctionCreate /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/auctions/:id" element={<AdminProtectedRoute permission="auctions.read"><AdminLayout><AdminAuctionDetail /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/catalog" element={<AdminProtectedRoute permission={['categories.read', 'brands.read']}><AdminLayout><AdminCatalog /></AdminLayout></AdminProtectedRoute>} />
           {/* Legacy routes kept for direct navigation; sidebar uses /catalog */}
           <Route path="/categories" element={<AdminProtectedRoute permission="categories.read"><AdminLayout><AdminCategories /></AdminLayout></AdminProtectedRoute>} />
