@@ -263,3 +263,60 @@ export const resolveSellerViolation = (sellerId: string, violationId: string, no
 
 export const cancelSellerViolation = (sellerId: string, violationId: string) =>
   request<void>('PATCH', `/admin/sellers/${sellerId}/violations/${violationId}/cancel`, { body: {} });
+
+// --- Auctions ---
+export const getAdminAuctions = async (): Promise<any[]> => {
+  return request<any[]>('GET', '/admin/auctions');
+};
+
+export const getAdminAuction = async (id: string): Promise<any> => {
+  return request<any>('GET', `/admin/auctions/${id}`);
+};
+
+export const createAdminAuction = async (data: any): Promise<any> => {
+  return request<any>('POST', '/admin/auctions', { body: data });
+};
+
+export const updateAdminAuction = async (id: string, data: any): Promise<void> => {
+  return request<void>('PATCH', `/admin/auctions/${id}`, { body: data });
+};
+
+export const publishAdminAuction = async (id: string): Promise<void> => {
+  return request<void>('POST', `/admin/auctions/${id}/publish`);
+};
+
+export const pauseAdminAuction = async (id: string): Promise<void> => {
+  return request<void>('POST', `/admin/auctions/${id}/pause`);
+};
+
+export const resumeAdminAuction = async (id: string): Promise<void> => {
+  return request<void>('POST', `/admin/auctions/${id}/resume`);
+};
+
+export const cancelAdminAuction = async (id: string): Promise<void> => {
+  return request<void>('POST', `/admin/auctions/${id}/cancel`);
+};
+
+export const finalizeAdminAuction = async (id: string): Promise<void> => {
+  return request<void>('POST', `/admin/auctions/${id}/finalize`);
+};
+
+export const createAdminLot = async (auctionId: string, data: any): Promise<any> => {
+  return request<any>('POST', `/admin/auctions/${auctionId}/lots`, { body: data });
+};
+
+export const updateAdminLot = async (lotId: string, data: any): Promise<void> => {
+  return request<void>('PATCH', `/admin/auction-lots/${lotId}`, { body: data });
+};
+
+export const getAdminLotBids = async (lotId: string): Promise<any[]> => {
+  return request<any[]>('GET', `/admin/auction-lots/${lotId}/bids`);
+};
+
+export const markLotUnpaid = async (lotId: string): Promise<void> => {
+  return request<void>('POST', `/admin/auction-lots/${lotId}/mark-unpaid-review`);
+};
+
+export const moveLotToDirectSale = async (lotId: string): Promise<void> => {
+  return request<void>('POST', `/admin/auction-lots/${lotId}/move-to-direct-sale`);
+};

@@ -173,6 +173,35 @@ func (r *Repository) UpdateEvent(ctx context.Context, e *AuctionEvent) error {
 	return err
 }
 
+// UpdateEventStatus updates just the event status
+func (r *Repository) UpdateEventStatus(ctx context.Context, id uuid.UUID, status AuctionStatus) error {
+	_, err := r.db.Exec(ctx, "UPDATE auction_events SET status = $1, updated_at = now() WHERE id = $2", status, id)
+	return err
+}
+
+// UpdateLot updates a subset of fields.
+func (r *Repository) UpdateLot(ctx context.Context, l *AuctionLot) error {
+	query := `
+		UPDATE auction_lots SET
+			title = $2, description = $3, start_price_cents = $4, bid_step_cents = $5,
+			can_relaunch = $6, can_move_to_direct_sale = $7, direct_sale_price_cents = $8,
+			admin_note = $9, updated_at = now()
+		WHERE id = $1
+	`
+	_, err := r.db.Exec(ctx, query,
+		l.ID, l.Title, l.Description, l.StartPriceCents, l.BidStepCents,
+		l.CanRelaunch, l.CanMoveToDirectSale, l.DirectSalePriceCents,
+		l.AdminNote,
+	)
+	return err
+}
+
+// UpdateLotStatus updates just the lot status
+func (r *Repository) UpdateLotStatus(ctx context.Context, id uuid.UUID, status LotStatus) error {
+	_, err := r.db.Exec(ctx, "UPDATE auction_lots SET status = $1, updated_at = now() WHERE id = $2", status, id)
+	return err
+}
+
 // ExecTx runs a generic transaction for complex operations.
 func (r *Repository) ExecTx(ctx context.Context, fn func(pgx.Tx) error) error {
 	tx, err := r.db.Begin(ctx)
@@ -302,4 +331,186 @@ func (r *Repository) ListActiveAuctions(ctx context.Context) ([]AuctionEvent, er
 		events = append(events, e)
 	}
 	return events, nil
+}
+
+func (r *Repository) ListAllEventsAdmin(ctx context.Context) ([]AuctionEvent, error) {
+	query := `
+		SELECT id, title, description, status, starts_at, ends_at, bid_step_cents, is_public, show_on_homepage, highlight_in_nav
+		FROM auction_events
+		ORDER BY created_at DESC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []AuctionEvent
+	for rows.Next() {
+		var e AuctionEvent
+		if err := rows.Scan(&e.ID, &e.Title, &e.Description, &e.Status, &e.StartsAt, &e.EndsAt, &e.BidStepCents, &e.IsPublic, &e.ShowOnHomepage, &e.HighlightInNav); err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+	return events, nil
+}
+
+func (r *Repository) GetEventByIDWithLots(ctx context.Context, id uuid.UUID) (*AuctionEvent, error) {
+	event, err := r.GetEventByID(ctx, id)
+	if err != nil || event == nil {
+		return event, err
+	}
+	
+	lots, err := r.GetLotsByAuctionID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	event.Lots = lots
+	return event, nil
+}
+
+func (r *Repository) GetLotsByAuctionID(ctx context.Context, id uuid.UUID) ([]AuctionLot, error) {
+	query := `
+		SELECT id, auction_id, title, description, image_url, start_price_cents, 
+			current_bid_cents, bid_step_cents, current_winner_user_id, status, 
+			order_id, payment_deadline_at, can_relaunch, can_move_to_direct_sale, 
+			direct_sale_price_cents, direct_sale_product_id, admin_note, created_at, updated_at
+		FROM auction_lots
+		WHERE auction_id = $1
+		ORDER BY created_at ASC
+	`
+	rows, err := r.db.Query(ctx, query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var lots []AuctionLot
+	for rows.Next() {
+		var l AuctionLot
+		if err := rows.Scan(
+			&l.ID, &l.AuctionID, &l.Title, &l.Description, &l.ImageURL, &l.StartPriceCents,
+			&l.CurrentBidCents, &l.BidStepCents, &l.CurrentWinnerUserID, &l.Status,
+			&l.OrderID, &l.PaymentDeadlineAt, &l.CanRelaunch, &l.CanMoveToDirectSale,
+			&l.DirectSalePriceCents, &l.DirectSaleProductID, &l.AdminNote, &l.CreatedAt, &l.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		lots = append(lots, l)
+	}
+	return lots, nil
+}
+
+func (r *Repository) GetLotByIDWithDetails(ctx context.Context, id uuid.UUID) (*AuctionLot, error) {
+	lot, err := r.GetLotByID(ctx, id)
+	if err != nil || lot == nil {
+		return lot, err
+	}
+
+	// Images
+	irows, err := r.db.Query(ctx, "SELECT id, lot_id, image_url, sort_order, is_primary, created_at FROM auction_lot_images WHERE lot_id = $1 ORDER BY sort_order ASC", id)
+	if err != nil {
+		return nil, err
+	}
+	defer irows.Close()
+	var images []AuctionLotImage
+	for irows.Next() {
+		var img AuctionLotImage
+		if err := irows.Scan(&img.ID, &img.LotID, &img.ImageURL, &img.SortOrder, &img.IsPrimary, &img.CreatedAt); err != nil {
+			return nil, err
+		}
+		images = append(images, img)
+	}
+	lot.Images = images
+
+	// Attributes
+	arows, err := r.db.Query(ctx, "SELECT id, lot_id, name, value, sort_order FROM auction_lot_attributes WHERE lot_id = $1 ORDER BY sort_order ASC", id)
+	if err != nil {
+		return nil, err
+	}
+	defer arows.Close()
+	var attrs []AuctionLotAttribute
+	for arows.Next() {
+		var attr AuctionLotAttribute
+		if err := arows.Scan(&attr.ID, &attr.LotID, &attr.Name, &attr.Value, &attr.SortOrder); err != nil {
+			return nil, err
+		}
+		attrs = append(attrs, attr)
+	}
+	lot.Attributes = attrs
+
+	return lot, nil
+}
+
+func (r *Repository) ListHomepageAuctions(ctx context.Context) ([]AuctionEvent, error) {
+	query := `
+		SELECT id, title, description, status, starts_at, ends_at, bid_step_cents, is_public, show_on_homepage, highlight_in_nav
+		FROM auction_events
+		WHERE status IN ('scheduled', 'live') AND is_public = true AND show_on_homepage = true
+		ORDER BY starts_at ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []AuctionEvent
+	for rows.Next() {
+		var e AuctionEvent
+		if err := rows.Scan(&e.ID, &e.Title, &e.Description, &e.Status, &e.StartsAt, &e.EndsAt, &e.BidStepCents, &e.IsPublic, &e.ShowOnHomepage, &e.HighlightInNav); err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+	return events, nil
+}
+
+func (r *Repository) ListNavHighlightAuctions(ctx context.Context) ([]AuctionEvent, error) {
+	query := `
+		SELECT id, title, description, status, starts_at, ends_at, bid_step_cents, is_public, show_on_homepage, highlight_in_nav
+		FROM auction_events
+		WHERE status IN ('scheduled', 'live') AND is_public = true AND highlight_in_nav = true
+		ORDER BY starts_at ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []AuctionEvent
+	for rows.Next() {
+		var e AuctionEvent
+		if err := rows.Scan(&e.ID, &e.Title, &e.Description, &e.Status, &e.StartsAt, &e.EndsAt, &e.BidStepCents, &e.IsPublic, &e.ShowOnHomepage, &e.HighlightInNav); err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+	return events, nil
+}
+
+func (r *Repository) GetBidsByLotID(ctx context.Context, lotID uuid.UUID) ([]AuctionBid, error) {
+	query := `
+		SELECT id, auction_id, lot_id, user_id, amount_cents, idempotency_key, created_at
+		FROM auction_bids
+		WHERE lot_id = $1
+		ORDER BY created_at DESC
+	`
+	rows, err := r.db.Query(ctx, query, lotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var bids []AuctionBid
+	for rows.Next() {
+		var b AuctionBid
+		if err := rows.Scan(&b.ID, &b.AuctionID, &b.LotID, &b.UserID, &b.AmountCents, &b.IdempotencyKey, &b.CreatedAt); err != nil {
+			return nil, err
+		}
+		bids = append(bids, b)
+	}
+	return bids, nil
 }

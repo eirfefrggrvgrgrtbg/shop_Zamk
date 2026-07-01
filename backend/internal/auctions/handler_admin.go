@@ -38,17 +38,11 @@ func (h *AdminHandler) writeError(w http.ResponseWriter, status int, code, messa
 // POST /api/admin/auctions
 func (h *AdminHandler) CreateAuction(w http.ResponseWriter, r *http.Request) {
 	userIDVal := r.Context().Value("userID")
-	roleVal := r.Context().Value("role")
-	if userIDVal == nil || roleVal == nil {
+	if userIDVal == nil {
 		h.writeError(w, http.StatusForbidden, "forbidden", "Access denied")
 		return
 	}
 	userID := userIDVal.(uuid.UUID)
-	role := roleVal.(string)
-	if role != "admin" && role != "owner" {
-		h.writeError(w, http.StatusForbidden, "forbidden", "Access denied")
-		return
-	}
 
 	var req AdminCreateAuctionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -94,18 +88,6 @@ func (h *AdminHandler) CreateAuction(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/admin/auctions/{id}/lots
 func (h *AdminHandler) CreateLot(w http.ResponseWriter, r *http.Request) {
-	userIDVal := r.Context().Value("userID")
-	roleVal := r.Context().Value("role")
-	if userIDVal == nil || roleVal == nil {
-		h.writeError(w, http.StatusForbidden, "forbidden", "Access denied")
-		return
-	}
-	role := roleVal.(string)
-	if role != "admin" && role != "owner" {
-		h.writeError(w, http.StatusForbidden, "forbidden", "Access denied")
-		return
-	}
-
 	auctionIDStr := chi.URLParam(r, "id")
 	auctionID, err := uuid.Parse(auctionIDStr)
 	if err != nil {
@@ -173,17 +155,11 @@ func (h *AdminHandler) CreateLot(w http.ResponseWriter, r *http.Request) {
 // POST /api/admin/auctions/{id}/finalize
 func (h *AdminHandler) FinalizeAuction(w http.ResponseWriter, r *http.Request) {
 	userIDVal := r.Context().Value("userID")
-	roleVal := r.Context().Value("role")
-	if userIDVal == nil || roleVal == nil {
+	if userIDVal == nil {
 		h.writeError(w, http.StatusForbidden, "forbidden", "Access denied")
 		return
 	}
 	userID := userIDVal.(uuid.UUID)
-	role := roleVal.(string)
-	if role != "admin" && role != "owner" {
-		h.writeError(w, http.StatusForbidden, "forbidden", "Access denied")
-		return
-	}
 
 	auctionIDStr := chi.URLParam(r, "id")
 	auctionID, err := uuid.Parse(auctionIDStr)
@@ -203,15 +179,214 @@ func (h *AdminHandler) FinalizeAuction(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }
 
-// STUBS FOR OTHER ENDPOINTS
-func (h *AdminHandler) GetAuctions(w http.ResponseWriter, r *http.Request) {}
-func (h *AdminHandler) GetAuction(w http.ResponseWriter, r *http.Request) {}
-func (h *AdminHandler) UpdateAuction(w http.ResponseWriter, r *http.Request) {}
-func (h *AdminHandler) PublishAuction(w http.ResponseWriter, r *http.Request) {}
-func (h *AdminHandler) PauseAuction(w http.ResponseWriter, r *http.Request) {}
-func (h *AdminHandler) ResumeAuction(w http.ResponseWriter, r *http.Request) {}
-func (h *AdminHandler) CancelAuction(w http.ResponseWriter, r *http.Request) {}
-func (h *AdminHandler) UpdateLot(w http.ResponseWriter, r *http.Request) {}
-func (h *AdminHandler) GetLotBids(w http.ResponseWriter, r *http.Request) {}
-func (h *AdminHandler) MarkLotUnpaid(w http.ResponseWriter, r *http.Request) {}
-func (h *AdminHandler) MoveToDirectSale(w http.ResponseWriter, r *http.Request) {}
+// GET /api/admin/auctions
+func (h *AdminHandler) GetAuctions(w http.ResponseWriter, r *http.Request) {
+	events, err := h.repo.ListAllEventsAdmin(r.Context())
+	if err != nil {
+		h.logger.Error("failed to list auctions", "error", err)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to fetch auctions")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(events)
+}
+
+// GET /api/admin/auctions/{id}
+func (h *AdminHandler) GetAuction(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid auction ID")
+		return
+	}
+
+	event, err := h.repo.GetEventByIDWithLots(r.Context(), id)
+	if err != nil {
+		h.logger.Error("failed to get auction", "error", err)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to fetch auction")
+		return
+	}
+	if event == nil {
+		h.writeError(w, http.StatusNotFound, "not_found", "Auction not found")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(event)
+}
+
+// PATCH /api/admin/auctions/{id}
+func (h *AdminHandler) UpdateAuction(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid auction ID")
+		return
+	}
+
+	var req AdminUpdateAuctionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON format")
+		return
+	}
+
+	err = h.service.UpdateEventAdmin(r.Context(), id, req)
+	if err != nil {
+		h.logger.Error("failed to update auction", "error", err)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update auction")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+// POST /api/admin/auctions/{id}/publish
+func (h *AdminHandler) PublishAuction(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid auction ID")
+		return
+	}
+
+	if err := h.service.UpdateEventStatus(r.Context(), id, AuctionStatusScheduled); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to publish auction")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+// POST /api/admin/auctions/{id}/pause
+func (h *AdminHandler) PauseAuction(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid auction ID")
+		return
+	}
+
+	if err := h.service.UpdateEventStatus(r.Context(), id, AuctionStatusPaused); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to pause auction")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+// POST /api/admin/auctions/{id}/resume
+func (h *AdminHandler) ResumeAuction(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid auction ID")
+		return
+	}
+
+	if err := h.service.UpdateEventStatus(r.Context(), id, AuctionStatusLive); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to resume auction")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+// POST /api/admin/auctions/{id}/cancel
+func (h *AdminHandler) CancelAuction(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid auction ID")
+		return
+	}
+
+	userIDVal := r.Context().Value("userID")
+	adminID := userIDVal.(uuid.UUID)
+
+	if err := h.service.CancelAuction(r.Context(), id, adminID); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to cancel auction")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+// PATCH /api/admin/auction-lots/{id}
+func (h *AdminHandler) UpdateLot(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid lot ID")
+		return
+	}
+
+	var req AdminUpdateLotRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON format")
+		return
+	}
+
+	err = h.service.UpdateLotAdmin(r.Context(), id, req)
+	if err != nil {
+		h.logger.Error("failed to update lot", "error", err)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update lot")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+// GET /api/admin/auction-lots/{id}/bids
+func (h *AdminHandler) GetLotBids(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid lot ID")
+		return
+	}
+
+	bids, err := h.repo.GetBidsByLotID(r.Context(), id)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get bids")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(bids)
+}
+
+// POST /api/admin/auction-lots/{id}/mark-unpaid-review
+func (h *AdminHandler) MarkLotUnpaid(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid lot ID")
+		return
+	}
+
+	if err := h.service.UpdateLotStatus(r.Context(), id, LotStatusUnpaidManualReview); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update lot status")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+// POST /api/admin/auction-lots/{id}/move-to-direct-sale
+func (h *AdminHandler) MoveToDirectSale(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid lot ID")
+		return
+	}
+	userIDVal := r.Context().Value("userID")
+	adminID := userIDVal.(uuid.UUID)
+
+	if err := h.service.MoveLotToDirectSale(r.Context(), id, adminID); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}

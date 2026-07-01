@@ -56,7 +56,25 @@ Every `/api/admin` route requires `AuthMiddleware + RequireRole("admin")` as the
 | /api/admin/reviews/{id}/{action} | POST | auth + role | **handler-level** (reviews.approve/reject/hide/block based on action) |
 | /api/admin/staff/roles | GET | auth + role | roles.read |
 | /api/admin/staff/members | GET | auth + role | staff.read |
-| /api/admin/staff/members | POST | auth + role | staff.create |
+| /api/admin/storefront/blocks | POST/PUT/DELETE | auth + role | storefront.manage |
+
+### Аукционы (Auctions)
+| Маршрут (Route) | Метод | Тип доступа | Требуемое право (Permission) |
+| --- | --- | --- | --- |
+| /api/admin/auctions | GET | auth + role | auctions.read |
+| /api/admin/auctions/{id} | GET | auth + role | auctions.read |
+| /api/admin/auctions | POST | auth + role | auctions.create |
+| /api/admin/auctions/{id} | PATCH | auth + role | auctions.update |
+| /api/admin/auctions/{id}/publish | POST | auth + role | auctions.publish |
+| /api/admin/auctions/{id}/pause | POST | auth + role | auctions.pause |
+| /api/admin/auctions/{id}/resume | POST | auth + role | auctions.resume |
+| /api/admin/auctions/{id}/cancel | POST | auth + role | auctions.cancel |
+| /api/admin/auctions/{id}/finalize | POST | auth + role | auctions.finalize |
+| /api/admin/auctions/{id}/lots | POST | auth + role | auctions.update |
+| /api/admin/auction-lots/{id} | PATCH | auth + role | auctions.update |
+| /api/admin/auction-lots/{id}/bids | GET | auth + role | auctions.read |
+| /api/admin/auction-lots/{id}/mark-unpaid-review | POST | auth + role | auctions.update |
+| /api/admin/auction-lots/{id}/move-to-direct-sale | POST | auth + role | auctions.move_to_direct_sale |
 | /api/admin/staff/members/{userId}/role | PATCH | auth + role | staff.update |
 | /api/admin/staff/members/{userId}/status | PATCH | auth + role | staff.block |
 | /api/admin/staff/members/{userId}/reset-password | POST | auth + role | staff.update |

@@ -184,6 +184,10 @@ func New(
 
 		// Auctions
 		r.Get("/auctions/active", auctionsPublicHandler.GetActiveAuctions)
+		r.Get("/auctions/homepage", auctionsPublicHandler.GetHomepageAuctions)
+		r.Get("/auctions/nav-highlight", auctionsPublicHandler.GetNavHighlightAuctions)
+		r.Get("/auctions/{id}/lots", auctionsPublicHandler.GetAuctionLots)
+		r.Get("/auction-lots/{id}", auctionsPublicHandler.GetAuctionLot)
 	})
 
 	r.Route("/api/customer", func(r chi.Router) {
@@ -390,9 +394,21 @@ func New(
 		r.With(perm("payouts.read")).Post("/payouts/trigger-availability", payoutsHandler.TriggerAvailability)
 
 		// Auctions
-		r.Post("/auctions", auctionsAdminHandler.CreateAuction)
-		r.Post("/auctions/{id}/lots", auctionsAdminHandler.CreateLot)
-		r.Post("/auctions/{id}/finalize", auctionsAdminHandler.FinalizeAuction)
+		r.With(perm("auctions.read")).Get("/auctions", auctionsAdminHandler.GetAuctions)
+		r.With(perm("auctions.read")).Get("/auctions/{id}", auctionsAdminHandler.GetAuction)
+		r.With(perm("auctions.create")).Post("/auctions", auctionsAdminHandler.CreateAuction)
+		r.With(perm("auctions.update")).Patch("/auctions/{id}", auctionsAdminHandler.UpdateAuction)
+		r.With(perm("auctions.publish")).Post("/auctions/{id}/publish", auctionsAdminHandler.PublishAuction)
+		r.With(perm("auctions.pause")).Post("/auctions/{id}/pause", auctionsAdminHandler.PauseAuction)
+		r.With(perm("auctions.resume")).Post("/auctions/{id}/resume", auctionsAdminHandler.ResumeAuction)
+		r.With(perm("auctions.cancel")).Post("/auctions/{id}/cancel", auctionsAdminHandler.CancelAuction)
+		r.With(perm("auctions.finalize")).Post("/auctions/{id}/finalize", auctionsAdminHandler.FinalizeAuction)
+		
+		r.With(perm("auctions.update")).Post("/auctions/{id}/lots", auctionsAdminHandler.CreateLot)
+		r.With(perm("auctions.update")).Patch("/auction-lots/{id}", auctionsAdminHandler.UpdateLot)
+		r.With(perm("auctions.read")).Get("/auction-lots/{id}/bids", auctionsAdminHandler.GetLotBids)
+		r.With(perm("auctions.update")).Post("/auction-lots/{id}/mark-unpaid-review", auctionsAdminHandler.MarkLotUnpaid)
+		r.With(perm("auctions.move_to_direct_sale")).Post("/auction-lots/{id}/move-to-direct-sale", auctionsAdminHandler.MoveToDirectSale)
 	})
 
 	r.Group(func(r chi.Router) {

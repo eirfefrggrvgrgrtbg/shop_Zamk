@@ -744,3 +744,165 @@ export interface CreateViolationRequest {
   severity: 'low' | 'medium' | 'high';
   countsForPenalty: boolean;
 }
+
+// --- Auctions ---
+export type AuctionStatus = 'draft' | 'scheduled' | 'live' | 'ended' | 'cancelled' | 'paused';
+export type LotStatus = 'draft' | 'active' | 'ended_no_bids' | 'won_pending_payment' | 'paid' | 'unpaid_manual_review' | 'moved_to_direct_sale' | 'cancelled';
+export type NoBidsPolicy = 'manual_review' | 'auto_direct_sale';
+export type UnpaidWinnerPolicy = 'manual_review' | 'offer_second_bidder';
+
+export interface AuctionEvent {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: AuctionStatus;
+  startsAt: string;
+  endsAt: string;
+  bidStepCents: number;
+  paymentDeadlineHours: number;
+  antiSnipingEnabled: boolean;
+  antiSnipingTriggerSeconds: number;
+  antiSnipingExtensionSeconds: number;
+  maxBidsPerUserPerLotPerMinute: number;
+  maxRejectedBidsPerUserPerMinute: number;
+  noBidsPolicy: NoBidsPolicy;
+  unpaidWinnerPolicy: UnpaidWinnerPolicy;
+  isPublic: boolean;
+  showOnHomepage: boolean;
+  highlightInNav: boolean;
+  biddingEnabled: boolean;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lots?: AuctionLot[];
+}
+
+export interface AuctionLotImage {
+  id: string;
+  lotId: string;
+  imageUrl: string;
+  sortOrder: number;
+  isPrimary: boolean;
+  createdAt: string;
+}
+
+export interface AuctionLotAttribute {
+  id: string;
+  lotId: string;
+  name: string;
+  value: string;
+  sortOrder: number;
+}
+
+export interface AuctionLot {
+  id: string;
+  auctionId: string;
+  title: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  startPriceCents: number;
+  currentBidCents?: number | null;
+  bidStepCents: number;
+  currentWinnerUserId?: string | null;
+  status: LotStatus;
+  orderId?: string | null;
+  paymentDeadlineAt?: string | null;
+  canRelaunch: boolean;
+  canMoveToDirectSale: boolean;
+  directSalePriceCents?: number | null;
+  directSaleProductId?: string | null;
+  adminNote?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  images?: AuctionLotImage[];
+  attributes?: AuctionLotAttribute[];
+}
+
+export interface AuctionBid {
+  id: string;
+  auctionId: string;
+  lotId: string;
+  userId: string;
+  amountCents: number;
+  idempotencyKey?: string | null;
+  createdAt: string;
+}
+
+export interface BidRequest {
+  amountCents?: number;
+  idempotencyKey?: string;
+  clientKnownBidCents?: number;
+}
+
+export interface BidResponse {
+  success: boolean;
+  newCurrentBid: number;
+  isLeading: boolean;
+  lotStatus: LotStatus;
+  endsAt: string;
+  extensionApplied: boolean;
+}
+
+export interface AdminCreateAuctionRequest {
+  title: string;
+  description?: string | null;
+  startsAt: string;
+  endsAt: string;
+  bidStepCents: number;
+  paymentDeadlineHours: number;
+  antiSnipingEnabled: boolean;
+  antiSnipingTriggerSeconds: number;
+  antiSnipingExtensionSeconds: number;
+  maxBidsPerUserPerLotPerMinute: number;
+  maxRejectedBidsPerUserPerMinute: number;
+  noBidsPolicy: NoBidsPolicy;
+  unpaidWinnerPolicy: UnpaidWinnerPolicy;
+  isPublic: boolean;
+  showOnHomepage: boolean;
+  highlightInNav: boolean;
+  biddingEnabled: boolean;
+}
+
+export interface AdminUpdateAuctionRequest {
+  title?: string;
+  description?: string | null;
+  startsAt?: string;
+  endsAt?: string;
+  bidStepCents?: number;
+  paymentDeadlineHours?: number;
+  antiSnipingEnabled?: boolean;
+  antiSnipingTriggerSeconds?: number;
+  antiSnipingExtensionSeconds?: number;
+  maxBidsPerUserPerLotPerMinute?: number;
+  maxRejectedBidsPerUserPerMinute?: number;
+  noBidsPolicy?: NoBidsPolicy;
+  unpaidWinnerPolicy?: UnpaidWinnerPolicy;
+  isPublic?: boolean;
+  showOnHomepage?: boolean;
+  highlightInNav?: boolean;
+  biddingEnabled?: boolean;
+}
+
+export interface AdminCreateLotRequest {
+  title: string;
+  description?: string | null;
+  startPriceCents: number;
+  bidStepCents: number;
+  canRelaunch: boolean;
+  canMoveToDirectSale: boolean;
+  directSalePriceCents?: number | null;
+  adminNote?: string | null;
+  images: { imageUrl: string; sortOrder: number; isPrimary: boolean }[];
+  attributes: { name: string; value: string; sortOrder: number }[];
+}
+
+export interface AdminUpdateLotRequest {
+  title?: string;
+  description?: string | null;
+  startPriceCents?: number;
+  bidStepCents?: number;
+  canRelaunch?: boolean;
+  canMoveToDirectSale?: boolean;
+  directSalePriceCents?: number | null;
+  adminNote?: string | null;
+}

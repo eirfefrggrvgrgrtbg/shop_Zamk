@@ -33,3 +33,24 @@ export const getProductRatingSummary = async (productId: string): Promise<Rating
 export const getPublicSeller = async (slugOrId: string, params?: any): Promise<any> => {
   return request<any>('GET', `/public/sellers/${slugOrId}`, { params });
 };
+
+// --- Auctions ---
+export const getActiveAuctions = async (): Promise<any[]> => {
+  return request<any[]>('GET', '/public/auctions/active');
+};
+
+export const getHomepageAuctions = async (): Promise<any[]> => {
+  return request<any[]>('GET', '/public/auctions/homepage');
+};
+
+export const getNavHighlightAuctions = async (): Promise<any[]> => {
+  return request<any[]>('GET', '/public/auctions/nav-highlight');
+};
+
+export const getAuctionLots = async (id: string): Promise<any[]> => {
+  return request<any[]>('GET', `/public/auctions/${id}/lots`);
+};
+
+export const getAuctionLot = async (id: string): Promise<any> => {
+  return request<any>('GET', `/public/auction-lots/${id}`);
+};

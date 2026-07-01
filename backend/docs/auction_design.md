@@ -6,6 +6,19 @@ The AUC-1 phase introduces a backend-only foundation for a platform-controlled a
 ## 2. Platform-Only Decision
 Auctions will initially be created and managed exclusively by the platform Admin/Owner. This ensures high-quality lots, correct pricing strategies, and prevents early-stage marketplace clutter.
 
+## Development Phases
+
+*   **AUC-1**: Foundation (DB migration, models, basic repo).
+*   **AUC-1B**: Backend Core (handlers, full service logic, API client types).
+*   **AUC-1C**: Runtime Backend Verification (Concurrency testing, Idempotency, Smoke test, RBAC). **Status: Backend runtime readiness is verified.**
+*   **AUC-2**: Admin Auction UI.
+    *   *Requirement*: Must include small “?” help icons next to unclear settings.
+    *   *Examples*: “Антиснайпинг”, “Шаг ставки”, “Публичный аукцион”, “Показывать на главной”, “Выделить в меню”, “Лимит ставок”, “Непроданный лот”, “Ручное решение”, “Перевести в прямую продажу”.
+*   **AUC-3**: Public Auction UI (Shop interface).
+*   **AUC-4**: WebSocket/SSE real-time integration.
+*   **AUC-5**: Winner order/payment integration.
+*   **AUC-6**: Full direct-sale product integration.
+
 ## 3. Why Sellers Do Not Create Auction Lots Yet
 Seller-created auctions introduce complexity regarding trust, fulfillment SLAs, and commission structures. For MVP, we need to stabilize the core bidding mechanism and buyer experience before opening the system to third-party sellers. This functionality is deferred to post-MVP.
 

@@ -102,3 +102,8 @@ export const deleteAddress = async (id: string): Promise<any> => {
 export const setDefaultAddress = async (id: string): Promise<any> => {
   return request('POST', `/customer/addresses/${id}/default`);
 };
+
+// --- Auctions ---
+export const placeBid = async (lotId: string, data: any): Promise<any> => {
+  return request<any>('POST', `/customer/auction-lots/${lotId}/bid`, { body: data });
+};

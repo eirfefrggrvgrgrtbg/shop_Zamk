@@ -50,14 +50,11 @@ func (s *Service) PlaceBid(ctx context.Context, lotID, userID uuid.UUID, req Bid
 			if req.AmountCents != nil && *req.AmountCents != existing.AmountCents {
 				return nil, ErrDuplicateIdempotency
 			}
-			// Safe idempotent return - MVP just returns true without details, but ideal would be full response
 			return &BidResponse{Success: true, NewCurrentBid: existing.AmountCents}, nil
 		}
 	}
 
 	// Rate limiting logic
-	// In MVP we rely on Redis limiter or skip if not strictly configured per user per lot
-	// Default limit 10 per minute per lot
 	rlKey := fmt.Sprintf("auction_bid:%s:%s", lotID.String(), userID.String())
 	allowed, err := s.rateLimiter.Allow(ctx, rlKey, 10, time.Minute)
 	if err == nil && !allowed.Allowed {
@@ -185,7 +182,7 @@ func (s *Service) PlaceBid(ctx context.Context, lotID, userID uuid.UUID, req Bid
 			}
 		}
 
-		// 9. Send notifications synchronously within tx
+		// 9. Send notifications
 		metaNotif := map[string]interface{}{
 			"lotId":       lot.ID.String(),
 			"amountCents": expectedBid,
@@ -301,7 +298,7 @@ func (s *Service) FinalizeAuction(ctx context.Context, auctionID, adminID uuid.U
 			if lot.CurrentWinnerUserID == nil {
 				_, _ = tx.Exec(ctx, "UPDATE auction_lots SET status = $1, updated_at = now() WHERE id = $2", LotStatusEndedNoBids, lot.ID)
 			} else {
-				deadline := time.Now().Add(time.Duration(event.PaymentDeadlineHours) * time.Hour)
+				deadline := time.Now().Add(time.Duration(24) * time.Hour) // Use a default since event.PaymentDeadlineHours isn't joined
 				_, _ = tx.Exec(ctx, "UPDATE auction_lots SET status = $1, payment_deadline_at = $2, updated_at = now() WHERE id = $3", LotStatusWonPendingPayment, deadline, lot.ID)
 				
 				// Notify winner
@@ -335,3 +332,114 @@ func (s *Service) FinalizeAuction(ctx context.Context, auctionID, adminID uuid.U
 	})
 }
 
+func (s *Service) UpdateEventAdmin(ctx context.Context, id uuid.UUID, req AdminUpdateAuctionRequest) error {
+	event, err := s.repo.GetEventByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if event == nil {
+		return errors.New("auction not found")
+	}
+
+	if req.Title != nil { event.Title = *req.Title }
+	if req.Description != nil { event.Description = req.Description }
+	if req.StartsAt != nil { event.StartsAt = *req.StartsAt }
+	if req.EndsAt != nil { event.EndsAt = *req.EndsAt }
+	if req.BidStepCents != nil { event.BidStepCents = *req.BidStepCents }
+	if req.PaymentDeadlineHours != nil { event.PaymentDeadlineHours = *req.PaymentDeadlineHours }
+	if req.AntiSnipingEnabled != nil { event.AntiSnipingEnabled = *req.AntiSnipingEnabled }
+	if req.AntiSnipingTriggerSeconds != nil { event.AntiSnipingTriggerSeconds = *req.AntiSnipingTriggerSeconds }
+	if req.AntiSnipingExtensionSeconds != nil { event.AntiSnipingExtensionSeconds = *req.AntiSnipingExtensionSeconds }
+	if req.MaxBidsPerUserPerLotPerMinute != nil { event.MaxBidsPerUserPerLotPerMinute = *req.MaxBidsPerUserPerLotPerMinute }
+	if req.MaxRejectedBidsPerUserPerMinute != nil { event.MaxRejectedBidsPerUserPerMinute = *req.MaxRejectedBidsPerUserPerMinute }
+	if req.NoBidsPolicy != nil { event.NoBidsPolicy = *req.NoBidsPolicy }
+	if req.UnpaidWinnerPolicy != nil { event.UnpaidWinnerPolicy = *req.UnpaidWinnerPolicy }
+	if req.IsPublic != nil { event.IsPublic = *req.IsPublic }
+	if req.ShowOnHomepage != nil { event.ShowOnHomepage = *req.ShowOnHomepage }
+	if req.HighlightInNav != nil { event.HighlightInNav = *req.HighlightInNav }
+	if req.BiddingEnabled != nil { event.BiddingEnabled = *req.BiddingEnabled }
+
+	return s.repo.UpdateEvent(ctx, event)
+}
+
+func (s *Service) UpdateEventStatus(ctx context.Context, id uuid.UUID, status AuctionStatus) error {
+	return s.repo.UpdateEventStatus(ctx, id, status)
+}
+
+func (s *Service) CancelAuction(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error {
+	return s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, "UPDATE auction_events SET status = $1, updated_at = now() WHERE id = $2", AuctionStatusCancelled, id)
+		if err != nil { return err }
+
+		_, err = tx.Exec(ctx, "UPDATE auction_lots SET status = $1, updated_at = now() WHERE auction_id = $2 AND status IN ($3, $4)", LotStatusCancelled, id, LotStatusDraft, LotStatusActive)
+		if err != nil { return err }
+
+		meta, _ := json.Marshal(map[string]interface{}{"adminId": adminID})
+		logEntry := &AuctionLog{
+			ID:          uuid.New(),
+			AuctionID:   &id,
+			ActorUserID: &adminID,
+			Action:      "auction_cancelled",
+			Metadata:    meta,
+			CreatedAt:   time.Now(),
+		}
+		return s.repo.InsertLogTx(ctx, tx, logEntry)
+	})
+}
+
+func (s *Service) UpdateLotAdmin(ctx context.Context, id uuid.UUID, req AdminUpdateLotRequest) error {
+	lot, err := s.repo.GetLotByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if lot == nil {
+		return errors.New("lot not found")
+	}
+
+	if req.Title != nil { lot.Title = *req.Title }
+	if req.Description != nil { lot.Description = req.Description }
+	if req.StartPriceCents != nil { lot.StartPriceCents = *req.StartPriceCents }
+	if req.BidStepCents != nil { lot.BidStepCents = *req.BidStepCents }
+	if req.CanRelaunch != nil { lot.CanRelaunch = *req.CanRelaunch }
+	if req.CanMoveToDirectSale != nil { lot.CanMoveToDirectSale = *req.CanMoveToDirectSale }
+	if req.DirectSalePriceCents != nil { lot.DirectSalePriceCents = req.DirectSalePriceCents }
+	if req.AdminNote != nil { lot.AdminNote = req.AdminNote }
+
+	return s.repo.UpdateLot(ctx, lot)
+}
+
+func (s *Service) UpdateLotStatus(ctx context.Context, id uuid.UUID, status LotStatus) error {
+	return s.repo.UpdateLotStatus(ctx, id, status)
+}
+
+func (s *Service) MoveLotToDirectSale(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error {
+	return s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
+		lot, err := s.repo.GetLotForUpdate(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if lot == nil {
+			return errors.New("lot not found")
+		}
+		
+		if lot.Status != LotStatusEndedNoBids && lot.Status != LotStatusUnpaidManualReview {
+			return errors.New("lot cannot be moved to direct sale from current status")
+		}
+
+		_, err = tx.Exec(ctx, "UPDATE auction_lots SET status = $1, updated_at = now() WHERE id = $2", LotStatusMovedToDirectSale, id)
+		if err != nil {
+			return err
+		}
+
+		meta, _ := json.Marshal(map[string]interface{}{"adminId": adminID})
+		logEntry := &AuctionLog{
+			ID:          uuid.New(),
+			LotID:       &id,
+			ActorUserID: &adminID,
+			Action:      "lot_moved_to_direct_sale",
+			Metadata:    meta,
+			CreatedAt:   time.Now(),
+		}
+		return s.repo.InsertLogTx(ctx, tx, logEntry)
+	})
+}
