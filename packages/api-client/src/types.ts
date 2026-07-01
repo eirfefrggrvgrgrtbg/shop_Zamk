@@ -940,8 +940,8 @@ export interface AdminAuctionLot {
   startPriceCents: number;
   currentBidCents?: number;
   bidStepCents: number;
-  allowRestart: boolean;
-  allowDirectSale: boolean;
+  canRelaunch: boolean;
+  canMoveToDirectSale: boolean;
   directSalePriceCents?: number;
   adminNote?: string;
   status: string;

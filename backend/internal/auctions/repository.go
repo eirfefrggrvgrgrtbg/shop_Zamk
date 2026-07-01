@@ -220,13 +220,14 @@ func (r *Repository) ExecTx(ctx context.Context, fn func(pgx.Tx) error) error {
 func (r *Repository) GetLotForUpdate(ctx context.Context, tx pgx.Tx, lotID uuid.UUID) (*AuctionLot, error) {
 	query := `
 		SELECT id, auction_id, start_price_cents, current_bid_cents, bid_step_cents, 
-			current_winner_user_id, status, payment_deadline_at, order_id
+			current_winner_user_id, status, payment_deadline_at, order_id,
+			can_move_to_direct_sale, direct_sale_price_cents, can_relaunch
 		FROM auction_lots 
 		WHERE id = $1 FOR UPDATE
 	`
 	row := tx.QueryRow(ctx, query, lotID)
 	var l AuctionLot
-	err := row.Scan(&l.ID, &l.AuctionID, &l.StartPriceCents, &l.CurrentBidCents, &l.BidStepCents, &l.CurrentWinnerUserID, &l.Status, &l.PaymentDeadlineAt, &l.OrderID)
+	err := row.Scan(&l.ID, &l.AuctionID, &l.StartPriceCents, &l.CurrentBidCents, &l.BidStepCents, &l.CurrentWinnerUserID, &l.Status, &l.PaymentDeadlineAt, &l.OrderID, &l.CanMoveToDirectSale, &l.DirectSalePriceCents, &l.CanRelaunch)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -661,4 +662,93 @@ func (r *Repository) MarkAuctionOrderPaidTx(ctx context.Context, tx pgx.Tx, orde
 	`, orderID)
 	
 	return err
+}
+
+// MoveLotToDirectSaleTx converts an auction lot to a ZAMK Platform direct sale product.
+func (r *Repository) MoveLotToDirectSaleTx(ctx context.Context, tx pgx.Tx, lotID uuid.UUID, platformSellerID uuid.UUID) (uuid.UUID, error) {
+	var l AuctionLot
+	err := tx.QueryRow(ctx, "SELECT id, title, description, image_url, start_price_cents, direct_sale_price_cents FROM auction_lots WHERE id = $1 FOR UPDATE", lotID).
+		Scan(&l.ID, &l.Title, &l.Description, &l.ImageURL, &l.StartPriceCents, &l.DirectSalePriceCents)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	price := l.StartPriceCents
+	if l.DirectSalePriceCents != nil {
+		price = *l.DirectSalePriceCents
+	}
+
+	productID := uuid.New()
+	slug := fmt.Sprintf("auction-lot-%s", productID.String()[:8])
+	
+	_, err = tx.Exec(ctx, `
+		INSERT INTO products (
+			id, seller_id, category_id, brand_id, title, slug, description, status, source,
+			price_cents, currency, main_image_url, created_at, updated_at, published_at
+		) VALUES (
+			$1, $2, NULL, NULL, $3, $4, $5, 'published', 'auction_direct_sale',
+			$6, 'RUB', $7, now(), now(), now()
+		)
+	`, productID, platformSellerID, l.Title, slug, l.Description, price, l.ImageURL)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to create product: %w", err)
+	}
+
+	variantID := uuid.New()
+	_, err = tx.Exec(ctx, `
+		INSERT INTO product_variants (id, product_id, sku, price_cents, is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, true, now(), now())
+	`, variantID, productID, slug, price)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to create variant: %w", err)
+	}
+
+	// Inventory
+	inventoryID := uuid.New()
+	_, err = tx.Exec(ctx, `
+		INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, now(), now())
+	`, inventoryID, productID, variantID, platformSellerID, 1, 0)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to create inventory: %w", err)
+	}
+
+	// Images
+	irows, err := tx.Query(ctx, "SELECT image_url, sort_order FROM auction_lot_images WHERE lot_id = $1 ORDER BY sort_order ASC", lotID)
+	if err == nil {
+		var imgs []struct {
+			URL   *string
+			Order int
+		}
+		for irows.Next() {
+			var u *string
+			var o int
+			if irows.Scan(&u, &o) == nil {
+				imgs = append(imgs, struct {
+					URL   *string
+					Order int
+				}{URL: u, Order: o})
+			}
+		}
+		irows.Close()
+		
+		for _, img := range imgs {
+			_, _ = tx.Exec(ctx, `
+				INSERT INTO product_images (id, product_id, image_url, sort_order, created_at)
+				VALUES ($1, $2, $3, $4, now())
+			`, uuid.New(), productID, img.URL, img.Order)
+		}
+	} else {
+		irows.Close()
+	}
+
+	// Link back
+	_, err = tx.Exec(ctx, `
+		UPDATE auction_lots SET status = 'moved_to_direct_sale', direct_sale_product_id = $1, updated_at = now() WHERE id = $2
+	`, productID, lotID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to update lot status: %w", err)
+	}
+
+	return productID, nil
 }

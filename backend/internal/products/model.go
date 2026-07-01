@@ -26,6 +26,7 @@ type Product struct {
 	Slug              string     `json:"slug"`
 	Description       *string    `json:"description,omitempty"`
 	Status            string     `json:"status"`
+	Source            string     `json:"source"`
 	Gender            *string    `json:"gender,omitempty"`
 	Color             *string    `json:"color,omitempty"`
 	Material          *string    `json:"material,omitempty"`

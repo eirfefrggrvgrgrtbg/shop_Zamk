@@ -1,4 +1,4 @@
-import { getProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller } from '@zamk/api-client/src/public';
+import { getProducts, getDirectSaleProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller } from '@zamk/api-client/src/public';
 import type { ProductSummary } from '@zamk/api-client/src/types';
 import type { Product as UIProduct, Brand as UIBrand, Category as UICategory, Review as UIReview } from '../types/catalog';
 
@@ -74,6 +74,31 @@ export async function fetchProducts(params?: any): Promise<{ items: UIProduct[],
   }
 
   const res = await getProducts(params);
+  return {
+    items: res.items.map(p => ({
+      id: p.id,
+      name: p.title,
+      brand: p.brandId ? (cachedBrands[p.brandId] || 'Бренд не указан') : 'Бренд не указан',
+      brandId: p.brandId || '',
+      price: p.priceCents / 100,
+      oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
+      image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
+      category: p.categoryId || 'Категория не указана',
+      sellerId: p.sellerId,
+      rating: p.rating?.average,
+      reviewsCount: p.rating?.count,
+      isNew: false,
+    })),
+    totalCount: res.totalCount
+  };
+}
+
+export async function fetchDirectSaleProducts(params?: any): Promise<{ items: UIProduct[], totalCount: number }> {
+  if (Object.keys(cachedBrands).length === 0) {
+    await fetchBrands().catch(() => {});
+  }
+
+  const res = await getDirectSaleProducts(params);
   return {
     items: res.items.map(p => ({
       id: p.id,

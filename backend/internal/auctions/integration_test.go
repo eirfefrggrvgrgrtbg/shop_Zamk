@@ -51,11 +51,11 @@ func TestAuctionIntegration(t *testing.T) {
 	_, err = pgClient.Pool.Exec(ctx, `
 		INSERT INTO users (id, name, email, password_hash, role, status, created_at, updated_at) 
 		VALUES 
-			($1, 'Admin', 'admin@test.com', 'x', 'admin', 'active', now(), now()), 
-			($2, 'A', 'a@test.com', 'y', 'customer', 'active', now(), now()), 
-			($3, 'B', 'b@test.com', 'z', 'customer', 'active', now(), now())
+			($1, 'Admin', $4, 'x', 'admin', 'active', now(), now()), 
+			($2, 'A', $5, 'y', 'customer', 'active', now(), now()), 
+			($3, 'B', $6, 'z', 'customer', 'active', now(), now())
 		ON CONFLICT (id) DO NOTHING
-	`, adminID, customerA, customerB)
+	`, adminID, customerA, customerB, uuid.New().String()+"@test.com", uuid.New().String()+"@test.com", uuid.New().String()+"@test.com")
 	if err != nil {
 		t.Fatalf("Failed to seed users: %v", err)
 	}
@@ -286,11 +286,14 @@ func TestAuctionConcurrency(t *testing.T) {
 	customers := []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()}
 	
 	// Seed admin
-	_, _ = pgClient.Pool.Exec(ctx, `INSERT INTO users (id, name, email, password_hash, role, status, created_at, updated_at) VALUES ($1, 'Admin', $2, 'x', 'admin', 'active', now(), now()) ON CONFLICT (id) DO NOTHING`, adminID, uuid.New().String()+"@test.com")
+	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO users (id, name, email, password_hash, role, status, created_at, updated_at) VALUES ($1, 'Admin', $2, 'x', 'admin', 'active', now(), now()) ON CONFLICT (id) DO NOTHING`, adminID, uuid.New().String()+"@admin.com")
+	if err != nil {
+		t.Fatalf("Failed to seed admin: %v", err)
+	}
 	
 	// Seed customers
 	for _, cID := range customers {
-		_, _ = pgClient.Pool.Exec(ctx, `INSERT INTO users (id, name, email, password_hash, role, status, created_at, updated_at) VALUES ($1, 'Customer', $2, 'y', 'customer', 'active', now(), now()) ON CONFLICT (id) DO NOTHING`, cID, uuid.New().String()+"@test.com")
+		_, _ = pgClient.Pool.Exec(ctx, `INSERT INTO users (id, name, email, password_hash, role, status, created_at, updated_at) VALUES ($1, 'Customer', $2, 'y', 'customer', 'active', now(), now()) ON CONFLICT (id) DO NOTHING`, cID, uuid.New().String()+"@customer.com")
 	}
 
 	// Create event & lot

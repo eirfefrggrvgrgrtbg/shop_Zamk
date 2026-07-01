@@ -20,8 +20,8 @@ export function LotModal({ isOpen, onClose, onSuccess, auctionId, lot }: LotModa
   const [description, setDescription] = useState('');
   const [startPriceRubles, setStartPriceRubles] = useState('100');
   const [bidStepRubles, setBidStepRubles] = useState('100');
-  const [allowRestart, setAllowRestart] = useState(false);
-  const [allowDirectSale, setAllowDirectSale] = useState(false);
+  const [canRelaunch, setCanRelaunch] = useState(false);
+  const [canMoveToDirectSale, setCanMoveToDirectSale] = useState(false);
   const [directSalePriceRubles, setDirectSalePriceRubles] = useState('');
   const [adminNote, setAdminNote] = useState('');
 
@@ -31,8 +31,8 @@ export function LotModal({ isOpen, onClose, onSuccess, auctionId, lot }: LotModa
       setDescription(lot.description || '');
       setStartPriceRubles((lot.startPriceCents / 100).toString());
       setBidStepRubles((lot.bidStepCents / 100).toString());
-      setAllowRestart(lot.allowRestart);
-      setAllowDirectSale(lot.allowDirectSale);
+      setCanRelaunch(lot.canRelaunch || false);
+      setCanMoveToDirectSale(lot.canMoveToDirectSale || false);
       setDirectSalePriceRubles(lot.directSalePriceCents ? (lot.directSalePriceCents / 100).toString() : '');
       setAdminNote(lot.adminNote || '');
     } else {
@@ -40,8 +40,8 @@ export function LotModal({ isOpen, onClose, onSuccess, auctionId, lot }: LotModa
       setDescription('');
       setStartPriceRubles('100');
       setBidStepRubles('100');
-      setAllowRestart(false);
-      setAllowDirectSale(false);
+      setCanRelaunch(false);
+      setCanMoveToDirectSale(false);
       setDirectSalePriceRubles('');
       setAdminNote('');
     }
@@ -73,8 +73,8 @@ export function LotModal({ isOpen, onClose, onSuccess, auctionId, lot }: LotModa
         description,
         startPriceCents,
         bidStepCents,
-        allowRestart,
-        allowDirectSale,
+        canRelaunch,
+        canMoveToDirectSale,
         directSalePriceCents: directSalePriceCents as any,
         adminNote,
       };
@@ -169,13 +169,13 @@ export function LotModal({ isOpen, onClose, onSuccess, auctionId, lot }: LotModa
               <div className="space-y-2 mt-4">
                 <div className="flex items-center">
                   <input
-                    id="allowRestart"
+                    id="canRelaunch"
                     type="checkbox"
-                    checked={allowRestart}
-                    onChange={(e) => setAllowRestart(e.target.checked)}
+                    checked={canRelaunch}
+                    onChange={(e) => setCanRelaunch(e.target.checked)}
                     className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                   />
-                  <label htmlFor="allowRestart" className="ml-2 flex items-center text-sm text-gray-900">
+                  <label htmlFor="canRelaunch" className="ml-2 flex items-center text-sm text-gray-900">
                     Разрешить перезапуск
                     <HelpTooltip content="Если лот не продан, его можно будет запустить в другом аукционе." />
                   </label>
@@ -183,20 +183,20 @@ export function LotModal({ isOpen, onClose, onSuccess, auctionId, lot }: LotModa
                 
                 <div className="flex items-center">
                   <input
-                    id="allowDirectSale"
+                    id="canMoveToDirectSale"
                     type="checkbox"
-                    checked={allowDirectSale}
-                    onChange={(e) => setAllowDirectSale(e.target.checked)}
+                    checked={canMoveToDirectSale}
+                    onChange={(e) => setCanMoveToDirectSale(e.target.checked)}
                     className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                   />
-                  <label htmlFor="allowDirectSale" className="ml-2 flex items-center text-sm text-gray-900">
+                  <label htmlFor="canMoveToDirectSale" className="ml-2 flex items-center text-sm text-gray-900">
                     Разрешить прямую продажу
                     <HelpTooltip content="Можно перевести лот в обычный магазин для прямой покупки." />
                   </label>
                 </div>
               </div>
 
-              {allowDirectSale && (
+              {canMoveToDirectSale && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Цена прямой продажи (₽)</label>
                   <input

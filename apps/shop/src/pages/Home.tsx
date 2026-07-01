@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { BrandCard, CategoryCard, SectionHeader } from '../components/editorial/StudioKit';
 import { ProductCard } from '../components/product/ProductCard';
 import { Button } from '../components/ui/Button';
-import { fetchBrands, fetchCategories, fetchProducts } from '../api/publicCatalog';
+import { fetchBrands, fetchCategories, fetchProducts, fetchDirectSaleProducts } from '../api/publicCatalog';
 import { HeroSection } from '../components/home/HeroSection';
 import { HomeAuctionBlock } from '../components/home/HomeAuctionBlock';
 import type { Brand, Category, Product } from '../types/catalog';
@@ -27,6 +27,7 @@ function EmptyHomeSection({ text }: { text: string }) {
 
 export function Home() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [directSaleProducts, setDirectSaleProducts] = useState<Product[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,14 +41,16 @@ export function Home() {
       setError('');
 
       try {
-        const [productsRes, apiBrands, apiCategories] = await Promise.all([
+        const [productsRes, dsProductsRes, apiBrands, apiCategories] = await Promise.all([
           fetchProducts(),
+          fetchDirectSaleProducts(),
           fetchBrands(),
           fetchCategories(),
         ]);
 
         if (!cancelled) {
           setProducts(productsRes.items);
+          setDirectSaleProducts(dsProductsRes.items);
           setBrands(apiBrands);
           setCategories(apiCategories);
         }
@@ -140,6 +143,28 @@ export function Home() {
                 <EmptyHomeSection text="Нет данных" />
               )}
             </motion.section>
+
+            {directSaleProducts.length > 0 && (
+              <motion.section {...reveal} className="glass-panel p-7 md:p-10 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent opacity-50"></div>
+                <SectionHeader 
+                  label="Архив" 
+                  title="Вещи ZAMK" 
+                  action={
+                    <Link to="/zamk">
+                      <Button variant="secondary" className="gap-2 bg-white/50 dark:bg-black/50">
+                        В архив <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </Link>
+                  }
+                />
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 relative z-10">
+                  {directSaleProducts.slice(0, 4).map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
+                </div>
+              </motion.section>
+            )}
 
             <motion.section {...reveal} className="glass-panel p-7 md:p-10">
               <SectionHeader label="Каталог" title="Товары из API" />

@@ -14,7 +14,8 @@
 - [x] **AUC-4B**: Real-time bidding safety hardening and concurrency verification.
 - [x] **AUC-5**: Winner order/payment integration.
 - [x] **AUC-5B**: Verified and hardened order/payment runtime flow.
-- [ ] **AUC-6**: Full direct-sale catalog integration. - Current Phase
+- [x] **AUC-6**: Full direct-sale catalog integration. - Current Phase
+- [x] **AUC-6C:** Verify direct-sale full runtime checkout flow, oversell prevention, and normal catalog regression checks.
 - [ ] **AUC-7**: Runtime E2E stabilization.
 
 ## 2. ADMIN — Complete Admin Panel

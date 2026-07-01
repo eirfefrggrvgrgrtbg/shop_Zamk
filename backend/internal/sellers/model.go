@@ -30,6 +30,7 @@ type Seller struct {
 	ContactEmail string       `json:"contactEmail"`
 	ContactPhone *string      `json:"contactPhone,omitempty"`
 	Status       SellerStatus `json:"status"`
+	IsPlatform   bool         `json:"isPlatform"`
 	LogoURL      *string      `json:"logoUrl,omitempty"`
 	LogoObjectKey *string     `json:"logoObjectKey,omitempty"`
 	CreatedAt    time.Time    `json:"createdAt"`

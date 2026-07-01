@@ -483,25 +483,42 @@ func (s *Service) UpdateLotStatus(ctx context.Context, id uuid.UUID, status LotS
 }
 
 func (s *Service) MoveLotToDirectSale(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error {
-	return s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
+	platformSellerID := uuid.MustParse("00000000-0000-4000-8000-000000000000")
+	var productID uuid.UUID
+
+	err := s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
 		lot, err := s.repo.GetLotForUpdate(ctx, tx, id)
 		if err != nil {
 			return err
 		}
 		if lot == nil {
-			return errors.New("lot not found")
+			return errors.New("Лот недоступен") // not required but safe
 		}
 		
+		if lot.Status == LotStatusMovedToDirectSale {
+			return errors.New("Лот уже переведён в прямую продажу.")
+		}
+
 		if lot.Status != LotStatusEndedNoBids && lot.Status != LotStatusUnpaidManualReview {
-			return errors.New("lot cannot be moved to direct sale from current status")
+			return errors.New("Лот нельзя перевести в прямую продажу.")
 		}
 
-		_, err = tx.Exec(ctx, "UPDATE auction_lots SET status = $1, updated_at = now() WHERE id = $2", LotStatusMovedToDirectSale, id)
+		if !lot.CanMoveToDirectSale {
+			return errors.New("Лот нельзя перевести в прямую продажу.")
+		}
+
+		if lot.DirectSalePriceCents == nil {
+			return errors.New("Укажите цену прямой продажи.")
+		}
+
+		pid, err := s.repo.MoveLotToDirectSaleTx(ctx, tx, id, platformSellerID)
 		if err != nil {
-			return err
+			fmt.Printf("DEBUG: MoveLotToDirectSaleTx failed for lot %s: %v\n", id, err)
+			return errors.New("Не удалось перевести лот в прямую продажу.")
 		}
+		productID = pid
 
-		meta, _ := json.Marshal(map[string]interface{}{"adminId": adminID})
+		meta, _ := json.Marshal(map[string]interface{}{"adminId": adminID, "productId": productID})
 		logEntry := &AuctionLog{
 			ID:          uuid.New(),
 			LotID:       &id,
@@ -512,6 +529,21 @@ func (s *Service) MoveLotToDirectSale(ctx context.Context, id uuid.UUID, adminID
 		}
 		return s.repo.InsertLogTx(ctx, tx, logEntry)
 	})
+
+	if err == nil {
+		status := LotStatusMovedToDirectSale
+		lot, _ := s.repo.GetLotByID(ctx, id)
+		if lot != nil {
+			s.hub.Broadcast(lot.AuctionID, AuctionRealtimeEvent{
+				EventType: "lot_status_changed",
+				AuctionID: lot.AuctionID,
+				LotID:     &id,
+				LotStatus: &status,
+			})
+		}
+	}
+
+	return err
 }
 
 func (s *Service) GetCustomerWins(ctx context.Context, userID uuid.UUID) ([]AuctionLot, error) {

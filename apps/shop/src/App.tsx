@@ -11,6 +11,7 @@ import { AuthModal } from './components/auth/AuthModal';
 import { SearchOverlay } from './components/search/SearchOverlay';
 import { Home } from './pages/Home';
 import { Catalog } from './pages/Catalog';
+import { DirectSale } from './pages/DirectSale';
 import { ProductDetail } from './pages/ProductDetail';
 import { SellerDetail } from './pages/SellerDetail';
 import { BrandDetail } from './pages/BrandDetail';
@@ -56,6 +57,7 @@ function App() {
                   <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="/catalog" element={<Catalog />} />
+                    <Route path="/zamk" element={<DirectSale />} />
                     <Route path="/product/:id" element={<ProductDetail />} />
                     <Route path="/auction" element={<AuctionPage />} />
                     <Route path="/auction/lots/:id" element={<AuctionLotDetail />} />

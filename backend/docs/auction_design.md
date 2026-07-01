@@ -19,6 +19,19 @@ Auctions will initially be created and managed exclusively by the platform Admin
 *   **AUC-5**: Winner order/payment integration.
 *   **AUC-6**: Full direct-sale product integration.
 
+## Current Implementation Status
+* **AUC-1/AUC-1B/AUC-1C**: Core backend logic verified and tested.
+* **AUC-2/AUC-2B**: Admin UI for managing auctions verified and tested.
+* **AUC-3/AUC-3B**: Public UI and real-time SSE updates verified.
+* **AUC-4/AUC-4B**: SSE fully integrated and verified.
+* **AUC-5/AUC-5B/AUC-5C**: Auction winner order creation, concurrency protection, and webhook processing verified.
+* **AUC-6/AUC-6B/AUC-6C**: Direct-sale transition for unsold lots, including isolated platform seller integration, oversell prevention, and normal catalog checkouts verified.
+
+### Known Remaining Work
+- Automatic cron/job to mark lots `ended_no_bids` if `payment_deadline_at` expires and unpaid.
+- (Optional) Second-highest-bidder logic or automatic relaunch strategies.
+- Future seller auction lots (currently restricted to system/admin only).
+
 ## 3. Why Sellers Do Not Create Auction Lots Yet
 Seller-created auctions introduce complexity regarding trust, fulfillment SLAs, and commission structures. For MVP, we need to stabilize the core bidding mechanism and buyer experience before opening the system to third-party sellers. This functionality is deferred to post-MVP.
 

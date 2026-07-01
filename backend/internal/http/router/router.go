@@ -179,6 +179,7 @@ func New(
 		r.Get("/categories", catalogHandler.ListCategories)
 		r.Get("/brands", catalogHandler.ListBrands)
 		r.Get("/products", productsHandler.ListPublicProducts)
+		r.Get("/direct-sale", productsHandler.GetDirectSaleProducts)
 		r.Get("/products/{idOrSlug}", productsHandler.GetPublicProduct)
 		r.Get("/sellers/{idOrSlug}", productsHandler.GetPublicSellerStore)
 

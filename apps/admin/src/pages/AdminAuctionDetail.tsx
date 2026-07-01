@@ -488,7 +488,7 @@ export function AdminAuctionDetail() {
                                 </button>
                               )}
 
-                              {hasPermission('auctions.move_to_direct_sale') && lot.allowDirectSale && (lot.status === 'ended_no_bids' || lot.status === 'unpaid_manual_review') && (
+                              {hasPermission('auctions.move_to_direct_sale') && lot.canMoveToDirectSale && (lot.status === 'ended_no_bids' || lot.status === 'unpaid_manual_review') && (
                                 <button
                                   onClick={() => handleDirectSale(lot.id)}
                                   className="text-green-600 hover:text-green-900"

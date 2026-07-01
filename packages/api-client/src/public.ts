@@ -10,6 +10,10 @@ export const getProducts = async (params?: any): Promise<ProductListResponse> =>
   return request<ProductListResponse>('GET', '/public/products', { params });
 };
 
+export const getDirectSaleProducts = async (params?: any): Promise<ProductListResponse> => {
+  return request<ProductListResponse>('GET', '/public/direct-sale', { params });
+};
+
 export const getProduct = async (idOrSlug: string): Promise<ProductDetail> => {
   return request<ProductDetail>('GET', `/public/products/${idOrSlug}`);
 };

@@ -540,6 +540,31 @@ func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func (h *Handler) GetDirectSaleProducts(w http.ResponseWriter, r *http.Request) {
+	page := pagination.FromRequest(r)
+	
+	filter := PublicProductFilter{}
+	platformSellerID := uuid.MustParse("00000000-0000-4000-8000-000000000000")
+	filter.SellerID = &platformSellerID
+	
+	if sort := r.URL.Query().Get("sort"); sort != "" {
+		filter.Sort = &sort
+	}
+	if inStock := r.URL.Query().Get("inStock"); inStock == "true" {
+		b := true
+		filter.InStock = &b
+	}
+
+	resp, err := h.service.ListPublicProducts(r.Context(), filter, page.Limit, page.Offset)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list direct sale products")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
 func (h *Handler) GetPublicProduct(w http.ResponseWriter, r *http.Request) {
 	idOrSlug := chi.URLParam(r, "idOrSlug")
 	if idOrSlug == "" {
