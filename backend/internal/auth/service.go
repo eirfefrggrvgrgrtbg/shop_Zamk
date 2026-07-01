@@ -160,6 +160,10 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentP
 		return errors.New("new password must be different from current password")
 	}
 
+	if err := ValidatePassword(newPassword, user.Email, user.Name); err != nil {
+		return err
+	}
+
 	hash, err := HashPassword(newPassword)
 	if err != nil {
 		return err
