@@ -41,7 +41,9 @@ function ProfileContent() {
   const [passwordError, setPasswordError] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
 
-  const [editName, setEditName] = useState(user?.name || '');
+  const [editFirstName, setEditFirstName] = useState(user?.firstName || '');
+  const [editLastName, setEditLastName] = useState(user?.lastName || '');
+  const [editMiddleName, setEditMiddleName] = useState(user?.middleName || '');
   const [editPhone, setEditPhone] = useState('');
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState(false);
@@ -54,7 +56,9 @@ function ProfileContent() {
 
     getProfile()
       .then((data) => {
-        setEditName(data.name || '');
+        setEditFirstName(data.firstName || '');
+        setEditLastName(data.lastName || '');
+        setEditMiddleName(data.middleName || '');
         setEditPhone(data.phone || '');
       })
       .catch(console.error);
@@ -63,13 +67,17 @@ function ProfileContent() {
   const handleSaveProfile = async () => {
     setProfileError('');
     setProfileSuccess(false);
-    if (!editName.trim()) {
+    if (!editFirstName.trim()) {
       setProfileError('Имя обязательно');
+      return;
+    }
+    if (!editLastName.trim()) {
+      setProfileError('Фамилия обязательна');
       return;
     }
     try {
       setIsSavingProfile(true);
-      await updateProfile({ name: editName, phone: editPhone });
+      await updateProfile({ firstName: editFirstName, lastName: editLastName, middleName: editMiddleName, phone: editPhone });
       setProfileSuccess(true);
       setTimeout(() => setProfileSuccess(false), 3000);
     } catch (err: any) {
@@ -126,14 +134,34 @@ function ProfileContent() {
         <div className='mt-4 grid grid-cols-1 md:grid-cols-2 gap-5 max-w-[980px] mx-auto'>
           <ProfilePanel title='Аккаунт'>
             <div className="flex flex-col gap-3">
-              <div>
-                <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Имя</label>
-                <Input
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  placeholder="Ваше имя"
-                  className="bg-white/50 dark:bg-white/5 border-white/40 dark:border-white/20"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Фамилия</label>
+                  <Input
+                    value={editLastName}
+                    onChange={(e) => setEditLastName(e.target.value)}
+                    placeholder="Ваша фамилия"
+                    className="bg-white/50 dark:bg-white/5 border-white/40 dark:border-white/20"
+                  />
+                </div>
+                <div>
+                  <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Имя</label>
+                  <Input
+                    value={editFirstName}
+                    onChange={(e) => setEditFirstName(e.target.value)}
+                    placeholder="Ваше имя"
+                    className="bg-white/50 dark:bg-white/5 border-white/40 dark:border-white/20"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Отчество, если есть</label>
+                  <Input
+                    value={editMiddleName}
+                    onChange={(e) => setEditMiddleName(e.target.value)}
+                    placeholder="Отчество"
+                    className="bg-white/50 dark:bg-white/5 border-white/40 dark:border-white/20"
+                  />
+                </div>
               </div>
               <div>
                 <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Телефон</label>

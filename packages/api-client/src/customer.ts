@@ -79,8 +79,8 @@ export const getProfile = async (): Promise<any> => {
   return request('GET', '/customer/profile');
 };
 
-export const updateProfile = async (data: { name: string; phone: string }): Promise<any> => {
-  return request('PATCH', '/customer/profile', { body: data });
+export const updateProfile = async (input: { firstName: string; lastName: string; middleName?: string; phone: string }): Promise<void> => {
+  return request<void>('PATCH', '/customer/profile', { body: input });
 };
 
 export const getAddresses = async (): Promise<any> => {

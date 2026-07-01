@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -55,6 +56,11 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := ValidateNameFields(&req.FirstName, &req.LastName, &req.MiddleName); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_name", err.Error())
+		return
+	}
+
 	ip := r.RemoteAddr
 	userAgent := r.UserAgent()
 
@@ -64,6 +70,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusConflict, "duplicate_email", err.Error())
 			return
 		}
+		log.Printf("registration failed: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to register")
 		return
 	}

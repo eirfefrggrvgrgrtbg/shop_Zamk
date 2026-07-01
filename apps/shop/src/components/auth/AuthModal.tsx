@@ -15,7 +15,9 @@ export function AuthModal() {
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [middleName, setMiddleName] = useState('');
 
   const calculateStrength = (pass: string) => {
     let score = 0;
@@ -50,7 +52,17 @@ export function AuthModal() {
           setIsLoading(false);
           return;
         }
-        await register(name, email, password, passwordConfirm);
+        if (!firstName.trim()) {
+          setError('Введите имя.');
+          setIsLoading(false);
+          return;
+        }
+        if (!lastName.trim()) {
+          setError('Введите фамилию.');
+          setIsLoading(false);
+          return;
+        }
+        await register(firstName, lastName, middleName, email, password, passwordConfirm);
       } else if (authView === 'forgot_password') {
         await resetPassword(email);
         setSuccess('Ссылка для восстановления отправлена на ваш e-mail.');
@@ -101,12 +113,25 @@ export function AuthModal() {
           )}
 
           {isRegister && (
-            <div>
+            <div className="flex flex-col gap-4">
               <Input 
-                placeholder="Ваше имя"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                placeholder="Фамилия"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
                 required
+                className="bg-white/60 dark:bg-white/5 focus:bg-white dark:focus:bg-white/10 backdrop-blur-sm"
+              />
+              <Input 
+                placeholder="Имя"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+                className="bg-white/60 dark:bg-white/5 focus:bg-white dark:focus:bg-white/10 backdrop-blur-sm"
+              />
+              <Input 
+                placeholder="Отчество, если есть"
+                value={middleName}
+                onChange={(e) => setMiddleName(e.target.value)}
                 className="bg-white/60 dark:bg-white/5 focus:bg-white dark:focus:bg-white/10 backdrop-blur-sm"
               />
             </div>

@@ -4,6 +4,9 @@ import { consumeAuthReturnPath } from '../components/account/CustomerProtectedRo
 export interface User {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
+  middleName?: string;
   email: string;
   avatar?: string;
   role?: string;
@@ -20,7 +23,7 @@ interface AuthContextType {
   closeAuthModal: () => void;
   setAuthView: (view: 'login' | 'register' | 'forgot_password' | 'change_password') => void;
   login: (email: string, pass: string) => Promise<void>;
-  register: (name: string, email: string, pass: string, passConfirm: string) => Promise<void>;
+  register: (firstName: string, lastName: string, middleName: string, email: string, pass: string, passConfirm: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   changePassword: (currentPass: string, newPass: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -30,10 +33,13 @@ import { login as apiLogin, register as apiRegister, refresh, me, logout as apiL
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function mapApiUser(apiUser: { id: string; name?: string; email: string; role?: string; status?: string }): User {
+function mapApiUser(apiUser: { id: string; name?: string; firstName?: string; lastName?: string; middleName?: string; email: string; role?: string; status?: string }): User {
   return {
     id: apiUser.id,
     name: apiUser.name || apiUser.email.split('@')[0],
+    firstName: apiUser.firstName,
+    lastName: apiUser.lastName,
+    middleName: apiUser.middleName,
     email: apiUser.email,
     role: apiUser.role,
     status: apiUser.status,
@@ -99,9 +105,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (name: string, email: string, pass: string, passConfirm: string) => {
+  const register = async (firstName: string, lastName: string, middleName: string, email: string, pass: string, passConfirm: string) => {
     try {
-      const res = await apiRegister({ name, email, password: pass, passwordConfirm: passConfirm });
+      const res = await apiRegister({ firstName, lastName, middleName, email, password: pass, passwordConfirm: passConfirm });
       
       setUser(mapApiUser(res.user));
       closeAuthModal();

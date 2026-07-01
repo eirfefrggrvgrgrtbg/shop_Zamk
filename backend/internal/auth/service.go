@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -36,7 +37,9 @@ func (s *Service) RegisterCustomer(ctx context.Context, input RegisterRequest, u
 		return AuthResponse{}, "", err
 	}
 
-	if err := ValidatePassword(input.Password, input.Name, input.Email); err != nil {
+	fullName := strings.TrimSpace(fmt.Sprintf("%s %s %s", input.LastName, input.FirstName, input.MiddleName))
+
+	if err := ValidatePassword(input.Password, fullName, input.Email); err != nil {
 		return AuthResponse{}, "", err
 	}
 
@@ -45,9 +48,17 @@ func (s *Service) RegisterCustomer(ctx context.Context, input RegisterRequest, u
 		return AuthResponse{}, "", err
 	}
 
+	middleName := &input.MiddleName
+	if input.MiddleName == "" {
+		middleName = nil
+	}
+
 	user := &users.User{
 		ID:           uuid.New(),
-		Name:         input.Name,
+		Name:         fullName,
+		FirstName:    &input.FirstName,
+		LastName:     &input.LastName,
+		MiddleName:   middleName,
 		Email:        strings.ToLower(input.Email),
 		PasswordHash: hash,
 		Role:         users.RoleCustomer,
@@ -138,6 +149,9 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (MeResponse, error) 
 		User: UserDTO{
 			ID:                 user.ID,
 			Name:               user.Name,
+			FirstName:          user.FirstName,
+			LastName:           user.LastName,
+			MiddleName:         user.MiddleName,
 			Email:              user.Email,
 			Role:               user.Role,
 			Status:             user.Status,
@@ -207,6 +221,9 @@ func (s *Service) createSessionForUser(ctx context.Context, user *users.User, us
 		User: UserDTO{
 			ID:                 user.ID,
 			Name:               user.Name,
+			FirstName:          user.FirstName,
+			LastName:           user.LastName,
+			MiddleName:         user.MiddleName,
 			Email:              user.Email,
 			Role:               user.Role,
 			Status:             user.Status,

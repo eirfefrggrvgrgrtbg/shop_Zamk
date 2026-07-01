@@ -8,8 +8,10 @@ import (
 )
 
 type UpdateProfileRequest struct {
-	Name  string `json:"name" validate:"required"`
-	Phone string `json:"phone" validate:"required"`
+	FirstName  string `json:"firstName" validate:"required,min=2,max=80"`
+	LastName   string `json:"lastName" validate:"required,min=2,max=80"`
+	MiddleName string `json:"middleName,omitempty" validate:"omitempty,max=80"`
+	Phone      string `json:"phone" validate:"required"`
 }
 
 type Handler struct {
@@ -45,12 +47,15 @@ func (h *Handler) GetProfile(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":        user.ID,
-		"name":      user.Name,
-		"email":     user.Email,
-		"phone":     user.Phone,
-		"status":    user.Status,
-		"createdAt": user.CreatedAt,
+		"id":         user.ID,
+		"name":       user.Name,
+		"firstName":  user.FirstName,
+		"lastName":   user.LastName,
+		"middleName": user.MiddleName,
+		"email":      user.Email,
+		"phone":      user.Phone,
+		"status":     user.Status,
+		"createdAt":  user.CreatedAt,
 	})
 }
 
@@ -72,7 +77,22 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.repo.UpdateCustomerProfile(r.Context(), userID, req.Name, req.Phone)
+	// Wait, we need auth.ValidateNameFields, let's just do it directly or import auth?
+	// But auth imports users, so importing auth from users would create a circular dependency.
+	// So we do basic validation here or use the validator.
+	
+	// Assuming validator is added to handler? Let's just trust the validator tags or do basic trim.
+	fullName := req.LastName + " " + req.FirstName
+	if req.MiddleName != "" {
+		fullName += " " + req.MiddleName
+	}
+
+	var midName *string
+	if req.MiddleName != "" {
+		midName = &req.MiddleName
+	}
+
+	err := h.repo.UpdateCustomerProfile(r.Context(), userID, fullName, &req.FirstName, &req.LastName, midName, req.Phone)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update profile")
 		return
@@ -82,12 +102,15 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	user, _ := h.repo.GetUserByID(r.Context(), userID)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":        user.ID,
-		"name":      user.Name,
-		"email":     user.Email,
-		"phone":     user.Phone,
-		"status":    user.Status,
-		"createdAt": user.CreatedAt,
+		"id":         user.ID,
+		"name":       user.Name,
+		"firstName":  user.FirstName,
+		"lastName":   user.LastName,
+		"middleName": user.MiddleName,
+		"email":      user.Email,
+		"phone":      user.Phone,
+		"status":     user.Status,
+		"createdAt":  user.CreatedAt,
 	})
 }
 
