@@ -103,18 +103,30 @@ function AuctionSection({ initialAuction, index }: { initialAuction: AuctionEven
       setAuction(prev => {
         const updatedLots = prev.lots?.map(lot => {
           if (lot.id === lastEvent.lotId) {
+            const oldBid = lot.currentBidCents || 0;
+            const newBid = lastEvent.currentBidCents !== undefined ? lastEvent.currentBidCents : oldBid;
+            const safeBid = newBid < oldBid ? oldBid : newBid;
+            
             return {
               ...lot,
-              ...(lastEvent.currentBidCents !== undefined ? { currentBidCents: lastEvent.currentBidCents } : {}),
+              ...(lastEvent.currentBidCents !== undefined ? { currentBidCents: safeBid } : {}),
               ...(lastEvent.lotStatus ? { status: lastEvent.lotStatus as any } : {})
             };
           }
           return lot;
         });
 
+        // Safe endsAt
+        let safeEndsAt = prev.endsAt;
+        if (lastEvent.endsAt && (lastEvent.eventType === 'bid_accepted' || lastEvent.eventType === 'lot_extended')) {
+          if (!prev.endsAt || new Date(lastEvent.endsAt) > new Date(prev.endsAt)) {
+            safeEndsAt = lastEvent.endsAt;
+          }
+        }
+
         return {
           ...prev,
-          ...(lastEvent.endsAt && (lastEvent.eventType === 'bid_accepted' || lastEvent.eventType === 'lot_extended') ? { endsAt: lastEvent.endsAt } : {}),
+          ...(safeEndsAt ? { endsAt: safeEndsAt } : {}),
           lots: updatedLots
         };
       });

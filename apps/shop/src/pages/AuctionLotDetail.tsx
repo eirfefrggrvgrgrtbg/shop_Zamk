@@ -65,13 +65,35 @@ export function AuctionLotDetail() {
     if (!lastEvent || !lot || !auction) return;
 
     if (lastEvent.eventType === 'bid_accepted' && lastEvent.lotId === lot.id) {
-      setLot(prev => prev ? { ...prev, currentBidCents: lastEvent.currentBidCents || prev.currentBidCents, status: (lastEvent.lotStatus as any) || prev.status } : prev);
+      setLot(prev => {
+        if (!prev) return prev;
+        const oldBid = prev.currentBidCents || 0;
+        const newBid = lastEvent.currentBidCents !== undefined ? lastEvent.currentBidCents : oldBid;
+        const safeBid = newBid < oldBid ? oldBid : newBid;
+        return { 
+          ...prev, 
+          currentBidCents: safeBid, 
+          status: (lastEvent.lotStatus as any) || prev.status 
+        };
+      });
       if (lastEvent.endsAt) {
-        setAuction(prev => prev ? { ...prev, endsAt: lastEvent.endsAt as string } : prev);
+        setAuction(prev => {
+          if (!prev) return prev;
+          if (!prev.endsAt || new Date(lastEvent.endsAt as string) > new Date(prev.endsAt)) {
+            return { ...prev, endsAt: lastEvent.endsAt as string };
+          }
+          return prev;
+        });
       }
     } else if (lastEvent.eventType === 'lot_extended' && lastEvent.lotId === lot.id) {
       if (lastEvent.endsAt) {
-        setAuction(prev => prev ? { ...prev, endsAt: lastEvent.endsAt as string } : prev);
+        setAuction(prev => {
+          if (!prev) return prev;
+          if (!prev.endsAt || new Date(lastEvent.endsAt as string) > new Date(prev.endsAt)) {
+            return { ...prev, endsAt: lastEvent.endsAt as string };
+          }
+          return prev;
+        });
       }
     } else if (lastEvent.eventType === 'auction_status_changed') {
       if (lastEvent.auctionStatus) {

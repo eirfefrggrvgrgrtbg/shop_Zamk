@@ -10,8 +10,9 @@
   - Unclear settings have “?” help tooltips.
 - [x] **AUC-3**: Public Auction UI (Frontend shop components for bidding and displaying lots).
   - AUC-3B verified public UI runtime behavior, public API usage, polling, and navigation.
-- [ ] **AUC-4**: WebSocket/SSE real-time bidding updates. - Current Phase
-- [ ] **AUC-5**: Winner order/payment integration.
+- [x] **AUC-4**: WebSocket/SSE real-time bidding updates.
+- [x] **AUC-4B**: Real-time bidding safety hardening and concurrency verification.
+- [ ] **AUC-5**: Winner order/payment integration. - Current Phase
 - [ ] **AUC-6**: Full direct-sale catalog integration.
 - [ ] **AUC-7**: Runtime E2E stabilization.
 

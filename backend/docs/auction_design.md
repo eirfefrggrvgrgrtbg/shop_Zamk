@@ -45,6 +45,22 @@ Tables include:
 **Events:** `draft`, `scheduled`, `live`, `ended`, `cancelled`, `paused`.
 **Lots:** `draft`, `active`, `ended_no_bids`, `won_pending_payment`, `paid`, `unpaid_manual_review`, `moved_to_direct_sale`, `cancelled`.
 
+## 2. Architecture & Stack
+
+### Backend
+* Go (chi router, pgx for PostgreSQL).
+* Separate module `internal/auctions` with its own handler, service, and repository.
+* `SELECT FOR UPDATE` is strictly used for locking the lot and auction event during bid placement to ensure consistency and prevent race conditions.
+* Real-time events broadcast via **Server-Sent Events (SSE)** hub (`internal/auctions/realtime.go`). The SSE endpoint strictly broadcasts public safe payload and no PII.
+
+### Frontend
+* React + Tailwind in `apps/shop` and `apps/admin`.
+* Direct polling is the primary fallback for the shop (e.g. 10-second intervals), but **SSE** is actively used by `useAuctionStream` hook to reflect live updates (bids, endsAt extensions, status changes) without full page reloads.
+
+### Infrastructure constraints
+* Bidding `POST /api/customer/auction-lots/{id}/bid` is the absolute source of truth. SSE is merely a UI enhancement. 
+* WebSocket is deferred unless required by extremely high interactivity needs.
+
 ## 9. Bid Transaction Logic
 Bids must be strictly atomic:
 1. `SELECT FOR UPDATE` on the lot to prevent concurrent mutations.
