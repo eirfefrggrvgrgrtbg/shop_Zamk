@@ -34,6 +34,8 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/ratelimit"
 )
 
 func main() {
@@ -169,8 +171,15 @@ func main() {
 	addressesService := addresses.NewService(addressesRepo)
 	addressesHandler := addresses.NewHandler(addressesService)
 
+	auctionsRepo := auctions.NewRepository(pgClient.Pool)
+	auctionsLimiter := ratelimit.New(redisClient.Client)
+	auctionsService := auctions.NewService(auctionsRepo, notificationsService, auctionsLimiter)
+	auctionsAdminHandler := auctions.NewAdminHandler(auctionsRepo, auctionsService, logger)
+	auctionsPublicHandler := auctions.NewPublicHandler(auctionsRepo, auctionsService, logger)
+	auctionsCustomerHandler := auctions.NewCustomerHandler(auctionsRepo, auctionsService, logger)
+
 	// Create router
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler)
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler)
 
 	// Start HTTP server
 	srv := &http.Server{

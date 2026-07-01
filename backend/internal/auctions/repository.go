@@ -1,0 +1,305 @@
+package auctions
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type Repository struct {
+	db *pgxpool.Pool
+}
+
+func NewRepository(db *pgxpool.Pool) *Repository {
+	return &Repository{db: db}
+}
+
+// CreateEvent inserts a new auction event.
+func (r *Repository) CreateEvent(ctx context.Context, e *AuctionEvent) error {
+	query := `
+		INSERT INTO auction_events (
+			id, title, description, status, starts_at, ends_at, bid_step_cents, 
+			payment_deadline_hours, anti_sniping_enabled, anti_sniping_trigger_seconds, 
+			anti_sniping_extension_seconds, max_bids_per_user_per_lot_per_minute, 
+			max_rejected_bids_per_user_per_minute, no_bids_policy, unpaid_winner_policy, 
+			is_public, show_on_homepage, highlight_in_nav, bidding_enabled, created_by, 
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+		)
+	`
+	_, err := r.db.Exec(ctx, query,
+		e.ID, e.Title, e.Description, e.Status, e.StartsAt, e.EndsAt, e.BidStepCents,
+		e.PaymentDeadlineHours, e.AntiSnipingEnabled, e.AntiSnipingTriggerSeconds,
+		e.AntiSnipingExtensionSeconds, e.MaxBidsPerUserPerLotPerMinute,
+		e.MaxRejectedBidsPerUserPerMinute, e.NoBidsPolicy, e.UnpaidWinnerPolicy,
+		e.IsPublic, e.ShowOnHomepage, e.HighlightInNav, e.BiddingEnabled, e.CreatedBy,
+		e.CreatedAt, e.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create auction event: %w", err)
+	}
+	return nil
+}
+
+// GetEventByID fetches an auction event without lots.
+func (r *Repository) GetEventByID(ctx context.Context, id uuid.UUID) (*AuctionEvent, error) {
+	query := `
+		SELECT id, title, description, status, starts_at, ends_at, bid_step_cents,
+			payment_deadline_hours, anti_sniping_enabled, anti_sniping_trigger_seconds,
+			anti_sniping_extension_seconds, max_bids_per_user_per_lot_per_minute,
+			max_rejected_bids_per_user_per_minute, no_bids_policy, unpaid_winner_policy,
+			is_public, show_on_homepage, highlight_in_nav, bidding_enabled, created_by,
+			created_at, updated_at
+		FROM auction_events
+		WHERE id = $1
+	`
+	row := r.db.QueryRow(ctx, query, id)
+	var e AuctionEvent
+	err := row.Scan(
+		&e.ID, &e.Title, &e.Description, &e.Status, &e.StartsAt, &e.EndsAt, &e.BidStepCents,
+		&e.PaymentDeadlineHours, &e.AntiSnipingEnabled, &e.AntiSnipingTriggerSeconds,
+		&e.AntiSnipingExtensionSeconds, &e.MaxBidsPerUserPerLotPerMinute,
+		&e.MaxRejectedBidsPerUserPerMinute, &e.NoBidsPolicy, &e.UnpaidWinnerPolicy,
+		&e.IsPublic, &e.ShowOnHomepage, &e.HighlightInNav, &e.BiddingEnabled, &e.CreatedBy,
+		&e.CreatedAt, &e.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get auction event: %w", err)
+	}
+	return &e, nil
+}
+
+// CreateLot inserts a new lot along with images and attributes.
+func (r *Repository) CreateLot(ctx context.Context, lot *AuctionLot) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+		INSERT INTO auction_lots (
+			id, auction_id, title, description, image_url, start_price_cents, 
+			current_bid_cents, bid_step_cents, current_winner_user_id, status, 
+			order_id, payment_deadline_at, can_relaunch, can_move_to_direct_sale, 
+			direct_sale_price_cents, direct_sale_product_id, admin_note, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+		)
+	`
+	_, err = tx.Exec(ctx, query,
+		lot.ID, lot.AuctionID, lot.Title, lot.Description, lot.ImageURL, lot.StartPriceCents,
+		lot.CurrentBidCents, lot.BidStepCents, lot.CurrentWinnerUserID, lot.Status,
+		lot.OrderID, lot.PaymentDeadlineAt, lot.CanRelaunch, lot.CanMoveToDirectSale,
+		lot.DirectSalePriceCents, lot.DirectSaleProductID, lot.AdminNote, lot.CreatedAt, lot.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert lot: %w", err)
+	}
+
+	for _, img := range lot.Images {
+		_, err = tx.Exec(ctx, `INSERT INTO auction_lot_images (id, lot_id, image_url, sort_order, is_primary, created_at) VALUES ($1, $2, $3, $4, $5, $6)`,
+			img.ID, lot.ID, img.ImageURL, img.SortOrder, img.IsPrimary, img.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("failed to insert lot image: %w", err)
+		}
+	}
+
+	for _, attr := range lot.Attributes {
+		_, err = tx.Exec(ctx, `INSERT INTO auction_lot_attributes (id, lot_id, name, value, sort_order) VALUES ($1, $2, $3, $4, $5)`,
+			attr.ID, lot.ID, attr.Name, attr.Value, attr.SortOrder)
+		if err != nil {
+			return fmt.Errorf("failed to insert lot attribute: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+// GetLotByID fetches a single lot (excluding heavy joins for simple lookups).
+func (r *Repository) GetLotByID(ctx context.Context, id uuid.UUID) (*AuctionLot, error) {
+	query := `
+		SELECT id, auction_id, title, description, image_url, start_price_cents, 
+			current_bid_cents, bid_step_cents, current_winner_user_id, status, 
+			order_id, payment_deadline_at, can_relaunch, can_move_to_direct_sale, 
+			direct_sale_price_cents, direct_sale_product_id, admin_note, created_at, updated_at
+		FROM auction_lots
+		WHERE id = $1
+	`
+	row := r.db.QueryRow(ctx, query, id)
+	var l AuctionLot
+	err := row.Scan(
+		&l.ID, &l.AuctionID, &l.Title, &l.Description, &l.ImageURL, &l.StartPriceCents,
+		&l.CurrentBidCents, &l.BidStepCents, &l.CurrentWinnerUserID, &l.Status,
+		&l.OrderID, &l.PaymentDeadlineAt, &l.CanRelaunch, &l.CanMoveToDirectSale,
+		&l.DirectSalePriceCents, &l.DirectSaleProductID, &l.AdminNote, &l.CreatedAt, &l.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get auction lot: %w", err)
+	}
+	return &l, nil
+}
+
+// UpdateEvent updates a subset of fields.
+func (r *Repository) UpdateEvent(ctx context.Context, e *AuctionEvent) error {
+	query := `
+		UPDATE auction_events SET
+			title = $2, description = $3, status = $4, starts_at = $5, ends_at = $6, 
+			bid_step_cents = $7, payment_deadline_hours = $8, anti_sniping_enabled = $9, 
+			anti_sniping_trigger_seconds = $10, anti_sniping_extension_seconds = $11, 
+			max_bids_per_user_per_lot_per_minute = $12, max_rejected_bids_per_user_per_minute = $13, 
+			no_bids_policy = $14, unpaid_winner_policy = $15, is_public = $16, show_on_homepage = $17, 
+			highlight_in_nav = $18, bidding_enabled = $19, updated_at = now()
+		WHERE id = $1
+	`
+	_, err := r.db.Exec(ctx, query,
+		e.ID, e.Title, e.Description, e.Status, e.StartsAt, e.EndsAt, e.BidStepCents,
+		e.PaymentDeadlineHours, e.AntiSnipingEnabled, e.AntiSnipingTriggerSeconds,
+		e.AntiSnipingExtensionSeconds, e.MaxBidsPerUserPerLotPerMinute,
+		e.MaxRejectedBidsPerUserPerMinute, e.NoBidsPolicy, e.UnpaidWinnerPolicy,
+		e.IsPublic, e.ShowOnHomepage, e.HighlightInNav, e.BiddingEnabled,
+	)
+	return err
+}
+
+// ExecTx runs a generic transaction for complex operations.
+func (r *Repository) ExecTx(ctx context.Context, fn func(pgx.Tx) error) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// GetLotForUpdate locks the lot row.
+func (r *Repository) GetLotForUpdate(ctx context.Context, tx pgx.Tx, lotID uuid.UUID) (*AuctionLot, error) {
+	query := `
+		SELECT id, auction_id, start_price_cents, current_bid_cents, bid_step_cents, 
+			current_winner_user_id, status 
+		FROM auction_lots 
+		WHERE id = $1 FOR UPDATE
+	`
+	row := tx.QueryRow(ctx, query, lotID)
+	var l AuctionLot
+	err := row.Scan(&l.ID, &l.AuctionID, &l.StartPriceCents, &l.CurrentBidCents, &l.BidStepCents, &l.CurrentWinnerUserID, &l.Status)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &l, nil
+}
+
+// GetEventForUpdate locks the event row.
+func (r *Repository) GetEventForUpdate(ctx context.Context, tx pgx.Tx, eventID uuid.UUID) (*AuctionEvent, error) {
+	query := `
+		SELECT id, status, starts_at, ends_at, bidding_enabled, anti_sniping_enabled,
+			anti_sniping_trigger_seconds, anti_sniping_extension_seconds, is_public
+		FROM auction_events 
+		WHERE id = $1 FOR UPDATE
+	`
+	row := tx.QueryRow(ctx, query, eventID)
+	var e AuctionEvent
+	err := row.Scan(&e.ID, &e.Status, &e.StartsAt, &e.EndsAt, &e.BiddingEnabled, &e.AntiSnipingEnabled, &e.AntiSnipingTriggerSeconds, &e.AntiSnipingExtensionSeconds, &e.IsPublic)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &e, nil
+}
+
+func (r *Repository) InsertBidTx(ctx context.Context, tx pgx.Tx, bid *AuctionBid) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO auction_bids (id, auction_id, lot_id, user_id, amount_cents, idempotency_key, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, bid.ID, bid.AuctionID, bid.LotID, bid.UserID, bid.AmountCents, bid.IdempotencyKey, bid.CreatedAt)
+	return err
+}
+
+func (r *Repository) UpdateLotBidTx(ctx context.Context, tx pgx.Tx, lotID uuid.UUID, amountCents int64, winnerID uuid.UUID) error {
+	_, err := tx.Exec(ctx, `
+		UPDATE auction_lots 
+		SET current_bid_cents = $1, current_winner_user_id = $2, updated_at = now() 
+		WHERE id = $3
+	`, amountCents, winnerID, lotID)
+	return err
+}
+
+func (r *Repository) ExtendAuctionTx(ctx context.Context, tx pgx.Tx, eventID uuid.UUID, newEndsAt time.Time) error {
+	_, err := tx.Exec(ctx, `
+		UPDATE auction_events SET ends_at = $1, updated_at = now() WHERE id = $2
+	`, newEndsAt, eventID)
+	return err
+}
+
+func (r *Repository) InsertLogTx(ctx context.Context, tx pgx.Tx, l *AuctionLog) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO auction_logs (id, auction_id, lot_id, actor_user_id, action, metadata, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, l.ID, l.AuctionID, l.LotID, l.ActorUserID, l.Action, l.Metadata, l.CreatedAt)
+	return err
+}
+
+func (r *Repository) LogSuspiciousEvent(ctx context.Context, s *AuctionSuspiciousEvent) error {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO auction_suspicious_events (id, auction_id, lot_id, user_id, reason, metadata, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, s.ID, s.AuctionID, s.LotID, s.UserID, s.Reason, s.Metadata, s.CreatedAt)
+	return err
+}
+
+func (r *Repository) CheckIdempotencyKey(ctx context.Context, lotID, userID uuid.UUID, key string) (*AuctionBid, error) {
+	query := `SELECT id, amount_cents FROM auction_bids WHERE lot_id = $1 AND user_id = $2 AND idempotency_key = $3 LIMIT 1`
+	var b AuctionBid
+	err := r.db.QueryRow(ctx, query, lotID, userID, key).Scan(&b.ID, &b.AmountCents)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &b, nil
+}
+
+func (r *Repository) ListActiveAuctions(ctx context.Context) ([]AuctionEvent, error) {
+	query := `
+		SELECT id, title, description, status, starts_at, ends_at, bid_step_cents, is_public, show_on_homepage, highlight_in_nav
+		FROM auction_events
+		WHERE status IN ('scheduled', 'live') AND is_public = true
+		ORDER BY starts_at ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []AuctionEvent
+	for rows.Next() {
+		var e AuctionEvent
+		if err := rows.Scan(&e.ID, &e.Title, &e.Description, &e.Status, &e.StartsAt, &e.EndsAt, &e.BidStepCents, &e.IsPublic, &e.ShowOnHomepage, &e.HighlightInNav); err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+	return events, nil
+}

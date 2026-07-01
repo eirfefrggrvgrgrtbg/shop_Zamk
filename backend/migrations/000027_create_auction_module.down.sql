@@ -1,0 +1,24 @@
+DROP INDEX IF EXISTS idx_auction_suspicious_events_user_id_created_at;
+DROP INDEX IF EXISTS idx_auction_logs_auction_id_created_at;
+DROP INDEX IF EXISTS idx_auction_bids_lot_user_idempotency;
+DROP INDEX IF EXISTS idx_auction_bids_user_id_created_at;
+DROP INDEX IF EXISTS idx_auction_bids_lot_id_created_at;
+DROP INDEX IF EXISTS idx_auction_lot_attributes_lot_id_sort_order;
+DROP INDEX IF EXISTS idx_auction_lot_images_lot_id_sort_order;
+DROP INDEX IF EXISTS idx_auction_lots_current_winner_user_id;
+DROP INDEX IF EXISTS idx_auction_lots_status;
+DROP INDEX IF EXISTS idx_auction_lots_auction_id;
+DROP INDEX IF EXISTS idx_auction_events_highlight_in_nav;
+DROP INDEX IF EXISTS idx_auction_events_show_on_homepage;
+DROP INDEX IF EXISTS idx_auction_events_is_public;
+DROP INDEX IF EXISTS idx_auction_events_ends_at;
+DROP INDEX IF EXISTS idx_auction_events_starts_at;
+DROP INDEX IF EXISTS idx_auction_events_status;
+
+DROP TABLE IF EXISTS auction_suspicious_events;
+DROP TABLE IF EXISTS auction_logs;
+DROP TABLE IF EXISTS auction_bids;
+DROP TABLE IF EXISTS auction_lot_attributes;
+DROP TABLE IF EXISTS auction_lot_images;
+DROP TABLE IF EXISTS auction_lots;
+DROP TABLE IF EXISTS auction_events;

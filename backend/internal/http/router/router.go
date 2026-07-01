@@ -31,6 +31,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 )
 
@@ -60,6 +61,9 @@ func New(
 	usersHandler *users.Handler,
 	addressesHandler *addresses.Handler,
 	notificationsHandler *notifications.Handler,
+	auctionsAdminHandler *auctions.AdminHandler,
+	auctionsPublicHandler *auctions.PublicHandler,
+	auctionsCustomerHandler *auctions.CustomerHandler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	rateLimiter := ratelimit.NewMiddleware(
@@ -177,6 +181,9 @@ func New(
 		r.Get("/products", productsHandler.ListPublicProducts)
 		r.Get("/products/{idOrSlug}", productsHandler.GetPublicProduct)
 		r.Get("/sellers/{idOrSlug}", productsHandler.GetPublicSellerStore)
+
+		// Auctions
+		r.Get("/auctions/active", auctionsPublicHandler.GetActiveAuctions)
 	})
 
 	r.Route("/api/customer", func(r chi.Router) {
@@ -217,6 +224,9 @@ func New(
 		r.Get("/notifications/unread-count", notificationsHandler.UnreadCountCustomer)
 		r.Post("/notifications/{id}/read", notificationsHandler.ReadCustomerNotification)
 		r.Post("/notifications/read-all", notificationsHandler.ReadAllCustomer)
+
+		// Auctions
+		r.Post("/auction-lots/{id}/bid", auctionsCustomerHandler.PlaceBid)
 	})
 
 	r.With(webhookLimit).Post("/api/payments/tbank/webhook", paymentsHandler.HandleTBankWebhook)
@@ -378,6 +388,11 @@ func New(
 		r.With(perm("payouts.read")).Get("/payouts/{id}", payoutsHandler.GetAdminPayout)
 		r.With(adminDangerousLimit).Patch("/payouts/{id}/status", payoutsHandler.UpdateAdminPayoutStatus)
 		r.With(perm("payouts.read")).Post("/payouts/trigger-availability", payoutsHandler.TriggerAvailability)
+
+		// Auctions
+		r.Post("/auctions", auctionsAdminHandler.CreateAuction)
+		r.Post("/auctions/{id}/lots", auctionsAdminHandler.CreateLot)
+		r.Post("/auctions/{id}/finalize", auctionsAdminHandler.FinalizeAuction)
 	})
 
 	r.Group(func(r chi.Router) {
