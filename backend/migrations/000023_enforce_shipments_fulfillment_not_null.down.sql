@@ -1,0 +1,5 @@
+BEGIN;
+
+ALTER TABLE shipments ALTER COLUMN fulfillment_id DROP NOT NULL;
+
+COMMIT;

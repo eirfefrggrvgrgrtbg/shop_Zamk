@@ -1,0 +1,104 @@
+import { request } from './client';
+import type { Cart, Order, ReturnRequest, ReturnResponse, ReviewCreateRequest, CustomerFulfillment } from './types';
+
+export const getCart = async (): Promise<Cart> => {
+  return request<Cart>('GET', '/customer/cart');
+};
+
+export const addToCart = async (input: { productId: string; productVariantId: string; quantity: number }): Promise<Cart> => {
+  return request<Cart>('POST', '/customer/cart/items', { body: input });
+};
+
+export const updateCartItem = async (itemId: string, quantity: number): Promise<Cart> => {
+  return request<Cart>('PATCH', `/customer/cart/items/${itemId}`, { body: { quantity } });
+};
+
+export const removeFromCart = async (itemId: string): Promise<Cart> => {
+  return request<Cart>('DELETE', `/customer/cart/items/${itemId}`);
+};
+
+export const clearCart = async (): Promise<void> => {
+  return request<void>('DELETE', '/customer/cart');
+};
+
+export const createOrder = async (input: { customerName: string; customerPhone: string; customerEmail: string; deliveryAddress: string }): Promise<Order> => {
+  return request<Order>('POST', '/customer/orders', { body: input });
+};
+
+export const getOrders = async (): Promise<Order[]> => {
+  return request<Order[]>('GET', '/customer/orders');
+};
+
+export const getOrder = async (orderId: string): Promise<Order> => {
+  return request<Order>('GET', `/customer/orders/${orderId}`);
+};
+
+export const getCustomerOrderFulfillments = async (orderId: string): Promise<CustomerFulfillment[]> => {
+  return request<CustomerFulfillment[]>('GET', `/customer/orders/${orderId}/fulfillments`);
+};
+
+// P0 fix: was /pay, backend route is /payment
+export const createPayment = async (orderId: string): Promise<{ paymentUrl: string }> => {
+  return request<{ paymentUrl: string }>('POST', `/customer/orders/${orderId}/payment`);
+};
+
+// P0 fix: path is /customer/orders/{orderId}/returns, body requires items[]
+export const createReturn = async (orderId: string, input: ReturnRequest): Promise<ReturnResponse> => {
+  return request<ReturnResponse>('POST', `/customer/orders/${orderId}/returns`, { body: input });
+};
+
+export const createReview = async (orderId: string, orderItemId: string, input: ReviewCreateRequest): Promise<any> => {
+  return request('POST', `/customer/orders/${orderId}/items/${orderItemId}/review`, { body: input });
+};
+
+export const getCustomerReturns = async (): Promise<any> => {
+  return request('GET', '/customer/returns');
+};
+
+export const getCustomerReturn = async (returnId: string): Promise<any> => {
+  return request('GET', `/customer/returns/${returnId}`);
+};
+
+export const getCustomerReviews = async (): Promise<any> => {
+  return request('GET', '/customer/reviews');
+};
+
+export const getFavorites = async (): Promise<any> => {
+  return request('GET', '/customer/favorites');
+};
+
+export const addFavorite = async (productId: string): Promise<any> => {
+  return request('POST', `/customer/favorites/${productId}`);
+};
+
+export const removeFavorite = async (productId: string): Promise<any> => {
+  return request('DELETE', `/customer/favorites/${productId}`);
+};
+
+export const getProfile = async (): Promise<any> => {
+  return request('GET', '/customer/profile');
+};
+
+export const updateProfile = async (data: { name: string; phone: string }): Promise<any> => {
+  return request('PATCH', '/customer/profile', { body: data });
+};
+
+export const getAddresses = async (): Promise<any> => {
+  return request('GET', '/customer/addresses');
+};
+
+export const createAddress = async (data: any): Promise<any> => {
+  return request('POST', '/customer/addresses', { body: data });
+};
+
+export const updateAddress = async (id: string, data: any): Promise<any> => {
+  return request('PATCH', `/customer/addresses/${id}`, { body: data });
+};
+
+export const deleteAddress = async (id: string): Promise<any> => {
+  return request('DELETE', `/customer/addresses/${id}`);
+};
+
+export const setDefaultAddress = async (id: string): Promise<any> => {
+  return request('POST', `/customer/addresses/${id}/default`);
+};

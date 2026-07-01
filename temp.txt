@@ -1,0 +1,115 @@
+      setEditingAddress(address);
+    } else {
+      setEditingAddress({ title: '', address: '' });
+    }
+    setAddressModalOpen(true);
+  };
+
+  const handleSaveAddress = () => {
+    if (!editingAddress || !editingAddress.title.trim() || !editingAddress.address.trim()) return;
+
+    if (editingAddress.id) {
+      setAddresses(addresses.map(a => a.id === editingAddress.id ? { ...a, title: editingAddress.title, address: editingAddress.address } : a));
+    } else {
+      const newId = addresses.length > 0 ? Math.max(...addresses.map(a => a.id)) + 1 : 1;
+      setAddresses([...addresses, { id: newId, title: editingAddress.title, address: editingAddress.address, isDefault: addresses.length === 0 }]);
+    }
+    setAddressModalOpen(false);
+  };
+
+  const handleDeleteAddress = (id: number) => {
+    setAddresses(addresses.filter(a => a.id !== id));
+  };
+
+  // Payment editing state
+  const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<{ id?: number; cardNumber: string; expiry: string } | null>(null);
+
+  const handleOpenPaymentModal = (payment?: PaymentMethod) => {
+    if (payment) {
+      setEditingPayment(payment);
+    } else {
+      setEditingPayment({ cardNumber: '', expiry: '' });
+    }
+    setPaymentModalOpen(true);
+  };
+
+  const handleSavePayment = () => {
+    if (!editingPayment || !editingPayment.cardNumber.trim() || !editingPayment.expiry.trim()) return;
+
+    if (editingPayment.id) {
+      setPayments(payments.map(p => p.id === editingPayment.id ? { ...p, cardNumber: editingPayment.cardNumber, expiry: editingPayment.expiry } : p));
+    } else {
+      const newId = payments.length > 0 ? Math.max(...payments.map(p => p.id)) + 1 : 1;
+      setPayments([...payments, { id: newId, cardNumber: editingPayment.cardNumber, expiry: editingPayment.expiry, isDefault: payments.length === 0 }]);
+    }
+    setPaymentModalOpen(false);
+  };
+
+  const handleDeletePayment = (id: number) => {
+    setPayments(payments.filter(p => p.id !== id));
+  };
+
+  return (
+    <div className='relative z-10 min-h-screen pt-24 md:pt-32 pb-20'>
+      <div className='container mx-auto px-4 sm:px-6 max-w-[800px]'>
+        
+        {/* Заголовок */}
+        <div className="mb-12 pl-2">
+          <h1 className="font-serif text-4xl md:text-5xl text-graphite mb-2">Настройки</h1>
+          <p className="text-graphite/50 text-[15px]">Управление аккаунтом и предпочтениями</p>
+        </div>
+
+        {/* 1. Безопасность */}
+        <Section title="Безопасность">
+          <SectionRow 
+            icon={Lock} 
+            title="Сменить пароль" 
+            description="Обновить текущий пароль учетной записи"
+            onClick={() => setPasswordModalOpen(true)}
+          />
+          <SectionRow 
+            icon={LogOut} 
+            title="Выйти со всех устройств" 
+            description="Завершить сеансы на других устройствах"
+            onClick={() => setLogoutModalOpen(true)}
+          />
+          <SectionRow 
+            icon={Trash2} 
+            title="Удалить аккаунт" 
+            description="Навсегда удалить профиль и все данные"
+            danger
+            onClick={() => setDeleteModalOpen(true)}
+          />
+        </Section>
+
+        {/* 2. Внешний вид */}
+        <Section title="Внешний вид">
+          <div className="p-5 md:p-6 flex flex-col gap-4">
+            <p className="text-[15px] font-medium text-graphite mb-2">Тема интерфейса</p>
+            <div className="bg-graphite/5 p-1.5 rounded-2xl flex relative w-full overflow-hidden">
+              {/* Ползунок */}
+              <motion.div
+                layoutId="theme-highlighter"
+                initial={false}
+                className="absolute top-1.5 bottom-1.5 w-[calc(33.333%-4px)] bg-white rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
+                animate={{
+                  x: theme === 'light' ? 0 : theme === 'dark' ? '100%' : '200%',
+                }}
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              />
+              {/* Опции */}
+              {(['light', 'dark', 'system'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTheme(t)}
+                  className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2.5 text-[13px] font-medium transition-colors ${theme === t ? 'text-graphite' : 'text-graphite/40 hover:text-graphite/70'}`}
+                >
+                  {t === 'light' && <Sun className="w-4 h-4" />}
+                  {t === 'dark' && <Moon className="w-4 h-4" />}
+                  {t === 'system' && <Monitor className="w-4 h-4" />}
+                  <span className="capitalize">{t === 'system' ? 'Авто' : t === 'light' ? 'Светлая' : 'Тёмная'}</span>
+                </button>
+              ))}
+            </div>
+          </div>

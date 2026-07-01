@@ -1,0 +1,4 @@
+.env
+*.exe
+.system_generated/
+*.log

@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS refunds;
+DROP TABLE IF EXISTS return_items;
+DROP TABLE IF EXISTS returns;
