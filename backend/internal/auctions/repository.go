@@ -402,6 +402,38 @@ func (r *Repository) GetLotsByAuctionID(ctx context.Context, id uuid.UUID) ([]Au
 	return lots, nil
 }
 
+func (r *Repository) GetPublicLotsByAuctionID(ctx context.Context, id uuid.UUID) ([]AuctionLot, error) {
+	query := `
+		SELECT id, auction_id, title, description, image_url, start_price_cents, 
+			current_bid_cents, bid_step_cents, current_winner_user_id, status, 
+			order_id, payment_deadline_at, can_relaunch, can_move_to_direct_sale, 
+			direct_sale_price_cents, direct_sale_product_id, admin_note, created_at, updated_at
+		FROM auction_lots
+		WHERE auction_id = $1 AND status NOT IN ('draft', 'cancelled')
+		ORDER BY created_at ASC
+	`
+	rows, err := r.db.Query(ctx, query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var lots []AuctionLot
+	for rows.Next() {
+		var l AuctionLot
+		if err := rows.Scan(
+			&l.ID, &l.AuctionID, &l.Title, &l.Description, &l.ImageURL, &l.StartPriceCents,
+			&l.CurrentBidCents, &l.BidStepCents, &l.CurrentWinnerUserID, &l.Status,
+			&l.OrderID, &l.PaymentDeadlineAt, &l.CanRelaunch, &l.CanMoveToDirectSale,
+			&l.DirectSalePriceCents, &l.DirectSaleProductID, &l.AdminNote, &l.CreatedAt, &l.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		lots = append(lots, l)
+	}
+	return lots, nil
+}
+
 func (r *Repository) GetLotByIDWithDetails(ctx context.Context, id uuid.UUID) (*AuctionLot, error) {
 	lot, err := r.GetLotByID(ctx, id)
 	if err != nil || lot == nil {

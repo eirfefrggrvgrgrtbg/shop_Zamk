@@ -43,6 +43,14 @@ func (h *PublicHandler) GetActiveAuctions(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	for i := range events {
+		lots, _ := h.repo.GetPublicLotsByAuctionID(r.Context(), events[i].ID)
+		if lots == nil {
+			lots = []AuctionLot{} // Ensure JSON sends [] instead of null
+		}
+		events[i].Lots = lots
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(events)
 }
@@ -54,6 +62,14 @@ func (h *PublicHandler) GetHomepageAuctions(w http.ResponseWriter, r *http.Reque
 		h.logger.Error("failed to list homepage auctions", "error", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list homepage auctions")
 		return
+	}
+
+	for i := range events {
+		lots, _ := h.repo.GetPublicLotsByAuctionID(r.Context(), events[i].ID)
+		if lots == nil {
+			lots = []AuctionLot{}
+		}
+		events[i].Lots = lots
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -69,6 +85,14 @@ func (h *PublicHandler) GetNavHighlightAuctions(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	for i := range events {
+		lots, _ := h.repo.GetPublicLotsByAuctionID(r.Context(), events[i].ID)
+		if lots == nil {
+			lots = []AuctionLot{}
+		}
+		events[i].Lots = lots
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(events)
 }
@@ -82,11 +106,14 @@ func (h *PublicHandler) GetAuctionLots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lots, err := h.repo.GetLotsByAuctionID(r.Context(), auctionID)
+	lots, err := h.repo.GetPublicLotsByAuctionID(r.Context(), auctionID)
 	if err != nil {
 		h.logger.Error("failed to list auction lots", "error", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to fetch lots")
 		return
+	}
+	if lots == nil {
+		lots = []AuctionLot{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -109,6 +136,11 @@ func (h *PublicHandler) GetAuctionLot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if lot == nil {
+		h.writeError(w, http.StatusNotFound, "not_found", "Lot not found")
+		return
+	}
+	
+	if lot.Status == LotStatusDraft || lot.Status == LotStatusCancelled {
 		h.writeError(w, http.StatusNotFound, "not_found", "Lot not found")
 		return
 	}
