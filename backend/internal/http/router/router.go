@@ -230,8 +230,10 @@ func New(
 		r.Post("/notifications/{id}/read", notificationsHandler.ReadCustomerNotification)
 		r.Post("/notifications/read-all", notificationsHandler.ReadAllCustomer)
 
-		// Auctions
+		// Auctions (Customer)
 		r.Post("/auction-lots/{id}/bid", auctionsCustomerHandler.PlaceBid)
+		r.Get("/auction-wins", auctionsCustomerHandler.GetAuctionWins)
+		r.Post("/auction-lots/{id}/create-order", auctionsCustomerHandler.CreateOrderForLot)
 	})
 
 	r.With(webhookLimit).Post("/api/payments/tbank/webhook", paymentsHandler.HandleTBankWebhook)

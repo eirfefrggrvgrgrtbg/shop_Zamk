@@ -81,3 +81,52 @@ func (h *CustomerHandler) PlaceBid(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(resp)
 }
+
+// GET /api/customer/auction-wins
+func (h *CustomerHandler) GetAuctionWins(w http.ResponseWriter, r *http.Request) {
+	userIDVal := r.Context().Value("userID")
+	if userIDVal == nil {
+		h.writeError(w, http.StatusForbidden, "forbidden", "Access denied")
+		return
+	}
+	userID := userIDVal.(uuid.UUID)
+
+	lots, err := h.service.GetCustomerWins(r.Context(), userID)
+	if err != nil {
+		h.logger.Error("failed to get customer wins", "error", err)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get wins")
+		return
+	}
+	if lots == nil {
+		lots = []AuctionLot{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(lots)
+}
+
+// POST /api/customer/auction-lots/{id}/create-order
+func (h *CustomerHandler) CreateOrderForLot(w http.ResponseWriter, r *http.Request) {
+	userIDVal := r.Context().Value("userID")
+	if userIDVal == nil {
+		h.writeError(w, http.StatusForbidden, "forbidden", "Access denied")
+		return
+	}
+	userID := userIDVal.(uuid.UUID)
+
+	lotIDStr := chi.URLParam(r, "id")
+	lotID, err := uuid.Parse(lotIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid lot ID")
+		return
+	}
+
+	result, err := h.service.CreateOrderForLot(r.Context(), lotID, userID)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "order_error", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}

@@ -145,3 +145,15 @@ type AuctionSuspiciousEvent struct {
 	Metadata  json.RawMessage `db:"metadata" json:"metadata"`
 	CreatedAt time.Time       `db:"created_at" json:"createdAt"`
 }
+
+type AuctionOrderLink struct {
+	ID           uuid.UUID `db:"id" json:"id"`
+	AuctionID    uuid.UUID `db:"auction_id" json:"auctionId"`
+	LotID        uuid.UUID `db:"lot_id" json:"lotId"`
+	OrderID      uuid.UUID `db:"order_id" json:"orderId"`
+	WinnerUserID uuid.UUID `db:"winner_user_id" json:"winnerUserId"`
+	AmountCents  int64     `db:"amount_cents" json:"amountCents"`
+	Status       string    `db:"status" json:"status"`
+	CreatedAt    time.Time `db:"created_at" json:"createdAt"`
+	UpdatedAt    time.Time `db:"updated_at" json:"updatedAt"`
+}

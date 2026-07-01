@@ -112,3 +112,12 @@ export interface PlaceBidRequest {
 export const placeBid = async (lotId: string, data: PlaceBidRequest): Promise<any> => {
   return request<any>('POST', `/customer/auction-lots/${lotId}/bid`, { body: data });
 };
+
+export const getAuctionWins = async (): Promise<any[]> => {
+  return request<any[]>('GET', '/customer/auction-wins');
+};
+
+export const createOrderForLot = async (lotId: string): Promise<{ OrderID: string; AmountCents: number }> => {
+  return request<{ OrderID: string; AmountCents: number }>('POST', `/customer/auction-lots/${lotId}/create-order`);
+};
+

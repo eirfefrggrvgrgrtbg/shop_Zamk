@@ -156,71 +156,125 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 				return err
 			}
 
-			// 2. Update Order
-			if err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid"); err != nil {
-				return err
-			}
-			if affected, err := s.ordersRepo.MarkOrderFulfillmentsStatusTx(ctx, tx, order.ID, "awaiting_payment", "paid"); err != nil {
-				return err
-			} else if affected == 0 {
-				return errors.New("cannot sync payment: no awaiting_payment fulfillments found for order")
-			}
-
-			query := `SELECT id, seller_id FROM order_fulfillments WHERE order_id = $1`
-			rows, err := tx.Query(ctx, query, order.ID)
+			// Check if it's an auction order
+			var isAuction bool
+			err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM auction_order_links WHERE order_id = $1)`, order.ID).Scan(&isAuction)
 			if err != nil {
 				return err
 			}
-			
-			var fulfillments []struct {
-				ID       uuid.UUID
-				SellerID uuid.UUID
-			}
-			for rows.Next() {
-				var id, sellerID uuid.UUID
-				if err := rows.Scan(&id, &sellerID); err != nil {
-					rows.Close()
+
+			if isAuction {
+				if err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid"); err != nil {
 					return err
 				}
-				fulfillments = append(fulfillments, struct{ID, SellerID uuid.UUID}{id, sellerID})
-			}
-			rows.Close()
-
-			var notifs []notifications.Notification
-			for _, f := range fulfillments {
-				notifs = append(notifs, notifications.Notification{
-					RecipientSellerID: &f.SellerID,
-					RecipientKind:     notifications.RecipientKindSeller,
-					Type:              notifications.TypeSellerFulfillmentPaid,
-					Title:             "Новый оплаченный заказ",
-					Body:              "Поступила новая сборка, готовая к обработке.",
-					EntityType:        "fulfillment",
-					EntityID:          f.ID,
-				})
-			}
-			if err := s.notifSvc.CreateManyNotificationsTx(ctx, tx, notifs); err != nil {
-				return err
-			}
-
-			history := &orders.OrderStatusHistory{
-				ID:         uuid.New(),
-				OrderID:    order.ID,
-				FromStatus: &order.Status,
-				ToStatus:   "paid",
-			}
-			if err := s.ordersRepo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
-				return err
-			}
-
-			// 3. Convert Reservations to Sale
-			resIDs, err := s.ordersRepo.GetOrderReservations(ctx, order.ID)
-			if err != nil {
-				return err
-			}
-
-			for _, rid := range resIDs {
-				if err := s.inventorySvc.ConvertReservationToSaleTx(ctx, tx, rid); err != nil {
+				_, err = tx.Exec(ctx, `UPDATE auction_order_links SET status = 'paid', updated_at = now() WHERE order_id = $1`, order.ID)
+				if err != nil {
 					return err
+				}
+				_, err = tx.Exec(ctx, `
+					UPDATE auction_lots SET status = 'paid', updated_at = now() 
+					WHERE id = (SELECT lot_id FROM auction_order_links WHERE order_id = $1)
+				`, order.ID)
+				if err != nil {
+					return err
+				}
+
+				var winnerID, lotID uuid.UUID
+				err = tx.QueryRow(ctx, `SELECT winner_user_id, lot_id FROM auction_order_links WHERE order_id = $1`, order.ID).Scan(&winnerID, &lotID)
+				if err == nil {
+					metaNotif := map[string]interface{}{"lotId": lotID.String()}
+					paidNotif := notifications.Notification{
+						ID:              uuid.New(),
+						RecipientUserID: &winnerID,
+						RecipientKind:   notifications.RecipientKindCustomer,
+						Type:            "auction_paid",
+						Title:           "Оплата лота получена",
+						Body:            "Оплата успешно зачислена. Ожидайте доставки или получения.",
+						EntityType:      "auction_lot",
+						EntityID:        lotID,
+						Metadata:        metaNotif,
+						CreatedAt:       now,
+					}
+					_ = s.notifSvc.CreateNotificationTx(ctx, tx, paidNotif)
+				}
+				
+				history := &orders.OrderStatusHistory{
+					ID:         uuid.New(),
+					OrderID:    order.ID,
+					FromStatus: &order.Status,
+					ToStatus:   "paid",
+				}
+				if err := s.ordersRepo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
+					return err
+				}
+
+			} else {
+				// 2. Normal Checkout Update Order
+				if err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid"); err != nil {
+					return err
+				}
+				if affected, err := s.ordersRepo.MarkOrderFulfillmentsStatusTx(ctx, tx, order.ID, "awaiting_payment", "paid"); err != nil {
+					return err
+				} else if affected == 0 {
+					return errors.New("cannot sync payment: no awaiting_payment fulfillments found for order")
+				}
+
+				query := `SELECT id, seller_id FROM order_fulfillments WHERE order_id = $1`
+				rows, err := tx.Query(ctx, query, order.ID)
+				if err != nil {
+					return err
+				}
+				
+				var fulfillments []struct {
+					ID       uuid.UUID
+					SellerID uuid.UUID
+				}
+				for rows.Next() {
+					var id, sellerID uuid.UUID
+					if err := rows.Scan(&id, &sellerID); err != nil {
+						rows.Close()
+						return err
+					}
+					fulfillments = append(fulfillments, struct{ID, SellerID uuid.UUID}{id, sellerID})
+				}
+				rows.Close()
+
+				var notifs []notifications.Notification
+				for _, f := range fulfillments {
+					notifs = append(notifs, notifications.Notification{
+						RecipientSellerID: &f.SellerID,
+						RecipientKind:     notifications.RecipientKindSeller,
+						Type:              notifications.TypeSellerFulfillmentPaid,
+						Title:             "Новый оплаченный заказ",
+						Body:              "Поступила новая сборка, готовая к обработке.",
+						EntityType:        "fulfillment",
+						EntityID:          f.ID,
+					})
+				}
+				if err := s.notifSvc.CreateManyNotificationsTx(ctx, tx, notifs); err != nil {
+					return err
+				}
+
+				history := &orders.OrderStatusHistory{
+					ID:         uuid.New(),
+					OrderID:    order.ID,
+					FromStatus: &order.Status,
+					ToStatus:   "paid",
+				}
+				if err := s.ordersRepo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
+					return err
+				}
+
+				// 3. Convert Reservations to Sale
+				resIDs, err := s.ordersRepo.GetOrderReservations(ctx, order.ID)
+				if err != nil {
+					return err
+				}
+
+				for _, rid := range resIDs {
+					if err := s.inventorySvc.ConvertReservationToSaleTx(ctx, tx, rid); err != nil {
+						return err
+					}
 				}
 			}
 

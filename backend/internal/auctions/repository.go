@@ -220,13 +220,13 @@ func (r *Repository) ExecTx(ctx context.Context, fn func(pgx.Tx) error) error {
 func (r *Repository) GetLotForUpdate(ctx context.Context, tx pgx.Tx, lotID uuid.UUID) (*AuctionLot, error) {
 	query := `
 		SELECT id, auction_id, start_price_cents, current_bid_cents, bid_step_cents, 
-			current_winner_user_id, status 
+			current_winner_user_id, status, payment_deadline_at, order_id
 		FROM auction_lots 
 		WHERE id = $1 FOR UPDATE
 	`
 	row := tx.QueryRow(ctx, query, lotID)
 	var l AuctionLot
-	err := row.Scan(&l.ID, &l.AuctionID, &l.StartPriceCents, &l.CurrentBidCents, &l.BidStepCents, &l.CurrentWinnerUserID, &l.Status)
+	err := row.Scan(&l.ID, &l.AuctionID, &l.StartPriceCents, &l.CurrentBidCents, &l.BidStepCents, &l.CurrentWinnerUserID, &l.Status, &l.PaymentDeadlineAt, &l.OrderID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -545,4 +545,120 @@ func (r *Repository) GetBidsByLotID(ctx context.Context, lotID uuid.UUID) ([]Auc
 		bids = append(bids, b)
 	}
 	return bids, nil
+}
+
+func (r *Repository) GetAuctionWinsByUserID(ctx context.Context, userID uuid.UUID) ([]AuctionLot, error) {
+	query := `
+		SELECT id, auction_id, title, description, image_url, start_price_cents, 
+			current_bid_cents, bid_step_cents, current_winner_user_id, status, 
+			order_id, payment_deadline_at, can_relaunch, can_move_to_direct_sale, 
+			direct_sale_price_cents, direct_sale_product_id, admin_note, created_at, updated_at
+		FROM auction_lots
+		WHERE current_winner_user_id = $1 AND status IN ('won_pending_payment', 'paid')
+		ORDER BY updated_at DESC
+	`
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var lots []AuctionLot
+	for rows.Next() {
+		var l AuctionLot
+		if err := rows.Scan(
+			&l.ID, &l.AuctionID, &l.Title, &l.Description, &l.ImageURL, &l.StartPriceCents,
+			&l.CurrentBidCents, &l.BidStepCents, &l.CurrentWinnerUserID, &l.Status,
+			&l.OrderID, &l.PaymentDeadlineAt, &l.CanRelaunch, &l.CanMoveToDirectSale,
+			&l.DirectSalePriceCents, &l.DirectSaleProductID, &l.AdminNote, &l.CreatedAt, &l.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		lots = append(lots, l)
+	}
+	return lots, nil
+}
+
+func (r *Repository) CreateAuctionOrderTx(ctx context.Context, tx pgx.Tx, orderID, userID, auctionID, lotID uuid.UUID, amountCents int64) error {
+	var name, email, phone string
+	err := tx.QueryRow(ctx, `SELECT COALESCE(first_name || ' ' || last_name, ''), email, COALESCE(phone, '') FROM users WHERE id = $1`, userID).Scan(&name, &email, &phone)
+	if err != nil {
+		return err
+	}
+	if name == " " || name == "" {
+		name = "Auction Winner"
+	}
+	if phone == "" {
+		phone = "-"
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO orders (id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, created_at, updated_at)
+		VALUES ($1, $2, 'awaiting_payment', $3, 'RUB', $4, $5, $6, '-', now(), now())
+	`, orderID, userID, amountCents, name, phone, email)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO order_status_history (id, order_id, to_status, actor_user_id, created_at)
+		VALUES ($1, $2, 'awaiting_payment', $3, now())
+	`, uuid.New(), orderID, userID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO auction_order_links (id, auction_id, lot_id, order_id, winner_user_id, amount_cents, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'awaiting_payment', now(), now())
+	`, uuid.New(), auctionID, lotID, orderID, userID, amountCents)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE auction_lots SET order_id = $1, updated_at = now() WHERE id = $2
+	`, orderID, lotID)
+	
+	return err
+}
+
+func (r *Repository) GetAuctionOrderLinkByOrderIDTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID) (*AuctionOrderLink, error) {
+	var link AuctionOrderLink
+	err := tx.QueryRow(ctx, `SELECT id, auction_id, lot_id, order_id, winner_user_id, amount_cents, status, created_at, updated_at FROM auction_order_links WHERE order_id = $1 LIMIT 1`, orderID).
+		Scan(&link.ID, &link.AuctionID, &link.LotID, &link.OrderID, &link.WinnerUserID, &link.AmountCents, &link.Status, &link.CreatedAt, &link.UpdatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &link, nil
+}
+
+func (r *Repository) MarkAuctionOrderPaidTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID) error {
+	_, err := tx.Exec(ctx, `UPDATE orders SET status = 'paid', updated_at = now() WHERE id = $1`, orderID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO order_status_history (id, order_id, from_status, to_status, actor_user_id, created_at)
+		VALUES ($1, $2, 'awaiting_payment', 'paid', NULL, now())
+	`, uuid.New(), orderID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `UPDATE auction_order_links SET status = 'paid', updated_at = now() WHERE order_id = $1`, orderID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE auction_lots SET status = 'paid', updated_at = now() 
+		WHERE id = (SELECT lot_id FROM auction_order_links WHERE order_id = $1)
+	`, orderID)
+	
+	return err
 }

@@ -32,6 +32,7 @@ import { Contacts } from './pages/Contacts';
 import { Privacy } from './pages/Privacy';
 import { AuctionPage } from './pages/Auction';
 import { AuctionLotDetail } from './pages/AuctionLotDetail';
+import { AuctionWins } from './pages/AuctionWins';
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
@@ -58,6 +59,7 @@ function App() {
                     <Route path="/product/:id" element={<ProductDetail />} />
                     <Route path="/auction" element={<AuctionPage />} />
                     <Route path="/auction/lots/:id" element={<AuctionLotDetail />} />
+                    <Route path="/auction/wins" element={<AuctionWins />} />
                     <Route path="/seller/:slugOrId" element={<SellerDetail />} />
                     <Route path="/brand/:id" element={<BrandDetail />} />
                     <Route path="/cart" element={<Cart />} />

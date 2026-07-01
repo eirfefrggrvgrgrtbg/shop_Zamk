@@ -12,8 +12,9 @@
   - AUC-3B verified public UI runtime behavior, public API usage, polling, and navigation.
 - [x] **AUC-4**: WebSocket/SSE real-time bidding updates.
 - [x] **AUC-4B**: Real-time bidding safety hardening and concurrency verification.
-- [ ] **AUC-5**: Winner order/payment integration. - Current Phase
-- [ ] **AUC-6**: Full direct-sale catalog integration.
+- [x] **AUC-5**: Winner order/payment integration.
+- [x] **AUC-5B**: Verified and hardened order/payment runtime flow.
+- [ ] **AUC-6**: Full direct-sale catalog integration. - Current Phase
 - [ ] **AUC-7**: Runtime E2E stabilization.
 
 ## 2. ADMIN — Complete Admin Panel

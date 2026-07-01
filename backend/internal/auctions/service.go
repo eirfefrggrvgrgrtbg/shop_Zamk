@@ -513,3 +513,78 @@ func (s *Service) MoveLotToDirectSale(ctx context.Context, id uuid.UUID, adminID
 		return s.repo.InsertLogTx(ctx, tx, logEntry)
 	})
 }
+
+func (s *Service) GetCustomerWins(ctx context.Context, userID uuid.UUID) ([]AuctionLot, error) {
+	return s.repo.GetAuctionWinsByUserID(ctx, userID)
+}
+
+type CreateAuctionOrderResult struct {
+	OrderID     uuid.UUID
+	AmountCents int64
+}
+
+func (s *Service) CreateOrderForLot(ctx context.Context, lotID, userID uuid.UUID) (*CreateAuctionOrderResult, error) {
+	var result CreateAuctionOrderResult
+
+	err := s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
+		lot, err := s.repo.GetLotForUpdate(ctx, tx, lotID)
+		if err != nil {
+			return err
+		}
+		if lot == nil {
+			return errors.New("lot not found")
+		}
+
+		if lot.CurrentWinnerUserID == nil || *lot.CurrentWinnerUserID != userID {
+			return errors.New("not the winner of this lot")
+		}
+
+		if lot.Status != LotStatusWonPendingPayment {
+			if lot.Status == LotStatusPaid {
+				if lot.OrderID == nil {
+					return errors.New("lot paid but order id missing")
+				}
+				link, err := s.repo.GetAuctionOrderLinkByOrderIDTx(ctx, tx, *lot.OrderID)
+				if err != nil {
+					return err
+				}
+				result.OrderID = *lot.OrderID
+				result.AmountCents = link.AmountCents
+				return nil
+			}
+			return errors.New("lot is not pending payment")
+		}
+
+		if lot.PaymentDeadlineAt != nil && time.Now().After(*lot.PaymentDeadlineAt) {
+			return errors.New("payment deadline expired")
+		}
+
+		if lot.OrderID != nil {
+			link, err := s.repo.GetAuctionOrderLinkByOrderIDTx(ctx, tx, *lot.OrderID)
+			if err != nil {
+				return err
+			}
+			if link != nil {
+				result.OrderID = *lot.OrderID
+				result.AmountCents = link.AmountCents
+				return nil
+			}
+		}
+
+		orderID := uuid.New()
+		amount := *lot.CurrentBidCents
+
+		if err := s.repo.CreateAuctionOrderTx(ctx, tx, orderID, userID, lot.AuctionID, lotID, amount); err != nil {
+			return err
+		}
+
+		result.OrderID = orderID
+		result.AmountCents = amount
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
