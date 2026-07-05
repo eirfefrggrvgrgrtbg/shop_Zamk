@@ -348,3 +348,7 @@ export const moveLotToDirectSale = async (lotId: string): Promise<void> => {
 export const getDashboardSummary = async (): Promise<AdminDashboardSummary> => {
   return request<AdminDashboardSummary>('GET', '/admin/dashboard/summary');
 };
+
+export const resetAdminSellerOwnerPassword = async (id: string): Promise<{ temporaryPassword: string }> => {
+  return request<{ temporaryPassword: string }>('POST', `/admin/sellers/${id}/reset-owner-password`);
+};

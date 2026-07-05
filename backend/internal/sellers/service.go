@@ -117,16 +117,15 @@ func (s *Service) CreateSellerByAdmin(ctx context.Context, req *CreateSellerRequ
 	}, nil
 }
 
-func (s *Service) ListSellers(ctx context.Context, limit, offset int) (*ListSellersResponse, error) {
-	items, err := s.repo.ListSellers(ctx, limit, offset)
+func (s *Service) ListSellers(ctx context.Context, filter SellersFilter) (*ListSellersResponse, error) {
+	items, total, err := s.repo.ListSellers(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	// For MVP, just returning items. Pagination total count needs a count query which we skip for MVP.
 	return &ListSellersResponse{
 		Items:      items,
-		TotalCount: len(items), 
+		TotalCount: total, 
 	}, nil
 }
 
@@ -256,7 +255,12 @@ func (s *Service) UpdateSellerStatusWithHistory(ctx context.Context, sellerID uu
 		return err
 	}
 
+	if seller.IsPlatform && (newStatus == string(StatusBlocked) || newStatus == string(StatusArchived)) {
+		return errors.New("Системного продавца нельзя заблокировать или удалить")
+	}
+
 	oldStatus := string(seller.Status)
+
 	if err := s.repo.UpdateSellerStatus(ctx, sellerID, SellerStatus(newStatus)); err != nil {
 		return err
 	}
@@ -372,4 +376,35 @@ func (s *Service) ResolveViolation(ctx context.Context, sellerID uuid.UUID, viol
 func (s *Service) CancelViolation(ctx context.Context, sellerID uuid.UUID, violationID uuid.UUID, actorUserID uuid.UUID) error {
 	actor := actorUserID
 	return s.repo.UpdateViolationStatus(ctx, violationID, "cancelled", &actor, nil)
+}
+
+// ResetOwnerPassword generates a new temporary password for the seller owner
+func (s *Service) ResetOwnerPassword(ctx context.Context, sellerID uuid.UUID) (string, error) {
+	seller, err := s.repo.GetSellerByID(ctx, sellerID)
+	if err != nil {
+		return "", err
+	}
+
+	d, err := s.repo.GetSellerDetailByID(ctx, seller.ID)
+	if err != nil {
+		return "", err
+	}
+
+	tempPassword := uuid.New().String()[:12]
+	hashedPassword, err := auth.HashPassword(tempPassword)
+	if err != nil {
+		return "", err
+	}
+
+	user, err := s.userRepo.GetUserByID(ctx, d.OwnerID)
+	if err != nil {
+		return "", err
+	}
+
+	err = s.userRepo.UpdatePasswordAndMustChange(ctx, user.ID, hashedPassword, true)
+	if err != nil {
+		return "", err
+	}
+
+	return tempPassword, nil
 }

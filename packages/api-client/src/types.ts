@@ -346,6 +346,7 @@ export interface AdminSeller {
   brandName: string;
   slug: string;
   status: string;
+  isPlatform?: boolean;
 }
 
 export interface AdminProductVariant {
@@ -727,6 +728,7 @@ export interface SellerDetail {
   contactEmail?: string;
   contactPhone?: string;
   status: string;
+  isPlatform?: boolean;
   createdAt: string;
   updatedAt: string;
   owner: {

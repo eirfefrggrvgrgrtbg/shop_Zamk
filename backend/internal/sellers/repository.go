@@ -128,16 +128,42 @@ func (r *Repository) UpdateSellerStatus(ctx context.Context, id uuid.UUID, statu
 	return nil
 }
 
-func (r *Repository) ListSellers(ctx context.Context, limit, offset int) ([]Seller, error) {
-	query := `
-		SELECT id, brand_name, slug, description, contact_email, contact_phone, status, logo_url, logo_object_key, created_at, updated_at
+func (r *Repository) ListSellers(ctx context.Context, filter SellersFilter) ([]Seller, int, error) {
+	baseQuery := `
 		FROM sellers
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
+		WHERE 1=1
 	`
-	rows, err := r.db.Query(ctx, query, limit, offset)
+	var args []interface{}
+	argID := 1
+
+	if filter.Status != "" {
+		baseQuery += fmt.Sprintf(" AND status = $%d", argID)
+		args = append(args, filter.Status)
+		argID++
+	}
+
+	if filter.Query != "" {
+		baseQuery += fmt.Sprintf(" AND (brand_name ILIKE $%d OR contact_email ILIKE $%d OR slug ILIKE $%d)", argID, argID, argID)
+		args = append(args, "%"+filter.Query+"%")
+		argID++
+	}
+
+	// Count
+	var total int
+	err := r.db.QueryRow(ctx, "SELECT COUNT(*) "+baseQuery, args...).Scan(&total)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list sellers: %w", err)
+		return nil, 0, fmt.Errorf("failed to count sellers: %w", err)
+	}
+
+	query := `
+		SELECT id, brand_name, slug, description, contact_email, contact_phone, status, is_platform, logo_url, logo_object_key, created_at, updated_at
+	` + baseQuery + fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", argID, argID+1)
+
+	args = append(args, filter.Limit, filter.Offset)
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list sellers: %w", err)
 	}
 	defer rows.Close()
 
@@ -145,13 +171,13 @@ func (r *Repository) ListSellers(ctx context.Context, limit, offset int) ([]Sell
 	for rows.Next() {
 		var s Seller
 		if err := rows.Scan(
-			&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.CreatedAt, &s.UpdatedAt,
+			&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.IsPlatform, &s.LogoURL, &s.LogoObjectKey, &s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
-			return nil, fmt.Errorf("failed to scan seller: %w", err)
+			return nil, 0, fmt.Errorf("failed to scan seller: %w", err)
 		}
 		items = append(items, s)
 	}
-	return items, rows.Err()
+	return items, total, rows.Err()
 }
 
 func (r *Repository) UpdateSellerProfile(ctx context.Context, sellerID uuid.UUID, req *UpdateSellerProfileRequest) error {

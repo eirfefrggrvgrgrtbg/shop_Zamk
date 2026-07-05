@@ -67,3 +67,10 @@ type SellerDetail struct {
 	ViolationsActive        int
 	ActivePenaltyViolations int
 }
+
+type SellersFilter struct {
+	Query  string
+	Status string
+	Limit  int
+	Offset int
+}

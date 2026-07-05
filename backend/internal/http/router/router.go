@@ -145,6 +145,7 @@ func New(
 		r.With(perm("sellers.read")).Get("/", sellersHandler.ListSellers)
 		r.With(perm("sellers.read")).Get("/{id}", sellersHandler.GetAdminSellerDetail)
 		r.With(perm("sellers.update_status")).Patch("/{id}/status", sellersHandler.UpdateSellerStatus)
+		r.With(perm("sellers.create_access")).Post("/{id}/reset-owner-password", sellersHandler.ResetOwnerPassword)
 		r.With(perm("sellers.verify")).Post("/{id}/verify", sellersHandler.VerifySeller)
 		r.With(perm("sellers.read")).Get("/{id}/status-history", sellersHandler.GetSellerStatusHistory)
 		r.With(perm("sellers.read")).Get("/{id}/warnings", sellersHandler.ListSellerWarnings)

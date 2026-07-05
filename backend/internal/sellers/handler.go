@@ -76,7 +76,13 @@ func (h *Handler) CreateSellerByAdmin(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListSellers(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	res, err := h.service.ListSellers(r.Context(), page.Limit, page.Offset)
+	filter := SellersFilter{
+		Limit:  page.Limit,
+		Offset: page.Offset,
+		Query:  r.URL.Query().Get("q"),
+		Status: r.URL.Query().Get("status"),
+	}
+	res, err := h.service.ListSellers(r.Context(), filter)
 	if err != nil {
 		h.respondError(w, http.StatusInternalServerError, "failed to list sellers")
 		return
@@ -195,6 +201,23 @@ func (h *Handler) UpdateSellerProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.respondJSON(w, http.StatusOK, res)
+}
+
+func (h *Handler) ResetOwnerPassword(w http.ResponseWriter, r *http.Request) {
+	sellerIDStr := chi.URLParam(r, "id")
+	sellerID, err := uuid.Parse(sellerIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid seller ID")
+		return
+	}
+
+	tempPassword, err := h.service.ResetOwnerPassword(r.Context(), sellerID)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, "failed to reset password")
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, map[string]string{"temporaryPassword": tempPassword})
 }
 
 func (h *Handler) respondJSON(w http.ResponseWriter, status int, data any) {

@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   getAdminSellers, createAdminSeller,
-  updateAdminSellerStatus, getAdminSellerDetail,
+  updateAdminSellerStatus, getAdminSellerDetail, resetAdminSellerOwnerPassword,
   verifyAdminSeller, getSellerStatusHistory,
   listSellerWarnings, createSellerWarning, resolveSellerWarning, cancelSellerWarning,
   listSellerViolations, createSellerViolation, resolveSellerViolation, cancelSellerViolation,
 } from '@zamk/api-client/src/admin';
 import type { AdminSeller, SellerDetail, SellerStatusHistoryItem, SellerWarning, SellerViolation } from '@zamk/api-client/src/types';
-import { AlertCircle, Plus, CheckCircle2, Store, X, ChevronRight, AlertTriangle } from 'lucide-react';
+import { AlertCircle, Plus, CheckCircle2, Store, X, ChevronRight, AlertTriangle, Search } from 'lucide-react';
 import { PermissionGuard } from '../components/PermissionGuard';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
+import { HelpTooltip } from '../components/HelpTooltip';
 
 // --- Constants ---
 
@@ -179,6 +180,30 @@ function ProfileTab({ detail }: { detail: SellerDetail }) {
       <Field label="�?писание" value={detail.description} />
       <Field label="�?он�?ак�?ная по�?�?а" value={detail.contactEmail} />
       <Field label="Теле�?он" value={detail.contactPhone} />
+
+      <PermissionGuard permission="sellers.manage">
+        <div className="border-t pt-4 mt-4">
+          <h4 className="text-sm font-medium text-gray-900 mb-2">Сброс пароля владельца</h4>
+          <p className="text-sm text-gray-500 mb-3">Сгенерировать новый временный пароль. <HelpTooltip content="Пароль для первого входа. После входа пользователь должен его сменить." /></p>
+          <button
+            type="button"
+            onClick={async () => {
+              if (confirm('Вы уверены, что хотите сбросить пароль владельца?')) {
+                try {
+                  const res = await resetAdminSellerOwnerPassword(detail.id);
+                  alert('Новый пароль: ' + res.temporaryPassword);
+                } catch (err: any) {
+                  alert('Ошибка: ' + err.message);
+                }
+              }
+            }}
+            className="px-3 py-1.5 border border-gray-300 rounded text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+          >
+            Сбросить пароль
+          </button>
+        </div>
+      </PermissionGuard>
+            
     </div>
   );
 }
@@ -807,6 +832,9 @@ function SellerDetailDrawer({ sellerId, onClose, onRefreshList }: {
 // --- Main AdminSellers Page ---
 export function AdminSellers() {
   const [sellers, setSellers] = useState<AdminSeller[]>([]);
+  const [q, setQ] = useState('');
+  const [debouncedQ, setDebouncedQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
@@ -835,7 +863,12 @@ export function AdminSellers() {
     }
   }, []);
 
-  useEffect(() => { fetchSellers(); }, [fetchSellers]);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQ(q), 300);
+    return () => clearTimeout(timer);
+  }, [q]);
+
+  useEffect(() => { fetchSellers(); }, [fetchSellers, debouncedQ, statusFilter]);
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -872,6 +905,35 @@ export function AdminSellers() {
         </PermissionGuard>
       </div>
 
+      
+      <div className="bg-white p-4 shadow sm:rounded-lg mb-6 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
+        <div className="relative flex-1">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            placeholder="Поиск по названию или email..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+        <div className="w-full sm:w-48">
+          <select
+            className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="">Все статусы</option>
+            <option value="pending">Ожидает активации</option>
+            <option value="active">Активен</option>
+            <option value="blocked">Заблокирован</option>
+            <option value="archived">В архиве</option>
+          </select>
+        </div>
+      </div>
+
       {error && (
         <div className="p-4 bg-red-50 text-red-700 rounded-md flex items-center">
           <AlertCircle className="h-5 w-5 mr-2" />{error}
@@ -894,7 +956,7 @@ export function AdminSellers() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название / Слаг</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название / Слаг <HelpTooltip content="Короткий адрес продавца на сайте." /></th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">С�?а�?�?с</th>
                 <th className="relative px-6 py-3"><span className="sr-only">�?ейс�?вия</span></th>
               </tr>
@@ -903,7 +965,7 @@ export function AdminSellers() {
               {sellers.map((seller) => (
                 <tr key={seller.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{seller.brandName}</div>
+                    <div className="text-sm font-medium text-gray-900">{seller.brandName} {seller.isPlatform && <Badge label="Системный продавец" className="bg-purple-100 text-purple-800 ml-2" />}</div>
                     <div className="text-xs text-gray-500">/{seller.slug}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
