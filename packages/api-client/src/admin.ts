@@ -1,10 +1,23 @@
 import { request } from './client';
-import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary } from './types';
+import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary } from './types';
 
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCount: number }> => {
   return request<{ items: AdminSeller[]; totalCount: number }>('GET', '/admin/sellers');
 };
+
+export const getAdminUsers = async (params?: { q?: string; role?: string; status?: string; limit?: number; offset?: number }): Promise<PaginatedAdminUsersResponse> => {
+  const query = new URLSearchParams();
+  if (params?.q) query.append('q', params.q);
+  if (params?.role) query.append('role', params.role);
+  if (params?.status) query.append('status', params.status);
+  if (params?.limit) query.append('limit', params.limit.toString());
+  if (params?.offset) query.append('offset', params.offset.toString());
+  
+  const qStr = query.toString() ? `?${query.toString()}` : '';
+  return request<PaginatedAdminUsersResponse>('GET', `/admin/users${qStr}`);
+};
+
 
 // Backend never returns plaintext temporaryPassword — only a boolean flag.
 // Frontend must show the locally-typed password to the admin after creation.

@@ -329,7 +329,8 @@ func New(
 		r.Post("/notifications/{id}/read", notificationsHandler.ReadAdminNotification)
 		r.Post("/notifications/read-all", notificationsHandler.ReadAllAdmin)
 
-		// Staff RBAC endpoints
+		// Users and Staff RBAC endpoints
+		r.With(perm("users.read")).Get("/users", usersHandler.ListAdminUsers)
 		r.With(perm("roles.read")).Get("/staff/roles", staffHandler.GetStaffRoles)
 		r.With(perm("audit.read")).Get("/audit-logs", staffHandler.GetAuditLogs)
 		r.With(perm("staff.read")).Get("/staff/members", staffHandler.ListStaffMembers)

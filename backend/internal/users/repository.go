@@ -139,3 +139,71 @@ func (r *Repository) GetStaffUserIDs(ctx context.Context) ([]uuid.UUID, error) {
 	}
 	return ids, rows.Err()
 }
+
+type UsersFilter struct {
+	Query  string
+	Role   string
+	Status string
+	Limit  int
+	Offset int
+}
+
+func (r *Repository) ListUsers(ctx context.Context, f UsersFilter) ([]User, int, error) {
+	baseQuery := `
+		FROM users
+		WHERE 1=1
+	`
+	args := []any{}
+	argID := 1
+
+	if f.Query != "" {
+		baseQuery += fmt.Sprintf(" AND (email ILIKE $%d OR name ILIKE $%d)", argID, argID)
+		args = append(args, "%"+f.Query+"%")
+		argID++
+	}
+	if f.Role != "" {
+		baseQuery += fmt.Sprintf(" AND role = $%d", argID)
+		args = append(args, f.Role)
+		argID++
+	}
+	if f.Status != "" {
+		baseQuery += fmt.Sprintf(" AND status = $%d", argID)
+		args = append(args, f.Status)
+		argID++
+	}
+
+	countQuery := `SELECT COUNT(*) ` + baseQuery
+	var total int
+	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count users: %w", err)
+	}
+
+	dataQuery := `
+		SELECT id, name, first_name, last_name, middle_name, email, phone, role, status, must_change_password, created_at, updated_at
+	` + baseQuery + fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, argID, argID+1)
+	
+	args = append(args, f.Limit, f.Offset)
+
+	rows, err := r.db.Query(ctx, dataQuery, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(
+			&u.ID, &u.Name, &u.FirstName, &u.LastName, &u.MiddleName, &u.Email, &u.Phone, &u.Role, &u.Status, &u.MustChangePassword, &u.CreatedAt, &u.UpdatedAt,
+		); err != nil {
+			return nil, 0, err
+		}
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	return users, total, nil
+}

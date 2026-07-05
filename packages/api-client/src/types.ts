@@ -7,6 +7,25 @@ export interface UserDTO {
   mustChangePassword?: boolean;
 }
 
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  firstName?: string;
+  lastName?: string;
+  role: string;
+  status: string;
+  mustChangePassword?: boolean;
+  createdAt: string;
+}
+
+export interface PaginatedAdminUsersResponse {
+  items: AdminUser[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 // ---------------------------------------------------------
 // PUBLIC DTOs
 // ---------------------------------------------------------
