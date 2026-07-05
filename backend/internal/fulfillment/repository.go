@@ -106,3 +106,13 @@ func (r *Repository) ListShipments(ctx context.Context, limit, offset int) ([]Sh
 	}
 	return list, nil
 }
+
+func (r *Repository) UpdateOrderFulfillmentsStatus(ctx context.Context, orderID uuid.UUID, status string) error {
+	query := `
+		UPDATE order_fulfillments
+		SET status = $1, updated_at = now()
+		WHERE order_id = $2
+	`
+	_, err := r.db.Exec(ctx, query, status, orderID)
+	return err
+}

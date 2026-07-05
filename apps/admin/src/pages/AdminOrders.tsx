@@ -14,10 +14,12 @@ import type { AdminOrderView } from '../api/adminOrders';
 import type { AdminFulfillment } from '@zamk/api-client/src/types';
 import {
   createAdminShipment,
+  updateAdminOrderFulfillmentStatus,
   createAdminFulfillmentShipment,
   getAdminShipmentErrorMessage,
 } from '../api/adminShipments';
 import { PermissionGuard } from '../components/PermissionGuard';
+import { HelpTooltip } from '../components/HelpTooltip';
 
 export function AdminOrders() {
   const navigate = useNavigate();
@@ -31,6 +33,8 @@ export function AdminOrders() {
   const [error, setError] = useState<string | null>(null);
   const [fulfillmentsError, setFulfillmentsError] = useState<string | null>(null);
   const [statusDraft, setStatusDraft] = useState('');
+  const [fulfillmentStatusDraft, setFulfillmentStatusDraft] = useState('');
+  const [fulfillmentStatusReason, setFulfillmentStatusReason] = useState('');
   const [statusComment, setStatusComment] = useState('');
   const [shipmentCarrier, setShipmentCarrier] = useState('');
   const [shipmentTrackingNumber, setShipmentTrackingNumber] = useState('');
@@ -154,6 +158,27 @@ export function AdminOrders() {
       await openOrderPanel(selectedOrder.id);
     } catch (err: unknown) {
       setError(getAdminOrderErrorMessage(err, 'Не удалось обновить статус заказа.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  
+  const handleFulfillmentStatusUpdate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedOrder || !fulfillmentStatusDraft) return;
+
+    try {
+      setIsSubmitting(true);
+      setError(null);
+      await updateAdminOrderFulfillmentStatus(selectedOrder.id, {
+        status: fulfillmentStatusDraft,
+        reason: fulfillmentStatusReason || undefined,
+      });
+      await fetchOrders();
+      await openOrderPanel(selectedOrder.id);
+    } catch (err: unknown) {
+      setError(getAdminOrderErrorMessage(err, 'Не удалось обновить статус сборки.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -620,6 +645,46 @@ export function AdminOrders() {
                     </PermissionGuard>
                   )}
 
+                  
+                  
+                  {/* Fulfillment Status update */}
+                  <PermissionGuard
+                    permission="orders.update_status"
+                    fallback={<p className="text-xs text-gray-400 border-t pt-4">У вас нет прав для изменения статуса сборки.</p>}
+                  >
+                    <form onSubmit={handleFulfillmentStatusUpdate} className="space-y-3 border-t pt-4">
+                      <p className="text-xs font-medium text-gray-500 uppercase flex items-center gap-1">
+                        Изменить статус сборки
+                        <HelpTooltip content="Показывает, на каком этапе находится подготовка заказа." />
+                      </p>
+                      <select
+                        required
+                        value={fulfillmentStatusDraft}
+                        onChange={(e) => setFulfillmentStatusDraft(e.target.value)}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                      >
+                        <option value="">Выберите статус сборки</option>
+                        {Object.entries(fulfillmentStatusLabels).map(([val, label]) => (
+                          <option key={val} value={val}>{label}</option>
+                        ))}
+                      </select>
+                      <textarea
+                        rows={2}
+                        value={fulfillmentStatusReason}
+                        onChange={(e) => setFulfillmentStatusReason(e.target.value)}
+                        placeholder="Причина (необязательно)"
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isSubmitting || !fulfillmentStatusDraft}
+                        className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {isSubmitting ? 'Обновление...' : 'Обновить сборку'}
+                      </button>
+                    </form>
+                  </PermissionGuard>
+
                   {/* Create shipment */}
                   {selectedOrder.status === 'paid' && fulfillments.length === 0 && (
                     <PermissionGuard
@@ -627,16 +692,32 @@ export function AdminOrders() {
                       fallback={<p className="text-xs text-gray-400 border-t pt-4">У вас нет прав для создания отгрузки.</p>}
                     >
                       <form onSubmit={handleCreateShipment} className="space-y-3 border-t pt-4">
-                        <p className="text-xs font-medium text-gray-500 uppercase">Создать отгрузку</p>
+                        <p className="text-xs font-medium text-gray-500 uppercase flex items-center gap-1">
+                          Создать отгрузку
+                          <HelpTooltip content="Посылка, созданная для доставки заказа." />
+                        </p>
                         <input
                           value={shipmentCarrier}
                           onChange={(e) => setShipmentCarrier(e.target.value)}
                           placeholder="Служба доставки (опционально)"
                           className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
                         />
+                        <input
+                          required
+                          value={shipmentTrackingNumber}
+                          onChange={(e) => setShipmentTrackingNumber(e.target.value)}
+                          placeholder="Трек-номер"
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                        />
+                        <input
+                          value={shipmentTrackingUrl}
+                          onChange={(e) => setShipmentTrackingUrl(e.target.value)}
+                          placeholder="Ссылка для отслеживания (опционально)"
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                        />
                         <button
                           type="submit"
-                          disabled={isSubmitting}
+                          disabled={isSubmitting || !shipmentTrackingNumber}
                           className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
                         >
                           {isSubmitting ? 'Создание...' : 'Создать отгрузку'}
@@ -645,6 +726,7 @@ export function AdminOrders() {
                     </PermissionGuard>
                   )}
 
+                
                   {/* Navigate to shipments */}
                   <div className="border-t pt-4">
                     <button
@@ -655,6 +737,7 @@ export function AdminOrders() {
                     </button>
                     <p className="mt-1 text-xs text-gray-400">В следующей версии создание отгрузки будет встроено прямо здесь.</p>
                   </div>
+
                 </>
               ) : null}
             </div>

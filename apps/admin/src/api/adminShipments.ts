@@ -4,6 +4,7 @@ import {
   getAdminShipment as apiGetAdminShipment,
   getAdminShipments as apiGetAdminShipments,
   updateAdminShipmentStatus as apiUpdateAdminShipmentStatus,
+  updateAdminOrderFulfillmentStatus as apiUpdateAdminOrderFulfillmentStatus,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
 import type { AdminShipment } from '@zamk/api-client/src/types';
@@ -119,4 +120,8 @@ export const getAdminShipmentErrorMessage = (error: unknown, fallback: string): 
     if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
   }
   return fallback;
+};
+
+export const updateAdminOrderFulfillmentStatus = async (orderId: string, data: { status: string; reason?: string }): Promise<void> => {
+  return apiUpdateAdminOrderFulfillmentStatus(orderId, data);
 };

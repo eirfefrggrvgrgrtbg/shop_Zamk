@@ -8,14 +8,19 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/dashboard"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/fulfillment"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/health"
 	appMiddleware "github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/middleware"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payments"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
@@ -29,11 +34,6 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/dashboard"
 )
 
 func New(
@@ -372,6 +372,7 @@ func New(
 		r.With(perm("orders.read")).Get("/orders/{id}", ordersHandler.GetAdminOrder)
 		r.With(perm("orders.read")).Get("/orders/{orderId}/fulfillments", fulfillmentHandler.GetAdminOrderFulfillments)
 		r.With(perm("orders.update_status")).Patch("/orders/{id}/status", ordersHandler.UpdateOrderStatus)
+		r.With(perm("orders.update_status")).Patch("/orders/{id}/fulfillment-status", fulfillmentHandler.UpdateAdminOrderFulfillmentStatus)
 		r.With(perm("shipments.create")).Post("/orders/{id}/shipment", fulfillmentHandler.CreateShipment)
 
 		// Payments
@@ -415,7 +416,7 @@ func New(
 		r.With(perm("auctions.resume")).Post("/auctions/{id}/resume", auctionsAdminHandler.ResumeAuction)
 		r.With(perm("auctions.cancel")).Post("/auctions/{id}/cancel", auctionsAdminHandler.CancelAuction)
 		r.With(perm("auctions.finalize")).Post("/auctions/{id}/finalize", auctionsAdminHandler.FinalizeAuction)
-		
+
 		r.With(perm("auctions.update")).Post("/auctions/{id}/lots", auctionsAdminHandler.CreateLot)
 		r.With(perm("auctions.update")).Patch("/auction-lots/{id}", auctionsAdminHandler.UpdateLot)
 		r.With(perm("auctions.read")).Get("/auction-lots/{id}/bids", auctionsAdminHandler.GetLotBids)

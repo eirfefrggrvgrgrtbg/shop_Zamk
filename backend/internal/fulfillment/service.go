@@ -179,7 +179,7 @@ func (s *Service) UpdateShipmentStatus(ctx context.Context, adminID, shipmentID 
 		if err != nil {
 			return err
 		}
-		
+
 		reqOrderID = shipment.OrderID
 
 		if shipment.Status == req.Status && req.Carrier == nil && req.TrackingNumber == nil && req.TrackingUrl == nil {
@@ -435,4 +435,32 @@ func (s *Service) GetSellerShipment(ctx context.Context, userID, orderID uuid.UU
 	}
 	// Return limited details (filtering done in handler/dto mapping)
 	return s.repo.GetShipmentByOrderID(ctx, orderID)
+}
+
+func (s *Service) UpdateAdminOrderFulfillmentStatus(ctx context.Context, adminID, orderID uuid.UUID, status string) error {
+	if !IsValidFulfillmentStatus(status) {
+		return ErrInvalidStatus
+	}
+
+	// This is a simplified approach, updating all fulfillments for the order.
+	if err := s.repo.UpdateOrderFulfillmentsStatus(ctx, orderID, status); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func IsValidFulfillmentStatus(status string) bool {
+	validStatuses := map[string]bool{
+		"awaiting_payment": true,
+		"paid":             true,
+		"assembling":       true,
+		"packed":           true,
+		"shipped":          true,
+		"delivered":        true,
+		"cancelled":        true,
+		"returned":         true,
+		"refunded":         true,
+	}
+	return validStatuses[status]
 }

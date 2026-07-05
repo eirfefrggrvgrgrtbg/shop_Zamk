@@ -389,3 +389,7 @@ export const getDashboardSummary = async (): Promise<AdminDashboardSummary> => {
 export const resetAdminSellerOwnerPassword = async (id: string): Promise<{ temporaryPassword: string }> => {
   return request<{ temporaryPassword: string }>('POST', `/admin/sellers/${id}/reset-owner-password`);
 };
+
+export const updateAdminOrderFulfillmentStatus = async (orderId: string, data: { status: string; reason?: string }): Promise<void> => {
+  return request<void>('PATCH', `/admin/orders/${orderId}/fulfillment-status`, { body: data });
+};
