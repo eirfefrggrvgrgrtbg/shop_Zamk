@@ -220,7 +220,7 @@ func (r *Repository) ListAdminOrders(ctx context.Context, q, status, paymentStat
 			MAX(COALESCE(f.status, 'pending')) as fulfillment_status,
 			CASE 
 				WHEN MAX(aol.id::text) IS NOT NULL THEN 'auction'
-				WHEN MAX(oi.seller_id::text) = \'` + common.PlatformSellerIDStr + `\' THEN 'direct_sale'
+				WHEN MAX(oi.seller_id::text) = '` + common.PlatformSellerIDStr + `' THEN 'direct_sale'
 				ELSE 'normal'
 			END as source_type,
 			o.total_price_cents, o.currency, o.customer_name, o.customer_email, o.created_at, o.updated_at, o.cancelled_at
@@ -259,7 +259,7 @@ func (r *Repository) GetAdminOrderDetail(ctx context.Context, id uuid.UUID) (*Ad
 			(SELECT COALESCE(MAX(status), 'pending') FROM order_fulfillments WHERE order_id = o.id) as fulfillment_status,
 			CASE 
 				WHEN EXISTS(SELECT 1 FROM auction_order_links WHERE order_id = o.id) THEN 'auction'
-				WHEN EXISTS(SELECT 1 FROM order_items WHERE order_id = o.id AND seller_id = \'` + common.PlatformSellerIDStr + `\') THEN 'direct_sale'
+				WHEN EXISTS(SELECT 1 FROM order_items WHERE order_id = o.id AND seller_id = '` + common.PlatformSellerIDStr + `') THEN 'direct_sale'
 				ELSE 'normal'
 			END as source_type,
 			o.total_price_cents, o.currency, o.customer_name, o.customer_email, o.created_at, o.updated_at, o.cancelled_at,
