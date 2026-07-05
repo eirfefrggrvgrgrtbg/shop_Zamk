@@ -173,7 +173,7 @@ export function AdminProducts() {
           className="block w-full sm:w-48 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
         >
           <option value="">Все источники</option>
-          <option value="platform">ZAMK</option>
+          <option value="auction_direct_sale">ZAMK</option>
           <option value="seller">Продавцы</option>
         </select>
       </div>
@@ -225,7 +225,7 @@ export function AdminProducts() {
                             <div>
                               <div className="text-sm font-medium text-gray-900">
                                 {product.title}
-                                {product.source === 'platform' && (
+                                {product.source === 'auction_direct_sale' && (
                                   <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
                                     ZAMK
                                   </span>
