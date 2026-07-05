@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, Boxes, Search, Filter } from 'lucide-react';
+import { AlertCircle, Boxes, Search } from 'lucide-react';
 import { HelpTooltip } from '../components/HelpTooltip';
 import {
-  adjustInventoryStock,
   getAdminInventory,
   getAdminInventoryErrorMessage,
   getAdminInventoryItem,
   getAdminInventoryMovements,
-  receiveInventoryStock,
-  writeOffInventoryStock,
+  adjustAdminInventory,
 } from '../api/adminInventory';
 import type { AdminInventoryMovementView, AdminInventoryView } from '../api/adminInventory';
 import { PermissionGuard } from '../components/PermissionGuard';
@@ -108,13 +106,11 @@ export function AdminInventory() {
       setIsSubmitting(true);
       setError(null);
       const input = {
-        productVariantId: selectedItem.productVariantId,
+        type: action,
         quantity: parsedQuantity,
         reason,
       };
-      if (action === 'receipt') await receiveInventoryStock(input);
-      if (action === 'adjustment') await adjustInventoryStock(input);
-      if (action === 'write_off') await writeOffInventoryStock(input);
+      await adjustAdminInventory(selectedItem.id, input);
       resetForm();
       await fetchInventory();
       await fetchMovements(selectedItem);

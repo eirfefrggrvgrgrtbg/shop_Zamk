@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
-	"time"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/common"
-	"github.com/jackc/pgx/v5"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"time"
 )
 
 type Repository struct {
@@ -340,7 +340,7 @@ func (r *Repository) ListAdminInventoryRich(ctx context.Context, q, sellerId, so
 		if color != nil && *color != "" {
 			variantParts = append(variantParts, *color)
 		}
-		
+
 		item.VariantLabel = ""
 		for idx, part := range variantParts {
 			if idx > 0 {
@@ -408,7 +408,7 @@ func (r *Repository) GetAdminInventoryItemRich(ctx context.Context, id uuid.UUID
 	if color != nil && *color != "" {
 		variantParts = append(variantParts, *color)
 	}
-	
+
 	item.VariantLabel = ""
 	for idx, part := range variantParts {
 		if idx > 0 {

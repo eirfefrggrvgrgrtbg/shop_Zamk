@@ -7,6 +7,7 @@ import {
   getAdminInventoryMovements as apiGetAdminInventoryMovements,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
+import { request } from '@zamk/api-client/src/client';
 import type { AdminInventoryItem, AdminInventoryMovement } from '@zamk/api-client/src/types';
 
 export interface AdminInventoryView {
@@ -144,4 +145,14 @@ export const getAdminInventoryErrorMessage = (error: unknown, fallback: string):
     if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
   }
   return fallback;
+};
+
+
+export const adjustAdminInventory = async (id: string, input: { type: string; quantity: number; reason: string; reference?: string }): Promise<void> => {
+  await request('POST', `/admin/inventory/${id}/adjust`, { body: input });
+};
+
+export const getAdminInventoryReservations = async (id: string): Promise<any[]> => {
+  const resp = await request<{ items: any[] }>('GET', `/admin/inventory/${id}/reservations`);
+  return resp.items || [];
 };

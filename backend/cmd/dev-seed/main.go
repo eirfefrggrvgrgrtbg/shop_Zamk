@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/common"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
@@ -40,7 +41,7 @@ var seedIDs = struct {
 	Inventory     uuid.UUID
 	Movement      uuid.UUID
 }{
-	AdminUser:     uuid.MustParse("11111111-1111-4111-8111-111111111111"),
+	AdminUser:     uuid.MustParse(common.PlatformSellerIDStr),
 	SellerUser:    uuid.MustParse("22222222-2222-4222-8222-222222222222"),
 	CustomerUser:  uuid.MustParse("33333333-3333-4333-8333-333333333333"),
 	Seller:        uuid.MustParse("44444444-4444-4444-8444-444444444444"),

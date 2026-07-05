@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-playground/validator/v10"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
 
@@ -38,7 +39,7 @@ func (h *Handler) WithAudit(ar *staff.AuditRepository) *Handler {
 
 func (h *Handler) ListAdminInventory(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	
+
 	q := r.URL.Query().Get("q")
 	sellerId := r.URL.Query().Get("sellerId")
 	source := r.URL.Query().Get("source")
@@ -328,5 +329,83 @@ func (h *Handler) writeError(w http.ResponseWriter, statusCode int, code, messag
 			"code":    code,
 			"message": message,
 		},
+	})
+}
+
+func (h *Handler) AdjustStockUnified(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value("userID")
+	if val == nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+	adminID := val.(uuid.UUID)
+
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid inventory ID")
+		return
+	}
+
+	var req UnifiedAdjustmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+	if err := h.validator.Struct(req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "Количество должно быть больше нуля.")
+		return
+	}
+
+	item, err := h.service.repo.GetAdminInventoryItemRich(r.Context(), id)
+	if err != nil {
+		h.writeError(w, http.StatusNotFound, "not_found", "Остаток не найден.")
+		return
+	}
+
+	var updatedItem interface{}
+
+	switch req.Type {
+	case "receipt":
+		updatedItem, err = h.service.ReceiveStock(r.Context(), adminID, ReceiptRequest{
+			ProductVariantID: item.ProductVariantID,
+			Quantity:         req.Quantity,
+			Reason:           &req.Reason,
+		})
+	case "adjustment":
+		updatedItem, err = h.service.AdjustStock(r.Context(), adminID, AdjustmentRequest{
+			ProductVariantID: item.ProductVariantID,
+			Quantity:         req.Quantity,
+			Reason:           req.Reason,
+		})
+	case "write_off":
+		updatedItem, err = h.service.WriteOffStock(r.Context(), adminID, WriteOffRequest{
+			ProductVariantID: item.ProductVariantID,
+			Quantity:         req.Quantity,
+			Reason:           req.Reason,
+		})
+	default:
+		h.writeError(w, http.StatusBadRequest, "invalid_type", "Invalid type")
+		return
+	}
+
+	if err != nil {
+		if strings.Contains(err.Error(), "insufficient") {
+			h.writeError(w, http.StatusBadRequest, "invalid_write_off", "Недостаточно доступного остатка.")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Не удалось обновить остаток.")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updatedItem)
+}
+
+func (h *Handler) GetAdminInventoryReservations(w http.ResponseWriter, r *http.Request) {
+	// Return empty safe list as documented in Task 8 if reservations are not fully practical to expose
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(AdminInventoryReservationResponse{
+		Items: []interface{}{},
 	})
 }
