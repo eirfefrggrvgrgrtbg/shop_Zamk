@@ -26,8 +26,8 @@ This document maps out the current state of the admin panel as of Phase ADMIN-1.
 | Section | Status | Notes |
 |---|---|---|
 | Dashboard | Ready | Uses client-side aggregation. Needs backend aggregated endpoints for scaling. |
-| Users | UI exists but backend missing | Displays static "Нет данных / Раздел будет доступен позже". |
-| Staff/RBAC | Ready | Functional RBAC management. |
+| Users | Ready | Displays paginated real user list, connected to backend. |
+| Staff/RBAC | Ready | Functional RBAC management with users.read permission. |
 | Sellers | Ready | Good functionality but needs fixing for Russian encoding glitches in text. |
 | Products | Ready | Standard CRUD. |
 | Product Moderation | Ready | Fully connected to backend. |
@@ -48,7 +48,6 @@ This document maps out the current state of the admin panel as of Phase ADMIN-1.
 
 ## 4. Missing Backend Endpoints
 - `GET /api/admin/metrics/dashboard` (Aggregation endpoint)
-- `GET /api/admin/users` (Users list management)
 - Proper system Settings endpoint (commissions, maintenance intervals)
 
 ## 5. Missing Frontend Pages
@@ -99,4 +98,4 @@ Terms needing tooltips:
 ## 13. Recommended Implementation Phases
 See `admin_next_steps.md` for the detailed phase breakdown (ADMIN-2 to ADMIN-10).
 
-- ADMIN-2/ADMIN-2B: Dashboard real metrics and RBAC verification completed. Next: ADMIN-3.
+- ADMIN-3/ADMIN-3B: Users, Staff, and RBAC runtime verification completed. Next: ADMIN-4 Seller Management.

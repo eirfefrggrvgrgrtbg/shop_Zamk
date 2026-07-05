@@ -136,6 +136,9 @@ func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 	offset := 0
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if v, err := strconv.Atoi(l); err == nil && v > 0 {
+			if v > 100 {
+				v = 100
+			}
 			limit = v
 		}
 	}

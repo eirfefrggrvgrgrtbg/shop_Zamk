@@ -48,4 +48,4 @@ The MVP for the admin panel routing and structure is in place, but several secti
 - **Pages**: All.
 - **Tasks**: Standardize the use of `PermissionGuard` and replace raw English errors with clean Russian equivalents. Add short `?` help tooltips everywhere.
 
-- ADMIN-2/ADMIN-2B: Dashboard real metrics and RBAC verification completed. Next: ADMIN-3.
+- ADMIN-3/ADMIN-3B: Users, Staff, and RBAC runtime verification completed. Next: ADMIN-4 Seller Management.
