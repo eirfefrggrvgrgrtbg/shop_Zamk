@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment } from './types';
+import type { AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary } from './types';
 
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCount: number }> => {
@@ -330,4 +330,8 @@ export const markLotUnpaid = async (lotId: string): Promise<void> => {
 
 export const moveLotToDirectSale = async (lotId: string): Promise<void> => {
   return request<void>('POST', `/admin/auction-lots/${lotId}/move-to-direct-sale`);
+};
+
+export const getDashboardSummary = async (): Promise<AdminDashboardSummary> => {
+  return request<AdminDashboardSummary>('GET', '/admin/dashboard/summary');
 };

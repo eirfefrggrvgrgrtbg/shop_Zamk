@@ -960,3 +960,76 @@ export interface AdminAuctionBid {
   isLeader?: boolean;
 }
 
+// ---------------------------------------------------------
+// DASHBOARD DTOs
+// ---------------------------------------------------------
+
+export interface DashboardOverviewMetrics {
+  totalOrders: number;
+  ordersToday: number;
+  revenueTodayCents: number;
+  revenue7dCents: number;
+  pendingModeration: number;
+  activeSellers: number;
+  activeProducts: number;
+  lowStockCount: number;
+}
+
+export interface DashboardOrdersMetrics {
+  newOrPending: number;
+  paid: number;
+  inFulfillment: number;
+  shippedOrDelivered: number;
+  cancelledOrRefunded: number;
+}
+
+export interface DashboardSellersMetrics {
+  active: number;
+  waitingModeration: number;
+  blocked: number;
+}
+
+export interface DashboardProductsMetrics {
+  published: number;
+  pendingModeration: number;
+  rejectedOrBlocked: number;
+  outOfStock: number;
+}
+
+export interface DashboardAuctionsMetrics {
+  active: number;
+  awaitingPayment: number;
+  unpaidManualReview: number;
+  directSaleItems: number;
+}
+
+export interface DashboardInventoryMetrics {
+  lowStockVariants: number;
+  reservedStock: number;
+  outOfStockCount: number;
+}
+
+export interface DashboardPaymentsMetrics {
+  paidOrdersSumCents: number;
+  pendingPayoutsCents: number;
+  failedPaymentsCount: number;
+}
+
+export interface DashboardAttentionItem {
+  title: string;
+  count: number;
+  severity: string;
+  link?: string;
+}
+
+export interface AdminDashboardSummary {
+  overview: DashboardOverviewMetrics;
+  orders: DashboardOrdersMetrics;
+  sellers: DashboardSellersMetrics;
+  products: DashboardProductsMetrics;
+  auctions: DashboardAuctionsMetrics;
+  inventory: DashboardInventoryMetrics;
+  payments: DashboardPaymentsMetrics;
+  attention: DashboardAttentionItem[];
+}
+

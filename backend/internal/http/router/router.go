@@ -33,6 +33,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/dashboard"
 )
 
 func New(
@@ -64,6 +65,7 @@ func New(
 	auctionsAdminHandler *auctions.AdminHandler,
 	auctionsPublicHandler *auctions.PublicHandler,
 	auctionsCustomerHandler *auctions.CustomerHandler,
+	dashboardHandler *dashboard.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	rateLimiter := ratelimit.NewMiddleware(
@@ -320,6 +322,7 @@ func New(
 
 		// /api/admin/me — no fine-grained permission required, role=admin is enough
 		r.Get("/me", staffHandler.GetAdminMe)
+		r.With(perm("dashboard.read")).Get("/dashboard/summary", dashboardHandler.GetDashboardSummary)
 
 		r.Get("/notifications", notificationsHandler.ListAdminNotifications)
 		r.Get("/notifications/unread-count", notificationsHandler.UnreadCountAdmin)

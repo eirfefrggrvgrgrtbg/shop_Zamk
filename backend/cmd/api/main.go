@@ -35,6 +35,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/dashboard"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/ratelimit"
 )
 
@@ -179,6 +180,10 @@ func main() {
 	auctionsPublicHandler := auctions.NewPublicHandler(auctionsRepo, auctionsService, logger)
 	auctionsCustomerHandler := auctions.NewCustomerHandler(auctionsRepo, auctionsService, logger)
 
+	dashboardRepo := dashboard.NewRepository(pgClient.Pool)
+	dashboardService := dashboard.NewService(dashboardRepo)
+	dashboardHandler := dashboard.NewHandler(dashboardService)
+
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	defer cancelWorkers()
 
@@ -193,7 +198,7 @@ func main() {
 	}
 
 	// Create router
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler)
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler)
 
 	// Start HTTP server
 	srv := &http.Server{
