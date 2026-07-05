@@ -181,7 +181,7 @@ function ProfileTab({ detail }: { detail: SellerDetail }) {
       <Field label="�?он�?ак�?ная по�?�?а" value={detail.contactEmail} />
       <Field label="Теле�?он" value={detail.contactPhone} />
 
-      <PermissionGuard permission="sellers.manage">
+      <PermissionGuard permission="sellers.create_access">
         <div className="border-t pt-4 mt-4">
           <h4 className="text-sm font-medium text-gray-900 mb-2">Сброс пароля владельца</h4>
           <p className="text-sm text-gray-500 mb-3">Сгенерировать новый временный пароль. <HelpTooltip content="Пароль для первого входа. После входа пользователь должен его сменить." /></p>

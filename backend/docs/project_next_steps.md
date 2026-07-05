@@ -20,9 +20,7 @@
 
 ## 2. ADMIN — Admin Panel Refinements
 - [x] **ADMIN-1**: Audit admin panel, fix encodings, define roadmap.
-- [x] **ADMIN-2**: Dashboard Metrics & Overview
-- [x] **ADMIN-3**: Users, Staff, and RBAC
-- [ ] **ADMIN-4**: Seller Management Completion
+- [x] **ADMIN-4**: Seller Management Completion (Done, runtime verified)
 - [ ] **ADMIN-5**: Catalog & Product Moderation
 - [ ] **ADMIN-6**: Orders, Fulfillment, and Shipments
 - [ ] **ADMIN-7**: Inventory and Storage
