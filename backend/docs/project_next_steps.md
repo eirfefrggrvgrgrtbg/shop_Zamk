@@ -16,7 +16,7 @@
 - [x] **AUC-5B**: Verified and hardened order/payment runtime flow.
 - [x] **AUC-6**: Full direct-sale catalog integration. - Current Phase
 - [x] **AUC-6C:** Verify direct-sale full runtime checkout flow, oversell prevention, and normal catalog regression checks.
-- [ ] **AUC-7**: Runtime E2E stabilization.
+- [x] **AUC-7**: Automatic Unpaid Auction Deadline Handling.
 
 ## 2. ADMIN — Complete Admin Panel
 - Audit every admin section.

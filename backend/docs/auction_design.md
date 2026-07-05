@@ -28,7 +28,6 @@ Auctions will initially be created and managed exclusively by the platform Admin
 * **AUC-6/AUC-6B/AUC-6C**: Direct-sale transition for unsold lots, including isolated platform seller integration, oversell prevention, and normal catalog checkouts verified.
 
 ### Known Remaining Work
-- Automatic cron/job to mark lots `ended_no_bids` if `payment_deadline_at` expires and unpaid.
 - (Optional) Second-highest-bidder logic or automatic relaunch strategies.
 - Future seller auction lots (currently restricted to system/admin only).
 
@@ -131,3 +130,11 @@ AUC-2B verified admin UI runtime behavior. The admin auction UI uses real backen
 
 ## AUC-3 Update
 AUC-3 verified the Public Auction UI. The customer-facing auction experience is integrated into the shop app with a homepage block, a dedicated `/auction` route, lot detail views `/auction/lots/:id`, and a bid flow with 10s polling and idempotency logic. Type mismatches in the API client were resolved. The next phase is AUC-4 (WebSocket/SSE real-time).
+
+## AUC-7 Update
+AUC-7 adds automatic unpaid deadline handling via a periodic background worker (every 5 minutes). If a lot's `payment_deadline_at` expires and it remains `won_pending_payment`, it transitions to `unpaid_manual_review` and notifies the admin.
+There is **no auto-charge** and **no second-highest-bidder logic**.
+Unpaid lots move to **manual review**, not direct sale automatically. The admin decides what to do next.
+The direct-sale flow from AUC-6 remains manual.
+The system enforces that the payment truth wins over the deadline: if a lot was paid in T-Bank but the webhook was delayed, `paid` state is prioritized and the deadline worker will skip it.
+Seller-created auctions remain future work.

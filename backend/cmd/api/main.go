@@ -179,6 +179,19 @@ func main() {
 	auctionsPublicHandler := auctions.NewPublicHandler(auctionsRepo, auctionsService, logger)
 	auctionsCustomerHandler := auctions.NewCustomerHandler(auctionsRepo, auctionsService, logger)
 
+	workerCtx, cancelWorkers := context.WithCancel(context.Background())
+	defer cancelWorkers()
+
+	if cfg.Worker.AuctionMaintenanceEnabled {
+		go auctions.StartMaintenanceWorker(
+			workerCtx,
+			auctionsService,
+			time.Duration(cfg.Worker.AuctionMaintenanceIntervalSecs)*time.Second,
+			cfg.Worker.AuctionMaintenanceBatchLimit,
+			logger,
+		)
+	}
+
 	// Create router
 	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler)
 
@@ -213,6 +226,7 @@ func main() {
 		// Give outstanding requests a deadline for completion.
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
+		cancelWorkers()
 
 		if err := srv.Shutdown(ctx); err != nil {
 			logger.Error("graceful shutdown did not complete", "error", err)

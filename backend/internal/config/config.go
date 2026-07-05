@@ -87,6 +87,9 @@ type WorkerConfig struct {
 	ReturnWindowDays               int
 	SellerBalanceIntervalSeconds   int
 	MarketplaceCommissionBPS       int
+	AuctionMaintenanceEnabled      bool
+	AuctionMaintenanceIntervalSecs int
+	AuctionMaintenanceBatchLimit   int
 }
 
 type RateLimitConfig struct {
@@ -163,6 +166,9 @@ func Load() (*Config, error) {
 			SellerBalanceIntervalSeconds:   getEnvAsInt("WORKER_SELLER_BALANCE_INTERVAL_SECONDS", 300),
 			// TODO: implement penalty commission (18% = 1800 bps) after violation engine is built
 			MarketplaceCommissionBPS:       getEnvAsInt("MARKETPLACE_COMMISSION_BPS", 900),
+			AuctionMaintenanceEnabled:      getEnvAsBool("AUCTION_MAINTENANCE_ENABLED", true),
+			AuctionMaintenanceIntervalSecs: getEnvAsInt("AUCTION_MAINTENANCE_INTERVAL_SECONDS", 300),
+			AuctionMaintenanceBatchLimit:   getEnvAsInt("AUCTION_MAINTENANCE_BATCH_LIMIT", 100),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:                        getEnvAsBool("RATE_LIMIT_ENABLED", true),

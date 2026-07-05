@@ -2,6 +2,7 @@ package auctions
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -751,4 +752,107 @@ func (r *Repository) MoveLotToDirectSaleTx(ctx context.Context, tx pgx.Tx, lotID
 	}
 
 	return productID, nil
+}
+
+type ExpiredLotResult struct {
+	LotID              uuid.UUID
+	AuctionID          uuid.UUID
+	WinnerUserID       uuid.UUID
+	StatusTransitioned bool
+}
+
+func (r *Repository) ExpireUnpaidAuctionLotsTx(ctx context.Context, tx pgx.Tx, now time.Time, limit int) ([]ExpiredLotResult, error) {
+	// Select lots with FOR UPDATE SKIP LOCKED
+	rows, err := tx.Query(ctx, `
+		SELECT id, auction_id, current_winner_user_id, order_id
+		FROM auction_lots
+		WHERE status = $1
+		  AND payment_deadline_at IS NOT NULL
+		  AND payment_deadline_at < $2
+		LIMIT $3
+		FOR UPDATE SKIP LOCKED
+	`, LotStatusWonPendingPayment, now, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query expired lots: %w", err)
+	}
+	defer rows.Close()
+
+	var toProcess []struct {
+		lotID     uuid.UUID
+		auctionID uuid.UUID
+		winnerID  uuid.UUID
+		orderID   *uuid.UUID
+	}
+
+	for rows.Next() {
+		var lotID, auctionID, winnerID uuid.UUID
+		var orderID *uuid.UUID
+		if err := rows.Scan(&lotID, &auctionID, &winnerID, &orderID); err != nil {
+			return nil, err
+		}
+		toProcess = append(toProcess, struct {
+			lotID     uuid.UUID
+			auctionID uuid.UUID
+			winnerID  uuid.UUID
+			orderID   *uuid.UUID
+		}{lotID, auctionID, winnerID, orderID})
+	}
+	rows.Close()
+
+	var results []ExpiredLotResult
+
+	for _, p := range toProcess {
+		var orderPaid bool
+		if p.orderID != nil {
+			var orderStatus string
+			err := tx.QueryRow(ctx, `SELECT status FROM orders WHERE id = $1`, *p.orderID).Scan(&orderStatus)
+			if err == nil && orderStatus == "paid" {
+				orderPaid = true
+			}
+		}
+
+		if orderPaid {
+			_, err = tx.Exec(ctx, `UPDATE auction_lots SET status = $1, updated_at = now() WHERE id = $2`, LotStatusPaid, p.lotID)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, ExpiredLotResult{
+				LotID:              p.lotID,
+				AuctionID:          p.auctionID,
+				WinnerUserID:       p.winnerID,
+				StatusTransitioned: false,
+			})
+			continue
+		}
+
+		_, err = tx.Exec(ctx, `UPDATE auction_lots SET status = $1, updated_at = now() WHERE id = $2`, LotStatusUnpaidManualReview, p.lotID)
+		if err != nil {
+			return nil, err
+		}
+
+		if p.orderID != nil {
+			_, err = tx.Exec(ctx, `UPDATE auction_order_links SET status = 'expired', updated_at = now() WHERE lot_id = $1`, p.lotID)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		b, _ := json.Marshal(map[string]interface{}{"reason": "payment_deadline_expired"})
+		_, err = tx.Exec(ctx, `
+			INSERT INTO auction_logs (id, auction_id, lot_id, actor_user_id, action, metadata, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, now())
+		`, uuid.New(), p.auctionID, p.lotID, nil, "auction_payment_deadline_expired", b)
+		if err != nil {
+			return nil, err
+		}
+
+		results = append(results, ExpiredLotResult{
+			LotID:              p.lotID,
+			AuctionID:          p.auctionID,
+			WinnerUserID:       p.winnerID,
+			StatusTransitioned: true,
+		})
+	}
+
+	return results, nil
 }

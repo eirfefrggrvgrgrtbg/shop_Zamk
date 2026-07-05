@@ -177,7 +177,7 @@ export function AuctionLotDetail() {
   const currentPrice = lot.currentBidCents || lot.startPriceCents;
   const bidStep = auction?.bidStepCents || 0;
   const nextBidAmount = lot.currentBidCents ? currentPrice + bidStep : currentPrice;
-  const isEnded = auction?.status === 'ended' || lot.status === 'ended_no_bids' || lot.status === 'won_pending_payment' || lot.status === 'paid';
+  const isEnded = auction?.status === 'ended' || lot.status === 'ended_no_bids' || lot.status === 'won_pending_payment' || lot.status === 'paid' || lot.status === 'unpaid_manual_review' || lot.status === 'moved_to_direct_sale';
   const isLive = lot.status === 'active' && auction?.status === 'live';
 
   return (
@@ -312,8 +312,17 @@ export function AuctionLotDetail() {
                   {isEnded ? 'Аукцион завершен' : 'Ожидает начала торгов'}
                 </div>
                 {isEnded && isAuthenticated && user && lot.currentWinnerUserId === user.id && (
-                  <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-2xl text-center">
-                    <h4 className="font-bold text-green-800 dark:text-green-300 mb-2">Поздравляем, вы победили!</h4>
+                  <div className={`p-4 border rounded-2xl text-center ${
+                    lot.status === 'unpaid_manual_review' || lot.status === 'moved_to_direct_sale'
+                      ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                      : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                  }`}>
+                    {lot.status === 'unpaid_manual_review' || lot.status === 'moved_to_direct_sale' ? (
+                      <h4 className="font-bold text-red-800 dark:text-red-300 mb-2">Срок оплаты истёк</h4>
+                    ) : (
+                      <h4 className="font-bold text-green-800 dark:text-green-300 mb-2">Поздравляем, вы победили!</h4>
+                    )}
+                    
                     {lot.status === 'won_pending_payment' && (
                        <Link to="/auction/wins" className="inline-block px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
                          Перейти к оплате
@@ -321,6 +330,12 @@ export function AuctionLotDetail() {
                     )}
                     {lot.status === 'paid' && (
                        <p className="text-sm text-green-700 dark:text-green-400">Лот успешно оплачен. Ожидайте уведомлений о доставке.</p>
+                    )}
+                    {lot.status === 'unpaid_manual_review' && (
+                       <p className="text-sm text-red-700 dark:text-red-400">Срок оплаты истёк, лот передан на модерацию.</p>
+                    )}
+                    {lot.status === 'moved_to_direct_sale' && (
+                       <p className="text-sm text-red-700 dark:text-red-400">Лот перенесен в магазин прямых продаж.</p>
                     )}
                   </div>
                 )}

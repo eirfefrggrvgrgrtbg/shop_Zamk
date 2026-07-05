@@ -399,6 +399,7 @@ func New(
 
 		// Auctions
 		r.With(perm("auctions.read")).Get("/auctions", auctionsAdminHandler.GetAuctions)
+		r.With(perm("auctions.update")).Post("/auctions/expire-unpaid", auctionsAdminHandler.ExpireUnpaidLots)
 		r.With(perm("auctions.read")).Get("/auctions/{id}", auctionsAdminHandler.GetAuction)
 		r.With(perm("auctions.create")).Post("/auctions", auctionsAdminHandler.CreateAuction)
 		r.With(perm("auctions.update")).Patch("/auctions/{id}", auctionsAdminHandler.UpdateAuction)
@@ -413,6 +414,7 @@ func New(
 		r.With(perm("auctions.read")).Get("/auction-lots/{id}/bids", auctionsAdminHandler.GetLotBids)
 		r.With(perm("auctions.update")).Post("/auction-lots/{id}/mark-unpaid-review", auctionsAdminHandler.MarkLotUnpaid)
 		r.With(perm("auctions.move_to_direct_sale")).Post("/auction-lots/{id}/move-to-direct-sale", auctionsAdminHandler.MoveToDirectSale)
+
 	})
 
 	r.Group(func(r chi.Router) {

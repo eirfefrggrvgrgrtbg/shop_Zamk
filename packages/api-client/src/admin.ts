@@ -311,6 +311,11 @@ export const createAdminLot = async (auctionId: string, data: Partial<AdminAucti
   return request<AdminAuctionLot>('POST', `/admin/auctions/${auctionId}/lots`, { body: data });
 };
 
+export const expireUnpaidAuctions = async (limit?: number): Promise<{ checkedCount: number; expiredCount: number }> => {
+  const query = limit ? `?limit=${limit}` : '';
+  return request<{ checkedCount: number; expiredCount: number }>('POST', `/admin/auctions/expire-unpaid${query}`);
+};
+
 export const updateAdminLot = async (lotId: string, data: Partial<AdminAuctionLot>): Promise<void> => {
   return request<void>('PATCH', `/admin/auction-lots/${lotId}`, { body: data });
 };

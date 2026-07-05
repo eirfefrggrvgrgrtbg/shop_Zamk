@@ -101,10 +101,14 @@ export function AuctionWins() {
                 <span className={`px-3 py-1 rounded-full text-xs font-medium mb-2 ${
                   lot.status === 'paid' ? 'bg-green-100 text-green-800' :
                   lot.status === 'won_pending_payment' ? 'bg-yellow-100 text-yellow-800' :
+                  lot.status === 'unpaid_manual_review' ? 'bg-red-100 text-red-800' :
+                  lot.status === 'moved_to_direct_sale' ? 'bg-gray-100 text-gray-800' :
                   'bg-gray-100 text-gray-800'
                 }`}>
                   {lot.status === 'paid' ? 'Оплачен' :
                    lot.status === 'won_pending_payment' ? 'Ожидает оплаты' :
+                   lot.status === 'unpaid_manual_review' ? 'Срок оплаты истёк' :
+                   lot.status === 'moved_to_direct_sale' ? 'Перенесён в магазин' :
                    lot.status}
                 </span>
 

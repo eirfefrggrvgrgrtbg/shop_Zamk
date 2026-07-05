@@ -620,3 +620,50 @@ func (s *Service) CreateOrderForLot(ctx context.Context, lotID, userID uuid.UUID
 	}
 	return &result, nil
 }
+
+func (s *Service) ExpireUnpaidAuctionLots(ctx context.Context, now time.Time, limit int) (int, int, error) {
+	var results []ExpiredLotResult
+
+	err := s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
+		var txErr error
+		results, txErr = s.repo.ExpireUnpaidAuctionLotsTx(ctx, tx, now, limit)
+		return txErr
+	})
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to execute expiry transaction: %w", err)
+	}
+
+	checkedCount := len(results)
+	expiredCount := 0
+
+	for _, res := range results {
+		if !res.StatusTransitioned {
+			continue // transitioned to paid instead
+		}
+		expiredCount++
+
+		lotStatus := LotStatusUnpaidManualReview
+		s.hub.Broadcast(res.AuctionID, AuctionRealtimeEvent{
+			EventType: "lot_status_changed",
+			LotID:     &res.LotID,
+			LotStatus: &lotStatus,
+		})
+
+		s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
+			return s.notifications.CreateNotificationTx(ctx, tx, notifications.Notification{
+				RecipientUserID: &res.WinnerUserID,
+				RecipientKind:   "customer",
+				Type:            "auction_expired",
+				Title:           "Аукцион: Оплата не поступила",
+				Body:            "Срок оплаты выигранного лота истёк.",
+				Metadata: map[string]interface{}{
+					"auctionId": res.AuctionID.String(),
+					"lotId":     res.LotID.String(),
+					"status":    "unpaid_manual_review",
+				},
+			})
+		})
+	}
+
+	return checkedCount, expiredCount, nil
+}

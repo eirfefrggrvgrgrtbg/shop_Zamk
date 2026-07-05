@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -389,4 +390,28 @@ func (h *AdminHandler) MoveToDirectSale(w http.ResponseWriter, r *http.Request) 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+func (h *AdminHandler) ExpireUnpaidLots(w http.ResponseWriter, r *http.Request) {
+	limitStr := r.URL.Query().Get("limit")
+	limit := 100
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	now := time.Now()
+	checked, expired, err := h.service.ExpireUnpaidAuctionLots(r.Context(), now, limit)
+	if err != nil {
+		h.logger.Error("failed to expire unpaid lots", "error", err)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to expire unpaid lots")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"checkedCount": checked,
+		"expiredCount": expired,
+	})
 }

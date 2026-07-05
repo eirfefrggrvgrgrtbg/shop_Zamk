@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Gavel, Plus, Play, Pause, XCircle, CheckCircle } from 'lucide-react';
-import { getAdminAuctions, publishAdminAuction, pauseAdminAuction, resumeAdminAuction, cancelAdminAuction, finalizeAdminAuction } from '@zamk/api-client/src/admin';
+import { getAdminAuctions, publishAdminAuction, pauseAdminAuction, resumeAdminAuction, cancelAdminAuction, finalizeAdminAuction, expireUnpaidAuctions } from '@zamk/api-client/src/admin';
 import type { AdminAuction } from '@zamk/api-client/src/types';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 
@@ -69,15 +69,33 @@ export function AdminAuctionsList() {
           <h1 className="text-2xl font-bold text-gray-900">Аукционы</h1>
           <p className="text-sm text-gray-500 mt-1">Управление аукционами платформы</p>
         </div>
-        {hasPermission('auctions.create') && (
-          <Link
-            to="/auctions/new"
-            className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-          >
-            <Plus className="h-5 w-5 mr-2" />
-            Создать аукцион
-          </Link>
-        )}
+        <div className="flex space-x-2">
+          {hasPermission('auctions.update') && (
+            <button
+              onClick={async () => {
+                try {
+                  await expireUnpaidAuctions();
+                  alert('Обслуживание успешно выполнено');
+                  fetchAuctions();
+                } catch (err: any) {
+                  alert('Ошибка: ' + err.message);
+                }
+              }}
+              className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+            >
+              Запустить обслуживание
+            </button>
+          )}
+          {hasPermission('auctions.create') && (
+            <Link
+              to="/auctions/new"
+              className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Создать аукцион
+            </Link>
+          )}
+        </div>
       </div>
 
       {error && (
