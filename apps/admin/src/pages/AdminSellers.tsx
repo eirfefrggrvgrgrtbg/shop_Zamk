@@ -14,10 +14,10 @@ import { useAdminAuth } from '../contexts/AdminAuthContext';
 // --- Constants ---
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: '�?жидае�? ак�?ива�?ии',
-  active: 'Ак�?ивен',
-  blocked: '�?аблоки�?ован',
-  archived: '�? а�?�?иве',
+  pending: 'Ожидает активации',
+  active: 'Активен',
+  blocked: 'Заблокирован',
+  archived: 'В архиве',
 };
 
 const STATUS_BADGE: Record<string, string> = {
@@ -28,29 +28,29 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 const WARNING_TYPES: Record<string, string> = {
-  late_shipment: '�?оздняя о�?п�?авка',
-  wrong_item: 'Неве�?н�?й �?ова�?',
-  no_shipment: 'Не�? о�?п�?авки',
-  poor_packaging: '�?ло�?ая �?паковка',
-  customer_complaint: '�?алоба пок�?па�?еля',
-  moderation_issue: 'На�?�?�?ение моде�?а�?ии',
-  return_problem: '�?�?облема с возв�?а�?ом',
-  other: '�?�?�?гое',
+  late_shipment: 'Поздняя отправка',
+  wrong_item: 'Неверный товар',
+  no_shipment: 'Нет отправки',
+  poor_packaging: 'Плохая упаковка',
+  customer_complaint: 'Жалоба покупателя',
+  moderation_issue: 'Нарушение модерации',
+  return_problem: 'Проблема с возвратом',
+  other: 'Другое',
 };
 
 const VIOLATION_TYPES: Record<string, string> = {
-  no_shipment: 'Не�? о�?п�?авки',
-  late_shipment: '�?оздняя о�?п�?авка',
-  wrong_item: 'Неве�?н�?й �?ова�?',
-  fake_product: '�?оддел�?н�?й �?ова�?',
-  damaged_item_not_disclosed: 'Ск�?�?�?�?й де�?ек�?',
-  repeated_customer_complaints: '�?ов�?о�?н�?е жалоб�?',
-  return_abuse: '�?ло�?по�?�?ебление возв�?а�?ами',
-  moderation_violation: 'На�?�?�?ение п�?авил моде�?а�?ии',
-  other: '�?�?�?гое',
+  no_shipment: 'Нет отправки',
+  late_shipment: 'Поздняя отправка',
+  wrong_item: 'Неверный товар',
+  fake_product: 'Поддельный товар',
+  damaged_item_not_disclosed: 'Скрытый дефект',
+  repeated_customer_complaints: 'Повторные жалобы',
+  return_abuse: 'Злоупотребление возвратами',
+  moderation_violation: 'Нарушение правил модерации',
+  other: 'Другое',
 };
 
-const SEVERITY_LABELS: Record<string, string> = { low: 'Низкая', medium: 'С�?едняя', high: '�?�?сокая' };
+const SEVERITY_LABELS: Record<string, string> = { low: 'Низкая', medium: 'Средняя', high: 'Высокая' };
 const SEVERITY_BADGE: Record<string, string> = {
   low: 'bg-blue-100 text-blue-700',
   medium: 'bg-yellow-100 text-yellow-800',

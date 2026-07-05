@@ -18,12 +18,17 @@
 - [x] **AUC-6C:** Verify direct-sale full runtime checkout flow, oversell prevention, and normal catalog regression checks.
 - [x] **AUC-7**: Automatic Unpaid Auction Deadline Handling.
 
-## 2. ADMIN — Complete Admin Panel
-- Audit every admin section.
-- Replace remaining demo/fake data.
-- Complete storage/inventory views.
-- Complete moderation/logs/settings.
-- Improve empty/error/loading states.
+## 2. ADMIN — Admin Panel Refinements
+- [x] **ADMIN-1**: Audit admin panel, fix encodings, define roadmap.
+- [ ] **ADMIN-2**: Dashboard Metrics & Overview
+- [ ] **ADMIN-3**: Users, Staff, and RBAC
+- [ ] **ADMIN-4**: Seller Management Completion
+- [ ] **ADMIN-5**: Catalog & Product Moderation
+- [ ] **ADMIN-6**: Orders, Fulfillment, and Shipments
+- [ ] **ADMIN-7**: Inventory and Storage
+- [ ] **ADMIN-8**: Payouts and Commissions
+- [ ] **ADMIN-9**: Audit Logs and Security Monitoring
+- [ ] **ADMIN-10**: UX Polish & Error States
 
 ## 3. SELLER — Complete Seller Cabinet
 - Remove demo data.
