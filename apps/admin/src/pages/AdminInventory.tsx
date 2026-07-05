@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, Boxes } from 'lucide-react';
+import { AlertCircle, Boxes, Search, Filter } from 'lucide-react';
+import { HelpTooltip } from '../components/HelpTooltip';
 import {
   adjustInventoryStock,
   getAdminInventory,
@@ -31,15 +32,28 @@ export function AdminInventory() {
   const [quantity, setQuantity] = useState('');
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
+  const [sellerFilter, setSellerFilter] = useState('');
+  const [lowStockFilter, setLowStockFilter] = useState(false);
+  const [pagination, setPagination] = useState({ limit: 50, offset: 0, total: 0 });
 
   const fetchInventory = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await getAdminInventory();
-      setInventory(data);
+      const resp = await getAdminInventory({
+        q: searchQuery,
+        source: sourceFilter,
+        sellerId: sellerFilter,
+        lowStock: lowStockFilter,
+        limit: pagination.limit,
+        offset: pagination.offset,
+      });
+      setInventory(resp.items);
+      setPagination(p => ({ ...p, total: resp.totalCount }));
       if (selectedItem) {
-        const refreshed = data.find((item) => item.id === selectedItem.id) ?? null;
+        const refreshed = resp.items.find((item) => item.id === selectedItem.id) ?? null;
         setSelectedItem(refreshed);
       }
     } catch (err: unknown) {
@@ -66,7 +80,7 @@ export function AdminInventory() {
 
   useEffect(() => {
     fetchInventory();
-  }, []);
+  }, [searchQuery, sourceFilter, sellerFilter, lowStockFilter, pagination.limit, pagination.offset]);
 
   const resetForm = () => {
     setQuantity('');
@@ -119,6 +133,54 @@ export function AdminInventory() {
         <h1 className="text-2xl font-bold text-gray-900">Остатки / Склад</h1>
       </div>
 
+      <div className="bg-white p-4 rounded-lg shadow space-y-4 sm:space-y-0 sm:flex sm:items-center sm:space-x-4">
+        <div className="flex-1 relative rounded-md shadow-sm">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
+            placeholder="Поиск по названию или SKU..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className="w-full sm:w-48">
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+          >
+            <option value="">Все источники</option>
+            <option value="auction_direct_sale">ZAMK (Свой склад)</option>
+            <option value="seller">Продавцы</option>
+          </select>
+        </div>
+        <div className="w-full sm:w-48">
+          <input
+            type="text"
+            className="focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+            placeholder="ID продавца..."
+            value={sellerFilter}
+            onChange={(e) => setSellerFilter(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center">
+          <input
+            id="low-stock"
+            name="low-stock"
+            type="checkbox"
+            checked={lowStockFilter}
+            onChange={(e) => setLowStockFilter(e.target.checked)}
+            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+          />
+          <label htmlFor="low-stock" className="ml-2 block text-sm text-gray-900">
+            Меньше 10 шт
+          </label>
+        </div>
+      </div>
+
       {error && (
         <div className="p-4 bg-red-50 text-red-700 rounded-md flex items-center">
           <AlertCircle className="h-5 w-5 mr-2" />
@@ -145,11 +207,20 @@ export function AdminInventory() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Товар / Вариант</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Продавец</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Доступно</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Зарезервировано</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Всего</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Товар / Вариант</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Источник / Продавец</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Доступно
+                      <HelpTooltip content="Количество товара, доступное для продажи (Всего - Зарезервировано)." />
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Резерв
+                      <HelpTooltip content="Товар, который находится в активных корзинах или неоплаченных заказах." />
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Всего
+                      <HelpTooltip content="Физическое количество товара на складе." />
+                    </th>
                     <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                   </tr>
                 </thead>
@@ -160,8 +231,19 @@ export function AdminInventory() {
                         <div className="text-sm font-medium text-gray-900">{item.productTitle}</div>
                         <div className="text-xs text-gray-500">{item.variant}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {item.sellerName || item.sellerId || '-'}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2">
+                          {(item as any).source === 'auction_direct_sale' ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                              ZAMK
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                              Seller
+                            </span>
+                          )}
+                          <span className="text-sm text-gray-500">{item.sellerName || item.sellerId || '-'}</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

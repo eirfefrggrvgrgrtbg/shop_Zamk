@@ -76,13 +76,13 @@ func (s *Service) ListAdminInventory(ctx context.Context, q, sellerId, source st
 	if items == nil {
 		items = []AdminInventoryItem{}
 	}
-	return AdminInventoryListResponse{Items: items, TotalCount: total}, nil
+	return InventoryListResponse{Items: items, TotalCount: len(items)}, nil
 }
 
-func (s *Service) GetAdminInventoryItem(ctx context.Context, id uuid.UUID) (AdminInventoryItem, error) {
-	i, err := s.repo.GetAdminInventoryItemRich(ctx, id)
+func (s *Service) GetAdminInventoryItem(ctx context.Context, id uuid.UUID) (Item, error) {
+	i, err := s.repo.GetItemByID(ctx, id)
 	if err != nil {
-		return AdminInventoryItem{}, err
+		return Item{}, err
 	}
 	return *i, nil
 }
@@ -292,15 +292,15 @@ func (s *Service) WriteOffStock(ctx context.Context, adminUserID uuid.UUID, req 
 func (s *Service) ListSellerInventory(ctx context.Context, currentUserID uuid.UUID, limit, offset int) (InventoryListResponse, error) {
 	seller, err := s.getSellerForUser(ctx, currentUserID)
 	if err != nil {
-		return InventoryListResponse{}, err
+		return AdminInventoryListResponse{}, err
 	}
 
 	items, err := s.repo.ListInventoryBySeller(ctx, seller.ID, limit, offset)
 	if err != nil {
-		return InventoryListResponse{}, err
+		return AdminInventoryListResponse{}, err
 	}
 	if items == nil {
-		items = []Item{}
+		items = []AdminInventoryItem{}
 	}
 	return InventoryListResponse{Items: items, TotalCount: len(items)}, nil
 }

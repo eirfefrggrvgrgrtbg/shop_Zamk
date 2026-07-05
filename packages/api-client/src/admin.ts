@@ -106,8 +106,17 @@ export const adminBlockProduct = async (id: string, comment?: string): Promise<v
   return request<void>('POST', `/admin/moderation/products/${id}/block`, { body: { comment } });
 };
 
-export const getAdminInventory = async (): Promise<{ items: AdminInventoryItem[]; totalCount: number }> => {
-  return request<{ items: AdminInventoryItem[]; totalCount: number }>('GET', '/admin/inventory');
+export const getAdminInventory = async (params?: { q?: string; sellerId?: string; source?: string; lowStock?: boolean; limit?: number; offset?: number }): Promise<{ items: AdminInventoryItem[]; totalCount: number }> => {
+  const query = new URLSearchParams();
+  if (params?.q) query.append('q', params.q);
+  if (params?.sellerId) query.append('sellerId', params.sellerId);
+  if (params?.source) query.append('source', params.source);
+  if (params?.lowStock) query.append('lowStock', 'true');
+  if (params?.limit) query.append('limit', params.limit.toString());
+  if (params?.offset) query.append('offset', params.offset.toString());
+  
+  const qStr = query.toString() ? `?${query.toString()}` : '';
+  return request<{ items: AdminInventoryItem[]; totalCount: number }>('GET', `/admin/inventory${qStr}`);
 };
 
 export const getAdminInventoryItem = async (id: string): Promise<AdminInventoryItem> => {

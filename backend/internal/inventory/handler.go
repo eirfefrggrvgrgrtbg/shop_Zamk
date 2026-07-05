@@ -38,7 +38,13 @@ func (h *Handler) WithAudit(ar *staff.AuditRepository) *Handler {
 
 func (h *Handler) ListAdminInventory(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	resp, err := h.service.ListAdminInventory(r.Context(), page.Limit, page.Offset)
+	
+	q := r.URL.Query().Get("q")
+	sellerId := r.URL.Query().Get("sellerId")
+	source := r.URL.Query().Get("source")
+	lowStock := r.URL.Query().Get("lowStock") == "true"
+
+	resp, err := h.service.ListAdminInventory(r.Context(), q, sellerId, source, lowStock, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list inventory")
 		return

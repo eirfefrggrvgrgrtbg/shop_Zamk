@@ -20,6 +20,7 @@ export interface AdminInventoryView {
   color?: string;
   sellerId?: string;
   sellerName?: string;
+  source: string;
   totalStock: number;
   reservedStock: number;
   availableStock: number;
@@ -75,6 +76,7 @@ export const mapInventoryItem = (item: AdminInventoryItem): AdminInventoryView =
     color,
     sellerId: item.sellerId,
     sellerName: getString(flexible, 'sellerName'),
+    source: getString(flexible, 'source') || 'seller',
     totalStock: item.totalStock,
     reservedStock: item.reservedStock,
     availableStock: item.availableStock,
@@ -95,9 +97,10 @@ export const mapInventoryMovement = (movement: AdminInventoryMovement): AdminInv
   };
 };
 
-export const getAdminInventory = async (): Promise<AdminInventoryView[]> => {
-  const response = await apiGetAdminInventory() as unknown as ListResponse<AdminInventoryItem>;
-  return unwrapItems(response).map(mapInventoryItem);
+export const getAdminInventory = async (params?: { q?: string; sellerId?: string; source?: string; lowStock?: boolean; limit?: number; offset?: number }): Promise<{ items: AdminInventoryView[]; totalCount: number }> => {
+  const response = await apiGetAdminInventory(params) as unknown as { items: AdminInventoryItem[]; totalCount: number };
+  const items = response.items || [];
+  return { items: items.map(mapInventoryItem), totalCount: response.totalCount || 0 };
 };
 
 export const getAdminInventoryItem = async (id: string): Promise<AdminInventoryView> => {

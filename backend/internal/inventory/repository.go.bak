@@ -254,7 +254,7 @@ func (r *Repository) ListAdminInventoryRich(ctx context.Context, q, sellerId, so
 		FROM inventory_items i
 		JOIN products p ON i.product_id = p.id
 		JOIN product_variants pv ON i.product_variant_id = pv.id
-		LEFT JOIN sellers su ON i.seller_id = su.id
+		LEFT JOIN seller_users su ON i.seller_id = su.id
 		WHERE 1=1
 	`
 	args := []interface{}{}
@@ -372,7 +372,7 @@ func (r *Repository) GetAdminInventoryItemRich(ctx context.Context, id uuid.UUID
 		FROM inventory_items i
 		JOIN products p ON i.product_id = p.id
 		JOIN product_variants pv ON i.product_variant_id = pv.id
-		LEFT JOIN sellers su ON i.seller_id = su.id
+		LEFT JOIN seller_users su ON i.seller_id = su.id
 		WHERE i.id = $1
 	`
 	var item AdminInventoryItem
