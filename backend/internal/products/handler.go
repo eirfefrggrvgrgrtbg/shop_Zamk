@@ -325,7 +325,27 @@ func (h *Handler) SubmitForModeration(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListAdminProducts(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	resp, err := h.service.ListAdminProducts(r.Context(), page.Limit, page.Offset)
+
+	filter := AdminProductFilter{}
+	q := r.URL.Query().Get("q")
+	if q != "" {
+		filter.Query = &q
+	}
+	status := r.URL.Query().Get("status")
+	if status != "" {
+		filter.Status = &status
+	}
+	source := r.URL.Query().Get("source")
+	if source != "" {
+		filter.Source = &source
+	}
+	if sID := r.URL.Query().Get("sellerId"); sID != "" {
+		if uid, err := uuid.Parse(sID); err == nil {
+			filter.SellerID = &uid
+		}
+	}
+
+	resp, err := h.service.ListAdminProducts(r.Context(), filter, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list products")
 		return
@@ -333,6 +353,39 @@ func (h *Handler) ListAdminProducts(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) GetAdminModerationHistory(w http.ResponseWriter, r *http.Request) {
+	productID, ok := h.parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+
+	// For admin, we don't need to verify seller ID
+	logs, err := h.service.GetAdminProductModerationHistory(r.Context(), productID)
+	if err != nil {
+		if errors.Is(err, ErrProductNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Product not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get moderation history")
+		return
+	}
+
+	items := make([]ModerationHistoryItem, 0, len(logs))
+	for _, l := range logs {
+		items = append(items, ModerationHistoryItem{
+			ID:         l.ID,
+			ProductID:  l.ProductID,
+			FromStatus: l.FromStatus,
+			ToStatus:   l.ToStatus,
+			Comment:    l.Comment,
+			CreatedAt:  l.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ModerationHistoryResponse{Items: items})
 }
 
 func (h *Handler) ListModerationProducts(w http.ResponseWriter, r *http.Request) {

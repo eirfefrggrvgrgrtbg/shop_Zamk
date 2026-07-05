@@ -7,6 +7,7 @@ import {
   getAdminProducts as apiGetAdminProducts,
   getModerationProducts as apiGetModerationProducts,
   uploadAdminProductImage as apiUploadAdminProductImage,
+  getAdminProductModerationHistory as apiGetAdminProductModerationHistory,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
 import type {
@@ -43,6 +44,7 @@ export interface AdminProductVariantDisplay {
 }
 
 export interface AdminProductView {
+  source?: string;
   id: string;
   title: string;
   description?: string;
@@ -154,9 +156,23 @@ export const mapAdminProduct = (product: AdminProduct | ModerationProduct): Admi
   };
 };
 
-export const getAdminProducts = async (): Promise<AdminProductView[]> => {
-  const response = await apiGetAdminProducts() as AdminProductListResponse;
-  return unwrapProducts(response).map(mapAdminProduct);
+export const getAdminProducts = async (
+  page: number = 1,
+  limit: number = 20,
+  filters?: {
+    q?: string;
+    status?: string;
+    sellerId?: string;
+    source?: string;
+  }
+): Promise<{ items: AdminProductView[]; totalCount: number }> => {
+  const data = await apiGetAdminProducts(page, limit, filters);
+  const items = (data.items || []).map(mapAdminProduct);
+  return { items, totalCount: data.totalCount || 0 };
+};
+
+export const getAdminProductModerationHistory = async (productId: string) => {
+  return apiGetAdminProductModerationHistory(productId);
 };
 
 export const getModerationProducts = async (): Promise<AdminProductView[]> => {

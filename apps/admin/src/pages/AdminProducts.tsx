@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Package, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { HelpTooltip } from '../components/HelpTooltip';
+import { Package, Search, AlertCircle } from 'lucide-react';
 import {
   approveProduct,
   blockProduct,
@@ -16,6 +17,11 @@ export function AdminProducts() {
   const [products, setProducts] = useState<AdminProductView[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
 
   // Reject/Block Modal State
   const [actionModal, setActionModal] = useState<{ isOpen: boolean, type: 'reject' | 'block' | null, productId: string | null }>({ isOpen: false, type: null, productId: null });
@@ -24,22 +30,31 @@ export function AdminProducts() {
   const [actionProductId, setActionProductId] = useState<string | null>(null);
   const [uploadingProductId, setUploadingProductId] = useState<string | null>(null);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await getAdminProducts();
-      setProducts(data);
+      const data = await getAdminProducts(page, 20, {
+        q: searchQuery,
+        status: statusFilter,
+        source: sourceFilter,
+      });
+      setProducts(data.items);
+      setTotalCount(data.totalCount);
     } catch (err: unknown) {
       setError(getAdminProductErrorMessage(err, 'Не удалось загрузить товары.'));
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [page, searchQuery, statusFilter, sourceFilter]);
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    const delayDebounceFn = setTimeout(() => {
+      fetchProducts();
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [fetchProducts]);
 
   const handleAction = async (id: string, action: 'publish' | 'hide' | 'approve') => {
     if (action === 'hide' && !window.confirm('Are you sure you want to hide this product?')) return;
@@ -123,7 +138,44 @@ export function AdminProducts() {
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">All Products</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Каталог товаров <HelpTooltip content="Управление всеми товарами продавцов и товарами платформы (ZAMK)." /></h1>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-4 mb-4">
+        <div className="relative flex-1">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            placeholder="Поиск по названию или ID..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+          />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+          className="block w-full sm:w-48 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+        >
+          <option value="">Все статусы</option>
+          <option value="published">Опубликован</option>
+          <option value="approved">Одобрен</option>
+          <option value="pending_moderation">На модерации</option>
+          <option value="rejected">Отклонен</option>
+          <option value="hidden">Скрыт</option>
+          <option value="blocked">Заблокирован</option>
+        </select>
+        <select
+          value={sourceFilter}
+          onChange={(e) => { setSourceFilter(e.target.value); setPage(1); }}
+          className="block w-full sm:w-48 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+        >
+          <option value="">Все источники</option>
+          <option value="platform">ZAMK</option>
+          <option value="seller">Продавцы</option>
+        </select>
       </div>
 
       {error && (
@@ -171,7 +223,14 @@ export function AdminProducts() {
                               </div>
                             )}
                             <div>
-                              <div className="text-sm font-medium text-gray-900">{product.title}</div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {product.title}
+                                {product.source === 'platform' && (
+                                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                    ZAMK
+                                  </span>
+                                )}
+                              </div>
                               <div className="text-xs text-gray-500">ID: {product.id}</div>
                               <div className="text-xs text-gray-500">Updated: {formatDate(product.updatedAt)}</div>
                             </div>
@@ -267,6 +326,27 @@ export function AdminProducts() {
           </div>
         </div>
       )}
+    
+      {totalCount > 0 && (
+        <div className="flex justify-center mt-4 space-x-2">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50"
+          >
+            Назад
+          </button>
+          <span className="px-3 py-1 text-gray-700">Страница {page} из {Math.max(1, Math.ceil(totalCount / 20))}</span>
+          <button
+            onClick={() => setPage((p) => Math.min(Math.ceil(totalCount / 20), p + 1))}
+            disabled={page >= Math.ceil(totalCount / 20)}
+            className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50"
+          >
+            Вперед
+          </button>
+        </div>
+      )}
     </div>
+
   );
 }

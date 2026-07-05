@@ -47,7 +47,7 @@ import {
   adminBlockProduct as apiBlockProduct,
   uploadAdminProductImage as apiUploadProductImage
 } from '@zamk/api-client/src/admin';
-import type { AdminSeller, Category, Brand, AdminProduct, ModerationProduct } from '@zamk/api-client/src/types';
+import type { AdminSeller, Category, Brand, ModerationProduct, PaginatedAdminProductsResponse } from '@zamk/api-client/src/types';
 
 // Sellers — P0 fix: apiGetSellers now returns { items, totalCount }
 export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCount: number }> => {
@@ -87,7 +87,7 @@ export const uploadAdminBrandLogo = async (brandId: string, file: File): Promise
 };
 
 // Products & Moderation
-export const getAdminProducts = async (): Promise<AdminProduct[]> => {
+export const getAdminProducts = async (): Promise<PaginatedAdminProductsResponse> => {
   return await apiGetProducts();
 };
 

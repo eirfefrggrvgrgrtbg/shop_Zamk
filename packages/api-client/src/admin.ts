@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary } from './types';
+import type { PaginatedAdminUsersResponse, AdminSeller, ModerationProduct, AdminOrder, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse } from './types';
 
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCount: number }> => {
@@ -52,8 +52,30 @@ export const uploadAdminBrandLogo = async (brandId: string, file: File): Promise
   return request<{ logoUrl: string }>('POST', `/admin/brands/${brandId}/logo/upload`, { body: formData });
 };
 
-export const getAdminProducts = async (): Promise<AdminProduct[]> => {
-  return request<AdminProduct[]>('GET', '/admin/products');
+export const getAdminProducts = async (
+  page: number = 1,
+  limit: number = 20,
+  filters?: {
+    q?: string;
+    status?: string;
+    sellerId?: string;
+    source?: string;
+  }
+): Promise<PaginatedAdminProductsResponse> => {
+  const query = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+  });
+  if (filters?.q) query.append('q', filters.q);
+  if (filters?.status) query.append('status', filters.status);
+  if (filters?.sellerId) query.append('sellerId', filters.sellerId);
+  if (filters?.source) query.append('source', filters.source);
+
+  return request<PaginatedAdminProductsResponse>('GET', `/admin/products?${query.toString()}`);
+};
+
+export const getAdminProductModerationHistory = async (productId: string): Promise<ModerationHistoryResponse> => {
+  return request<ModerationHistoryResponse>('GET', `/admin/products/${productId}/moderation-logs`);
 };
 
 export const getModerationProducts = async (): Promise<ModerationProduct[]> => {

@@ -91,3 +91,10 @@ type PublicProductFilter struct {
 	InStock       *bool      `json:"inStock,omitempty"`
 	Sort          *string    `json:"sort,omitempty"`
 }
+
+type AdminProductFilter struct {
+	Query    *string    `json:"q,omitempty"`
+	Status   *string    `json:"status,omitempty"`
+	SellerID *uuid.UUID `json:"sellerId,omitempty"`
+	Source   *string    `json:"source,omitempty"`
+}

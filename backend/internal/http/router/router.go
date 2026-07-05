@@ -349,6 +349,7 @@ func New(
 
 		// Products
 		r.With(perm("products.read")).Get("/products", productsHandler.ListAdminProducts)
+		r.With(perm("products.read")).Get("/products/{id}/moderation-logs", productsHandler.GetAdminModerationHistory)
 		r.With(uploadLimit, perm("products.moderate")).Post("/products/{id}/images/upload", storageHandler.UploadAdminProductImage)
 		r.With(perm("products.moderate")).Get("/moderation/products", productsHandler.ListModerationProducts)
 		r.With(adminDangerousLimit, perm("products.approve")).Post("/moderation/products/{id}/approve", productsHandler.AdminApproveProduct)

@@ -94,7 +94,7 @@ func (r *Repository) GetProductByIDForSeller(ctx context.Context, id, sellerID u
 func (r *Repository) getProductByCondition(ctx context.Context, condition string, args ...any) (*Product, error) {
 	query := `
 		SELECT id, seller_id, category_id, brand_id, title, slug, description,
-			status, gender, color, material, care_instructions,
+			status, source, gender, color, material, care_instructions,
 			price_cents, old_price_cents, currency, main_image_url, main_image_object_key,
 			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
 		FROM products
@@ -103,7 +103,7 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 	var p Product
 	err := r.db.QueryRow(ctx, query, args...).Scan(
 		&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
-		&p.Status, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
+		&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
 		&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL, &p.MainImageObjectKey,
 		&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
 	)
@@ -367,23 +367,109 @@ func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUI
 	return r.listProductsQuery(ctx, query, sellerID, limit, offset)
 }
 
-func (r *Repository) ListAllProducts(ctx context.Context, limit, offset int) ([]Product, error) {
-	query := `
-		SELECT id, seller_id, category_id, brand_id, title, slug, description,
-			status, gender, color, material, care_instructions,
-			price_cents, old_price_cents, currency, main_image_url,
-			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
-		FROM products
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
-	`
-	return r.listProductsQuery(ctx, query, limit, offset)
+func (r *Repository) ListAdminProducts(ctx context.Context, filter AdminProductFilter, limit, offset int) ([]Product, int, error) {
+	queryBuilder := strings.Builder{}
+	queryBuilder.WriteString(`
+		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
+			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
+			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
+			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment
+		FROM products p
+	`)
+
+	var args []interface{}
+	argID := 1
+	var conditions []string
+
+	if filter.Query != nil && *filter.Query != "" {
+		queryBuilder.WriteString(` LEFT JOIN sellers s ON p.seller_id = s.id `)
+		conditions = append(conditions, fmt.Sprintf("(p.title ILIKE $%d OR p.id::text ILIKE $%d OR s.brand_name ILIKE $%d)", argID, argID, argID))
+		args = append(args, "%"+*filter.Query+"%")
+		argID++
+	}
+
+	if filter.Status != nil && *filter.Status != "" {
+		conditions = append(conditions, fmt.Sprintf("p.status = $%d", argID))
+		args = append(args, *filter.Status)
+		argID++
+	}
+
+	if filter.Source != nil && *filter.Source != "" {
+		conditions = append(conditions, fmt.Sprintf("p.source = $%d", argID))
+		args = append(args, *filter.Source)
+		argID++
+	}
+
+	if filter.SellerID != nil {
+		conditions = append(conditions, fmt.Sprintf("p.seller_id = $%d", argID))
+		args = append(args, *filter.SellerID)
+		argID++
+	}
+
+	if len(conditions) > 0 {
+		queryBuilder.WriteString(" WHERE " + strings.Join(conditions, " AND "))
+	}
+
+	// Calculate total count
+	countQuery := "SELECT COUNT(*) FROM (" + queryBuilder.String() + ") AS c"
+	var totalCount int
+	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get total count: %w", err)
+	}
+
+	queryBuilder.WriteString(fmt.Sprintf(" ORDER BY p.created_at DESC LIMIT $%d OFFSET $%d", argID, argID+1))
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Query(ctx, queryBuilder.String(), args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list products: %w", err)
+	}
+	defer rows.Close()
+
+	var products []Product
+	for rows.Next() {
+		var p Product
+		if err := rows.Scan(
+			&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
+			&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
+			&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
+			&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
+		); err != nil {
+			return nil, 0, err
+		}
+		products = append(products, p)
+	}
+	if rows.Err() != nil {
+		return nil, 0, rows.Err()
+	}
+
+	for i := range products {
+		variants, _ := r.GetProductVariants(ctx, products[i].ID)
+		if variants != nil {
+			products[i].Variants = variants
+			inStock := false
+			for _, v := range variants {
+				if v.InStock != nil && *v.InStock {
+					inStock = true
+					break
+				}
+			}
+			products[i].InStock = &inStock
+		}
+		images, _ := r.GetProductImages(ctx, products[i].ID)
+		if images != nil {
+			products[i].Images = images
+		}
+	}
+
+	return products, totalCount, nil
 }
 
 func (r *Repository) ListProductsForModeration(ctx context.Context, limit, offset int) ([]Product, error) {
 	query := `
 		SELECT id, seller_id, category_id, brand_id, title, slug, description,
-			status, gender, color, material, care_instructions,
+			status, source, gender, color, material, care_instructions,
 			price_cents, old_price_cents, currency, main_image_url,
 			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
 		FROM products
@@ -398,7 +484,7 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 	queryBuilder := strings.Builder{}
 	queryBuilder.WriteString(`
 		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
-			p.status, p.gender, p.color, p.material, p.care_instructions,
+			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
 			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
 			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment
 		FROM products p
@@ -499,7 +585,7 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 		var p Product
 		if err := rows.Scan(
 			&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
-			&p.Status, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
+			&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
 			&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
 			&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
 		); err != nil {
@@ -523,7 +609,7 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug string) (*Product, error) {
 	query := `
 		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
-			p.status, p.gender, p.color, p.material, p.care_instructions,
+			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
 			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
 			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment
 		FROM products p
@@ -533,7 +619,7 @@ func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug
 	var p Product
 	err := r.db.QueryRow(ctx, query, idOrSlug).Scan(
 		&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
-		&p.Status, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
+		&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
 		&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
 		&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
 	)
@@ -581,7 +667,7 @@ func (r *Repository) listProductsQuery(ctx context.Context, query string, args .
 		var p Product
 		if err := rows.Scan(
 			&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
-			&p.Status, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
+			&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
 			&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
 			&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
 		); err != nil {

@@ -423,6 +423,11 @@ export interface ModerationProduct {
   images?: AdminProductImage[];
 }
 
+export interface PaginatedAdminProductsResponse {
+  items: AdminProduct[];
+  totalCount: number;
+}
+
 export interface AdminOrder {
   id: string;
   userId?: string;

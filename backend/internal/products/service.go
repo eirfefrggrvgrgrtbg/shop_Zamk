@@ -380,15 +380,15 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 // Admin Moderation Operations
 // ---------------------------------------------------------
 
-func (s *Service) ListAdminProducts(ctx context.Context, limit, offset int) (ProductListResponse, error) {
-	items, err := s.repo.ListAllProducts(ctx, limit, offset)
+func (s *Service) ListAdminProducts(ctx context.Context, filter AdminProductFilter, limit, offset int) (ProductListResponse, error) {
+	items, totalCount, err := s.repo.ListAdminProducts(ctx, filter, limit, offset)
 	if err != nil {
 		return ProductListResponse{}, err
 	}
 	if items == nil {
 		items = []Product{}
 	}
-	return ProductListResponse{Items: items, TotalCount: len(items)}, nil
+	return ProductListResponse{Items: items, TotalCount: totalCount}, nil
 }
 
 func (s *Service) ListProductsForModeration(ctx context.Context, limit, offset int) (ProductListResponse, error) {
@@ -405,6 +405,15 @@ func (s *Service) ListProductsForModeration(ctx context.Context, limit, offset i
 func (s *Service) GetProductModerationHistory(ctx context.Context, sellerID, productID uuid.UUID) ([]ProductModerationLog, error) {
 	// First verify the seller owns the product
 	_, err := s.repo.GetProductByIDForSeller(ctx, productID, sellerID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.ListProductModerationLogs(ctx, productID)
+}
+
+func (s *Service) GetAdminProductModerationHistory(ctx context.Context, productID uuid.UUID) ([]ProductModerationLog, error) {
+	// Verify product exists
+	_, err := s.repo.GetProductByID(ctx, productID)
 	if err != nil {
 		return nil, err
 	}
