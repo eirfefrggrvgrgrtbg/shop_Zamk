@@ -4,6 +4,7 @@ import {
   adminHideProduct,
   adminPublishProduct,
   adminRejectProduct,
+  getAdminProduct as apiGetAdminProduct,
   getAdminProducts as apiGetAdminProducts,
   getModerationProducts as apiGetModerationProducts,
   uploadAdminProductImage as apiUploadAdminProductImage,
@@ -169,6 +170,11 @@ export const getAdminProducts = async (
   const data = await apiGetAdminProducts(page, limit, filters);
   const items = (data.items || []).map(mapAdminProduct);
   return { items, totalCount: data.totalCount || 0 };
+};
+
+export const getAdminProduct = async (id: string): Promise<AdminProductView> => {
+  const data = await apiGetAdminProduct(id);
+  return mapAdminProduct(data);
 };
 
 export const getAdminProductModerationHistory = async (productId: string) => {

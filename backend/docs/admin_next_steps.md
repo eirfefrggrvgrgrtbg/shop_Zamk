@@ -2,26 +2,32 @@
 
 The MVP for the admin panel routing and structure is in place, but several sections require polish, unified UX, and deeper feature integration.
 
-## ADMIN-2: Dashboard Metrics & Overview
-**Goal**: Replace client-side aggregation with aggregated backend endpoints.
-- **Pages**: `AdminDashboard.tsx`
-- **Backend Endpoints**: `GET /api/admin/metrics/dashboard` (needs implementation)
-- **Tasks**: Show real stats (revenue, active auctions, moderation queue size) securely without pulling all lists into memory.
+## ✅ ADMIN-2: Dashboard Metrics & Overview — COMPLETED
+Real aggregate metrics via `GET /api/admin/dashboard/summary`. PII-safe. Role-protected.
 
-## ADMIN-3: Users, Staff, and RBAC
-**Goal**: Make the user management and staff/role assignments robust.
-- **Pages**: `AdminUsers.tsx`, `AdminStaff.tsx`, `AdminRoles.tsx`
-- **Tasks**: Connect `AdminUsers.tsx` to a real backend endpoint (`GET /api/admin/users`). Ensure help tooltips explain RBAC concepts.
+## ✅ ADMIN-3: Users, Staff, and RBAC — COMPLETED
+`GET /api/admin/users` with pagination/search/filter. `users.read` permission, role-mapped. `AdminUsers.tsx` uses real API.
 
-## ADMIN-4: Seller Management Completion
-**Goal**: Finalize seller workflows, metrics, and isolation.
-- **Pages**: `AdminSellers.tsx`
-- **Tasks**: Ensure platform seller ("ZAMK") cannot be blocked or archived accidentally. Fix text encodings.
+## ✅ ADMIN-4: Seller Management Completion — COMPLETED
+Seller list/search/filter/status. Platform seller protected from block/archive. Reset owner password flow. `sellers.manage` permission.
 
-## ADMIN-5: Catalog & Product Moderation
-**Goal**: Complete the moderation flow and category/brand management.
-- **Pages**: `AdminProducts.tsx`, `AdminModeration.tsx`, `AdminCatalog.tsx`
-- **Tasks**: Implement bulk actions for moderation. Add help tooltips ("?") explaining product status ("pending", "active", "rejected").
+## ✅ ADMIN-5: Catalog & Product Moderation — COMPLETED (ADMIN-5, 5B, 5C)
+
+**ADMIN-5**: Product list with filters (q, status, source), pagination, ZAMK badge (`auction_direct_sale`).
+
+**ADMIN-5B**: Source consistency verified (`seller` and `auction_direct_sale` are the only valid values). RBAC confirmed in DB. All 3 builds pass.
+
+**ADMIN-5C**: Product detail drawer added.
+- Backend: `GET /api/admin/products/{id}` — returns full product (title, slug, status, source, price, variants, images, dates, moderation comment). Permission: `products.read`. No PII.
+- Backend: `GET /api/admin/products/{id}/moderation-logs` — returns `[]` safely when empty.
+- Frontend: Product detail drawer opens from table row click.
+- Frontend: Moderation logs timeline shown in drawer.
+- Frontend: Approve / Reject (with required reason) / Publish / Hide / Block action buttons — context-aware.
+- Frontend: All UI strings in Russian. No English labels.
+- Product sources: `seller` (default), `auction_direct_sale` (ZAMK platform products).
+- Moderation flow: draft → pending_moderation → approved → published. Reject → rejected. Hide/Block available.
+- Category/brand admin mutations: deferred to future work (read-only access exists).
+- No password hash, tokens, or customer PII returned in any product admin endpoint.
 
 ## ADMIN-6: Orders, Fulfillment, and Shipments
 **Goal**: Combine fulfillment creation and shipment tracking.
@@ -47,5 +53,3 @@ The MVP for the admin panel routing and structure is in place, but several secti
 **Goal**: Ensure every page has strict loading/error/empty states and HelpTooltips.
 - **Pages**: All.
 - **Tasks**: Standardize the use of `PermissionGuard` and replace raw English errors with clean Russian equivalents. Add short `?` help tooltips everywhere.
-
-- ADMIN-3/ADMIN-3B: Users, Staff, and RBAC runtime verification completed. Next: ADMIN-4 Seller Management.

@@ -355,6 +355,26 @@ func (h *Handler) ListAdminProducts(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func (h *Handler) GetAdminProduct(w http.ResponseWriter, r *http.Request) {
+	productID, ok := h.parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+
+	prod, err := h.service.GetAdminProductDetail(r.Context(), productID)
+	if err != nil {
+		if errors.Is(err, ErrProductNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Product not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get product")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(prod)
+}
+
 func (h *Handler) GetAdminModerationHistory(w http.ResponseWriter, r *http.Request) {
 	productID, ok := h.parseUUIDParam(w, r, "id")
 	if !ok {

@@ -391,6 +391,14 @@ func (s *Service) ListAdminProducts(ctx context.Context, filter AdminProductFilt
 	return ProductListResponse{Items: items, TotalCount: totalCount}, nil
 }
 
+func (s *Service) GetAdminProductDetail(ctx context.Context, productID uuid.UUID) (Product, error) {
+	p, err := s.repo.GetProductByID(ctx, productID)
+	if err != nil {
+		return Product{}, err
+	}
+	return *p, nil
+}
+
 func (s *Service) ListProductsForModeration(ctx context.Context, limit, offset int) (ProductListResponse, error) {
 	items, err := s.repo.ListProductsForModeration(ctx, limit, offset)
 	if err != nil {
