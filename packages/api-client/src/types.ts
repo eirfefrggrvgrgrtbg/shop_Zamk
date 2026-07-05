@@ -432,16 +432,22 @@ export interface AdminOrder {
   id: string;
   userId?: string;
   status: string;
+  fulfillmentStatus: string;
+  sourceType: string;
   totalPriceCents: number;
   currency: string;
   customerName?: string;
-  customerPhone?: string;
   customerEmail?: string;
-  deliveryAddress?: string;
   createdAt: string;
   updatedAt?: string;
   cancelledAt?: string;
+}
+
+export interface AdminOrderDetail extends AdminOrder {
+  customerPhone?: string;
+  deliveryAddress?: string;
   items?: OrderItem[];
+  fulfillments?: AdminFulfillment[];
 }
 
 export interface AdminPayment {

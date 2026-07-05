@@ -315,12 +315,12 @@ func (s *Service) ListCustomerOrders(ctx context.Context, userID uuid.UUID, limi
 	return s.repo.ListCustomerOrders(ctx, userID, limit, offset)
 }
 
-func (s *Service) GetAdminOrder(ctx context.Context, orderID uuid.UUID) (*Order, error) {
-	return s.repo.GetOrder(ctx, orderID)
+func (s *Service) GetAdminOrder(ctx context.Context, orderID uuid.UUID) (*AdminOrderDetail, error) {
+	return s.repo.GetAdminOrderDetail(ctx, orderID)
 }
 
-func (s *Service) ListAdminOrders(ctx context.Context, limit, offset int) ([]Order, error) {
-	return s.repo.ListAdminOrders(ctx, limit, offset)
+func (s *Service) ListAdminOrders(ctx context.Context, q, status, paymentStatus, fulfillmentStatus, sourceType, sellerId string, limit, offset int) ([]AdminOrder, int, error) {
+	return s.repo.ListAdminOrders(ctx, q, status, paymentStatus, fulfillmentStatus, sourceType, sellerId, limit, offset)
 }
 
 func (s *Service) ListSellerOrders(ctx context.Context, userID uuid.UUID, limit, offset int) ([]SellerOrder, error) {

@@ -182,15 +182,23 @@ func (h *Handler) GetAdminOrder(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListAdminOrders(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	orders, err := h.service.ListAdminOrders(r.Context(), page.Limit, page.Offset)
+	
+	q := r.URL.Query().Get("q")
+	status := r.URL.Query().Get("status")
+	paymentStatus := r.URL.Query().Get("paymentStatus")
+	fulfillmentStatus := r.URL.Query().Get("fulfillmentStatus")
+	sourceType := r.URL.Query().Get("sourceType")
+	sellerId := r.URL.Query().Get("sellerId")
+
+	orders, total, err := h.service.ListAdminOrders(r.Context(), q, status, paymentStatus, fulfillmentStatus, sourceType, sellerId, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list orders")
 		return
 	}
 
-	resp := OrderListResponse{
+	resp := AdminOrderListResponse{
 		Items:      orders,
-		TotalCount: len(orders),
+		TotalCount: total,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

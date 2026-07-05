@@ -5,12 +5,14 @@ import {
   getAdminOrderFulfillments as apiGetAdminOrderFulfillments,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
-import type { AdminOrder, OrderItem, AdminFulfillment } from '@zamk/api-client/src/types';
+import type { AdminOrder, AdminOrderDetail, OrderItem, AdminFulfillment } from '@zamk/api-client/src/types';
 
 export interface AdminOrderView {
   id: string;
   status: string;
   statusLabel: string;
+  fulfillmentStatus: string;
+  sourceType: string;
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
@@ -19,6 +21,7 @@ export interface AdminOrderView {
   totalPriceCents: number;
   currency: string;
   items: OrderItem[];
+  fulfillments?: AdminFulfillment[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -48,27 +51,33 @@ const unwrapItems = <T>(response: ListResponse<T>): T[] => {
   return response.items ?? [];
 };
 
-export const mapAdminOrder = (order: AdminOrder): AdminOrderView => {
+export const mapAdminOrder = (order: AdminOrderDetail | AdminOrder): AdminOrderView => {
   return {
     id: order.id,
     status: order.status,
     statusLabel: orderStatusLabels[order.status] ?? order.status,
+    fulfillmentStatus: order.fulfillmentStatus || 'pending',
+    sourceType: order.sourceType || 'normal',
     customerName: order.customerName,
-    customerPhone: order.customerPhone,
+    customerPhone: (order as AdminOrderDetail).customerPhone,
     customerEmail: order.customerEmail,
-    deliveryAddress: order.deliveryAddress,
+    deliveryAddress: (order as AdminOrderDetail).deliveryAddress,
     totalAmount: order.totalPriceCents / 100,
     totalPriceCents: order.totalPriceCents,
     currency: order.currency || 'RUB',
-    items: order.items ?? [],
+    items: (order as AdminOrderDetail).items ?? [],
+    fulfillments: (order as AdminOrderDetail).fulfillments,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };
 };
 
-export const getAdminOrders = async (): Promise<AdminOrderView[]> => {
-  const response = await apiGetAdminOrders() as unknown as ListResponse<AdminOrder>;
-  return unwrapItems(response).map(mapAdminOrder);
+export const getAdminOrders = async (params?: Parameters<typeof apiGetAdminOrders>[0]): Promise<{ items: AdminOrderView[]; totalCount: number }> => {
+  const response = await apiGetAdminOrders(params);
+  return {
+    items: response.items.map(mapAdminOrder),
+    totalCount: response.totalCount,
+  };
 };
 
 export const getAdminOrder = async (id: string): Promise<AdminOrderView> => {

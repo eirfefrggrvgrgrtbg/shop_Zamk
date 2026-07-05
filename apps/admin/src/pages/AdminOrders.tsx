@@ -37,7 +37,17 @@ export function AdminOrders() {
   const [shipmentTrackingUrl, setShipmentTrackingUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
+  const [fulfillmentStatusFilter, setFulfillmentStatusFilter] = useState('');
+
   const fulfillmentStatusLabels: Record<string, string> = {
+    pending: 'Ожидает',
     awaiting_payment: 'Ожидает оплаты',
     paid: 'Оплачен',
     assembling: 'Собирается',
@@ -62,8 +72,16 @@ export function AdminOrders() {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await getAdminOrders();
-      setOrders(data);
+      const data = await getAdminOrders({
+        limit,
+        offset: (page - 1) * limit,
+        q: debouncedQuery,
+        status: statusFilter,
+        sourceType: sourceFilter,
+        fulfillmentStatus: fulfillmentStatusFilter,
+      });
+      setOrders(data.items);
+      setTotalCount(data.totalCount);
     } catch (err: unknown) {
       setError(getAdminOrderErrorMessage(err, 'Не удалось загрузить заказы.'));
     } finally {
@@ -106,8 +124,16 @@ export function AdminOrders() {
   };
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
     fetchOrders();
-  }, []);
+  }, [page, debouncedQuery, statusFilter, sourceFilter, fulfillmentStatusFilter]);
 
   const handleStatusUpdate = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -200,6 +226,56 @@ export function AdminOrders() {
         <h1 className="text-2xl font-bold text-gray-900">Заказы</h1>
       </div>
 
+      <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-lg shadow-sm">
+        <div className="flex-1">
+          <input
+            type="text"
+            placeholder="Поиск по ID, имени, email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          />
+        </div>
+        <div className="w-full sm:w-48">
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          >
+            <option value="">Все статусы</option>
+            <option value="awaiting_payment">Ожидает оплаты</option>
+            <option value="paid">Оплачен</option>
+            <option value="cancelled">Отменён</option>
+          </select>
+        </div>
+        <div className="w-full sm:w-48">
+          <select
+            value={fulfillmentStatusFilter}
+            onChange={(e) => { setFulfillmentStatusFilter(e.target.value); setPage(1); }}
+            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          >
+            <option value="">Все сборки</option>
+            <option value="pending">Ожидает</option>
+            <option value="assembling">Собирается</option>
+            <option value="packed">Упакован</option>
+            <option value="shipped">Отгружен</option>
+            <option value="delivered">Доставлен</option>
+          </select>
+        </div>
+        <div className="w-full sm:w-48">
+          <select
+            value={sourceFilter}
+            onChange={(e) => { setSourceFilter(e.target.value); setPage(1); }}
+            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          >
+            <option value="">Все типы</option>
+            <option value="normal">Обычные</option>
+            <option value="auction">Аукционы</option>
+            <option value="direct_sale">ZAMK</option>
+          </select>
+        </div>
+      </div>
+
       {error && (
         <div className="p-4 bg-red-50 text-red-700 rounded-md flex items-center">
           <AlertCircle className="h-5 w-5 mr-2" />
@@ -230,6 +306,8 @@ export function AdminOrders() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Покупатель</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Сумма</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Тип</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Сборка</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
                       <th className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
@@ -249,7 +327,17 @@ export function AdminOrders() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {formatMoney(order.totalAmount, order.currency)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {order.sourceType === 'auction' && <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">Аукцион</span>}
+                          {order.sourceType === 'direct_sale' && <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">ZAMK</span>}
+                          {order.sourceType === 'normal' && <span className="text-gray-500">Обычный</span>}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(order.fulfillmentStatus)}`}>
+                            {fulfillmentStatusLabels[order.fulfillmentStatus] || order.fulfillmentStatus}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(order.status)}`}>
                             {order.statusLabel}
                           </span>
@@ -269,6 +357,36 @@ export function AdminOrders() {
               </div>
             </div>
           </div>
+          
+          {totalCount > limit && (
+            <div className="mt-4 flex items-center justify-between bg-white px-4 py-3 sm:px-6 rounded-lg shadow-sm border border-gray-200">
+              <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-gray-700">
+                    Показано от <span className="font-medium">{(page - 1) * limit + 1}</span> до <span className="font-medium">{Math.min(page * limit, totalCount)}</span> из <span className="font-medium">{totalCount}</span> заказов
+                  </p>
+                </div>
+                <div>
+                  <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
+                    >
+                      Назад
+                    </button>
+                    <button
+                      onClick={() => setPage(p => p + 1)}
+                      disabled={page * limit >= totalCount}
+                      className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
+                    >
+                      Вперёд
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -310,6 +428,18 @@ export function AdminOrders() {
                       <span className={`mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(selectedOrder.status)}`}>
                         {selectedOrder.statusLabel}
                       </span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase">Сборка</p>
+                      <span className={`mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(selectedOrder.fulfillmentStatus)}`}>
+                        {fulfillmentStatusLabels[selectedOrder.fulfillmentStatus] || selectedOrder.fulfillmentStatus}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase">Тип заказа</p>
+                      <p className="mt-1 text-sm text-gray-900">
+                        {selectedOrder.sourceType === 'auction' ? 'Аукцион' : selectedOrder.sourceType === 'direct_sale' ? 'ZAMK (Прямая продажа)' : 'Обычный'}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs font-medium text-gray-500 uppercase">Создан</p>

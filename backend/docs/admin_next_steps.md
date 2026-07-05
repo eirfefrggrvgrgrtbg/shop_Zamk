@@ -29,10 +29,18 @@ Seller list/search/filter/status. Platform seller protected from block/archive. 
 - Category/brand admin mutations: deferred to future work (read-only access exists).
 - No password hash, tokens, or customer PII returned in any product admin endpoint.
 
-## ADMIN-6: Orders, Fulfillment, and Shipments
-**Goal**: Combine fulfillment creation and shipment tracking.
-- **Pages**: `AdminOrders.tsx`, `AdminShipments.tsx`
-- **Tasks**: Move manual shipment creation into the Order Detail side-panel. Remove the temporary manual `createOrderId` form from `AdminShipments.tsx`.
+## ✅ ADMIN-6: Orders, Fulfillment, and Shipments — PARTIALLY COMPLETED (ADMIN-6, 6B)
+
+**ADMIN-6**: Admin orders list with server-side pagination, debounced search, and advanced filters (status, fulfillmentStatus, sourceType). Source types accurately inferred (`auction`, `direct_sale`, `normal`). 
+
+**ADMIN-6B**: Runtime verified. Proper PII safety on `AdminOrderDetail`. Fulfillments included securely. Admin orders drawer displays tracking information properly. `PlatformSellerID` safely extracted to `backend/internal/common`.
+
+## ADMIN-6C: Fulfillment & Shipments Admin Completion
+**Goal**: Finish the endpoints and UI actions for managing fulfillments and shipments from the admin side.
+- **Tasks**:
+  - Backend: Implement admin mutation endpoints for `fulfillment-status`.
+  - Frontend: Move manual shipment creation into the Order Detail side-panel. Remove the temporary manual `createOrderId` form from `AdminShipments.tsx`.
+  - UI: Provide direct buttons in the admin panel to update shipment statuses and fulfillment stages.
 
 ## ADMIN-7: Inventory and Storage
 **Goal**: Make inventory management precise and location-aware.

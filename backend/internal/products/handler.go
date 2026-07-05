@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/common"
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-playground/validator/v10"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
 
@@ -558,25 +559,25 @@ func (h *Handler) handleAdminModerationAction(w http.ResponseWriter, r *http.Req
 
 func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	
+
 	filter := PublicProductFilter{}
 	q := r.URL.Query().Get("q")
 	if q != "" {
 		filter.Query = &q
 	}
-	
+
 	if catID := r.URL.Query().Get("categoryId"); catID != "" && catID != "all" {
 		if id, err := uuid.Parse(catID); err == nil {
 			filter.CategoryID = &id
 		}
 	}
-	
+
 	if brandID := r.URL.Query().Get("brandId"); brandID != "" && brandID != "all" {
 		if id, err := uuid.Parse(brandID); err == nil {
 			filter.BrandID = &id
 		}
 	}
-	
+
 	if sort := r.URL.Query().Get("sort"); sort != "" {
 		filter.Sort = &sort
 	}
@@ -615,11 +616,11 @@ func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetDirectSaleProducts(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	
+
 	filter := PublicProductFilter{}
-	platformSellerID := uuid.MustParse("00000000-0000-4000-8000-000000000000")
+	platformSellerID := uuid.MustParse(common.PlatformSellerIDStr)
 	filter.SellerID = &platformSellerID
-	
+
 	if sort := r.URL.Query().Get("sort"); sort != "" {
 		filter.Sort = &sort
 	}
@@ -673,7 +674,7 @@ func (h *Handler) GetPublicSellerStore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := PublicProductFilter{SellerID: &seller.ID}
-	
+
 	if q := r.URL.Query().Get("q"); q != "" {
 		filter.Query = &q
 	}

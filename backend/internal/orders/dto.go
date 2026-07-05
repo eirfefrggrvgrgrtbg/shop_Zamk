@@ -35,3 +35,31 @@ type SellerOrder struct {
 	ShipmentStatus  *string       `json:"shipmentStatus,omitempty"`
 	Items           []OrderItem   `json:"items"`
 }
+
+type AdminOrderListResponse struct {
+	Items      []AdminOrder `json:"items"`
+	TotalCount int          `json:"totalCount"`
+}
+
+type AdminOrder struct {
+	ID                uuid.UUID `json:"id"`
+	UserID            uuid.UUID `json:"userId"`
+	Status            string    `json:"status"` // payment/overall status
+	FulfillmentStatus string    `json:"fulfillmentStatus"`
+	SourceType        string    `json:"sourceType"` // 'auction', 'direct_sale', 'normal'
+	TotalPriceCents   int64     `json:"totalPriceCents"`
+	Currency          string    `json:"currency"`
+	CustomerName      string    `json:"customerName"`
+	CustomerEmail     string    `json:"customerEmail"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
+	CancelledAt       *time.Time `json:"cancelledAt,omitempty"`
+}
+
+type AdminOrderDetail struct {
+	AdminOrder
+	CustomerPhone     string               `json:"customerPhone"`
+	DeliveryAddress   string               `json:"deliveryAddress"`
+	Items             []OrderItem          `json:"items"`
+	Fulfillments      []OrderFulfillment   `json:"fulfillments"`
+}

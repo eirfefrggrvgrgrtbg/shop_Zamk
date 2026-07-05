@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/common"
 	"time"
 
 	"github.com/google/uuid"
@@ -170,7 +171,7 @@ func (s *Service) PlaceBid(ctx context.Context, lotID, userID uuid.UUID, req Bid
 					return err
 				}
 				extensionApplied = true
-				
+
 				extMeta, _ := json.Marshal(map[string]interface{}{
 					"triggerBidId": bidID,
 					"newEndsAt":    newEndsAt,
@@ -327,7 +328,7 @@ func (s *Service) FinalizeAuction(ctx context.Context, auctionID uuid.UUID, admi
 			} else {
 				deadline := time.Now().Add(time.Duration(24) * time.Hour) // Use a default since event.PaymentDeadlineHours isn't joined
 				_, _ = tx.Exec(ctx, "UPDATE auction_lots SET status = $1, payment_deadline_at = $2, updated_at = now() WHERE id = $3", LotStatusWonPendingPayment, deadline, lot.ID)
-				
+
 				// Notify winner
 				metaNotif := map[string]interface{}{"lotId": lot.ID.String()}
 				wonNotif := notifications.Notification{
@@ -379,23 +380,57 @@ func (s *Service) UpdateEventAdmin(ctx context.Context, id uuid.UUID, req AdminU
 		return errors.New("auction not found")
 	}
 
-	if req.Title != nil { event.Title = *req.Title }
-	if req.Description != nil { event.Description = req.Description }
-	if req.StartsAt != nil { event.StartsAt = *req.StartsAt }
-	if req.EndsAt != nil { event.EndsAt = *req.EndsAt }
-	if req.BidStepCents != nil { event.BidStepCents = *req.BidStepCents }
-	if req.PaymentDeadlineHours != nil { event.PaymentDeadlineHours = *req.PaymentDeadlineHours }
-	if req.AntiSnipingEnabled != nil { event.AntiSnipingEnabled = *req.AntiSnipingEnabled }
-	if req.AntiSnipingTriggerSeconds != nil { event.AntiSnipingTriggerSeconds = *req.AntiSnipingTriggerSeconds }
-	if req.AntiSnipingExtensionSeconds != nil { event.AntiSnipingExtensionSeconds = *req.AntiSnipingExtensionSeconds }
-	if req.MaxBidsPerUserPerLotPerMinute != nil { event.MaxBidsPerUserPerLotPerMinute = *req.MaxBidsPerUserPerLotPerMinute }
-	if req.MaxRejectedBidsPerUserPerMinute != nil { event.MaxRejectedBidsPerUserPerMinute = *req.MaxRejectedBidsPerUserPerMinute }
-	if req.NoBidsPolicy != nil { event.NoBidsPolicy = *req.NoBidsPolicy }
-	if req.UnpaidWinnerPolicy != nil { event.UnpaidWinnerPolicy = *req.UnpaidWinnerPolicy }
-	if req.IsPublic != nil { event.IsPublic = *req.IsPublic }
-	if req.ShowOnHomepage != nil { event.ShowOnHomepage = *req.ShowOnHomepage }
-	if req.HighlightInNav != nil { event.HighlightInNav = *req.HighlightInNav }
-	if req.BiddingEnabled != nil { event.BiddingEnabled = *req.BiddingEnabled }
+	if req.Title != nil {
+		event.Title = *req.Title
+	}
+	if req.Description != nil {
+		event.Description = req.Description
+	}
+	if req.StartsAt != nil {
+		event.StartsAt = *req.StartsAt
+	}
+	if req.EndsAt != nil {
+		event.EndsAt = *req.EndsAt
+	}
+	if req.BidStepCents != nil {
+		event.BidStepCents = *req.BidStepCents
+	}
+	if req.PaymentDeadlineHours != nil {
+		event.PaymentDeadlineHours = *req.PaymentDeadlineHours
+	}
+	if req.AntiSnipingEnabled != nil {
+		event.AntiSnipingEnabled = *req.AntiSnipingEnabled
+	}
+	if req.AntiSnipingTriggerSeconds != nil {
+		event.AntiSnipingTriggerSeconds = *req.AntiSnipingTriggerSeconds
+	}
+	if req.AntiSnipingExtensionSeconds != nil {
+		event.AntiSnipingExtensionSeconds = *req.AntiSnipingExtensionSeconds
+	}
+	if req.MaxBidsPerUserPerLotPerMinute != nil {
+		event.MaxBidsPerUserPerLotPerMinute = *req.MaxBidsPerUserPerLotPerMinute
+	}
+	if req.MaxRejectedBidsPerUserPerMinute != nil {
+		event.MaxRejectedBidsPerUserPerMinute = *req.MaxRejectedBidsPerUserPerMinute
+	}
+	if req.NoBidsPolicy != nil {
+		event.NoBidsPolicy = *req.NoBidsPolicy
+	}
+	if req.UnpaidWinnerPolicy != nil {
+		event.UnpaidWinnerPolicy = *req.UnpaidWinnerPolicy
+	}
+	if req.IsPublic != nil {
+		event.IsPublic = *req.IsPublic
+	}
+	if req.ShowOnHomepage != nil {
+		event.ShowOnHomepage = *req.ShowOnHomepage
+	}
+	if req.HighlightInNav != nil {
+		event.HighlightInNav = *req.HighlightInNav
+	}
+	if req.BiddingEnabled != nil {
+		event.BiddingEnabled = *req.BiddingEnabled
+	}
 
 	return s.repo.UpdateEvent(ctx, event)
 }
@@ -415,10 +450,14 @@ func (s *Service) UpdateEventStatus(ctx context.Context, id uuid.UUID, status Au
 func (s *Service) CancelAuction(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error {
 	err := s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, "UPDATE auction_events SET status = $1, updated_at = now() WHERE id = $2", AuctionStatusCancelled, id)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 
 		_, err = tx.Exec(ctx, "UPDATE auction_lots SET status = $1, updated_at = now() WHERE auction_id = $2 AND status IN ($3, $4)", LotStatusCancelled, id, LotStatusDraft, LotStatusActive)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 
 		meta, _ := json.Marshal(map[string]interface{}{"adminId": adminID})
 		logEntry := &AuctionLog{
@@ -453,14 +492,30 @@ func (s *Service) UpdateLotAdmin(ctx context.Context, id uuid.UUID, req AdminUpd
 		return errors.New("lot not found")
 	}
 
-	if req.Title != nil { lot.Title = *req.Title }
-	if req.Description != nil { lot.Description = req.Description }
-	if req.StartPriceCents != nil { lot.StartPriceCents = *req.StartPriceCents }
-	if req.BidStepCents != nil { lot.BidStepCents = *req.BidStepCents }
-	if req.CanRelaunch != nil { lot.CanRelaunch = *req.CanRelaunch }
-	if req.CanMoveToDirectSale != nil { lot.CanMoveToDirectSale = *req.CanMoveToDirectSale }
-	if req.DirectSalePriceCents != nil { lot.DirectSalePriceCents = req.DirectSalePriceCents }
-	if req.AdminNote != nil { lot.AdminNote = req.AdminNote }
+	if req.Title != nil {
+		lot.Title = *req.Title
+	}
+	if req.Description != nil {
+		lot.Description = req.Description
+	}
+	if req.StartPriceCents != nil {
+		lot.StartPriceCents = *req.StartPriceCents
+	}
+	if req.BidStepCents != nil {
+		lot.BidStepCents = *req.BidStepCents
+	}
+	if req.CanRelaunch != nil {
+		lot.CanRelaunch = *req.CanRelaunch
+	}
+	if req.CanMoveToDirectSale != nil {
+		lot.CanMoveToDirectSale = *req.CanMoveToDirectSale
+	}
+	if req.DirectSalePriceCents != nil {
+		lot.DirectSalePriceCents = req.DirectSalePriceCents
+	}
+	if req.AdminNote != nil {
+		lot.AdminNote = req.AdminNote
+	}
 
 	return s.repo.UpdateLot(ctx, lot)
 }
@@ -483,7 +538,7 @@ func (s *Service) UpdateLotStatus(ctx context.Context, id uuid.UUID, status LotS
 }
 
 func (s *Service) MoveLotToDirectSale(ctx context.Context, id uuid.UUID, adminID uuid.UUID) error {
-	platformSellerID := uuid.MustParse("00000000-0000-4000-8000-000000000000")
+	platformSellerID := uuid.MustParse(common.PlatformSellerIDStr)
 	var productID uuid.UUID
 
 	err := s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
@@ -494,7 +549,7 @@ func (s *Service) MoveLotToDirectSale(ctx context.Context, id uuid.UUID, adminID
 		if lot == nil {
 			return errors.New("Лот недоступен") // not required but safe
 		}
-		
+
 		if lot.Status == LotStatusMovedToDirectSale {
 			return errors.New("Лот уже переведён в прямую продажу.")
 		}

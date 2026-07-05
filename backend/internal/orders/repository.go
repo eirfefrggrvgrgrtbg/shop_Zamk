@@ -3,6 +3,8 @@ package orders
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/common"
 	"time"
 
 	"github.com/google/uuid"
@@ -161,38 +163,152 @@ func (r *Repository) ListCustomerOrders(ctx context.Context, userID uuid.UUID, l
 	return orders, nil
 }
 
-func (r *Repository) ListAdminOrders(ctx context.Context, limit, offset int) ([]Order, error) {
-	query := `
-		SELECT id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, created_at, updated_at, cancelled_at
-		FROM orders ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
+func (r *Repository) ListAdminOrders(ctx context.Context, q, status, paymentStatus, fulfillmentStatus, sourceType, sellerId string, limit, offset int) ([]AdminOrder, int, error) {
+	baseQuery := `
+		FROM orders o
+		LEFT JOIN order_items oi ON o.id = oi.order_id
+		LEFT JOIN order_fulfillments f ON o.id = f.order_id
+		LEFT JOIN auction_order_links aol ON o.id = aol.order_id
+		WHERE 1=1
 	`
-	rows, err := r.db.Query(ctx, query, limit, offset)
+	args := []interface{}{}
+	argID := 1
+
+	if q != "" {
+		baseQuery += ` AND (o.customer_name ILIKE $` + fmt.Sprintf("%d", argID) + ` OR o.customer_email ILIKE $` + fmt.Sprintf("%d", argID+1) + ` OR o.id::text ILIKE $` + fmt.Sprintf("%d", argID+2) + `)`
+		args = append(args, "%"+q+"%", "%"+q+"%", "%"+q+"%")
+		argID += 3
+	}
+	if status != "" {
+		baseQuery += ` AND o.status = $` + fmt.Sprintf("%d", argID)
+		args = append(args, status)
+		argID++
+	}
+	if paymentStatus != "" {
+		baseQuery += ` AND o.status = $` + fmt.Sprintf("%d", argID) // In this system order status IS payment status
+		args = append(args, paymentStatus)
+		argID++
+	}
+	if fulfillmentStatus != "" {
+		baseQuery += ` AND f.status = $` + fmt.Sprintf("%d", argID)
+		args = append(args, fulfillmentStatus)
+		argID++
+	}
+	if sellerId != "" {
+		baseQuery += ` AND f.seller_id = $` + fmt.Sprintf("%d", argID)
+		args = append(args, sellerId)
+		argID++
+	}
+	if sourceType == "auction" {
+		baseQuery += " AND aol.id IS NOT NULL"
+	} else if sourceType == "direct_sale" {
+		baseQuery += " AND aol.id IS NULL AND oi.seller_id = '" + common.PlatformSellerIDStr + "'"
+	} else if sourceType == "normal" {
+		baseQuery += " AND aol.id IS NULL AND oi.seller_id != '" + common.PlatformSellerIDStr + "'"
+	}
+
+	countQuery := "SELECT COUNT(DISTINCT o.id) " + baseQuery
+	var totalCount int
+	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+
+	selectQuery := `
+		SELECT 
+			o.id, o.user_id, o.status, 
+			MAX(COALESCE(f.status, 'pending')) as fulfillment_status,
+			CASE 
+				WHEN MAX(aol.id::text) IS NOT NULL THEN 'auction'
+				WHEN MAX(oi.seller_id::text) = \'` + common.PlatformSellerIDStr + `\' THEN 'direct_sale'
+				ELSE 'normal'
+			END as source_type,
+			o.total_price_cents, o.currency, o.customer_name, o.customer_email, o.created_at, o.updated_at, o.cancelled_at
+	` + baseQuery + `
+		GROUP BY o.id
+		ORDER BY o.created_at DESC
+		LIMIT $` + fmt.Sprintf("%d", argID) + ` OFFSET $` + fmt.Sprintf("%d", argID+1)
+
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Query(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, err
 	}
 	defer rows.Close()
 
-	var orders []Order
+	var orders []AdminOrder
 	for rows.Next() {
-		var o Order
-		if err := rows.Scan(&o.ID, &o.UserID, &o.Status, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail, &o.DeliveryAddress, &o.CreatedAt, &o.UpdatedAt, &o.CancelledAt); err != nil {
-			return nil, err
+		var o AdminOrder
+		if err := rows.Scan(&o.ID, &o.UserID, &o.Status, &o.FulfillmentStatus, &o.SourceType, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerEmail, &o.CreatedAt, &o.UpdatedAt, &o.CancelledAt); err != nil {
+			return nil, 0, err
 		}
 		orders = append(orders, o)
 	}
 
-	for i := range orders {
-		orders[i].Items, err = r.GetOrderItems(ctx, orders[i].ID)
-		if err != nil {
-			return nil, err
+	if orders == nil {
+		orders = make([]AdminOrder, 0)
+	}
+	return orders, totalCount, nil
+}
+
+func (r *Repository) GetAdminOrderDetail(ctx context.Context, id uuid.UUID) (*AdminOrderDetail, error) {
+	query := `
+		SELECT 
+			o.id, o.user_id, o.status, 
+			(SELECT COALESCE(MAX(status), 'pending') FROM order_fulfillments WHERE order_id = o.id) as fulfillment_status,
+			CASE 
+				WHEN EXISTS(SELECT 1 FROM auction_order_links WHERE order_id = o.id) THEN 'auction'
+				WHEN EXISTS(SELECT 1 FROM order_items WHERE order_id = o.id AND seller_id = \'` + common.PlatformSellerIDStr + `\') THEN 'direct_sale'
+				ELSE 'normal'
+			END as source_type,
+			o.total_price_cents, o.currency, o.customer_name, o.customer_email, o.created_at, o.updated_at, o.cancelled_at,
+			o.customer_phone, o.delivery_address
+		FROM orders o
+		WHERE o.id = $1
+	`
+	var o AdminOrderDetail
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&o.ID, &o.UserID, &o.Status, &o.FulfillmentStatus, &o.SourceType,
+		&o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerEmail,
+		&o.CreatedAt, &o.UpdatedAt, &o.CancelledAt,
+		&o.CustomerPhone, &o.DeliveryAddress,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrOrderNotFound
 		}
+		return nil, err
 	}
 
-	if orders == nil {
-		orders = make([]Order, 0)
+	o.Items, err = r.GetOrderItems(ctx, o.ID)
+	if err != nil {
+		return nil, err
 	}
-	return orders, nil
+
+	fQuery := `
+		SELECT id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents, created_at, updated_at
+		FROM order_fulfillments WHERE order_id = $1
+	`
+	fRows, err := r.db.Query(ctx, fQuery, o.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer fRows.Close()
+
+	for fRows.Next() {
+		var f OrderFulfillment
+		if err := fRows.Scan(&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt); err != nil {
+			return nil, err
+		}
+		o.Fulfillments = append(o.Fulfillments, f)
+	}
+
+	if o.Fulfillments == nil {
+		o.Fulfillments = make([]OrderFulfillment, 0)
+	}
+
+	return &o, nil
 }
 
 func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerOrder, error) {
