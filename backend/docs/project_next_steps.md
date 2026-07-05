@@ -55,3 +55,5 @@
 - Deployment configuration.
 - Monitoring & Alerts.
 - Backups.
+
+- ADMIN-2/ADMIN-2B: Dashboard real metrics and RBAC verification completed. Next: ADMIN-3.

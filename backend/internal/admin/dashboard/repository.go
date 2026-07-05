@@ -87,9 +87,9 @@ func (r *Repository) GetSummary(ctx context.Context) (*DashboardSummary, error) 
 	var lowStock, reserved, oosCount int
 	err = r.db.QueryRow(ctx, `
 		SELECT 
-			COUNT(*) FILTER (WHERE available_quantity > 0 AND available_quantity <= 5),
-			COALESCE(SUM(reserved_quantity), 0),
-			COUNT(*) FILTER (WHERE available_quantity = 0)
+			COUNT(*) FILTER (WHERE (total_stock - reserved_stock) > 0 AND (total_stock - reserved_stock) <= 5),
+			COALESCE(SUM(reserved_stock), 0),
+			COUNT(*) FILTER (WHERE (total_stock - reserved_stock) = 0)
 		FROM inventory_items
 	`).Scan(&lowStock, &reserved, &oosCount)
 	if err != nil { return nil, err }

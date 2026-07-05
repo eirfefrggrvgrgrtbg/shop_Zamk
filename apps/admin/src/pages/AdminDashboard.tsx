@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Package, RotateCcw, Store, Wallet, AlertTriangle, AlertCircle, Info, RefreshCw, Box, ClipboardList, Gavel } from 'lucide-react';
+import { Package, Store, Wallet, AlertTriangle, AlertCircle, Info, RefreshCw, Box, ClipboardList, Gavel } from 'lucide-react';
 import { getDashboardSummary } from '@zamk/api-client';
 import type { AdminDashboardSummary } from '@zamk/api-client';
 import { HelpTooltip } from '../components/HelpTooltip';

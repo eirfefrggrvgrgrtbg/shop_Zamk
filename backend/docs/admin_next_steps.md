@@ -47,3 +47,5 @@ The MVP for the admin panel routing and structure is in place, but several secti
 **Goal**: Ensure every page has strict loading/error/empty states and HelpTooltips.
 - **Pages**: All.
 - **Tasks**: Standardize the use of `PermissionGuard` and replace raw English errors with clean Russian equivalents. Add short `?` help tooltips everywhere.
+
+- ADMIN-2/ADMIN-2B: Dashboard real metrics and RBAC verification completed. Next: ADMIN-3.

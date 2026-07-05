@@ -98,3 +98,5 @@ Terms needing tooltips:
 
 ## 13. Recommended Implementation Phases
 See `admin_next_steps.md` for the detailed phase breakdown (ADMIN-2 to ADMIN-10).
+
+- ADMIN-2/ADMIN-2B: Dashboard real metrics and RBAC verification completed. Next: ADMIN-3.
