@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
@@ -390,7 +389,7 @@ func (h *Handler) AdjustStockUnified(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		if strings.Contains(err.Error(), "insufficient") {
+		if errors.Is(err, ErrNegativeStock) || errors.Is(err, ErrStockBelowReserved) {
 			h.writeError(w, http.StatusBadRequest, "invalid_write_off", "Недостаточно доступного остатка.")
 			return
 		}
