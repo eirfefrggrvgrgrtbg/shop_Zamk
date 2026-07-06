@@ -1,7 +1,8 @@
 # Order & Fulfillment Flow (UX-4)
 
 ## Overview
-This document describes the lifecycle of an order after checkout, including reservation, seller fulfillment, shipment, and delivery. It covers the roles of Customer, Seller, and Admin, along with the allowed status transitions and API interactions.
+
+This document describes the lifecycle of an order after checkout, including seller fulfillment, shipment, and delivery. It covers the roles of Customer, Seller, and Admin, along with the allowed status transitions, API interactions, and verified inventory behavior.
 
 ## Status Definitions
 
@@ -61,26 +62,36 @@ This document describes the lifecycle of an order after checkout, including rese
   - `PATCH /api/admin/shipments/{id}/status` -> `shipped`, `delivered`
 - The Shipment status updates cascade back to the `Fulfillment` status, which in turn cascades up to the parent `Order` status via `recalculateParentOrderStatusTx`.
 
-## Inventory Consumption Behavior (Verified)
+## Inventory Behavior Verified in UX-4
 
-During the checkout and fulfillment flow, the inventory state behaves as follows:
+1. **Cart:**
+   - Adding item to cart does not change stock.
 
-1. **Cart & Checkout Initiation:**
-   - Adding items to the cart and initiating checkout does *not* immediately deduct or reserve stock.
-2. **Payment Confirmation:**
-   - When the payment webhook (`payment.succeeded`) confirms the order is paid, the system immediately records a `sale` movement.
-   - **`total_stock`**: Decrements by the ordered quantity.
-   - **`available_stock`**: Decrements by the ordered quantity.
-   - **`reserved_stock`**: Remains unchanged (since the stock goes straight to `sale`).
-3. **Fulfillment (Assembling/Packed/Shipped/Delivered):**
-   - The stock is already deducted at the moment of payment success. Subsequent transitions (assembling -> packed -> shipped -> delivered) do *not* trigger any further inventory movements. The stock remains deducted.
+2. **Order creation / checkout initiation:**
+   - Stock is not reserved immediately.
+   - `reserved_stock` remains unchanged.
 
-*SQL before/after confirmed:*
-- Initial: Total=10, Reserved=0, Available=10
-- After Checkout & Payment: Total=9, Reserved=0, Available=9 (1 item sold)
-- After Delivered: Total=9, Reserved=0, Available=9
+3. **Payment confirmation webhook:**
+   - After successful TBank/STUB webhook, backend records a stock movement with type `sale`.
+   - `total_stock` decreases by ordered quantity.
+   - `available_stock` decreases by ordered quantity.
+   - `reserved_stock` remains unchanged.
+
+4. **Fulfillment statuses:**
+   - `assembling`, `packed`, `shipped`, `delivered` do not change stock again.
+   - Stock was already consumed at successful payment.
+
+5. **Verified SQL example:**
+   - before: total=10, reserved=0, available=10
+   - after payment: total=9, reserved=0, available=9
+   - after delivered: total=9, reserved=0, available=9
+
+6. **Future work:**
+   - If business decides to support long reservation before payment, implement a separate INV phase.
+   - Current behavior is immediate sale consumption after payment success.
 
 ## Notifications
 
-- **Seller packed fulfillment**: Notification sent to Customer (`CustomerFulfillmentPacked`) and Staff (`StaffFulfillmentPacked`).
-- **Status Updates**: Webhooks or emails (if implemented) notify the customer of `shipped` and `delivered` events.
+- **Seller marks assembling**: Notification sent to Customer (`CustomerFulfillmentAssembling`).
+- **Seller marks packed**: Notification sent to Customer (`CustomerFulfillmentPacked`) and Staff (`StaffFulfillmentPacked`).
+- **Status Updates**: Customer is notified on `shipped` and `delivered` events via notification system.

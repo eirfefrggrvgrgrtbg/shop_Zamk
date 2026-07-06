@@ -34,7 +34,7 @@
 - [x] **UX-1**: Seller Onboarding Flow
 - [x] **UX-2**: Seller Product Creation and Admin Moderation Flow
 - [x] **UX-3**: Customer Checkout and Order Flow
-- [ ] **UX-4**: Order Fulfillment Flow - Current Phase
+- [x] **UX-4**: Order Fulfillment Flow — seller fulfillment, shipment, delivery, inventory verified
 - [ ] Remove demo data.
 - [ ] Real seller metrics.
 - [ ] Real product/order/fulfillment state.
