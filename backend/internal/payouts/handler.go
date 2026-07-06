@@ -198,6 +198,11 @@ func (h *Handler) UpdateAdminPayoutStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if req.Status == "rejected" && (req.Comment == nil || *req.Comment == "") {
+		h.writeError(w, http.StatusBadRequest, "comment_required", "Укажите причину отклонения.")
+		return
+	}
+
 	// Handler-level dynamic permission check based on target status
 	if h.staffSvc != nil {
 		var requiredPerm string

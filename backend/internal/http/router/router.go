@@ -402,12 +402,14 @@ func New(
 		r.With(perm("refunds.read")).Get("/refunds/{id}", returnsHandler.GetAdminRefund)
 
 		// Payouts — UpdateAdminPayoutStatus uses handler-level dynamic permission check
-		r.With(perm("payouts.read")).Get("/payouts", payoutsHandler.ListAdminPayouts)
-		r.With(perm("payouts.read")).Get("/payouts/summary", payoutsHandler.GetAdminPayoutSummary)
 		r.With(perm("payouts.read")).Get("/seller-balances", payoutsHandler.GetAdminSellerBalances)
-		r.With(perm("payouts.read")).Get("/payouts/{id}", payoutsHandler.GetAdminPayout)
-		r.With(adminDangerousLimit).Patch("/payouts/{id}/status", payoutsHandler.UpdateAdminPayoutStatus)
-		r.With(perm("payouts.read")).Post("/payouts/trigger-availability", payoutsHandler.TriggerAvailability)
+		r.Route("/payouts", func(r chi.Router) {
+			r.With(perm("payouts.read")).Get("/", payoutsHandler.ListAdminPayouts)
+			r.With(perm("payouts.read")).Get("/summary", payoutsHandler.GetAdminPayoutSummary)
+			r.With(perm("payouts.read")).Get("/{id}", payoutsHandler.GetAdminPayout)
+			r.With(adminDangerousLimit).Patch("/{id}/status", payoutsHandler.UpdateAdminPayoutStatus)
+			r.With(perm("payouts.read")).Post("/trigger-availability", payoutsHandler.TriggerAvailability)
+		})
 
 		// Auctions
 		r.With(perm("auctions.read")).Get("/auctions", auctionsAdminHandler.GetAuctions)
