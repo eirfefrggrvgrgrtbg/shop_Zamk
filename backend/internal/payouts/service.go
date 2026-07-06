@@ -343,3 +343,15 @@ func (s *Service) UpdatePayoutStatus(ctx context.Context, payoutID uuid.UUID, ad
 		return s.repo.UpdatePayoutTx(ctx, tx, payout)
 	})
 }
+
+func (s *Service) GetAdminPayoutSummary(ctx context.Context) (*AdminPayoutSummary, error) {
+	return s.repo.GetAdminPayoutSummary(ctx)
+}
+
+func (s *Service) ListAdminSellerBalances(ctx context.Context, limit, offset int) ([]AdminSellerBalance, int, error) {
+	return s.repo.ListAdminSellerBalances(ctx, limit, offset)
+}
+
+func (s *Service) ListAdminPayoutsFiltered(ctx context.Context, filter PayoutFilter, limit, offset int) ([]Payout, int, error) {
+	return s.repo.ListAdminPayoutsFiltered(ctx, filter, limit, offset)
+}

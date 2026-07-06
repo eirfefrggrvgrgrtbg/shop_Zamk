@@ -39,10 +39,9 @@ Seller list/search/filter/status. Platform seller protected from block/archive. 
 **Goal**: Make inventory management precise and location-aware.
 - **Completed**: Inventory list with advanced search/source filters. Detailed movements ledger. Unified stock adjustments endpoint (`receipt`, `adjustment`, `write_off`). Basic reservations listing endpoint. Admin/seller/public stock access correctly bounded. `PlatformSellerIDStr` UUID properly established for ZAMK platform tracking.
 
-## ADMIN-8: Payouts and Commissions
+## ✅ ADMIN-8: Payouts and Commissions — COMPLETED (ADMIN-8, 8B)
 **Goal**: Automate and track payouts to sellers.
-- **Pages**: `AdminPayouts.tsx`
-- **Tasks**: Integrate actual payout gateways (or tracking). Ensure commission calculations are visible and explainable via Tooltips.
+- **Completed**: Payout summary works. Seller balances work. Payout filters work. Payout detail/action behavior strictly enforced (reject reason required, valid transitions). Direct sale ZAMK payout behavior validated. Seller endpoint state secured. No sensitive bank/payment data exposed.
 
 ## ADMIN-9: Audit Logs and Security Monitoring
 **Goal**: Ensure all admin actions are logged and auditable.

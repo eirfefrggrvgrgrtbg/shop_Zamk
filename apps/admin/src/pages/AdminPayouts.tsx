@@ -4,6 +4,7 @@ import {
   getAdminPayout,
   getAdminPayoutErrorMessage,
   getAdminPayouts,
+  getAdminPayoutSummary,
   getPayoutStatusLabel,
   getPayoutStatusTargets,
   updateAdminPayoutStatus,
@@ -13,19 +14,28 @@ import { PermissionGuard } from '../components/PermissionGuard';
 
 export function AdminPayouts() {
   const [payouts, setPayouts] = useState<AdminPayoutView[]>([]);
+  const [summary, setSummary] = useState<any>(null);
   const [selectedPayout, setSelectedPayout] = useState<AdminPayoutView | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [filters, setFilters] = useState({ q: '', sellerId: '', status: '' });
+  const [debouncedFilters, setDebouncedFilters] = useState(filters);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusDraft, setStatusDraft] = useState('');
   const [comment, setComment] = useState('');
 
+  const fetchSummary = async () => {
+    try {
+      setSummary(await getAdminPayoutSummary());
+    } catch (e) {}
+  };
+
   const fetchPayouts = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      setPayouts(await getAdminPayouts());
+      setPayouts(await getAdminPayouts(debouncedFilters));
     } catch (err: unknown) {
       setError(getAdminPayoutErrorMessage(err, 'Не удалось загрузить выплаты.'));
     } finally {
@@ -49,12 +59,22 @@ export function AdminPayouts() {
   };
 
   useEffect(() => {
+    const timer = setTimeout(() => setDebouncedFilters(filters), 500);
+    return () => clearTimeout(timer);
+  }, [filters]);
+
+  useEffect(() => {
     fetchPayouts();
-  }, []);
+    fetchSummary();
+  }, [debouncedFilters]);
 
   const handleStatusUpdate = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedPayout || !statusDraft) return;
+    if (statusDraft === 'rejected' && !comment) {
+      setError('Необходимо указать причину отказа (комментарий).');
+      return;
+    }
     if (statusDraft === 'paid' && !window.confirm('Отметить выплату как выплаченную? Это ручное подтверждение. Реальный банковский перевод выполняется вне системы.')) return;
 
     try {
@@ -94,6 +114,48 @@ export function AdminPayouts() {
           <h1 className="text-2xl font-bold text-gray-900">Выплаты продавцам</h1>
           <p className="mt-1 text-sm text-gray-500">Выплаты продавцам за реализованные товары. Базовая комиссия ZAMK — 9%. При 2 нарушениях комиссия может быть повышена до 18% на 1 месяц (система нарушений будет подключена отдельно).</p>
         </div>
+      </div>
+
+      
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-4 mt-6">
+        <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
+          <dt className="truncate text-sm font-medium text-gray-500">Доступно к выплате</dt>
+          <dd className="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{summary ? (summary.totalAvailableCents / 100).toFixed(2) : '-'} ₽</dd>
+        </div>
+        <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
+          <dt className="truncate text-sm font-medium text-gray-500">Ожидает выплаты</dt>
+          <dd className="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{summary ? (summary.totalPendingCents / 100).toFixed(2) : '-'} ₽</dd>
+        </div>
+        <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
+          <dt className="truncate text-sm font-medium text-gray-500">Уже выплачено</dt>
+          <dd className="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{summary ? (summary.totalPaidCents / 100).toFixed(2) : '-'} ₽</dd>
+        </div>
+        <div className="overflow-hidden rounded-lg bg-indigo-50 px-4 py-5 shadow sm:p-6 border border-indigo-100">
+          <dt className="truncate text-sm font-medium text-indigo-700">Комиссия ZAMK</dt>
+          <dd className="mt-1 text-3xl font-semibold tracking-tight text-indigo-900">{summary ? (summary.totalCommissionCents / 100).toFixed(2) : '-'} ₽</dd>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col sm:flex-row gap-4">
+        <input
+          type="text"
+          placeholder="Поиск по ID или продавцу..."
+          className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm flex-1"
+          value={filters.q}
+          onChange={(e) => setFilters(f => ({ ...f, q: e.target.value }))}
+        />
+        <select
+          className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          value={filters.status}
+          onChange={(e) => setFilters(f => ({ ...f, status: e.target.value }))}
+        >
+          <option value="">Все статусы</option>
+          <option value="requested">Запрошена</option>
+          <option value="approved">Одобрена</option>
+          <option value="rejected">Отклонена</option>
+          <option value="paid">Выплачена</option>
+          <option value="cancelled">Отменена</option>
+        </select>
       </div>
 
       <div className="bg-amber-50 border-l-4 border-amber-400 p-4">

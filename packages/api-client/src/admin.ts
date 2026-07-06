@@ -232,8 +232,15 @@ export const getAdminRefund = async (id: string): Promise<AdminRefund> => {
   return request<AdminRefund>('GET', `/admin/refunds/${id}`);
 };
 
-export const getAdminPayouts = async (): Promise<{ items: AdminPayout[]; totalCount: number }> => {
-  return request<{ items: AdminPayout[]; totalCount: number }>('GET', '/admin/payouts');
+export const getAdminPayouts = async (params?: { q?: string; sellerId?: string; status?: string; limit?: number; offset?: number }): Promise<{ items: AdminPayout[]; totalCount: number }> => {
+  const query = new URLSearchParams();
+  if (params?.q) query.set('q', params.q);
+  if (params?.sellerId) query.set('sellerId', params.sellerId);
+  if (params?.status) query.set('status', params.status);
+  if (params?.limit) query.set('limit', params.limit.toString());
+  if (params?.offset) query.set('offset', params.offset.toString());
+  const qStr = query.toString() ? `?${query.toString()}` : '';
+  return request<{ items: AdminPayout[]; totalCount: number }>('GET', `/admin/payouts${qStr}`);
 };
 
 export const getAdminPayout = async (id: string): Promise<{ id?: string; payout?: AdminPayout } | AdminPayout> => {
@@ -401,4 +408,15 @@ export const resetAdminSellerOwnerPassword = async (id: string): Promise<{ tempo
 
 export const updateAdminOrderFulfillmentStatus = async (orderId: string, data: { status: string; reason?: string }): Promise<void> => {
   return request<void>('PATCH', `/admin/orders/${orderId}/fulfillment-status`, { body: data });
+};
+
+export const getAdminPayoutSummary = async (): Promise<any> => {
+  return await request<any>('GET', '/admin/payouts/summary');
+};
+
+export const getAdminSellerBalances = async (params?: { limit?: number; offset?: number }): Promise<any> => {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set('limit', params.limit.toString());
+  if (params?.offset) query.set('offset', params.offset.toString());
+  return await request<any>('GET', `/admin/seller-balances?${query.toString()}`);
 };

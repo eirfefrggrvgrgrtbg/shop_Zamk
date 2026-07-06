@@ -3,6 +3,7 @@ package payouts
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -234,4 +235,186 @@ func (r *Repository) GetTotalPaidPayouts(ctx context.Context, sellerID uuid.UUID
 	var total int64
 	err := r.db.QueryRow(ctx, query, sellerID).Scan(&total)
 	return total, err
+}
+
+func (r *Repository) GetAdminPayoutSummary(ctx context.Context) (*AdminPayoutSummary, error) {
+	query := `
+		SELECT type, SUM(amount_cents) as total
+		FROM seller_balance_ledger
+		GROUP BY type
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var summary AdminPayoutSummary
+	var salePending, saleAvailable, manualAdj, refundDeduction, payoutReq, payoutRej, payoutPaid int64
+
+	for rows.Next() {
+		var ltype string
+		var total int64
+		if err := rows.Scan(&ltype, &total); err != nil {
+			return nil, err
+		}
+		switch ltype {
+		case "sale_pending":
+			salePending += total
+		case "sale_available":
+			saleAvailable += total
+		case "manual_adjustment":
+			manualAdj += total
+		case "refund_deduction":
+			refundDeduction += total
+		case "payout_requested":
+			payoutReq += total
+			summary.TotalPendingCents -= total // payoutReq is negative, so sub to get pos
+		case "payout_rejected":
+			payoutRej += total
+			summary.TotalRejectedCents += total // payout_rejected is positive
+		case "payout_cancelled":
+			payoutRej += total
+			summary.TotalRejectedCents += total
+		case "payout_paid":
+			payoutPaid += total
+		}
+	}
+
+	summary.TotalAvailableCents = saleAvailable + manualAdj + refundDeduction + payoutReq + payoutRej
+
+	// Commission logic: Assuming we want commission from the marketplace orders
+	// For third-party orders: The seller net is stored as "sale_pending" (and later "sale_available"). 
+	// To get total marketplace commission, we might need a separate sum from order_fulfillments or calculate it based on something else.
+	// The prompt states: "total marketplace commission".
+	// Let's compute commission by summing (subtotal - seller_amount) from order_fulfillments for 3rd party sellers.
+	commQuery := `
+		SELECT COALESCE(SUM(subtotal_cents - seller_amount_cents), 0)
+		FROM order_fulfillments
+		WHERE seller_id != '00000000-0000-4000-8000-000000000000'
+	`
+	err = r.db.QueryRow(ctx, commQuery).Scan(&summary.TotalCommissionCents)
+	if err != nil {
+		return nil, err
+	}
+
+	// Wait, payoutPaid in ledger is often 0 or not perfectly mapped if "paid" doesn't create negative.
+	// Let's sum from payouts table directly for paid:
+	paidQuery := `SELECT COALESCE(SUM(amount_cents), 0) FROM payouts WHERE status = 'paid'`
+	err = r.db.QueryRow(ctx, paidQuery).Scan(&summary.TotalPaidCents)
+	if err != nil {
+		return nil, err
+	}
+
+	summary.Currency = "RUB"
+	return &summary, nil
+}
+
+func (r *Repository) ListAdminSellerBalances(ctx context.Context, limit, offset int) ([]AdminSellerBalance, int, error) {
+	// Let's use a subquery to aggregate ledger by seller
+	query := `
+		WITH agg AS (
+			SELECT 
+				seller_id,
+				SUM(CASE WHEN type = 'sale_pending' THEN amount_cents ELSE 0 END) as pending_cents,
+				SUM(CASE WHEN type IN ('sale_available', 'manual_adjustment', 'refund_deduction', 'payout_requested', 'payout_rejected', 'payout_cancelled') THEN amount_cents ELSE 0 END) as available_cents
+			FROM seller_balance_ledger
+			GROUP BY seller_id
+		)
+		SELECT 
+			a.seller_id,
+			s.brand_name,
+			a.pending_cents,
+			a.available_cents
+		FROM agg a
+		JOIN sellers s ON s.id = a.seller_id
+		ORDER BY a.available_cents DESC
+		LIMIT $1 OFFSET $2
+	`
+	rows, err := r.db.Query(ctx, query, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var list []AdminSellerBalance
+	for rows.Next() {
+		var b AdminSellerBalance
+		if err := rows.Scan(&b.SellerID, &b.SellerName, &b.PendingBalanceCents, &b.AvailableBalanceCents); err != nil {
+			return nil, 0, err
+		}
+		b.Currency = "RUB"
+		list = append(list, b)
+	}
+	if list == nil {
+		list = make([]AdminSellerBalance, 0)
+	}
+
+	var total int
+	err = r.db.QueryRow(ctx, `SELECT count(DISTINCT seller_id) FROM seller_balance_ledger`).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return list, total, nil
+}
+
+func (r *Repository) ListAdminPayoutsFiltered(ctx context.Context, filter PayoutFilter, limit, offset int) ([]Payout, int, error) {
+	query := `
+		SELECT p.id, p.seller_id, p.status, p.amount_cents, p.currency, p.requested_at, p.approved_at, p.rejected_at, p.paid_at, p.admin_user_id, p.comment, p.created_at, p.updated_at
+		FROM payouts p
+		LEFT JOIN sellers s ON s.id = p.seller_id
+		WHERE 1=1
+	`
+	var args []interface{}
+	argIdx := 1
+
+	if filter.Status != "" {
+		query += ` AND p.status = $` + strconv.Itoa(argIdx)
+		args = append(args, filter.Status)
+		argIdx++
+	}
+
+	if filter.SellerID != "" {
+		if _, err := uuid.Parse(filter.SellerID); err == nil {
+			query += ` AND p.seller_id = $` + strconv.Itoa(argIdx)
+			args = append(args, filter.SellerID)
+			argIdx++
+		}
+	}
+
+	if filter.Q != "" {
+		query += ` AND (s.brand_name ILIKE $` + strconv.Itoa(argIdx) + ` OR p.id::text ILIKE $` + strconv.Itoa(argIdx) + `)`
+		args = append(args, "%"+filter.Q+"%")
+		argIdx++
+	}
+
+	countQuery := `SELECT count(*) FROM (` + query + `) as c`
+	var total int
+	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	query += ` ORDER BY p.created_at DESC LIMIT $` + strconv.Itoa(argIdx) + ` OFFSET $` + strconv.Itoa(argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var list []Payout
+	for rows.Next() {
+		var p Payout
+		if err := rows.Scan(&p.ID, &p.SellerID, &p.Status, &p.AmountCents, &p.Currency, &p.RequestedAt, &p.ApprovedAt, &p.RejectedAt, &p.PaidAt, &p.AdminUserID, &p.Comment, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, 0, err
+		}
+		list = append(list, p)
+	}
+	if list == nil {
+		list = make([]Payout, 0)
+	}
+
+	return list, total, nil
 }

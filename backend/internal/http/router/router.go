@@ -403,6 +403,8 @@ func New(
 
 		// Payouts — UpdateAdminPayoutStatus uses handler-level dynamic permission check
 		r.With(perm("payouts.read")).Get("/payouts", payoutsHandler.ListAdminPayouts)
+		r.With(perm("payouts.read")).Get("/payouts/summary", payoutsHandler.GetAdminPayoutSummary)
+		r.With(perm("payouts.read")).Get("/seller-balances", payoutsHandler.GetAdminSellerBalances)
 		r.With(perm("payouts.read")).Get("/payouts/{id}", payoutsHandler.GetAdminPayout)
 		r.With(adminDangerousLimit).Patch("/payouts/{id}/status", payoutsHandler.UpdateAdminPayoutStatus)
 		r.With(perm("payouts.read")).Post("/payouts/trigger-availability", payoutsHandler.TriggerAvailability)

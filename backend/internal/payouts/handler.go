@@ -134,13 +134,18 @@ func (h *Handler) RequestPayout(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListAdminPayouts(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	payouts, err := h.service.ListAdminPayouts(r.Context(), page.Limit, page.Offset)
+	filter := PayoutFilter{
+		Q:        r.URL.Query().Get("q"),
+		SellerID: r.URL.Query().Get("sellerId"),
+		Status:   r.URL.Query().Get("status"),
+	}
+	payouts, total, err := h.service.ListAdminPayoutsFiltered(r.Context(), filter, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list payouts")
 		return
 	}
 
-	resp := PayoutListResponse{Items: payouts, TotalCount: len(payouts)}
+	resp := PayoutListResponse{Items: payouts, TotalCount: total}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -273,4 +278,27 @@ func (h *Handler) TriggerAvailability(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{
 		"processed": processed,
 	})
+}
+
+func (h *Handler) GetAdminPayoutSummary(w http.ResponseWriter, r *http.Request) {
+	summary, err := h.service.GetAdminPayoutSummary(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get payout summary")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(summary)
+}
+
+func (h *Handler) GetAdminSellerBalances(w http.ResponseWriter, r *http.Request) {
+	page := pagination.FromRequest(r)
+	balances, total, err := h.service.ListAdminSellerBalances(r.Context(), page.Limit, page.Offset)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list seller balances")
+		return
+	}
+
+	resp := AdminSellerBalanceListResponse{Items: balances, TotalCount: total}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }

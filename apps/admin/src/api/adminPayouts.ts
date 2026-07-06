@@ -2,6 +2,8 @@ import {
   getAdminPayout as apiGetAdminPayout,
   getAdminPayouts as apiGetAdminPayouts,
   updateAdminPayoutStatus as apiUpdateAdminPayoutStatus,
+  getAdminPayoutSummary as apiGetAdminPayoutSummary,
+  getAdminSellerBalances as apiGetAdminSellerBalances,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
 import type { AdminPayout } from '@zamk/api-client/src/types';
@@ -69,8 +71,8 @@ export const getPayoutStatusTargets = (status: string): string[] => {
 
 export const getPayoutStatusLabel = (status: string): string => labels[status] ?? status;
 
-export const getAdminPayouts = async (): Promise<AdminPayoutView[]> => {
-  const response = await apiGetAdminPayouts() as unknown as ListResponse<AdminPayout>;
+export const getAdminPayouts = async (params?: { q?: string; sellerId?: string; status?: string; limit?: number; offset?: number }): Promise<AdminPayoutView[]> => {
+  const response = await apiGetAdminPayouts(params) as unknown as ListResponse<AdminPayout>;
   return unwrapItems(response).map(mapAdminPayout);
 };
 
@@ -90,4 +92,12 @@ export const getAdminPayoutErrorMessage = (error: unknown, fallback: string): st
     if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
   }
   return fallback;
+};
+
+export const getAdminPayoutSummary = async () => {
+  return await apiGetAdminPayoutSummary();
+};
+
+export const getAdminSellerBalances = async (params?: { limit?: number; offset?: number }) => {
+  return await apiGetAdminSellerBalances(params);
 };

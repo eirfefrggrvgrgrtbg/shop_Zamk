@@ -1065,3 +1065,20 @@ export interface AdminDashboardSummary {
   attention: DashboardAttentionItem[];
 }
 
+
+export interface AdminPayoutSummary {
+  totalAvailableCents: number;
+  totalPendingCents: number;
+  totalPaidCents: number;
+  totalRejectedCents: number;
+  totalCommissionCents: number;
+  currency: string;
+}
+
+export interface AdminSellerBalance {
+  sellerId: string;
+  sellerName: string;
+  pendingBalanceCents: number;
+  availableBalanceCents: number;
+  currency: string;
+}
