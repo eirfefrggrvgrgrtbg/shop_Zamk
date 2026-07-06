@@ -7,11 +7,13 @@ export interface ProductListResponse {
 }
 
 export const getProducts = async (params?: any): Promise<ProductListResponse> => {
-  return request<ProductListResponse>('GET', '/public/products', { params });
+  const res = await request<ProductListResponse>('GET', '/public/products', { params });
+  return { ...res, items: res?.items || [] };
 };
 
 export const getDirectSaleProducts = async (params?: any): Promise<ProductListResponse> => {
-  return request<ProductListResponse>('GET', '/public/direct-sale', { params });
+  const res = await request<ProductListResponse>('GET', '/public/direct-sale', { params });
+  return { ...res, items: res?.items || [] };
 };
 
 export const getProduct = async (idOrSlug: string): Promise<ProductDetail> => {
@@ -19,15 +21,18 @@ export const getProduct = async (idOrSlug: string): Promise<ProductDetail> => {
 };
 
 export const getCategories = async (): Promise<Category[]> => {
-  return request<Category[]>('GET', '/public/categories');
+  const res = await request<any>('GET', '/public/categories');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const getBrands = async (): Promise<Brand[]> => {
-  return request<Brand[]>('GET', '/public/brands');
+  const res = await request<any>('GET', '/public/brands');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const getProductReviews = async (productId: string, params?: any): Promise<PublicReview[]> => {
-  return request<PublicReview[]>('GET', `/public/products/${productId}/reviews`, { params });
+  const res = await request<any>('GET', `/public/products/${productId}/reviews`, { params });
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const getProductRatingSummary = async (productId: string): Promise<RatingSummary> => {
@@ -35,24 +40,32 @@ export const getProductRatingSummary = async (productId: string): Promise<Rating
 };
 
 export const getPublicSeller = async (slugOrId: string, params?: any): Promise<any> => {
-  return request<any>('GET', `/public/sellers/${slugOrId}`, { params });
+  const res = await request<any>('GET', `/public/sellers/${slugOrId}`, { params });
+  if (res?.products) {
+    res.products.items = res.products.items || [];
+  }
+  return res;
 };
 
 // --- Auctions ---
 export const getActiveAuctions = async (): Promise<AuctionEvent[]> => {
-  return request<AuctionEvent[]>('GET', '/public/auctions/active');
+  const res = await request<any>('GET', '/public/auctions/active');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const getHomepageAuctions = async (): Promise<AuctionEvent[]> => {
-  return request<AuctionEvent[]>('GET', '/public/auctions/homepage');
+  const res = await request<any>('GET', '/public/auctions/homepage');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const getNavHighlightAuctions = async (): Promise<AuctionEvent[]> => {
-  return request<AuctionEvent[]>('GET', '/public/auctions/nav-highlight');
+  const res = await request<any>('GET', '/public/auctions/nav-highlight');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const getAuctionLots = async (id: string): Promise<AuctionLot[]> => {
-  return request<AuctionLot[]>('GET', `/public/auctions/${id}/lots`);
+  const res = await request<any>('GET', `/public/auctions/${id}/lots`);
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const getAuctionLot = async (id: string): Promise<AuctionLot> => {

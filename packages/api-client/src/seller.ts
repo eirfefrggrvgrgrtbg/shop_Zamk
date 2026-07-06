@@ -6,7 +6,8 @@ export const getSellerMe = async (): Promise<SellerMe> => {
 };
 
 export const getSellerProducts = async (): Promise<SellerProduct[]> => {
-  return request<SellerProduct[]>('GET', '/seller/products');
+  const res = await request<any>('GET', '/seller/products');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const createSellerProduct = async (input: any): Promise<SellerProduct> => {
@@ -30,12 +31,14 @@ export const uploadSellerProductImage = async (productId: string, file: File): P
 
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getSellerInventory = async (): Promise<{ items: InventoryItem[]; totalCount: number }> => {
-  return request<{ items: InventoryItem[]; totalCount: number }>('GET', '/seller/inventory');
+  const res = await request<any>('GET', '/seller/inventory');
+  return { ...res, items: res?.items || [] };
 };
 
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getSellerOrders = async (): Promise<{ items: SellerOrder[]; totalCount: number }> => {
-  return request<{ items: SellerOrder[]; totalCount: number }>('GET', '/seller/orders');
+  const res = await request<any>('GET', '/seller/orders');
+  return { ...res, items: res?.items || [] };
 };
 
 export const getSellerOrder = async (id: string): Promise<SellerOrder> => {
@@ -53,7 +56,8 @@ export const getSellerFulfillments = async (params?: { limit?: number; offset?: 
   if (params?.status) query.append('status', params.status);
   
   const qStr = query.toString() ? `?${query.toString()}` : '';
-  return request<{ items: SellerFulfillment[]; totalCount: number }>('GET', `/seller/fulfillments${qStr}`);
+  const res = await request<any>('GET', `/seller/fulfillments${qStr}`);
+  return { ...res, items: res?.items || [] };
 };
 
 export const getSellerFulfillment = async (id: string): Promise<SellerFulfillment> => {
@@ -70,7 +74,8 @@ export const markSellerFulfillmentPacked = async (id: string): Promise<void> => 
 
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getSellerReturns = async (): Promise<{ items: SellerReturn[]; totalCount: number }> => {
-  return request<{ items: SellerReturn[]; totalCount: number }>('GET', '/seller/returns');
+  const res = await request<any>('GET', '/seller/returns');
+  return { ...res, items: res?.items || [] };
 };
 
 export const getSellerReturn = async (id: string): Promise<SellerReturn> => {
@@ -79,7 +84,8 @@ export const getSellerReturn = async (id: string): Promise<SellerReturn> => {
 
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getSellerReviews = async (): Promise<{ items: SellerReview[]; totalCount: number }> => {
-  return request<{ items: SellerReview[]; totalCount: number }>('GET', '/seller/reviews');
+  const res = await request<any>('GET', '/seller/reviews');
+  return { ...res, items: res?.items || [] };
 };
 
 export const getSellerReview = async (id: string): Promise<SellerReview> => {
@@ -91,7 +97,8 @@ export const getSellerBalance = async (): Promise<SellerBalance> => {
 };
 
 export const getSellerPayouts = async (): Promise<Payout[]> => {
-  return request<Payout[]>('GET', '/seller/payouts');
+  const res = await request<any>('GET', '/seller/payouts');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const requestSellerPayout = async (amountCents: number, comment?: string): Promise<Payout> => {
@@ -109,11 +116,13 @@ export const uploadSellerLogo = async (file: File): Promise<{ logoUrl: string }>
 };
 
 export const getSellerWarnings = async (): Promise<SellerWarning[]> => {
-  return request<SellerWarning[]>('GET', '/seller/warnings');
+  const res = await request<any>('GET', '/seller/warnings');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const getSellerViolations = async (): Promise<SellerViolation[]> => {
-  return request<SellerViolation[]>('GET', '/seller/violations');
+  const res = await request<any>('GET', '/seller/violations');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const getModerationHistory = async (productId: string): Promise<{ items: any[] }> => {

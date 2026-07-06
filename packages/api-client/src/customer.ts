@@ -26,7 +26,8 @@ export const createOrder = async (input: { customerName: string; customerPhone: 
 };
 
 export const getOrders = async (): Promise<Order[]> => {
-  return request<Order[]>('GET', '/customer/orders');
+  const res = await request<any>('GET', '/customer/orders');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const getOrder = async (orderId: string): Promise<Order> => {
@@ -34,7 +35,8 @@ export const getOrder = async (orderId: string): Promise<Order> => {
 };
 
 export const getCustomerOrderFulfillments = async (orderId: string): Promise<CustomerFulfillment[]> => {
-  return request<CustomerFulfillment[]>('GET', `/customer/orders/${orderId}/fulfillments`);
+  const res = await request<any>('GET', `/customer/orders/${orderId}/fulfillments`);
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 // P0 fix: was /pay, backend route is /payment
@@ -114,7 +116,8 @@ export const placeBid = async (lotId: string, data: PlaceBidRequest): Promise<an
 };
 
 export const getAuctionWins = async (): Promise<any[]> => {
-  return request<any[]>('GET', '/customer/auction-wins');
+  const res = await request<any>('GET', '/customer/auction-wins');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const createOrderForLot = async (lotId: string): Promise<{ OrderID: string; AmountCents: number }> => {

@@ -3,7 +3,8 @@ import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, Moderation
 
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCount: number }> => {
-  return request<{ items: AdminSeller[]; totalCount: number }>('GET', '/admin/sellers');
+  const res = await request<any>('GET', '/admin/sellers');
+  return { ...res, items: res?.items || [] };
 };
 
 export const getAdminUsers = async (params?: { q?: string; role?: string; status?: string; limit?: number; offset?: number }): Promise<PaginatedAdminUsersResponse> => {
@@ -30,7 +31,8 @@ export const updateAdminSellerStatus = async (id: string, status: string, reason
 };
 
 export const getAdminCategories = async (): Promise<Category[]> => {
-  return request<Category[]>('GET', '/admin/categories');
+  const res = await request<any>('GET', '/admin/categories');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const createAdminCategory = async (data: any): Promise<Category> => {
@@ -38,7 +40,8 @@ export const createAdminCategory = async (data: any): Promise<Category> => {
 };
 
 export const getAdminBrands = async (): Promise<Brand[]> => {
-  return request<Brand[]>('GET', '/admin/brands');
+  const res = await request<any>('GET', '/admin/brands');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const createAdminBrand = async (data: any): Promise<Brand> => {
@@ -71,7 +74,8 @@ export const getAdminProducts = async (
   if (filters?.sellerId) query.append('sellerId', filters.sellerId);
   if (filters?.source) query.append('source', filters.source);
 
-  return request<PaginatedAdminProductsResponse>('GET', `/admin/products?${query.toString()}`);
+  const res = await request<any>('GET', `/admin/products?${query.toString()}`);
+  return { ...res, items: res?.items || [] };
 };
 
 export const getAdminProduct = async (id: string): Promise<AdminProduct> => {
@@ -83,7 +87,8 @@ export const getAdminProductModerationHistory = async (productId: string): Promi
 };
 
 export const getModerationProducts = async (): Promise<ModerationProduct[]> => {
-  return request<ModerationProduct[]>('GET', '/admin/moderation/products');
+  const res = await request<any>('GET', '/admin/moderation/products');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const adminApproveProduct = async (id: string, comment?: string): Promise<void> => {
@@ -124,7 +129,8 @@ export const getAdminInventoryItem = async (id: string): Promise<AdminInventoryI
 };
 
 export const getAdminInventoryMovements = async (id: string): Promise<{ items: AdminInventoryMovement[]; totalCount: number }> => {
-  return request<{ items: AdminInventoryMovement[]; totalCount: number }>('GET', `/admin/inventory/${id}/movements`);
+  const res = await request<any>('GET', `/admin/inventory/${id}/movements`);
+  return { ...res, items: res?.items || [] };
 };
 
 export const createAdminInventoryReceipt = async (data: { productVariantId: string; quantity: number; reason?: string }): Promise<AdminInventoryItem> => {
@@ -163,7 +169,8 @@ export const updateAdminOrderStatus = async (id: string, data: { status: string;
 };
 
 export const getAdminOrderFulfillments = async (orderId: string): Promise<{ items: AdminFulfillment[]; totalCount: number }> => {
-  return request<{ items: AdminFulfillment[]; totalCount: number }>('GET', `/admin/orders/${orderId}/fulfillments`);
+  const res = await request<any>('GET', `/admin/orders/${orderId}/fulfillments`);
+  return { ...res, items: res?.items || [] };
 };
 
 export const getAdminFulfillments = async (params?: { limit?: number; offset?: number; status?: string }): Promise<{ items: AdminFulfillment[]; totalCount: number }> => {
@@ -181,7 +188,8 @@ export const getAdminFulfillment = async (id: string): Promise<AdminFulfillment>
 };
 
 export const getAdminPayments = async (): Promise<{ items: AdminPayment[]; totalCount: number }> => {
-  return request<{ items: AdminPayment[]; totalCount: number }>('GET', '/admin/payments');
+  const res = await request<any>('GET', '/admin/payments');
+  return { ...res, items: res?.items || [] };
 };
 
 export const getAdminPayment = async (id: string): Promise<AdminPayment> => {
@@ -189,7 +197,8 @@ export const getAdminPayment = async (id: string): Promise<AdminPayment> => {
 };
 
 export const getAdminShipments = async (): Promise<AdminShipment[]> => {
-  return request<AdminShipment[]>('GET', '/admin/shipments');
+  const res = await request<any>('GET', '/admin/shipments');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const getAdminShipment = async (id: string): Promise<AdminShipment> => {
@@ -209,7 +218,8 @@ export const updateAdminShipmentStatus = async (id: string, data: { status: stri
 };
 
 export const getAdminReturns = async (): Promise<{ items: AdminReturn[]; totalCount: number }> => {
-  return request<{ items: AdminReturn[]; totalCount: number }>('GET', '/admin/returns');
+  const res = await request<any>('GET', '/admin/returns');
+  return { ...res, items: res?.items || [] };
 };
 
 export const getAdminReturn = async (id: string): Promise<AdminReturn> => {
@@ -225,7 +235,8 @@ export const createAdminRefundForReturn = async (returnId: string, data: { reaso
 };
 
 export const getAdminRefunds = async (): Promise<{ items: AdminRefund[]; totalCount: number }> => {
-  return request<{ items: AdminRefund[]; totalCount: number }>('GET', '/admin/refunds');
+  const res = await request<any>('GET', '/admin/refunds');
+  return { ...res, items: res?.items || [] };
 };
 
 export const getAdminRefund = async (id: string): Promise<AdminRefund> => {
@@ -252,7 +263,8 @@ export const updateAdminPayoutStatus = async (id: string, data: { status: string
 };
 
 export const getAdminReviews = async (): Promise<{ items: AdminReview[]; totalCount: number }> => {
-  return request<{ items: AdminReview[]; totalCount: number }>('GET', '/admin/reviews');
+  const res = await request<any>('GET', '/admin/reviews');
+  return { ...res, items: res?.items || [] };
 };
 
 export const getAdminReview = async (id: string): Promise<AdminReview> => {
@@ -351,7 +363,8 @@ export const cancelSellerViolation = (sellerId: string, violationId: string) =>
 import type { AdminAuction, AdminAuctionLot, AdminAuctionBid } from './types';
 
 export const getAdminAuctions = async (): Promise<{ items: AdminAuction[]; totalCount: number }> => {
-  return request<{ items: AdminAuction[]; totalCount: number }>('GET', '/admin/auctions');
+  const res = await request<any>('GET', '/admin/auctions');
+  return { ...res, items: res?.items || [] };
 };
 
 export const getAdminAuction = async (id: string): Promise<AdminAuction> => {
@@ -387,7 +400,8 @@ export const finalizeAdminAuction = async (id: string): Promise<void> => {
 };
 
 export const getAdminLots = async (auctionId: string): Promise<{ items: AdminAuctionLot[]; totalCount: number }> => {
-  return request<{ items: AdminAuctionLot[]; totalCount: number }>('GET', `/admin/auctions/${auctionId}/lots`);
+  const res = await request<any>('GET', `/admin/auctions/${auctionId}/lots`);
+  return { ...res, items: res?.items || [] };
 };
 
 export const createAdminLot = async (auctionId: string, data: Partial<AdminAuctionLot>): Promise<AdminAuctionLot> => {
@@ -404,7 +418,8 @@ export const updateAdminLot = async (lotId: string, data: Partial<AdminAuctionLo
 };
 
 export const getAdminLotBids = async (lotId: string): Promise<{ items: AdminAuctionBid[]; totalCount: number }> => {
-  return request<{ items: AdminAuctionBid[]; totalCount: number }>('GET', `/admin/auction-lots/${lotId}/bids`);
+  const res = await request<any>('GET', `/admin/auction-lots/${lotId}/bids`);
+  return { ...res, items: res?.items || [] };
 };
 
 export const markLotUnpaid = async (lotId: string): Promise<void> => {

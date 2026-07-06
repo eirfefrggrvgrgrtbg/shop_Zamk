@@ -356,7 +356,7 @@ func (r *Repository) ListProductModerationLogs(ctx context.Context, productID uu
 func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]Product, error) {
 	query := `
 		SELECT id, seller_id, category_id, brand_id, title, slug, description,
-			status, gender, color, material, care_instructions,
+			status, source, gender, color, material, care_instructions,
 			price_cents, old_price_cents, currency, main_image_url,
 			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
 		FROM products
