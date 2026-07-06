@@ -38,11 +38,12 @@ type UpdateProductRequest struct {
 }
 
 type ProductVariantRequest struct {
-	SKU        *string `json:"sku,omitempty"`
-	Size       *string `json:"size,omitempty"`
-	Color      *string `json:"color,omitempty"`
-	Barcode    *string `json:"barcode,omitempty"`
-	PriceCents *int64  `json:"priceCents,omitempty" validate:"omitempty,min=0"`
+	SKU          *string `json:"sku,omitempty"`
+	Size         *string `json:"size,omitempty"`
+	Color        *string `json:"color,omitempty"`
+	Barcode      *string `json:"barcode,omitempty"`
+	PriceCents   *int64  `json:"priceCents,omitempty" validate:"omitempty,min=0"`
+	InitialStock *int    `json:"initialStock,omitempty" validate:"omitempty,min=0"`
 }
 
 type ProductImageRequest struct {

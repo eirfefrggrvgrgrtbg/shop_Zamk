@@ -59,17 +59,18 @@ type RatingSummary struct {
 }
 
 type ProductVariant struct {
-	ID         uuid.UUID `json:"id"`
-	ProductID  uuid.UUID `json:"productId"`
-	SKU        *string   `json:"sku,omitempty"`
-	Size       *string   `json:"size,omitempty"`
-	Color      *string   `json:"color,omitempty"`
-	Barcode    *string   `json:"barcode,omitempty"`
-	PriceCents *int64    `json:"priceCents,omitempty"`
-	IsActive   bool      `json:"isActive"`
-	InStock    *bool     `json:"inStock,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ID           uuid.UUID `json:"id"`
+	ProductID    uuid.UUID `json:"productId"`
+	SKU          *string   `json:"sku,omitempty"`
+	Size         *string   `json:"size,omitempty"`
+	Color        *string   `json:"color,omitempty"`
+	Barcode      *string   `json:"barcode,omitempty"`
+	PriceCents   *int64    `json:"priceCents,omitempty"`
+	IsActive     bool      `json:"isActive"`
+	InStock      *bool     `json:"inStock,omitempty"`
+	InitialStock *int      `json:"initialStock,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 type ProductImage struct {

@@ -386,87 +386,102 @@ export function SellerProducts() {
           </div>
         </section>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
-          <section className="glass-panel-strong p-5 md:p-6">
-            <div className="overflow-x-auto">
-              <table className="min-w-[1120px] w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border-lighter text-[11px] uppercase tracking-[0.14em] text-ash dark:border-white/10">
-                    <th className="py-3 pr-4 font-semibold">Товар</th>
-                    <th className="py-3 pr-4 font-semibold">Статус</th>
-                    <th className="py-3 pr-4 font-semibold">Цена</th>
-                    <th className="py-3 pr-4 font-semibold">Остаток</th>
-                    <th className="py-3 pr-4 font-semibold">Просмотры</th>
-                    <th className="py-3 pr-4 font-semibold">Заказы</th>
-                    <th className="py-3 pr-4 font-semibold">Качество</th>
-                    <th className="py-3 pr-4 font-semibold">Сигнал</th>
-                    <th className="py-3 font-semibold">Действия</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProducts.map((product) => {
-                    const stock = product.sizes.reduce((sum, item) => sum + item.stock, 0);
-                    const isSelected = product.id === selectedProduct?.id;
-
-                    return (
-                      <tr
-                        key={product.id}
-                        className={cn('border-b border-border-lighter/70 last:border-b-0 dark:border-white/8', isSelected && 'bg-ice/50 dark:bg-white/5')}
-                      >
-                        <td className="py-4 pr-4">
-                          <button type="button" onClick={() => setSelectedId(product.id)} className="flex items-center gap-3 text-left">
-                            <ProductAvatar product={product} />
-                            <span>
-                              <span className="block font-medium text-graphite dark:text-white">{product.title}</span>
-                              <span className="mt-1 block text-xs text-graphite-light dark:text-white/58">{product.sku} · {product.category}</span>
-                            </span>
-                          </button>
-                        </td>
-                        <td className="py-4 pr-4"><ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge></td>
-                        <td className="py-4 pr-4 text-graphite dark:text-white">{formatCurrency(product.price)}</td>
-                        <td className="py-4 pr-4 text-graphite-light dark:text-white/68">{formatNumber(stock)}</td>
-                        <td className="py-4 pr-4 text-graphite-light dark:text-white/68">{formatNumber(product.views)}</td>
-                        <td className="py-4 pr-4 text-graphite-light dark:text-white/68">{formatNumber(product.orders)}</td>
-                        <td className="py-4 pr-4 min-w-[130px]"><QualityMeter value={product.quality} /></td>
-                        <td className="py-4 pr-4"><ProductBadge tone={getIssueTone(product.issue)}>{issueLabels[product.issue]}</ProductBadge></td>
-                        <td className="py-4">
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => updateProductStatus(product.id, product.status === 'paused' ? 'published' : 'paused')}
-                              className="rounded-full border border-border-lighter p-2 text-graphite-light transition-colors hover:text-graphite dark:border-white/16 dark:text-white/62 dark:hover:text-white"
-                              aria-label="Переключить продажу"
-                            >
-                              <PauseCircle className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => duplicateProduct()}
-                              className="rounded-full border border-border-lighter p-2 text-graphite-light transition-colors hover:text-graphite dark:border-white/16 dark:text-white/62 dark:hover:text-white"
-                              aria-label="Дублировать товар"
-                            >
-                              <Copy className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedId(product.id)}
-                              className="rounded-full border border-border-lighter p-2 text-graphite-light transition-colors hover:text-graphite dark:border-white/16 dark:text-white/62 dark:hover:text-white"
-                              aria-label="Открыть детали"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {products.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-ice text-graphite dark:bg-white/10 dark:text-white">
+                <PackagePlus className="h-8 w-8" />
+              </div>
+              <h2 className="mb-2 text-2xl font-serif text-graphite dark:text-white">У вас пока нет товаров</h2>
+              <p className="mb-8 max-w-md text-graphite-light dark:text-white/60">
+                Добавьте первый товар, чтобы отправить его на модерацию. После одобрения он появится в публичном каталоге.
+              </p>
+              <Link to="/seller-products/new" className="button-dark">
+                Добавить товар
+              </Link>
             </div>
-          </section>
+          ) : (
+            <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+              <section className="glass-panel-strong p-5 md:p-6">
+                <div className="overflow-x-auto">
+                  <table className="min-w-[1120px] w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border-lighter text-[11px] uppercase tracking-[0.14em] text-ash dark:border-white/10">
+                        <th className="py-3 pr-4 font-semibold">Товар</th>
+                        <th className="py-3 pr-4 font-semibold">Статус</th>
+                        <th className="py-3 pr-4 font-semibold">Цена</th>
+                        <th className="py-3 pr-4 font-semibold">Остаток</th>
+                        <th className="py-3 pr-4 font-semibold">Просмотры</th>
+                        <th className="py-3 pr-4 font-semibold">Заказы</th>
+                        <th className="py-3 pr-4 font-semibold">Качество</th>
+                        <th className="py-3 pr-4 font-semibold">Сигнал</th>
+                        <th className="py-3 font-semibold">Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredProducts.map((product) => {
+                        const stock = product.sizes.reduce((sum, item) => sum + item.stock, 0);
+                        const isSelected = product.id === selectedProduct?.id;
 
-          {selectedProduct && <ProductDetailPanel product={selectedProduct} sellerStatus={sellerStatus} />}
-        </div>
+                        return (
+                          <tr
+                            key={product.id}
+                            className={cn('border-b border-border-lighter/70 last:border-b-0 dark:border-white/8', isSelected && 'bg-ice/50 dark:bg-white/5')}
+                          >
+                            <td className="py-4 pr-4">
+                              <button type="button" onClick={() => setSelectedId(product.id)} className="flex items-center gap-3 text-left">
+                                <ProductAvatar product={product} />
+                                <span>
+                                  <span className="block font-medium text-graphite dark:text-white">{product.title}</span>
+                                  <span className="mt-1 block text-xs text-graphite-light dark:text-white/58">{product.sku} · {product.category}</span>
+                                </span>
+                              </button>
+                            </td>
+                            <td className="py-4 pr-4"><ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge></td>
+                            <td className="py-4 pr-4 text-graphite dark:text-white">{formatCurrency(product.price)}</td>
+                            <td className="py-4 pr-4 text-graphite-light dark:text-white/68">{formatNumber(stock)}</td>
+                            <td className="py-4 pr-4 text-graphite-light dark:text-white/68">{formatNumber(product.views)}</td>
+                            <td className="py-4 pr-4 text-graphite-light dark:text-white/68">{formatNumber(product.orders)}</td>
+                            <td className="py-4 pr-4 min-w-[130px]"><QualityMeter value={product.quality} /></td>
+                            <td className="py-4 pr-4"><ProductBadge tone={getIssueTone(product.issue)}>{issueLabels[product.issue]}</ProductBadge></td>
+                            <td className="py-4">
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => updateProductStatus(product.id, product.status === 'paused' ? 'published' : 'paused')}
+                                  className="rounded-full border border-border-lighter p-2 text-graphite-light transition-colors hover:text-graphite dark:border-white/16 dark:text-white/62 dark:hover:text-white"
+                                  aria-label="Переключить продажу"
+                                >
+                                  <PauseCircle className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => duplicateProduct()}
+                                  className="rounded-full border border-border-lighter p-2 text-graphite-light transition-colors hover:text-graphite dark:border-white/16 dark:text-white/62 dark:hover:text-white"
+                                  aria-label="Дублировать товар"
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedId(product.id)}
+                                  className="rounded-full border border-border-lighter p-2 text-graphite-light transition-colors hover:text-graphite dark:border-white/16 dark:text-white/62 dark:hover:text-white"
+                                  aria-label="Открыть детали"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              {selectedProduct && <ProductDetailPanel product={selectedProduct} sellerStatus={sellerStatus} />}
+            </div>
+          )}
       </div>
     </div>
   );

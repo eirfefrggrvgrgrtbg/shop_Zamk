@@ -113,16 +113,17 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 	var variants []ProductVariant
 	for _, vr := range req.Variants {
 		variants = append(variants, ProductVariant{
-			ID:         uuid.New(),
-			ProductID:  p.ID,
-			SKU:        vr.SKU,
-			Size:       vr.Size,
-			Color:      vr.Color,
-			Barcode:    vr.Barcode,
-			PriceCents: vr.PriceCents,
-			IsActive:   true,
-			CreatedAt:  now,
-			UpdatedAt:  now,
+			ID:           uuid.New(),
+			ProductID:    p.ID,
+			SKU:          vr.SKU,
+			Size:         vr.Size,
+			Color:        vr.Color,
+			Barcode:      vr.Barcode,
+			PriceCents:   vr.PriceCents,
+			InitialStock: vr.InitialStock,
+			IsActive:     true,
+			CreatedAt:    now,
+			UpdatedAt:    now,
 		})
 	}
 

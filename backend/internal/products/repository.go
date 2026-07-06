@@ -173,7 +173,13 @@ func (r *Repository) UpdateProductStatus(ctx context.Context, p *Product) error 
 // ---------------------------------------------------------
 
 func (r *Repository) ReplaceProductVariants(ctx context.Context, productID uuid.UUID, variants []ProductVariant) error {
-	_, err := r.db.Exec(ctx, `DELETE FROM product_variants WHERE product_id = $1`, productID)
+	var sellerID uuid.UUID
+	err := r.db.QueryRow(ctx, `SELECT seller_id FROM products WHERE id = $1`, productID).Scan(&sellerID)
+	if err != nil {
+		return fmt.Errorf("failed to get seller_id for product: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, `DELETE FROM product_variants WHERE product_id = $1`, productID)
 	if err != nil {
 		return fmt.Errorf("failed to delete existing variants: %w", err)
 	}
@@ -188,6 +194,19 @@ func (r *Repository) ReplaceProductVariants(ctx context.Context, productID uuid.
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert variant: %w", err)
+		}
+
+		if v.InitialStock != nil && *v.InitialStock > 0 {
+			invQuery := `
+				INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, 0, $6, $7)
+			`
+			_, err = r.db.Exec(ctx, invQuery,
+				uuid.New(), v.ProductID, v.ID, sellerID, *v.InitialStock, v.CreatedAt, v.UpdatedAt,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to insert inventory_item: %w", err)
+			}
 		}
 	}
 	return nil

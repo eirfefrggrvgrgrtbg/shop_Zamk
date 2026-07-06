@@ -129,6 +129,10 @@ export const getModerationHistory = async (productId: string): Promise<{ items: 
   return request<{ items: any[] }>('GET', `/seller/products/${productId}/moderation-history`);
 };
 
+export const submitSellerProductModeration = async (productId: string, comment?: string): Promise<void> => {
+  return request<void>('POST', `/seller/products/${productId}/submit-moderation`, { body: { comment } });
+};
+
 export const completeSellerOnboarding = async (): Promise<void> => {
   return request<void>('POST', '/seller/onboarding/complete');
 };

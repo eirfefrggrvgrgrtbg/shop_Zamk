@@ -12,8 +12,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { type SellerProductSize, type SellerProductStatus } from '../lib/seller-products';
-import { createSellerProduct, uploadSellerProductImage, getSellerMe } from '@zamk/api-client/src/seller';
-import { request } from '@zamk/api-client/src/client'; // for submit to moderation if not exported
+import { createSellerProduct, uploadSellerProductImage, getSellerMe, submitSellerProductModeration } from '@zamk/api-client/src/seller';
 import type { SellerMe } from '@zamk/api-client/src/types';
 import { cn } from '../lib/utils';
 
@@ -198,7 +197,7 @@ export function SellerProductNew() {
           size: s.size,
           sku: `${draft.sku}-${s.size}`,
           color: draft.color,
-          inStock: s.stock > 0,
+          initialStock: Math.max(0, s.stock),
           isActive: true
         }));
 
@@ -227,7 +226,7 @@ export function SellerProductNew() {
       }
 
       if (status === 'moderation') {
-        await request('POST', `/seller/products/${product.id}/submit-moderation`);
+        await submitSellerProductModeration(product.id);
       }
 
       setSavedStatus(status);

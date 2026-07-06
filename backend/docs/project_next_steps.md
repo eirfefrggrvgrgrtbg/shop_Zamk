@@ -31,11 +31,11 @@
 - [ ] **ADMIN-10**: Production Hardening, Monitoring, Deployment, and QA Freeze
 
 ## 3. SELLER — Complete Seller Cabinet
-- Remove demo data.
-- Real seller metrics.
-- Real product/order/fulfillment state.
-- Hints/onboarding for new sellers.
-- Correct seller page behavior.
+- [x] **UX-1**: Seller Onboarding Flow
+- [x] **UX-2**: Seller Product Creation and Admin Moderation Flow - Current Phase
+- [ ] Remove demo data.
+- [ ] Real seller metrics.
+- [ ] Real product/order/fulfillment state.
 
 ## 4. DEV — Create Test Account Documentation
 - Create `backend/docs/dev_test_accounts.md` (later).
