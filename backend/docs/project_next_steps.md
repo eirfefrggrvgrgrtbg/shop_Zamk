@@ -24,9 +24,8 @@
 - [x] **ADMIN-3/3B**: Users, Staff, RBAC. Runtime verified.
 - [x] **ADMIN-4/4B**: Seller Management Completion. Runtime verified.
 - [x] **ADMIN-5/5B/5C**: Catalog & Product Moderation. Detail drawer, logs, actions. Runtime verified. **Next recommended: ADMIN-6**.
-- [x] **ADMIN-6/6B**: Orders, Fulfillment, and Shipments (Partially completed: Orders List, Detail, Runtime Safe). **Next recommended: ADMIN-6C**.
-- [ ] **ADMIN-6C**: Fulfillment actions and manual Shipment Creation completion.
-- [ ] **ADMIN-7**: Inventory and Storage
+- [x] **ADMIN-6/6B/6C/6D**: Orders, Fulfillment, and Shipments fully completed.
+- [x] **ADMIN-7/7B/7C**: Inventory and Storage fully completed.
 - [ ] **ADMIN-8**: Payouts and Commissions
 - [ ] **ADMIN-9**: Audit Logs and Security Monitoring
 - [ ] **ADMIN-10**: UX Polish & Error States
