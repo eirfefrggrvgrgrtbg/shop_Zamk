@@ -26,9 +26,9 @@
 - [x] **ADMIN-5/5B/5C**: Catalog & Product Moderation. Detail drawer, logs, actions. Runtime verified. **Next recommended: ADMIN-6**.
 - [x] **ADMIN-6/6B/6C/6D**: Orders, Fulfillment, and Shipments fully completed.
 - [x] **ADMIN-7/7B/7C**: Inventory and Storage fully completed.
-- [ ] **ADMIN-8**: Payouts and Commissions
-- [ ] **ADMIN-9**: Audit Logs and Security Monitoring
-- [ ] **ADMIN-10**: UX Polish & Error States
+- [x] **ADMIN-8/8B/8C/8D**: Payouts and Commissions fully completed.
+- [x] **ADMIN-9/9B**: Audit Logs and Security Monitoring fully completed.
+- [ ] **ADMIN-10**: Production Hardening, Monitoring, Deployment, and QA Freeze
 
 ## 3. SELLER — Complete Seller Cabinet
 - Remove demo data.

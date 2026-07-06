@@ -36,6 +36,8 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/dashboard"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/reports"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/audit"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/ratelimit"
 )
 
@@ -184,6 +186,12 @@ func main() {
 	dashboardService := dashboard.NewService(dashboardRepo)
 	dashboardHandler := dashboard.NewHandler(dashboardService)
 
+	reportsHandler := reports.NewHandler(dashboardService, logger)
+
+	auditLogRepo := audit.NewRepository(pgClient.Pool)
+	auditLogService := audit.NewService(auditLogRepo, logger)
+	auditLogHandler := audit.NewHandler(auditLogService, logger)
+
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	defer cancelWorkers()
 
@@ -198,7 +206,7 @@ func main() {
 	}
 
 	// Create router
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler)
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, auditLogHandler)
 
 	// Start HTTP server
 	srv := &http.Server{

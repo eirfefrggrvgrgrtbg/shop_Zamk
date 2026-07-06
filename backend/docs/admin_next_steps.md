@@ -43,12 +43,13 @@ Seller list/search/filter/status. Platform seller protected from block/archive. 
 **Goal**: Automate and track payouts to sellers.
 - **Completed**: Payout summary works. Seller balances work. Payout filters work. Payout detail/action behavior strictly enforced (reject reason required, valid transitions). Direct sale ZAMK payout behavior validated. Seller endpoint state secured. No sensitive bank/payment data exposed.
 
-## ADMIN-9: Audit Logs and Security Monitoring
+## ✅ ADMIN-9: Audit Logs and Security Monitoring — COMPLETED (ADMIN-9, 9B)
 **Goal**: Ensure all admin actions are logged and auditable.
-- **Pages**: `AdminAuditLogs.tsx`
-- **Tasks**: Connect UI to backend audit logs. Parse metadata visually.
+- **Completed**: `AdminAuditLogs.tsx` connected to `GET /api/admin/audit-logs` with granular filters (`q`, `action`, `entityType`). Clean metadata sanitization. 
+- **Completed**: `AdminReports.tsx` dashboard created under `/reports` relying on `GET /api/admin/reports/summary`.
+- **Completed**: Route RBAC mapping for `reports.read` and `security.read` added and explicitly verified in router. Security events endpoint documented as future work.
 
-## ADMIN-10: UX Polish & Error States
+## ADMIN-10: Production Hardening, Monitoring, Deployment, and QA Freeze
 **Goal**: Ensure every page has strict loading/error/empty states and HelpTooltips.
 - **Pages**: All.
 - **Tasks**: Standardize the use of `PermissionGuard` and replace raw English errors with clean Russian equivalents. Add short `?` help tooltips everywhere.

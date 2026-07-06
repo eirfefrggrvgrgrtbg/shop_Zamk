@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { listAuditLogs } from '@zamk/api-client/src/admin';
-import { AlertCircle, ChevronDown, ChevronRight, ClipboardList } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, ClipboardList, Search, Filter } from 'lucide-react';
 
 interface AuditLog {
   id: string;
@@ -47,13 +47,25 @@ export function AdminAuditLogs() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadLogs = useCallback(async (pageNum: number) => {
+  const [filterQ, setFilterQ] = useState('');
+  const [filterAction, setFilterAction] = useState('');
+  const [filterEntityType, setFilterEntityType] = useState('');
+
+  const [activeFilters, setActiveFilters] = useState({ q: '', action: '', entityType: '' });
+
+  const loadLogs = useCallback(async (pageNum: number, filters: typeof activeFilters) => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await listAuditLogs(PAGE_SIZE, pageNum * PAGE_SIZE);
+      const data = await listAuditLogs({
+        limit: PAGE_SIZE,
+        offset: pageNum * PAGE_SIZE,
+        q: filters.q,
+        action: filters.action,
+        entityType: filters.entityType,
+      });
       setLogs(data.items ?? []);
-      setTotal(data.total ?? 0);
+      setTotal(data.totalCount ?? 0);
     } catch (err: any) {
       setError(err.message || 'Не удалось загрузить журнал действий');
     } finally {
@@ -61,7 +73,13 @@ export function AdminAuditLogs() {
     }
   }, []);
 
-  useEffect(() => { loadLogs(page); }, [loadLogs, page]);
+  useEffect(() => { loadLogs(page, activeFilters); }, [loadLogs, page, activeFilters]);
+
+  const applyFilters = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPage(0);
+    setActiveFilters({ q: filterQ, action: filterAction, entityType: filterEntityType });
+  };
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -74,6 +92,53 @@ export function AdminAuditLogs() {
             {total > 0 ? `${total} записей` : 'Записей нет'}
           </p>
         </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+        <form onSubmit={applyFilters} className="flex flex-col sm:flex-row gap-4 items-end">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Поиск</label>
+            <div className="relative rounded-md shadow-sm">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 px-3 border"
+                placeholder="Почта, действие, тип..."
+                value={filterQ}
+                onChange={e => setFilterQ(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="w-full sm:w-48">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Действие</label>
+            <input
+              type="text"
+              className="focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md py-2 px-3 border"
+              placeholder="Точное совпадение..."
+              value={filterAction}
+              onChange={e => setFilterAction(e.target.value)}
+            />
+          </div>
+          <div className="w-full sm:w-48">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Тип сущности</label>
+            <input
+              type="text"
+              className="focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md py-2 px-3 border"
+              placeholder="Например, orders"
+              value={filterEntityType}
+              onChange={e => setFilterEntityType(e.target.value)}
+            />
+          </div>
+          <button
+            type="submit"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <Filter className="h-4 w-4 mr-2" />
+            Фильтр
+          </button>
+        </form>
       </div>
 
       {error && (
@@ -89,14 +154,14 @@ export function AdminAuditLogs() {
           <p className="mt-2 text-sm text-gray-500">Загрузка журнала...</p>
         </div>
       ) : logs.length === 0 ? (
-        <div className="text-center py-10 bg-white rounded-lg shadow">
+        <div className="text-center py-10 bg-white rounded-lg shadow border border-gray-200">
           <ClipboardList className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Записей нет</h3>
-          <p className="mt-1 text-sm text-gray-500">Журнал действий пока пуст.</p>
+          <p className="mt-1 text-sm text-gray-500">По вашему запросу ничего не найдено.</p>
         </div>
       ) : (
         <>
-          <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
+          <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -115,19 +180,19 @@ export function AdminAuditLogs() {
                       {new Date(log.createdAt).toLocaleString('ru-RU')}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="text-xs font-mono text-gray-800">{log.action}</span>
+                      <span className="text-xs font-mono text-gray-800 bg-gray-100 px-2 py-1 rounded">{log.action}</span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                      {log.entityType ?? '—'}
+                      {log.entityType ? <span className="font-medium text-gray-700">{log.entityType}</span> : '—'}
                       {log.entityId && (
-                        <div className="text-gray-400 font-mono" title={log.entityId}>
+                        <div className="text-gray-400 font-mono text-[10px] mt-0.5" title={log.entityId}>
                           {log.entityId.substring(0, 8)}…
                         </div>
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {log.actorEmail ?? '—'}
-                      {log.actorRole && <div className="text-gray-400">{log.actorRole}</div>}
+                      <div className="font-medium">{log.actorEmail ?? 'Система'}</div>
+                      {log.actorRole && <div className="text-gray-400 mt-0.5">{log.actorRole}</div>}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
                       {log.ip ?? '—'}
@@ -141,9 +206,8 @@ export function AdminAuditLogs() {
             </table>
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mt-4">
               <p className="text-sm text-gray-500">
                 Страница {page + 1} из {totalPages}
               </p>
@@ -151,14 +215,14 @@ export function AdminAuditLogs() {
                 <button
                   disabled={page === 0}
                   onClick={() => setPage(p => p - 1)}
-                  className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-50"
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                 >
                   Назад
                 </button>
                 <button
                   disabled={page >= totalPages - 1}
                   onClick={() => setPage(p => p + 1)}
-                  className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-50"
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                 >
                   Вперёд
                 </button>

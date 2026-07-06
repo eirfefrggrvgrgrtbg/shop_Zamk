@@ -18,6 +18,7 @@ import { AdminRefunds } from './pages/AdminRefunds';
 import { AdminPayouts } from './pages/AdminPayouts';
 import { AdminReviews } from './pages/AdminReviews';
 import { AdminAuditLogs } from './pages/AdminAuditLogs';
+import { AdminReports } from './pages/AdminReports';
 import { AdminSettings } from './pages/AdminSettings';
 import { AdminCategories } from './pages/AdminCategories';
 import { AdminBrands } from './pages/AdminBrands';
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="/reviews" element={<AdminProtectedRoute permission="reviews.read"><AdminLayout><AdminReviews /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/audit-logs" element={<AdminProtectedRoute permission="audit.read"><AdminLayout><AdminAuditLogs /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/audit" element={<AdminProtectedRoute permission="audit.read"><AdminLayout><AdminAuditLogs /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/reports" element={<AdminProtectedRoute permission="reports.read"><AdminLayout><AdminReports /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/roles" element={<AdminProtectedRoute permission="roles.read"><AdminLayout><AdminRoles /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/staff" element={<AdminProtectedRoute permission="staff.read"><AdminLayout><AdminStaff /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/settings" element={<AdminProtectedRoute><AdminLayout><AdminSettings /></AdminLayout></AdminProtectedRoute>} />

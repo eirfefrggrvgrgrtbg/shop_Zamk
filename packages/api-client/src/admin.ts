@@ -292,8 +292,25 @@ export const updateStaffStatus = async (userId: string, data: UpdateStaffStatusR
 export const resetStaffPassword = async (userId: string, data: ResetStaffPasswordRequest): Promise<void> =>
   request<void>('POST', `/admin/staff/members/${userId}/reset-password`, { body: data });
 
-export const listAuditLogs = async (limit = 50, offset = 0): Promise<{ items: any[]; total: number; limit: number; offset: number }> =>
-  request('GET', `/admin/audit-logs?limit=${limit}&offset=${offset}`);
+export const listAuditLogs = async (params?: { limit?: number; offset?: number; q?: string; action?: string; entityType?: string; actorUserId?: string; entityId?: string; dateFrom?: string; dateTo?: string }): Promise<{ items: any[]; totalCount: number }> => {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set('limit', params.limit.toString());
+  if (params?.offset) query.set('offset', params.offset.toString());
+  if (params?.q) query.set('q', params.q);
+  if (params?.action) query.set('action', params.action);
+  if (params?.entityType) query.set('entityType', params.entityType);
+  if (params?.actorUserId) query.set('actorUserId', params.actorUserId);
+  if (params?.entityId) query.set('entityId', params.entityId);
+  if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
+  if (params?.dateTo) query.set('dateTo', params.dateTo);
+  
+  const qStr = query.toString() ? `?${query.toString()}` : '';
+  return request('GET', `/admin/audit-logs${qStr}`);
+};
+
+export const getAdminReportsSummary = async (): Promise<any> => {
+  return request('GET', '/admin/reports/summary');
+};
 
 // ---- Phase E: Seller Management ----
 

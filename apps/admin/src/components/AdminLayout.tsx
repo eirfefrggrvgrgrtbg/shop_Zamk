@@ -19,6 +19,7 @@ import {
   Users,
   Shield,
   ClipboardList,
+  FileText,
 } from 'lucide-react';
 
 import { useAdminAuth } from '../contexts/AdminAuthContext';
@@ -61,6 +62,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   ];
 
   const staffNavItems: NavItem[] = [
+    { name: 'Сводные отчеты', path: '/reports', icon: FileText, permission: 'reports.read' },
     { name: 'Доступы и роли', path: '/roles', icon: Shield, permission: 'roles.read' },
     { name: 'Сотрудники', path: '/staff', icon: Users, permission: 'staff.read' },
     { name: 'Журнал действий', path: '/audit', icon: ClipboardList, permission: 'audit.read' },

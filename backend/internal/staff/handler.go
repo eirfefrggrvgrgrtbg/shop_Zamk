@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -106,37 +105,6 @@ func (h *Handler) GetStaffRoles(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
-// GetAuditLogs returns paginated audit logs.
-func (h *Handler) GetAuditLogs(w http.ResponseWriter, r *http.Request) {
-	limit := 20
-	offset := 0
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if v, err := strconv.Atoi(l); err == nil && v > 0 {
-			limit = v
-		}
-	}
-	if o := r.URL.Query().Get("offset"); o != "" {
-		if v, err := strconv.Atoi(o); err == nil && v >= 0 {
-			offset = v
-		}
-	}
-
-	logs, total, err := h.auditRepo.ListAuditLogs(r.Context(), limit, offset)
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list audit logs")
-		return
-	}
-	if logs == nil {
-		logs = []AuditLog{}
-	}
-
-	h.writeJSON(w, http.StatusOK, map[string]any{
-		"items":  logs,
-		"total":  total,
-		"limit":  limit,
-		"offset": offset,
-	})
-}
 
 // ListStaffMembers returns all staff members.
 // GET /api/admin/staff/members

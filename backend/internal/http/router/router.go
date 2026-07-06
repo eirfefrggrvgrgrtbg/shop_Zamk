@@ -34,6 +34,8 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/reports"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/audit"
 )
 
 func New(
@@ -66,6 +68,8 @@ func New(
 	auctionsPublicHandler *auctions.PublicHandler,
 	auctionsCustomerHandler *auctions.CustomerHandler,
 	dashboardHandler *dashboard.Handler,
+	reportsHandler *reports.Handler,
+	auditHandler *audit.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	rateLimiter := ratelimit.NewMiddleware(
@@ -333,7 +337,8 @@ func New(
 		// Users and Staff RBAC endpoints
 		r.With(perm("users.read")).Get("/users", usersHandler.ListAdminUsers)
 		r.With(perm("roles.read")).Get("/staff/roles", staffHandler.GetStaffRoles)
-		r.With(perm("audit.read")).Get("/audit-logs", staffHandler.GetAuditLogs)
+		r.With(perm("audit.read")).Get("/audit-logs", auditHandler.HandleListLogs)
+		r.With(perm("reports.read")).Get("/reports/summary", reportsHandler.HandleGetSummary)
 		r.With(perm("staff.read")).Get("/staff/members", staffHandler.ListStaffMembers)
 		r.With(perm("staff.create")).Post("/staff/members", staffHandler.CreateStaffMember)
 		r.With(perm("staff.update")).Patch("/staff/members/{userId}/role", staffHandler.UpdateStaffRole)
