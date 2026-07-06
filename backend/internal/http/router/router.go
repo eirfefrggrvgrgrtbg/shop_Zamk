@@ -170,6 +170,12 @@ func New(
 		r.With(uploadLimit).Post("/logo/upload", storageHandler.UploadSellerProfileImage)
 	})
 
+	r.Route("/api/seller/onboarding", func(r chi.Router) {
+		r.Use(appMiddleware.AuthMiddleware(tokenService))
+		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Post("/complete", sellersHandler.CompleteOnboarding)
+	})
+
 	r.Route("/api/seller/warnings", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireRole(users.RoleSeller))

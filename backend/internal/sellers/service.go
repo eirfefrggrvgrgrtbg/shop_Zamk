@@ -74,7 +74,7 @@ func (s *Service) CreateSellerByAdmin(ctx context.Context, req *CreateSellerRequ
 		Description:  req.Description,
 		ContactEmail: req.ContactEmail,
 		ContactPhone: req.ContactPhone,
-		Status:       StatusPending, // New sellers start as pending; admin must activate them
+		Status:       StatusPendingSetup, // New sellers start as pending_setup, require onboarding
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -131,7 +131,7 @@ func (s *Service) ListSellers(ctx context.Context, filter SellersFilter) (*ListS
 
 func (s *Service) UpdateSellerStatus(ctx context.Context, id uuid.UUID, req *UpdateSellerStatusRequest) error {
 	switch req.Status {
-	case StatusPending, StatusActive, StatusBlocked, StatusArchived:
+	case StatusPendingSetup, StatusPending, StatusActive, StatusBlocked, StatusArchived:
 		// Valid
 	default:
 		return errors.New("invalid status")
@@ -158,6 +158,19 @@ func (s *Service) UpdateSellerProfile(ctx context.Context, currentUserID uuid.UU
 	}
 
 	return s.GetSellerMe(ctx, currentUserID)
+}
+
+func (s *Service) CompleteOnboarding(ctx context.Context, currentUserID uuid.UUID) error {
+	seller, _, err := s.repo.GetSellerByUserID(ctx, currentUserID)
+	if err != nil {
+		return err
+	}
+
+	if seller.Status != StatusPendingSetup {
+		return errors.New("seller is not in pending_setup status")
+	}
+
+	return s.repo.UpdateSellerStatus(ctx, seller.ID, StatusPending)
 }
 
 func (s *Service) GetSellerMe(ctx context.Context, currentUserID uuid.UUID) (*SellerMeResponse, error) {
@@ -240,7 +253,7 @@ func (s *Service) GetSellerDetail(ctx context.Context, sellerID uuid.UUID) (*Sel
 // UpdateSellerStatusWithHistory changes seller status and writes status history.
 func (s *Service) UpdateSellerStatusWithHistory(ctx context.Context, sellerID uuid.UUID, newStatus string, reason *string, actorUserID uuid.UUID) error {
 	switch SellerStatus(newStatus) {
-	case StatusPending, StatusActive, StatusBlocked, StatusArchived:
+	case StatusPendingSetup, StatusPending, StatusActive, StatusBlocked, StatusArchived:
 		// valid
 	default:
 		return errors.New("invalid status")

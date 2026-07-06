@@ -203,6 +203,27 @@ func (h *Handler) UpdateSellerProfile(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, res)
 }
 
+func (h *Handler) CompleteOnboarding(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value("userID")
+	if val == nil {
+		h.respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	userID, ok := val.(uuid.UUID)
+	if !ok {
+		h.respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	err := h.service.CompleteOnboarding(r.Context(), userID)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) ResetOwnerPassword(w http.ResponseWriter, r *http.Request) {
 	sellerIDStr := chi.URLParam(r, "id")
 	sellerID, err := uuid.Parse(sellerIDStr)

@@ -128,3 +128,7 @@ export const getSellerViolations = async (): Promise<SellerViolation[]> => {
 export const getModerationHistory = async (productId: string): Promise<{ items: any[] }> => {
   return request<{ items: any[] }>('GET', `/seller/products/${productId}/moderation-history`);
 };
+
+export const completeSellerOnboarding = async (): Promise<void> => {
+  return request<void>('POST', '/seller/onboarding/complete');
+};

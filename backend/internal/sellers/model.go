@@ -9,10 +9,11 @@ import (
 type SellerStatus string
 
 const (
-	StatusPending  SellerStatus = "pending"
-	StatusActive   SellerStatus = "active"
-	StatusBlocked  SellerStatus = "blocked"
-	StatusArchived SellerStatus = "archived"
+	StatusPendingSetup SellerStatus = "pending_setup"
+	StatusPending      SellerStatus = "pending"
+	StatusActive       SellerStatus = "active"
+	StatusBlocked      SellerStatus = "blocked"
+	StatusArchived     SellerStatus = "archived"
 )
 
 type SellerRole string

@@ -37,10 +37,9 @@ export function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const navLinks = [
-    { to: '/auction', label: 'Аукцион', highlight: hasLiveAuction },
-    { to: '/zamk', label: 'Вещи ZAMK' },
+  const navLinks: { to: string; label: string; highlight?: boolean }[] = [
     { to: '/catalog', label: 'Каталог' },
+    { to: '/zamk', label: 'Вещи ZAMK' },
     { to: '/brands', label: 'Бренды' },
     { to: '/seller-dashboard', label: 'Продавцам' },
   ];
@@ -160,18 +159,11 @@ export function Navbar() {
             <Link to="/" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               Главная
             </Link>
-            <Link to="/auction" className="text-lg font-medium py-2 border-b border-border-lighter flex justify-between items-center" onClick={() => setIsMobileMenuOpen(false)}>
-              Аукцион
-              {hasLiveAuction && <span className="bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">Live</span>}
-            </Link>
-            <Link to="/zamk" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
-              Вещи ZAMK
-            </Link>
             <Link to="/catalog" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               Каталог
             </Link>
-            <Link to="/collections" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
-              Подборки
+            <Link to="/zamk" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
+              Вещи ZAMK
             </Link>
             <Link to="/brands" className="text-lg font-medium py-2 border-b border-border-lighter" onClick={() => setIsMobileMenuOpen(false)}>
               Бренды

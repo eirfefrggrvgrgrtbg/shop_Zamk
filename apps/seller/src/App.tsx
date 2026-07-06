@@ -14,6 +14,7 @@ import { SellerPayouts } from './pages/SellerPayouts';
 import { SellerTemplates } from './pages/SellerTemplates';
 import { SellerSettings } from './pages/SellerSettings';
 import { SellerWarnings } from './pages/SellerWarnings';
+import { SellerOnboarding } from './pages/SellerOnboarding';
 import { AuthProvider } from './contexts/AuthContext';
 import { SellerProtectedRoute } from './components/SellerProtectedRoute';
 
@@ -24,6 +25,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<SellerLogin />} />
           
+          <Route path="/onboarding" element={<SellerProtectedRoute><SellerOnboarding /></SellerProtectedRoute>} />
+
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           
           <Route path="/dashboard" element={<SellerProtectedRoute><SellerLayout><SellerDashboard /></SellerLayout></SellerProtectedRoute>} />

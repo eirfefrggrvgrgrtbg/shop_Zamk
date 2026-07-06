@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   LayoutDashboard, 
@@ -27,13 +27,20 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sellerStatus, setSellerStatus] = useState<string | null>(null);
 
+  const navigate = useNavigate();
+
   useEffect(() => {
     import('@zamk/api-client/src/seller').then(({ getSellerMe }) => {
       getSellerMe()
-        .then((data) => setSellerStatus(data.seller.status))
+        .then((data) => {
+          setSellerStatus(data.seller.status);
+          if (data.seller.status === 'pending_setup') {
+            navigate('/onboarding', { replace: true });
+          }
+        })
         .catch(console.error);
     });
-  }, []);
+  }, [navigate]);
 
   const navItems = [
     { name: 'Панель продавца', path: '/dashboard', icon: LayoutDashboard },
