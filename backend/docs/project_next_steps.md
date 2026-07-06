@@ -30,9 +30,10 @@
 - [x] **ADMIN-9/9B**: Audit Logs and Security Monitoring fully completed.
 - [ ] **ADMIN-10**: Production Hardening, Monitoring, Deployment, and QA Freeze
 
-## 3. SELLER — Complete Seller Cabinet
+## 3. SELLER & BUYER — Complete UX Flows
 - [x] **UX-1**: Seller Onboarding Flow
-- [x] **UX-2**: Seller Product Creation and Admin Moderation Flow - Current Phase
+- [x] **UX-2**: Seller Product Creation and Admin Moderation Flow
+- [x] **UX-3**: Customer Checkout and Order Flow - Current Phase
 - [ ] Remove demo data.
 - [ ] Real seller metrics.
 - [ ] Real product/order/fulfillment state.
