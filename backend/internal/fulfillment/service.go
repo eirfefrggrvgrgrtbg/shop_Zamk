@@ -123,7 +123,7 @@ func (s *Service) CreateShipmentForFulfillment(ctx context.Context, adminID, ful
 
 		// Verify fulfillment status
 		if fulfillment.Status == "cancelled" || fulfillment.Status == "returned" || fulfillment.Status == "refunded" || fulfillment.Status == "delivered" {
-			return errors.New("cannot create shipment for this fulfillment status")
+			return ErrInvalidFulfillmentStatus
 		}
 
 		// Verify shipment doesn't already exist for this fulfillment

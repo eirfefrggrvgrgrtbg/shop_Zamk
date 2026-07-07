@@ -94,6 +94,10 @@ func (h *Handler) CreateShipmentForFulfillment(w http.ResponseWriter, r *http.Re
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if errors.Is(err, ErrInvalidFulfillmentStatus) || errors.Is(err, ErrOrderNotPaid) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
