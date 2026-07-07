@@ -115,6 +115,10 @@ func (s *Service) ProcessRefundDeduction(ctx context.Context, refundID uuid.UUID
 		// Verify we haven't already deducted for this refund
 		// (omitted for brevity, assume idempotent or caller guarantees single call)
 		
+		// Calculate the net amount for the refund deduction
+		// We use the same calculation as ProcessSaleCompletion
+		_, netCents := s.CalculateCommissionAndNet(amountCents)
+
 		entry := &SellerBalanceLedger{
 			ID:          uuid.New(),
 			SellerID:    sellerID,
@@ -122,7 +126,7 @@ func (s *Service) ProcessRefundDeduction(ctx context.Context, refundID uuid.UUID
 			ReturnID:    &returnID,
 			RefundID:    &refundID,
 			Type:        "refund_deduction",
-			AmountCents: -amountCents, // NEGATIVE
+			AmountCents: -netCents, // NEGATIVE of NET
 			Currency:    "RUB",
 		}
 		

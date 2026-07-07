@@ -28,7 +28,8 @@ export function AdminReturns() {
     try {
       setIsLoading(true);
       setError(null);
-      setReturns(await getAdminReturns());
+      const data = await getAdminReturns();
+      setReturns(data || []);
     } catch (err: unknown) {
       setError(getAdminReturnErrorMessage(err, 'Не удалось загрузить возвраты.'));
     } finally {
@@ -209,13 +210,13 @@ export function AdminReturns() {
 
           <div className="mt-6">
             <h3 className="text-sm font-medium text-gray-700">Позиции</h3>
-            {selectedReturn.items.length === 0 ? (
+            {!selectedReturn.items || selectedReturn.items.length === 0 ? (
               <p className="mt-2 text-sm text-gray-500">Нет данных</p>
             ) : (
               <div className="mt-2 overflow-hidden border border-gray-200 sm:rounded-lg">
                 <table className="min-w-full divide-y divide-gray-200">
                   <tbody className="divide-y divide-gray-200 bg-white">
-                    {selectedReturn.items.map((item) => (
+                    {(selectedReturn.items || []).map((item) => (
                       <tr key={item.id}>
                         <td className="px-4 py-2 text-sm text-gray-900">{item.productTitle || item.orderItemId}</td>
                         <td className="px-4 py-2 text-sm text-gray-500">x{item.quantity}</td>
@@ -256,7 +257,7 @@ export function AdminReturns() {
             >
               <form onSubmit={handleCreateRefund} className="space-y-4">
                 <h3 className="text-sm font-medium text-gray-700">Создать возмещение</h3>
-                <p className="text-xs text-gray-500">Сумма возмещения рассчитывается бэкендом на основе позиций возврата и оплаченного заказа.</p>
+                <p className="text-xs text-gray-500">Возврат средств выполняется в тестовом режиме. Реальный перевод не производится. Сумма возмещения рассчитывается бэкендом.</p>
                 <textarea rows={3} value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="Причина возмещения (необязательно)" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
                 <button type="submit" disabled={isSubmitting || selectedReturn.status !== 'item_received'} className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
                   Создать возмещение

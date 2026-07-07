@@ -2,6 +2,7 @@ package returns
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -170,6 +171,8 @@ func (s *Service) UpdateReturnStatus(ctx context.Context, adminID, returnID uuid
 		ret.Status = req.Status
 		if req.AdminComment != nil {
 			ret.AdminComment = req.AdminComment
+		} else if req.Status == "rejected" {
+			return errors.New("admin comment/reason is required for rejection")
 		}
 
 		now := time.Now()
@@ -215,6 +218,10 @@ func (s *Service) CreateRefund(ctx context.Context, adminID, returnID uuid.UUID,
 		ret, items, err := s.repo.GetReturn(ctx, returnID)
 		if err != nil {
 			return err
+		}
+
+		if ret.Status == "refunded" || ret.Status == "completed" {
+			return errors.New("return is already refunded or completed")
 		}
 
 		// Calculate refund amount based on return items
@@ -294,7 +301,7 @@ func (s *Service) CreateRefund(ctx context.Context, adminID, returnID uuid.UUID,
 	})
 
 	if err == nil && s.payouts != nil {
-		_ = s.payouts.ProcessRefundDeduction(ctx, ref.ID, *ref.ReturnID, ref.OrderID, ref.AmountCents)
+		err = s.payouts.ProcessRefundDeduction(ctx, ref.ID, *ref.ReturnID, ref.OrderID, ref.AmountCents)
 	}
 
 	if err != nil {
