@@ -29,11 +29,11 @@ type SellerOrderListResponse struct {
 }
 
 type SellerOrder struct {
-	ID              uuid.UUID     `json:"id"`
-	Status          string        `json:"status"`
-	CreatedAt       time.Time     `json:"createdAt"`
-	ShipmentStatus  *string       `json:"shipmentStatus,omitempty"`
-	Items           []OrderItem   `json:"items"`
+	ID             uuid.UUID   `json:"id"`
+	Status         string      `json:"status"`
+	CreatedAt      time.Time   `json:"createdAt"`
+	ShipmentStatus *string     `json:"shipmentStatus,omitempty"`
+	Items          []OrderItem `json:"items"`
 }
 
 type AdminOrderListResponse struct {
@@ -42,24 +42,24 @@ type AdminOrderListResponse struct {
 }
 
 type AdminOrder struct {
-	ID                uuid.UUID `json:"id"`
-	UserID            uuid.UUID `json:"userId"`
-	Status            string    `json:"status"` // payment/overall status
-	FulfillmentStatus string    `json:"fulfillmentStatus"`
-	SourceType        string    `json:"sourceType"` // 'auction', 'direct_sale', 'normal'
-	TotalPriceCents   int64     `json:"totalPriceCents"`
-	Currency          string    `json:"currency"`
-	CustomerName      string    `json:"customerName"`
-	CustomerEmail     string    `json:"customerEmail"`
-	CreatedAt         time.Time `json:"createdAt"`
-	UpdatedAt         time.Time `json:"updatedAt"`
+	ID                uuid.UUID  `json:"id"`
+	UserID            uuid.UUID  `json:"userId"`
+	Status            string     `json:"status"` // payment/overall status
+	FulfillmentStatus string     `json:"fulfillmentStatus"`
+	SourceType        string     `json:"sourceType"` // 'auction', 'direct_sale', 'normal'
+	TotalPriceCents   int64      `json:"totalPriceCents"`
+	Currency          string     `json:"currency"`
+	CustomerName      string     `json:"customerName"`
+	CustomerEmail     string     `json:"customerEmail"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	UpdatedAt         time.Time  `json:"updatedAt"`
 	CancelledAt       *time.Time `json:"cancelledAt,omitempty"`
 }
 
 type AdminOrderDetail struct {
 	AdminOrder
-	CustomerPhone     string               `json:"customerPhone"`
-	DeliveryAddress   string               `json:"deliveryAddress"`
-	Items             []OrderItem          `json:"items"`
-	Fulfillments      []OrderFulfillment   `json:"fulfillments"`
+	CustomerPhone   string             `json:"customerPhone"`
+	DeliveryAddress string             `json:"deliveryAddress"`
+	Items           []OrderItem        `json:"items"`
+	Fulfillments    []OrderFulfillment `json:"fulfillments"`
 }

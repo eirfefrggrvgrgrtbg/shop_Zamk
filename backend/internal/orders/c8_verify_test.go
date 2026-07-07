@@ -47,23 +47,45 @@ func TestC8FulfillmentCreation(t *testing.T) {
 	variantB := uuid.New()
 
 	// Insert mock users
-	if _, err := db.Exec(ctx, "INSERT INTO users (id, name, email, password_hash, role, status, must_change_password, created_at, updated_at) VALUES ($1, 'Buyer', $2, 'hash', 'customer', 'active', false, now(), now())", buyer, buyer.String()+"@ex.com"); err != nil { t.Fatalf("buyer: %v", err) }
-	if _, err := db.Exec(ctx, "INSERT INTO users (id, name, email, password_hash, role, status, must_change_password, created_at, updated_at) VALUES ($1, 'Seller A', $2, 'hash', 'seller', 'active', false, now(), now())", sellerA, sellerA.String()+"@ex.com"); err != nil { t.Fatalf("sellerA: %v", err) }
-	if _, err := db.Exec(ctx, "INSERT INTO users (id, name, email, password_hash, role, status, must_change_password, created_at, updated_at) VALUES ($1, 'Seller B', $2, 'hash', 'seller', 'active', false, now(), now())", sellerB, sellerB.String()+"@ex.com"); err != nil { t.Fatalf("sellerB: %v", err) }
-	
-	if _, err := db.Exec(ctx, "INSERT INTO sellers (id, brand_name, slug, contact_email, status) VALUES ($1, $2, $3, $4, 'active')", sellerA, "Brand A", sellerA.String(), "contactA@ex.com"); err != nil { t.Fatalf("sellerA profile: %v", err) }
-	if _, err := db.Exec(ctx, "INSERT INTO sellers (id, brand_name, slug, contact_email, status) VALUES ($1, $2, $3, $4, 'active')", sellerB, "Brand B", sellerB.String(), "contactB@ex.com"); err != nil { t.Fatalf("sellerB profile: %v", err) }
-	
+	if _, err := db.Exec(ctx, "INSERT INTO users (id, name, email, password_hash, role, status, must_change_password, created_at, updated_at) VALUES ($1, 'Buyer', $2, 'hash', 'customer', 'active', false, now(), now())", buyer, buyer.String()+"@ex.com"); err != nil {
+		t.Fatalf("buyer: %v", err)
+	}
+	if _, err := db.Exec(ctx, "INSERT INTO users (id, name, email, password_hash, role, status, must_change_password, created_at, updated_at) VALUES ($1, 'Seller A', $2, 'hash', 'seller', 'active', false, now(), now())", sellerA, sellerA.String()+"@ex.com"); err != nil {
+		t.Fatalf("sellerA: %v", err)
+	}
+	if _, err := db.Exec(ctx, "INSERT INTO users (id, name, email, password_hash, role, status, must_change_password, created_at, updated_at) VALUES ($1, 'Seller B', $2, 'hash', 'seller', 'active', false, now(), now())", sellerB, sellerB.String()+"@ex.com"); err != nil {
+		t.Fatalf("sellerB: %v", err)
+	}
+
+	if _, err := db.Exec(ctx, "INSERT INTO sellers (id, brand_name, slug, contact_email, status) VALUES ($1, $2, $3, $4, 'active')", sellerA, "Brand A", sellerA.String(), "contactA@ex.com"); err != nil {
+		t.Fatalf("sellerA profile: %v", err)
+	}
+	if _, err := db.Exec(ctx, "INSERT INTO sellers (id, brand_name, slug, contact_email, status) VALUES ($1, $2, $3, $4, 'active')", sellerB, "Brand B", sellerB.String(), "contactB@ex.com"); err != nil {
+		t.Fatalf("sellerB profile: %v", err)
+	}
+
 	catID := uuid.New()
 	brandID := uuid.New()
-	if _, err := db.Exec(ctx, "INSERT INTO categories (id, name, slug) VALUES ($1, 'cat', $2)", catID, catID.String()); err != nil { t.Fatalf("cat: %v", err) }
-	if _, err := db.Exec(ctx, "INSERT INTO brands (id, name, slug) VALUES ($1, 'br', $2)", brandID, brandID.String()); err != nil { t.Fatalf("br: %v", err) }
+	if _, err := db.Exec(ctx, "INSERT INTO categories (id, name, slug) VALUES ($1, 'cat', $2)", catID, catID.String()); err != nil {
+		t.Fatalf("cat: %v", err)
+	}
+	if _, err := db.Exec(ctx, "INSERT INTO brands (id, name, slug) VALUES ($1, 'br', $2)", brandID, brandID.String()); err != nil {
+		t.Fatalf("br: %v", err)
+	}
 
-	if _, err := db.Exec(ctx, "INSERT INTO products (id, seller_id, category_id, brand_id, title, slug, description, status, price_cents) VALUES ($1, $2, $3, $4, 'P A', $5, 'desc', 'published', 100000)", productA, sellerA, catID, brandID, productA.String()); err != nil { t.Fatalf("prodA: %v", err) }
-	if _, err := db.Exec(ctx, "INSERT INTO products (id, seller_id, category_id, brand_id, title, slug, description, status, price_cents) VALUES ($1, $2, $3, $4, 'P B', $5, 'desc', 'published', 200000)", productB, sellerB, catID, brandID, productB.String()); err != nil { t.Fatalf("prodB: %v", err) }
+	if _, err := db.Exec(ctx, "INSERT INTO products (id, seller_id, category_id, brand_id, title, slug, description, status, price_cents) VALUES ($1, $2, $3, $4, 'P A', $5, 'desc', 'published', 100000)", productA, sellerA, catID, brandID, productA.String()); err != nil {
+		t.Fatalf("prodA: %v", err)
+	}
+	if _, err := db.Exec(ctx, "INSERT INTO products (id, seller_id, category_id, brand_id, title, slug, description, status, price_cents) VALUES ($1, $2, $3, $4, 'P B', $5, 'desc', 'published', 200000)", productB, sellerB, catID, brandID, productB.String()); err != nil {
+		t.Fatalf("prodB: %v", err)
+	}
 
-	if _, err := db.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, is_active) VALUES ($1, $2, $3, 100000, true)", variantA, productA, variantA.String()); err != nil { t.Fatalf("varA: %v", err) }
-	if _, err := db.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, is_active) VALUES ($1, $2, $3, 200000, true)", variantB, productB, variantB.String()); err != nil { t.Fatalf("varB: %v", err) }
+	if _, err := db.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, is_active) VALUES ($1, $2, $3, 100000, true)", variantA, productA, variantA.String()); err != nil {
+		t.Fatalf("varA: %v", err)
+	}
+	if _, err := db.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, is_active) VALUES ($1, $2, $3, 200000, true)", variantB, productB, variantB.String()); err != nil {
+		t.Fatalf("varB: %v", err)
+	}
 
 	// Mock cart directly into db so real cartRepo can find it
 	cID := uuid.New()
@@ -86,7 +108,7 @@ func TestC8FulfillmentCreation(t *testing.T) {
 	}
 
 	pgClient := &postgres.Client{Pool: db}
-	
+
 	cartRepo := cart.NewRepository(db)
 	invRepo := inventory.NewRepository(db)
 	// We pass nil for sellers.Repository since inventory doesn't strictly need it to run just reservations

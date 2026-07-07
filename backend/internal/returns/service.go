@@ -8,9 +8,9 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 )
 
 type payoutsService interface {
@@ -225,7 +225,7 @@ func (s *Service) UpdateReturnStatus(ctx context.Context, adminID, returnID uuid
 				title = "Возврат отклонен"
 				body = "Заявка на возврат была отклонена."
 			}
-			
+
 			order, _ := s.ordersRepo.GetOrderForUpdateTx(ctx, tx, ret.OrderID)
 			orderItems, _ := s.ordersRepo.GetOrderItems(ctx, ret.OrderID)
 			if order != nil && len(orderItems) > 0 {

@@ -24,20 +24,20 @@ const (
 )
 
 type Seller struct {
-	ID           uuid.UUID    `json:"id"`
-	BrandName    string       `json:"brandName"`
-	Slug         string       `json:"slug"`
-	Description  *string      `json:"description,omitempty"`
-	ContactEmail string       `json:"contactEmail"`
-	ContactPhone *string      `json:"contactPhone,omitempty"`
-	AverageRating float64   `json:"averageRating"`
-	ReviewsCount  int       `json:"reviewsCount"`
-	Status       SellerStatus `json:"status"`
-	IsPlatform   bool         `json:"isPlatform"`
-	LogoURL      *string      `json:"logoUrl,omitempty"`
-	LogoObjectKey *string     `json:"logoObjectKey,omitempty"`
-	CreatedAt    time.Time    `json:"createdAt"`
-	UpdatedAt    time.Time    `json:"updatedAt"`
+	ID            uuid.UUID    `json:"id"`
+	BrandName     string       `json:"brandName"`
+	Slug          string       `json:"slug"`
+	Description   *string      `json:"description,omitempty"`
+	ContactEmail  string       `json:"contactEmail"`
+	ContactPhone  *string      `json:"contactPhone,omitempty"`
+	AverageRating float64      `json:"averageRating"`
+	ReviewsCount  int          `json:"reviewsCount"`
+	Status        SellerStatus `json:"status"`
+	IsPlatform    bool         `json:"isPlatform"`
+	LogoURL       *string      `json:"logoUrl,omitempty"`
+	LogoObjectKey *string      `json:"logoObjectKey,omitempty"`
+	CreatedAt     time.Time    `json:"createdAt"`
+	UpdatedAt     time.Time    `json:"updatedAt"`
 }
 
 type SellerUser struct {
@@ -50,18 +50,18 @@ type SellerUser struct {
 
 // SellerDetail is the internal aggregate used by GetSellerDetailByID.
 type SellerDetail struct {
-	ID           uuid.UUID
-	BrandName    string
-	Slug         string
-	Description  *string
-	ContactEmail string
-	ContactPhone *string
-	AverageRating float64   `json:"averageRating"`
-	ReviewsCount  int       `json:"reviewsCount"`
-	LogoURL      *string
-	Status       SellerStatus
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID            uuid.UUID
+	BrandName     string
+	Slug          string
+	Description   *string
+	ContactEmail  string
+	ContactPhone  *string
+	AverageRating float64 `json:"averageRating"`
+	ReviewsCount  int     `json:"reviewsCount"`
+	LogoURL       *string
+	Status        SellerStatus
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 
 	OwnerID     uuid.UUID
 	OwnerName   string

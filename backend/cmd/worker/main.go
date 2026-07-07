@@ -62,7 +62,7 @@ func main() {
 	ordersService := orders.NewService(ordersRepo, cartRepo, inventoryService, pgClient, cfg)
 
 	returnsRepo := returns.NewRepository(pgClient.Pool)
-	
+
 	devEmailSender := notifications.NewDevEmailSender(logger)
 	userRepo := users.NewRepository(pgClient.Pool)
 	notificationsRepo := notifications.NewRepository(pgClient)

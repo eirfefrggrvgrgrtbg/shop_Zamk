@@ -10,12 +10,12 @@ var (
 )
 
 var (
-	ErrSellerNotPending    = errors.New("seller is not in pending status")
-	ErrSellerIncomplete    = errors.New("seller profile is incomplete")
-	ErrReasonRequired      = errors.New("reason is required for this status change")
-	ErrWarningNotFound     = errors.New("warning not found")
-	ErrViolationNotFound   = errors.New("violation not found")
-	ErrAlreadyResolved     = errors.New("already resolved or cancelled")
+	ErrSellerNotPending  = errors.New("seller is not in pending status")
+	ErrSellerIncomplete  = errors.New("seller profile is incomplete")
+	ErrReasonRequired    = errors.New("reason is required for this status change")
+	ErrWarningNotFound   = errors.New("warning not found")
+	ErrViolationNotFound = errors.New("violation not found")
+	ErrAlreadyResolved   = errors.New("already resolved or cancelled")
 )
 
 // VerifyMissingFieldsError is returned when VerifySeller finds incomplete profile fields.

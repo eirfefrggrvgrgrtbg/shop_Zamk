@@ -50,13 +50,13 @@ type Fulfillment struct {
 }
 
 type FulfillmentItem struct {
-	OrderItemID    uuid.UUID `json:"orderItemId"`
-	ProductID      uuid.UUID `json:"productId"`
-	ProductTitle   string    `json:"productTitle"`
+	OrderItemID    uuid.UUID  `json:"orderItemId"`
+	ProductID      uuid.UUID  `json:"productId"`
+	ProductTitle   string     `json:"productTitle"`
 	VariantID      *uuid.UUID `json:"variantId,omitempty"`
-	SKU            *string   `json:"sku,omitempty"`
-	Quantity       int       `json:"quantity"`
-	UnitPriceCents int64     `json:"unitPriceCents"`
-	LineTotalCents int64     `json:"lineTotalCents"`
-	ImageURL       *string   `json:"imageUrl,omitempty"`
+	SKU            *string    `json:"sku,omitempty"`
+	Quantity       int        `json:"quantity"`
+	UnitPriceCents int64      `json:"unitPriceCents"`
+	LineTotalCents int64      `json:"lineTotalCents"`
+	ImageURL       *string    `json:"imageUrl,omitempty"`
 }

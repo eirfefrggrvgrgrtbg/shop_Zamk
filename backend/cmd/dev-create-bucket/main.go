@@ -38,7 +38,7 @@ func main() {
 	} else {
 		log.Printf("Bucket %s already exists", bucketName)
 	}
-	
+
 	policy := `{"Version": "2012-10-17","Statement": [{"Action": ["s3:GetObject"],"Effect": "Allow","Principal": {"AWS": ["*"]},"Resource": ["arn:aws:s3:::` + bucketName + `/*"],"Sid": ""}]}`
 	err = client.SetBucketPolicy(ctx, bucketName, policy)
 	if err != nil {

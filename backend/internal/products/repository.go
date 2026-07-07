@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 )
 
 type Repository struct {
@@ -116,13 +116,13 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 		}
 		return nil, fmt.Errorf("failed to get product: %w", err)
 	}
-	
+
 	// Load Variants
 	p.Variants, err = r.GetProductVariants(ctx, p.ID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	inStock := false
 	for _, v := range p.Variants {
 		if v.InStock != nil && *v.InStock {
@@ -372,7 +372,7 @@ func (r *Repository) ListProductModerationLogs(ctx context.Context, productID uu
 // ---------------------------------------------------------
 // List Operations
 // ---------------------------------------------------------
-// For simplicity in Phase 4, we use basic lists without pagination arguments in SQL yet, 
+// For simplicity in Phase 4, we use basic lists without pagination arguments in SQL yet,
 // but we structure them to be easily extensible.
 
 func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]Product, error) {
@@ -636,9 +636,9 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 		return nil, 0, rows.Err()
 	}
 
-	// The previous listProductsQuery approach doesn't load variants and images natively. 
-	// To preserve existing behavior, ListPublishedProducts doesn't load variants/images. 
-	// Wait, is 'inStock' needed? The prompt says "Filters: in stock". 
+	// The previous listProductsQuery approach doesn't load variants and images natively.
+	// To preserve existing behavior, ListPublishedProducts doesn't load variants/images.
+	// Wait, is 'inStock' needed? The prompt says "Filters: in stock".
 	// If inStock is needed, maybe we should join variants?
 	// I will just return the products for now.
 
@@ -670,13 +670,13 @@ func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug
 		}
 		return nil, fmt.Errorf("failed to get product: %w", err)
 	}
-	
+
 	// Load Variants
 	p.Variants, err = r.GetProductVariants(ctx, p.ID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	inStock := false
 	for _, v := range p.Variants {
 		if v.InStock != nil && *v.InStock {
@@ -694,7 +694,6 @@ func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug
 
 	return &p, nil
 }
-
 
 func (r *Repository) listProductsQuery(ctx context.Context, query string, args ...any) ([]Product, error) {
 	rows, err := r.db.Query(ctx, query, args...)
@@ -725,7 +724,7 @@ func (r *Repository) listProductsQuery(ctx context.Context, query string, args .
 		variants, _ := r.GetProductVariants(ctx, products[i].ID)
 		if variants != nil {
 			products[i].Variants = variants
-			
+
 			inStock := false
 			for _, v := range variants {
 				if v.InStock != nil && *v.InStock {

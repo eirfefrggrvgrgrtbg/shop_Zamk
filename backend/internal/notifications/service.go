@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
 
 type Service struct {

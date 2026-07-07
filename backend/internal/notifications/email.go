@@ -19,7 +19,7 @@ func NewDevEmailSender(logger *slog.Logger) *DevEmailSender {
 }
 
 func (s *DevEmailSender) SendSellerInvitationEmail(email, temporaryPassword string) error {
-	// WARNING: In production, never log passwords. 
+	// WARNING: In production, never log passwords.
 	// This is exclusively for local development testing to avoid real SMTP.
 	s.logger.Info("📧 [DEV EMAIL] Seller Invitation",
 		"to", email,

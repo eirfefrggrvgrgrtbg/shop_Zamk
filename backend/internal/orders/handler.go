@@ -6,10 +6,10 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-playground/validator/v10"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
 
@@ -182,7 +182,7 @@ func (h *Handler) GetAdminOrder(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListAdminOrders(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	
+
 	q := r.URL.Query().Get("q")
 	status := r.URL.Query().Get("status")
 	paymentStatus := r.URL.Query().Get("paymentStatus")

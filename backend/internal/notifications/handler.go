@@ -23,17 +23,17 @@ func NewHandler(svc *Service, log *slog.Logger) *Handler {
 func (h *Handler) getPagination(r *http.Request) (int, int) {
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
-	
+
 	limit := 20
 	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 		limit = l
 	}
-	
+
 	offset := 0
 	if o, err := strconv.Atoi(offsetStr); err == nil && o > 0 {
 		offset = o
 	}
-	
+
 	return limit, offset
 }
 

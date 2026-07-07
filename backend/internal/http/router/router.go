@@ -10,7 +10,9 @@ import (
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/dashboard"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/reports"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/audit"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
@@ -34,8 +36,6 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/reports"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/audit"
 )
 
 func New(

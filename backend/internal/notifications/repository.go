@@ -5,8 +5,8 @@ import (
 
 	"strconv"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 )
@@ -41,7 +41,7 @@ func (r *Repository) CheckExistsTx(ctx context.Context, tx pgx.Tx, recipientKind
 			WHERE recipient_kind = $1 AND type = $2 AND entity_type = $3 AND entity_id = $4
 	`
 	args := []interface{}{recipientKind, typ, entityType, entityID}
-	
+
 	if recipientUserID != nil {
 		query += " AND recipient_user_id = $5"
 		args = append(args, *recipientUserID)
@@ -58,7 +58,7 @@ func (r *Repository) CreateManyNotificationsTx(ctx context.Context, tx pgx.Tx, n
 	if len(ns) == 0 {
 		return nil
 	}
-	
+
 	// pgx.Batch could be used, or simply loop
 	for _, n := range ns {
 		if err := r.CreateNotificationTx(ctx, tx, &n); err != nil {
@@ -71,7 +71,7 @@ func (r *Repository) CreateManyNotificationsTx(ctx context.Context, tx pgx.Tx, n
 func (r *Repository) ListNotifications(ctx context.Context, userID, sellerID *uuid.UUID, kind string, limit, offset int) ([]Notification, int, error) {
 	whereClause := "WHERE recipient_kind = $1"
 	args := []interface{}{kind}
-	
+
 	if userID != nil {
 		whereClause += " AND recipient_user_id = $2"
 		args = append(args, *userID)
@@ -92,7 +92,7 @@ func (r *Repository) ListNotifications(ctx context.Context, userID, sellerID *uu
 		` + whereClause + `
 		ORDER BY created_at DESC
 		LIMIT $` + r.placeholder(len(args)+1) + ` OFFSET $` + r.placeholder(len(args)+2)
-	
+
 	args = append(args, limit, offset)
 
 	rows, err := r.db.Pool.Query(ctx, query, args...)
@@ -126,7 +126,7 @@ func (r *Repository) placeholder(idx int) string {
 func (r *Repository) MarkRead(ctx context.Context, id uuid.UUID, userID, sellerID *uuid.UUID, kind string) error {
 	query := `UPDATE notifications SET read_at = now() WHERE id = $1 AND recipient_kind = $2`
 	args := []interface{}{id, kind}
-	
+
 	if userID != nil {
 		query += " AND recipient_user_id = $3"
 		args = append(args, *userID)
@@ -148,7 +148,7 @@ func (r *Repository) MarkRead(ctx context.Context, id uuid.UUID, userID, sellerI
 func (r *Repository) MarkAllRead(ctx context.Context, userID, sellerID *uuid.UUID, kind string) error {
 	query := `UPDATE notifications SET read_at = now() WHERE read_at IS NULL AND recipient_kind = $1`
 	args := []interface{}{kind}
-	
+
 	if userID != nil {
 		query += " AND recipient_user_id = $2"
 		args = append(args, *userID)
@@ -164,7 +164,7 @@ func (r *Repository) MarkAllRead(ctx context.Context, userID, sellerID *uuid.UUI
 func (r *Repository) CountUnread(ctx context.Context, userID, sellerID *uuid.UUID, kind string) (int, error) {
 	query := `SELECT count(*) FROM notifications WHERE read_at IS NULL AND recipient_kind = $1`
 	args := []interface{}{kind}
-	
+
 	if userID != nil {
 		query += " AND recipient_user_id = $2"
 		args = append(args, *userID)

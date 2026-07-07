@@ -81,7 +81,7 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	// Wait, we need auth.ValidateNameFields, let's just do it directly or import auth?
 	// But auth imports users, so importing auth from users would create a circular dependency.
 	// So we do basic validation here or use the validator.
-	
+
 	// Assuming validator is added to handler? Let's just trust the validator tags or do basic trim.
 	fullName := req.LastName + " " + req.FirstName
 	if req.MiddleName != "" {
@@ -131,7 +131,7 @@ func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	role := r.URL.Query().Get("role")
 	status := r.URL.Query().Get("status")
-	
+
 	limit := 20
 	offset := 0
 	if l := r.URL.Query().Get("limit"); l != "" {
@@ -198,4 +198,3 @@ func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 		"offset": offset,
 	})
 }
-

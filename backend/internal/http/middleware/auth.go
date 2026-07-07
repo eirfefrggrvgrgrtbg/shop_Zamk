@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
+	"github.com/google/uuid"
 )
 
 func AuthMiddleware(tokenService *auth.TokenService) func(http.Handler) http.Handler {

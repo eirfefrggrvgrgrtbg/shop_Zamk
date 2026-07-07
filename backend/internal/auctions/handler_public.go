@@ -141,7 +141,7 @@ func (h *PublicHandler) GetAuctionLot(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusNotFound, "not_found", "Lot not found")
 		return
 	}
-	
+
 	if lot.Status == LotStatusDraft || lot.Status == LotStatusCancelled {
 		h.writeError(w, http.StatusNotFound, "not_found", "Lot not found")
 		return

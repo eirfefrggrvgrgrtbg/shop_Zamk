@@ -28,12 +28,12 @@ type PayoutResponse struct {
 }
 
 type AdminPayoutSummary struct {
-	TotalAvailableCents   int64 `json:"totalAvailableCents"`
-	TotalPendingCents     int64 `json:"totalPendingCents"`
-	TotalPaidCents        int64 `json:"totalPaidCents"`
-	TotalRejectedCents    int64 `json:"totalRejectedCents"`
-	TotalCommissionCents  int64 `json:"totalCommissionCents"`
-	Currency              string `json:"currency"`
+	TotalAvailableCents  int64  `json:"totalAvailableCents"`
+	TotalPendingCents    int64  `json:"totalPendingCents"`
+	TotalPaidCents       int64  `json:"totalPaidCents"`
+	TotalRejectedCents   int64  `json:"totalRejectedCents"`
+	TotalCommissionCents int64  `json:"totalCommissionCents"`
+	Currency             string `json:"currency"`
 }
 
 type AdminSellerBalance struct {

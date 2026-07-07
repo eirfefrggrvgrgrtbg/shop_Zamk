@@ -112,7 +112,8 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusForbidden, "seller_blocked", "Магазин заблокирован или архивирован. Действие недоступно.")
 			return
 		}
-		fmt.Println("Create Product Error:", err); h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create product")
+		fmt.Println("Create Product Error:", err)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create product")
 		return
 	}
 

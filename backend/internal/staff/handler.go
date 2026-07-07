@@ -105,7 +105,6 @@ func (h *Handler) GetStaffRoles(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
-
 // ListStaffMembers returns all staff members.
 // GET /api/admin/staff/members
 func (h *Handler) ListStaffMembers(w http.ResponseWriter, r *http.Request) {

@@ -50,15 +50,15 @@ func (m *mockRepo) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug s
 func TestPublicVisibility_ListProducts(t *testing.T) {
 	repo := &mockRepo{
 		products: []mockProductRow{
-			{P: Product{Status: StatusPublished}, SellerStatus: "active"},             // 1. returned
-			{P: Product{Status: StatusPublished}, SellerStatus: "pending"},            // 2. NOT returned
-			{P: Product{Status: StatusPublished}, SellerStatus: "blocked"},            // 3. NOT returned
-			{P: Product{Status: StatusPublished}, SellerStatus: "archived"},           // 4. NOT returned
-			{P: Product{Status: StatusDraft}, SellerStatus: "active"},                 // 5. NOT returned
-			{P: Product{Status: StatusPendingModeration}, SellerStatus: "active"},     // 6. NOT returned
-			{P: Product{Status: StatusRejected}, SellerStatus: "active"},              // 7. NOT returned
-			{P: Product{Status: StatusHidden}, SellerStatus: "active"},                // 8. NOT returned
-			{P: Product{Status: StatusBlocked}, SellerStatus: "active"},               // 8. NOT returned
+			{P: Product{Status: StatusPublished}, SellerStatus: "active"},         // 1. returned
+			{P: Product{Status: StatusPublished}, SellerStatus: "pending"},        // 2. NOT returned
+			{P: Product{Status: StatusPublished}, SellerStatus: "blocked"},        // 3. NOT returned
+			{P: Product{Status: StatusPublished}, SellerStatus: "archived"},       // 4. NOT returned
+			{P: Product{Status: StatusDraft}, SellerStatus: "active"},             // 5. NOT returned
+			{P: Product{Status: StatusPendingModeration}, SellerStatus: "active"}, // 6. NOT returned
+			{P: Product{Status: StatusRejected}, SellerStatus: "active"},          // 7. NOT returned
+			{P: Product{Status: StatusHidden}, SellerStatus: "active"},            // 8. NOT returned
+			{P: Product{Status: StatusBlocked}, SellerStatus: "active"},           // 8. NOT returned
 		},
 	}
 

@@ -12,10 +12,16 @@ import (
 
 	"github.com/joho/godotenv"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/dashboard"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/reports"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/audit"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/fulfillment"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/router"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
@@ -24,6 +30,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payments"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/ratelimit"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
@@ -32,13 +39,6 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/dashboard"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/reports"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/audit"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/ratelimit"
 )
 
 func main() {
@@ -87,7 +87,7 @@ func main() {
 	})
 
 	sellersRepo := sellers.NewRepository(pgClient.Pool)
-	
+
 	devEmailSender := notifications.NewDevEmailSender(logger)
 	notificationsRepo := notifications.NewRepository(pgClient)
 	notificationsService := notifications.NewService(notificationsRepo, userRepo, devEmailSender)
@@ -113,7 +113,7 @@ func main() {
 	ordersHandler := orders.NewHandler(ordersService)
 
 	reviewsRepo := reviews.NewRepository(pgClient)
-	reviewsService := reviews.NewService(reviewsRepo, ordersRepo, sellersRepo, pgClient)
+	reviewsService := reviews.NewService(reviewsRepo, ordersRepo, sellersRepo, pgClient, notificationsService)
 	reviewsHandler := reviews.NewHandler(reviewsService)
 
 	productsRepo := products.NewRepository(pgClient.Pool)

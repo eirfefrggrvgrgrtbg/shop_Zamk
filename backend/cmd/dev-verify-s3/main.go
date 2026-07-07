@@ -33,23 +33,23 @@ func main() {
 	// Test uploading a tiny image
 	testContent := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // Minimal PNG header
 	fileReader := bytes.NewReader(testContent)
-	
+
 	fileName := "test-image.png"
 	fileSize := int64(len(testContent))
 	mimeType := "image/png"
 	ownerID := uuid.New()
-	
+
 	fmt.Println("Uploading test object...")
 	ctx := context.Background()
 	objKey := fmt.Sprintf("test/%s/%s", ownerID.String(), fileName)
-	
+
 	storedObj, err := provider.UploadImage(ctx, fileReader, fileSize, objKey, mimeType)
 	if err != nil {
 		log.Fatalf("Failed to upload test object: %v", err)
 	}
-	
+
 	fmt.Printf("Upload successful.\nObject Key: %s\nPublic URL: %s\n", storedObj.ObjectKey, storedObj.ObjectURL)
-	
+
 	// Test public URL
 	fmt.Println("Testing public URL access...")
 	resp, err := http.Get(storedObj.ObjectURL)
@@ -64,7 +64,7 @@ func main() {
 			fmt.Println("Note: 404 Not Found means the object does not exist or S3_PUBLIC_BASE_URL is incorrect.")
 		}
 	}
-	
+
 	// Clean up test object
 	fmt.Println("Cleaning up test object...")
 	err = provider.DeleteObject(ctx, storedObj.ObjectKey)
@@ -73,6 +73,6 @@ func main() {
 	} else {
 		fmt.Println("Cleanup successful.")
 	}
-	
+
 	fmt.Println("Verification complete.")
 }

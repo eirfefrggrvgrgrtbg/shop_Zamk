@@ -44,7 +44,7 @@ func doReq(method, url string, body any, token string) (int, map[string]any) {
 func doUploadReq(url string, fieldName, filename string, fileContent []byte, extraFields map[string]string, token string) (int, map[string]any) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	
+
 	h := make(textproto.MIMEHeader)
 	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fieldName, filename))
 	h.Set("Content-Type", "image/png")
@@ -213,7 +213,7 @@ func main() {
 		fmt.Println("Customer registration failed:", status, data)
 		os.Exit(1)
 	}
-	
+
 	status, data = doReq("POST", "http://localhost:8080/api/auth/login", map[string]string{
 		"email":    fmt.Sprintf("cust_%d@test.com", uniqueId),
 		"password": "custPassword123",
@@ -262,7 +262,7 @@ func main() {
 			{
 				"sku": fmt.Sprintf("AM-%d", uniqueId),
 				"attributes": map[string]any{
-					"size": "42",
+					"size":  "42",
 					"color": "red",
 				},
 			},
@@ -273,7 +273,7 @@ func main() {
 		os.Exit(1)
 	}
 	prodId := data["id"].(string)
-	
+
 	var variantId string
 	if variantsRaw := data["variants"]; variantsRaw != nil {
 		prodVariants := variantsRaw.([]any)
@@ -281,7 +281,7 @@ func main() {
 			variantId = prodVariants[0].(map[string]any)["id"].(string)
 		}
 	}
-	
+
 	if data["status"].(string) != "draft" {
 		fmt.Println("Product should be draft, got:", data["status"])
 		os.Exit(1)
@@ -563,10 +563,10 @@ func main() {
 		"Token":       "invalid_token",
 	}
 	status, _ = doReq("POST", "http://localhost:8080/api/payments/tbank/webhook", webhookPayload, "")
-	// Webhook endpoint might return 200 OK even for invalid to avoid retries, or 400. 
+	// Webhook endpoint might return 200 OK even for invalid to avoid retries, or 400.
 	// Our implementation currently returns 200 OK for ErrInvalidSignature to acknowledge but ignore.
 	// We'll verify the payment didn't change instead.
-	
+
 	fmt.Println("33. Verify payment is still pending...")
 	status, data = doReq("GET", "http://localhost:8080/api/admin/payments/"+paymentId, nil, adminToken)
 	if status != 200 || data["status"].(string) != "pending" {
@@ -673,7 +673,7 @@ func main() {
 		fmt.Println("Update shipment status failed:", status)
 		os.Exit(1)
 	}
-	
+
 	fmt.Println("44. Verify order status = assembling...")
 	status, data = doReq("GET", "http://localhost:8080/api/admin/orders/"+paymentOrderId, nil, adminToken)
 	if data["status"].(string) != "assembling" {
@@ -727,7 +727,7 @@ func main() {
 		"ownerEmail":        fmt.Sprintf("otherowner_%d@super.com", uniqueId),
 		"temporaryPassword": "storePassword123",
 	}, adminToken)
-	
+
 	status, data = doReq("POST", "http://localhost:8080/api/auth/login", map[string]string{
 		"email":    fmt.Sprintf("otherowner_%d@super.com", uniqueId),
 		"password": "storePassword123",
@@ -764,7 +764,7 @@ func main() {
 	unpaidOrderId := unpaidData["id"].(string)
 
 	status, _ = doReq("POST", "http://localhost:8080/api/admin/orders/"+unpaidOrderId+"/shipment", map[string]any{
-		"carrier":        "ManualDelivery",
+		"carrier": "ManualDelivery",
 	}, adminToken)
 	if status != 400 {
 		fmt.Println("Unpaid order allowed shipment! Status:", status)
@@ -942,7 +942,7 @@ func main() {
 		fmt.Println("Expected pending balance 25500, got:", pendingBal)
 		os.Exit(1)
 	}
-	
+
 	fmt.Println("63. Creating third order to ensure positive balance...")
 	doReq("POST", "http://localhost:8080/api/customer/cart/items", map[string]any{
 		"productId":        prodId,
@@ -950,9 +950,9 @@ func main() {
 		"quantity":         1,
 	}, custToken)
 	_, data = doReq("POST", "http://localhost:8080/api/customer/orders", map[string]any{
-		"customerName": "Test Customer 4",
-		"customerPhone": "+79998887766",
-		"customerEmail": "cust4@test.com",
+		"customerName":    "Test Customer 4",
+		"customerPhone":   "+79998887766",
+		"customerEmail":   "cust4@test.com",
 		"deliveryAddress": "123 Main St",
 	}, custToken)
 	thirdOrderId := data["id"].(string)
@@ -1046,8 +1046,8 @@ func main() {
 
 	fmt.Println("70. Customer creates a review...")
 	status, data = doReq("POST", "http://localhost:8080/api/customer/orders/"+thirdOrderId+"/items/"+thirdOrderItemId+"/review", map[string]any{
-		"rating": 5,
-		"title": "Great product!",
+		"rating":  5,
+		"title":   "Great product!",
 		"comment": "I loved it.",
 	}, custToken)
 	if status != 201 {
@@ -1107,10 +1107,10 @@ func main() {
 
 	fmt.Println("76. Create a draft product for image upload test...")
 	status, data = doReq("POST", "http://localhost:8080/api/seller/products", map[string]any{
-		"title":       "Upload Test Product",
-		"priceCents":  1000,
-		"currency":    "RUB",
-		"status":      "draft",
+		"title":      "Upload Test Product",
+		"priceCents": 1000,
+		"currency":   "RUB",
+		"status":     "draft",
 	}, sellerToken)
 	if status != 201 {
 		fmt.Println("Create test product failed:", status, data)

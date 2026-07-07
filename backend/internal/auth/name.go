@@ -7,10 +7,10 @@ import (
 )
 
 var (
-	ErrNameEmpty        = errors.New("Введите имя.")
-	ErrLastNameEmpty    = errors.New("Введите фамилию.")
-	ErrNameInvalid      = errors.New("Имя указано некорректно.")
-	ErrLastNameInvalid  = errors.New("Фамилия указана некорректно.")
+	ErrNameEmpty         = errors.New("Введите имя.")
+	ErrLastNameEmpty     = errors.New("Введите фамилию.")
+	ErrNameInvalid       = errors.New("Имя указано некорректно.")
+	ErrLastNameInvalid   = errors.New("Фамилия указана некорректно.")
 	ErrMiddleNameInvalid = errors.New("Отчество указано некорректно.")
 )
 

@@ -12,7 +12,7 @@ import (
 
 type TokenService struct {
 	accessSecret  []byte
-	refreshSecret []byte // used to hash refresh tokens if needed, but we'll use SHA256 or bcrypt instead. 
+	refreshSecret []byte // used to hash refresh tokens if needed, but we'll use SHA256 or bcrypt instead.
 	accessTTL     time.Duration
 }
 

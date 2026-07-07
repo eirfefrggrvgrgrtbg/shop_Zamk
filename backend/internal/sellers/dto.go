@@ -19,8 +19,8 @@ type CreateSellerRequest struct {
 }
 
 type CreateSellerResponse struct {
-	Seller                   Seller     `json:"seller"`
-	OwnerUser                users.User `json:"ownerUser"`
+	Seller                    Seller     `json:"seller"`
+	OwnerUser                 users.User `json:"ownerUser"`
 	TemporaryPasswordReturned bool       `json:"temporaryPasswordReturned"`
 }
 

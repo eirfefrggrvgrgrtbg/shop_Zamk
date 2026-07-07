@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 )
 
 var ErrNotFound = errors.New("user not found")
@@ -182,7 +182,7 @@ func (r *Repository) ListUsers(ctx context.Context, f UsersFilter) ([]User, int,
 	dataQuery := `
 		SELECT id, name, first_name, last_name, middle_name, email, phone, role, status, must_change_password, created_at, updated_at
 	` + baseQuery + fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, argID, argID+1)
-	
+
 	args = append(args, f.Limit, f.Offset)
 
 	rows, err := r.db.Query(ctx, dataQuery, args...)

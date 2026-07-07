@@ -56,7 +56,7 @@
 
 ## 6. SEARCH & REVIEWS
 - [x] **SEARCH-1**: Public catalog search, filters (category, brand, seller, size, price, inStock), sorting (newest, price_asc, price_desc), pagination (load more). UUID validation 400, minPrice>maxPrice 400. Security: strip moderation fields from public responses. DB indexes (000035). Frontend reactive fetch, inStock toggle, size single-select, load more.
-- [ ] **REVIEW-1**: Product Reviews & Ratings Flow (Current Phase) - Customer Product Reviews, Seller Ratings and Admin Moderation.
+- [x] **REVIEW-1**: Product Reviews & Ratings Flow (Current Phase) - Customer Product Reviews, Seller Ratings and Admin Moderation.
 
 ## 7. PROD — Final Production Work
 - Domains mapping.

@@ -18,34 +18,34 @@ const (
 )
 
 type Product struct {
-	ID                uuid.UUID  `json:"id"`
-	SellerID          uuid.UUID  `json:"sellerId"`
-	CategoryID        *uuid.UUID `json:"categoryId,omitempty"`
-	BrandID           *uuid.UUID `json:"brandId,omitempty"`
-	Title             string     `json:"title"`
-	Slug              string     `json:"slug"`
-	Description       *string    `json:"description,omitempty"`
-	Status            string     `json:"status"`
-	Source            string     `json:"source"`
-	Gender            *string    `json:"gender,omitempty"`
-	Color             *string    `json:"color,omitempty"`
-	Material          *string    `json:"material,omitempty"`
-	CareInstructions  *string    `json:"careInstructions,omitempty"`
-	PriceCents        int64      `json:"priceCents"`
-	OldPriceCents     *int64     `json:"oldPriceCents,omitempty"`
-	Currency          string     `json:"currency"`
-	MainImageURL      *string    `json:"mainImageUrl,omitempty"`
-	AverageRating     float64    `json:"averageRating"`
-	ReviewsCount      int        `json:"reviewsCount"`
-	MainImageObjectKey *string   `json:"mainImageObjectKey,omitempty"`
-	CreatedAt         time.Time  `json:"createdAt"`
-	UpdatedAt         time.Time  `json:"updatedAt"`
-	SubmittedAt       *time.Time `json:"submittedAt,omitempty"`
-	ApprovedAt        *time.Time `json:"approvedAt,omitempty"`
-	PublishedAt       *time.Time `json:"publishedAt,omitempty"`
-	RejectedAt        *time.Time `json:"rejectedAt,omitempty"`
-	ModerationComment *string    `json:"moderationComment,omitempty"`
-	InStock           *bool      `json:"inStock,omitempty"`
+	ID                 uuid.UUID  `json:"id"`
+	SellerID           uuid.UUID  `json:"sellerId"`
+	CategoryID         *uuid.UUID `json:"categoryId,omitempty"`
+	BrandID            *uuid.UUID `json:"brandId,omitempty"`
+	Title              string     `json:"title"`
+	Slug               string     `json:"slug"`
+	Description        *string    `json:"description,omitempty"`
+	Status             string     `json:"status"`
+	Source             string     `json:"source"`
+	Gender             *string    `json:"gender,omitempty"`
+	Color              *string    `json:"color,omitempty"`
+	Material           *string    `json:"material,omitempty"`
+	CareInstructions   *string    `json:"careInstructions,omitempty"`
+	PriceCents         int64      `json:"priceCents"`
+	OldPriceCents      *int64     `json:"oldPriceCents,omitempty"`
+	Currency           string     `json:"currency"`
+	MainImageURL       *string    `json:"mainImageUrl,omitempty"`
+	AverageRating      float64    `json:"averageRating"`
+	ReviewsCount       int        `json:"reviewsCount"`
+	MainImageObjectKey *string    `json:"mainImageObjectKey,omitempty"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	UpdatedAt          time.Time  `json:"updatedAt"`
+	SubmittedAt        *time.Time `json:"submittedAt,omitempty"`
+	ApprovedAt         *time.Time `json:"approvedAt,omitempty"`
+	PublishedAt        *time.Time `json:"publishedAt,omitempty"`
+	RejectedAt         *time.Time `json:"rejectedAt,omitempty"`
+	ModerationComment  *string    `json:"moderationComment,omitempty"`
+	InStock            *bool      `json:"inStock,omitempty"`
 
 	// Associations
 	Variants []ProductVariant `json:"variants,omitempty"`
@@ -76,13 +76,13 @@ type ProductVariant struct {
 }
 
 type ProductImage struct {
-	ID         uuid.UUID `json:"id"`
-	ProductID  uuid.UUID `json:"productId"`
-	ImageURL   string    `json:"imageUrl"`
-	ObjectKey  *string   `json:"objectKey,omitempty"`
-	AltText    *string   `json:"altText,omitempty"`
-	SortOrder  int       `json:"sortOrder"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID        uuid.UUID `json:"id"`
+	ProductID uuid.UUID `json:"productId"`
+	ImageURL  string    `json:"imageUrl"`
+	ObjectKey *string   `json:"objectKey,omitempty"`
+	AltText   *string   `json:"altText,omitempty"`
+	SortOrder int       `json:"sortOrder"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type ProductModerationLog struct {

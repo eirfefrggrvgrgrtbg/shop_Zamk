@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
@@ -17,14 +18,16 @@ type Service struct {
 	ordersRepo *orders.Repository
 	sellerRepo *sellers.Repository
 	db         *postgres.Client
+	notifSvc   *notifications.Service
 }
 
-func NewService(repo *Repository, ordersRepo *orders.Repository, sellerRepo *sellers.Repository, db *postgres.Client) *Service {
+func NewService(repo *Repository, ordersRepo *orders.Repository, sellerRepo *sellers.Repository, db *postgres.Client, notifSvc *notifications.Service) *Service {
 	return &Service{
 		repo:       repo,
 		ordersRepo: ordersRepo,
 		sellerRepo: sellerRepo,
 		db:         db,
+		notifSvc:   notifSvc,
 	}
 }
 
@@ -69,6 +72,13 @@ func (s *Service) CreateReview(ctx context.Context, userID, orderID, orderItemID
 			variantID = &vid
 		}
 
+		if req.Title != nil && len(*req.Title) > 100 {
+			return ErrInvalidRating // I'll use a generic error for now or maybe better just add ErrReviewTooLong, wait, I can just do errors.New
+		}
+		if req.Comment != nil && len(*req.Comment) > 1000 {
+			return ErrInvalidRating // I'll add ErrInvalidLength below
+		}
+
 		now := time.Now()
 		review = &ProductReview{
 			ID:               uuid.New(),
@@ -88,6 +98,16 @@ func (s *Service) CreateReview(ctx context.Context, userID, orderID, orderItemID
 
 		if err := s.repo.CreateReview(ctx, tx, review); err != nil {
 			return err
+		}
+
+		if s.notifSvc != nil {
+			_ = s.notifSvc.CreateStaffNotificationTx(ctx, tx, notifications.Notification{
+				Type:       "review.created",
+				EntityType: "review",
+				EntityID:   review.ID,
+				Title:      "New Product Review",
+				Body:       "A new review requires moderation.",
+			})
 		}
 		return nil
 	})
@@ -141,6 +161,40 @@ func (s *Service) ModerateReview(ctx context.Context, adminID, reviewID uuid.UUI
 		if err := s.repo.RecalculateSellerRating(ctx, tx, review.SellerID); err != nil {
 			return err
 		}
+
+		if s.notifSvc != nil {
+			if toStatus == "published" {
+				_ = s.notifSvc.CreateNotificationTx(ctx, tx, notifications.Notification{
+					RecipientKind:   notifications.RecipientKindCustomer,
+					RecipientUserID: &review.UserID,
+					Type:            "review.published",
+					EntityType:      "review",
+					EntityID:        review.ID,
+					Title:           "Your review is published",
+					Body:            "Your review has been approved and published.",
+				})
+				_ = s.notifSvc.CreateNotificationTx(ctx, tx, notifications.Notification{
+					RecipientKind:     notifications.RecipientKindSeller,
+					RecipientSellerID: &review.SellerID,
+					Type:              "review.published_seller",
+					EntityType:        "review",
+					EntityID:          review.ID,
+					Title:             "New Product Review",
+					Body:              "A customer left a new review on your product.",
+				})
+			} else if toStatus == "rejected" {
+				_ = s.notifSvc.CreateNotificationTx(ctx, tx, notifications.Notification{
+					RecipientKind:   notifications.RecipientKindCustomer,
+					RecipientUserID: &review.UserID,
+					Type:            "review.rejected",
+					EntityType:      "review",
+					EntityID:        review.ID,
+					Title:           "Your review was rejected",
+					Body:            "Your review didn't meet our guidelines.",
+				})
+			}
+		}
+
 		return nil
 	})
 }

@@ -30,7 +30,7 @@ func (h *Handler) HandleGetSummary(w http.ResponseWriter, r *http.Request) {
 
 	report := AdminReportSummary{
 		TotalOrders:       summary.Overview.TotalOrders,
-		TotalRevenueCents: summary.Overview.RevenueTodayCents + summary.Overview.Revenue7dCents, // Simplified approximation if total is missing, but typically we want real total. Wait, dashboard doesn't have all-time revenue. 
+		TotalRevenueCents: summary.Overview.RevenueTodayCents + summary.Overview.Revenue7dCents, // Simplified approximation if total is missing, but typically we want real total. Wait, dashboard doesn't have all-time revenue.
 		TotalSellers:      summary.Sellers.Active + summary.Sellers.WaitingModeration + summary.Sellers.Blocked,
 		ActiveSellers:     summary.Sellers.Active,
 		TotalProducts:     summary.Products.Published + summary.Products.PendingModeration + summary.Products.RejectedOrBlocked + summary.Products.OutOfStock,

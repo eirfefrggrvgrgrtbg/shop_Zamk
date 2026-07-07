@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	
+
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
@@ -34,10 +34,10 @@ func TestAuctionIntegration(t *testing.T) {
 		t.Fatalf("Failed to connect to Redis: %v", err)
 	}
 	limiter := ratelimit.New(redisClient.Client)
-	
+
 	notifRepo := notifications.NewRepository(pgClient)
 	notifService := notifications.NewService(notifRepo, nil, nil) // nil userRepo, nil ws
-	
+
 	repo := auctions.NewRepository(pgClient.Pool)
 	hub := auctions.NewSSEHub()
 	svc := auctions.NewService(repo, notifService, limiter, hub)
@@ -62,45 +62,45 @@ func TestAuctionIntegration(t *testing.T) {
 
 	// 1. Admin creates auction
 	eventReq := auctions.AdminCreateAuctionRequest{
-		Title: "Integration Test Auction",
-		StartsAt: time.Now().Add(-1 * time.Hour), // Already started
-		EndsAt: time.Now().Add(1 * time.Hour),
-		BidStepCents: 1000, // 10.00
-		PaymentDeadlineHours: 24,
-		AntiSnipingEnabled: true,
-		AntiSnipingTriggerSeconds: 300, // 5 mins
-		AntiSnipingExtensionSeconds: 60, // 1 min
-		MaxBidsPerUserPerLotPerMinute: 10,
+		Title:                           "Integration Test Auction",
+		StartsAt:                        time.Now().Add(-1 * time.Hour), // Already started
+		EndsAt:                          time.Now().Add(1 * time.Hour),
+		BidStepCents:                    1000, // 10.00
+		PaymentDeadlineHours:            24,
+		AntiSnipingEnabled:              true,
+		AntiSnipingTriggerSeconds:       300, // 5 mins
+		AntiSnipingExtensionSeconds:     60,  // 1 min
+		MaxBidsPerUserPerLotPerMinute:   10,
 		MaxRejectedBidsPerUserPerMinute: 10,
-		NoBidsPolicy: "manual_review",
-		UnpaidWinnerPolicy: "manual_review",
-		IsPublic: true,
-		ShowOnHomepage: true,
-		HighlightInNav: true,
-		BiddingEnabled: true,
+		NoBidsPolicy:                    "manual_review",
+		UnpaidWinnerPolicy:              "manual_review",
+		IsPublic:                        true,
+		ShowOnHomepage:                  true,
+		HighlightInNav:                  true,
+		BiddingEnabled:                  true,
 	}
 
 	event := &auctions.AuctionEvent{
-		ID: uuid.New(),
-		Title: eventReq.Title,
-		Status: auctions.AuctionStatusDraft,
-		StartsAt: eventReq.StartsAt,
-		EndsAt: eventReq.EndsAt,
-		BidStepCents: eventReq.BidStepCents,
-		PaymentDeadlineHours: eventReq.PaymentDeadlineHours,
-		AntiSnipingEnabled: eventReq.AntiSnipingEnabled,
-		AntiSnipingTriggerSeconds: eventReq.AntiSnipingTriggerSeconds,
-		AntiSnipingExtensionSeconds: eventReq.AntiSnipingExtensionSeconds,
-		MaxBidsPerUserPerLotPerMinute: eventReq.MaxBidsPerUserPerLotPerMinute,
+		ID:                              uuid.New(),
+		Title:                           eventReq.Title,
+		Status:                          auctions.AuctionStatusDraft,
+		StartsAt:                        eventReq.StartsAt,
+		EndsAt:                          eventReq.EndsAt,
+		BidStepCents:                    eventReq.BidStepCents,
+		PaymentDeadlineHours:            eventReq.PaymentDeadlineHours,
+		AntiSnipingEnabled:              eventReq.AntiSnipingEnabled,
+		AntiSnipingTriggerSeconds:       eventReq.AntiSnipingTriggerSeconds,
+		AntiSnipingExtensionSeconds:     eventReq.AntiSnipingExtensionSeconds,
+		MaxBidsPerUserPerLotPerMinute:   eventReq.MaxBidsPerUserPerLotPerMinute,
 		MaxRejectedBidsPerUserPerMinute: eventReq.MaxRejectedBidsPerUserPerMinute,
-		NoBidsPolicy: auctions.NoBidsPolicy(eventReq.NoBidsPolicy),
-		UnpaidWinnerPolicy: auctions.UnpaidWinnerPolicy(eventReq.UnpaidWinnerPolicy),
-		IsPublic: eventReq.IsPublic,
-		ShowOnHomepage: eventReq.ShowOnHomepage,
-		HighlightInNav: eventReq.HighlightInNav,
-		BiddingEnabled: eventReq.BiddingEnabled,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		NoBidsPolicy:                    auctions.NoBidsPolicy(eventReq.NoBidsPolicy),
+		UnpaidWinnerPolicy:              auctions.UnpaidWinnerPolicy(eventReq.UnpaidWinnerPolicy),
+		IsPublic:                        eventReq.IsPublic,
+		ShowOnHomepage:                  eventReq.ShowOnHomepage,
+		HighlightInNav:                  eventReq.HighlightInNav,
+		BiddingEnabled:                  eventReq.BiddingEnabled,
+		CreatedAt:                       time.Now(),
+		UpdatedAt:                       time.Now(),
 	}
 	err = repo.CreateEvent(ctx, event)
 	if err != nil {
@@ -110,14 +110,14 @@ func TestAuctionIntegration(t *testing.T) {
 
 	// 2. Admin creates lots
 	lot1 := &auctions.AuctionLot{
-		ID: uuid.New(),
-		AuctionID: event.ID,
-		Title: "Test Lot 1 (Bids)",
+		ID:              uuid.New(),
+		AuctionID:       event.ID,
+		Title:           "Test Lot 1 (Bids)",
 		StartPriceCents: 5000,
-		BidStepCents: 1000,
-		Status: auctions.LotStatusDraft,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		BidStepCents:    1000,
+		Status:          auctions.LotStatusDraft,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 	err = repo.CreateLot(ctx, lot1)
 	if err != nil {
@@ -125,14 +125,14 @@ func TestAuctionIntegration(t *testing.T) {
 	}
 
 	lot2 := &auctions.AuctionLot{
-		ID: uuid.New(),
-		AuctionID: event.ID,
-		Title: "Test Lot 2 (No Bids)",
+		ID:              uuid.New(),
+		AuctionID:       event.ID,
+		Title:           "Test Lot 2 (No Bids)",
 		StartPriceCents: 3000,
-		BidStepCents: 500,
-		Status: auctions.LotStatusDraft,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		BidStepCents:    500,
+		Status:          auctions.LotStatusDraft,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 	err = repo.CreateLot(ctx, lot2)
 	if err != nil {
@@ -158,7 +158,7 @@ func TestAuctionIntegration(t *testing.T) {
 	if err != nil || len(activeEvents) == 0 {
 		t.Fatalf("Failed to list active auctions: %v", err)
 	}
-	
+
 	hpEvents, err := repo.ListHomepageAuctions(ctx)
 	if err != nil || len(hpEvents) == 0 {
 		t.Fatalf("Failed to list homepage auctions: %v", err)
@@ -173,7 +173,7 @@ func TestAuctionIntegration(t *testing.T) {
 	idemA := uuid.New().String()
 	bidAmountA := int64(5000) // Start price
 	respA, err := svc.PlaceBid(ctx, lot1.ID, customerA, auctions.BidRequest{
-		AmountCents: &bidAmountA,
+		AmountCents:    &bidAmountA,
 		IdempotencyKey: &idemA,
 	})
 	if err != nil {
@@ -188,7 +188,7 @@ func TestAuctionIntegration(t *testing.T) {
 	idemB := uuid.New().String()
 	bidAmountB := int64(6000) // 5000 + 1000 step
 	respB, err := svc.PlaceBid(ctx, lot1.ID, customerB, auctions.BidRequest{
-		AmountCents: &bidAmountB,
+		AmountCents:    &bidAmountB,
 		IdempotencyKey: &idemB,
 	})
 	if err != nil {
@@ -201,10 +201,10 @@ func TestAuctionIntegration(t *testing.T) {
 
 	// 9. Check notifications logic
 	// The DB should have notifications for A (outbid) and B (accepted). We won't test full DB rows, but no panic is good.
-	
+
 	// 10. Duplicate idempotency key
 	respB2, err := svc.PlaceBid(ctx, lot1.ID, customerB, auctions.BidRequest{
-		AmountCents: &bidAmountB,
+		AmountCents:    &bidAmountB,
 		IdempotencyKey: &idemB,
 	})
 	if err != nil {
@@ -218,7 +218,7 @@ func TestAuctionIntegration(t *testing.T) {
 	// 11. Conflicting idempotency key
 	confAmount := int64(7000)
 	_, err = svc.PlaceBid(ctx, lot1.ID, customerB, auctions.BidRequest{
-		AmountCents: &confAmount,
+		AmountCents:    &confAmount,
 		IdempotencyKey: &idemB,
 	})
 	if err != auctions.ErrDuplicateIdempotency {
@@ -273,10 +273,10 @@ func TestAuctionConcurrency(t *testing.T) {
 		t.Fatalf("Failed to connect to Redis: %v", err)
 	}
 	limiter := ratelimit.New(redisClient.Client)
-	
+
 	notifRepo := notifications.NewRepository(pgClient)
 	notifService := notifications.NewService(notifRepo, nil, nil) // nil userRepo, nil ws
-	
+
 	repo := auctions.NewRepository(pgClient.Pool)
 	hub := auctions.NewSSEHub()
 	svc := auctions.NewService(repo, notifService, limiter, hub)
@@ -284,13 +284,13 @@ func TestAuctionConcurrency(t *testing.T) {
 	// Admin and 5 Customers
 	adminID := uuid.New()
 	customers := []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()}
-	
+
 	// Seed admin
 	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO users (id, name, email, password_hash, role, status, created_at, updated_at) VALUES ($1, 'Admin', $2, 'x', 'admin', 'active', now(), now()) ON CONFLICT (id) DO NOTHING`, adminID, uuid.New().String()+"@admin.com")
 	if err != nil {
 		t.Fatalf("Failed to seed admin: %v", err)
 	}
-	
+
 	// Seed customers
 	for _, cID := range customers {
 		_, _ = pgClient.Pool.Exec(ctx, `INSERT INTO users (id, name, email, password_hash, role, status, created_at, updated_at) VALUES ($1, 'Customer', $2, 'y', 'customer', 'active', now(), now()) ON CONFLICT (id) DO NOTHING`, cID, uuid.New().String()+"@customer.com")
@@ -298,28 +298,28 @@ func TestAuctionConcurrency(t *testing.T) {
 
 	// Create event & lot
 	event := &auctions.AuctionEvent{
-		ID: uuid.New(),
-		Title: "Concurrency Test Auction",
-		Status: auctions.AuctionStatusLive, // immediately live
-		StartsAt: time.Now().Add(-1 * time.Hour),
-		EndsAt: time.Now().Add(1 * time.Hour),
-		BidStepCents: 500,
+		ID:                   uuid.New(),
+		Title:                "Concurrency Test Auction",
+		Status:               auctions.AuctionStatusLive, // immediately live
+		StartsAt:             time.Now().Add(-1 * time.Hour),
+		EndsAt:               time.Now().Add(1 * time.Hour),
+		BidStepCents:         500,
 		PaymentDeadlineHours: 24,
-		BiddingEnabled: true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		BiddingEnabled:       true,
+		CreatedAt:            time.Now(),
+		UpdatedAt:            time.Now(),
 	}
 	_ = repo.CreateEvent(ctx, event)
 
 	lot := &auctions.AuctionLot{
-		ID: uuid.New(),
-		AuctionID: event.ID,
-		Title: "Race Condition Lot",
+		ID:              uuid.New(),
+		AuctionID:       event.ID,
+		Title:           "Race Condition Lot",
 		StartPriceCents: 1000,
-		BidStepCents: 500,
-		Status: auctions.LotStatusActive,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		BidStepCents:    500,
+		Status:          auctions.LotStatusActive,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 	_ = repo.CreateLot(ctx, lot)
 
@@ -331,7 +331,7 @@ func TestAuctionConcurrency(t *testing.T) {
 		go func(customerID uuid.UUID) {
 			idem := uuid.New().String()
 			_, err := svc.PlaceBid(context.Background(), lot.ID, customerID, auctions.BidRequest{
-				AmountCents: &bidAmount,
+				AmountCents:    &bidAmount,
 				IdempotencyKey: &idem,
 			})
 			errs <- err
@@ -349,7 +349,7 @@ func TestAuctionConcurrency(t *testing.T) {
 	if successCount != 1 {
 		t.Fatalf("Expected exactly 1 successful bid for amount 1000, but got %d", successCount)
 	}
-	
+
 	finalLot, _ := repo.GetLotByID(ctx, lot.ID)
 	if finalLot.CurrentBidCents == nil || *finalLot.CurrentBidCents != 1000 {
 		t.Fatalf("Expected current bid to be 1000, got %v", finalLot.CurrentBidCents)
@@ -375,47 +375,47 @@ func TestCreateOrderConcurrency(t *testing.T) {
 		t.Fatalf("Failed to connect to Redis: %v", err)
 	}
 	limiter := ratelimit.New(redisClient.Client)
-	
+
 	notifRepo := notifications.NewRepository(pgClient)
 	notifService := notifications.NewService(notifRepo, nil, nil) // nil userRepo, nil ws
-	
+
 	repo := auctions.NewRepository(pgClient.Pool)
 	hub := auctions.NewSSEHub()
 	svc := auctions.NewService(repo, notifService, limiter, hub)
 
 	winnerID := uuid.New()
-	
+
 	// Seed winner
 	_, _ = pgClient.Pool.Exec(ctx, `INSERT INTO users (id, name, email, password_hash, role, status, created_at, updated_at) VALUES ($1, 'Winner', $2, 'y', 'customer', 'active', now(), now()) ON CONFLICT (id) DO NOTHING`, winnerID, uuid.New().String()+"@test.com")
 
 	event := &auctions.AuctionEvent{
-		ID: uuid.New(),
-		Title: "Order Concurrency Test Auction",
-		Status: auctions.AuctionStatusLive,
-		StartsAt: time.Now().Add(-1 * time.Hour),
-		EndsAt: time.Now().Add(1 * time.Hour),
-		BidStepCents: 500,
+		ID:                   uuid.New(),
+		Title:                "Order Concurrency Test Auction",
+		Status:               auctions.AuctionStatusLive,
+		StartsAt:             time.Now().Add(-1 * time.Hour),
+		EndsAt:               time.Now().Add(1 * time.Hour),
+		BidStepCents:         500,
 		PaymentDeadlineHours: 24,
-		BiddingEnabled: true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		BiddingEnabled:       true,
+		CreatedAt:            time.Now(),
+		UpdatedAt:            time.Now(),
 	}
 	_ = repo.CreateEvent(ctx, event)
 
 	amountCents := int64(1500)
 	deadline := time.Now().Add(24 * time.Hour)
 	lot := &auctions.AuctionLot{
-		ID: uuid.New(),
-		AuctionID: event.ID,
-		Title: "Race Condition Order Lot",
-		StartPriceCents: 1000,
-		CurrentBidCents: &amountCents,
-		BidStepCents: 500,
+		ID:                  uuid.New(),
+		AuctionID:           event.ID,
+		Title:               "Race Condition Order Lot",
+		StartPriceCents:     1000,
+		CurrentBidCents:     &amountCents,
+		BidStepCents:        500,
 		CurrentWinnerUserID: &winnerID,
-		Status: auctions.LotStatusWonPendingPayment,
-		PaymentDeadlineAt: &deadline,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		Status:              auctions.LotStatusWonPendingPayment,
+		PaymentDeadlineAt:   &deadline,
+		CreatedAt:           time.Now(),
+		UpdatedAt:           time.Now(),
 	}
 	_ = repo.CreateLot(ctx, lot)
 
@@ -441,7 +441,7 @@ func TestCreateOrderConcurrency(t *testing.T) {
 		// Wait, idempotency should return success with the same order ID! So success count can be 5, but they must all return the SAME orderID!
 		t.Logf("Expected some successes due to idempotency. Successes: %d", successCount)
 	}
-	
+
 	var linkCount int
 	err = pgClient.Pool.QueryRow(ctx, "SELECT count(*) FROM auction_order_links WHERE lot_id = $1", lot.ID).Scan(&linkCount)
 	if err != nil {

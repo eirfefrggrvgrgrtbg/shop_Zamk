@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -118,8 +118,8 @@ func (s *Service) CreateSellerByAdmin(ctx context.Context, req *CreateSellerRequ
 
 	// Do not return password hash
 	return &CreateSellerResponse{
-		Seller: *seller,
-		OwnerUser: *user,
+		Seller:                    *seller,
+		OwnerUser:                 *user,
 		TemporaryPasswordReturned: false,
 	}, nil
 }
@@ -132,7 +132,7 @@ func (s *Service) ListSellers(ctx context.Context, filter SellersFilter) (*ListS
 
 	return &ListSellersResponse{
 		Items:      items,
-		TotalCount: total, 
+		TotalCount: total,
 	}, nil
 }
 
