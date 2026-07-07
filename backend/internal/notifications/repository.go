@@ -135,8 +135,14 @@ func (r *Repository) MarkRead(ctx context.Context, id uuid.UUID, userID, sellerI
 		args = append(args, *sellerID)
 	}
 
-	_, err := r.db.Pool.Exec(ctx, query, args...)
-	return err
+	res, err := r.db.Pool.Exec(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
 }
 
 func (r *Repository) MarkAllRead(ctx context.Context, userID, sellerID *uuid.UUID, kind string) error {

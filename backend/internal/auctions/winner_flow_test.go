@@ -30,7 +30,7 @@ func TestWinnerFlow(t *testing.T) {
 	limiter := ratelimit.New(redisClient)
 
 	notifRepo := notifications.NewRepository(pgClient)
-	notifService := notifications.NewService(notifRepo, nil)
+	notifService := notifications.NewService(notifRepo, nil, nil)
 
 	repo := NewRepository(pgClient.Pool)
 	hub := NewSSEHub()

@@ -120,6 +120,10 @@ func (h *Handler) ReadCustomerNotification(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := h.svc.MarkReadCustomer(r.Context(), id, userID); err != nil {
+		if err.Error() == "no rows in result set" {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
 		h.log.Error("failed to mark customer notification read", "err", err)
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return
@@ -141,6 +145,10 @@ func (h *Handler) ReadSellerNotification(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.svc.MarkReadSeller(r.Context(), id, userID); err != nil {
+		if err.Error() == "no rows in result set" {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
 		h.log.Error("failed to mark seller notification read", "err", err)
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return
@@ -163,6 +171,10 @@ func (h *Handler) ReadAdminNotification(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.svc.MarkReadStaff(r.Context(), id, userID); err != nil {
+		if err.Error() == "no rows in result set" {
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
 		h.log.Error("failed to mark admin notification read", "err", err)
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return
