@@ -124,3 +124,19 @@ export const createOrderForLot = async (lotId: string): Promise<{ OrderID: strin
   return request<{ OrderID: string; AmountCents: number }>('POST', `/customer/auction-lots/${lotId}/create-order`);
 };
 
+export const getCustomerNotifications = async (limit = 20, offset = 0): Promise<import('./types').PaginatedNotifications> => {
+  return request<import('./types').PaginatedNotifications>('GET', `/customer/notifications?limit=${limit}&offset=${offset}`);
+};
+
+export const getCustomerUnreadNotificationsCount = async (): Promise<import('./types').UnreadCountResponse> => {
+  return request<import('./types').UnreadCountResponse>('GET', '/customer/notifications/unread-count');
+};
+
+export const markCustomerNotificationRead = async (id: string): Promise<void> => {
+  return request<void>('POST', `/customer/notifications/${id}/read`);
+};
+
+export const markAllCustomerNotificationsRead = async (): Promise<void> => {
+  return request<void>('POST', '/customer/notifications/read-all');
+};
+

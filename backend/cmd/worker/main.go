@@ -13,12 +13,14 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
 
 func main() {
@@ -60,8 +62,14 @@ func main() {
 	ordersService := orders.NewService(ordersRepo, cartRepo, inventoryService, pgClient, cfg)
 
 	returnsRepo := returns.NewRepository(pgClient.Pool)
+	
+	devEmailSender := notifications.NewDevEmailSender(logger)
+	userRepo := users.NewRepository(pgClient.Pool)
+	notificationsRepo := notifications.NewRepository(pgClient)
+	notificationsService := notifications.NewService(notificationsRepo, userRepo, devEmailSender)
+
 	payoutsRepo := payouts.NewRepository(pgClient.Pool)
-	payoutsService := payouts.NewService(payoutsRepo, pgClient, returnsRepo, ordersRepo, cfg)
+	payoutsService := payouts.NewService(payoutsRepo, pgClient, returnsRepo, ordersRepo, cfg, notificationsService)
 
 	logger.Info("worker started successfully")
 

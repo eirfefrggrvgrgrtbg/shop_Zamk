@@ -12,6 +12,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/reviews"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 )
 
 type Service struct {
@@ -19,14 +20,16 @@ type Service struct {
 	sellerRepo *sellers.Repository
 	dbPool     *postgres.Client
 	reviews    *reviews.Service
+	notifs     *notifications.Service
 }
 
-func NewService(repo *Repository, sellerRepo *sellers.Repository, dbPool *postgres.Client, reviewsSvc *reviews.Service) *Service {
+func NewService(repo *Repository, sellerRepo *sellers.Repository, dbPool *postgres.Client, reviewsSvc *reviews.Service, notifs *notifications.Service) *Service {
 	return &Service{
 		repo:       repo,
 		sellerRepo: sellerRepo,
 		dbPool:     dbPool,
 		reviews:    reviewsSvc,
+		notifs:     notifs,
 	}
 }
 
@@ -373,7 +376,19 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 		if err := txRepo.UpdateProductStatus(ctx, p); err != nil {
 			return err
 		}
-		return txRepo.AddModerationLog(ctx, log)
+		if err := txRepo.AddModerationLog(ctx, log); err != nil {
+			return err
+		}
+		if s.notifs != nil {
+			_ = s.notifs.CreateStaffNotificationTx(ctx, tx, notifications.Notification{
+				Type:       notifications.TypeProductModerationSubmitted,
+				Title:      "Новый товар на модерацию",
+				Body:       "Товар " + p.Title + " ожидает модерации.",
+				EntityType: "product",
+				EntityID:   p.ID,
+			})
+		}
+		return nil
 	})
 }
 
@@ -469,7 +484,36 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 		if err := txRepo.UpdateProductStatus(ctx, p); err != nil {
 			return err
 		}
-		return txRepo.AddModerationLog(ctx, log)
+		if err := txRepo.AddModerationLog(ctx, log); err != nil {
+			return err
+		}
+		if s.notifs != nil {
+			var notifType, title, body string
+			if toStatus == StatusApproved {
+				notifType = notifications.TypeProductApproved
+				title = "Товар одобрен"
+				body = "Ваш товар " + p.Title + " прошел модерацию и одобрен."
+			} else if toStatus == StatusRejected {
+				notifType = notifications.TypeProductRejected
+				title = "Товар отклонен"
+				body = "Ваш товар " + p.Title + " не прошел модерацию."
+				if comment != nil {
+					body += " Причина: " + *comment
+				}
+			}
+			if notifType != "" {
+				_ = s.notifs.CreateNotificationTx(ctx, tx, notifications.Notification{
+					RecipientSellerID: &p.SellerID,
+					RecipientKind:     notifications.RecipientKindSeller,
+					Type:              notifType,
+					Title:             title,
+					Body:              body,
+					EntityType:        "product",
+					EntityID:          p.ID,
+				})
+			}
+		}
+		return nil
 	})
 }
 

@@ -10,12 +10,21 @@ import (
 )
 
 type Service struct {
-	repo *Repository
-	userRepo *users.Repository
+	repo        *Repository
+	userRepo    *users.Repository
+	emailSender EmailSender
 }
 
-func NewService(repo *Repository, userRepo *users.Repository) *Service {
-	return &Service{repo: repo, userRepo: userRepo}
+func NewService(repo *Repository, userRepo *users.Repository, emailSender EmailSender) *Service {
+	return &Service{repo: repo, userRepo: userRepo, emailSender: emailSender}
+}
+
+// SendSellerInvitationEmail delegates to EmailSender
+func (s *Service) SendSellerInvitationEmail(email, temporaryPassword string) error {
+	if s.emailSender != nil {
+		return s.emailSender.SendSellerInvitationEmail(email, temporaryPassword)
+	}
+	return nil
 }
 
 // CreateNotificationTx creates a single notification, skipping if deduplication rule applies.

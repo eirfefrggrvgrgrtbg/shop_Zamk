@@ -87,7 +87,13 @@ func main() {
 	})
 
 	sellersRepo := sellers.NewRepository(pgClient.Pool)
-	sellersService := sellers.NewService(sellersRepo, userRepo, pgClient)
+	
+	devEmailSender := notifications.NewDevEmailSender(logger)
+	notificationsRepo := notifications.NewRepository(pgClient)
+	notificationsService := notifications.NewService(notificationsRepo, userRepo, devEmailSender)
+	notificationsHandler := notifications.NewHandler(notificationsService, logger)
+
+	sellersService := sellers.NewService(sellersRepo, userRepo, pgClient, notificationsService)
 	sellersHandler := sellers.NewHandler(sellersService)
 
 	catalogRepo := catalog.NewRepository(pgClient.Pool)
@@ -111,7 +117,7 @@ func main() {
 	reviewsHandler := reviews.NewHandler(reviewsService)
 
 	productsRepo := products.NewRepository(pgClient.Pool)
-	productsService := products.NewService(productsRepo, sellersRepo, pgClient, reviewsService)
+	productsService := products.NewService(productsRepo, sellersRepo, pgClient, reviewsService, notificationsService)
 	productsHandler := products.NewHandler(productsService, sellersService)
 
 	tbankProvider := payments.NewTBankProvider(
@@ -121,9 +127,6 @@ func main() {
 		cfg.TBank.SuccessURL,
 		cfg.TBank.FailURL,
 	)
-	notificationsRepo := notifications.NewRepository(pgClient)
-	notificationsService := notifications.NewService(notificationsRepo, userRepo)
-	notificationsHandler := notifications.NewHandler(notificationsService, logger)
 
 	paymentsRepo := payments.NewRepository(pgClient.Pool)
 	paymentsService := payments.NewService(paymentsRepo, ordersRepo, inventoryService, tbankProvider, pgClient, notificationsService)
@@ -132,14 +135,14 @@ func main() {
 	returnsRepo := returns.NewRepository(pgClient.Pool)
 
 	payoutsRepo := payouts.NewRepository(pgClient.Pool)
-	payoutsService := payouts.NewService(payoutsRepo, pgClient, returnsRepo, ordersRepo, cfg)
+	payoutsService := payouts.NewService(payoutsRepo, pgClient, returnsRepo, ordersRepo, cfg, notificationsService)
 	payoutsHandler := payouts.NewHandler(payoutsService)
 
 	fulfillmentRepo := fulfillment.NewRepository(pgClient.Pool)
 	fulfillmentService := fulfillment.NewService(fulfillmentRepo, ordersRepo, pgClient, payoutsService, notificationsService)
 	fulfillmentHandler := fulfillment.NewHandler(fulfillmentService)
 
-	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, cfg.Worker.ReturnWindowDays)
+	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, cfg.Worker.ReturnWindowDays, notificationsService)
 	returnsHandler := returns.NewHandler(returnsService)
 
 	storageProvider, err := storage.NewS3Client(&cfg.S3)

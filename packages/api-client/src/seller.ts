@@ -136,3 +136,19 @@ export const submitSellerProductModeration = async (productId: string, comment?:
 export const completeSellerOnboarding = async (): Promise<void> => {
   return request<void>('POST', '/seller/onboarding/complete');
 };
+
+export const getSellerNotifications = async (limit = 20, offset = 0): Promise<import('./types').PaginatedNotifications> => {
+  return request<import('./types').PaginatedNotifications>('GET', `/seller/notifications?limit=${limit}&offset=${offset}`);
+};
+
+export const getSellerUnreadNotificationsCount = async (): Promise<import('./types').UnreadCountResponse> => {
+  return request<import('./types').UnreadCountResponse>('GET', '/seller/notifications/unread-count');
+};
+
+export const markSellerNotificationRead = async (id: string): Promise<void> => {
+  return request<void>('POST', `/seller/notifications/${id}/read`);
+};
+
+export const markAllSellerNotificationsRead = async (): Promise<void> => {
+  return request<void>('POST', '/seller/notifications/read-all');
+};

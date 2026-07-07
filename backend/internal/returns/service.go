@@ -10,6 +10,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 )
 
 type payoutsService interface {
@@ -23,9 +24,10 @@ type Service struct {
 	db           *postgres.Client
 	payouts      payoutsService
 	windowDays   int
+	notifs       *notifications.Service
 }
 
-func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *inventory.Service, db *postgres.Client, payouts payoutsService, windowDays int) *Service {
+func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *inventory.Service, db *postgres.Client, payouts payoutsService, windowDays int, notifs *notifications.Service) *Service {
 	return &Service{
 		repo:         repo,
 		ordersRepo:   ordersRepo,
@@ -33,6 +35,7 @@ func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *i
 		db:           db,
 		payouts:      payouts,
 		windowDays:   windowDays,
+		notifs:       notifs,
 	}
 }
 
@@ -104,7 +107,29 @@ func (s *Service) CreateReturn(ctx context.Context, userID, orderID uuid.UUID, r
 			})
 		}
 
-		return s.repo.CreateReturnTx(ctx, tx, ret, retItems)
+		if err := s.repo.CreateReturnTx(ctx, tx, ret, retItems); err != nil {
+			return err
+		}
+
+		if s.notifs != nil {
+			_ = s.notifs.CreateStaffNotificationTx(ctx, tx, notifications.Notification{
+				Type:       notifications.TypeReturnCreated,
+				Title:      "Новая заявка на возврат",
+				Body:       "Покупатель запросил возврат.",
+				EntityType: "return",
+				EntityID:   ret.ID,
+			})
+			_ = s.notifs.CreateNotificationTx(ctx, tx, notifications.Notification{
+				RecipientSellerID: &orderItems[0].SellerID,
+				RecipientKind:     notifications.RecipientKindSeller,
+				Type:              notifications.TypeReturnCreated,
+				Title:             "Новая заявка на возврат",
+				Body:              "Покупатель запросил возврат товара.",
+				EntityType:        "return",
+				EntityID:          ret.ID,
+			})
+		}
+		return nil
 	})
 
 	if err != nil {
@@ -187,6 +212,33 @@ func (s *Service) UpdateReturnStatus(ctx context.Context, adminID, returnID uuid
 
 		if err := s.repo.UpdateReturnTx(ctx, tx, ret); err != nil {
 			return err
+		}
+
+		if s.notifs != nil && (req.Status == "approved" || req.Status == "rejected") {
+			var notifType, title, body string
+			if req.Status == "approved" {
+				notifType = notifications.TypeReturnApproved
+				title = "Возврат одобрен"
+				body = "Заявка на возврат была одобрена."
+			} else {
+				notifType = notifications.TypeReturnRejected
+				title = "Возврат отклонен"
+				body = "Заявка на возврат была отклонена."
+			}
+			
+			order, _ := s.ordersRepo.GetOrderForUpdateTx(ctx, tx, ret.OrderID)
+			orderItems, _ := s.ordersRepo.GetOrderItems(ctx, ret.OrderID)
+			if order != nil && len(orderItems) > 0 {
+				_ = s.notifs.CreateNotificationTx(ctx, tx, notifications.Notification{
+					RecipientSellerID: &orderItems[0].SellerID,
+					RecipientKind:     notifications.RecipientKindSeller,
+					Type:              notifType,
+					Title:             title,
+					Body:              body,
+					EntityType:        "return",
+					EntityID:          ret.ID,
+				})
+			}
 		}
 
 		// Apply restock preferences if marked as item_received or completed
@@ -278,6 +330,21 @@ func (s *Service) CreateRefund(ctx context.Context, adminID, returnID uuid.UUID,
 
 		if err := s.repo.CreateRefundTx(ctx, tx, ref); err != nil {
 			return err
+		}
+
+		if s.notifs != nil {
+			order, _ := s.ordersRepo.GetOrder(ctx, ret.OrderID)
+			if order != nil {
+				_ = s.notifs.CreateNotificationTx(ctx, tx, notifications.Notification{
+					RecipientUserID: &order.UserID,
+					RecipientKind:   notifications.RecipientKindCustomer,
+					Type:            notifications.TypeRefundCreated,
+					Title:           "Оформлен возврат средств",
+					Body:            "Денежные средства были отправлены на вашу карту.",
+					EntityType:      "refund",
+					EntityID:        ref.ID,
+				})
+			}
 		}
 
 		// Update return status to refunded

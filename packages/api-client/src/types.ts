@@ -247,6 +247,31 @@ export interface ModerationLogEntry {
   createdAt: string;
 }
 
+export interface Notification {
+  id: string;
+  recipientCustomerId?: string | null;
+  recipientSellerId?: string | null;
+  recipientStaffId?: string | null;
+  recipientKind: 'customer' | 'seller' | 'staff';
+  type: string;
+  title: string;
+  body: string;
+  entityType?: string;
+  entityId?: string | null;
+  metadata?: Record<string, any> | null;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface PaginatedNotifications {
+  items: Notification[];
+  totalCount: number;
+}
+
+export interface UnreadCountResponse {
+  count: number;
+}
+
 export interface ModerationHistoryResponse {
   items: ModerationLogEntry[];
 }

@@ -430,6 +430,22 @@ export const moveLotToDirectSale = async (lotId: string): Promise<void> => {
   return request<void>('POST', `/admin/auction-lots/${lotId}/move-to-direct-sale`);
 };
 
+export const getAdminNotifications = async (limit = 20, offset = 0): Promise<import('./types').PaginatedNotifications> => {
+  return request<import('./types').PaginatedNotifications>('GET', `/admin/notifications?limit=${limit}&offset=${offset}`);
+};
+
+export const getAdminUnreadNotificationsCount = async (): Promise<import('./types').UnreadCountResponse> => {
+  return request<import('./types').UnreadCountResponse>('GET', '/admin/notifications/unread-count');
+};
+
+export const markAdminNotificationRead = async (id: string): Promise<void> => {
+  return request<void>('POST', `/admin/notifications/${id}/read`);
+};
+
+export const markAllAdminNotificationsRead = async (): Promise<void> => {
+  return request<void>('POST', '/admin/notifications/read-all');
+};
+
 export const getDashboardSummary = async (): Promise<AdminDashboardSummary> => {
   return request<AdminDashboardSummary>('GET', '/admin/dashboard/summary');
 };

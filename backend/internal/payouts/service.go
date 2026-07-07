@@ -7,6 +7,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -27,15 +28,17 @@ type Service struct {
 	returns    returnsRepo
 	orders     ordersRepo
 	cfg        *config.Config
+	notifs     *notifications.Service
 }
 
-func NewService(repo *Repository, db *postgres.Client, returns returnsRepo, orders ordersRepo, cfg *config.Config) *Service {
+func NewService(repo *Repository, db *postgres.Client, returns returnsRepo, orders ordersRepo, cfg *config.Config, notifs *notifications.Service) *Service {
 	return &Service{
 		repo:    repo,
 		db:      db,
 		returns: returns,
 		orders:  orders,
 		cfg:     cfg,
+		notifs:  notifs,
 	}
 }
 
@@ -238,6 +241,16 @@ func (s *Service) RequestPayout(ctx context.Context, userID uuid.UUID, req Payou
 			return err
 		}
 
+		if s.notifs != nil {
+			_ = s.notifs.CreateStaffNotificationTx(ctx, tx, notifications.Notification{
+				Type:       notifications.TypePayoutRequested,
+				Title:      "Новая заявка на выплату",
+				Body:       "Заявка на выплату ожидает подтверждения.",
+				EntityType: "payout",
+				EntityID:   payout.ID,
+			})
+		}
+
 		// Create hold
 		hold := &SellerBalanceLedger{
 			ID:          uuid.New(),
@@ -344,7 +357,39 @@ func (s *Service) UpdatePayoutStatus(ctx context.Context, payoutID uuid.UUID, ad
 			}
 		}
 
-		return s.repo.UpdatePayoutTx(ctx, tx, payout)
+		if err := s.repo.UpdatePayoutTx(ctx, tx, payout); err != nil {
+			return err
+		}
+
+		if s.notifs != nil {
+			var notifType, title, body string
+			switch req.Status {
+			case "approved":
+				notifType = notifications.TypePayoutApproved
+				title = "Выплата одобрена"
+				body = "Ваша заявка на выплату одобрена."
+			case "rejected":
+				notifType = notifications.TypePayoutRejected
+				title = "Выплата отклонена"
+				body = "Ваша заявка на выплату отклонена."
+			case "paid":
+				notifType = notifications.TypePayoutPaid
+				title = "Выплата произведена"
+				body = "Средства отправлены на ваши реквизиты."
+			}
+			if notifType != "" {
+				_ = s.notifs.CreateNotificationTx(ctx, tx, notifications.Notification{
+					RecipientSellerID: &payout.SellerID,
+					RecipientKind:     notifications.RecipientKindSeller,
+					Type:              notifType,
+					Title:             title,
+					Body:              body,
+					EntityType:        "payout",
+					EntityID:          payout.ID,
+				})
+			}
+		}
+		return nil
 	})
 }
 

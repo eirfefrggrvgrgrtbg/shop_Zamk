@@ -10,6 +10,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -18,13 +19,15 @@ type Service struct {
 	repo     *Repository
 	userRepo *users.Repository
 	dbClient *postgres.Client
+	notifs   *notifications.Service
 }
 
-func NewService(repo *Repository, userRepo *users.Repository, dbClient *postgres.Client) *Service {
+func NewService(repo *Repository, userRepo *users.Repository, dbClient *postgres.Client, notifs *notifications.Service) *Service {
 	return &Service{
 		repo:     repo,
 		userRepo: userRepo,
 		dbClient: dbClient,
+		notifs:   notifs,
 	}
 }
 
@@ -109,6 +112,10 @@ func (s *Service) CreateSellerByAdmin(ctx context.Context, req *CreateSellerRequ
 		return nil, err
 	}
 
+	if s.notifs != nil {
+		_ = s.notifs.SendSellerInvitationEmail(req.OwnerEmail, req.TemporaryPassword)
+	}
+
 	// Do not return password hash
 	return &CreateSellerResponse{
 		Seller: *seller,
@@ -170,7 +177,19 @@ func (s *Service) CompleteOnboarding(ctx context.Context, currentUserID uuid.UUI
 		return errors.New("seller is not in pending_setup status")
 	}
 
-	return s.repo.UpdateSellerStatus(ctx, seller.ID, StatusPending)
+	err = s.repo.UpdateSellerStatus(ctx, seller.ID, StatusPending)
+	if err == nil && s.notifs != nil {
+		_ = s.dbClient.RunInTx(ctx, func(tx pgx.Tx) error {
+			return s.notifs.CreateStaffNotificationTx(ctx, tx, notifications.Notification{
+				Type:       notifications.TypeSellerOnboardingCompleted,
+				Title:      "Продавец завершил настройку",
+				Body:       "Продавец " + seller.BrandName + " ожидает верификации.",
+				EntityType: "seller",
+				EntityID:   seller.ID,
+			})
+		})
+	}
+	return err
 }
 
 func (s *Service) GetSellerMe(ctx context.Context, currentUserID uuid.UUID) (*SellerMeResponse, error) {

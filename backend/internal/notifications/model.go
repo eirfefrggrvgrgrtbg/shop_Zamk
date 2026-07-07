@@ -26,8 +26,26 @@ const (
 	TypeSellerShipmentDelivered = "shipment_delivered"
 
 	// Admin/Staff types
-	TypeStaffFulfillmentPacked = "fulfillment_packed"
-	TypeStaffShipmentProblem   = "shipment_problem"
+	TypeStaffFulfillmentPacked     = "fulfillment_packed"
+	TypeStaffShipmentProblem       = "shipment_problem"
+	TypeSellerOnboardingCompleted  = "seller_onboarding_completed"
+	TypeProductModerationSubmitted = "product_moderation_submitted"
+	TypePayoutRequested            = "payout_requested"
+
+	// Moderation types (to seller)
+	TypeProductApproved = "product_approved"
+	TypeProductRejected = "product_rejected"
+
+	// Payout types (to seller)
+	TypePayoutApproved = "payout_approved"
+	TypePayoutRejected = "payout_rejected"
+	TypePayoutPaid     = "payout_paid"
+
+	// Return/Refund types
+	TypeReturnCreated  = "return_created"
+	TypeReturnApproved = "return_approved"
+	TypeReturnRejected = "return_rejected"
+	TypeRefundCreated  = "refund_created"
 )
 
 type Notification struct {
