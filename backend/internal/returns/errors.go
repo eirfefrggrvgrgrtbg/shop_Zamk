@@ -11,4 +11,6 @@ var (
 	ErrUnauthorized         = errors.New("unauthorized access to return")
 	ErrInvalidStatusTransition = errors.New("invalid status transition")
 	ErrRefundExceedsPaid    = errors.New("refund exceeds total paid amount")
+	ErrRejectReasonRequired = errors.New("admin comment/reason is required for rejection")
+	ErrReturnAlreadyRefunded = errors.New("return is already refunded or completed")
 )

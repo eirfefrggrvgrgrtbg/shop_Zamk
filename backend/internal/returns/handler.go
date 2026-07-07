@@ -221,6 +221,10 @@ func (h *Handler) UpdateAdminReturnStatus(w http.ResponseWriter, r *http.Request
 			h.writeError(w, http.StatusBadRequest, "invalid_transition", err.Error())
 			return
 		}
+		if errors.Is(err, ErrRejectReasonRequired) {
+			h.writeError(w, http.StatusBadRequest, "reason_required", err.Error())
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update return status")
 		return
 	}
@@ -276,6 +280,10 @@ func (h *Handler) CreateAdminRefund(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, ErrRefundExceedsPaid) {
 			h.writeError(w, http.StatusBadRequest, "refund_exceeds_paid", err.Error())
+			return
+		}
+		if errors.Is(err, ErrReturnAlreadyRefunded) {
+			h.writeError(w, http.StatusConflict, "already_refunded", err.Error())
 			return
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create refund")
