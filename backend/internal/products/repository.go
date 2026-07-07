@@ -97,6 +97,7 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 		SELECT id, seller_id, category_id, brand_id, title, slug, description,
 			status, source, gender, color, material, care_instructions,
 			price_cents, old_price_cents, currency, main_image_url, main_image_object_key,
+			average_rating, reviews_count,
 			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
 		FROM products
 		WHERE ` + condition + `
@@ -106,6 +107,7 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 		&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
 		&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
 		&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL, &p.MainImageObjectKey,
+		&p.AverageRating, &p.ReviewsCount,
 		&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
 	)
 	if err != nil {
@@ -378,6 +380,7 @@ func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUI
 		SELECT id, seller_id, category_id, brand_id, title, slug, description,
 			status, source, gender, color, material, care_instructions,
 			price_cents, old_price_cents, currency, main_image_url,
+			average_rating, reviews_count,
 			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
 		FROM products
 		WHERE seller_id = $1
@@ -393,6 +396,7 @@ func (r *Repository) ListAdminProducts(ctx context.Context, filter AdminProductF
 		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
 			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
 			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
+			p.average_rating, p.reviews_count,
 			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment
 		FROM products p
 	`)
@@ -454,6 +458,7 @@ func (r *Repository) ListAdminProducts(ctx context.Context, filter AdminProductF
 			&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
 			&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
 			&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
+			&p.AverageRating, &p.ReviewsCount,
 			&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
 		); err != nil {
 			return nil, 0, err
@@ -491,6 +496,7 @@ func (r *Repository) ListProductsForModeration(ctx context.Context, limit, offse
 		SELECT id, seller_id, category_id, brand_id, title, slug, description,
 			status, source, gender, color, material, care_instructions,
 			price_cents, old_price_cents, currency, main_image_url,
+			average_rating, reviews_count,
 			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
 		FROM products
 		WHERE status = 'pending_moderation'
@@ -506,6 +512,7 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
 			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
 			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
+			p.average_rating, p.reviews_count,
 			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment
 		FROM products p
 		INNER JOIN sellers s ON p.seller_id = s.id
@@ -618,6 +625,7 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 			&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
 			&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
 			&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
+			&p.AverageRating, &p.ReviewsCount,
 			&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
 		); err != nil {
 			return nil, 0, err
@@ -642,6 +650,7 @@ func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug
 		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
 			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
 			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
+			p.average_rating, p.reviews_count,
 			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment
 		FROM products p
 		INNER JOIN sellers s ON p.seller_id = s.id
@@ -652,6 +661,7 @@ func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug
 		&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
 		&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
 		&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
+		&p.AverageRating, &p.ReviewsCount,
 		&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
 	)
 	if err != nil {
@@ -700,6 +710,7 @@ func (r *Repository) listProductsQuery(ctx context.Context, query string, args .
 			&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
 			&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
 			&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
+			&p.AverageRating, &p.ReviewsCount,
 			&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
 		); err != nil {
 			return nil, err

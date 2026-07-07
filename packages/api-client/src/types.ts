@@ -48,6 +48,8 @@ export interface ProductSummary {
   rejectedAt?: string;
   // Included from rating summary usually
   rating?: RatingSummary;
+  averageRating?: number;
+  reviewsCount?: number;
 }
 
 export interface ProductDetail extends ProductSummary {
@@ -89,7 +91,7 @@ export interface PublicReview {
   productId: string;
   rating: number;
   title?: string;
-  content: string;
+  comment?: string;
   customerName: string; // usually masked
   createdAt: string;
 }
@@ -360,7 +362,44 @@ export interface Payout {
   rejectedAt?: string;
   paidAt?: string;
   comment?: string;
+  createdAt: string;
 }
+
+// ---------------------------------------------------------
+// REVIEWS DTOs
+// ---------------------------------------------------------
+export interface ProductReview {
+  id: string;
+  productId: string;
+  customerId: string;
+  rating: number;
+  comment?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProductReviewRequest {
+  productId: string;
+  rating: number;
+  comment?: string;
+}
+
+export interface ModerateReviewRequest {
+  status: 'approved' | 'rejected' | 'hidden' | 'blocked';
+  comment?: string;
+}
+
+export interface ProductReviewModerationLog {
+  id: string;
+  reviewId: string;
+  adminUserId: string;
+  fromStatus: string;
+  toStatus: string;
+  comment?: string;
+  createdAt: string;
+}
+
 
 // ---------------------------------------------------------
 // ADMIN DTOs
@@ -423,6 +462,8 @@ export interface AdminProduct {
   rejectedAt?: string;
   moderationComment?: string;
   inStock?: boolean;
+  averageRating?: number;
+  reviewsCount?: number;
   variants?: AdminProductVariant[];
   images?: AdminProductImage[];
 }
@@ -765,6 +806,8 @@ export interface SellerDetail {
   contactPhone?: string;
   status: string;
   isPlatform?: boolean;
+  averageRating?: number;
+  reviewsCount?: number;
   createdAt: string;
   updatedAt: string;
   owner: {
@@ -1107,3 +1150,4 @@ export interface AdminSellerBalance {
   availableBalanceCents: number;
   currency: string;
 }
+

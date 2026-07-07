@@ -35,6 +35,8 @@ type Product struct {
 	OldPriceCents     *int64     `json:"oldPriceCents,omitempty"`
 	Currency          string     `json:"currency"`
 	MainImageURL      *string    `json:"mainImageUrl,omitempty"`
+	AverageRating     float64    `json:"averageRating"`
+	ReviewsCount      int        `json:"reviewsCount"`
 	MainImageObjectKey *string   `json:"mainImageObjectKey,omitempty"`
 	CreatedAt         time.Time  `json:"createdAt"`
 	UpdatedAt         time.Time  `json:"updatedAt"`

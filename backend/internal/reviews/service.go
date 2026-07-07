@@ -131,7 +131,17 @@ func (s *Service) ModerateReview(ctx context.Context, adminID, reviewID uuid.UUI
 			Comment:     comment,
 			CreatedAt:   now,
 		}
-		return s.repo.LogModeration(ctx, tx, log)
+		if err := s.repo.LogModeration(ctx, tx, log); err != nil {
+			return err
+		}
+
+		if err := s.repo.RecalculateProductRating(ctx, tx, review.ProductID); err != nil {
+			return err
+		}
+		if err := s.repo.RecalculateSellerRating(ctx, tx, review.SellerID); err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
@@ -167,7 +177,7 @@ func (s *Service) GetSellerReviews(ctx context.Context, userID uuid.UUID, limit,
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.ListReviews(ctx, map[string]interface{}{"seller_id": seller.ID}, limit, offset)
+	return s.repo.ListReviews(ctx, map[string]interface{}{"seller_id": seller.ID, "status": "published"}, limit, offset)
 }
 
 func (s *Service) GetSellerReviewByID(ctx context.Context, userID, reviewID uuid.UUID) (*ProductReview, error) {

@@ -186,7 +186,7 @@ export async function fetchProductReviews(productId: string): Promise<UIReview[]
     id: r.id,
     author: r.customerName || 'Аноним',
     rating: r.rating,
-    text: r.content,
+    text: r.comment || '',
     date: new Date(r.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })
   }));
 }

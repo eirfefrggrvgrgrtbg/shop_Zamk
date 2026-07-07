@@ -53,13 +53,13 @@ func (r *Repository) CreateSellerUser(ctx context.Context, su *SellerUser) error
 
 func (r *Repository) GetSellerByID(ctx context.Context, id uuid.UUID) (*Seller, error) {
 	query := `
-		SELECT id, brand_name, slug, description, contact_email, contact_phone, status, logo_url, logo_object_key, created_at, updated_at
+		SELECT id, brand_name, slug, description, contact_email, contact_phone, status, logo_url, logo_object_key, average_rating, reviews_count, created_at, updated_at
 		FROM sellers
 		WHERE id = $1
 	`
 	var s Seller
 	err := r.db.QueryRow(ctx, query, id).Scan(
-		&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.AverageRating, &s.ReviewsCount, &s.CreatedAt, &s.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -72,13 +72,13 @@ func (r *Repository) GetSellerByID(ctx context.Context, id uuid.UUID) (*Seller, 
 
 func (r *Repository) GetSellerBySlug(ctx context.Context, slug string) (*Seller, error) {
 	query := `
-		SELECT id, brand_name, slug, description, contact_email, contact_phone, status, logo_url, logo_object_key, created_at, updated_at
+		SELECT id, brand_name, slug, description, contact_email, contact_phone, status, logo_url, logo_object_key, average_rating, reviews_count, created_at, updated_at
 		FROM sellers
 		WHERE slug = $1
 	`
 	var s Seller
 	err := r.db.QueryRow(ctx, query, slug).Scan(
-		&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.AverageRating, &s.ReviewsCount, &s.CreatedAt, &s.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -91,7 +91,7 @@ func (r *Repository) GetSellerBySlug(ctx context.Context, slug string) (*Seller,
 
 func (r *Repository) GetSellerByUserID(ctx context.Context, userID uuid.UUID) (*Seller, *SellerUser, error) {
 	query := `
-		SELECT s.id, s.brand_name, s.slug, s.description, s.contact_email, s.contact_phone, s.status, s.logo_url, s.logo_object_key, s.created_at, s.updated_at,
+		SELECT s.id, s.brand_name, s.slug, s.description, s.contact_email, s.contact_phone, s.status, s.logo_url, s.logo_object_key, s.average_rating, s.reviews_count, s.created_at, s.updated_at,
 		       su.id, su.seller_id, su.user_id, su.role, su.created_at
 		FROM sellers s
 		JOIN seller_users su ON s.id = su.seller_id
@@ -100,7 +100,7 @@ func (r *Repository) GetSellerByUserID(ctx context.Context, userID uuid.UUID) (*
 	var s Seller
 	var su SellerUser
 	err := r.db.QueryRow(ctx, query, userID).Scan(
-		&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.AverageRating, &s.ReviewsCount, &s.CreatedAt, &s.UpdatedAt,
 		&su.ID, &su.SellerID, &su.UserID, &su.Role, &su.CreatedAt,
 	)
 	if err != nil {
@@ -156,7 +156,7 @@ func (r *Repository) ListSellers(ctx context.Context, filter SellersFilter) ([]S
 	}
 
 	query := `
-		SELECT id, brand_name, slug, description, contact_email, contact_phone, status, is_platform, logo_url, logo_object_key, created_at, updated_at
+		SELECT id, brand_name, slug, description, contact_email, contact_phone, status, is_platform, logo_url, logo_object_key, average_rating, reviews_count, created_at, updated_at
 	` + baseQuery + fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", argID, argID+1)
 
 	args = append(args, filter.Limit, filter.Offset)
@@ -171,7 +171,7 @@ func (r *Repository) ListSellers(ctx context.Context, filter SellersFilter) ([]S
 	for rows.Next() {
 		var s Seller
 		if err := rows.Scan(
-			&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.IsPlatform, &s.LogoURL, &s.LogoObjectKey, &s.CreatedAt, &s.UpdatedAt,
+			&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.IsPlatform, &s.LogoURL, &s.LogoObjectKey, &s.AverageRating, &s.ReviewsCount, &s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("failed to scan seller: %w", err)
 		}
@@ -235,7 +235,7 @@ func (r *Repository) CountSellers(ctx context.Context) (int, error) {
 func (r *Repository) GetSellerDetailByID(ctx context.Context, sellerID uuid.UUID) (*SellerDetail, error) {
 	query := `
 		SELECT
-			s.id, s.brand_name, s.slug, s.description, s.contact_email, s.contact_phone, s.logo_url, s.status, s.created_at, s.updated_at,
+			s.id, s.brand_name, s.slug, s.description, s.contact_email, s.contact_phone, s.logo_url, s.status, s.average_rating, s.reviews_count, s.created_at, s.updated_at,
 			u.id, u.name, u.email, u.status,
 			(SELECT COUNT(*) FROM seller_warnings sw WHERE sw.seller_id = s.id AND sw.status = 'active')  AS warnings_active,
 			(SELECT COUNT(*) FROM seller_violations sv WHERE sv.seller_id = s.id AND sv.status = 'active') AS violations_active,
@@ -248,7 +248,7 @@ func (r *Repository) GetSellerDetailByID(ctx context.Context, sellerID uuid.UUID
 	`
 	var d SellerDetail
 	err := r.db.QueryRow(ctx, query, sellerID).Scan(
-		&d.ID, &d.BrandName, &d.Slug, &d.Description, &d.ContactEmail, &d.ContactPhone, &d.LogoURL, &d.Status, &d.CreatedAt, &d.UpdatedAt,
+		&d.ID, &d.BrandName, &d.Slug, &d.Description, &d.ContactEmail, &d.ContactPhone, &d.LogoURL, &d.Status, &d.AverageRating, &d.ReviewsCount, &d.CreatedAt, &d.UpdatedAt,
 		&d.OwnerID, &d.OwnerName, &d.OwnerEmail, &d.OwnerStatus,
 		&d.WarningsActive, &d.ViolationsActive, &d.ActivePenaltyViolations,
 	)

@@ -30,6 +30,8 @@ type Seller struct {
 	Description  *string      `json:"description,omitempty"`
 	ContactEmail string       `json:"contactEmail"`
 	ContactPhone *string      `json:"contactPhone,omitempty"`
+	AverageRating float64   `json:"averageRating"`
+	ReviewsCount  int       `json:"reviewsCount"`
 	Status       SellerStatus `json:"status"`
 	IsPlatform   bool         `json:"isPlatform"`
 	LogoURL      *string      `json:"logoUrl,omitempty"`
@@ -54,6 +56,8 @@ type SellerDetail struct {
 	Description  *string
 	ContactEmail string
 	ContactPhone *string
+	AverageRating float64   `json:"averageRating"`
+	ReviewsCount  int       `json:"reviewsCount"`
 	LogoURL      *string
 	Status       SellerStatus
 	CreatedAt    time.Time

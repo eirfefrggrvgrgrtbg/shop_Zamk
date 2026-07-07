@@ -183,3 +183,45 @@ func (r *Repository) GetRatingSummary(ctx context.Context, productID uuid.UUID) 
 	}
 	return &summary, nil
 }
+
+func (r *Repository) RecalculateProductRating(ctx context.Context, tx postgres.DBTX, productID uuid.UUID) error {
+	query := `
+		WITH stats AS (
+			SELECT COALESCE(AVG(rating), 0) as avg_rating, COUNT(*) as cnt
+			FROM product_reviews
+			WHERE product_id = $1 AND status = 'published'
+		)
+		UPDATE products
+		SET average_rating = ROUND(stats.avg_rating::numeric, 1),
+		    reviews_count = stats.cnt
+		FROM stats
+		WHERE products.id = $1
+	`
+	dbExecutor := tx
+	if dbExecutor == nil {
+		dbExecutor = r.db.Pool
+	}
+	_, err := dbExecutor.Exec(ctx, query, productID)
+	return err
+}
+
+func (r *Repository) RecalculateSellerRating(ctx context.Context, tx postgres.DBTX, sellerID uuid.UUID) error {
+	query := `
+		WITH stats AS (
+			SELECT COALESCE(AVG(rating), 0) as avg_rating, COUNT(*) as cnt
+			FROM product_reviews
+			WHERE seller_id = $1 AND status = 'published'
+		)
+		UPDATE sellers
+		SET average_rating = ROUND(stats.avg_rating::numeric, 1),
+		    reviews_count = stats.cnt
+		FROM stats
+		WHERE sellers.id = $1
+	`
+	dbExecutor := tx
+	if dbExecutor == nil {
+		dbExecutor = r.db.Pool
+	}
+	_, err := dbExecutor.Exec(ctx, query, sellerID)
+	return err
+}
