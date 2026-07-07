@@ -6,8 +6,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/go-chi/chi/v5"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/google/uuid"
 )
 
@@ -79,8 +79,8 @@ func (h *Handler) HandleTBankWebhook(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("OK"))
 			return
 		}
-
-		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to process webhook: "+err.Error())
+		
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to process webhook: " + err.Error())
 		return
 	}
 

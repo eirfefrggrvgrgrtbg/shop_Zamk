@@ -57,7 +57,7 @@ func sanitizeMetadata(raw json.RawMessage) json.RawMessage {
 	}
 
 	sensitiveKeys := []string{"password", "passwordHash", "token", "accessToken", "refreshToken", "card", "bank", "raw_payload"}
-
+	
 	dirty := false
 	for _, key := range sensitiveKeys {
 		if _, ok := data[key]; ok {

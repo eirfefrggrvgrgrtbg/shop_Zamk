@@ -284,7 +284,7 @@ func (r *Repository) GetAdminPayoutSummary(ctx context.Context) (*AdminPayoutSum
 	summary.TotalAvailableCents = saleAvailable + manualAdj + refundDeduction + payoutReq + payoutRej
 
 	// Commission logic: Assuming we want commission from the marketplace orders
-	// For third-party orders: The seller net is stored as "sale_pending" (and later "sale_available").
+	// For third-party orders: The seller net is stored as "sale_pending" (and later "sale_available"). 
 	// To get total marketplace commission, we might need a separate sum from order_fulfillments or calculate it based on something else.
 	// The prompt states: "total marketplace commission".
 	// Let's compute commission by summing (subtotal - seller_amount) from order_fulfillments for 3rd party sellers.

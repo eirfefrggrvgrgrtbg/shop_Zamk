@@ -19,13 +19,13 @@ type Category struct {
 }
 
 type Brand struct {
-	ID            uuid.UUID `json:"id"`
-	Name          string    `json:"name"`
-	Slug          string    `json:"slug"`
-	Description   *string   `json:"description,omitempty"`
-	LogoURL       *string   `json:"logoUrl,omitempty"`
-	LogoObjectKey *string   `json:"logoObjectKey,omitempty"`
-	IsActive      bool      `json:"isActive"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	Slug        string    `json:"slug"`
+	Description *string   `json:"description,omitempty"`
+	LogoURL     *string   `json:"logoUrl,omitempty"`
+	LogoObjectKey *string `json:"logoObjectKey,omitempty"`
+	IsActive    bool      `json:"isActive"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }

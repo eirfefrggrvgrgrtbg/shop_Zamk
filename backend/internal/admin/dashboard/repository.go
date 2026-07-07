@@ -15,7 +15,7 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 
 func (r *Repository) GetSummary(ctx context.Context) (*DashboardSummary, error) {
 	summary := &DashboardSummary{}
-
+	
 	// Query Orders
 	var totalOrders, ordersToday, newOrPending, paid, inFulfillment, shippedDelivered, cancelledRefunded int
 	err := r.db.QueryRow(ctx, `
@@ -29,9 +29,7 @@ func (r *Repository) GetSummary(ctx context.Context) (*DashboardSummary, error) 
 			COUNT(*) FILTER (WHERE status IN ('cancelled', 'refunded'))
 		FROM orders
 	`).Scan(&totalOrders, &ordersToday, &newOrPending, &paid, &inFulfillment, &shippedDelivered, &cancelledRefunded)
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 
 	summary.Overview.TotalOrders = totalOrders
 	summary.Overview.OrdersToday = ordersToday
@@ -52,9 +50,7 @@ func (r *Repository) GetSummary(ctx context.Context) (*DashboardSummary, error) 
 			COALESCE(SUM(total_price_cents) FILTER (WHERE status = 'paid'), 0)
 		FROM orders
 	`).Scan(&revToday, &rev7d, &paidOrdersSum)
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 	summary.Overview.RevenueTodayCents = revToday
 	summary.Overview.Revenue7dCents = rev7d
 	summary.Payments.PaidOrdersSumCents = paidOrdersSum
@@ -68,9 +64,7 @@ func (r *Repository) GetSummary(ctx context.Context) (*DashboardSummary, error) 
 			COUNT(*) FILTER (WHERE status = 'blocked')
 		FROM sellers
 	`).Scan(&activeSellers, &waitingModSellers, &blockedSellers)
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 	summary.Overview.ActiveSellers = activeSellers
 	summary.Sellers = SellersMetrics{
 		Active:            activeSellers,
@@ -87,10 +81,8 @@ func (r *Repository) GetSummary(ctx context.Context) (*DashboardSummary, error) 
 			COUNT(*) FILTER (WHERE status IN ('rejected', 'blocked'))
 		FROM products
 	`).Scan(&pubProducts, &modProducts, &rejProducts)
-	if err != nil {
-		return nil, err
-	}
-
+	if err != nil { return nil, err }
+	
 	// Inventory
 	var lowStock, reserved, oosCount int
 	err = r.db.QueryRow(ctx, `
@@ -100,9 +92,7 @@ func (r *Repository) GetSummary(ctx context.Context) (*DashboardSummary, error) 
 			COUNT(*) FILTER (WHERE (total_stock - reserved_stock) = 0)
 		FROM inventory_items
 	`).Scan(&lowStock, &reserved, &oosCount)
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 
 	summary.Overview.ActiveProducts = pubProducts
 	summary.Overview.PendingModeration = modProducts

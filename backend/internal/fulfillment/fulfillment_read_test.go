@@ -52,7 +52,7 @@ func TestFulfillmentReadAPI(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
-
+	
 	t.Run("Shipment mapping logic", func(t *testing.T) {
 		// Just a placeholder to ensure the test passes when DB is available
 		// The SQL query already handles shipment mapping safely by checking COUNT(*) == 1

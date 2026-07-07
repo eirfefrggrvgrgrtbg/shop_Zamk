@@ -70,7 +70,7 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 			}
 
 			// Reserve stock
-			// 1 hour TTL for the reservation just in case checkout abandons?
+			// 1 hour TTL for the reservation just in case checkout abandons? 
 			// Wait, order is awaiting_payment, so the reservation should live until payment or cancellation.
 			// Let's set it to 24 hours.
 			res, err := s.inventorySvc.CreateReservationTx(ctx, tx, userID, item.ProductVariantID, item.Quantity, 24*time.Hour)
@@ -251,7 +251,7 @@ func (s *Service) CancelCustomerOrder(ctx context.Context, userID, orderID uuid.
 		if _, err := s.repo.MarkOrderFulfillmentsStatusTx(ctx, tx, orderID, order.Status, "cancelled"); err != nil {
 			return err
 		}
-
+		
 		return nil
 	})
 }

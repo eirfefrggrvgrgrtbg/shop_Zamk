@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -304,7 +304,7 @@ func (s *Service) DeleteSellerProductImage(ctx context.Context, userID, productI
 	if img.ObjectKey != nil {
 		_ = s.provider.DeleteObject(context.Background(), *img.ObjectKey)
 	}
-
+	
 	// If it was the main image, reset it
 	if prod.MainImageURL != nil && *prod.MainImageURL == img.ImageURL {
 		// Just clear it for simplicity, UI/User can set another one or we can pick the first remaining
@@ -316,7 +316,7 @@ func (s *Service) DeleteSellerProductImage(ctx context.Context, userID, productI
 			}
 			_ = s.productsRepo.SetMainImage(ctx, productID, remaining[0].ImageURL, objKey)
 		} else {
-			_ = s.productsRepo.SetMainImage(ctx, productID, "", "")
+			_ = s.productsRepo.SetMainImage(ctx, productID, "", "") 
 		}
 	}
 	return nil

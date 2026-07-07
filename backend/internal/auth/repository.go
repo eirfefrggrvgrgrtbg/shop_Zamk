@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 )
 
 type Session struct {

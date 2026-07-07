@@ -3,8 +3,8 @@ package returns
 import "github.com/google/uuid"
 
 type CreateReturnRequest struct {
-	Reason  string                    `json:"reason" validate:"required"`
-	Comment *string                   `json:"comment"`
+	Reason  string                   `json:"reason" validate:"required"`
+	Comment *string                  `json:"comment"`
 	Items   []CreateReturnItemRequest `json:"items" validate:"required,min=1"`
 }
 

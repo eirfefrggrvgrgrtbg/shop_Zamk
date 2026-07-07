@@ -363,7 +363,7 @@ func (r *Repository) GetEventByIDWithLots(ctx context.Context, id uuid.UUID) (*A
 	if err != nil || event == nil {
 		return event, err
 	}
-
+	
 	lots, err := r.GetLotsByAuctionID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -621,7 +621,7 @@ func (r *Repository) CreateAuctionOrderTx(ctx context.Context, tx pgx.Tx, orderI
 	_, err = tx.Exec(ctx, `
 		UPDATE auction_lots SET order_id = $1, updated_at = now() WHERE id = $2
 	`, orderID, lotID)
-
+	
 	return err
 }
 
@@ -661,7 +661,7 @@ func (r *Repository) MarkAuctionOrderPaidTx(ctx context.Context, tx pgx.Tx, orde
 		UPDATE auction_lots SET status = 'paid', updated_at = now() 
 		WHERE id = (SELECT lot_id FROM auction_order_links WHERE order_id = $1)
 	`, orderID)
-
+	
 	return err
 }
 
@@ -681,7 +681,7 @@ func (r *Repository) MoveLotToDirectSaleTx(ctx context.Context, tx pgx.Tx, lotID
 
 	productID := uuid.New()
 	slug := fmt.Sprintf("auction-lot-%s", productID.String()[:8])
-
+	
 	_, err = tx.Exec(ctx, `
 		INSERT INTO products (
 			id, seller_id, category_id, brand_id, title, slug, description, status, source,
@@ -732,7 +732,7 @@ func (r *Repository) MoveLotToDirectSaleTx(ctx context.Context, tx pgx.Tx, lotID
 			}
 		}
 		irows.Close()
-
+		
 		for _, img := range imgs {
 			_, _ = tx.Exec(ctx, `
 				INSERT INTO product_images (id, product_id, image_url, sort_order, created_at)

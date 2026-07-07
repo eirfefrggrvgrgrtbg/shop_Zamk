@@ -197,7 +197,7 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 					}
 					_ = s.notifSvc.CreateNotificationTx(ctx, tx, paidNotif)
 				}
-
+				
 				history := &orders.OrderStatusHistory{
 					ID:         uuid.New(),
 					OrderID:    order.ID,
@@ -224,7 +224,7 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 				if err != nil {
 					return err
 				}
-
+				
 				var fulfillments []struct {
 					ID       uuid.UUID
 					SellerID uuid.UUID
@@ -235,7 +235,7 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 						rows.Close()
 						return err
 					}
-					fulfillments = append(fulfillments, struct{ ID, SellerID uuid.UUID }{id, sellerID})
+					fulfillments = append(fulfillments, struct{ID, SellerID uuid.UUID}{id, sellerID})
 				}
 				rows.Close()
 

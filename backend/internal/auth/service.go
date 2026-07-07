@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 	"github.com/google/uuid"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
 
 type Service struct {
@@ -249,6 +249,6 @@ func (s *Service) ForgotPassword(ctx context.Context, email string) error {
 	} else {
 		_ = s.authRepo.CreatePasswordResetRequest(ctx, email, nil)
 	}
-
+	
 	return nil
 }

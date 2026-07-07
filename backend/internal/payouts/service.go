@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -23,12 +23,12 @@ type ordersRepo interface {
 }
 
 type Service struct {
-	repo    *Repository
-	db      *postgres.Client
-	returns returnsRepo
-	orders  ordersRepo
-	cfg     *config.Config
-	notifs  *notifications.Service
+	repo       *Repository
+	db         *postgres.Client
+	returns    returnsRepo
+	orders     ordersRepo
+	cfg        *config.Config
+	notifs     *notifications.Service
 }
 
 func NewService(repo *Repository, db *postgres.Client, returns returnsRepo, orders ordersRepo, cfg *config.Config, notifs *notifications.Service) *Service {
@@ -54,7 +54,7 @@ func (s *Service) CreatePendingSalesForOrder(ctx context.Context, orderID uuid.U
 	if err != nil {
 		return err
 	}
-
+	
 	items, err := s.orders.GetOrderItems(ctx, orderID)
 	if err != nil {
 		return err
@@ -71,7 +71,7 @@ func (s *Service) CreatePendingSalesForOrder(ctx context.Context, orderID uuid.U
 			}
 
 			_, netCents := s.CalculateCommissionAndNet(item.SubtotalPriceCents)
-
+			
 			// Available at is calculated from the time of delivery (which is approximately now when this is called)
 			availableAt := time.Now().AddDate(0, 0, s.cfg.Worker.ReturnWindowDays)
 
@@ -85,7 +85,7 @@ func (s *Service) CreatePendingSalesForOrder(ctx context.Context, orderID uuid.U
 				Currency:    "RUB",
 				AvailableAt: &availableAt,
 			}
-
+			
 			if err := s.repo.InsertLedgerEntryTx(ctx, tx, entry); err != nil {
 				return err
 			}
@@ -95,21 +95,21 @@ func (s *Service) CreatePendingSalesForOrder(ctx context.Context, orderID uuid.U
 }
 
 func (s *Service) ProcessRefundDeduction(ctx context.Context, refundID uuid.UUID, returnID uuid.UUID, orderID uuid.UUID, amountCents int64) error {
-	// Need order items to attribute the deduction?
+	// Need order items to attribute the deduction? 
 	// The requirement says "must be linked to return_id/refund_id/order_item_id if possible".
 	// Since refund is at the return level, and return has return_items, it's slightly complex to attribute proportional refund.
 	// We will create a negative ledger entry at the order level for now, or attribute it to the first order_item of the return.
 	// Wait, we need the seller ID! So we must query the order items.
-
+	
 	items, err := s.orders.GetOrderItems(ctx, orderID)
 	if err != nil {
 		return err
 	}
-
+	
 	if len(items) == 0 {
 		return nil
 	}
-
+	
 	// Assuming a single seller per order for simplicity, or we take the seller of the first item
 	// In ZAMK phase 6, cart creates separate orders per seller. So all items in an order have the same seller.
 	sellerID := items[0].SellerID
@@ -117,7 +117,7 @@ func (s *Service) ProcessRefundDeduction(ctx context.Context, refundID uuid.UUID
 	return s.db.RunInTx(ctx, func(tx pgx.Tx) error {
 		// Verify we haven't already deducted for this refund
 		// (omitted for brevity, assume idempotent or caller guarantees single call)
-
+		
 		// Calculate the net amount for the refund deduction
 		// We use the same calculation as ProcessSaleCompletion
 		_, netCents := s.CalculateCommissionAndNet(amountCents)
@@ -132,20 +132,20 @@ func (s *Service) ProcessRefundDeduction(ctx context.Context, refundID uuid.UUID
 			AmountCents: -netCents, // NEGATIVE of NET
 			Currency:    "RUB",
 		}
-
+		
 		return s.repo.InsertLedgerEntryTx(ctx, tx, entry)
 	})
 }
 
 func (s *Service) MakeSellerFundsAvailable(ctx context.Context, now time.Time, limit int) (int, error) {
 	processed := 0
-
+	
 	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
 		pendings, err := s.repo.GetLedgerEntriesByType(ctx, tx, "sale_pending", limit, now)
 		if err != nil {
 			return err
 		}
-
+		
 		for _, pending := range pendings {
 			// Skip if already available
 			exists, err := s.repo.HasSaleAvailableForOrderItem(ctx, *pending.OrderItemID)
@@ -180,17 +180,17 @@ func (s *Service) MakeSellerFundsAvailable(ctx context.Context, now time.Time, l
 				AmountCents: pending.AmountCents,
 				Currency:    pending.Currency,
 			}
-
+			
 			if err := s.repo.InsertLedgerEntryTx(ctx, tx, entry); err != nil {
 				return err
 			}
-
+			
 			processed++
 		}
-
+		
 		return nil
 	})
-
+	
 	return processed, err
 }
 
@@ -260,7 +260,7 @@ func (s *Service) RequestPayout(ctx context.Context, userID uuid.UUID, req Payou
 			AmountCents: -req.AmountCents, // NEGATIVE
 			Currency:    "RUB",
 		}
-
+		
 		return s.repo.InsertLedgerEntryTx(ctx, tx, hold)
 	})
 

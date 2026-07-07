@@ -64,61 +64,61 @@ func TestMoveLotToDirectSale(t *testing.T) {
 
 	// Lot 1: valid ended_no_bids
 	lot1 := &AuctionLot{
-		ID:                   uuid.New(),
-		AuctionID:            event.ID,
-		Title:                "No Bids Lot",
-		Description:          nil,
-		StartPriceCents:      1000,
-		BidStepCents:         500,
-		Status:               LotStatusEndedNoBids,
-		CanMoveToDirectSale:  true,
-		DirectSalePriceCents: &dsPrice,
-		CreatedAt:            time.Now(),
-		UpdatedAt:            time.Now(),
+		ID:                    uuid.New(),
+		AuctionID:             event.ID,
+		Title:                 "No Bids Lot",
+		Description:           nil,
+		StartPriceCents:       1000,
+		BidStepCents:          500,
+		Status:                LotStatusEndedNoBids,
+		CanMoveToDirectSale:   true,
+		DirectSalePriceCents:  &dsPrice,
+		CreatedAt:             time.Now(),
+		UpdatedAt:             time.Now(),
 	}
 	_ = repo.CreateLot(ctx, lot1)
 
 	// Lot 2: valid unpaid_manual_review
 	lot2 := &AuctionLot{
-		ID:                   uuid.New(),
-		AuctionID:            event.ID,
-		Title:                "Unpaid Lot",
-		StartPriceCents:      1000,
-		BidStepCents:         500,
-		Status:               LotStatusUnpaidManualReview,
-		CanMoveToDirectSale:  true,
-		DirectSalePriceCents: &dsPrice,
-		CreatedAt:            time.Now(),
-		UpdatedAt:            time.Now(),
+		ID:                    uuid.New(),
+		AuctionID:             event.ID,
+		Title:                 "Unpaid Lot",
+		StartPriceCents:       1000,
+		BidStepCents:          500,
+		Status:                LotStatusUnpaidManualReview,
+		CanMoveToDirectSale:   true,
+		DirectSalePriceCents:  &dsPrice,
+		CreatedAt:             time.Now(),
+		UpdatedAt:             time.Now(),
 	}
 	_ = repo.CreateLot(ctx, lot2)
 
 	// Lot 3: active rejected
 	lot3 := &AuctionLot{
-		ID:                   uuid.New(),
-		AuctionID:            event.ID,
-		Title:                "Active Lot",
-		StartPriceCents:      1000,
-		BidStepCents:         500,
-		Status:               LotStatusActive,
-		CanMoveToDirectSale:  true,
-		DirectSalePriceCents: &dsPrice,
-		CreatedAt:            time.Now(),
-		UpdatedAt:            time.Now(),
+		ID:                    uuid.New(),
+		AuctionID:             event.ID,
+		Title:                 "Active Lot",
+		StartPriceCents:       1000,
+		BidStepCents:          500,
+		Status:                LotStatusActive,
+		CanMoveToDirectSale:   true,
+		DirectSalePriceCents:  &dsPrice,
+		CreatedAt:             time.Now(),
+		UpdatedAt:             time.Now(),
 	}
 	_ = repo.CreateLot(ctx, lot3)
 
 	// Lot 4: missing price
 	lot4 := &AuctionLot{
-		ID:                  uuid.New(),
-		AuctionID:           event.ID,
-		Title:               "No Price Lot",
-		StartPriceCents:     1000,
-		BidStepCents:        500,
-		Status:              LotStatusEndedNoBids,
-		CanMoveToDirectSale: true,
-		CreatedAt:           time.Now(),
-		UpdatedAt:           time.Now(),
+		ID:                    uuid.New(),
+		AuctionID:             event.ID,
+		Title:                 "No Price Lot",
+		StartPriceCents:       1000,
+		BidStepCents:          500,
+		Status:                LotStatusEndedNoBids,
+		CanMoveToDirectSale:   true,
+		CreatedAt:             time.Now(),
+		UpdatedAt:             time.Now(),
 	}
 	if err := repo.CreateLot(ctx, lot4); err != nil {
 		t.Fatalf("Failed to create lot4: %v", err)
@@ -126,31 +126,31 @@ func TestMoveLotToDirectSale(t *testing.T) {
 
 	// Lot 5: can_move_to_direct_sale=false
 	lot5 := &AuctionLot{
-		ID:                   uuid.New(),
-		AuctionID:            event.ID,
-		Title:                "Cannot Move Lot",
-		StartPriceCents:      1000,
-		BidStepCents:         500,
-		Status:               LotStatusEndedNoBids,
-		CanMoveToDirectSale:  false,
-		DirectSalePriceCents: &dsPrice,
-		CreatedAt:            time.Now(),
-		UpdatedAt:            time.Now(),
+		ID:                    uuid.New(),
+		AuctionID:             event.ID,
+		Title:                 "Cannot Move Lot",
+		StartPriceCents:       1000,
+		BidStepCents:          500,
+		Status:                LotStatusEndedNoBids,
+		CanMoveToDirectSale:   false,
+		DirectSalePriceCents:  &dsPrice,
+		CreatedAt:             time.Now(),
+		UpdatedAt:             time.Now(),
 	}
 	_ = repo.CreateLot(ctx, lot5)
 
 	// Lot 6: concurrency check
 	lot6 := &AuctionLot{
-		ID:                   uuid.New(),
-		AuctionID:            event.ID,
-		Title:                "Concurrent Lot",
-		StartPriceCents:      1000,
-		BidStepCents:         500,
-		Status:               LotStatusEndedNoBids,
-		CanMoveToDirectSale:  true,
-		DirectSalePriceCents: &dsPrice,
-		CreatedAt:            time.Now(),
-		UpdatedAt:            time.Now(),
+		ID:                    uuid.New(),
+		AuctionID:             event.ID,
+		Title:                 "Concurrent Lot",
+		StartPriceCents:       1000,
+		BidStepCents:          500,
+		Status:                LotStatusEndedNoBids,
+		CanMoveToDirectSale:   true,
+		DirectSalePriceCents:  &dsPrice,
+		CreatedAt:             time.Now(),
+		UpdatedAt:             time.Now(),
 	}
 	_ = repo.CreateLot(ctx, lot6)
 

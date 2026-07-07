@@ -22,7 +22,7 @@ func (r *Repository) ListSellerFulfillments(ctx context.Context, sellerID uuid.U
 	`
 	var args []interface{}
 	args = append(args, sellerID)
-
+	
 	if status != nil && *status != "" {
 		query += fmt.Sprintf(" AND f.status = $%d", len(args)+1)
 		args = append(args, *status)
@@ -163,7 +163,7 @@ func (r *Repository) ListAdminFulfillments(ctx context.Context, limit, offset in
 		LEFT JOIN shipments s ON (s.fulfillment_id = f.id) OR (s.fulfillment_id IS NULL AND s.order_id = f.order_id AND (SELECT COUNT(*) FROM order_fulfillments WHERE order_id = f.order_id) = 1)
 	`
 	var args []interface{}
-
+	
 	if status != nil && *status != "" {
 		query += fmt.Sprintf(" WHERE f.status = $%d", len(args)+1)
 		args = append(args, *status)
