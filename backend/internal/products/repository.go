@@ -732,3 +732,45 @@ func (r *Repository) listProductsQuery(ctx context.Context, query string, args .
 
 	return products, nil
 }
+
+func (r *Repository) GetProductImageByID(ctx context.Context, imageID uuid.UUID) (ProductImage, error) {
+	query := `
+		SELECT id, product_id, image_url, object_key, alt_text, sort_order, created_at
+		FROM product_images
+		WHERE id = $1
+	`
+	var img ProductImage
+	err := r.db.QueryRow(ctx, query, imageID).Scan(
+		&img.ID, &img.ProductID, &img.ImageURL, &img.ObjectKey, &img.AltText, &img.SortOrder, &img.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ProductImage{}, ErrProductNotFound
+		}
+		return ProductImage{}, fmt.Errorf("failed to get product image: %w", err)
+	}
+	return img, nil
+}
+
+func (r *Repository) DeleteProductImage(ctx context.Context, imageID uuid.UUID) error {
+	query := `DELETE FROM product_images WHERE id = $1`
+	res, err := r.db.Exec(ctx, query, imageID)
+	if err != nil {
+		return fmt.Errorf("failed to delete product image: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrProductNotFound
+	}
+	return nil
+}
+
+func (r *Repository) ReorderProductImages(ctx context.Context, productID uuid.UUID, imageIDs []uuid.UUID) error {
+	for i, id := range imageIDs {
+		query := `UPDATE product_images SET sort_order = $1 WHERE id = $2 AND product_id = $3`
+		_, err := r.db.Exec(ctx, query, i, id, productID)
+		if err != nil {
+			return fmt.Errorf("failed to reorder product image: %w", err)
+		}
+	}
+	return nil
+}

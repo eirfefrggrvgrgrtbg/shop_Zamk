@@ -12,7 +12,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { type SellerProductSize, type SellerProductStatus } from '../lib/seller-products';
-import { getSellerProduct, updateSellerProduct, uploadSellerProductImage, getSellerMe, getModerationHistory } from '@zamk/api-client/src/seller';
+import { getSellerMe, getSellerProduct, updateSellerProduct, uploadSellerProductImage, getModerationHistory, deleteSellerProductImage } from '@zamk/api-client/src/seller';
 import { request } from '@zamk/api-client/src/client';
 import type { SellerMe } from '@zamk/api-client/src/types';
 import { cn } from '../lib/utils';
@@ -38,7 +38,7 @@ type DraftProduct = {
   material: string;
   color: string;
   season: string;
-  photos: string[];
+  photos: { id: string, url: string, isNew: boolean }[];
   sizes: SellerProductSize[];
 };
 
@@ -143,6 +143,7 @@ export function SellerProductEdit() {
   const [draft, setDraft] = useState<DraftProduct>(initialDraft);
   const [activeStep, setActiveStep] = useState<StepId>('base');
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [deletedPhotoIds, setDeletedPhotoIds] = useState<string[]>([]);
   const [savedStatus, setSavedStatus] = useState<SellerProductStatus | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -191,7 +192,7 @@ export function SellerProductEdit() {
           material: product.material || '',
           color: product.color || '',
           season: 'Всесезон',
-          photos: product.images?.map((img: any) => img.imageUrl) || [],
+          photos: product.images?.map((img: any) => ({ id: img.id, url: img.imageUrl, isNew: false })) || [],
           sizes
         });
       } catch (err: any) {
@@ -226,9 +227,13 @@ export function SellerProductEdit() {
     setSavedStatus(null);
   };
 
-  const removePhoto = (photo: string) => {
-    updateDraft('photos', draft.photos.filter((item) => item !== photo));
-    setPhotoFiles((current) => current.filter((f) => f.name !== photo));
+  const removePhoto = (photoId: string, isNew: boolean) => {
+    updateDraft('photos', draft.photos.filter((item) => item.id !== photoId));
+    if (isNew) {
+      setPhotoFiles((current) => current.filter((f) => f.name !== photoId));
+    } else {
+      setDeletedPhotoIds((current) => [...current, photoId]);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -241,7 +246,10 @@ export function SellerProductEdit() {
     }
 
     setPhotoFiles(curr => [...curr, ...validFiles]);
-    updateDraft('photos', [...draft.photos, ...validFiles.map(f => f.name)]);
+    updateDraft('photos', [
+      ...draft.photos, 
+      ...validFiles.map(f => ({ id: f.name, url: URL.createObjectURL(f), isNew: true }))
+    ]);
   };
 
   const saveProduct = async (status: SellerProductStatus) => {
@@ -274,6 +282,14 @@ export function SellerProductEdit() {
       };
 
       await updateSellerProduct(id as string, payload);
+
+      for (const deletedId of deletedPhotoIds) {
+        try {
+          await deleteSellerProductImage(id as string, deletedId);
+        } catch (imgErr) {
+          console.error('Failed to delete image', imgErr);
+        }
+      }
 
       for (const file of photoFiles) {
         try {
@@ -407,9 +423,14 @@ export function SellerProductEdit() {
                 )}
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {draft.photos.map((photo) => (
-                    <div key={photo} className="flex items-center justify-between gap-3 rounded-2xl border border-border-lighter bg-white/72 p-4 dark:border-white/16 dark:bg-black/24">
-                      <span className="text-sm text-graphite dark:text-white">{photo}</span>
-                      <button type="button" onClick={() => removePhoto(photo)} className="text-ash hover:text-red-500 dark:hover:text-red-300">
+                    <div key={photo.id} className="flex items-center justify-between gap-3 rounded-2xl border border-border-lighter bg-white/72 p-4 dark:border-white/16 dark:bg-black/24">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        {photo.url.startsWith('blob:') || photo.url.startsWith('http') ? (
+                           <img src={photo.url} alt="thumbnail" className="h-10 w-10 object-cover rounded-lg" />
+                        ) : null}
+                        <span className="text-sm text-graphite dark:text-white truncate max-w-[200px]">{photo.id}</span>
+                      </div>
+                      <button type="button" onClick={() => removePhoto(photo.id, photo.isNew)} className="text-ash hover:text-red-500 dark:hover:text-red-300">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>

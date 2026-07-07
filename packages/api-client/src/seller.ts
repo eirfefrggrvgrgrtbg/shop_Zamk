@@ -23,12 +23,19 @@ export const updateSellerProduct = async (id: string, input: any): Promise<Selle
 };
 
 // P0 fix: was /images, backend route is /images/upload
-export const uploadSellerProductImage = async (productId: string, file: File): Promise<{ imageUrl: string }> => {
+export const uploadSellerProductImage = async (productId: string, file: File): Promise<{ id: string, imageUrl: string }> => {
   const formData = new FormData();
   formData.append('image', file);
-  return request<{ imageUrl: string }>('POST', `/seller/products/${productId}/images/upload`, { body: formData });
+  return request<{ id: string, imageUrl: string }>('POST', `/seller/products/${productId}/images/upload`, { body: formData });
 };
 
+export const deleteSellerProductImage = async (productId: string, imageId: string): Promise<void> => {
+  return request<void>('DELETE', `/seller/products/${productId}/images/${imageId}`);
+};
+
+export const reorderSellerProductImages = async (productId: string, imageIds: string[]): Promise<void> => {
+  return request<void>('PUT', `/seller/products/${productId}/images/reorder`, { body: { imageIds } });
+};
 // P0 fix: backend returns { items, totalCount } not bare array
 export const getSellerInventory = async (): Promise<{ items: InventoryItem[]; totalCount: number }> => {
   const res = await request<any>('GET', '/seller/inventory');

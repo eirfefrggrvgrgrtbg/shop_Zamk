@@ -264,6 +264,8 @@ func New(
 		r.Post("/{id}/submit-moderation", productsHandler.SubmitForModeration)
 		r.Get("/{id}/moderation-history", productsHandler.GetModerationHistory)
 		r.With(uploadLimit).Post("/{id}/images/upload", storageHandler.UploadSellerProductImage)
+		r.Delete("/{id}/images/{imageId}", storageHandler.DeleteSellerProductImage)
+		r.Put("/{id}/images/reorder", storageHandler.ReorderSellerProductImages)
 	})
 
 	r.Route("/api/seller/inventory", func(r chi.Router) {

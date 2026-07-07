@@ -78,6 +78,10 @@ func (s *Service) UploadSellerProductImage(ctx context.Context, userID, productI
 		return nil, ErrProductNotOwned
 	}
 
+	if len(prod.Images) >= 8 {
+		return nil, fmt.Errorf("maximum 8 images allowed per product")
+	}
+
 	if !products.CanEditProduct(seller.Status, prod.Status) {
 		return nil, products.ErrProductNotEditable
 	}
@@ -258,4 +262,96 @@ func (s *Service) UploadSellerProfileImage(ctx context.Context, userID uuid.UUID
 	return &SellerLogoResponse{
 		LogoURL: stored.ObjectURL,
 	}, nil
+}
+
+func (s *Service) DeleteSellerProductImage(ctx context.Context, userID, productID, imageID uuid.UUID) error {
+	seller, _, err := s.sellersRepo.GetSellerByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get seller profile: %w", err)
+	}
+
+	prod, err := s.productsRepo.GetProductByID(ctx, productID)
+	if err != nil {
+		return fmt.Errorf("failed to get product: %w", err)
+	}
+
+	if prod.SellerID != seller.ID {
+		return ErrProductNotOwned
+	}
+
+	if !products.CanEditProduct(seller.Status, prod.Status) {
+		return products.ErrProductNotEditable
+	}
+
+	img, err := s.productsRepo.GetProductImageByID(ctx, imageID)
+	if err != nil {
+		return fmt.Errorf("failed to get image: %w", err)
+	}
+	if img.ProductID != productID {
+		return fmt.Errorf("image does not belong to product")
+	}
+
+	// Delete from DB first
+	if err := s.productsRepo.DeleteProductImage(ctx, imageID); err != nil {
+		return err
+	}
+
+	// Then from storage
+	if img.ObjectKey != nil {
+		_ = s.provider.DeleteObject(context.Background(), *img.ObjectKey)
+	}
+	
+	// If it was the main image, reset it
+	if prod.MainImageURL != nil && *prod.MainImageURL == img.ImageURL {
+		// Just clear it for simplicity, UI/User can set another one or we can pick the first remaining
+		remaining, _ := s.productsRepo.GetProductImages(ctx, productID)
+		if len(remaining) > 0 {
+			objKey := ""
+			if remaining[0].ObjectKey != nil {
+				objKey = *remaining[0].ObjectKey
+			}
+			_ = s.productsRepo.SetMainImage(ctx, productID, remaining[0].ImageURL, objKey)
+		} else {
+			_ = s.productsRepo.SetMainImage(ctx, productID, "", "") 
+		}
+	}
+	return nil
+}
+
+func (s *Service) ReorderSellerProductImages(ctx context.Context, userID, productID uuid.UUID, imageIDs []uuid.UUID) error {
+	seller, _, err := s.sellersRepo.GetSellerByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get seller profile: %w", err)
+	}
+
+	prod, err := s.productsRepo.GetProductByID(ctx, productID)
+	if err != nil {
+		return fmt.Errorf("failed to get product: %w", err)
+	}
+
+	if prod.SellerID != seller.ID {
+		return ErrProductNotOwned
+	}
+
+	if !products.CanEditProduct(seller.Status, prod.Status) {
+		return products.ErrProductNotEditable
+	}
+
+	if err := s.productsRepo.ReorderProductImages(ctx, productID, imageIDs); err != nil {
+		return err
+	}
+
+	// Update main image to be the first one in the list
+	if len(imageIDs) > 0 {
+		firstImg, err := s.productsRepo.GetProductImageByID(ctx, imageIDs[0])
+		if err == nil {
+			objKey := ""
+			if firstImg.ObjectKey != nil {
+				objKey = *firstImg.ObjectKey
+			}
+			_ = s.productsRepo.SetMainImage(ctx, productID, firstImg.ImageURL, objKey)
+		}
+	}
+
+	return nil
 }

@@ -248,25 +248,6 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		}
 	}
 
-	var images []ProductImage
-	if req.Images != nil {
-		now := time.Now()
-		for i, ir := range req.Images {
-			sortOrder := i
-			if ir.SortOrder != nil {
-				sortOrder = *ir.SortOrder
-			}
-			images = append(images, ProductImage{
-				ID:        uuid.New(),
-				ProductID: p.ID,
-				ImageURL:  ir.ImageURL,
-				AltText:   ir.AltText,
-				SortOrder: sortOrder,
-				CreatedAt: now,
-			})
-		}
-	}
-
 	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
 		if err := txRepo.UpdateProduct(ctx, p); err != nil {
@@ -277,12 +258,6 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				return err
 			}
 			p.Variants = variants
-		}
-		if req.Images != nil {
-			if err := txRepo.ReplaceProductImages(ctx, p.ID, images); err != nil {
-				return err
-			}
-			p.Images = images
 		}
 		return nil
 	})

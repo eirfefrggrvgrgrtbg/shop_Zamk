@@ -32,3 +32,4 @@ dist-ssr
 *.sw?
 build_log.txt
 scratch/
+backend/api
