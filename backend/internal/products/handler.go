@@ -567,37 +567,65 @@ func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if catID := r.URL.Query().Get("categoryId"); catID != "" && catID != "all" {
-		if id, err := uuid.Parse(catID); err == nil {
-			filter.CategoryID = &id
+		id, err := uuid.Parse(catID)
+		if err != nil {
+			h.writeError(w, http.StatusBadRequest, "invalid_filter", "Invalid categoryId: must be a valid UUID")
+			return
 		}
+		filter.CategoryID = &id
 	}
 
 	if brandID := r.URL.Query().Get("brandId"); brandID != "" && brandID != "all" {
-		if id, err := uuid.Parse(brandID); err == nil {
-			filter.BrandID = &id
+		id, err := uuid.Parse(brandID)
+		if err != nil {
+			h.writeError(w, http.StatusBadRequest, "invalid_filter", "Invalid brandId: must be a valid UUID")
+			return
 		}
+		filter.BrandID = &id
 	}
 
-	if sort := r.URL.Query().Get("sort"); sort != "" {
-		filter.Sort = &sort
+	if sellerID := r.URL.Query().Get("sellerId"); sellerID != "" {
+		id, err := uuid.Parse(sellerID)
+		if err != nil {
+			h.writeError(w, http.StatusBadRequest, "invalid_filter", "Invalid sellerId: must be a valid UUID")
+			return
+		}
+		filter.SellerID = &id
 	}
 
-	// We can parse minPriceCents and maxPriceCents, but we need strconv.
-	// Since we haven't imported strconv in handler.go directly, let's just parse it using fmt or simple string parsing, wait, strconv is better.
-	// I will just add strconv import or simply use Sscanf.
+	if size := r.URL.Query().Get("size"); size != "" {
+		filter.Size = &size
+	}
+
+	if sortVal := r.URL.Query().Get("sort"); sortVal != "" {
+		filter.Sort = &sortVal
+	}
+
+	var minPriceCents, maxPriceCents *int64
 	if minPrice := r.URL.Query().Get("minPriceCents"); minPrice != "" {
 		var min int64
-		if _, err := fmt.Sscanf(minPrice, "%d", &min); err == nil {
-			filter.MinPriceCents = &min
+		if _, err := fmt.Sscanf(minPrice, "%d", &min); err != nil || min < 0 {
+			h.writeError(w, http.StatusBadRequest, "invalid_filter", "Invalid minPriceCents: must be a non-negative integer")
+			return
 		}
+		minPriceCents = &min
 	}
 
 	if maxPrice := r.URL.Query().Get("maxPriceCents"); maxPrice != "" {
 		var max int64
-		if _, err := fmt.Sscanf(maxPrice, "%d", &max); err == nil {
-			filter.MaxPriceCents = &max
+		if _, err := fmt.Sscanf(maxPrice, "%d", &max); err != nil || max < 0 {
+			h.writeError(w, http.StatusBadRequest, "invalid_filter", "Invalid maxPriceCents: must be a non-negative integer")
+			return
 		}
+		maxPriceCents = &max
 	}
+
+	if minPriceCents != nil && maxPriceCents != nil && *minPriceCents > *maxPriceCents {
+		h.writeError(w, http.StatusBadRequest, "invalid_filter", "minPriceCents must be less than or equal to maxPriceCents")
+		return
+	}
+	filter.MinPriceCents = minPriceCents
+	filter.MaxPriceCents = maxPriceCents
 
 	if inStock := r.URL.Query().Get("inStock"); inStock == "true" {
 		b := true

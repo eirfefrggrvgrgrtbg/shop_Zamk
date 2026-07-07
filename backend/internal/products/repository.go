@@ -562,9 +562,20 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 
 	if filter.InStock != nil && *filter.InStock {
 		queryBuilder.WriteString(` AND EXISTS (
-			SELECT 1 FROM product_variants v 
-			WHERE v.product_id = p.id AND v.is_active = true AND v.in_stock = true
+			SELECT 1 FROM product_variants pv2
+			JOIN inventory_items ii ON pv2.id = ii.product_variant_id
+			WHERE pv2.product_id = p.id AND pv2.is_active = true
+			AND (COALESCE(ii.total_stock, 0) - COALESCE(ii.reserved_stock, 0)) > 0
 		)`)
+	}
+
+	if filter.Size != nil && *filter.Size != "" {
+		queryBuilder.WriteString(fmt.Sprintf(` AND EXISTS (
+			SELECT 1 FROM product_variants v
+			WHERE v.product_id = p.id AND v.is_active = true AND v.size = $%d
+		)`, argID))
+		args = append(args, *filter.Size)
+		argID++
 	}
 
 	// Calculate total count before applying limit, offset, and order

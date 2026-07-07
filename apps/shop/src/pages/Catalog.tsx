@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, SlidersHorizontal, X, Check } from 'lucide-react';
 import { ProductCard } from '../components/product/ProductCard';
@@ -98,56 +98,78 @@ export function Catalog() {
     Number(searchParams.get('maxPriceCents')) / 100 || DEFAULT_PRICE_RANGE[1]
   ]);
   const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'newest');
-  
-  // Unimplemented filters - kept for UI but disabled in logic
+  const [activeSize, setActiveSize] = useState<string | null>(searchParams.get('size'));
+  const [onlyInStock, setOnlyInStock] = useState(searchParams.get('inStock') === 'true');
+
+  // UI-only filters (color, material, style) — not wired to backend for MVP
   const [activeStyles, setActiveStyles] = useState<string[]>([]);
-  const [activeSizes, setActiveSizes] = useState<string[]>([]);
   const [activeColors, setActiveColors] = useState<string[]>([]);
   const [activeMaterials, setActiveMaterials] = useState<string[]>([]);
-  
+
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [apiProducts, setApiProducts] = useState<Product[]>([]);
   const [totalProducts, setTotalProducts] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const PAGE_LIMIT = 24;
 
-  // Sync state to URL and fetch
+  // Ref to track if categories/brands already loaded (only fetch once)
+  const metaLoaded = useRef(false);
+
+  const buildParams = useCallback(() => {
+    const params: Record<string, any> = { limit: PAGE_LIMIT, sort: sortBy };
+    if (activeCategory !== 'all') params.categoryId = activeCategory;
+    if (activeBrand) params.brandId = activeBrand;
+    if (activeSize) params.size = activeSize;
+    if (onlyInStock) params.inStock = 'true';
+    if (priceRange[0] > DEFAULT_PRICE_RANGE[0]) params.minPriceCents = priceRange[0] * 100;
+    if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) params.maxPriceCents = priceRange[1] * 100;
+    const searchQuery = searchParams.get('q');
+    if (searchQuery) params.q = searchQuery;
+    return params;
+  }, [activeCategory, activeBrand, activeSize, onlyInStock, priceRange, sortBy, searchParams]);
+
+  // Fetch on filter/sort change — reset to page 1
   useEffect(() => {
+    setOffset(0);
+    setApiProducts([]);
+
     async function loadProducts() {
       try {
         setIsLoading(true);
-        const params: Record<string, any> = {};
-        if (activeCategory !== 'all') params.categoryId = activeCategory;
-        if (activeBrand) params.brandId = activeBrand;
-        if (priceRange[0] > DEFAULT_PRICE_RANGE[0]) params.minPriceCents = priceRange[0] * 100;
-        if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) params.maxPriceCents = priceRange[1] * 100;
-        if (sortBy !== 'newest') params.sort = sortBy;
-        
-        const searchQuery = searchParams.get('q');
-        if (searchQuery) params.q = searchQuery;
+        const params = { ...buildParams(), offset: 0 };
 
-        const [productsRes, apiCategories, apiBrands] = await Promise.all([
-          fetchProducts(params),
-          fetchCategories(),
-          fetchBrands(),
-        ]);
+        const [productsRes, apiCategories, apiBrands] = metaLoaded.current
+          ? [await fetchProducts(params), categories, brands]
+          : await Promise.all([fetchProducts(params), fetchCategories(), fetchBrands()]);
+
+        if (!metaLoaded.current) {
+          setCategories(apiCategories as Category[]);
+          setBrands(apiBrands as Brand[]);
+          metaLoaded.current = true;
+        }
+
         setApiProducts(productsRes.items);
         setTotalProducts(productsRes.totalCount);
-        setCategories(apiCategories);
-        setBrands(apiBrands);
+        setHasMore(productsRes.items.length === PAGE_LIMIT && productsRes.totalCount > PAGE_LIMIT);
         setError(null);
-        
+
         // Sync URL
         const newParams = new URLSearchParams(searchParams);
         if (activeCategory !== 'all') newParams.set('categoryId', activeCategory); else newParams.delete('categoryId');
         if (activeBrand) newParams.set('brandId', activeBrand); else newParams.delete('brandId');
+        if (activeSize) newParams.set('size', activeSize); else newParams.delete('size');
+        if (onlyInStock) newParams.set('inStock', 'true'); else newParams.delete('inStock');
         if (priceRange[0] > DEFAULT_PRICE_RANGE[0]) newParams.set('minPriceCents', (priceRange[0] * 100).toString()); else newParams.delete('minPriceCents');
         if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) newParams.set('maxPriceCents', (priceRange[1] * 100).toString()); else newParams.delete('maxPriceCents');
-        if (sortBy !== 'newest') newParams.set('sort', sortBy); else newParams.delete('sort');
+        newParams.set('sort', sortBy);
         setSearchParams(newParams, { replace: true });
-        
+
       } catch (err) {
         console.error('Failed to load products:', err);
         setError('Не удалось загрузить товары. Попробуйте позже.');
@@ -156,21 +178,41 @@ export function Catalog() {
       }
     }
     loadProducts();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategory, activeBrand, activeSize, onlyInStock, priceRange, sortBy, searchParams.get('q')]);
+
+  const loadMore = async () => {
+    if (isLoadingMore || !hasMore) return;
+    try {
+      setIsLoadingMore(true);
+      const newOffset = offset + PAGE_LIMIT;
+      const params = { ...buildParams(), offset: newOffset };
+      const res = await fetchProducts(params);
+      setApiProducts(prev => [...prev, ...res.items]);
+      setOffset(newOffset);
+      setHasMore(res.items.length === PAGE_LIMIT && (newOffset + PAGE_LIMIT) < res.totalCount);
+    } catch (err) {
+      console.error('Failed to load more products:', err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
 
   const categoryOptions: Category[] = [{ id: 'all', slug: 'all', name: 'Все товары', icon: '✦' }, ...categories];
   const hasActivePriceFilter = priceRange[0] !== DEFAULT_PRICE_RANGE[0] || priceRange[1] !== DEFAULT_PRICE_RANGE[1];
-  const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeStyles.length > 0 || activeSizes.length > 0 || activeColors.length > 0 || activeMaterials.length > 0 || hasActivePriceFilter;
-  const activeFiltersCount = activeStyles.length + activeSizes.length + activeColors.length + activeMaterials.length + (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
+  const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeSize !== null || onlyInStock || activeStyles.length > 0 || activeColors.length > 0 || activeMaterials.length > 0 || hasActivePriceFilter;
+  const activeFiltersCount = activeStyles.length + activeColors.length + activeMaterials.length + (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (activeSize ? 1 : 0) + (onlyInStock ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
 
-  // Local filtering is disabled; we trust the backend
+  // Products from API — no local filtering needed
   const filteredProducts = apiProducts;
 
   const resetFilters = () => {
     setActiveCategory('all');
     setActiveBrand(null);
+    setActiveSize(null);
+    setOnlyInStock(false);
     setActiveStyles([]);
-    setActiveSizes([]);
     setActiveColors([]);
     setActiveMaterials([]);
     setPriceRange(DEFAULT_PRICE_RANGE);
@@ -189,7 +231,8 @@ export function Catalog() {
   };
 
   const toggleSize = (size: string) => {
-    setActiveSizes(prev => prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size]);
+    // Backend supports single size filter; toggle selects/deselects
+    setActiveSize(prev => prev === size ? null : size);
   };
 
   const toggleColor = (color: string) => {
@@ -199,6 +242,7 @@ export function Catalog() {
   const toggleMaterial = (material: string) => {
     setActiveMaterials(prev => prev.includes(material) ? prev.filter(m => m !== material) : [...prev, material]);
   };
+
 
   // Контент фильтров (переиспользуется для desktop и mobile)
   const FiltersContent = () => (
@@ -237,7 +281,7 @@ export function Catalog() {
       </FilterSection>
 
       {/* Размеры */}
-      <FilterSection title="Размер" defaultOpen={activeSizes.length > 0}>
+      <FilterSection title="Размер" defaultOpen={activeSize !== null}>
         <div className="grid grid-cols-4 gap-2">
           {SIZES.map((size) => (
             <button
@@ -245,7 +289,7 @@ export function Catalog() {
               onClick={() => toggleSize(size)}
               className={cn(
                 "h-8 border text-[11px] font-mono transition-all flex items-center justify-center rounded-[2px]",
-                activeSizes.includes(size)
+                activeSize === size
                   ? "bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
                   : "bg-transparent border-black/20 dark:border-white/20 text-black/60 dark:text-white/60 hover:border-black/50 dark:hover:border-white/50 hover:text-black dark:hover:text-white"
               )}
@@ -255,6 +299,7 @@ export function Catalog() {
           ))}
         </div>
       </FilterSection>
+
 
       {/* Цвета */}
       <FilterSection title="Цвет" defaultOpen={activeColors.length > 0}>
@@ -342,6 +387,25 @@ export function Catalog() {
           ))}
         </div>
       </FilterSection>
+
+      {/* В наличии */}
+      <FilterSection title="Наличие" defaultOpen={onlyInStock}>
+        <button
+          onClick={() => setOnlyInStock(prev => !prev)}
+          className="flex items-center gap-3 py-1.5 group text-left w-full"
+        >
+          <div className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
+            {onlyInStock && <Check className="w-4 h-4 text-black dark:text-white" strokeWidth={2.5} />}
+          </div>
+          <span className={cn(
+            "text-[12px] font-sans font-light tracking-wide transition-colors",
+            onlyInStock ? "text-black dark:text-white font-normal" : "text-black/70 dark:text-white/70 group-hover:text-black dark:group-hover:text-white"
+          )}>
+            Только в наличии
+          </span>
+        </button>
+      </FilterSection>
+
 
       {/* Кнопка сброса */}
       {hasActiveFilters && (
@@ -433,12 +497,18 @@ export function Catalog() {
                     <button type="button" aria-label="Снять фильтр бренда" onClick={() => setActiveBrand(null)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
-                {activeSizes.map(size => (
-                  <span key={size} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
-                    {size}
-                    <button type="button" aria-label={`Снять фильтр размера ${size}`} onClick={() => toggleSize(size)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
+                {activeSize && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
+                    {activeSize}
+                    <button type="button" aria-label={`Снять фильтр размера ${activeSize}`} onClick={() => setActiveSize(null)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
-                ))}
+                )}
+                {onlyInStock && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
+                    В наличии
+                    <button type="button" aria-label="Снять фильтр наличия" onClick={() => setOnlyInStock(false)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
+                  </span>
+                )}
                 {activeColors.map(color => (
                   <span key={color} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
                     {color}
@@ -465,11 +535,29 @@ export function Catalog() {
                 <p className="text-sm text-ash">{error}</p>
               </div>
             ) : filteredProducts.length > 0 ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
-                {filteredProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
+                  {filteredProducts.map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
+                </div>
+                {hasMore && (
+                  <div className="flex justify-center mt-10">
+                    <button
+                      type="button"
+                      onClick={loadMore}
+                      disabled={isLoadingMore}
+                      className="inline-flex items-center gap-2 h-11 px-8 rounded-lg border border-black/20 dark:border-white/20 text-sm font-mono uppercase tracking-wider text-graphite dark:text-white hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all disabled:opacity-50"
+                    >
+                      {isLoadingMore ? (
+                        <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />Загрузка...</>
+                      ) : (
+                        <>Показать ещё</>           
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center py-16 px-4">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-ice dark:bg-white/10 flex items-center justify-center">

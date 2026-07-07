@@ -559,9 +559,15 @@ func (s *Service) ListPublicProducts(ctx context.Context, filter PublicProductFi
 	if items == nil {
 		items = []Product{}
 	}
-	
-	if s.reviews != nil {
-		for i := range items {
+
+	for i := range items {
+		// Strip internal moderation fields from public response
+		items[i].ModerationComment = nil
+		items[i].RejectedAt = nil
+		items[i].SubmittedAt = nil
+		items[i].ApprovedAt = nil
+
+		if s.reviews != nil {
 			summary, err := s.reviews.GetRatingSummary(ctx, items[i].ID)
 			if err == nil && summary != nil {
 				items[i].Rating = &RatingSummary{
@@ -571,7 +577,7 @@ func (s *Service) ListPublicProducts(ctx context.Context, filter PublicProductFi
 			}
 		}
 	}
-	
+
 	return ProductListResponse{Items: items, TotalCount: totalCount}, nil
 }
 
@@ -580,7 +586,13 @@ func (s *Service) GetPublicProduct(ctx context.Context, idOrSlug string) (Produc
 	if err != nil {
 		return Product{}, err
 	}
-	
+
+	// Strip internal moderation fields from public response
+	p.ModerationComment = nil
+	p.RejectedAt = nil
+	p.SubmittedAt = nil
+	p.ApprovedAt = nil
+
 	if s.reviews != nil {
 		summary, err := s.reviews.GetRatingSummary(ctx, p.ID)
 		if err == nil && summary != nil {
@@ -590,6 +602,6 @@ func (s *Service) GetPublicProduct(ctx context.Context, idOrSlug string) (Produc
 			}
 		}
 	}
-	
+
 	return *p, nil
 }

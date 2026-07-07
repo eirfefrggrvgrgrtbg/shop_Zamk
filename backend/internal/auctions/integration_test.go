@@ -36,7 +36,7 @@ func TestAuctionIntegration(t *testing.T) {
 	limiter := ratelimit.New(redisClient.Client)
 	
 	notifRepo := notifications.NewRepository(pgClient)
-	notifService := notifications.NewService(notifRepo, nil) // nil ws
+	notifService := notifications.NewService(notifRepo, nil, nil) // nil userRepo, nil ws
 	
 	repo := auctions.NewRepository(pgClient.Pool)
 	hub := auctions.NewSSEHub()
@@ -275,7 +275,7 @@ func TestAuctionConcurrency(t *testing.T) {
 	limiter := ratelimit.New(redisClient.Client)
 	
 	notifRepo := notifications.NewRepository(pgClient)
-	notifService := notifications.NewService(notifRepo, nil) // nil ws
+	notifService := notifications.NewService(notifRepo, nil, nil) // nil userRepo, nil ws
 	
 	repo := auctions.NewRepository(pgClient.Pool)
 	hub := auctions.NewSSEHub()
@@ -377,7 +377,7 @@ func TestCreateOrderConcurrency(t *testing.T) {
 	limiter := ratelimit.New(redisClient.Client)
 	
 	notifRepo := notifications.NewRepository(pgClient)
-	notifService := notifications.NewService(notifRepo, nil) // nil ws
+	notifService := notifications.NewService(notifRepo, nil, nil) // nil userRepo, nil ws
 	
 	repo := auctions.NewRepository(pgClient.Pool)
 	hub := auctions.NewSSEHub()
