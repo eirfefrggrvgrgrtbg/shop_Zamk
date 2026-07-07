@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/google/uuid"
@@ -91,7 +92,10 @@ func TestC8FulfillmentCreation(t *testing.T) {
 	// We pass nil for sellers.Repository since inventory doesn't strictly need it to run just reservations
 	invSvc := inventory.NewService(invRepo, nil, pgClient)
 
-	svc := NewService(repo, cartRepo, invSvc, pgClient)
+	mockConfig := &config.Config{
+		Worker: config.WorkerConfig{MarketplaceCommissionBPS: 1500},
+	}
+	svc := NewService(repo, cartRepo, invSvc, pgClient, mockConfig)
 
 	// Action: Create Order
 	req := CreateOrderRequest{

@@ -57,7 +57,7 @@ func main() {
 
 	cartRepo := cart.NewRepository(pgClient.Pool)
 	ordersRepo := orders.NewRepository(pgClient.Pool)
-	ordersService := orders.NewService(ordersRepo, cartRepo, inventoryService, pgClient)
+	ordersService := orders.NewService(ordersRepo, cartRepo, inventoryService, pgClient, cfg)
 
 	returnsRepo := returns.NewRepository(pgClient.Pool)
 	payoutsRepo := payouts.NewRepository(pgClient.Pool)

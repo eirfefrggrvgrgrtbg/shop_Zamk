@@ -39,6 +39,10 @@
 - [ ] Real seller metrics.
 - [ ] Real product/order/fulfillment state.
 
+## 4. FIN — Finance Flows
+- [ ] **FIN-1**: Seller Balance, Commission and Payout Flow — Current Phase
+- [ ] **FIN-2** (future): Refund/Return Settlement, Promo Codes, Delivery Fee Commission
+
 ## 4. DEV — Create Test Account Documentation
 - Create `backend/docs/dev_test_accounts.md` (later).
 - Include admin/owner/seller/customer test credentials.

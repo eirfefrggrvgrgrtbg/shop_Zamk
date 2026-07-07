@@ -112,7 +112,7 @@ export function AdminPayouts() {
       <div className="sm:flex sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Выплаты продавцам</h1>
-          <p className="mt-1 text-sm text-gray-500">Выплаты продавцам за реализованные товары. Базовая комиссия ZAMK — 9%. При 2 нарушениях комиссия может быть повышена до 18% на 1 месяц (система нарушений будет подключена отдельно).</p>
+          <p className="mt-1 text-sm text-gray-500">Выплаты продавцам за реализованные товары. Базовая комиссия ZAMK — 15%. При 2 нарушениях комиссия может быть повышена до 18% на 1 месяц (система нарушений будет подключена отдельно).</p>
         </div>
       </div>
 

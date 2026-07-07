@@ -82,7 +82,7 @@ export function SellerPayouts() {
         <h1 className="text-2xl font-bold mb-2">Финансы и выплаты</h1>
         <p className="text-gray-600 mb-4">Здесь вы можете управлять балансом и запрашивать выплаты.</p>
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-          <p className="font-medium">Базовая комиссия платформы составляет 9%. Штрафные санкции (при наличии) могут временно увеличить комиссию.</p>
+          <p className="font-medium">Базовая комиссия платформы составляет 15%. Штрафные санкции (при наличии) могут временно увеличить комиссию.</p>
         </div>
       </div>
 

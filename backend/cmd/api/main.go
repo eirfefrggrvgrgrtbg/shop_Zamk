@@ -103,7 +103,7 @@ func main() {
 	cartHandler := cart.NewHandler(cartService)
 
 	ordersRepo := orders.NewRepository(pgClient.Pool)
-	ordersService := orders.NewService(ordersRepo, cartRepo, inventoryService, pgClient)
+	ordersService := orders.NewService(ordersRepo, cartRepo, inventoryService, pgClient, cfg)
 	ordersHandler := orders.NewHandler(ordersService)
 
 	reviewsRepo := reviews.NewRepository(pgClient)

@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 )
@@ -18,14 +19,16 @@ type Service struct {
 	cartRepo     *cart.Repository
 	inventorySvc *inventory.Service
 	db           *postgres.Client
+	cfg          *config.Config
 }
 
-func NewService(repo *Repository, cartRepo *cart.Repository, inventorySvc *inventory.Service, db *postgres.Client) *Service {
+func NewService(repo *Repository, cartRepo *cart.Repository, inventorySvc *inventory.Service, db *postgres.Client, cfg *config.Config) *Service {
 	return &Service{
 		repo:         repo,
 		cartRepo:     cartRepo,
 		inventorySvc: inventorySvc,
 		db:           db,
+		cfg:          cfg,
 	}
 }
 
@@ -137,7 +140,7 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 
 		sellerFulfillments := make(map[uuid.UUID]*OrderFulfillment)
 		for sellerID, subtotal := range sellerTotals {
-			commissionBps := 900 // Default base commission
+			commissionBps := s.cfg.Worker.MarketplaceCommissionBPS // From MARKETPLACE_COMMISSION_BPS env var (default 900, .env sets 1500)
 			commissionAmount := (subtotal * int64(commissionBps)) / 10000
 			sellerAmount := subtotal - commissionAmount
 
