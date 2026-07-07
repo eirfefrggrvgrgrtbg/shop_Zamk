@@ -10,8 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
+	"github.com/jackc/pgx/v5"
 )
 
 type Service struct {
@@ -19,14 +21,16 @@ type Service struct {
 	productsRepo *products.Repository
 	catalogRepo  *catalog.Repository
 	sellersRepo  *sellers.Repository
+	dbPool       *postgres.Client
 }
 
-func NewService(provider Provider, productsRepo *products.Repository, catalogRepo *catalog.Repository, sellersRepo *sellers.Repository) *Service {
+func NewService(provider Provider, productsRepo *products.Repository, catalogRepo *catalog.Repository, sellersRepo *sellers.Repository, dbPool *postgres.Client) *Service {
 	return &Service{
 		provider:     provider,
 		productsRepo: productsRepo,
 		catalogRepo:  catalogRepo,
 		sellersRepo:  sellersRepo,
+		dbPool:       dbPool,
 	}
 }
 
@@ -337,20 +341,55 @@ func (s *Service) ReorderSellerProductImages(ctx context.Context, userID, produc
 		return products.ErrProductNotEditable
 	}
 
-	if err := s.productsRepo.ReorderProductImages(ctx, productID, imageIDs); err != nil {
-		return err
+	existingImages, err := s.productsRepo.GetProductImages(ctx, productID)
+	if err != nil {
+		return fmt.Errorf("failed to get product images: %w", err)
 	}
 
-	// Update main image to be the first one in the list
-	if len(imageIDs) > 0 {
-		firstImg, err := s.productsRepo.GetProductImageByID(ctx, imageIDs[0])
-		if err == nil {
-			objKey := ""
-			if firstImg.ObjectKey != nil {
-				objKey = *firstImg.ObjectKey
-			}
-			_ = s.productsRepo.SetMainImage(ctx, productID, firstImg.ImageURL, objKey)
+	existingMap := make(map[uuid.UUID]bool)
+	for _, img := range existingImages {
+		existingMap[img.ID] = true
+	}
+
+	seen := make(map[uuid.UUID]bool)
+	for _, id := range imageIDs {
+		if !existingMap[id] {
+			return fmt.Errorf("image %s does not belong to product", id)
 		}
+		if seen[id] {
+			return fmt.Errorf("duplicate image ID %s", id)
+		}
+		seen[id] = true
+	}
+
+	if len(imageIDs) != len(existingImages) {
+		return fmt.Errorf("missing images in reorder request")
+	}
+
+	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
+		repoTx := s.productsRepo.WithTx(tx)
+		if err := repoTx.ReorderProductImages(ctx, productID, imageIDs); err != nil {
+			return err
+		}
+
+		if len(imageIDs) > 0 {
+			firstImg, err := repoTx.GetProductImageByID(ctx, imageIDs[0])
+			if err == nil {
+				objKey := ""
+				if firstImg.ObjectKey != nil {
+					objKey = *firstImg.ObjectKey
+				}
+				_ = repoTx.SetMainImage(ctx, productID, firstImg.ImageURL, objKey)
+			}
+		} else {
+			_ = repoTx.SetMainImage(ctx, productID, "", "")
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to reorder images: %w", err)
 	}
 
 	return nil

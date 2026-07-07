@@ -150,7 +150,7 @@ func main() {
 		logger.Error("failed to create storage provider", "error", err)
 		os.Exit(1)
 	}
-	storageService := storage.NewService(storageProvider, productsRepo, catalogRepo, sellersRepo)
+	storageService := storage.NewService(storageProvider, productsRepo, catalogRepo, sellersRepo, pgClient)
 	storageHandler := storage.NewHandler(storageService, &cfg.S3)
 
 	// Staff RBAC

@@ -9,10 +9,12 @@
 - **Public URLs**: Формируются через `S3_PUBLIC_BASE_URL` или эндпоинт MinIO.
 
 ### 2. Endpoints
+Product images are managed through dedicated image endpoints.
+UpdateProduct does not replace product_images rows and does not drop object_key.
 - `POST /api/seller/products/{id}/images/upload` — работает, валидирует данные, загружает в S3, затем в БД.
 - `POST /api/admin/products/{id}/images/upload` — для админа.
-- `PUT /api/seller/products/{id}` — принимает массив URL-ов изображений (`images`). В текущей реализации полностью удаляет старые записи из БД и создает новые, **теряя при этом `object_key`**. Это приводит к orphaning файлам в S3.
-- Эндпоинты удаления `DELETE` для изображений отсутствуют.
+- `PUT /api/seller/products/{id}/images/reorder` — для сортировки.
+- `DELETE /api/seller/products/{id}/images/{imageId}` — для удаления конкретного фото.
 
 ### 3. Лимиты и Валидация
 - **Allowed Formats**: `image/jpeg`, `image/png`, `image/webp`.

@@ -5,6 +5,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
@@ -260,6 +261,10 @@ func (h *Handler) ReorderSellerProductImages(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		if err == ErrProductNotOwned || err == ErrProductNotDraft || err == products.ErrProductNotEditable {
 			h.writeJSONError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "duplicate image ID") || strings.Contains(err.Error(), "does not belong") || strings.Contains(err.Error(), "missing images") {
+			h.writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		h.writeJSONError(w, http.StatusInternalServerError, "failed to reorder images")
