@@ -48,6 +48,7 @@ func (r *Repository) CreateProduct(ctx context.Context, p *Product) error {
 		p.CreatedAt, p.UpdatedAt,
 	)
 	if err != nil {
+		fmt.Printf("CreateProduct DB Error: %v\n", err)
 		if strings.Contains(err.Error(), "SQLSTATE 23505") {
 			return ErrDuplicateSlug
 		}

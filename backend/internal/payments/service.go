@@ -240,8 +240,10 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 				rows.Close()
 
 				var notifs []notifications.Notification
+				now := time.Now().UTC()
 				for _, f := range fulfillments {
 					notifs = append(notifs, notifications.Notification{
+						ID:                uuid.New(),
 						RecipientSellerID: &f.SellerID,
 						RecipientKind:     notifications.RecipientKindSeller,
 						Type:              notifications.TypeSellerFulfillmentPaid,
@@ -249,6 +251,7 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 						Body:              "Поступила новая сборка, готовая к обработке.",
 						EntityType:        "fulfillment",
 						EntityID:          f.ID,
+						CreatedAt:         now,
 					})
 				}
 				if err := s.notifSvc.CreateManyNotificationsTx(ctx, tx, notifs); err != nil {

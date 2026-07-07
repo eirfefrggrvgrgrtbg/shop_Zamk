@@ -238,6 +238,15 @@ func (s *Service) UpdateReturnStatus(ctx context.Context, adminID, returnID uuid
 					EntityType:        "return",
 					EntityID:          ret.ID,
 				})
+				_ = s.notifs.CreateNotificationTx(ctx, tx, notifications.Notification{
+					RecipientUserID: &order.UserID,
+					RecipientKind:   notifications.RecipientKindCustomer,
+					Type:            "return_status_changed",
+					Title:           title,
+					Body:            body,
+					EntityType:      "return",
+					EntityID:        ret.ID,
+				})
 			}
 		}
 
@@ -338,7 +347,7 @@ func (s *Service) CreateRefund(ctx context.Context, adminID, returnID uuid.UUID,
 				_ = s.notifs.CreateNotificationTx(ctx, tx, notifications.Notification{
 					RecipientUserID: &order.UserID,
 					RecipientKind:   notifications.RecipientKindCustomer,
-					Type:            notifications.TypeRefundCreated,
+					Type:            "refund_processed",
 					Title:           "Оформлен возврат средств",
 					Body:            "Денежные средства были отправлены на вашу карту.",
 					EntityType:      "refund",
