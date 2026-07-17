@@ -177,7 +177,9 @@ export function SellerProductNew() {
     
     const validFiles = files.filter(f => ['image/jpeg', 'image/png', 'image/webp'].includes(f.type));
     if (validFiles.length < files.length) {
-      alert('Некоторые файлы пропущены. Разрешены только JPG, PNG, WEBP.');
+      setError('Некоторые файлы пропущены. Разрешены только JPG, PNG, WEBP.');
+    } else {
+      setError('');
     }
 
     setPhotoFiles(curr => [...curr, ...validFiles]);

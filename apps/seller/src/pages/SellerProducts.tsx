@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   BarChart3,
-  Copy,
   Eye,
   Edit2,
   PackagePlus,
@@ -300,12 +299,8 @@ export function SellerProducts() {
       // Update local state for immediate feedback
       setProducts((current) => current.map((product) => (product.id === id ? { ...product, status: nextStatus, updatedAt: 'Только что' } : product)));
     } catch (err: any) {
-      alert(err.message || 'Ошибка обновления статуса');
+      setError(err.message || 'Ошибка обновления статуса');
     }
-  };
-
-  const duplicateProduct = () => {
-    alert('Дублирование будет подключено через API');
   };
 
   if (isLoading) {
@@ -452,14 +447,6 @@ export function SellerProducts() {
                                   aria-label="Переключить продажу"
                                 >
                                   <PauseCircle className="h-4 w-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => duplicateProduct()}
-                                  className="rounded-full border border-border-lighter p-2 text-graphite-light transition-colors hover:text-graphite dark:border-white/16 dark:text-white/62 dark:hover:text-white"
-                                  aria-label="Дублировать товар"
-                                >
-                                  <Copy className="h-4 w-4" />
                                 </button>
                                 <button
                                   type="button"

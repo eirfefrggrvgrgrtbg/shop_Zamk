@@ -2,7 +2,9 @@ import { request } from './client';
 import type { Cart, Order, ReturnRequest, ReturnResponse, ReviewCreateRequest, CustomerFulfillment } from './types';
 
 export const getCart = async (): Promise<Cart> => {
-  return request<Cart>('GET', '/customer/cart');
+  const res = await request<Cart>('GET', '/customer/cart');
+  if (res && !res.items) res.items = [];
+  return res;
 };
 
 export const addToCart = async (input: { productId: string; productVariantId: string; quantity: number }): Promise<Cart> => {
@@ -54,7 +56,8 @@ export const createReview = async (orderId: string, orderItemId: string, input: 
 };
 
 export const getCustomerReturns = async (): Promise<any> => {
-  return request('GET', '/customer/returns');
+  const res = await request<any>('GET', '/customer/returns');
+  return { ...res, items: res?.items || [] };
 };
 
 export const getCustomerReturn = async (returnId: string): Promise<any> => {
@@ -62,11 +65,13 @@ export const getCustomerReturn = async (returnId: string): Promise<any> => {
 };
 
 export const getCustomerReviews = async (): Promise<any> => {
-  return request('GET', '/customer/reviews');
+  const res = await request<any>('GET', '/customer/reviews');
+  return { ...res, items: res?.items || [] };
 };
 
 export const getFavorites = async (): Promise<any> => {
-  return request('GET', '/customer/favorites');
+  const res = await request<any>('GET', '/customer/favorites');
+  return { ...res, items: res?.items || [] };
 };
 
 export const addFavorite = async (productId: string): Promise<any> => {
@@ -125,7 +130,9 @@ export const createOrderForLot = async (lotId: string): Promise<{ OrderID: strin
 };
 
 export const getCustomerNotifications = async (limit = 20, offset = 0): Promise<import('./types').PaginatedNotifications> => {
-  return request<import('./types').PaginatedNotifications>('GET', `/customer/notifications?limit=${limit}&offset=${offset}`);
+  const res = await request<import('./types').PaginatedNotifications>('GET', `/customer/notifications?limit=${limit}&offset=${offset}`);
+  if (res && !res.items) res.items = [];
+  return res;
 };
 
 export const getCustomerUnreadNotificationsCount = async (): Promise<import('./types').UnreadCountResponse> => {

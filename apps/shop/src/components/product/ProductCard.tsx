@@ -60,7 +60,7 @@ export function ProductCard({ product }: ProductCardProps) {
             className="block w-full h-full"
           >
             <img
-              src={product.images?.[0] ?? product.image}
+              src={product.images?.[0] || product.image || 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image'}
               alt={product.name}
               className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
               loading="lazy"

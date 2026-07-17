@@ -114,7 +114,10 @@ export function ProductDetail() {
     );
   }
 
-  const images = product.images || [product.image];
+  const defaultImage = 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image';
+  const images = (product.images && product.images.length > 0)
+    ? product.images
+    : (product.image ? [product.image] : [defaultImage]);
   // We use brandId for link but use string brand for name
   const liked = isFavorite(product.id);
   const specs = getProductSpecs(product);
@@ -553,9 +556,6 @@ export function ProductDetail() {
           )}
         </section>
 
-        <motion.section className="mt-16 rounded-3xl border border-dashed border-border-lighter bg-white/60 p-8 text-center text-ash dark:border-white/10 dark:bg-white/5" initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
-          Рекомендации товаров пока не подключены.
-        </motion.section>
       </div>
       {/* Size Chart Modal */}
       <Modal isOpen={showSizeChart} onClose={() => setShowSizeChart(false)} title="Размерная сетка">

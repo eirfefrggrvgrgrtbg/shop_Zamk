@@ -17,7 +17,12 @@ export const getDirectSaleProducts = async (params?: any): Promise<ProductListRe
 };
 
 export const getProduct = async (idOrSlug: string): Promise<ProductDetail> => {
-  return request<ProductDetail>('GET', `/public/products/${idOrSlug}`);
+  const res = await request<any>('GET', `/public/products/${idOrSlug}`);
+  if (res) {
+    res.images = res.images || [];
+    res.variants = res.variants || [];
+  }
+  return res;
 };
 
 export const getCategories = async (): Promise<Category[]> => {

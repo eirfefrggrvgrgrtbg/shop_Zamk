@@ -79,7 +79,12 @@ export const getAdminProducts = async (
 };
 
 export const getAdminProduct = async (id: string): Promise<AdminProduct> => {
-  return request<AdminProduct>('GET', `/admin/products/${id}`);
+  const res = await request<any>('GET', `/admin/products/${id}`);
+  if (res) {
+    res.images = res.images || [];
+    res.variants = res.variants || [];
+  }
+  return res;
 };
 
 export const getAdminProductModerationHistory = async (productId: string): Promise<ModerationHistoryResponse> => {

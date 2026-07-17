@@ -15,7 +15,12 @@ export const createSellerProduct = async (input: any): Promise<SellerProduct> =>
 };
 
 export const getSellerProduct = async (id: string): Promise<SellerProduct> => {
-  return request<SellerProduct>('GET', `/seller/products/${id}`);
+  const res = await request<any>('GET', `/seller/products/${id}`);
+  if (res) {
+    res.images = res.images || [];
+    res.variants = res.variants || [];
+  }
+  return res;
 };
 
 export const updateSellerProduct = async (id: string, input: any): Promise<SellerProduct> => {

@@ -135,12 +135,6 @@ export function Cart() {
           </aside>
         </div>
 
-        <section className='mt-14'>
-          <SectionHeader label='Рекомендации' title='Может дополнить корзину' />
-          <div className='rounded-3xl border border-dashed border-border-lighter bg-white/60 p-8 text-center text-sm text-ash dark:border-white/10 dark:bg-white/5'>
-            Рекомендации товаров пока не подключены.
-          </div>
-        </section>
       </div>
     </div>
   );

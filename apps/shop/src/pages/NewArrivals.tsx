@@ -65,7 +65,7 @@ export function NewArrivals() {
           <SectionHeader
             label='Каталог'
             title='Свежие поступления'
-            description='Показываем реальные опубликованные товары из API без mock-подборок.'
+            description='Самые новые и интересные поступления в нашем каталоге.'
           />
 
           {isLoading ? (
