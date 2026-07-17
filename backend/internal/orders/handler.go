@@ -70,6 +70,10 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusBadRequest, "invalid_order", err.Error())
 			return
 		}
+		if errors.Is(err, ErrIdempotencyKeyConflict) {
+			h.writeError(w, http.StatusConflict, "conflict", err.Error())
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}

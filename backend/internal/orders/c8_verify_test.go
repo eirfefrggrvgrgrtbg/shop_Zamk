@@ -98,10 +98,16 @@ func TestC8FulfillmentCreation(t *testing.T) {
 	svc := NewService(repo, cartRepo, invSvc, pgClient, mockConfig)
 
 	// Action: Create Order
-	req := CreateOrderRequest{
-		CustomerName: "Test",
+	dmID := uuid.New()
+	if _, err := db.Exec(ctx, "INSERT INTO delivery_methods (id, code, name, price_cents, is_active) VALUES ($1, 'mock', 'mock', 100, true)", dmID); err != nil {
+		t.Fatalf("insert dm: %v", err)
 	}
-	order, err := svc.CreateOrder(ctx, buyer, req)
+
+	req := CreateOrderRequest{
+		CustomerName:     "Test",
+		DeliveryMethodID: dmID,
+	}
+	order, err := svc.CreateOrder(ctx, buyer, req, nil)
 	if err != nil {
 		t.Fatalf("failed to create order: %v", err)
 	}

@@ -25,7 +25,15 @@ Only products with `status = 'published'` are visible in the public catalog and 
 - The delivery method details (price, estimated days, name) are snapshotted into the `Order` to prevent historical drift.
 - The system automatically triggers an `InventoryReservation` for the ordered items.
 - The reservation lasts until the payment completes or the order is cancelled. This prevents overselling.
-- Once created, the order status is `awaiting_payment`.
+- ID (`UUID`, primary key)
+- UserId (`UUID`)
+- Status (`string`, default: `awaiting_payment`)
+- TotalPriceCents, Currency
+- Delivery information (Address, Method, Price)
+- CheckoutIdempotencyKey (`UUID`, nullable, `UNIQUE` index with UserId)
+- CheckoutRequestHash (`string`, nullable, used to fingerprint order payload and detect 409 collisions)
+
+The `CheckoutRequestHash` is calculated as a SHA256 sum of a deterministic representation of the order payload (including customer data, delivery data, and sorted cart items). If a request comes with a known `Idempotency-Key` but a non-matching payload hash, the server replies with `409 Conflict`.
 
 ## Payment MVP Behavior
 - The system integrates a mocked TBANK provider using a `STUB` terminal key.

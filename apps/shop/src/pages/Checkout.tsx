@@ -15,7 +15,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function Checkout() {
   const { items, totalPrice, clearCart } = useCart();
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [deliveryMethods, setDeliveryMethods] = useState<PublicDeliveryMethod[]>([]);
   const [selectedMethodId, setSelectedMethodId] = useState<string>('');
   const [done, setDone] = useState(false);
@@ -55,6 +55,11 @@ export function Checkout() {
       }
     });
   }, [isAuthenticated]);
+
+  // Regenerate idempotency key when critical checkout parameters change to avoid 409
+  useEffect(() => {
+    setIdempotencyKey(crypto.randomUUID());
+  }, [items, selectedMethodId, selectedAddressId, firstName, lastName, email, phone, address]);
 
   const handleCheckout = async () => {
     if (!isAuthenticated) {
@@ -123,7 +128,12 @@ export function Checkout() {
         window.location.href = payment.paymentUrl;
       }
     } catch (e: any) {
-      setValidationError(e.message || 'Не удалось сохранить заказ. Попробуйте ещё раз.');
+      if (e.message && e.message.includes('Idempotency key conflict')) {
+        setValidationError('Вы изменили данные после отправки заказа. Пожалуйста, проверьте информацию и попробуйте снова.');
+        setIdempotencyKey(crypto.randomUUID()); // Reset key for next attempt
+      } else {
+        setValidationError(e.message || 'Не удалось сохранить заказ. Попробуйте ещё раз.');
+      }
       setIsSubmitting(false);
     }
   };

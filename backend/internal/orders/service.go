@@ -2,11 +2,16 @@ package orders
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
@@ -45,10 +50,21 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 		return nil, ErrEmptyCart
 	}
 
+	// Calculate Request Hash
+	var requestHash string
 	if idempotencyKey != nil {
+		hashStr := calculateRequestHash(userID, req, userCart.Items)
+		requestHash = hashStr
+
 		existing, err := s.repo.GetOrderByIdempotencyKey(ctx, userID, *idempotencyKey)
 		if err == nil {
-			return existing, nil
+			// Found existing order
+			if existing.CheckoutRequestHash != nil && *existing.CheckoutRequestHash == requestHash {
+				return existing, nil // Idempotent success, return existing order
+			}
+			return nil, ErrIdempotencyKeyConflict // Same key, different payload
+		} else if !errors.Is(err, ErrOrderNotFound) {
+			return nil, err
 		}
 	}
 
@@ -150,6 +166,10 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 			CheckoutIdempotencyKey:   idempotencyKey,
 		}
 
+		if idempotencyKey != nil {
+			order.CheckoutRequestHash = &requestHash
+		}
+
 		if err := s.repo.CreateOrderTx(ctx, tx, order); err != nil {
 			return err
 		}
@@ -221,6 +241,20 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 	})
 
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "orders_customer_id_idempotency_key_idx" {
+			// Idempotency key conflict due to concurrency
+			if idempotencyKey != nil {
+				existing, getErr := s.repo.GetOrderByIdempotencyKey(ctx, userID, *idempotencyKey)
+				if getErr == nil {
+					if existing.CheckoutRequestHash != nil && *existing.CheckoutRequestHash == requestHash {
+						return existing, nil
+					}
+					return nil, ErrIdempotencyKeyConflict
+				}
+			}
+			return nil, ErrIdempotencyKeyConflict
+		}
 		return nil, err
 	}
 
@@ -334,6 +368,37 @@ func (s *Service) GetCustomerOrder(ctx context.Context, userID, orderID uuid.UUI
 		return nil, ErrOrderNotFound
 	}
 	return order, nil
+}
+
+func calculateRequestHash(userID uuid.UUID, req CreateOrderRequest, cartItems []cart.CartItem) string {
+	// Sort items for deterministic hashing
+	type hashItem struct {
+		VariantID uuid.UUID
+		Quantity  int
+	}
+	items := make([]hashItem, len(cartItems))
+	for i, item := range cartItems {
+		items[i] = hashItem{VariantID: item.ProductVariantID, Quantity: item.Quantity}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].VariantID.String() < items[j].VariantID.String()
+	})
+
+	hashData := struct {
+		UserID           string
+		DeliveryMethodID string
+		DeliveryAddress  string
+		Items            []hashItem
+	}{
+		UserID:           userID.String(),
+		DeliveryMethodID: req.DeliveryMethodID.String(),
+		DeliveryAddress:  req.DeliveryAddress, // spaces normalization can be added, assuming exact match for now
+		Items:            items,
+	}
+
+	b, _ := json.Marshal(hashData)
+	hash := sha256.Sum256(b)
+	return hex.EncodeToString(hash[:])
 }
 
 func (s *Service) ListCustomerOrders(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Order, error) {

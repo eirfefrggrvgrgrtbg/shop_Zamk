@@ -11,4 +11,5 @@ var (
 	ErrInvalidStatusTransition = errors.New("invalid status transition")
 	ErrManualPaidNotAllowed    = errors.New("manual transition to paid is not allowed in this phase")
 	ErrOrderNotCancellable     = errors.New("order is not cancellable")
+	ErrIdempotencyKeyConflict  = errors.New("idempotency key conflict")
 )
