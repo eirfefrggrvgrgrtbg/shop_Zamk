@@ -154,22 +154,6 @@ function OverviewTab({ detail, onVerify }: { detail: SellerDetail; onVerify: () 
   );
 }
 
-          <p className="text-xs text-gray-500">Штрафных</p>
-        </div>
-      </div>
-
-      {detail.status === 'pending' && hasPermission('sellers.verify') && (
-        <button
-          onClick={onVerify}
-          className="w-full px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700"
-        >
-          Проверить и активировать
-        </button>
-      )}
-    </div>
-  );
-}
-
 // --- Tab: Профиль ---
 function ProfileTab({ detail }: { detail: SellerDetail }) {
   const [error, setError] = useState<string | null>(null);
@@ -639,12 +623,12 @@ function ViolationsTab({ sellerId, violations, activePenaltyViolations, onRefres
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">�?аголовок</label>
+                <label className="block text-sm font-medium text-gray-700">�Заголовок</label>
                 <input required type="text" value={vTitle} onChange={e => setVTitle(e.target.value)}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">�?писание</label>
+                <label className="block text-sm font-medium text-gray-700">�Описание</label>
                 <textarea required value={vDescription} onChange={e => setVDescription(e.target.value)} rows={3}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
               </div>
