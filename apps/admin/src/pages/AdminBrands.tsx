@@ -64,7 +64,8 @@ export function AdminBrands() {
       await uploadAdminBrandLogo(brandId, file);
       fetchBrands();
     } catch (err: any) {
-      alert(err.message || 'Не удалось загрузить логотип');
+      setError(err.message || 'Не удалось загрузить логотип');
+      setTimeout(() => setError(null), 3000);
     } finally {
       setUploadingBrandId(null);
       e.target.value = '';

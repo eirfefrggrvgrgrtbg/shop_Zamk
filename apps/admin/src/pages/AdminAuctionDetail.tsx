@@ -48,6 +48,7 @@ export function AdminAuctionDetail() {
   const [lots, setLots] = useState<AdminAuctionLot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -158,7 +159,8 @@ export function AdminAuctionDetail() {
       };
 
       await updateAdminAuction(id, data);
-      alert('Сохранено.');
+      setSuccess('Сохранено.');
+      setTimeout(() => setSuccess(null), 3000);
       loadAuctionData();
     } catch (err) {
       setError('Не удалось сохранить.');
@@ -178,10 +180,12 @@ export function AdminAuctionDetail() {
       if (action === 'resume') await resumeAdminAuction(id);
       if (action === 'cancel') await cancelAdminAuction(id);
       if (action === 'finalize') await finalizeAdminAuction(id);
-      alert('Действие выполнено.');
+      setSuccess('Действие выполнено.');
+      setTimeout(() => setSuccess(null), 3000);
       loadAuctionData();
     } catch (err) {
-      alert('Не удалось выполнить действие.');
+      setError('Не удалось выполнить действие.');
+      setTimeout(() => setError(null), 3000);
     }
   };
 
@@ -189,10 +193,12 @@ export function AdminAuctionDetail() {
     if (!window.confirm('Лот будет помечен для прямой продажи. Полная витрина прямой продажи будет добавлена позже.')) return;
     try {
       await moveLotToDirectSale(lotId);
-      alert('Лот помечен для прямой продажи.');
+      setSuccess('Лот помечен для прямой продажи.');
+      setTimeout(() => setSuccess(null), 3000);
       loadLots();
     } catch (err) {
-      alert('Не удалось выполнить действие.');
+      setError('Не удалось выполнить действие.');
+      setTimeout(() => setError(null), 3000);
     }
   };
 
@@ -264,6 +270,18 @@ export function AdminAuctionDetail() {
         </div>
       </div>
 
+      {success && (
+        <div className="bg-green-50 text-green-700 p-4 rounded-md">
+          {success}
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 text-red-700 p-4 rounded-md">
+          {error}
+        </div>
+      )}
+
       <div className="bg-white shadow rounded-lg">
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8 px-6" aria-label="Tabs">
@@ -285,12 +303,6 @@ export function AdminAuctionDetail() {
         <div className="p-6">
           {activeTab === 'settings' && (
             <form onSubmit={handleUpdate} className="space-y-8 max-w-4xl">
-              {error && (
-                <div className="bg-red-50 text-red-700 p-4 rounded-md">
-                  {error}
-                </div>
-              )}
-
               {/* Basic Fields */}
               <section>
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">

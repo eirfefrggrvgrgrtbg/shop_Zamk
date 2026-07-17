@@ -154,32 +154,50 @@ function OverviewTab({ detail, onVerify }: { detail: SellerDetail; onVerify: () 
   );
 }
 
-// --- Tab: �?�?о�?ил�? ---
+          <p className="text-xs text-gray-500">Штрафных</p>
+        </div>
+      </div>
+
+      {detail.status === 'pending' && hasPermission('sellers.verify') && (
+        <button
+          onClick={onVerify}
+          className="w-full px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700"
+        >
+          Проверить и активировать
+        </button>
+      )}
+    </div>
+  );
+}
+
+// --- Tab: Профиль ---
 function ProfileTab({ detail }: { detail: SellerDetail }) {
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const missing: string[] = [];
   if (!detail.brandName) missing.push('Название магазина');
   if (!detail.slug) missing.push('URL-слаг');
-  if (!detail.description || detail.description.length < 10) missing.push('�?писание (миним�?м 10 символов)');
-  if (!detail.contactEmail && !detail.contactPhone) missing.push('�?он�?ак�?ная по�?�?а или �?еле�?он');
+  if (!detail.description || detail.description.length < 10) missing.push('Описание (минимум 10 символов)');
+  if (!detail.contactEmail && !detail.contactPhone) missing.push('Контактная почта или телефон');
 
   return (
     <div className="space-y-4">
       {missing.length > 0 && (
         <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-          <p className="font-medium mb-1">Незаполненн�?е поля:</p>
+          <p className="font-medium mb-1">Незаполненные поля:</p>
           <ul className="list-disc list-inside">
             {missing.map(f => <li key={f}>{f}</li>)}
           </ul>
         </div>
       )}
       {detail.logoUrl && (
-        <img src={detail.logoUrl} alt="�?ого�?ип" className="h-16 w-16 rounded object-cover border" />
+        <img src={detail.logoUrl} alt="Логотип" className="h-16 w-16 rounded object-cover border" />
       )}
       <Field label="Название" value={detail.brandName} />
       <Field label="Слаг" value={detail.slug ? `/${detail.slug}` : undefined} />
-      <Field label="�?писание" value={detail.description} />
-      <Field label="�?он�?ак�?ная по�?�?а" value={detail.contactEmail} />
-      <Field label="Теле�?он" value={detail.contactPhone} />
+      <Field label="Описание" value={detail.description} />
+      <Field label="Контактная почта" value={detail.contactEmail} />
+      <Field label="Телефон" value={detail.contactPhone} />
 
       <PermissionGuard permission="sellers.create_access">
         <div className="border-t pt-4 mt-4">
@@ -191,9 +209,11 @@ function ProfileTab({ detail }: { detail: SellerDetail }) {
               if (confirm('Вы уверены, что хотите сбросить пароль владельца?')) {
                 try {
                   const res = await resetAdminSellerOwnerPassword(detail.id);
-                  alert('Новый пароль: ' + res.temporaryPassword);
+                  setSuccess('Новый пароль: ' + res.temporaryPassword);
+                  setError(null);
                 } catch (err: any) {
-                  alert('Ошибка: ' + err.message);
+                  setError('Ошибка: ' + err.message);
+                  setSuccess(null);
                 }
               }
             }}
@@ -201,6 +221,8 @@ function ProfileTab({ detail }: { detail: SellerDetail }) {
           >
             Сбросить пароль
           </button>
+          {success && <div className="mt-2 p-3 bg-green-50 text-green-800 text-sm rounded border border-green-200 font-mono">{success}</div>}
+          {error && <div className="mt-2 p-3 bg-red-50 text-red-800 text-sm rounded border border-red-200">{error}</div>}
         </div>
       </PermissionGuard>
             
@@ -217,7 +239,7 @@ function Field({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-// --- Tab: С�?а�?�?с�? ---
+// --- Tab: Статусы ---
 function StatusTab({
   detail, history, onStatusUpdate, onVerify, verifyError,
 }: {
@@ -243,7 +265,7 @@ function StatusTab({
       await onStatusUpdate(newStatus, reason || undefined);
       setReason('');
     } catch (err: any) {
-      setUpdateError(err.message || '�?�?ибка обновления с�?а�?�?са');
+      setUpdateError(err.message || 'Ошибка обновления статуса');
     } finally {
       setIsUpdating(false);
     }
@@ -259,27 +281,27 @@ function StatusTab({
 
       {hasPermission('sellers.update_status') && (
         <form onSubmit={handleSubmit} className="space-y-3 border rounded-lg p-4">
-          <p className="text-sm font-medium text-gray-700">�?змени�?�? с�?а�?�?с</p>
+          <p className="text-sm font-medium text-gray-700">Изменить статус</p>
           {updateError && <p className="text-xs text-red-600">{updateError}</p>}
           <select
             value={newStatus}
             onChange={e => setNewStatus(e.target.value)}
             className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500"
           >
-            <option value="pending">�?жидае�? ак�?ива�?ии</option>
-            <option value="active">Ак�?ивен</option>
-            <option value="blocked">�?аблоки�?ован</option>
-            <option value="archived">�? а�?�?иве</option>
+            <option value="pending">Ожидает активации</option>
+            <option value="active">Активен</option>
+            <option value="blocked">Заблокирован</option>
+            <option value="archived">В архиве</option>
           </select>
           {needsReason && (
             <div>
-              <label className="block text-xs text-gray-600 mb-1">�?�?и�?ина (обяза�?ел�?но)</label>
+              <label className="block text-xs text-gray-600 mb-1">Причина (обязательно)</label>
               <input
                 required
                 type="text"
                 value={reason}
                 onChange={e => setReason(e.target.value)}
-                placeholder="Укажи�?е п�?и�?ин�?"
+                placeholder="Укажите причину"
                 className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
             </div>
@@ -289,7 +311,7 @@ function StatusTab({
             disabled={isUpdating}
             className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
           >
-            {isUpdating ? 'Со�?�?анение...' : 'Со�?�?ани�?�? с�?а�?�?с'}
+            {isUpdating ? 'Сохранение...' : 'Сохранить статус'}
           </button>
         </form>
       )}
@@ -299,14 +321,14 @@ function StatusTab({
           onClick={onVerify}
           className="w-full px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700"
         >
-          �?�?ове�?и�?�? и ак�?иви�?ова�?�?
+          Проверить и активировать
         </button>
       )}
 
       <div>
-        <p className="text-sm font-medium text-gray-700 mb-2">�?с�?о�?ия с�?а�?�?сов</p>
+        <p className="text-sm font-medium text-gray-700 mb-2">История статусов</p>
         {history.length === 0 ? (
-          <p className="text-sm text-gray-400">�?с�?о�?ия п�?с�?а</p>
+          <p className="text-sm text-gray-400">История пуста</p>
         ) : (
           <div className="space-y-2">
             {history.map(item => (
@@ -320,7 +342,7 @@ function StatusTab({
                   )}
                   <Badge label={STATUS_LABELS[item.newStatus] ?? item.newStatus} className={STATUS_BADGE[item.newStatus] ?? 'bg-gray-100'} />
                 </div>
-                {item.reason && <p className="text-xs text-gray-500 mt-1">�?�?и�?ина: {item.reason}</p>}
+                {item.reason && <p className="text-xs text-gray-500 mt-1">Причина: {item.reason}</p>}
                 <p className="text-xs text-gray-400">{new Date(item.createdAt).toLocaleString('ru-RU')}</p>
               </div>
             ))}
@@ -331,7 +353,7 @@ function StatusTab({
   );
 }
 
-// --- Tab: �?�?ед�?п�?еждения ---
+// --- Tab: Предупреждения ---
 function WarningsTab({ sellerId, warnings, onRefresh }: {
   sellerId: string;
   warnings: SellerWarning[];
@@ -359,7 +381,7 @@ function WarningsTab({ sellerId, warnings, onRefresh }: {
       setWTitle(''); setWMessage('');
       onRefresh();
     } catch (err: any) {
-      setError(err.message || '�?�?ибка');
+      setError(err.message || 'Ошибка');
     } finally {
       setIsWorking(false);
     }
@@ -373,19 +395,20 @@ function WarningsTab({ sellerId, warnings, onRefresh }: {
       setResolveId(null); setResolveNote('');
       onRefresh();
     } catch (err: any) {
-      setError(err.message || '�?�?ибка');
+      setError(err.message || 'Ошибка');
     } finally {
       setIsWorking(false);
     }
   };
 
   const handleCancel = async (warningId: string) => {
-    if (!window.confirm('�?�?мени�?�? п�?ед�?п�?еждение?')) return;
+    if (!window.confirm('Отменить предупреждение?')) return;
     try {
       await cancelSellerWarning(sellerId, warningId);
       onRefresh();
     } catch (err: any) {
-      alert(err.message || '�?�?ибка');
+      setError(err.message || 'Ошибка');
+      setTimeout(() => setError(null), 3000);
     }
   };
 
@@ -396,12 +419,12 @@ function WarningsTab({ sellerId, warnings, onRefresh }: {
       {hasPermission('sellers.warn') && (
         <button onClick={() => setIsCreateOpen(true)}
           className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
-          <Plus className="-ml-0.5 mr-1.5 h-4 w-4" /> Созда�?�? п�?ед�?п�?еждение
+          <Plus className="-ml-0.5 mr-1.5 h-4 w-4" /> Создать предупреждение
         </button>
       )}
 
       {warnings.length === 0 ? (
-        <p className="text-sm text-gray-400">�?�?ед�?п�?еждений не�?</p>
+        <p className="text-sm text-gray-400">Предупреждений нет</p>
       ) : (
         <div className="space-y-2">
           {warnings.map(w => (
@@ -414,8 +437,8 @@ function WarningsTab({ sellerId, warnings, onRefresh }: {
                 </div>
                 {w.status === 'active' && hasPermission('sellers.warn') && (
                   <div className="flex gap-2 text-xs">
-                    <button onClick={() => setResolveId(w.id)} className="text-green-600 hover:text-green-800">Раз�?е�?и�?�?</button>
-                    <button onClick={() => handleCancel(w.id)} className="text-gray-500 hover:text-gray-700">�?�?мени�?�?</button>
+                    <button onClick={() => setResolveId(w.id)} className="text-green-600 hover:text-green-800">Разрешить</button>
+                    <button onClick={() => handleCancel(w.id)} className="text-gray-500 hover:text-gray-700">Отменить</button>
                   </div>
                 )}
               </div>
@@ -429,7 +452,7 @@ function WarningsTab({ sellerId, warnings, onRefresh }: {
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg p-5 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">Созда�?�? п�?ед�?п�?еждение</h3>
+            <h3 className="text-lg font-bold mb-4">Создать предупреждение</h3>
             <form onSubmit={handleCreate} className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Тип</label>
@@ -439,30 +462,30 @@ function WarningsTab({ sellerId, warnings, onRefresh }: {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">�?аголовок</label>
+                <label className="block text-sm font-medium text-gray-700">Заголовок</label>
                 <input required type="text" value={wTitle} onChange={e => setWTitle(e.target.value)}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Сооб�?ение</label>
+                <label className="block text-sm font-medium text-gray-700">Сообщение</label>
                 <textarea required value={wMessage} onChange={e => setWMessage(e.target.value)} rows={3}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Се�?�?�?знос�?�?</label>
+                <label className="block text-sm font-medium text-gray-700">Серьезность</label>
                 <select value={wSeverity} onChange={e => setWSeverity(e.target.value as any)}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
                   <option value="low">Низкая</option>
-                  <option value="medium">С�?едняя</option>
-                  <option value="high">�?�?сокая</option>
+                  <option value="medium">Средняя</option>
+                  <option value="high">Высокая</option>
                 </select>
               </div>
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setIsCreateOpen(false)}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm">�?�?мена</button>
+                  className="px-3 py-2 border border-gray-300 rounded-md text-sm">Отмена</button>
                 <button type="submit" disabled={isWorking}
                   className="px-3 py-2 bg-indigo-600 text-white rounded-md text-sm disabled:opacity-50">
-                  {isWorking ? 'Создание...' : 'Созда�?�?'}
+                  {isWorking ? 'Создание...' : 'Создать'}
                 </button>
               </div>
             </form>
@@ -473,18 +496,18 @@ function WarningsTab({ sellerId, warnings, onRefresh }: {
       {resolveId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg p-5 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">Раз�?е�?и�?�? п�?ед�?п�?еждение</h3>
+            <h3 className="text-lg font-bold mb-4">Разрешить предупреждение</h3>
             <div>
-              <label className="block text-sm font-medium text-gray-700">�?�?име�?ание (необяза�?ел�?но)</label>
+              <label className="block text-sm font-medium text-gray-700">Примечание (необязательно)</label>
               <textarea value={resolveNote} onChange={e => setResolveNote(e.target.value)} rows={2}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
             </div>
             <div className="flex justify-end gap-2 mt-3">
               <button onClick={() => setResolveId(null)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm">�?�?мена</button>
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm">Отмена</button>
               <button onClick={handleResolve} disabled={isWorking}
                 className="px-3 py-2 bg-green-600 text-white rounded-md text-sm disabled:opacity-50">
-                {isWorking ? 'Раз�?е�?ение...' : '�?од�?ве�?ди�?�?'}
+                {isWorking ? 'Разрешение...' : 'Подтвердить'}
               </button>
             </div>
           </div>
@@ -494,7 +517,7 @@ function WarningsTab({ sellerId, warnings, onRefresh }: {
   );
 }
 
-// --- Tab: На�?�?�?ения ---
+// --- Tab: Нарушения ---
 function ViolationsTab({ sellerId, violations, activePenaltyViolations, onRefresh }: {
   sellerId: string;
   violations: SellerViolation[];
@@ -527,7 +550,7 @@ function ViolationsTab({ sellerId, violations, activePenaltyViolations, onRefres
       setVTitle(''); setVDescription('');
       onRefresh();
     } catch (err: any) {
-      setError(err.message || '�?�?ибка');
+      setError(err.message || 'Ошибка');
     } finally {
       setIsWorking(false);
     }
@@ -541,19 +564,20 @@ function ViolationsTab({ sellerId, violations, activePenaltyViolations, onRefres
       setResolveId(null); setResolveNote('');
       onRefresh();
     } catch (err: any) {
-      setError(err.message || '�?�?ибка');
+      setError(err.message || 'Ошибка');
     } finally {
       setIsWorking(false);
     }
   };
 
   const handleCancel = async (violationId: string) => {
-    if (!window.confirm('�?�?мени�?�? на�?�?�?ение?')) return;
+    if (!window.confirm('Отменить нарушение?')) return;
     try {
       await cancelSellerViolation(sellerId, violationId);
       onRefresh();
     } catch (err: any) {
-      alert(err.message || '�?�?ибка');
+      setError(err.message || 'Ошибка');
+      setTimeout(() => setError(null), 3000);
     }
   };
 

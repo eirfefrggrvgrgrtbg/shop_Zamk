@@ -191,7 +191,8 @@ export function AdminStaff() {
       await updateStaffStatus(member.userId, { status: newStatus as any });
       setMembers(prev => prev.map(m => m.userId === member.userId ? { ...m, staffStatus: newStatus } : m));
     } catch (err: any) {
-      alert(err.message || 'Не удалось обновить статус');
+      setError(err.message || 'Не удалось обновить статус');
+      setTimeout(() => setError(null), 3000);
       loadData();
     }
   };

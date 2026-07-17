@@ -111,7 +111,8 @@ export function AdminCatalog() {
       await uploadAdminBrandLogo(brandId, file);
       fetchBrands();
     } catch (err: any) {
-      alert(err.message || 'Не удалось загрузить логотип');
+      setBrandError(err.message || 'Не удалось загрузить логотип');
+      setTimeout(() => setBrandError(null), 3000);
     } finally {
       setUploadingBrandId(null);
       e.target.value = '';

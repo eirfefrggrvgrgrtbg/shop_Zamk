@@ -18,6 +18,7 @@ export function AdminAuctionsList() {
   const [auctions, setAuctions] = useState<AdminAuction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const { hasPermission } = useAdminAuth();
 
   const fetchAuctions = async () => {
@@ -47,10 +48,12 @@ export function AdminAuctionsList() {
       if (action === 'resume') await resumeAdminAuction(id);
       if (action === 'cancel') await cancelAdminAuction(id);
       if (action === 'finalize') await finalizeAdminAuction(id);
-      alert('Действие выполнено.');
+      setSuccess('Действие выполнено.');
+      setTimeout(() => setSuccess(null), 3000);
       fetchAuctions();
     } catch (err) {
-      alert('Не удалось выполнить действие.');
+      setError('Не удалось выполнить действие.');
+      setTimeout(() => setError(null), 3000);
     }
   };
 
@@ -75,10 +78,12 @@ export function AdminAuctionsList() {
               onClick={async () => {
                 try {
                   await expireUnpaidAuctions();
-                  alert('Обслуживание успешно выполнено');
+                  setSuccess('Обслуживание успешно выполнено');
+                  setTimeout(() => setSuccess(null), 3000);
                   fetchAuctions();
                 } catch (err: any) {
-                  alert('Ошибка: ' + err.message);
+                  setError('Ошибка: ' + err.message);
+                  setTimeout(() => setError(null), 3000);
                 }
               }}
               className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
@@ -97,6 +102,12 @@ export function AdminAuctionsList() {
           )}
         </div>
       </div>
+
+      {success && (
+        <div className="bg-green-50 text-green-700 p-4 rounded-md">
+          {success}
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 text-red-700 p-4 rounded-md">

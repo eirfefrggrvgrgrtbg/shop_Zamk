@@ -27,7 +27,13 @@
 ## admin
 | app | page | problem | fix | file | status | notes |
 |---|---|---|---|---|---|---|
-| admin | Multiple | Admin UI uses `alert` for success/fail | Verified acceptable | Multiple | skipped | Internal panel, simple feedback is acceptable |
+| admin | AdminAuctionCreate | Uses `alert()` for success/fail | Replaced with inline state | AdminAuctionCreate.tsx | fixed | |
+| admin | AdminAuctionDetail | Uses `alert()` for success/fail | Replaced with inline state | AdminAuctionDetail.tsx | fixed | |
+| admin | AdminAuctionsList | Uses `alert()` for success/fail | Replaced with inline state | AdminAuctionsList.tsx | fixed | |
+| admin | AdminBrands | Uses `alert()` for success/fail | Replaced with inline state | AdminBrands.tsx | fixed | |
+| admin | AdminCatalog | Uses `alert()` for success/fail | Replaced with inline state | AdminCatalog.tsx | fixed | |
+| admin | AdminSellers | Uses `alert()` for success/fail | Replaced with inline state | AdminSellers.tsx | fixed | Fixed mojibake |
+| admin | AdminStaff | Uses `alert()` for success/fail | Replaced with inline state | AdminStaff.tsx | fixed | |
 
 ## known gaps
 *   `AdminProducts` and `AdminAuctions` might still be slightly unpolished, but they fulfill the minimum UX requirements without crashing.

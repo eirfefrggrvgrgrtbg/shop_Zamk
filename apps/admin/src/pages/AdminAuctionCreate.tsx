@@ -93,7 +93,6 @@ export function AdminAuctionCreate() {
       };
 
       const result = await createAdminAuction(data);
-      alert('Сохранено.');
       navigate(`/auctions/${result.id}`);
     } catch (err) {
       setError('Не удалось сохранить.');
