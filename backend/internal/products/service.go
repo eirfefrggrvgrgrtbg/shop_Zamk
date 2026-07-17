@@ -526,22 +526,74 @@ func (s *Service) BlockProduct(ctx context.Context, adminUserID, productID uuid.
 // Public Operations
 // ---------------------------------------------------------
 
-func (s *Service) ListPublicProducts(ctx context.Context, filter PublicProductFilter, limit, offset int) (ProductListResponse, error) {
+func mapToPublicProduct(p Product) PublicProduct {
+	var sellerSlug, sellerName string
+	if p.SellerSlug != nil {
+		sellerSlug = *p.SellerSlug
+	}
+	if p.SellerName != nil {
+		sellerName = *p.SellerName
+	}
+
+	pub := PublicProduct{
+		ID:               p.ID,
+		SellerID:         p.SellerID,
+		SellerSlug:       sellerSlug,
+		SellerName:       sellerName,
+		CategoryID:       p.CategoryID,
+		BrandID:          p.BrandID,
+		Title:            p.Title,
+		Slug:             p.Slug,
+		Description:      p.Description,
+		Status:           p.Status,
+		Gender:           p.Gender,
+		Color:            p.Color,
+		Material:         p.Material,
+		CareInstructions: p.CareInstructions,
+		PriceCents:       p.PriceCents,
+		OldPriceCents:    p.OldPriceCents,
+		Currency:         p.Currency,
+		MainImageURL:     p.MainImageURL,
+		AverageRating:    p.AverageRating,
+		ReviewsCount:     p.ReviewsCount,
+		InStock:          p.InStock,
+		CreatedAt:        p.CreatedAt,
+		Rating:           p.Rating,
+	}
+
+	for _, v := range p.Variants {
+		pub.Variants = append(pub.Variants, PublicProductVariant{
+			ID:         v.ID,
+			ProductID:  v.ProductID,
+			Size:       v.Size,
+			Color:      v.Color,
+			PriceCents: v.PriceCents,
+			IsActive:   v.IsActive,
+			InStock:    v.InStock,
+		})
+	}
+
+	for _, i := range p.Images {
+		pub.Images = append(pub.Images, PublicProductImage{
+			ID:        i.ID,
+			ProductID: i.ProductID,
+			ImageURL:  i.ImageURL,
+			AltText:   i.AltText,
+			SortOrder: i.SortOrder,
+		})
+	}
+
+	return pub
+}
+
+func (s *Service) ListPublicProducts(ctx context.Context, filter PublicProductFilter, limit, offset int) (PublicProductListResponse, error) {
 	items, totalCount, err := s.repo.ListPublishedProducts(ctx, filter, limit, offset)
 	if err != nil {
-		return ProductListResponse{}, err
-	}
-	if items == nil {
-		items = []Product{}
+		return PublicProductListResponse{}, err
 	}
 
+	var pubItems []PublicProduct
 	for i := range items {
-		// Strip internal moderation fields from public response
-		items[i].ModerationComment = nil
-		items[i].RejectedAt = nil
-		items[i].SubmittedAt = nil
-		items[i].ApprovedAt = nil
-
 		if s.reviews != nil {
 			summary, err := s.reviews.GetRatingSummary(ctx, items[i].ID)
 			if err == nil && summary != nil {
@@ -551,22 +603,21 @@ func (s *Service) ListPublicProducts(ctx context.Context, filter PublicProductFi
 				}
 			}
 		}
+		pubItems = append(pubItems, mapToPublicProduct(items[i]))
 	}
 
-	return ProductListResponse{Items: items, TotalCount: totalCount}, nil
+	if pubItems == nil {
+		pubItems = []PublicProduct{}
+	}
+
+	return PublicProductListResponse{Items: pubItems, TotalCount: totalCount}, nil
 }
 
-func (s *Service) GetPublicProduct(ctx context.Context, idOrSlug string) (Product, error) {
+func (s *Service) GetPublicProduct(ctx context.Context, idOrSlug string) (PublicProduct, error) {
 	p, err := s.repo.GetPublishedProductBySlugOrID(ctx, idOrSlug)
 	if err != nil {
-		return Product{}, err
+		return PublicProduct{}, err
 	}
-
-	// Strip internal moderation fields from public response
-	p.ModerationComment = nil
-	p.RejectedAt = nil
-	p.SubmittedAt = nil
-	p.ApprovedAt = nil
 
 	if s.reviews != nil {
 		summary, err := s.reviews.GetRatingSummary(ctx, p.ID)
@@ -578,5 +629,5 @@ func (s *Service) GetPublicProduct(ctx context.Context, idOrSlug string) (Produc
 		}
 	}
 
-	return *p, nil
+	return mapToPublicProduct(*p), nil
 }

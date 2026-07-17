@@ -29,6 +29,8 @@ export function mapProductSummaryToCatalog(
     images: p.mainImageUrl ? [p.mainImageUrl] : [],
     category: p.categoryId || 'Категория не указана',
     sellerId: p.sellerId,
+    sellerSlug: p.sellerSlug,
+    sellerName: p.sellerName,
     rating: p.rating?.average,
     reviewsCount: p.rating?.count,
     isNew: false,
@@ -85,6 +87,8 @@ export async function fetchProducts(params?: any): Promise<{ items: UIProduct[],
       image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
       category: p.categoryId || 'Категория не указана',
       sellerId: p.sellerId,
+      sellerSlug: p.sellerSlug,
+      sellerName: p.sellerName,
       rating: p.rating?.average,
       reviewsCount: p.rating?.count,
       isNew: false,
@@ -118,7 +122,7 @@ export async function fetchDirectSaleProducts(params?: any): Promise<{ items: UI
   };
 }
 
-export async function fetchPublicSeller(slugOrId: string, params?: any): Promise<{ seller: any, products: { items: UIProduct[], totalCount: number } }> {
+export async function fetchPublicSeller(slugOrId: string, params?: any): Promise<{ seller: any, items: UIProduct[], totalCount: number }> {
   if (Object.keys(cachedBrands).length === 0) {
     await fetchBrands().catch(() => {});
   }
@@ -127,23 +131,23 @@ export async function fetchPublicSeller(slugOrId: string, params?: any): Promise
   
   return {
     seller: res.seller,
-    products: {
-      items: res.products.items.map((p: any) => ({
-        id: p.id,
-        name: p.title,
-        brand: p.brandId ? (cachedBrands[p.brandId] || 'Бренд не указан') : 'Бренд не указан',
-        brandId: p.brandId || '',
-        price: p.priceCents / 100,
-        oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
-        image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
-        category: p.categoryId || 'Категория не указана',
-        sellerId: p.sellerId,
-        rating: p.rating?.average,
-        reviewsCount: p.rating?.count,
-        isNew: false,
-      })),
-      totalCount: res.products.totalCount
-    }
+    items: res.items.map((p: any) => ({
+      id: p.id,
+      name: p.title,
+      brand: p.brandId ? (cachedBrands[p.brandId] || 'Бренд не указан') : 'Бренд не указан',
+      brandId: p.brandId || '',
+      price: p.priceCents / 100,
+      oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
+      image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
+      category: p.categoryId || 'Категория не указана',
+      sellerId: p.sellerId,
+      sellerSlug: p.sellerSlug,
+      sellerName: p.sellerName,
+      rating: p.rating?.average,
+      reviewsCount: p.rating?.count,
+      isNew: false,
+    })),
+    totalCount: res.totalCount
   };
 }
 

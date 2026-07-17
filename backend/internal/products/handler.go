@@ -707,6 +707,25 @@ func (h *Handler) GetPublicSellerStore(w http.ResponseWriter, r *http.Request) {
 	if q := r.URL.Query().Get("q"); q != "" {
 		filter.Query = &q
 	}
+	if catID := r.URL.Query().Get("categoryId"); catID != "" && catID != "all" {
+		if id, err := uuid.Parse(catID); err == nil {
+			filter.CategoryID = &id
+		} else {
+			h.writeError(w, http.StatusBadRequest, "invalid_categoryId", "Invalid categoryId format")
+			return
+		}
+	}
+	if brandID := r.URL.Query().Get("brandId"); brandID != "" && brandID != "all" {
+		if id, err := uuid.Parse(brandID); err == nil {
+			filter.BrandID = &id
+		} else {
+			h.writeError(w, http.StatusBadRequest, "invalid_brandId", "Invalid brandId format")
+			return
+		}
+	}
+	if size := r.URL.Query().Get("size"); size != "" {
+		filter.Size = &size
+	}
 	if minPriceStr := r.URL.Query().Get("minPriceCents"); minPriceStr != "" {
 		var p int64
 		fmt.Sscanf(minPriceStr, "%d", &p)
@@ -716,6 +735,12 @@ func (h *Handler) GetPublicSellerStore(w http.ResponseWriter, r *http.Request) {
 		var p int64
 		fmt.Sscanf(maxPriceStr, "%d", &p)
 		filter.MaxPriceCents = &p
+	}
+	if filter.MinPriceCents != nil && filter.MaxPriceCents != nil {
+		if *filter.MinPriceCents > *filter.MaxPriceCents {
+			h.writeError(w, http.StatusBadRequest, "invalid_price_range", "minPriceCents cannot be greater than maxPriceCents")
+			return
+		}
 	}
 	if inStockStr := r.URL.Query().Get("inStock"); inStockStr == "true" {
 		t := true
@@ -735,20 +760,15 @@ func (h *Handler) GetPublicSellerStore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type sellerStoreResponse struct {
-		Seller   any `json:"seller"`
-		Products any `json:"products"`
-	}
-
-	productsData := map[string]any{
-		"items":      listResp.Items,
-		"limit":      limit,
-		"offset":     offset,
-		"totalCount": listResp.TotalCount,
+		Seller     any `json:"seller"`
+		Items      any `json:"items"`
+		TotalCount int `json:"totalCount"`
 	}
 
 	resp := sellerStoreResponse{
-		Seller:   seller,
-		Products: productsData,
+		Seller:     seller,
+		Items:      listResp.Items,
+		TotalCount: listResp.TotalCount,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

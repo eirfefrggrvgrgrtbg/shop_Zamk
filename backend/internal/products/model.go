@@ -20,6 +20,8 @@ const (
 type Product struct {
 	ID                 uuid.UUID  `json:"id"`
 	SellerID           uuid.UUID  `json:"sellerId"`
+	SellerSlug         *string    `json:"-"`
+	SellerName         *string    `json:"-"`
 	CategoryID         *uuid.UUID `json:"categoryId,omitempty"`
 	BrandID            *uuid.UUID `json:"brandId,omitempty"`
 	Title              string     `json:"title"`

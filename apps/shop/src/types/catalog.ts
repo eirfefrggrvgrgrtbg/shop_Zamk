@@ -38,6 +38,8 @@ export interface Product {
   reviewsCount?: number;
   reviews?: Review[];
   sellerId?: string;
+  sellerSlug?: string;
+  sellerName?: string;
 }
 
 export interface Brand {

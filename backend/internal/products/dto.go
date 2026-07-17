@@ -1,7 +1,10 @@
 package products
 
-import "github.com/google/uuid"
+import (
+	"time"
 
+	"github.com/google/uuid"
+)
 type CreateProductRequest struct {
 	Title            string                  `json:"title" validate:"required"`
 	Slug             *string                 `json:"slug,omitempty"`
@@ -67,6 +70,58 @@ type RejectProductRequest struct {
 type ProductListResponse struct {
 	Items      []Product `json:"items"`
 	TotalCount int       `json:"totalCount"`
+}
+
+type PublicProduct struct {
+	ID               uuid.UUID              `json:"id"`
+	SellerID         uuid.UUID              `json:"sellerId"`
+	SellerSlug       string                 `json:"sellerSlug"`
+	SellerName       string                 `json:"sellerName"`
+	CategoryID       *uuid.UUID             `json:"categoryId,omitempty"`
+	BrandID          *uuid.UUID             `json:"brandId,omitempty"`
+	Title            string                 `json:"title"`
+	Slug             string                 `json:"slug"`
+	Description      *string                `json:"description,omitempty"`
+	Status           string                 `json:"status"`
+	Gender           *string                `json:"gender,omitempty"`
+	Color            *string                `json:"color,omitempty"`
+	Material         *string                `json:"material,omitempty"`
+	CareInstructions *string                `json:"careInstructions,omitempty"`
+	PriceCents       int64                  `json:"priceCents"`
+	OldPriceCents    *int64                 `json:"oldPriceCents,omitempty"`
+	Currency         string                 `json:"currency"`
+	MainImageURL     *string                `json:"mainImageUrl,omitempty"`
+	AverageRating    float64                `json:"averageRating"`
+	ReviewsCount     int                    `json:"reviewsCount"`
+	InStock          *bool                  `json:"inStock,omitempty"`
+	CreatedAt        time.Time              `json:"createdAt"`
+
+	Variants []PublicProductVariant `json:"variants,omitempty"`
+	Images   []PublicProductImage   `json:"images,omitempty"`
+	Rating   *RatingSummary         `json:"rating,omitempty"`
+}
+
+type PublicProductVariant struct {
+	ID         uuid.UUID `json:"id"`
+	ProductID  uuid.UUID `json:"productId"`
+	Size       *string   `json:"size,omitempty"`
+	Color      *string   `json:"color,omitempty"`
+	PriceCents *int64    `json:"priceCents,omitempty"`
+	IsActive   bool      `json:"isActive"`
+	InStock    *bool     `json:"inStock,omitempty"`
+}
+
+type PublicProductImage struct {
+	ID        uuid.UUID `json:"id"`
+	ProductID uuid.UUID `json:"productId"`
+	ImageURL  string    `json:"imageUrl"`
+	AltText   *string   `json:"altText,omitempty"`
+	SortOrder int       `json:"sortOrder"`
+}
+
+type PublicProductListResponse struct {
+	Items      []PublicProduct `json:"items"`
+	TotalCount int             `json:"totalCount"`
 }
 
 type ModerationHistoryItem struct {

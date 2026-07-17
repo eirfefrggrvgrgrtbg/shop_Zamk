@@ -44,10 +44,10 @@ export const getProductRatingSummary = async (productId: string): Promise<Rating
   return request<RatingSummary>('GET', `/public/products/${productId}/rating-summary`);
 };
 
-export const getPublicSeller = async (slugOrId: string, params?: any): Promise<any> => {
-  const res = await request<any>('GET', `/public/sellers/${slugOrId}`, { params });
-  if (res?.products) {
-    res.products.items = res.products.items || [];
+export const getPublicSeller = async (slugOrId: string, params?: any): Promise<import('./types').PublicSellerStorefrontResponse> => {
+  const res = await request<import('./types').PublicSellerStorefrontResponse>('GET', `/public/sellers/${slugOrId}`, { params });
+  if (res && res.items) {
+    res.items = res.items || [];
   }
   return res;
 };

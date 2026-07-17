@@ -218,13 +218,13 @@ export function ProductDetail() {
           {/* Product Info */}
           <div className="lg:sticky lg:top-28 lg:self-start">
             {/* Brand / Seller */}
-            {product.sellerId ? (
-              <Link to={`/seller/${product.sellerId}`} className="text-sm text-ash hover:text-graphite dark:hover:text-white transition-colors">
-                {product.brand}
+            {product.sellerSlug ? (
+              <Link to={`/seller/${product.sellerSlug}`} className="text-sm text-ash hover:text-graphite dark:hover:text-white transition-colors">
+                {product.sellerName || product.brand}
               </Link>
             ) : (
               <span className="text-sm text-ash">
-                {product.brand}
+                {product.sellerName || product.brand}
               </span>
             )}
 
@@ -413,12 +413,13 @@ export function ProductDetail() {
 
             <div className="mt-8 rounded-[14px] border border-dashed border-border-lighter bg-white p-4 text-sm text-ash dark:border-white/10 dark:bg-white/[0.02] flex items-center justify-between">
               <div>
-                <p className="text-graphite dark:text-white font-medium">Продавец</p>
-                <p className="text-xs">ID: {product.sellerId}</p>
+                <p className="text-graphite dark:text-white font-medium">Продавец: {product.sellerName || product.brand}</p>
               </div>
-              <Link to={`/seller/${product.sellerId}`} className="text-primary hover:underline font-medium">
-                Перейти в магазин →
-              </Link>
+              {product.sellerSlug && (
+                <Link to={`/seller/${product.sellerSlug}`} className="text-primary hover:underline font-medium">
+                  Перейти в магазин →
+                </Link>
+              )}
             </div>
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="flex items-center gap-3 p-3 rounded-lg bg-ice/50 dark:bg-white/5">

@@ -105,12 +105,12 @@ export function ProductCard({ product }: ProductCardProps) {
         <div className="flex flex-col text-[11px] leading-relaxed text-black dark:text-gray-100 font-medium">
           <div className="uppercase tracking-widest text-[9px] mb-2 border-b border-dashed border-gray-400 dark:border-zinc-500 pb-2">
           <div className="flex gap-2 items-center text-black/60 dark:text-white/60">
-            {product.sellerId ? (
-              <Link to={`/seller/${product.sellerId}`} className="hover:underline hover:text-black dark:hover:text-white transition-colors">
-                {product.brand}
+            {product.sellerSlug ? (
+              <Link to={`/seller/${product.sellerSlug}`} className="hover:underline hover:text-black dark:hover:text-white transition-colors">
+                {product.sellerName || product.brand}
               </Link>
             ) : (
-              <span>{product.brand}</span>
+              <span>{product.sellerName || product.brand}</span>
             )}
             <span> | ЧЕК</span>
           </div>

@@ -10,7 +10,7 @@ import (
 // Public methods
 // ---------------------------------------------------------
 
-func (s *Service) GetPublicSeller(ctx context.Context, idOrSlug string) (*Seller, error) {
+func (s *Service) GetPublicSeller(ctx context.Context, idOrSlug string) (*PublicSeller, error) {
 	var seller *Seller
 	var err error
 
@@ -29,9 +29,13 @@ func (s *Service) GetPublicSeller(ctx context.Context, idOrSlug string) (*Seller
 		return nil, ErrSellerNotFound
 	}
 
-	// Remove private contacts if not explicitly required to be public
-	seller.ContactEmail = ""
-	seller.ContactPhone = nil
+	publicSeller := &PublicSeller{
+		ID:          seller.ID,
+		BrandName:   seller.BrandName,
+		Slug:        seller.Slug,
+		Description: seller.Description,
+		LogoURL:     seller.LogoURL,
+	}
 
-	return seller, nil
+	return publicSeller, nil
 }

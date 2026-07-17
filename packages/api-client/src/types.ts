@@ -41,6 +41,8 @@ export interface ProductSummary {
   categoryId?: string;
   brandId?: string;
   sellerId?: string;
+  sellerSlug?: string;
+  sellerName?: string;
   createdAt: string;
   status: string;
   inStock?: boolean;
@@ -99,6 +101,21 @@ export interface PublicReview {
 export interface RatingSummary {
   average: number;
   count: number;
+}
+
+export interface PublicSeller {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  logoUrl?: string;
+  createdAt: string;
+}
+
+export interface PublicSellerStorefrontResponse {
+  seller: PublicSeller;
+  items: ProductSummary[];
+  totalCount: number;
 }
 
 // ---------------------------------------------------------

@@ -47,6 +47,14 @@ type UpdateSellerProfileRequest struct {
 	Slug         *string `json:"slug,omitempty"`
 }
 
+type PublicSeller struct {
+	ID          uuid.UUID `json:"id"`
+	BrandName   string    `json:"brandName"`
+	Slug        string    `json:"slug"`
+	Description *string   `json:"description,omitempty"`
+	LogoURL     *string   `json:"logoUrl,omitempty"`
+}
+
 // ---- Phase E: Seller Management DTOs ----
 
 // UpdateSellerStatusRequest already exists but needs Reason added via pointer override below.
