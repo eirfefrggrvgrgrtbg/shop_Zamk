@@ -17,6 +17,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/delivery"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/fulfillment"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/health"
@@ -70,6 +71,7 @@ func New(
 	dashboardHandler *dashboard.Handler,
 	reportsHandler *reports.Handler,
 	auditHandler *audit.Handler,
+	deliveryHandler *delivery.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	rateLimiter := ratelimit.NewMiddleware(
@@ -195,6 +197,7 @@ func New(
 		r.Get("/direct-sale", productsHandler.GetDirectSaleProducts)
 		r.Get("/products/{idOrSlug}", productsHandler.GetPublicProduct)
 		r.Get("/sellers/{idOrSlug}", productsHandler.GetPublicSellerStore)
+		r.Get("/delivery-methods", deliveryHandler.GetPublicMethods)
 
 		// Auctions
 		r.Get("/auctions/active", auctionsPublicHandler.GetActiveAuctions)

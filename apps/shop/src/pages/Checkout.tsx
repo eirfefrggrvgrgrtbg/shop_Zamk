@@ -7,18 +7,17 @@ import { useCart } from '../contexts/CartContext';
 import { formatPrice } from '../lib/utils';
 import { CheckoutPanel, PillFilter, SectionHeader } from '../components/editorial/StudioKit';
 import { createOrder, createPayment } from '@zamk/api-client/src/customer';
+import { getDeliveryMethods } from '@zamk/api-client/src/public';
+import type { PublicDeliveryMethod } from '@zamk/api-client/src/types';
 import { useAuth } from '../contexts/AuthContext';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const DELIVERY_OPTIONS = {
-  1: 'Курьер 1-2 дня',
-  2: 'Самовывоз',
-  3: 'Экспресс 3 часа',
-} as const;
 
 export function Checkout() {
   const { items, totalPrice, clearCart } = useCart();
-  const [step, setStep] = useState(1);
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [deliveryMethods, setDeliveryMethods] = useState<PublicDeliveryMethod[]>([]);
+  const [selectedMethodId, setSelectedMethodId] = useState<string>('');
   const [done, setDone] = useState(false);
   const { isAuthenticated, user, openAuthModal } = useAuth();
   const [firstName, setFirstName] = useState(user?.name?.split(' ')[0] || '');
@@ -31,6 +30,15 @@ export function Checkout() {
 
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('new');
+
+  useEffect(() => {
+    getDeliveryMethods().then(methods => {
+      setDeliveryMethods(methods);
+      if (methods.length > 0) {
+        setSelectedMethodId(methods[0].id);
+      }
+    }).catch(console.error);
+  }, []);
 
   useEffect(() => {
     import('@zamk/api-client/src/customer').then(({ getAddresses }) => {
@@ -94,12 +102,16 @@ export function Checkout() {
     }
 
     try {
+      const selectedMethod = deliveryMethods.find(m => m.id === selectedMethodId);
+      const deliveryAddressText = selectedMethod ? `${selectedMethod.name}: ${finalAddress}` : finalAddress;
+
       const order = await createOrder({
         customerName: finalName,
         customerEmail: trimmedEmail,
         customerPhone: finalPhone,
-        deliveryAddress: `${DELIVERY_OPTIONS[step as keyof typeof DELIVERY_OPTIONS]}: ${finalAddress}`
-      });
+        deliveryAddress: deliveryAddressText,
+        deliveryMethodId: selectedMethodId
+      }, idempotencyKey);
 
       const payment = await createPayment(order.id);
       
@@ -149,7 +161,8 @@ export function Checkout() {
     );
   }
 
-  const delivery = 0; // Доставка рассчитывается позже
+  const selectedMethod = deliveryMethods.find(m => m.id === selectedMethodId);
+  const delivery = selectedMethod ? selectedMethod.priceCents : 0;
   const total = totalPrice + delivery;
 
   return (
@@ -230,9 +243,18 @@ export function Checkout() {
             <CheckoutPanel>
               <SectionHeader label='Шаг 2' title='Доставка' />
               <div className='flex flex-wrap gap-2'>
-                <PillFilter label='Курьер 1-2 дня' active={step === 1} onClick={() => setStep(1)} />
-                <PillFilter label='Самовывоз' active={step === 2} onClick={() => setStep(2)} />
-                <PillFilter label='Экспресс 3 часа' active={step === 3} onClick={() => setStep(3)} />
+                {deliveryMethods.length > 0 ? (
+                  deliveryMethods.map((m) => (
+                    <PillFilter 
+                      key={m.id}
+                      label={`${m.name} (${m.priceCents === 0 ? 'Бесплатно' : formatPrice(m.priceCents)})`} 
+                      active={selectedMethodId === m.id} 
+                      onClick={() => setSelectedMethodId(m.id)} 
+                    />
+                  ))
+                ) : (
+                  <p className='text-sm text-graphite-light dark:text-white/60'>Загрузка способов доставки...</p>
+                )}
               </div>
             </CheckoutPanel>
 
@@ -266,7 +288,7 @@ export function Checkout() {
                 )})}
                 <div className='border-t border-border-lighter dark:border-white/10 pt-3 mt-3 space-y-2'>
                   <div className='flex justify-between text-graphite dark:text-white/84'><span>Товары</span><span>{formatPrice(totalPrice)}</span></div>
-                  <div className='flex justify-between text-graphite dark:text-white/84'><span>Доставка</span><span className='text-xs'>Рассчитывается при оформлении</span></div>
+                  <div className='flex justify-between text-graphite dark:text-white/84'><span>Доставка</span><span className='text-xs'>{delivery === 0 ? 'Бесплатно' : formatPrice(delivery)}</span></div>
                   <div className='flex justify-between text-base font-semibold text-graphite dark:text-white'><span>Итого</span><span>{formatPrice(total)}</span></div>
                 </div>
               </div>

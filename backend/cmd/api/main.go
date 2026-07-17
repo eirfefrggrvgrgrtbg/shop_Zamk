@@ -21,6 +21,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/delivery"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/fulfillment"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/router"
@@ -142,6 +143,10 @@ func main() {
 	fulfillmentService := fulfillment.NewService(fulfillmentRepo, ordersRepo, pgClient, payoutsService, notificationsService)
 	fulfillmentHandler := fulfillment.NewHandler(fulfillmentService)
 
+	deliveryRepo := delivery.NewRepository(pgClient)
+	deliveryService := delivery.NewService(deliveryRepo)
+	deliveryHandler := delivery.NewHandler(deliveryService)
+
 	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, cfg.Worker.ReturnWindowDays, notificationsService)
 	returnsHandler := returns.NewHandler(returnsService)
 
@@ -209,7 +214,7 @@ func main() {
 	}
 
 	// Create router
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, auditLogHandler)
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, auditLogHandler, deliveryHandler)
 
 	// Start HTTP server
 	srv := &http.Server{

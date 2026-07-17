@@ -9,8 +9,9 @@ import (
 type CreateOrderRequest struct {
 	CustomerName    string `json:"customerName" validate:"required"`
 	CustomerPhone   string `json:"customerPhone" validate:"required"`
-	CustomerEmail   string `json:"customerEmail" validate:"required,email"`
-	DeliveryAddress string `json:"deliveryAddress" validate:"required"`
+	CustomerEmail    string    `json:"customerEmail" validate:"required,email"`
+	DeliveryAddress  string    `json:"deliveryAddress" validate:"required"`
+	DeliveryMethodID uuid.UUID `json:"deliveryMethodId" validate:"required"`
 }
 
 type UpdateOrderStatusRequest struct {
@@ -58,8 +59,14 @@ type AdminOrder struct {
 
 type AdminOrderDetail struct {
 	AdminOrder
-	CustomerPhone     string               `json:"customerPhone"`
-	DeliveryAddress   string               `json:"deliveryAddress"`
-	Items             []OrderItem          `json:"items"`
-	Fulfillments      []OrderFulfillment   `json:"fulfillments"`
+	CustomerPhone              string               `json:"customerPhone"`
+	DeliveryAddress            string               `json:"deliveryAddress"`
+	DeliveryMethodID           *uuid.UUID           `json:"deliveryMethodId"`
+	DeliveryMethodCode         *string              `json:"deliveryMethodCode"`
+	DeliveryMethodName         *string              `json:"deliveryMethodName"`
+	DeliveryPriceCents         *int64               `json:"deliveryPriceCents"`
+	DeliveryEstimatedDaysMin   *int                 `json:"deliveryEstimatedDaysMin"`
+	DeliveryEstimatedDaysMax   *int                 `json:"deliveryEstimatedDaysMax"`
+	Items                      []OrderItem          `json:"items"`
+	Fulfillments               []OrderFulfillment   `json:"fulfillments"`
 }

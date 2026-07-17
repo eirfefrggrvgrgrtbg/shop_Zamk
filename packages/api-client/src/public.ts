@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { ProductSummary, ProductDetail, Category, Brand, PublicReview, RatingSummary, AuctionEvent, AuctionLot } from './types';
+import type { ProductSummary, ProductDetail, Category, Brand, PublicReview, RatingSummary, AuctionEvent, AuctionLot, PublicDeliveryMethod } from './types';
 
 export interface ProductListResponse {
   items: ProductSummary[];
@@ -27,6 +27,11 @@ export const getProduct = async (idOrSlug: string): Promise<ProductDetail> => {
 
 export const getCategories = async (): Promise<Category[]> => {
   const res = await request<any>('GET', '/public/categories');
+  return res?.items || (Array.isArray(res) ? res : []);
+};
+
+export const getDeliveryMethods = async (): Promise<PublicDeliveryMethod[]> => {
+  const res = await request<any>('GET', '/public/delivery-methods');
   return res?.items || (Array.isArray(res) ? res : []);
 };
 

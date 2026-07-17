@@ -30,6 +30,15 @@ export interface PaginatedAdminUsersResponse {
 // PUBLIC DTOs
 // ---------------------------------------------------------
 
+export interface PublicDeliveryMethod {
+  id: string;
+  code: string;
+  name: string;
+  priceCents: number;
+  estimatedDaysMin?: number;
+  estimatedDaysMax?: number;
+}
+
 export interface ProductSummary {
   id: string;
   title: string;

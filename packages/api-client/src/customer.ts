@@ -23,8 +23,12 @@ export const clearCart = async (): Promise<void> => {
   return request<void>('DELETE', '/customer/cart');
 };
 
-export const createOrder = async (input: { customerName: string; customerPhone: string; customerEmail: string; deliveryAddress: string }): Promise<Order> => {
-  return request<Order>('POST', '/customer/orders', { body: input });
+export const createOrder = async (input: { customerName: string; customerPhone: string; customerEmail: string; deliveryAddress: string; deliveryMethodId: string }, idempotencyKey?: string): Promise<Order> => {
+  const headers: Record<string, string> = {};
+  if (idempotencyKey) {
+    headers['Idempotency-Key'] = idempotencyKey;
+  }
+  return request<Order>('POST', '/customer/orders', { body: input, headers });
 };
 
 export const getOrders = async (): Promise<Order[]> => {

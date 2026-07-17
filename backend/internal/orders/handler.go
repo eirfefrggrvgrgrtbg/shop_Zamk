@@ -55,7 +55,16 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	order, err := h.service.CreateOrder(r.Context(), userID, req)
+	idempStr := r.Header.Get("Idempotency-Key")
+	var idempotencyKey *uuid.UUID
+	if idempStr != "" {
+		id, err := uuid.Parse(idempStr)
+		if err == nil {
+			idempotencyKey = &id
+		}
+	}
+
+	order, err := h.service.CreateOrder(r.Context(), userID, req, idempotencyKey)
 	if err != nil {
 		if errors.Is(err, ErrEmptyCart) || errors.Is(err, ErrProductNotPublished) || errors.Is(err, ErrVariantNotFound) || errors.Is(err, ErrInsufficientStock) {
 			h.writeError(w, http.StatusBadRequest, "invalid_order", err.Error())

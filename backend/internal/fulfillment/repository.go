@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,7 +24,15 @@ func (r *Repository) CreateShipmentTx(ctx context.Context, tx pgx.Tx, s *Shipmen
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING created_at, updated_at
 	`
-	return tx.QueryRow(ctx, query, s.ID, s.OrderID, s.FulfillmentID, s.Status, s.Carrier, s.TrackingNumber, s.TrackingUrl).Scan(&s.CreatedAt, &s.UpdatedAt)
+	err := tx.QueryRow(ctx, query, s.ID, s.OrderID, s.FulfillmentID, s.Status, s.Carrier, s.TrackingNumber, s.TrackingUrl).Scan(&s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return ErrShipmentExists
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *Repository) CreateShipmentEventTx(ctx context.Context, tx pgx.Tx, e *ShipmentEvent) error {

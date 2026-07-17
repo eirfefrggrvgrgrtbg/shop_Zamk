@@ -32,7 +32,7 @@ func NewService(repo *Repository, cartRepo *cart.Repository, inventorySvc *inven
 	}
 }
 
-func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateOrderRequest) (*Order, error) {
+func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateOrderRequest, idempotencyKey *uuid.UUID) (*Order, error) {
 	// 1. Load cart
 	userCart, err := s.cartRepo.GetCartByUserID(ctx, userID)
 	if err != nil {
@@ -45,11 +45,26 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 		return nil, ErrEmptyCart
 	}
 
+	if idempotencyKey != nil {
+		existing, err := s.repo.GetOrderByIdempotencyKey(ctx, userID, *idempotencyKey)
+		if err == nil {
+			return existing, nil
+		}
+	}
+
+	dm, err := s.repo.GetDeliveryMethod(ctx, req.DeliveryMethodID)
+	if err != nil {
+		return nil, errors.New("invalid delivery method")
+	}
+	if !dm.IsActive {
+		return nil, errors.New("delivery method is not active")
+	}
+
 	var createdOrder *Order
 
 	// 2. Start transaction
 	err = s.db.RunInTx(ctx, func(tx pgx.Tx) error {
-		totalPriceCents := int64(0)
+		totalPriceCents := dm.PriceCents
 		var orderItems []OrderItem
 		var reservations []OrderReservation
 
@@ -117,15 +132,22 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 
 		// Create order
 		order := &Order{
-			ID:              orderID,
-			UserID:          userID,
-			Status:          "awaiting_payment",
-			TotalPriceCents: totalPriceCents,
-			Currency:        "RUB",
-			CustomerName:    req.CustomerName,
-			CustomerPhone:   req.CustomerPhone,
-			CustomerEmail:   req.CustomerEmail,
-			DeliveryAddress: req.DeliveryAddress,
+			ID:                       orderID,
+			UserID:                   userID,
+			Status:                   "awaiting_payment",
+			TotalPriceCents:          totalPriceCents,
+			Currency:                 "RUB",
+			CustomerName:             req.CustomerName,
+			CustomerPhone:            req.CustomerPhone,
+			CustomerEmail:            req.CustomerEmail,
+			DeliveryAddress:          req.DeliveryAddress,
+			DeliveryMethodID:         &dm.ID,
+			DeliveryMethodCode:       &dm.Code,
+			DeliveryMethodName:       &dm.Name,
+			DeliveryPriceCents:       &dm.PriceCents,
+			DeliveryEstimatedDaysMin: dm.EstimatedDaysMin,
+			DeliveryEstimatedDaysMax: dm.EstimatedDaysMax,
+			CheckoutIdempotencyKey:   idempotencyKey,
 		}
 
 		if err := s.repo.CreateOrderTx(ctx, tx, order); err != nil {

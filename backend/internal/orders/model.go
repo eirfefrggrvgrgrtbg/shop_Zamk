@@ -15,10 +15,17 @@ type Order struct {
 	CustomerName    string     `json:"customerName" db:"customer_name"`
 	CustomerPhone   string     `json:"customerPhone" db:"customer_phone"`
 	CustomerEmail   string     `json:"customerEmail" db:"customer_email"`
-	DeliveryAddress string     `json:"deliveryAddress" db:"delivery_address"`
-	CreatedAt       time.Time  `json:"createdAt" db:"created_at"`
-	UpdatedAt       time.Time  `json:"updatedAt" db:"updated_at"`
-	CancelledAt     *time.Time `json:"cancelledAt" db:"cancelled_at"`
+	DeliveryAddress            string     `json:"deliveryAddress" db:"delivery_address"`
+	DeliveryMethodID           *uuid.UUID `json:"deliveryMethodId" db:"delivery_method_id"`
+	DeliveryMethodCode         *string    `json:"deliveryMethodCode" db:"delivery_method_code"`
+	DeliveryMethodName         *string    `json:"deliveryMethodName" db:"delivery_method_name"`
+	DeliveryPriceCents         *int64     `json:"deliveryPriceCents" db:"delivery_price_cents"`
+	DeliveryEstimatedDaysMin   *int       `json:"deliveryEstimatedDaysMin" db:"delivery_estimated_days_min"`
+	DeliveryEstimatedDaysMax   *int       `json:"deliveryEstimatedDaysMax" db:"delivery_estimated_days_max"`
+	CheckoutIdempotencyKey     *uuid.UUID `json:"checkoutIdempotencyKey" db:"checkout_idempotency_key"`
+	CreatedAt                  time.Time  `json:"createdAt" db:"created_at"`
+	UpdatedAt                  time.Time  `json:"updatedAt" db:"updated_at"`
+	CancelledAt                *time.Time `json:"cancelledAt" db:"cancelled_at"`
 
 	Items []OrderItem `json:"items" db:"-"`
 }
