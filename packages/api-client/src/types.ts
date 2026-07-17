@@ -178,6 +178,8 @@ export interface CustomerFulfillmentItem {
   productId: string;
   productTitle: string;
   variantId?: string | null;
+  variantSize?: string | null;
+  variantColor?: string | null;
   sku?: string | null;
   quantity: number;
   unitPriceCents: number;
@@ -326,6 +328,8 @@ export interface SellerFulfillmentItem {
   productId: string;
   productTitle: string;
   variantId?: string | null;
+  variantSize?: string | null;
+  variantColor?: string | null;
   sku?: string | null;
   quantity: number;
   unitPriceCents: number;
@@ -567,6 +571,8 @@ export interface AdminFulfillmentItem {
   productId: string;
   productTitle: string;
   variantId?: string | null;
+  variantSize?: string | null;
+  variantColor?: string | null;
   sku?: string | null;
   quantity: number;
   unitPriceCents: number;

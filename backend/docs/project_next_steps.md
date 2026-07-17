@@ -1,71 +1,18 @@
-# ZAMK Project Roadmap & Next Steps
+# Project Next Steps
 
-## 1. AUC — Auction Module (AUC) - Current Phase
-- [x] **AUC-1**: Foundation (DB migration, models, basic repo).
-- [x] **AUC-1B**: Complete core backend logic (handlers, router wiring, complete API client types).
-- [x] **AUC-1C**: Runtime backend verification (Atomic concurrency testing, RBAC migration, Smoke test). Backend runtime readiness is fully verified.
-- [x] **AUC-2**: Admin UI.
-  - AUC-2B verified admin UI runtime behavior.
-  - Admin auction UI uses real backend data.
-  - Unclear settings have “?” help tooltips.
-- [x] **AUC-3**: Public Auction UI (Frontend shop components for bidding and displaying lots).
-  - AUC-3B verified public UI runtime behavior, public API usage, polling, and navigation.
-- [x] **AUC-4**: WebSocket/SSE real-time bidding updates.
-- [x] **AUC-4B**: Real-time bidding safety hardening and concurrency verification.
-- [x] **AUC-5**: Winner order/payment integration.
-- [x] **AUC-5B**: Verified and hardened order/payment runtime flow.
-- [x] **AUC-6**: Full direct-sale catalog integration. - Current Phase
-- [x] **AUC-6C:** Verify direct-sale full runtime checkout flow, oversell prevention, and normal catalog regression checks.
-- [x] **AUC-7**: Automatic Unpaid Auction Deadline Handling.
+## Completed: PRODUCT-VARIANTS-1
+We have successfully implemented and stabilized the Product Variants and Stock Flow, covering the following:
+- Variant modeling with size, color, SKU.
+- Proper ownership protection and cross-product injection blocking.
+- `MergeProductVariants` with soft-deletion and safe upserts.
+- Automatic moderation reset on variant/product edits.
+- Cart item isolation by variant ID.
+- Idempotent and thread-safe reservation logic (verified via concurrency testing).
+- Immutable order snapshots surviving variant modifications.
+- Successful verification across browser runtime (Shop, Seller, Admin) and full builds.
 
-## 2. ADMIN — Admin Panel Refinements
-- [x] **ADMIN-1**: Audit admin panel, fix encodings, define roadmap.
-- [x] **ADMIN-2/2B**: Real dashboard metrics. Runtime verified.
-- [x] **ADMIN-3/3B**: Users, Staff, RBAC. Runtime verified.
-- [x] **ADMIN-4/4B**: Seller Management Completion. Runtime verified.
-- [x] **ADMIN-5/5B/5C**: Catalog & Product Moderation. Detail drawer, logs, actions. Runtime verified. **Next recommended: ADMIN-6**.
-- [x] **ADMIN-6/6B/6C/6D**: Orders, Fulfillment, and Shipments fully completed.
-- [x] **ADMIN-7/7B/7C**: Inventory and Storage fully completed.
-- [x] **ADMIN-8/8B/8C/8D**: Payouts and Commissions fully completed.
-- [x] **ADMIN-9/9B**: Audit Logs and Security Monitoring fully completed.
-- [ ] **ADMIN-10**: Production Hardening, Monitoring, Deployment, and QA Freeze
-
-## 3. SELLER & BUYER — Complete UX Flows
-- [x] **UX-1**: Seller Onboarding Flow
-- [x] **UX-2**: Seller Product Creation and Admin Moderation Flow
-- [x] **UX-3**: Customer Checkout and Order Flow
-- [x] **UX-4**: Order Fulfillment Flow — seller fulfillment, shipment, delivery, inventory verified
-- [x] **CUSTOMER-1**: Customer Account & Favorites Flow
-- [ ] **STOREFRONT-1**: Public Seller Storefront Flow — Current Phase
-- [ ] Remove demo data.
-- [ ] Real seller metrics.
-- [ ] Real product/order/fulfillment state.
-
-## 4. FIN — Finance Flows
-- [ ] **FIN-1**: Seller Balance, Commission and Payout Flow — Current Phase
-- [ ] **FIN-2** (future): Refund/Return Settlement, Promo Codes, Delivery Fee Commission
-
-## 4. DEV — Create Test Account Documentation
-- Create `backend/docs/dev_test_accounts.md` (later).
-- Include admin/owner/seller/customer test credentials.
-- Keep only dev credentials, no production secrets.
-
-## 5. BUYER/HOME — Buyer/Homepage Optimization
-- Improve homepage layout.
-- Product cards/model display refinements.
-- Include an active auction block on the homepage.
-- Clarify the catalog vs. auction relationship.
-
-## 6. SEARCH & REVIEWS
-- [x] **SEARCH-1**: Public catalog search, filters (category, brand, seller, size, price, inStock), sorting (newest, price_asc, price_desc), pagination (load more). UUID validation 400, minPrice>maxPrice 400. Security: strip moderation fields from public responses. DB indexes (000035). Frontend reactive fetch, inStock toggle, size single-select, load more.
-- [x] **REVIEW-1**: Product Reviews & Ratings Flow (Current Phase) - Customer Product Reviews, Seller Ratings and Admin Moderation.
-
-## 7. PROD — Final Production Work
-- Domains mapping.
-- Email integration (SMTP, password reset links, verification).
-- Security hardening.
-- Deployment configuration.
-- Monitoring & Alerts.
-- Backups.
-
-- ADMIN-2/ADMIN-2B: Dashboard real metrics and RBAC verification completed. Next: ADMIN-3.
+## Next Up / Known Gaps
+- **Global SKU Uniqueness**: Determine if SKUs should be globally unique across all sellers or just within a single seller's catalog.
+- **Color Mapping**: Current color support uses hex codes and string names. Consider a normalized palette system for better search filtering.
+- **Return Workflows**: Enhance the return process to handle partial quantities of specific variants.
+- **Search Indexing**: Ensure variant properties (like size and color) are properly indexed in the search engine (Elasticsearch/Meilisearch) for faceted navigation.

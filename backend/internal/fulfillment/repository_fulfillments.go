@@ -67,7 +67,7 @@ func (r *Repository) ListSellerFulfillments(ctx context.Context, sellerID uuid.U
 func (r *Repository) GetFulfillmentItems(ctx context.Context, fulfillmentID uuid.UUID) ([]FulfillmentItem, error) {
 	query := `
 		SELECT 
-			id, product_id, title, product_variant_id, sku, quantity, price_cents, subtotal_price_cents, image_url
+			id, product_id, title, product_variant_id, variant_size, variant_color, sku, quantity, price_cents, subtotal_price_cents, image_url
 		FROM order_items
 		WHERE order_fulfillment_id = $1
 	`
@@ -80,7 +80,7 @@ func (r *Repository) GetFulfillmentItems(ctx context.Context, fulfillmentID uuid
 	var items []FulfillmentItem
 	for rows.Next() {
 		var item FulfillmentItem
-		if err := rows.Scan(&item.OrderItemID, &item.ProductID, &item.ProductTitle, &item.VariantID, &item.SKU, &item.Quantity, &item.UnitPriceCents, &item.LineTotalCents, &item.ImageURL); err != nil {
+		if err := rows.Scan(&item.OrderItemID, &item.ProductID, &item.ProductTitle, &item.VariantID, &item.VariantSize, &item.VariantColor, &item.SKU, &item.Quantity, &item.UnitPriceCents, &item.LineTotalCents, &item.ImageURL); err != nil {
 			return nil, err
 		}
 		items = append(items, item)

@@ -49,7 +49,7 @@ function AccordionSection({ title, children, defaultOpen = false }: { title: str
 
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
-  
+
   const [product, setProduct] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,7 +71,7 @@ export function ProductDetail() {
         const data = await fetchProductById(id);
         setProduct(data);
         setError(null);
-        
+
         try {
           const revs = await fetchProductReviews(id);
           setReviews(revs);
@@ -130,7 +130,7 @@ export function ProductDetail() {
       return;
     }
     setSizeError('');
-    
+
     let variantId = product.variants?.[0]?.id;
     let variantInStock = product.variants?.[0]?.inStock ?? true;
     if (product.variants && activeSize) {
@@ -140,7 +140,7 @@ export function ProductDetail() {
          variantInStock = match.inStock ?? true;
       }
     }
-    
+
     if (!variantId) {
       showToast('Для товара не указан вариант. Добавление в корзину недоступно.');
       return;
@@ -157,6 +157,17 @@ export function ProductDetail() {
     } catch (e: any) {
       showToast(e.message || 'Ошибка при добавлении');
     }
+  };
+
+  const getDisplayPrice = () => {
+    let currentPrice = product.price;
+    if (product.variants && activeSize) {
+      const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
+      if (match && match.priceCents) {
+        currentPrice = match.priceCents;
+      }
+    }
+    return currentPrice;
   };
 
   return (
@@ -266,10 +277,10 @@ export function ProductDetail() {
               {product.discountPrice ? (
                 <>
                   <span className="text-2xl font-semibold text-red-500">{formatPrice(product.discountPrice)}</span>
-                  <span className="text-lg text-ash line-through">{formatPrice(product.price)}</span>
+                  <span className="text-lg text-ash line-through">{formatPrice(getDisplayPrice())}</span>
                 </>
               ) : (
-                <span className="text-2xl font-semibold text-graphite dark:text-white">{formatPrice(product.price)}</span>
+                <span className="text-2xl font-semibold text-graphite dark:text-white">{formatPrice(getDisplayPrice())}</span>
               )}
             </div>
 
@@ -367,10 +378,10 @@ export function ProductDetail() {
 
             {/* Add to cart */}
             <div className="mt-6 flex gap-3">
-              <Button 
-                type="button" 
-                variant="primary" 
-                className="flex-1 h-12 gap-2" 
+              <Button
+                type="button"
+                variant="primary"
+                className="flex-1 h-12 gap-2"
                 onClick={handleAddToCart}
                 disabled={(() => {
                   let vStock = product.variants?.[0]?.inStock ?? true;

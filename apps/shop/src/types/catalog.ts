@@ -30,7 +30,7 @@ export interface Product {
     color?: string;
     inStock?: boolean;
     isActive?: boolean;
-    price?: number;
+    priceCents?: number;
   }[];
   isNew?: boolean;
   isBestseller?: boolean;

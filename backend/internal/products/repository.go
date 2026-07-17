@@ -175,43 +175,78 @@ func (r *Repository) UpdateProductStatus(ctx context.Context, p *Product) error 
 // Variants Operations
 // ---------------------------------------------------------
 
-func (r *Repository) ReplaceProductVariants(ctx context.Context, productID uuid.UUID, variants []ProductVariant) error {
+func (r *Repository) MergeProductVariants(ctx context.Context, productID uuid.UUID, variants []ProductVariant) error {
 	var sellerID uuid.UUID
 	err := r.db.QueryRow(ctx, `SELECT seller_id FROM products WHERE id = $1`, productID).Scan(&sellerID)
 	if err != nil {
 		return fmt.Errorf("failed to get seller_id for product: %w", err)
 	}
 
-	_, err = r.db.Exec(ctx, `DELETE FROM product_variants WHERE product_id = $1`, productID)
+	existingVariants, err := r.GetProductVariants(ctx, productID)
 	if err != nil {
-		return fmt.Errorf("failed to delete existing variants: %w", err)
+		return fmt.Errorf("failed to get existing variants: %w", err)
 	}
 
-	for _, v := range variants {
-		query := `
-			INSERT INTO product_variants (id, product_id, sku, size, color, barcode, price_cents, is_active, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		`
-		_, err := r.db.Exec(ctx, query,
-			v.ID, v.ProductID, v.SKU, v.Size, v.Color, v.Barcode, v.PriceCents, v.IsActive, v.CreatedAt, v.UpdatedAt,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to insert variant: %w", err)
-		}
+	existingMap := make(map[uuid.UUID]ProductVariant)
+	for _, v := range existingVariants {
+		existingMap[v.ID] = v
+	}
 
-		if v.InitialStock != nil && *v.InitialStock > 0 {
-			invQuery := `
-				INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at)
-				VALUES ($1, $2, $3, $4, $5, 0, $6, $7)
+	incomingMap := make(map[uuid.UUID]bool)
+
+	for _, v := range variants {
+		incomingMap[v.ID] = true
+		_, exists := existingMap[v.ID]
+
+		if exists {
+			query := `
+				UPDATE product_variants
+				SET sku = $1, size = $2, color = $3, barcode = $4, price_cents = $5, is_active = $6, updated_at = now()
+				WHERE id = $7 AND product_id = $8
 			`
-			_, err = r.db.Exec(ctx, invQuery,
-				uuid.New(), v.ProductID, v.ID, sellerID, *v.InitialStock, v.CreatedAt, v.UpdatedAt,
+			_, err := r.db.Exec(ctx, query,
+				v.SKU, v.Size, v.Color, v.Barcode, v.PriceCents, v.IsActive, v.ID, productID,
 			)
 			if err != nil {
-				return fmt.Errorf("failed to insert inventory_item: %w", err)
+				return fmt.Errorf("failed to update variant: %w", err)
+			}
+		} else {
+			query := `
+				INSERT INTO product_variants (id, product_id, sku, size, color, barcode, price_cents, is_active, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			`
+			_, err := r.db.Exec(ctx, query,
+				v.ID, v.ProductID, v.SKU, v.Size, v.Color, v.Barcode, v.PriceCents, v.IsActive, v.CreatedAt, v.UpdatedAt,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to insert variant: %w", err)
+			}
+
+			if v.InitialStock != nil && *v.InitialStock > 0 {
+				invQuery := `
+					INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, $5, 0, $6, $7)
+				`
+				_, err = r.db.Exec(ctx, invQuery,
+					uuid.New(), v.ProductID, v.ID, sellerID, *v.InitialStock, v.CreatedAt, v.UpdatedAt,
+				)
+				if err != nil {
+					return fmt.Errorf("failed to insert inventory_item: %w", err)
+				}
 			}
 		}
 	}
+
+	for id := range existingMap {
+		if !incomingMap[id] {
+			softDeleteQuery := `UPDATE product_variants SET is_active = false, updated_at = now() WHERE id = $1 AND product_id = $2`
+			_, err := r.db.Exec(ctx, softDeleteQuery, id, productID)
+			if err != nil {
+				return fmt.Errorf("failed to soft-delete variant: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 

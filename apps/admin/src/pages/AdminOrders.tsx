@@ -506,7 +506,14 @@ export function AdminOrders() {
                           <tbody className="divide-y divide-gray-200 bg-white">
                             {selectedOrder.items.map((item) => (
                               <tr key={item.id}>
-                                <td className="px-3 py-2 text-gray-900">{item.title}</td>
+                                <td className="px-3 py-2 text-gray-900">
+                                  <div>{item.title}</div>
+                                  <div className="text-xs text-gray-500 flex flex-wrap gap-2 mt-1">
+                                    {item.variantSize && <span>Размер: {item.variantSize}</span>}
+                                    {item.variantColor && <span>Цвет: {item.variantColor}</span>}
+                                    {item.sku && <span>SKU: {item.sku}</span>}
+                                  </div>
+                                </td>
                                 <td className="px-3 py-2 text-center text-gray-500">×{item.quantity}</td>
                                 <td className="px-3 py-2 text-right text-gray-900">
                                   {(item.subtotalPriceCents / 100).toFixed(2)} ₽
@@ -579,7 +586,14 @@ export function AdminOrders() {
                                 <tbody className="divide-y divide-gray-200 bg-white">
                                   {f.items.map(item => (
                                     <tr key={item.orderItemId}>
-                                      <td className="px-2 py-1 text-gray-900">{item.productTitle} {item.sku ? `(${item.sku})` : ''}</td>
+                                      <td className="px-2 py-1 text-gray-900">
+                                        <div>{item.productTitle}</div>
+                                        <div className="text-xs text-gray-500 flex flex-wrap gap-2 mt-0.5">
+                                          {item.variantSize && <span>Размер: {item.variantSize}</span>}
+                                          {item.variantColor && <span>Цвет: {item.variantColor}</span>}
+                                          {item.sku && <span>SKU: {item.sku}</span>}
+                                        </div>
+                                      </td>
                                       <td className="px-2 py-1 text-center text-gray-500">×{item.quantity}</td>
                                       <td className="px-2 py-1 text-right text-gray-900">{(item.lineTotalCents / 100).toFixed(2)} ₽</td>
                                     </tr>

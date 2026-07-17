@@ -54,6 +54,8 @@ type FulfillmentItem struct {
 	ProductID      uuid.UUID `json:"productId"`
 	ProductTitle   string    `json:"productTitle"`
 	VariantID      *uuid.UUID `json:"variantId,omitempty"`
+	VariantSize    *string   `json:"variantSize,omitempty"`
+	VariantColor   *string   `json:"variantColor,omitempty"`
 	SKU            *string   `json:"sku,omitempty"`
 	Quantity       int       `json:"quantity"`
 	UnitPriceCents int64     `json:"unitPriceCents"`

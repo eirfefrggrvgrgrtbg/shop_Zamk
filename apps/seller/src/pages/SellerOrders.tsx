@@ -320,11 +320,13 @@ export function SellerOrders() {
                                 <h4 className="font-medium text-graphite dark:text-white truncate" title={item.productTitle}>
                                   {item.productTitle}
                                 </h4>
-                                {(item.sku || item.variantId) && (
-                                  <p className="text-xs text-ash mt-0.5">
-                                    SKU: {item.sku || item.variantId}
-                                  </p>
-                                )}
+                                <div className="text-xs text-ash mt-0.5 flex flex-wrap gap-2">
+                                  {item.variantSize && <span>Размер: {item.variantSize}</span>}
+                                  {item.variantColor && <span>Цвет: {item.variantColor}</span>}
+                                  {(item.sku || item.variantId) && (
+                                    <span>SKU: {item.sku || item.variantId}</span>
+                                  )}
+                                </div>
                                 <div className="flex items-center justify-between mt-2">
                                   <span className="text-sm text-ash">{item.quantity} шт. × {currencyFormatter.format(item.unitPriceCents / 100)}</span>
                                   <span className="font-medium text-graphite dark:text-white">{currencyFormatter.format(item.lineTotalCents / 100)}</span>

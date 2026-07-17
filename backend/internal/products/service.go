@@ -59,7 +59,7 @@ func CanEditProduct(sellerStatus sellers.SellerStatus, productStatus string) boo
 		return false
 	}
 	if sellerStatus == sellers.StatusPending || sellerStatus == sellers.StatusActive {
-		return productStatus == StatusDraft || productStatus == StatusRejected
+		return productStatus != StatusBlocked
 	}
 	return false
 }
@@ -152,7 +152,7 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 			return err
 		}
 		if len(variants) > 0 {
-			if err := txRepo.ReplaceProductVariants(ctx, p.ID, variants); err != nil {
+			if err := txRepo.MergeProductVariants(ctx, p.ID, variants); err != nil {
 				return err
 			}
 		}
@@ -240,21 +240,54 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				Size:       vr.Size,
 				Color:      vr.Color,
 				Barcode:    vr.Barcode,
-				PriceCents: vr.PriceCents,
-				IsActive:   true,
-				CreatedAt:  now,
-				UpdatedAt:  now,
+				PriceCents:   vr.PriceCents,
+				InitialStock: vr.InitialStock,
+				IsActive:     true,
+				CreatedAt:    now,
+				UpdatedAt:    now,
 			})
+		}
+	}
+
+	needsModerationReset := false
+	if p.Status == StatusPublished || p.Status == StatusApproved {
+		needsModerationReset = true
+	}
+
+	var modLog *ProductModerationLog
+	if needsModerationReset {
+		oldStatus := p.Status
+		p.Status = StatusPendingModeration
+		now := time.Now()
+		p.SubmittedAt = &now
+
+		modLog = &ProductModerationLog{
+			ID:         uuid.New(),
+			ProductID:  p.ID,
+			FromStatus: &oldStatus,
+			ToStatus:   StatusPendingModeration,
+			Comment:    func(s string) *string { return &s }("Автоматический сброс модерации при редактировании"),
+			CreatedAt:  now,
 		}
 	}
 
 	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
+
+		if needsModerationReset {
+			if err := txRepo.UpdateProductStatus(ctx, p); err != nil {
+				return err
+			}
+			if err := txRepo.AddModerationLog(ctx, modLog); err != nil {
+				return err
+			}
+		}
+
 		if err := txRepo.UpdateProduct(ctx, p); err != nil {
 			return err
 		}
 		if req.Variants != nil {
-			if err := txRepo.ReplaceProductVariants(ctx, p.ID, variants); err != nil {
+			if err := txRepo.MergeProductVariants(ctx, p.ID, variants); err != nil {
 				return err
 			}
 			p.Variants = variants

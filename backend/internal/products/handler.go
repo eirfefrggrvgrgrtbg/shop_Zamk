@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/common"
+	"log"
 	"net/http"
 	"time"
 
@@ -206,6 +207,7 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusConflict, "product_not_editable", "Действие с товаром недоступно в его текущем статусе.")
 			return
 		}
+		log.Printf("[ERROR] Failed to update product: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update product")
 		return
 	}
