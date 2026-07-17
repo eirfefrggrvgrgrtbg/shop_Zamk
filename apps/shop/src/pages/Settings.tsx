@@ -7,6 +7,8 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress } from '@zamk/api-client/src/customer';
 import { useToast } from '../contexts/ToastContext';
+import { CustomerProtectedRoute } from '../components/account/CustomerProtectedRoute';
+import { AccountNav } from '../components/account/AccountNav';
 
 // --- Компоненты UI для настроек ---
 
@@ -126,16 +128,24 @@ export function Settings() {
   };
 
   return (
-    <div className='relative z-10 min-h-screen pt-24 md:pt-32 pb-20'>
-      <div className='container mx-auto px-4 sm:px-6 max-w-[800px]'>
-        
-        {/* Заголовок */}
-        <div className="mb-12 pl-2">
-          <h1 className="font-serif text-4xl md:text-5xl text-graphite dark:text-white mb-2">Настройки</h1>
-          <p className="text-graphite/50 dark:text-white/50 text-[15px]">Управление аккаунтом и предпочтениями</p>
-        </div>
+    <CustomerProtectedRoute
+      title="Настройки"
+      description="Управление аккаунтом и предпочтениями."
+    >
+      <div className='relative z-10 min-h-screen pt-32 md:pt-40 pb-20'>
+        <div className='container mx-auto px-4 sm:px-6 max-w-[800px]'>
+          
+          <section className="mb-8 border-b border-border-lighter pb-8">
+            <p className="text-[13px] font-medium tracking-[0.14em] text-ash uppercase mb-3">Личный кабинет</p>
+            <h1 className="text-4xl md:text-5xl font-serif text-graphite dark:text-white tracking-tight leading-none">
+              Настройки
+            </h1>
+          </section>
 
-        {/* 2. Внешний вид */}
+          <AccountNav />
+
+          <div className="mt-8">
+            {/* 2. Внешний вид */}
         <Section title="Внешний вид">
           <div className="p-5 md:p-6 flex flex-col gap-4">
             <p className="text-[15px] font-medium text-graphite dark:text-white mb-2">Тема интерфейса</p>
@@ -306,7 +316,8 @@ export function Settings() {
           </Button>
         </div>
       </Modal>
-
+      </div>
     </div>
+    </CustomerProtectedRoute>
   );
 }

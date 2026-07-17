@@ -69,9 +69,9 @@ export const getCustomerReviews = async (): Promise<any> => {
   return { ...res, items: res?.items || [] };
 };
 
-export const getFavorites = async (): Promise<any> => {
+export const getFavorites = async (): Promise<any[]> => {
   const res = await request<any>('GET', '/customer/favorites');
-  return { ...res, items: res?.items || [] };
+  return Array.isArray(res) ? res : (res?.items || []);
 };
 
 export const addFavorite = async (productId: string): Promise<any> => {
