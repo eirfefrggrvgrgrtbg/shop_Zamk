@@ -18,8 +18,11 @@ Only products with `status = 'published'` are visible in the public catalog and 
 - Empty carts are gracefully handled in the UI.
 
 ## Checkout Behavior
+- The customer selects an active `DeliveryMethod` obtained from `GET /api/public/delivery-methods`.
 - The customer provides their shipping details (name, email, phone, address).
-- Backend creates an `Order`.
+- A client-generated `Idempotency-Key` (UUID) is sent in the headers to prevent double-charging or duplicate order creation during network retries.
+- Backend validates the payload, checks inventory, and ensures the selected delivery method is valid.
+- The delivery method details (price, estimated days, name) are snapshotted into the `Order` to prevent historical drift.
 - The system automatically triggers an `InventoryReservation` for the ordered items.
 - The reservation lasts until the payment completes or the order is cancelled. This prevents overselling.
 - Once created, the order status is `awaiting_payment`.

@@ -1,5 +1,14 @@
 # Project Next Steps
 
+## Completed: DELIVERY-1 / SHIPPING-CHECKOUT-FLOW-1
+We have successfully implemented and stabilized the Shipping and Checkout flow:
+- Dynamic delivery methods managed via PostgreSQL table (`delivery_methods`) using UUIDs.
+- Order snapshotting (method code, name, price, estimated days) to prevent historical drift if a delivery method's price changes or it is deleted.
+- Checkout idempotency enforced at the database level (`Idempotency-Key` and `user_id` unique constraint on `orders`).
+- Fully resilient multi-seller fulfillment lifecycle without hardcoded string IDs.
+- Validated via rigorous API constraints testing (400/409 errors for invalid methods or duplicated idempotency keys).
+- Seamless frontend integration and full browser-runtime smoke tests successful.
+
 ## Completed: PRODUCT-VARIANTS-1
 We have successfully implemented and stabilized the Product Variants and Stock Flow, covering the following:
 - Variant modeling with size, color, SKU.
