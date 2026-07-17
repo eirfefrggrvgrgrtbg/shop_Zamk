@@ -40,25 +40,30 @@ func NewService(repo *Repository, cartRepo *cart.Repository, inventorySvc *inven
 func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateOrderRequest, idempotencyKey *uuid.UUID) (*Order, error) {
 	// 1. Load cart
 	userCart, err := s.cartRepo.GetCartByUserID(ctx, userID)
-	if err != nil {
-		if errors.Is(err, cart.ErrCartNotFound) {
-			return nil, ErrEmptyCart
-		}
+	if err != nil && !errors.Is(err, cart.ErrCartNotFound) {
 		return nil, err
 	}
-	if len(userCart.Items) == 0 {
-		return nil, ErrEmptyCart
+
+	var cartItems []cart.CartItem
+	if userCart != nil {
+		cartItems = userCart.Items
 	}
 
-	// Calculate Request Hash
-	var requestHash string
 	if idempotencyKey != nil {
-		hashStr := calculateRequestHash(userID, req, userCart.Items)
-		requestHash = hashStr
-
 		existing, err := s.repo.GetOrderByIdempotencyKey(ctx, userID, *idempotencyKey)
 		if err == nil {
 			// Found existing order
+			itemsForHash := cartItems
+			if len(itemsForHash) == 0 {
+				for _, oi := range existing.Items {
+					itemsForHash = append(itemsForHash, cart.CartItem{
+						ProductID:        oi.ProductID,
+						ProductVariantID: oi.ProductVariantID,
+						Quantity:         oi.Quantity,
+					})
+				}
+			}
+			requestHash := calculateRequestHash(userID, req, itemsForHash)
 			if existing.CheckoutRequestHash != nil && *existing.CheckoutRequestHash == requestHash {
 				return existing, nil // Idempotent success, return existing order
 			}
@@ -66,6 +71,16 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 		} else if !errors.Is(err, ErrOrderNotFound) {
 			return nil, err
 		}
+	}
+
+	if len(cartItems) == 0 {
+		return nil, ErrEmptyCart
+	}
+
+	// Calculate Request Hash for new order
+	var requestHash string
+	if idempotencyKey != nil {
+		requestHash = calculateRequestHash(userID, req, cartItems)
 	}
 
 	dm, err := s.repo.GetDeliveryMethod(ctx, req.DeliveryMethodID)
