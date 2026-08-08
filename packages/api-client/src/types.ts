@@ -477,11 +477,20 @@ export interface SellerOrder {
 }
 
 export interface SellerReturn {
-  id: string;
+  returnItemId: string;
+  returnId: string;
+  orderId: string;
+  orderNumber?: string;
+  orderItemId: string;
   status: string;
+  quantity: number;
   reason?: string;
   condition?: string;
-  items?: any[];
+  productTitle: string;
+  imageUrl?: string;
+  priceCents: number;
+  subtotalPriceCents: number;
+  createdAt: string;
 }
 
 export interface SellerFulfillmentItem {

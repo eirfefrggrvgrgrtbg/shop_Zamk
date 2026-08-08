@@ -3,6 +3,7 @@ package returns
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -69,6 +70,7 @@ func (r *Repository) GetReturn(ctx context.Context, id uuid.UUID) (*Return, []Re
 		&ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt,
 	)
 	if err != nil {
+		fmt.Printf("GetReturn %v err: %v\n", id, err)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil, ErrReturnNotFound
 		}
@@ -154,10 +156,15 @@ func (r *Repository) ListAllReturns(ctx context.Context, limit, offset int) ([]R
 
 func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerReturnItem, error) {
 	query := `
-		SELECT ri.id, ri.return_id, r.order_id, ri.order_item_id, r.status, ri.quantity, ri.reason, ri.condition
+		SELECT 
+			ri.id, ri.return_id, r.order_id, o.order_number, ri.order_item_id, 
+			r.status, ri.quantity, ri.reason, ri.condition, 
+			oi.title, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity), 
+			r.created_at
 		FROM return_items ri
 		JOIN returns r ON r.id = ri.return_id
 		JOIN order_items oi ON oi.id = ri.order_item_id
+		JOIN orders o ON o.id = r.order_id
 		WHERE oi.seller_id = $1
 		ORDER BY r.created_at DESC
 		LIMIT $2 OFFSET $3
@@ -171,7 +178,7 @@ func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUI
 	var list []SellerReturnItem
 	for rows.Next() {
 		var item SellerReturnItem
-		if err := rows.Scan(&item.ReturnItemID, &item.ReturnID, &item.OrderID, &item.OrderItemID, &item.Status, &item.Quantity, &item.Reason, &item.Condition); err != nil {
+		if err := rows.Scan(&item.ReturnItemID, &item.ReturnID, &item.OrderID, &item.OrderNumber, &item.OrderItemID, &item.Status, &item.Quantity, &item.Reason, &item.Condition, &item.ProductTitle, &item.ImageURL, &item.PriceCents, &item.SubtotalPriceCents, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, item)
@@ -184,10 +191,15 @@ func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUI
 
 func (r *Repository) GetSellerReturnItemsForReturn(ctx context.Context, sellerID, returnID uuid.UUID) ([]SellerReturnItem, error) {
 	query := `
-		SELECT ri.id, ri.return_id, r.order_id, ri.order_item_id, r.status, ri.quantity, ri.reason, ri.condition
+		SELECT 
+			ri.id, ri.return_id, r.order_id, o.order_number, ri.order_item_id, 
+			r.status, ri.quantity, ri.reason, ri.condition, 
+			oi.title, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity), 
+			r.created_at
 		FROM return_items ri
 		JOIN returns r ON r.id = ri.return_id
 		JOIN order_items oi ON oi.id = ri.order_item_id
+		JOIN orders o ON o.id = r.order_id
 		WHERE oi.seller_id = $1 AND r.id = $2
 	`
 	rows, err := r.db.Query(ctx, query, sellerID, returnID)
@@ -199,7 +211,7 @@ func (r *Repository) GetSellerReturnItemsForReturn(ctx context.Context, sellerID
 	var list []SellerReturnItem
 	for rows.Next() {
 		var item SellerReturnItem
-		if err := rows.Scan(&item.ReturnItemID, &item.ReturnID, &item.OrderID, &item.OrderItemID, &item.Status, &item.Quantity, &item.Reason, &item.Condition); err != nil {
+		if err := rows.Scan(&item.ReturnItemID, &item.ReturnID, &item.OrderID, &item.OrderNumber, &item.OrderItemID, &item.Status, &item.Quantity, &item.Reason, &item.Condition, &item.ProductTitle, &item.ImageURL, &item.PriceCents, &item.SubtotalPriceCents, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, item)

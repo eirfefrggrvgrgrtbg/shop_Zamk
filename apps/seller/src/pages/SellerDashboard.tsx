@@ -143,7 +143,7 @@ export function SellerDashboard() {
     };
   }, []);
 
-  const activeOrders = data.orders.filter((order) => !['delivered', 'cancelled'].includes(order.commercialStatus)).length;
+  const activeOrders = data.orders.filter((order) => !['delivered', 'cancelled', 'returned', 'refunded', 'fully_returned'].includes(order.commercialStatus)).length;
   const totalStock = data.inventory.reduce((sum, item) => sum + (item.available ?? 0), 0);
 
   const checklist = [

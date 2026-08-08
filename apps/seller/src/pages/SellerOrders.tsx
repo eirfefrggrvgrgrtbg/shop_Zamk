@@ -13,6 +13,8 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   awaiting_payment: { label: 'Ожидает оплаты', color: 'bg-yellow-100 text-yellow-800' },
   paid: { label: 'Оплачен', color: 'bg-emerald-100 text-emerald-800' },
   cancelled: { label: 'Отменён', color: 'bg-red-100 text-red-800' },
+  has_return: { label: 'Есть возврат', color: 'bg-orange-100 text-orange-800' },
+  fully_returned: { label: 'Возвращён', color: 'bg-rose-100 text-rose-800' },
   returned: { label: 'Возврат', color: 'bg-rose-100 text-rose-800' },
   refunded: { label: 'Возмещён', color: 'bg-gray-100 text-gray-800' },
 };

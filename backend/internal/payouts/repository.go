@@ -68,6 +68,21 @@ func (r *Repository) CreateLedgerEntryTx(ctx context.Context, tx pgx.Tx, entry *
 	return err
 }
 
+func (r *Repository) GetSellerEarningEntryTx(ctx context.Context, tx pgx.Tx, orderItemID uuid.UUID) (*SellerLedgerEntry, error) {
+	query := `
+		SELECT id, seller_id, order_id, order_item_id, payout_batch_id, type, amount_cents, currency, available_at, metadata, created_at
+		FROM seller_ledger_entries
+		WHERE order_item_id = $1 AND type = 'seller_earning'
+		LIMIT 1
+	`
+	var e SellerLedgerEntry
+	err := tx.QueryRow(ctx, query, orderItemID).Scan(&e.ID, &e.SellerID, &e.OrderID, &e.OrderItemID, &e.PayoutBatchID, &e.Type, &e.AmountCents, &e.Currency, &e.AvailableAt, &e.Metadata, &e.CreatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &e, err
+}
+
 func (r *Repository) ListSellerLedger(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerLedgerEntry, int, error) {
 	query := `
 		SELECT id, seller_id, order_id, order_item_id, payout_batch_id, type, amount_cents, currency, available_at, metadata, created_at
@@ -144,7 +159,13 @@ func (r *Repository) GetSellerBalanceSummary(ctx context.Context, sellerID uuid.
 			}
 		case "adjustment":
 			if !hasBatch {
-				summary.AdjustmentsCents += total
+				if isAvailable != nil && *isAvailable {
+					summary.AdjustmentsCents += total
+				} else {
+					// Frozen adjustment (e.g. for a return of a still-frozen earning)
+					// We subtract it from the frozen amount.
+					sellerEarningFrozen += total
+				}
 			}
 		case "payout":
 			summary.PaidCents += total
@@ -226,7 +247,7 @@ func (r *Repository) LockAvailableLedgerEntriesTx(ctx context.Context, tx pgx.Tx
 		SELECT id, seller_id, order_id, order_item_id, payout_batch_id, type, amount_cents, currency, available_at, metadata, created_at
 		FROM seller_ledger_entries
 		WHERE seller_id = $1 
-		  AND (available_at <= now() OR type = 'adjustment')
+		  AND (available_at <= now() OR (type = 'adjustment' AND available_at IS NULL))
 		  AND payout_batch_id IS NULL
 		  AND type IN ('seller_earning', 'adjustment')
 		FOR UPDATE
@@ -298,7 +319,11 @@ func (r *Repository) GetAdminPayoutSummary(ctx context.Context) (*AdminPayoutSum
 				sellerEarningFrozen += total
 			}
 		case "adjustment":
-			adjustments += total
+			if isAvailable != nil && *isAvailable {
+				adjustments += total
+			} else {
+				sellerEarningFrozen += total
+			}
 		case "payout":
 			summary.TotalPaidCents += total // Wait, payouts are negative.
 		}

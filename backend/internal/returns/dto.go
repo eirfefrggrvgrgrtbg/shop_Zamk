@@ -1,6 +1,10 @@
 package returns
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type CreateReturnRequest struct {
 	Reason  string                   `json:"reason" validate:"required"`
@@ -47,14 +51,20 @@ type RefundListResponse struct {
 }
 
 type SellerReturnItem struct {
-	ReturnItemID uuid.UUID `json:"returnItemId"`
-	ReturnID     uuid.UUID `json:"returnId"`
-	OrderID      uuid.UUID `json:"orderId"`
-	OrderItemID  uuid.UUID `json:"orderItemId"`
-	Status       string    `json:"status"` // return status
-	Quantity     int       `json:"quantity"`
-	Reason       *string   `json:"reason"`
-	Condition    *string   `json:"condition"`
+	ReturnItemID       uuid.UUID `json:"returnItemId"`
+	ReturnID           uuid.UUID `json:"returnId"`
+	OrderID            uuid.UUID `json:"orderId"`
+	OrderNumber        *string   `json:"orderNumber"`
+	OrderItemID        uuid.UUID `json:"orderItemId"`
+	Status             string    `json:"status"` // return status
+	Quantity           int       `json:"quantity"`
+	Reason             *string   `json:"reason"`
+	Condition          *string   `json:"condition"`
+	ProductTitle       string    `json:"productTitle"`
+	ImageURL           *string   `json:"imageUrl"`
+	PriceCents         int64     `json:"priceCents"`
+	SubtotalPriceCents int64     `json:"subtotalPriceCents"`
+	CreatedAt          time.Time `json:"createdAt"`
 }
 
 type SellerReturnListResponse struct {

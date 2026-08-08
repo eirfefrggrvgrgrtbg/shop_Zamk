@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -283,9 +284,10 @@ func (h *Handler) CreateAdminRefund(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, ErrReturnAlreadyRefunded) {
-			h.writeError(w, http.StatusConflict, "already_refunded", err.Error())
+			h.writeError(w, http.StatusBadRequest, "already_refunded", "Return is already refunded or completed")
 			return
 		}
+		log.Printf("CreateRefund failed: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create refund")
 		return
 	}

@@ -9,12 +9,13 @@ import (
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 )
 
 type payoutsService interface {
-	ProcessRefundDeduction(ctx context.Context, refundID uuid.UUID, returnID uuid.UUID, orderID uuid.UUID, amountCents int64) error
+	ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnID uuid.UUID, orderID uuid.UUID, items []payouts.ReturnItemDeduction) error
 }
 
 type paymentsService interface {
@@ -330,12 +331,23 @@ func (s *Service) CreateRefund(ctx context.Context, adminID, returnID uuid.UUID,
 		}
 
 		// Process inventory restock for items marked restock=true
+		var deductionItems []payouts.ReturnItemDeduction
 		for _, item := range items {
+			deductionItems = append(deductionItems, payouts.ReturnItemDeduction{
+				OrderItemID: item.OrderItemID,
+				Quantity:    item.Quantity,
+			})
 			if item.Restock {
 				oi := orderItemMap[item.OrderItemID]
 				if err := s.inventorySvc.ProcessRestockTx(ctx, tx, oi.ProductVariantID, item.Quantity, &ret.ID); err != nil {
 					return err
 				}
+			}
+		}
+
+		if s.payouts != nil {
+			if err := s.payouts.ProcessReturnDeduction(ctx, tx, ret.ID, ret.OrderID, deductionItems); err != nil {
+				return err
 			}
 		}
 

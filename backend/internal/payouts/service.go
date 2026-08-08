@@ -3,6 +3,7 @@ package payouts
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
@@ -147,39 +148,82 @@ func (s *Service) CreatePendingSalesForOrder(ctx context.Context, orderID uuid.U
 	return tx.Commit(ctx)
 }
 
-func (s *Service) ProcessRefundDeduction(ctx context.Context, refundID uuid.UUID, returnID uuid.UUID, orderID uuid.UUID, amountCents int64) error {
-	// For simplicity, just insert a negative adjustment to offset earnings.
-	// Since order id is enough, we can attribute it back to the seller by querying the seller of this order.
-	items, err := s.orders.GetOrderItems(ctx, orderID)
+func (s *Service) ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnID uuid.UUID, orderID uuid.UUID, items []ReturnItemDeduction) error {
+	orderItems, err := s.orders.GetOrderItems(ctx, orderID)
 	if err != nil {
 		return err
 	}
-	if len(items) == 0 {
-		return nil
+	orderItemMap := make(map[uuid.UUID]orders.OrderItem)
+	for _, oi := range orderItems {
+		orderItemMap[oi.ID] = oi
 	}
-	// just assign to first item's seller
-	sellerID := items[0].SellerID
 
-	tx, err := s.dbPool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
+	for _, item := range items {
+		log.Printf("ProcessReturnDeduction: processing item: %+v", item)
+		oi, ok := orderItemMap[item.OrderItemID]
+		if !ok {
+			log.Printf("ProcessReturnDeduction: order item not found in orderItemMap for id %s", item.OrderItemID)
+			continue
+		}
 
-	err = s.repo.CreateLedgerEntryTx(ctx, tx, &SellerLedgerEntry{
-		ID:          uuid.New(),
-		SellerID:    sellerID,
-		OrderID:     &orderID,
-		Type:        "adjustment",
-		AmountCents: -amountCents,
-		Currency:    "RUB",
-		Metadata:    []byte(`{"reason":"refund","refund_id":"` + refundID.String() + `"}`),
-		CreatedAt:   time.Now(),
-	})
-	if err != nil {
-		return err
+		earningEntry, err := s.repo.GetSellerEarningEntryTx(ctx, tx, item.OrderItemID)
+		if err != nil {
+			log.Printf("ProcessReturnDeduction: error getting earning entry: %v", err)
+			return err
+		}
+		if earningEntry == nil {
+			log.Printf("ProcessReturnDeduction: earningEntry is nil for order item %s", item.OrderItemID)
+			continue // Should not happen for fulfilled orders
+		}
+		log.Printf("ProcessReturnDeduction: found earningEntry: %+v", earningEntry)
+
+		// Calculate proportional deduction
+		// Wait, earningEntry.AmountCents is the net earning for the entire quantity in oi.
+		// Net deduction per unit = earningEntry.AmountCents / int64(oi.Quantity)
+		if oi.Quantity <= 0 {
+			continue
+		}
+		deductionCents := (earningEntry.AmountCents / int64(oi.Quantity)) * int64(item.Quantity)
+
+		if earningEntry.PayoutBatchID != nil {
+			// POST-PAYOUT RETURN RECOVERY: DEFERRED logic.
+			// The funds were already paid. We insert an adjustment to offset future payouts.
+			err = s.repo.CreateLedgerEntryTx(ctx, tx, &SellerLedgerEntry{
+				ID:          uuid.New(),
+				SellerID:    earningEntry.SellerID,
+				OrderID:     &orderID,
+				OrderItemID: &item.OrderItemID,
+				Type:        "adjustment",
+				AmountCents: -deductionCents,
+				Currency:    "RUB",
+				Metadata:    []byte(`{"reason":"return_post_payout","return_id":"` + returnID.String() + `"}`),
+				CreatedAt:   time.Now(),
+			})
+			if err != nil {
+				return err
+			}
+		} else {
+			// Frozen or unfrozen but not yet paid.
+			// Insert a negative seller_earning with the EXACT SAME available_at to offset it mathematically.
+			err = s.repo.CreateLedgerEntryTx(ctx, tx, &SellerLedgerEntry{
+				ID:          uuid.New(),
+				SellerID:    earningEntry.SellerID,
+				OrderID:     &orderID,
+				OrderItemID: &item.OrderItemID,
+				Type:        "adjustment",
+				AmountCents: -deductionCents,
+				Currency:    "RUB",
+				AvailableAt: earningEntry.AvailableAt,
+				Metadata:    []byte(`{"reason":"return_deduction","return_id":"` + returnID.String() + `"}`),
+				CreatedAt:   time.Now(),
+			})
+			if err != nil {
+				return err
+			}
+		}
 	}
-	return tx.Commit(ctx)
+
+	return nil
 }
 
 // Called by a background job, or delivery webhook

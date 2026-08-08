@@ -40,3 +40,8 @@ type SellerLedgerEntry struct {
 	Metadata      []byte     `json:"metadata" db:"metadata"`
 	CreatedAt     time.Time  `json:"createdAt" db:"created_at"`
 }
+
+type ReturnItemDeduction struct {
+	OrderItemID uuid.UUID
+	Quantity    int
+}

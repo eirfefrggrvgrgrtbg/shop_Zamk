@@ -321,7 +321,11 @@ func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, l
 			o.id, 
 			o.order_number, 
 			o.created_at, 
-			o.status as commercial_status,
+			CASE
+				WHEN rs.refunded_units >= COALESCE(SUM(oi.quantity), 0) THEN 'fully_returned'
+				WHEN rs.refunded_units > 0 THEN 'has_return'
+				ELSE o.status
+			END as commercial_status,
 			COALESCE(s.status, 'pending') as delivery_status,
 			COUNT(oi.id) as seller_item_count,
 			COALESCE(SUM(oi.quantity), 0) as seller_units,
@@ -329,8 +333,18 @@ func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, l
 		FROM orders o
 		JOIN order_items oi ON o.id = oi.order_id
 		LEFT JOIN shipments s ON o.id = s.order_id
+		LEFT JOIN (
+			SELECT 
+				oi2.order_id,
+				SUM(ri.quantity) as refunded_units
+			FROM order_items oi2
+			JOIN return_items ri ON oi2.id = ri.order_item_id
+			JOIN returns r ON ri.return_id = r.id
+			WHERE r.status = 'refunded' AND oi2.seller_id = $1
+			GROUP BY oi2.order_id
+		) rs ON o.id = rs.order_id
 		WHERE oi.seller_id = $1
-		GROUP BY o.id, o.order_number, o.created_at, o.status, s.status
+		GROUP BY o.id, o.order_number, o.created_at, o.status, s.status, rs.refunded_units
 		ORDER BY o.created_at DESC
 		LIMIT $2 OFFSET $3
 	`
@@ -439,7 +453,11 @@ func (r *Repository) GetSellerOrder(ctx context.Context, sellerID, orderID uuid.
 			o.id, 
 			o.order_number, 
 			o.created_at, 
-			o.status as commercial_status,
+			CASE
+				WHEN rs.refunded_units >= COALESCE(SUM(oi.quantity), 0) THEN 'fully_returned'
+				WHEN rs.refunded_units > 0 THEN 'has_return'
+				ELSE o.status
+			END as commercial_status,
 			COALESCE(s.status, 'pending') as delivery_status,
 			COUNT(oi.id) as seller_item_count,
 			COALESCE(SUM(oi.quantity), 0) as seller_units,
@@ -447,8 +465,18 @@ func (r *Repository) GetSellerOrder(ctx context.Context, sellerID, orderID uuid.
 		FROM orders o
 		JOIN order_items oi ON o.id = oi.order_id
 		LEFT JOIN shipments s ON o.id = s.order_id
+		LEFT JOIN (
+			SELECT 
+				oi2.order_id,
+				SUM(ri.quantity) as refunded_units
+			FROM order_items oi2
+			JOIN return_items ri ON oi2.id = ri.order_item_id
+			JOIN returns r ON ri.return_id = r.id
+			WHERE r.status = 'refunded' AND oi2.seller_id = $2
+			GROUP BY oi2.order_id
+		) rs ON o.id = rs.order_id
 		WHERE o.id = $1 AND oi.seller_id = $2
-		GROUP BY o.id, o.order_number, o.created_at, o.status, s.status
+		GROUP BY o.id, o.order_number, o.created_at, o.status, s.status, rs.refunded_units
 	`
 	var o SellerOrder
 	err := r.db.QueryRow(ctx, query, orderID, sellerID).Scan(&o.ID, &o.OrderNumber, &o.CreatedAt, &o.CommercialStatus, &o.DeliveryStatus, &o.SellerItemCount, &o.SellerUnits, &o.SellerGrossAmount)

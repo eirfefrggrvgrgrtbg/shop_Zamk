@@ -109,7 +109,9 @@ export function SellerPayouts() {
                   >
                     <td className="px-4 py-3 whitespace-nowrap text-gray-900">{l.createdAt}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="font-medium text-gray-700">{l.type}</span>
+                      <span className="font-medium text-gray-700">
+                        {l.type === 'return_deduction' ? 'Возврат покупателю' : l.type}
+                      </span>
                       {l.orderId && <div className="text-xs text-gray-400 mt-0.5">Заказ</div>}
                     </td>
                     <td className={`px-4 py-3 whitespace-nowrap font-medium ${l.amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
@@ -204,7 +206,8 @@ export function SellerPayouts() {
                     <span className="text-gray-600 font-medium">
                       {entry.type === 'seller_earning' ? 'Чистый доход' : 
                        entry.type === 'sale_gross' ? 'Сумма продажи' :
-                       entry.type === 'zamk_commission' ? 'Комиссия ZAMK' : entry.type}
+                       entry.type === 'zamk_commission' ? 'Комиссия ZAMK' : 
+                       entry.type === 'adjustment' ? 'Корректировка' : entry.type}
                     </span>
                     <span className={`font-bold ${entry.amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                       {entry.amount > 0 ? '+' : ''}{currencyFormatter.format(entry.amount)}

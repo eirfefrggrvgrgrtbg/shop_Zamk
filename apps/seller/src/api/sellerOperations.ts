@@ -30,10 +30,7 @@ export function adaptOrders(data: SellerOrder[] | { items?: SellerOrder[] }) {
 }
 
 export function adaptReturns(data: SellerReturn[] | { items?: SellerReturn[] }) {
-  return unwrap(data).map(ret => ({
-    id: ret.id,
-    status: ret.status,
-  }));
+  return unwrap(data);
 }
 
 export function adaptReviews(data: SellerReview[] | { items?: SellerReview[] }) {
