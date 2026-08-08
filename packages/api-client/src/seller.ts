@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, InventoryItem, SellerOrder, SellerReturn, SellerReview, SellerBalance, Payout, SellerWarning, SellerViolation, SellerFulfillment } from './types';
+import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, SellerInventoryItem, SellerOrder, SellerReturn, SellerReview, SellerBalance, PayoutBatchListResponse, LedgerListResponse, SellerWarning, SellerViolation, SellerFulfillment, SellerSupply, CreateSupplyRequest } from './types';
 
 export const getSellerMe = async (): Promise<SellerMe> => {
   return request<SellerMe>('GET', '/seller/me');
@@ -41,8 +41,7 @@ export const deleteSellerProductImage = async (productId: string, imageId: strin
 export const reorderSellerProductImages = async (productId: string, imageIds: string[]): Promise<void> => {
   return request<void>('PUT', `/seller/products/${productId}/images/reorder`, { body: { imageIds } });
 };
-// P0 fix: backend returns { items, totalCount } not bare array
-export const getSellerInventory = async (): Promise<{ items: InventoryItem[]; totalCount: number }> => {
+export const getSellerInventory = async (): Promise<{ items: SellerInventoryItem[]; totalCount: number }> => {
   const res = await request<any>('GET', '/seller/inventory');
   return { ...res, items: res?.items || [] };
 };
@@ -51,6 +50,10 @@ export const getSellerInventory = async (): Promise<{ items: InventoryItem[]; to
 export const getSellerOrders = async (): Promise<{ items: SellerOrder[]; totalCount: number }> => {
   const res = await request<any>('GET', '/seller/orders');
   return { ...res, items: res?.items || [] };
+};
+
+export const getSellerOrderSummary = async (): Promise<any> => {
+  return request<any>('GET', '/seller/orders/summary');
 };
 
 export const getSellerOrder = async (id: string): Promise<SellerOrder> => {
@@ -108,13 +111,12 @@ export const getSellerBalance = async (): Promise<SellerBalance> => {
   return request<SellerBalance>('GET', '/seller/balance');
 };
 
-export const getSellerPayouts = async (): Promise<Payout[]> => {
-  const res = await request<any>('GET', '/seller/payouts');
-  return res?.items || (Array.isArray(res) ? res : []);
+export const getSellerLedger = async (limit = 50, offset = 0): Promise<LedgerListResponse> => {
+  return request<LedgerListResponse>('GET', `/seller/payouts/ledger?limit=${limit}&offset=${offset}`);
 };
 
-export const requestSellerPayout = async (amountCents: number, comment?: string): Promise<Payout> => {
-  return request<Payout>('POST', '/seller/payouts/request', { body: { amountCents, comment } });
+export const getSellerPayouts = async (limit = 50, offset = 0): Promise<PayoutBatchListResponse> => {
+  return request<PayoutBatchListResponse>('GET', `/seller/payouts?limit=${limit}&offset=${offset}`);
 };
 
 export const updateSellerMe = async (req: UpdateSellerProfileRequest): Promise<SellerMe> => {
@@ -133,8 +135,25 @@ export const getSellerWarnings = async (): Promise<SellerWarning[]> => {
 };
 
 export const getSellerViolations = async (): Promise<SellerViolation[]> => {
-  const res = await request<any>('GET', '/seller/violations');
+  const res = await request<{ items: SellerViolation[] }>('GET', '/seller/violations');
+  return res.items || [];
+};
+
+export const getSellerSupplies = async (): Promise<SellerSupply[]> => {
+  const res = await request<any>('GET', '/seller/supplies');
   return res?.items || (Array.isArray(res) ? res : []);
+};
+
+export const createSellerSupply = async (input: CreateSupplyRequest): Promise<SellerSupply> => {
+  return request<SellerSupply>('POST', '/seller/supplies', { body: input });
+};
+
+export const getSellerSupply = async (id: string): Promise<SellerSupply> => {
+  return request<SellerSupply>('GET', `/seller/supplies/${id}`);
+};
+
+export const shipSellerSupply = async (id: string): Promise<void> => {
+  return request<void>('POST', `/seller/supplies/${id}/ship`);
 };
 
 export const getModerationHistory = async (productId: string): Promise<{ items: any[] }> => {

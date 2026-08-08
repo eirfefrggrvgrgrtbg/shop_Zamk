@@ -4,13 +4,22 @@ import { AdminLogin } from './pages/AdminLogin';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminUsers } from './pages/AdminUsers';
 import { AdminSellers } from './pages/AdminSellers';
+import { AdminSellerDetail } from './pages/AdminSellerDetail';
 import { AdminAuctionsList } from './pages/AdminAuctionsList';
 import { AdminAuctionCreate } from './pages/AdminAuctionCreate';
 import { AdminAuctionDetail } from './pages/AdminAuctionDetail';
 import { AdminProducts } from './pages/AdminProducts';
 import { AdminModeration } from './pages/AdminModeration';
+import { AdminProductDetail } from './pages/AdminProductDetail';
+import { AdminModerationProductDetail } from './pages/AdminModerationProductDetail';
 import { AdminOrders } from './pages/AdminOrders';
+import { AdminOrderDetail } from './pages/AdminOrderDetail';
+import { AdminFulfillmentsList } from './pages/AdminFulfillmentsList';
+import { AdminReceivingScanner } from './pages/AdminReceivingScanner';
+import { AdminSupplyReceiving } from './pages/AdminSupplyReceiving';
+import { AdminOrderProblems } from './pages/AdminOrderProblems';
 import { AdminPayments } from './pages/AdminPayments';
+import { AdminPaymentDetail } from './pages/AdminPaymentDetail';
 import { AdminShipments } from './pages/AdminShipments';
 import { AdminInventory } from './pages/AdminInventory';
 import { AdminReturns } from './pages/AdminReturns';
@@ -42,6 +51,7 @@ export default function App() {
           <Route path="/dashboard" element={<AdminProtectedRoute><AdminLayout><AdminDashboard /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/users" element={<AdminProtectedRoute><AdminLayout><AdminUsers /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/sellers" element={<AdminProtectedRoute permission="sellers.read"><AdminLayout><AdminSellers /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/sellers/:id" element={<AdminProtectedRoute permission="sellers.read"><AdminLayout><AdminSellerDetail /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/auctions" element={<AdminProtectedRoute permission="auctions.read"><AdminLayout><AdminAuctionsList /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/auctions/new" element={<AdminProtectedRoute permission="auctions.create"><AdminLayout><AdminAuctionCreate /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/auctions/:id" element={<AdminProtectedRoute permission="auctions.read"><AdminLayout><AdminAuctionDetail /></AdminLayout></AdminProtectedRoute>} />
@@ -50,9 +60,17 @@ export default function App() {
           <Route path="/categories" element={<AdminProtectedRoute permission="categories.read"><AdminLayout><AdminCategories /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/brands" element={<AdminProtectedRoute permission="brands.read"><AdminLayout><AdminBrands /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/products" element={<AdminProtectedRoute permission="products.read"><AdminLayout><AdminProducts /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/products/:productId" element={<AdminProtectedRoute permission="products.read"><AdminLayout><AdminProductDetail /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/moderation" element={<AdminProtectedRoute permission="products.moderate"><AdminLayout><AdminModeration /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/moderation/products/:productId" element={<AdminProtectedRoute permission="products.moderate"><AdminLayout><AdminModerationProductDetail /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/orders" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminOrders /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/orders/fulfillments" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminFulfillmentsList /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/orders/receiving" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminReceivingScanner /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/supplies/receiving" element={<AdminProtectedRoute permission="inventory.read"><AdminLayout><AdminSupplyReceiving /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/orders/problems" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminOrderProblems /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/orders/:orderId" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminOrderDetail /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/payments" element={<AdminProtectedRoute permission="payments.read"><AdminLayout><AdminPayments /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/payments/:paymentId" element={<AdminProtectedRoute permission="payments.read"><AdminLayout><AdminPaymentDetail /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/shipments" element={<AdminProtectedRoute permission="shipments.read"><AdminLayout><AdminShipments /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/inventory" element={<AdminProtectedRoute permission="inventory.read"><AdminLayout><AdminInventory /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/returns" element={<AdminProtectedRoute permission="returns.read"><AdminLayout><AdminReturns /></AdminLayout></AdminProtectedRoute>} />

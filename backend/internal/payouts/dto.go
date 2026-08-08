@@ -1,45 +1,51 @@
 package payouts
 
+import "time"
+
 type BalanceResponse struct {
-	PendingBalanceCents   int64  `json:"pendingBalanceCents"`
-	AvailableBalanceCents int64  `json:"availableBalanceCents"`
-	RequestedPayoutsCents int64  `json:"requestedPayoutsCents"`
-	PaidPayoutsCents      int64  `json:"paidPayoutsCents"`
-	Currency              string `json:"currency"`
+	GrossSalesCents  int64  `json:"grossSalesCents"`
+	CommissionCents  int64  `json:"commissionCents"`
+	AdjustmentsCents int64  `json:"adjustmentsCents"`
+	FrozenCents      int64  `json:"frozenCents"`
+	AvailableCents   int64  `json:"availableCents"`
+	PaidCents        int64  `json:"paidCents"`
+	Currency         string `json:"currency"`
+	NextPayoutAt     *time.Time `json:"nextPayoutAt"`
 }
 
-type PayoutRequestDto struct {
-	AmountCents int64   `json:"amountCents" validate:"required,gt=0"`
-	Comment     *string `json:"comment"`
+type PayoutBatchListResponse struct {
+	Items      []PayoutBatch `json:"items"`
+	TotalCount int           `json:"totalCount"`
 }
 
-type UpdatePayoutStatusRequest struct {
-	Status  string  `json:"status" validate:"required,oneof=approved rejected paid cancelled"`
-	Comment *string `json:"comment"`
+type LedgerListResponse struct {
+	Items      []SellerLedgerEntry `json:"items"`
+	TotalCount int                 `json:"totalCount"`
 }
 
-type PayoutListResponse struct {
-	Items      []Payout `json:"items"`
-	TotalCount int      `json:"totalCount"`
+type AdminSellerCommissionRequest struct {
+	RateBPS int    `json:"rateBps" validate:"required,min=0,max=10000"`
+	Reason  string `json:"reason" validate:"required"`
 }
 
-type PayoutResponse struct {
-	Payout
+type PayoutFilter struct {
+	Q        string
+	SellerID string
+	Status   string
 }
 
 type AdminPayoutSummary struct {
-	TotalAvailableCents   int64 `json:"totalAvailableCents"`
-	TotalPendingCents     int64 `json:"totalPendingCents"`
-	TotalPaidCents        int64 `json:"totalPaidCents"`
-	TotalRejectedCents    int64 `json:"totalRejectedCents"`
-	TotalCommissionCents  int64 `json:"totalCommissionCents"`
-	Currency              string `json:"currency"`
+	TotalAvailableCents  int64  `json:"totalAvailableCents"`
+	TotalFrozenCents     int64  `json:"totalFrozenCents"`
+	TotalPaidCents       int64  `json:"totalPaidCents"`
+	TotalCommissionCents int64  `json:"totalCommissionCents"`
+	Currency             string `json:"currency"`
 }
 
 type AdminSellerBalance struct {
 	SellerID              string `json:"sellerId"`
 	SellerName            string `json:"sellerName"`
-	PendingBalanceCents   int64  `json:"pendingBalanceCents"`
+	FrozenBalanceCents    int64  `json:"frozenBalanceCents"`
 	AvailableBalanceCents int64  `json:"availableBalanceCents"`
 	Currency              string `json:"currency"`
 }
@@ -47,10 +53,4 @@ type AdminSellerBalance struct {
 type AdminSellerBalanceListResponse struct {
 	Items      []AdminSellerBalance `json:"items"`
 	TotalCount int                  `json:"totalCount"`
-}
-
-type PayoutFilter struct {
-	Q        string
-	SellerID string
-	Status   string
 }

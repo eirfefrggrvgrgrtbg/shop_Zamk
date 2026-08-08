@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, SlidersHorizontal, X, Check } from 'lucide-react';
 import { ProductCard } from '../components/product/ProductCard';
 import { Drawer } from '../components/ui/Drawer';
+import { Button } from '../components/ui/Button';
 import { SortDropdown } from '../components/editorial/StudioKit';
 import { fetchBrands, fetchCategories, fetchDirectSaleProducts } from '../api/publicCatalog';
 import type { Brand, Category, Product } from '../types/catalog';
@@ -453,13 +454,13 @@ export function DirectSale() {
                 </div>
                 <h3 className="text-xl font-serif text-graphite dark:text-white mb-2">Ничего не найдено</h3>
                 <p className="text-sm text-ash mb-4">Здесь пока нет вещей из прямых продаж.</p>
-                <button
+                <Button
                   type="button"
                   onClick={resetFilters}
-                  className="inline-flex h-10 items-center rounded-lg bg-graphite px-5 text-sm text-white"
+                  className="mt-2"
                 >
                   Сбросить фильтры
-                </button>
+                </Button>
               </div>
             )}
           </div>

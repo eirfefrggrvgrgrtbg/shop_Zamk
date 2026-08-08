@@ -1,6 +1,7 @@
 package products
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +24,25 @@ type CreateProductRequest struct {
 	Images           []ProductImageRequest   `json:"images,omitempty"`
 }
 
+func (req *CreateProductRequest) ValidateSKUs() error {
+	seen := make(map[string]bool)
+	for i := range req.Variants {
+		v := &req.Variants[i]
+		if v.SKU != nil {
+			// ZAMK Rule: SKU unique per Seller.
+			// Normalization: trim surrounding whitespace and case-insensitive comparison.
+			trimmed := strings.ToLower(strings.TrimSpace(*v.SKU))
+			if trimmed != "" {
+				if seen[trimmed] {
+					return &DuplicateSKUError{SKU: strings.TrimSpace(*v.SKU)}
+				}
+				seen[trimmed] = true
+			}
+		}
+	}
+	return nil
+}
+
 type UpdateProductRequest struct {
 	Title            *string                 `json:"title,omitempty"`
 	Slug             *string                 `json:"slug,omitempty"`
@@ -40,10 +60,30 @@ type UpdateProductRequest struct {
 	Images           []ProductImageRequest   `json:"images,omitempty"`
 }
 
+func (req *UpdateProductRequest) ValidateSKUs() error {
+	seen := make(map[string]bool)
+	for i := range req.Variants {
+		v := &req.Variants[i]
+		if v.SKU != nil {
+			// ZAMK Rule: SKU unique per Seller.
+			// Normalization: trim surrounding whitespace and case-insensitive comparison.
+			trimmed := strings.ToLower(strings.TrimSpace(*v.SKU))
+			if trimmed != "" {
+				if seen[trimmed] {
+					return &DuplicateSKUError{SKU: strings.TrimSpace(*v.SKU)}
+				}
+				seen[trimmed] = true
+			}
+		}
+	}
+	return nil
+}
+
 type ProductVariantRequest struct {
 	SKU          *string `json:"sku,omitempty"`
 	Size         *string `json:"size,omitempty"`
 	Color        *string `json:"color,omitempty"`
+	OptionValues map[string]interface{} `json:"optionValues,omitempty"`
 	Barcode      *string `json:"barcode,omitempty"`
 	PriceCents   *int64  `json:"priceCents,omitempty" validate:"omitempty,min=0"`
 	InitialStock *int    `json:"initialStock,omitempty" validate:"omitempty,min=0"`
@@ -60,7 +100,8 @@ type SubmitProductModerationRequest struct {
 }
 
 type AdminProductModerationRequest struct {
-	Comment *string `json:"comment,omitempty"`
+	Comment           *string `json:"comment,omitempty"`
+	ExpectedUpdatedAt *string `json:"expectedUpdatedAt,omitempty"`
 }
 
 type RejectProductRequest struct {
@@ -102,13 +143,14 @@ type PublicProduct struct {
 }
 
 type PublicProductVariant struct {
-	ID         uuid.UUID `json:"id"`
-	ProductID  uuid.UUID `json:"productId"`
-	Size       *string   `json:"size,omitempty"`
-	Color      *string   `json:"color,omitempty"`
-	PriceCents *int64    `json:"priceCents,omitempty"`
-	IsActive   bool      `json:"isActive"`
-	InStock    *bool     `json:"inStock,omitempty"`
+	ID           uuid.UUID `json:"id"`
+	ProductID    uuid.UUID `json:"productId"`
+	Size         *string   `json:"size,omitempty"`
+	Color        *string   `json:"color,omitempty"`
+	OptionValues map[string]interface{} `json:"optionValues,omitempty"`
+	PriceCents   *int64    `json:"priceCents,omitempty"`
+	IsActive     bool      `json:"isActive"`
+	InStock      *bool     `json:"inStock,omitempty"`
 }
 
 type PublicProductImage struct {
@@ -125,12 +167,14 @@ type PublicProductListResponse struct {
 }
 
 type ModerationHistoryItem struct {
-	ID         uuid.UUID `json:"id"`
-	ProductID  uuid.UUID `json:"productId"`
-	FromStatus *string   `json:"fromStatus,omitempty"`
-	ToStatus   string    `json:"toStatus"`
-	Comment    *string   `json:"comment,omitempty"`
-	CreatedAt  string    `json:"createdAt"` // Formatting time to ISO8601
+	ID          uuid.UUID  `json:"id"`
+	ProductID   uuid.UUID  `json:"productId"`
+	AdminUserID *uuid.UUID `json:"adminUserId,omitempty"`
+	AdminName   *string    `json:"adminName,omitempty"`
+	FromStatus  *string    `json:"fromStatus,omitempty"`
+	ToStatus    string     `json:"toStatus"`
+	Comment     *string    `json:"comment,omitempty"`
+	CreatedAt   string     `json:"createdAt"` // Formatting time to ISO8601
 }
 
 type ModerationHistoryResponse struct {
@@ -149,9 +193,55 @@ type PublicProductFilter struct {
 	Sort          *string    `json:"sort,omitempty"`
 }
 
-type AdminProductFilter struct {
-	Query    *string    `json:"q,omitempty"`
-	Status   *string    `json:"status,omitempty"`
-	SellerID *uuid.UUID `json:"sellerId,omitempty"`
-	Source   *string    `json:"source,omitempty"`
+type ModerationConfig struct {
+	WarningHours  int `json:"warningHours"`  // SLA Warning threshold in hours (default: 24)
+	CriticalHours int `json:"criticalHours"` // SLA Critical threshold in hours (default: 48)
 }
+
+type AdminModerationListResponse struct {
+	Items      []Product        `json:"items"`
+	TotalCount int              `json:"totalCount"`
+	Config     ModerationConfig `json:"config"`
+}
+
+type AdminProductFilter struct {
+	Query           *string      `json:"q,omitempty"`
+	Status          *string      `json:"status,omitempty"`
+	SellerID        *uuid.UUID   `json:"sellerId,omitempty"`
+	CategoryID      *uuid.UUID   `json:"categoryId,omitempty"`
+	CategoryIDs     []uuid.UUID  `json:"categoryIds,omitempty"`
+	BrandID         *uuid.UUID   `json:"brandId,omitempty"`
+	BrandIDs        []uuid.UUID  `json:"brandIds,omitempty"`
+	Source          *string      `json:"source,omitempty"`
+	HasProblems     *bool        `json:"hasProblems,omitempty"`
+	SubmittedPeriod *string      `json:"submittedPeriod,omitempty"`
+	SubmittedFrom   *time.Time   `json:"submittedFrom,omitempty"`
+	SubmittedTo     *time.Time   `json:"submittedTo,omitempty"`
+	NoMainImage     *bool        `json:"noMainImage,omitempty"`
+	NoDescription   *bool        `json:"noDescription,omitempty"`
+	NoBrand         *bool        `json:"noBrand,omitempty"`
+	NoVariants      *bool        `json:"noVariants,omitempty"`
+	NoPrice         *bool        `json:"noPrice,omitempty"`
+	DuplicateSKU    *bool        `json:"duplicateSku,omitempty"`
+	NoStock         *bool        `json:"noStock,omitempty"`
+	Resubmitted     *bool        `json:"resubmitted,omitempty"`
+	Sort            *string      `json:"sort,omitempty"`
+	SortOrder       *string      `json:"sortOrder,omitempty"`
+}
+
+type StartReviewRequest struct {
+	ExpectedUpdatedAt *time.Time `json:"expectedUpdatedAt,omitempty"`
+}
+
+type ProductPreviewLinkResponse struct {
+	PageURL        string `json:"pageUrl"`
+	CatalogCardURL string `json:"catalogCardUrl"`
+	ExpiresAt      string `json:"expiresAt"`
+}
+
+type ProductPublishErrorResponse struct {
+	Code    string   `json:"code"`
+	Message string   `json:"message"`
+	Reasons []string `json:"reasons"`
+}
+

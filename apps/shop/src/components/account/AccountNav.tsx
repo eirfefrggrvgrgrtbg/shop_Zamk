@@ -4,10 +4,11 @@ import { cn } from '../../lib/utils';
 
 const links = [
   { to: '/account', label: 'Профиль', icon: User, end: true },
-  { to: '/orders', label: 'Заказы', icon: ShoppingBag },
-  { to: '/favorites', label: 'Избранное', icon: Heart },
-  { to: '/orders', label: 'Возвраты', icon: RotateCcw },
-  { to: '/reviews', label: 'Отзывы', icon: Star },
+  { to: '/orders', label: 'Заказы', icon: ShoppingBag, end: true },
+  { to: '/favorites', label: 'Избранное', icon: Heart, end: true },
+  { to: '/returns', label: 'Возвраты', icon: RotateCcw, end: true },
+  { to: '/reviews', label: 'Отзывы', icon: Star, end: true },
+  { to: '/settings', label: 'Настройки', icon: RotateCcw, end: true },
 ];
 
 export function AccountNav() {

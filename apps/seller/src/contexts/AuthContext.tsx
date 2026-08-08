@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { me, logout as apiLogout } from '@zamk/api-client/src/auth';
+import { me, refresh, logout as apiLogout } from '@zamk/api-client/src/auth';
 import type { UserDTO } from '@zamk/api-client/src/types';
 
 interface AuthContextType {
@@ -36,6 +36,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const initAuth = useCallback(async () => {
     setIsInitializing(true);
+    try {
+      await refresh();
+    } catch (e) {
+      // Refresh might fail if no cookie, that's fine, me() will also fail
+    }
     await refreshUser();
     setIsInitializing(false);
   }, [refreshUser]);

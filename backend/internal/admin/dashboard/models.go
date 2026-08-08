@@ -20,6 +20,14 @@ type OverviewMetrics struct {
 	ActiveSellers     int   `json:"activeSellers"`
 	ActiveProducts    int   `json:"activeProducts"`
 	LowStockCount     int   `json:"lowStockCount"`
+
+	AverageDailyOrders20d            float64 `json:"averageDailyOrders20d"`
+	AverageDailyRevenue20dCents      int64   `json:"averageDailyRevenue20dCents"`
+	PreviousRevenue7dCents           int64   `json:"previousRevenue7dCents"`
+	AverageOrderValue7dCents         int64   `json:"averageOrderValue7dCents"`
+	PreviousAverageOrderValue7dCents int64   `json:"previousAverageOrderValue7dCents"`
+	Returns7d                        int     `json:"returns7d"`
+	PreviousReturns7d                int     `json:"previousReturns7d"`
 }
 
 type OrdersMetrics struct {
@@ -59,6 +67,7 @@ type InventoryMetrics struct {
 type PaymentsMetrics struct {
 	PaidOrdersSumCents  int64 `json:"paidOrdersSumCents"`
 	PendingPayoutsCents int64 `json:"pendingPayoutsCents"`
+	PaidPayoutsCents    int64 `json:"paidPayoutsCents"`
 	FailedPaymentsCount int   `json:"failedPaymentsCount"`
 }
 

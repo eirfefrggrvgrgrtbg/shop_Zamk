@@ -8,6 +8,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/common"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
@@ -44,13 +45,24 @@ func (h *Handler) WithAudit(ar *staff.AuditRepository) *Handler {
 // ---------------------------------------------------------
 
 func (h *Handler) writeError(w http.ResponseWriter, statusCode int, code, message string) {
+	h.writeErrorWithDetails(w, statusCode, code, message, nil)
+}
+
+func (h *Handler) writeErrorWithDetails(w http.ResponseWriter, statusCode int, code, message string, details map[string]any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
+	
+	errMap := map[string]any{
+		"code":    code,
+		"message": message,
+	}
+	
+	for k, v := range details {
+		errMap[k] = v
+	}
+	
 	json.NewEncoder(w).Encode(map[string]any{
-		"error": map[string]string{
-			"code":    code,
-			"message": message,
-		},
+		"error": errMap,
 	})
 }
 
@@ -103,6 +115,12 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrDuplicateSlug) {
 			h.writeError(w, http.StatusConflict, "duplicate_slug", "Product slug already exists")
+			return
+		}
+		var skuErr *DuplicateSKUError
+		if errors.As(err, &skuErr) {
+			msg := fmt.Sprintf("SKU «%s» уже используется в другом вашем товаре.", skuErr.SKU)
+			h.writeErrorWithDetails(w, http.StatusBadRequest, "duplicate_sku", msg, map[string]any{"sku": skuErr.SKU})
 			return
 		}
 		if errors.Is(err, ErrSellerNotFound) {
@@ -197,6 +215,12 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, ErrDuplicateSlug) {
 			h.writeError(w, http.StatusConflict, "duplicate_slug", "Product slug already exists")
+			return
+		}
+		var skuErr *DuplicateSKUError
+		if errors.As(err, &skuErr) {
+			msg := fmt.Sprintf("SKU «%s» уже используется в другом вашем товаре.", skuErr.SKU)
+			h.writeErrorWithDetails(w, http.StatusBadRequest, "duplicate_sku", msg, map[string]any{"sku": skuErr.SKU})
 			return
 		}
 		if errors.Is(err, ErrSellerBlocked) {
@@ -327,9 +351,7 @@ func (h *Handler) SubmitForModeration(w http.ResponseWriter, r *http.Request) {
 // Admin Handlers
 // ---------------------------------------------------------
 
-func (h *Handler) ListAdminProducts(w http.ResponseWriter, r *http.Request) {
-	page := pagination.FromRequest(r)
-
+func (h *Handler) parseAdminProductFilter(r *http.Request) AdminProductFilter {
 	filter := AdminProductFilter{}
 	q := r.URL.Query().Get("q")
 	if q != "" {
@@ -348,9 +370,103 @@ func (h *Handler) ListAdminProducts(w http.ResponseWriter, r *http.Request) {
 			filter.SellerID = &uid
 		}
 	}
+	if catID := r.URL.Query().Get("categoryId"); catID != "" && catID != "all" {
+		if id, err := uuid.Parse(catID); err == nil {
+			filter.CategoryID = &id
+		}
+	}
+	if catIDs := r.URL.Query().Get("categoryIds"); catIDs != "" {
+		for _, part := range strings.Split(catIDs, ",") {
+			if uid, err := uuid.Parse(strings.TrimSpace(part)); err == nil {
+				filter.CategoryIDs = append(filter.CategoryIDs, uid)
+			}
+		}
+	}
+	if brandID := r.URL.Query().Get("brandId"); brandID != "" && brandID != "all" {
+		if id, err := uuid.Parse(brandID); err == nil {
+			filter.BrandID = &id
+		}
+	}
+	if brandIDs := r.URL.Query().Get("brandIds"); brandIDs != "" {
+		for _, part := range strings.Split(brandIDs, ",") {
+			if uid, err := uuid.Parse(strings.TrimSpace(part)); err == nil {
+				filter.BrandIDs = append(filter.BrandIDs, uid)
+			}
+		}
+	}
+	if sp := r.URL.Query().Get("submittedPeriod"); sp != "" && sp != "all" {
+		filter.SubmittedPeriod = &sp
+	}
+
+	parseBoolFlag := func(key string) *bool {
+		val := r.URL.Query().Get(key)
+		if val == "true" || val == "1" {
+			t := true
+			return &t
+		}
+		return nil
+	}
+
+	filter.NoMainImage = parseBoolFlag("noMainImage")
+	filter.NoDescription = parseBoolFlag("noDescription")
+	filter.NoBrand = parseBoolFlag("noBrand")
+	filter.NoVariants = parseBoolFlag("noVariants")
+	filter.NoPrice = parseBoolFlag("noPrice")
+	filter.DuplicateSKU = parseBoolFlag("duplicateSku")
+	filter.NoStock = parseBoolFlag("noStock")
+	filter.Resubmitted = parseBoolFlag("resubmitted")
+
+	if filter.NoMainImage != nil || filter.NoDescription != nil || filter.NoBrand != nil || filter.NoVariants != nil || filter.NoPrice != nil || filter.DuplicateSKU != nil || filter.NoStock != nil || filter.Resubmitted != nil {
+		t := true
+		filter.HasProblems = &t
+	}
+
+	if sortBy := r.URL.Query().Get("sortBy"); sortBy != "" {
+		filter.Sort = &sortBy
+	}
+	if sortOrder := r.URL.Query().Get("sortOrder"); sortOrder != "" {
+		filter.SortOrder = &sortOrder
+	}
+	return filter
+}
+
+func (h *Handler) AdminUpdateProduct(w http.ResponseWriter, r *http.Request) {
+	productID, ok := h.parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	adminID, ok := h.getUserID(w, r)
+	if !ok {
+		return
+	}
+
+	var req UpdateProductRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_json", "Invalid JSON payload")
+		return
+	}
+
+	prod, err := h.service.AdminUpdateProduct(r.Context(), adminID, productID, req)
+	if err != nil {
+		if errors.Is(err, ErrProductNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Product not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(prod)
+}
+
+func (h *Handler) ListAdminProducts(w http.ResponseWriter, r *http.Request) {
+	page := pagination.FromRequest(r)
+	filter := h.parseAdminProductFilter(r)
 
 	resp, err := h.service.ListAdminProducts(r.Context(), filter, page.Limit, page.Offset)
 	if err != nil {
+		log.Printf("ERROR in ListAdminProducts (service): %v\n", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list products")
 		return
 	}
@@ -399,12 +515,14 @@ func (h *Handler) GetAdminModerationHistory(w http.ResponseWriter, r *http.Reque
 	items := make([]ModerationHistoryItem, 0, len(logs))
 	for _, l := range logs {
 		items = append(items, ModerationHistoryItem{
-			ID:         l.ID,
-			ProductID:  l.ProductID,
-			FromStatus: l.FromStatus,
-			ToStatus:   l.ToStatus,
-			Comment:    l.Comment,
-			CreatedAt:  l.CreatedAt.Format(time.RFC3339),
+			ID:          l.ID,
+			ProductID:   l.ProductID,
+			AdminUserID: l.AdminUserID,
+			AdminName:   l.AdminName,
+			FromStatus:  l.FromStatus,
+			ToStatus:    l.ToStatus,
+			Comment:     l.Comment,
+			CreatedAt:   l.CreatedAt.Format(time.RFC3339),
 		})
 	}
 
@@ -414,14 +532,30 @@ func (h *Handler) GetAdminModerationHistory(w http.ResponseWriter, r *http.Reque
 
 func (h *Handler) ListModerationProducts(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	resp, err := h.service.ListProductsForModeration(r.Context(), page.Limit, page.Offset)
+	filter := h.parseAdminProductFilter(r)
+	
+	// Ensure we only show pending_moderation if status is not provided or is all
+	if filter.Status == nil || *filter.Status == "all" || *filter.Status == "" {
+		s := "pending_moderation"
+		filter.Status = &s
+	}
+
+	resp, err := h.service.ListAdminProducts(r.Context(), filter, page.Limit, page.Offset)
 	if err != nil {
+		log.Printf("ERROR in ListModerationProducts (service): %v\n", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list products")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(AdminModerationListResponse{
+		Items:      resp.Items,
+		TotalCount: resp.TotalCount,
+		Config: ModerationConfig{
+			WarningHours:  24,
+			CriticalHours: 48,
+		},
+	})
 }
 
 func (h *Handler) AdminApproveProduct(w http.ResponseWriter, r *http.Request) {
@@ -431,8 +565,46 @@ func (h *Handler) AdminApproveProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) AdminPublishProduct(w http.ResponseWriter, r *http.Request) {
-	h.handleAdminModerationAction(w, r, "product.publish", func(ctx context.Context, adminID, productID uuid.UUID, comment *string) error {
-		return h.service.PublishProduct(ctx, adminID, productID, comment)
+	adminID, ok := h.getUserID(w, r)
+	if !ok {
+		return
+	}
+	productID, ok := h.parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+
+	var req AdminProductModerationRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	err := h.service.PublishProduct(r.Context(), adminID, productID, req.Comment)
+	if err != nil {
+		var notPubErr *ErrNotPublishable
+		if errors.As(err, &notPubErr) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(ProductPublishErrorResponse{
+				Code:    "product_not_publishable",
+				Message: "Товар не может быть опубликован на витрине",
+				Reasons: notPubErr.Reasons,
+			})
+			return
+		}
+		if errors.Is(err, ErrInvalidStatusTransition) {
+			h.writeError(w, http.StatusUnprocessableEntity, "invalid_status", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":            "ok",
+		"code":              "published",
+		"message":           "Товар успешно опубликован на витрине",
+		"actualVisibility":  true,
+		"visibilityReasons": []string{},
 	})
 }
 

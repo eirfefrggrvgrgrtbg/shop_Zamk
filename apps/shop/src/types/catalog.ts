@@ -40,6 +40,7 @@ export interface Product {
   sellerId?: string;
   sellerSlug?: string;
   sellerName?: string;
+  isPreview?: boolean;
 }
 
 export interface Brand {

@@ -202,6 +202,88 @@ func (r *Repository) ListInventoryBySeller(ctx context.Context, sellerID uuid.UU
 	return r.listInventoryItems(ctx, query, sellerID, limit, offset)
 }
 
+func (r *Repository) ListSellerInventoryRich(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerInventoryItem, int, error) {
+	baseQuery := `
+		FROM inventory_items i
+		JOIN products p ON i.product_id = p.id
+		JOIN product_variants pv ON i.product_variant_id = pv.id
+		WHERE i.seller_id = $1
+	`
+	args := []interface{}{sellerID}
+
+	countQuery := "SELECT COUNT(*) " + baseQuery
+	var totalCount int
+	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	selectQuery := `
+		SELECT 
+			i.product_variant_id, i.product_id, p.title, 
+			(SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY sort_order ASC, created_at ASC LIMIT 1) as image_url,
+			pv.option_values, pv.size, pv.color, pv.sku,
+			i.total_stock, i.reserved_stock,
+			COALESCE((
+				SELECT SUM(ssi.expected_quantity - ssi.accepted_quantity)
+				FROM seller_supply_items ssi
+				JOIN seller_supplies ss ON ssi.supply_id = ss.id
+				WHERE ssi.variant_id = i.product_variant_id 
+				  AND ss.status IN ('ready_to_ship', 'shipped_by_seller', 'arrived_at_zamk', 'receiving')
+			), 0) as inbound
+	` + baseQuery + `
+		ORDER BY p.title ASC, pv.sku ASC
+		LIMIT $2 OFFSET $3
+	`
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Query(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var items []SellerInventoryItem
+	for rows.Next() {
+		var item SellerInventoryItem
+		var imageUrl *string
+		var optionValues map[string]interface{}
+		var size, color, sku *string
+
+		err := rows.Scan(
+			&item.VariantID, &item.ProductID, &item.ProductTitle,
+			&imageUrl, &optionValues, &size, &color, &sku,
+			&item.OnHand, &item.Reserved, &item.Inbound,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		item.Image = imageUrl
+		item.Available = item.OnHand - item.Reserved
+		
+		if sku != nil {
+			item.SKU = *sku
+		}
+
+		// Merge legacy size/color into optionValues if optionValues is missing
+		if optionValues == nil {
+			optionValues = make(map[string]interface{})
+		}
+		if size != nil && *size != "" && optionValues["Размер"] == nil {
+			optionValues["Размер"] = *size
+		}
+		if color != nil && *color != "" && optionValues["Цвет"] == nil {
+			optionValues["Цвет"] = *color
+		}
+		item.OptionValues = optionValues
+
+		items = append(items, item)
+	}
+
+	return items, totalCount, nil
+}
+
 func (r *Repository) listInventoryItems(ctx context.Context, query string, args ...any) ([]Item, error) {
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {

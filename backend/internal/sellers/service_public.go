@@ -29,10 +29,18 @@ func (s *Service) GetPublicSeller(ctx context.Context, idOrSlug string) (*Public
 		return nil, ErrSellerNotFound
 	}
 
+	brandName := ""
+	if seller.BrandName != nil {
+		brandName = *seller.BrandName
+	}
+	slug := ""
+	if seller.Slug != nil {
+		slug = *seller.Slug
+	}
 	publicSeller := &PublicSeller{
 		ID:          seller.ID,
-		BrandName:   seller.BrandName,
-		Slug:        seller.Slug,
+		BrandName:   brandName,
+		Slug:        slug,
 		Description: seller.Description,
 		LogoURL:     seller.LogoURL,
 	}

@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, SlidersHorizontal, X, Check } from 'lucide-r
 import { ProductCard } from '../components/product/ProductCard';
 import { Drawer } from '../components/ui/Drawer';
 import { SortDropdown } from '../components/editorial/StudioKit';
+import { Button } from '../components/ui/Button';
 import { fetchBrands, fetchCategories, fetchProducts } from '../api/publicCatalog';
 import type { Brand, Category, Product } from '../types/catalog';
 import { cn } from '../lib/utils';
@@ -12,23 +13,11 @@ const SORT_OPTIONS = [
   { value: 'newest', label: 'Сначала новые' },
   { value: 'price_asc', label: 'Цена по возрастанию' },
   { value: 'price_desc', label: 'Цена по убыванию' },
+  { value: 'rating_desc', label: 'По высокому рейтингу' },
 ];
 
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
-const COLORS = [
-  { name: 'Чёрный', hex: '#1a1a1a' },
-  { name: 'Белый', hex: '#ffffff' },
-  { name: 'Серый', hex: '#8c8c8c' },
-  { name: 'Бежевый', hex: '#d4c4b0' },
-  { name: 'Синий', hex: '#2d4a6f' },
-  { name: 'Коричневый', hex: '#6b4423' },
-];
-const MATERIALS = ['Хлопок', 'Шерсть', 'Лён', 'Кашемир', 'Полиэстер', 'Шёлк'];
 const DEFAULT_PRICE_RANGE: [number, number] = [0, 100000];
-
-const normalizeText = (value: string) => value.toLowerCase().replace(/ё/g, 'е');
-
-const STYLES = ['Все', 'Спортвир', 'Арт', 'Авангард', 'Горпкор', 'Стритвир', 'Опиум', 'Y2K', 'Апсайкл', 'Архив', 'Кэжуал'];
 
 // Компонент раскрывающейся секции фильтра
 function FilterSection({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
@@ -101,11 +90,6 @@ export function Catalog() {
   const [activeSize, setActiveSize] = useState<string | null>(searchParams.get('size'));
   const [onlyInStock, setOnlyInStock] = useState(searchParams.get('inStock') === 'true');
 
-  // UI-only filters (color, material, style) — not wired to backend for MVP
-  const [activeStyles, setActiveStyles] = useState<string[]>([]);
-  const [activeColors, setActiveColors] = useState<string[]>([]);
-  const [activeMaterials, setActiveMaterials] = useState<string[]>([]);
-
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [apiProducts, setApiProducts] = useState<Product[]>([]);
   const [totalProducts, setTotalProducts] = useState(0);
@@ -118,7 +102,6 @@ export function Catalog() {
   const [hasMore, setHasMore] = useState(false);
   const PAGE_LIMIT = 24;
 
-  // Ref to track if categories/brands already loaded (only fetch once)
   const metaLoaded = useRef(false);
 
   const buildParams = useCallback(() => {
@@ -134,7 +117,6 @@ export function Catalog() {
     return params;
   }, [activeCategory, activeBrand, activeSize, onlyInStock, priceRange, sortBy, searchParams]);
 
-  // Fetch on filter/sort change — reset to page 1
   useEffect(() => {
     setOffset(0);
     setApiProducts([]);
@@ -198,69 +180,25 @@ export function Catalog() {
     }
   };
 
-
   const categoryOptions: Category[] = [{ id: 'all', slug: 'all', name: 'Все товары', icon: '✦' }, ...categories];
   const hasActivePriceFilter = priceRange[0] !== DEFAULT_PRICE_RANGE[0] || priceRange[1] !== DEFAULT_PRICE_RANGE[1];
-  const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeSize !== null || onlyInStock || activeStyles.length > 0 || activeColors.length > 0 || activeMaterials.length > 0 || hasActivePriceFilter;
-  const activeFiltersCount = activeStyles.length + activeColors.length + activeMaterials.length + (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (activeSize ? 1 : 0) + (onlyInStock ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
-
-  // Products from API — no local filtering needed
-  const filteredProducts = apiProducts;
+  const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeSize !== null || onlyInStock || hasActivePriceFilter;
+  const activeFiltersCount = (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (activeSize ? 1 : 0) + (onlyInStock ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
 
   const resetFilters = () => {
     setActiveCategory('all');
     setActiveBrand(null);
     setActiveSize(null);
     setOnlyInStock(false);
-    setActiveStyles([]);
-    setActiveColors([]);
-    setActiveMaterials([]);
     setPriceRange(DEFAULT_PRICE_RANGE);
   };
 
-  const toggleStyle = (style: string) => {
-    if (style === 'Все') {
-      setActiveStyles([]);
-      return;
-    }
-    setActiveStyles((prev) =>
-      prev.includes(style)
-        ? prev.filter((s) => s !== style)
-        : [...prev, style]
-    );
-  };
-
   const toggleSize = (size: string) => {
-    // Backend supports single size filter; toggle selects/deselects
     setActiveSize(prev => prev === size ? null : size);
   };
 
-  const toggleColor = (color: string) => {
-    setActiveColors(prev => prev.includes(color) ? prev.filter(c => c !== color) : [...prev, color]);
-  };
-
-  const toggleMaterial = (material: string) => {
-    setActiveMaterials(prev => prev.includes(material) ? prev.filter(m => m !== material) : [...prev, material]);
-  };
-
-
-  // Контент фильтров (переиспользуется для desktop и mobile)
   const FiltersContent = () => (
     <div className="flex flex-col px-1 pb-4">
-      {/* Стили */}
-      <FilterSection title="Стиль" defaultOpen={true}>
-        <div className="flex flex-col gap-1">
-          {STYLES.map((style) => (
-            <FilterCheckbox
-              key={style}
-              label={style}
-              isActive={style === 'Все' ? activeStyles.length === 0 : activeStyles.includes(style)}
-              onClick={() => toggleStyle(style)}
-            />
-          ))}
-        </div>
-      </FilterSection>
-
       {/* Категории */}
       <FilterSection title="Категории" defaultOpen={activeCategory !== 'all'}>
         <div className="flex flex-col gap-1">
@@ -295,32 +233,6 @@ export function Catalog() {
               )}
             >
               {size}
-            </button>
-          ))}
-        </div>
-      </FilterSection>
-
-
-      {/* Цвета */}
-      <FilterSection title="Цвет" defaultOpen={activeColors.length > 0}>
-        <div className="grid grid-cols-3 gap-2">
-          {COLORS.map((color) => (
-            <button
-              key={color.name}
-              onClick={() => toggleColor(color.name)}
-              title={color.name}
-              className={cn(
-                "h-8 px-2 border text-[10px] font-mono tracking-wider transition-all flex items-center gap-1.5 rounded-[2px]",
-                activeColors.includes(color.name)
-                  ? "bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
-                  : "bg-transparent border-black/20 dark:border-white/20 text-black/60 dark:text-white/60 hover:border-black/50 dark:hover:border-white/50 hover:text-black dark:hover:text-white"
-              )}
-            >
-              <span 
-                className="w-2.5 h-2.5 rounded-[1px] border border-black/30 shadow-inner block"
-                style={{ backgroundColor: color.hex }}
-              />
-              <span className="truncate">{color.name}</span>
             </button>
           ))}
         </div>
@@ -374,20 +286,6 @@ export function Catalog() {
         </div>
       </FilterSection>
 
-      {/* Материал */}
-      <FilterSection title="Материал" defaultOpen={activeMaterials.length > 0}>
-        <div className="flex flex-col gap-1">
-          {MATERIALS.map((material) => (
-            <FilterCheckbox
-              key={material}
-              label={material}
-              isActive={activeMaterials.includes(material)}
-              onClick={() => toggleMaterial(material)}
-            />
-          ))}
-        </div>
-      </FilterSection>
-
       {/* В наличии */}
       <FilterSection title="Наличие" defaultOpen={onlyInStock}>
         <button
@@ -406,15 +304,17 @@ export function Catalog() {
         </button>
       </FilterSection>
 
-
       {/* Кнопка сброса */}
       {hasActiveFilters && (
-        <button
-          onClick={resetFilters}
-          className="w-full mt-6 h-8 text-[10px] font-mono uppercase tracking-widest text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white border-b border-dashed border-black/20 dark:border-white/20 hover:border-black/60 dark:hover:border-white/60 transition-colors"
-        >
-          Сбросить фильтры
-        </button>
+        <div className="mt-6">
+          <Button
+            variant="outline"
+            onClick={resetFilters}
+            className="w-full h-10 text-xs font-mono uppercase tracking-widest border-dashed border-black/20 dark:border-white/20"
+          >
+            Сбросить фильтры
+          </Button>
+        </div>
       )}
 
       {/* Технический штамп / подвал (Archivecore) */}
@@ -427,9 +327,8 @@ export function Catalog() {
   );
 
   return (
-    <div className="relative z-10 min-h-screen pt-24 md:pt-28 pb-20">
+    <div className="relative z-10 min-h-screen pt-24 md:pt-28 pb-20 bg-background text-foreground transition-colors duration-300">
       <div className="container mx-auto px-4 sm:px-6 max-w-[1400px]">
-
         {/* Breadcrumbs */}
         <nav className="flex items-center gap-2 text-sm text-ash mb-6">
           <Link to="/" className="hover:text-graphite dark:hover:text-white transition-colors">Главная</Link>
@@ -463,7 +362,7 @@ export function Catalog() {
 
         {/* Main content */}
         <div className="flex gap-10">
-          {/* Desktop Sidebar Filters (Archivecore / Liquid Glass) */}
+          {/* Desktop Sidebar Filters */}
           <aside className="hidden lg:block w-[280px] flex-shrink-0 relative">
             <div className="sticky top-28 flex flex-col max-h-[calc(100vh-120px)] bg-white/5 dark:bg-[#111111]/5 backdrop-blur-[24px] rounded-[24px] border-[1px] border-white/20 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.04)] overflow-hidden">
               <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0 z-10 border-b border-black/5 dark:border-white/5">
@@ -484,7 +383,7 @@ export function Catalog() {
           <div className="flex-1 min-w-0">
             {/* Active filters tags */}
             {hasActiveFilters && (
-              <div className="flex flex-wrap gap-2 mb-4">
+              <div className="flex flex-wrap items-center gap-2 mb-6">
                 {activeCategory !== 'all' && (
                   <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
                     {categoryOptions.find(c => c.id === activeCategory)?.name}
@@ -509,69 +408,58 @@ export function Catalog() {
                     <button type="button" aria-label="Снять фильтр наличия" onClick={() => setOnlyInStock(false)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
-                {activeColors.map(color => (
-                  <span key={color} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
-                    {color}
-                    <button type="button" aria-label={`Снять фильтр цвета ${color}`} onClick={() => toggleColor(color)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
-                  </span>
-                ))}
-                {activeMaterials.map(material => (
-                  <span key={material} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
-                    {material}
-                    <button type="button" aria-label={`Снять фильтр материала ${material}`} onClick={() => toggleMaterial(material)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
-                  </span>
-                ))}
+                <Button variant="ghost" size="sm" onClick={resetFilters} className="text-xs ml-2">Сбросить все</Button>
               </div>
             )}
 
             {isLoading ? (
-              <div className="text-center py-16 px-4">
-                <div className="animate-spin w-8 h-8 mx-auto border-2 border-black border-t-transparent rounded-full dark:border-white dark:border-t-transparent" />
-                <h3 className="mt-4 text-graphite dark:text-white">Загрузка товаров...</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="animate-pulse flex flex-col gap-2">
+                    <div className="w-full aspect-[3/4] bg-black/5 dark:bg-white/5 rounded-2xl"></div>
+                    <div className="h-4 bg-black/5 dark:bg-white/5 rounded w-3/4"></div>
+                    <div className="h-4 bg-black/5 dark:bg-white/5 rounded w-1/2"></div>
+                  </div>
+                ))}
               </div>
             ) : error ? (
               <div className="text-center py-16 px-4">
                 <h3 className="text-xl font-serif text-error mb-2">Ошибка</h3>
                 <p className="text-sm text-ash">{error}</p>
+                <Button variant="outline" onClick={() => window.location.reload()} className="mt-4">Обновить страницу</Button>
               </div>
-            ) : filteredProducts.length > 0 ? (
+            ) : apiProducts.length > 0 ? (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
-                  {filteredProducts.map((product) => (
+                  {apiProducts.map((product) => (
                     <ProductCard key={product.id} product={product} />
                   ))}
                 </div>
                 {hasMore && (
                   <div className="flex justify-center mt-10">
-                    <button
-                      type="button"
+                    <Button
+                      variant="outline"
                       onClick={loadMore}
                       disabled={isLoadingMore}
-                      className="inline-flex items-center gap-2 h-11 px-8 rounded-lg border border-black/20 dark:border-white/20 text-sm font-mono uppercase tracking-wider text-graphite dark:text-white hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all disabled:opacity-50"
+                      className="px-8"
                     >
-                      {isLoadingMore ? (
-                        <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />Загрузка...</>
-                      ) : (
-                        <>Показать ещё</>           
-                      )}
-                    </button>
+                      {isLoadingMore ? 'Загрузка...' : 'Показать ещё'}
+                    </Button>
                   </div>
                 )}
               </>
             ) : (
-              <div className="text-center py-16 px-4">
+              <div className="text-center py-16 px-4 border border-dashed border-black/10 dark:border-white/10 rounded-2xl">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-ice dark:bg-white/10 flex items-center justify-center">
                   <SlidersHorizontal className="w-7 h-7 text-ash" />
                 </div>
                 <h3 className="text-xl font-serif text-graphite dark:text-white mb-2">Ничего не найдено</h3>
-                <p className="text-sm text-ash mb-4">Попробуйте изменить параметры фильтрации</p>
-                <button
-                  type="button"
+                <p className="text-sm text-ash mb-6">Попробуйте изменить параметры фильтрации</p>
+                <Button
                   onClick={resetFilters}
-                  className="inline-flex h-10 items-center rounded-lg bg-graphite px-5 text-sm text-white"
                 >
                   Сбросить фильтры
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -584,15 +472,14 @@ export function Catalog() {
           <FiltersContent />
         </div>
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-t border-black/10 dark:border-white/10">
-          <button
+          <Button
             onClick={() => setShowMobileFilters(false)}
-            className="w-full h-10 rounded-lg bg-black text-white dark:bg-white dark:text-black text-[12px] font-mono uppercase tracking-widest font-semibold"
+            className="w-full h-10"
           >
             Показать {totalProducts} товаров
-          </button>
+          </Button>
         </div>
       </Drawer>
     </div>
   );
 }
-

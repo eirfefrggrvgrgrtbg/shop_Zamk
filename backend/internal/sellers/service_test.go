@@ -85,9 +85,12 @@ func (s *stubSellerRepo) CountActivePenaltyViolations(_ context.Context, _ uuid.
 func completeSeller() *Seller {
 	desc := "A complete shop description that is long enough"
 	phone := "+7-999-000-0000"
+	brandName := "Test Shop"
+	slug := "test-shop"
+	email := "shop@example.com"
 	return &Seller{
-		ID: uuid.New(), BrandName: "Test Shop", Slug: "test-shop",
-		Description: &desc, ContactEmail: "shop@example.com", ContactPhone: &phone,
+		ID: uuid.New(), BrandName: &brandName, Slug: &slug,
+		Description: &desc, ContactEmail: &email, ContactPhone: &phone,
 		Status: StatusPending, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 }
@@ -103,16 +106,16 @@ func (svc *testSvc) VerifySeller(ctx context.Context, sellerID uuid.UUID, actorI
 		return nil, ErrSellerNotPending
 	}
 	var missing []string
-	if seller.BrandName == "" {
+	if seller.BrandName == nil || *seller.BrandName == "" {
 		missing = append(missing, "brandName")
 	}
-	if seller.Slug == "" {
+	if seller.Slug == nil || *seller.Slug == "" {
 		missing = append(missing, "slug")
 	}
 	if seller.Description == nil || len(*seller.Description) < 10 {
 		missing = append(missing, "description")
 	}
-	if seller.ContactEmail == "" && (seller.ContactPhone == nil || *seller.ContactPhone == "") {
+	if (seller.ContactEmail == nil || *seller.ContactEmail == "") && (seller.ContactPhone == nil || *seller.ContactPhone == "") {
 		missing = append(missing, "contactEmail or contactPhone")
 	}
 	if len(missing) > 0 {
@@ -157,7 +160,8 @@ func TestVerifySeller_PendingComplete(t *testing.T) {
 }
 
 func TestVerifySeller_PendingIncomplete(t *testing.T) {
-	s := &Seller{ID: uuid.New(), BrandName: "", Slug: "", Status: StatusPending}
+	emptyStr := ""
+	s := &Seller{ID: uuid.New(), BrandName: &emptyStr, Slug: &emptyStr, Status: StatusPending}
 	svc := &testSvc{repo: &stubSellerRepo{seller: s}}
 	_, err := svc.VerifySeller(context.Background(), s.ID, uuid.New())
 	if err == nil {

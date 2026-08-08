@@ -1,4 +1,4 @@
-import { InventoryItem, SellerOrder, SellerReturn, SellerReview } from '@zamk/api-client/src/types';
+import { SellerReturn, SellerReview } from '@zamk/api-client/src/types';
 
 // P0 fix: backend returns { items, totalCount } wrapper; unwrap defensively
 function unwrap<T>(data: T[] | { items?: T[] } | null | undefined): T[] {
@@ -6,13 +6,18 @@ function unwrap<T>(data: T[] | { items?: T[] } | null | undefined): T[] {
   return Array.isArray(data) ? data : (data.items ?? []);
 }
 
-export function adaptInventory(data: InventoryItem[] | { items?: InventoryItem[] }) {
-  return unwrap(data).map(item => ({
-    productId: item.productId,
-    availableStock: item.quantityAvailable,
-    reservedStock: item.quantityReserved,
-    totalStock: item.quantityAvailable + item.quantityReserved,
-  }));
+export interface SellerOrder {
+  id: string;
+  orderNumber: string;
+  createdAt: string;
+  status: string;
+  commercialStatus: string;
+  deliveryStatus: string;
+  totalPriceCents?: number;
+  sellerItemCount: number;
+  sellerUnits: number;
+  sellerGrossAmount: number;
+  items: any[]; // OrderItem[] but any is okay for this type issue
 }
 
 export function adaptOrders(data: SellerOrder[] | { items?: SellerOrder[] }) {

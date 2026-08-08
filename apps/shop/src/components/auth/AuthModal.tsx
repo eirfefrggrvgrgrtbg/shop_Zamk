@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatRussianPhone, normalizeRussianPhone } from '../../lib/phone';
 import { useAuth } from '../../contexts/AuthContext';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -18,6 +19,7 @@ export function AuthModal() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [middleName, setMiddleName] = useState('');
+  const [phone, setPhone] = useState('');
 
   const calculateStrength = (pass: string) => {
     let score = 0;
@@ -62,7 +64,15 @@ export function AuthModal() {
           setIsLoading(false);
           return;
         }
-        await register(firstName, lastName, middleName, email, password, passwordConfirm);
+        
+        const cleanPhone = normalizeRussianPhone(phone);
+        if (!cleanPhone || cleanPhone.length < 12) { // +7 + 10 digits
+          setError('Введите полный номер телефона.');
+          setIsLoading(false);
+          return;
+        }
+
+        await register(firstName, lastName, middleName, cleanPhone, email, password, passwordConfirm);
       } else if (authView === 'forgot_password') {
         await resetPassword(email);
         setSuccess('Ссылка для восстановления отправлена на ваш e-mail.');
@@ -70,7 +80,11 @@ export function AuthModal() {
         await changePassword(password, newPassword);
       }
     } catch (err: any) {
-      setError(err.message || 'Произошла ошибка при отправке');
+      if (!err.status || err.status === 500) {
+        setError('Не удалось создать аккаунт. Попробуйте ещё раз позже');
+      } else {
+        setError(err.message || 'Произошла ошибка при отправке');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -132,6 +146,16 @@ export function AuthModal() {
                 placeholder="Отчество, если есть"
                 value={middleName}
                 onChange={(e) => setMiddleName(e.target.value)}
+                className="bg-white/60 dark:bg-white/5 focus:bg-white dark:focus:bg-white/10 backdrop-blur-sm"
+              />
+              <Input 
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                placeholder="+7 (___) ___-__-__"
+                value={phone}
+                onChange={(e) => setPhone(formatRussianPhone(e.target.value))}
+                required
                 className="bg-white/60 dark:bg-white/5 focus:bg-white dark:focus:bg-white/10 backdrop-blur-sm"
               />
             </div>

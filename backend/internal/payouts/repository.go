@@ -2,8 +2,6 @@ package payouts
 
 import (
 	"context"
-	"errors"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,14 +17,98 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) GetSellerBalances(ctx context.Context, sellerID uuid.UUID) (*BalanceResponse, error) {
+// SellerCommissionRules
+func (r *Repository) GetActiveCommissionRule(ctx context.Context, sellerID uuid.UUID) (*SellerCommissionRule, error) {
+	query := `SELECT id, seller_id, rate_bps, reason, created_by, created_at FROM seller_commission_rules WHERE seller_id = $1 ORDER BY created_at DESC LIMIT 1`
+	var rule SellerCommissionRule
+	err := r.db.QueryRow(ctx, query, sellerID).Scan(&rule.ID, &rule.SellerID, &rule.RateBPS, &rule.Reason, &rule.CreatedBy, &rule.CreatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil // No rule found
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &rule, nil
+}
+
+func (r *Repository) ListCommissionRules(ctx context.Context, sellerID uuid.UUID) ([]SellerCommissionRule, error) {
+	query := `SELECT id, seller_id, rate_bps, reason, created_by, created_at FROM seller_commission_rules WHERE seller_id = $1 ORDER BY created_at DESC`
+	rows, err := r.db.Query(ctx, query, sellerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []SellerCommissionRule
+	for rows.Next() {
+		var rule SellerCommissionRule
+		if err := rows.Scan(&rule.ID, &rule.SellerID, &rule.RateBPS, &rule.Reason, &rule.CreatedBy, &rule.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, rule)
+	}
+	if list == nil {
+		list = []SellerCommissionRule{}
+	}
+	return list, nil
+}
+
+func (r *Repository) CreateCommissionRule(ctx context.Context, rule *SellerCommissionRule) error {
+	query := `INSERT INTO seller_commission_rules (id, seller_id, rate_bps, reason, created_by, created_at) VALUES ($1, $2, $3, $4, $5, $6)`
+	_, err := r.db.Exec(ctx, query, rule.ID, rule.SellerID, rule.RateBPS, rule.Reason, rule.CreatedBy, rule.CreatedAt)
+	return err
+}
+
+// Ledger Entries
+func (r *Repository) CreateLedgerEntryTx(ctx context.Context, tx pgx.Tx, entry *SellerLedgerEntry) error {
 	query := `
-		SELECT 
-			type,
-			SUM(amount_cents) as total
-		FROM seller_balance_ledger
+		INSERT INTO seller_ledger_entries (id, seller_id, order_id, order_item_id, payout_batch_id, type, amount_cents, currency, available_at, metadata, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`
+	_, err := tx.Exec(ctx, query, entry.ID, entry.SellerID, entry.OrderID, entry.OrderItemID, entry.PayoutBatchID, entry.Type, entry.AmountCents, entry.Currency, entry.AvailableAt, entry.Metadata, entry.CreatedAt)
+	return err
+}
+
+func (r *Repository) ListSellerLedger(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerLedgerEntry, int, error) {
+	query := `
+		SELECT id, seller_id, order_id, order_item_id, payout_batch_id, type, amount_cents, currency, available_at, metadata, created_at
+		FROM seller_ledger_entries
 		WHERE seller_id = $1
-		GROUP BY type
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+	rows, err := r.db.Query(ctx, query, sellerID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var list []SellerLedgerEntry
+	for rows.Next() {
+		var e SellerLedgerEntry
+		if err := rows.Scan(&e.ID, &e.SellerID, &e.OrderID, &e.OrderItemID, &e.PayoutBatchID, &e.Type, &e.AmountCents, &e.Currency, &e.AvailableAt, &e.Metadata, &e.CreatedAt); err != nil {
+			return nil, 0, err
+		}
+		list = append(list, e)
+	}
+	if list == nil {
+		list = []SellerLedgerEntry{}
+	}
+
+	var count int
+	err = r.db.QueryRow(ctx, `SELECT count(*) FROM seller_ledger_entries WHERE seller_id = $1`, sellerID).Scan(&count)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return list, count, nil
+}
+
+func (r *Repository) GetSellerBalanceSummary(ctx context.Context, sellerID uuid.UUID) (*BalanceResponse, error) {
+	query := `
+		SELECT type, available_at <= now(), payout_batch_id IS NOT NULL, SUM(amount_cents)
+		FROM seller_ledger_entries
+		WHERE seller_id = $1
+		GROUP BY type, available_at <= now(), payout_batch_id IS NOT NULL
 	`
 	rows, err := r.db.Query(ctx, query, sellerID)
 	if err != nil {
@@ -34,214 +116,159 @@ func (r *Repository) GetSellerBalances(ctx context.Context, sellerID uuid.UUID) 
 	}
 	defer rows.Close()
 
-	var pending, available, requested, paid int64
-	// availableBalanceCents = SUM(sale_available) + SUM(manual_adjustment) + SUM(refund_deduction) + SUM(payout_requested) + SUM(payout_rejected)
-	// pendingBalanceCents = SUM(sale_pending)
-	var saleAvailable, manualAdj, refundDeduction, payoutReq, payoutRej int64
+	summary := &BalanceResponse{Currency: "RUB"}
+	var sellerEarningAvailable int64
+	var sellerEarningFrozen int64
 
 	for rows.Next() {
 		var ltype string
+		var isAvailable *bool
+		var hasBatch bool
 		var total int64
-		if err := rows.Scan(&ltype, &total); err != nil {
+		if err := rows.Scan(&ltype, &isAvailable, &hasBatch, &total); err != nil {
 			return nil, err
 		}
+		
 		switch ltype {
-		case "sale_pending":
-			pending += total
-		case "sale_available":
-			saleAvailable += total
-		case "refund_deduction":
-			refundDeduction += total
-		case "manual_adjustment":
-			manualAdj += total
-		case "payout_requested":
-			payoutReq += total
-			requested -= total // it's negative in ledger, so we negate to show positive absolute value
-		case "payout_rejected":
-			payoutRej += total
-		case "payout_cancelled":
-			payoutRej += total
-		case "payout_paid":
-			paid += total // wait, payout_paid might be 0 amount audit marker or positive if we tracked it differently. If 0, it doesn't affect.
+		case "sale_gross":
+			summary.GrossSalesCents += total
+		case "zamk_commission":
+			summary.CommissionCents += total
+		case "seller_earning":
+			if !hasBatch {
+				if isAvailable != nil && *isAvailable {
+					sellerEarningAvailable += total
+				} else {
+					sellerEarningFrozen += total
+				}
+			}
+		case "adjustment":
+			if !hasBatch {
+				summary.AdjustmentsCents += total
+			}
+		case "payout":
+			summary.PaidCents += total
 		}
 	}
+	
+	// Payouts are paid. The total Available is the sum of (sellerEarningAvailable + adjustments + payouts (which are negative)).
+	// Because when a payout happens, we append a negative `payout` entry to ledger.
+	summary.AvailableCents = sellerEarningAvailable + summary.AdjustmentsCents + summary.PaidCents
+	summary.FrozenCents = sellerEarningFrozen
 
-	available = saleAvailable + manualAdj + refundDeduction + payoutReq + payoutRej
-
-	return &BalanceResponse{
-		PendingBalanceCents:   pending,
-		AvailableBalanceCents: available,
-		RequestedPayoutsCents: requested,
-		PaidPayoutsCents:      paid,
-		Currency:              "RUB",
-	}, nil
+	return summary, nil
 }
 
-func (r *Repository) InsertLedgerEntryTx(ctx context.Context, tx pgx.Tx, entry *SellerBalanceLedger) error {
+// Payout Batches
+func (r *Repository) ListPayoutBatches(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]PayoutBatch, int, error) {
 	query := `
-		INSERT INTO seller_balance_ledger (id, seller_id, order_id, order_item_id, return_id, refund_id, payout_id, type, amount_cents, currency, available_at, comment)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		RETURNING created_at
-	`
-	return tx.QueryRow(ctx, query, entry.ID, entry.SellerID, entry.OrderID, entry.OrderItemID, entry.ReturnID, entry.RefundID, entry.PayoutID, entry.Type, entry.AmountCents, entry.Currency, entry.AvailableAt, entry.Comment).Scan(&entry.CreatedAt)
-}
-
-func (r *Repository) HasSalePendingForOrderItem(ctx context.Context, orderItemID uuid.UUID) (bool, error) {
-	query := `SELECT 1 FROM seller_balance_ledger WHERE order_item_id = $1 AND type = 'sale_pending' LIMIT 1`
-	var tmp int
-	err := r.db.QueryRow(ctx, query, orderItemID).Scan(&tmp)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func (r *Repository) GetLedgerEntriesByType(ctx context.Context, tx pgx.Tx, ltype string, limit int, availableBefore time.Time) ([]SellerBalanceLedger, error) {
-	query := `
-		SELECT id, seller_id, order_id, order_item_id, return_id, refund_id, payout_id, type, amount_cents, currency, available_at, created_at, comment
-		FROM seller_balance_ledger
-		WHERE type = $1 AND available_at <= $2
-		LIMIT $3
-		FOR UPDATE SKIP LOCKED
-	`
-	rows, err := tx.Query(ctx, query, ltype, availableBefore, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var list []SellerBalanceLedger
-	for rows.Next() {
-		var entry SellerBalanceLedger
-		if err := rows.Scan(&entry.ID, &entry.SellerID, &entry.OrderID, &entry.OrderItemID, &entry.ReturnID, &entry.RefundID, &entry.PayoutID, &entry.Type, &entry.AmountCents, &entry.Currency, &entry.AvailableAt, &entry.CreatedAt, &entry.Comment); err != nil {
-			return nil, err
-		}
-		list = append(list, entry)
-	}
-	if list == nil {
-		list = make([]SellerBalanceLedger, 0)
-	}
-	return list, nil
-}
-
-func (r *Repository) HasSaleAvailableForOrderItem(ctx context.Context, orderItemID uuid.UUID) (bool, error) {
-	query := `SELECT 1 FROM seller_balance_ledger WHERE order_item_id = $1 AND type = 'sale_available' LIMIT 1`
-	var tmp int
-	err := r.db.QueryRow(ctx, query, orderItemID).Scan(&tmp)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func (r *Repository) CreatePayoutTx(ctx context.Context, tx pgx.Tx, payout *Payout) error {
-	query := `
-		INSERT INTO payouts (id, seller_id, status, amount_cents, currency, comment)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING requested_at, updated_at, created_at
-	`
-	return tx.QueryRow(ctx, query, payout.ID, payout.SellerID, payout.Status, payout.AmountCents, payout.Currency, payout.Comment).Scan(&payout.RequestedAt, &payout.UpdatedAt, &payout.CreatedAt)
-}
-
-func (r *Repository) GetPayout(ctx context.Context, id uuid.UUID) (*Payout, error) {
-	query := `
-		SELECT id, seller_id, status, amount_cents, currency, requested_at, approved_at, rejected_at, paid_at, admin_user_id, comment, created_at, updated_at
-		FROM payouts WHERE id = $1
-	`
-	var p Payout
-	err := r.db.QueryRow(ctx, query, id).Scan(
-		&p.ID, &p.SellerID, &p.Status, &p.AmountCents, &p.Currency, &p.RequestedAt, &p.ApprovedAt, &p.RejectedAt, &p.PaidAt, &p.AdminUserID, &p.Comment, &p.CreatedAt, &p.UpdatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrPayoutNotFound
-		}
-		return nil, err
-	}
-	return &p, nil
-}
-
-func (r *Repository) UpdatePayoutTx(ctx context.Context, tx pgx.Tx, payout *Payout) error {
-	query := `
-		UPDATE payouts
-		SET status = $1, approved_at = $2, rejected_at = $3, paid_at = $4, admin_user_id = $5, comment = $6, updated_at = now()
-		WHERE id = $7
-		RETURNING updated_at
-	`
-	return tx.QueryRow(ctx, query, payout.Status, payout.ApprovedAt, payout.RejectedAt, payout.PaidAt, payout.AdminUserID, payout.Comment, payout.ID).Scan(&payout.UpdatedAt)
-}
-
-func (r *Repository) ListSellerPayouts(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]Payout, error) {
-	query := `
-		SELECT id, seller_id, status, amount_cents, currency, requested_at, approved_at, rejected_at, paid_at, admin_user_id, comment, created_at, updated_at
-		FROM payouts WHERE seller_id = $1 ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3
+		SELECT id, seller_id, amount_cents, status, scheduled_for, processed_at, failure_reason, created_at, updated_at
+		FROM payout_batches WHERE seller_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 	`
 	rows, err := r.db.Query(ctx, query, sellerID, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
-
-	var list []Payout
+	var list []PayoutBatch
 	for rows.Next() {
-		var p Payout
-		if err := rows.Scan(&p.ID, &p.SellerID, &p.Status, &p.AmountCents, &p.Currency, &p.RequestedAt, &p.ApprovedAt, &p.RejectedAt, &p.PaidAt, &p.AdminUserID, &p.Comment, &p.CreatedAt, &p.UpdatedAt); err != nil {
-			return nil, err
+		var p PayoutBatch
+		if err := rows.Scan(&p.ID, &p.SellerID, &p.AmountCents, &p.Status, &p.ScheduledFor, &p.ProcessedAt, &p.FailureReason, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, 0, err
 		}
 		list = append(list, p)
 	}
 	if list == nil {
-		list = make([]Payout, 0)
+		list = []PayoutBatch{}
 	}
-	return list, nil
+	var count int
+	err = r.db.QueryRow(ctx, `SELECT count(*) FROM payout_batches WHERE seller_id = $1`, sellerID).Scan(&count)
+	return list, count, err
 }
 
-func (r *Repository) ListAllPayouts(ctx context.Context, limit, offset int) ([]Payout, error) {
+func (r *Repository) GetPayoutBatch(ctx context.Context, id uuid.UUID) (*PayoutBatch, error) {
 	query := `
-		SELECT id, seller_id, status, amount_cents, currency, requested_at, approved_at, rejected_at, paid_at, admin_user_id, comment, created_at, updated_at
-		FROM payouts ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
+		SELECT id, seller_id, amount_cents, status, scheduled_for, processed_at, failure_reason, created_at, updated_at
+		FROM payout_batches WHERE id = $1
 	`
-	rows, err := r.db.Query(ctx, query, limit, offset)
+	var p PayoutBatch
+	err := r.db.QueryRow(ctx, query, id).Scan(&p.ID, &p.SellerID, &p.AmountCents, &p.Status, &p.ScheduledFor, &p.ProcessedAt, &p.FailureReason, &p.CreatedAt, &p.UpdatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &p, err
+}
+
+func (r *Repository) CreatePayoutBatchTx(ctx context.Context, tx pgx.Tx, p *PayoutBatch) error {
+	query := `
+		INSERT INTO payout_batches (id, seller_id, amount_cents, status, scheduled_for, processed_at, failure_reason, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+	_, err := tx.Exec(ctx, query, p.ID, p.SellerID, p.AmountCents, p.Status, p.ScheduledFor, p.ProcessedAt, p.FailureReason, p.CreatedAt, p.UpdatedAt)
+	return err
+}
+
+func (r *Repository) UpdatePayoutBatchTx(ctx context.Context, tx pgx.Tx, p *PayoutBatch) error {
+	query := `
+		UPDATE payout_batches SET status=$1, processed_at=$2, failure_reason=$3, updated_at=now() WHERE id=$4
+	`
+	_, err := tx.Exec(ctx, query, p.Status, p.ProcessedAt, p.FailureReason, p.ID)
+	return err
+}
+
+// Atomic payout processing
+func (r *Repository) LockAvailableLedgerEntriesTx(ctx context.Context, tx pgx.Tx, sellerID uuid.UUID) ([]SellerLedgerEntry, error) {
+	// To prevent double payouts, we find entries that are "available" (available_at <= now())
+	// and are not yet linked to a payout batch.
+	// But wait, adjustments don't have available_at? Oh, we need to consider how adjustments and payouts work.
+	// Let's just lock all available unpayouted entries. Payout batch id is null for those that haven't been picked up.
+	query := `
+		SELECT id, seller_id, order_id, order_item_id, payout_batch_id, type, amount_cents, currency, available_at, metadata, created_at
+		FROM seller_ledger_entries
+		WHERE seller_id = $1 
+		  AND (available_at <= now() OR type = 'adjustment')
+		  AND payout_batch_id IS NULL
+		  AND type IN ('seller_earning', 'adjustment')
+		FOR UPDATE
+	`
+	rows, err := tx.Query(ctx, query, sellerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var list []Payout
+	var list []SellerLedgerEntry
 	for rows.Next() {
-		var p Payout
-		if err := rows.Scan(&p.ID, &p.SellerID, &p.Status, &p.AmountCents, &p.Currency, &p.RequestedAt, &p.ApprovedAt, &p.RejectedAt, &p.PaidAt, &p.AdminUserID, &p.Comment, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		var e SellerLedgerEntry
+		if err := rows.Scan(&e.ID, &e.SellerID, &e.OrderID, &e.OrderItemID, &e.PayoutBatchID, &e.Type, &e.AmountCents, &e.Currency, &e.AvailableAt, &e.Metadata, &e.CreatedAt); err != nil {
 			return nil, err
 		}
-		list = append(list, p)
-	}
-	if list == nil {
-		list = make([]Payout, 0)
+		list = append(list, e)
 	}
 	return list, nil
 }
 
-// GetTotalPaidByPayout calculates total paid amount (just in case we sum payout_paid)
-func (r *Repository) GetTotalPaidPayouts(ctx context.Context, sellerID uuid.UUID) (int64, error) {
-	query := `SELECT COALESCE(SUM(amount_cents), 0) FROM payouts WHERE seller_id = $1 AND status = 'paid'`
-	var total int64
-	err := r.db.QueryRow(ctx, query, sellerID).Scan(&total)
-	return total, err
+func (r *Repository) LinkLedgerEntriesToPayoutTx(ctx context.Context, tx pgx.Tx, payoutBatchID uuid.UUID, entryIDs []uuid.UUID) error {
+	if len(entryIDs) == 0 {
+		return nil
+	}
+	query := `UPDATE seller_ledger_entries SET payout_batch_id = $1 WHERE id = ANY($2)`
+	_, err := tx.Exec(ctx, query, payoutBatchID, entryIDs)
+	return err
+}
+
+func (r *Repository) UpdateAvailableAtByOrderIdTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, availableAt time.Time) error {
+	query := `UPDATE seller_ledger_entries SET available_at = $1 WHERE order_id = $2 AND type = 'seller_earning'`
+	_, err := tx.Exec(ctx, query, availableAt, orderID)
+	return err
 }
 
 func (r *Repository) GetAdminPayoutSummary(ctx context.Context) (*AdminPayoutSummary, error) {
+	// A simple aggregated view for admin
 	query := `
-		SELECT type, SUM(amount_cents) as total
-		FROM seller_balance_ledger
-		GROUP BY type
+		SELECT type, available_at <= now(), SUM(amount_cents)
+		FROM seller_ledger_entries
+		GROUP BY type, available_at <= now()
 	`
 	rows, err := r.db.Query(ctx, query)
 	if err != nil {
@@ -249,172 +276,61 @@ func (r *Repository) GetAdminPayoutSummary(ctx context.Context) (*AdminPayoutSum
 	}
 	defer rows.Close()
 
-	var summary AdminPayoutSummary
-	var salePending, saleAvailable, manualAdj, refundDeduction, payoutReq, payoutRej, payoutPaid int64
+	summary := &AdminPayoutSummary{Currency: "RUB"}
+	var sellerEarningFrozen, sellerEarningAvailable int64
+	var adjustments int64
 
 	for rows.Next() {
 		var ltype string
+		var isAvailable *bool
 		var total int64
-		if err := rows.Scan(&ltype, &total); err != nil {
+		if err := rows.Scan(&ltype, &isAvailable, &total); err != nil {
 			return nil, err
 		}
+		
 		switch ltype {
-		case "sale_pending":
-			salePending += total
-		case "sale_available":
-			saleAvailable += total
-		case "manual_adjustment":
-			manualAdj += total
-		case "refund_deduction":
-			refundDeduction += total
-		case "payout_requested":
-			payoutReq += total
-			summary.TotalPendingCents -= total // payoutReq is negative, so sub to get pos
-		case "payout_rejected":
-			payoutRej += total
-			summary.TotalRejectedCents += total // payout_rejected is positive
-		case "payout_cancelled":
-			payoutRej += total
-			summary.TotalRejectedCents += total
-		case "payout_paid":
-			payoutPaid += total
+		case "zamk_commission":
+			summary.TotalCommissionCents += total
+		case "seller_earning":
+			if isAvailable != nil && *isAvailable {
+				sellerEarningAvailable += total
+			} else {
+				sellerEarningFrozen += total
+			}
+		case "adjustment":
+			adjustments += total
+		case "payout":
+			summary.TotalPaidCents += total // Wait, payouts are negative.
 		}
 	}
 
-	summary.TotalAvailableCents = saleAvailable + manualAdj + refundDeduction + payoutReq + payoutRej
+	summary.TotalAvailableCents = sellerEarningAvailable + adjustments + summary.TotalPaidCents
+	summary.TotalFrozenCents = sellerEarningFrozen
+	// TotalCommissionCents is negative, make it positive for display
+	summary.TotalCommissionCents = -summary.TotalCommissionCents
+	// TotalPaidCents is negative, make it positive for display
+	summary.TotalPaidCents = -summary.TotalPaidCents
 
-	// Commission logic: Assuming we want commission from the marketplace orders
-	// For third-party orders: The seller net is stored as "sale_pending" (and later "sale_available"). 
-	// To get total marketplace commission, we might need a separate sum from order_fulfillments or calculate it based on something else.
-	// The prompt states: "total marketplace commission".
-	// Let's compute commission by summing (subtotal - seller_amount) from order_fulfillments for 3rd party sellers.
-	commQuery := `
-		SELECT COALESCE(SUM(subtotal_cents - seller_amount_cents), 0)
-		FROM order_fulfillments
-		WHERE seller_id != '00000000-0000-4000-8000-000000000000'
-	`
-	err = r.db.QueryRow(ctx, commQuery).Scan(&summary.TotalCommissionCents)
-	if err != nil {
-		return nil, err
-	}
-
-	// Wait, payoutPaid in ledger is often 0 or not perfectly mapped if "paid" doesn't create negative.
-	// Let's sum from payouts table directly for paid:
-	paidQuery := `SELECT COALESCE(SUM(amount_cents), 0) FROM payouts WHERE status = 'paid'`
-	err = r.db.QueryRow(ctx, paidQuery).Scan(&summary.TotalPaidCents)
-	if err != nil {
-		return nil, err
-	}
-
-	summary.Currency = "RUB"
-	return &summary, nil
+	return summary, nil
 }
 
-func (r *Repository) ListAdminSellerBalances(ctx context.Context, limit, offset int) ([]AdminSellerBalance, int, error) {
-	// Let's use a subquery to aggregate ledger by seller
-	query := `
-		WITH agg AS (
-			SELECT 
-				seller_id,
-				SUM(CASE WHEN type = 'sale_pending' THEN amount_cents ELSE 0 END) as pending_cents,
-				SUM(CASE WHEN type IN ('sale_available', 'manual_adjustment', 'refund_deduction', 'payout_requested', 'payout_rejected', 'payout_cancelled') THEN amount_cents ELSE 0 END) as available_cents
-			FROM seller_balance_ledger
-			GROUP BY seller_id
+// UnfreezeAvailableEntries marks ledger entries as available when their available_at
+// timestamp has elapsed. Returns how many rows were updated.
+func (r *Repository) UnfreezeAvailableEntries(ctx context.Context, now time.Time, limit int) (int, error) {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE seller_ledger_entries
+		SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{unfrozen}', 'true')
+		WHERE id IN (
+			SELECT id FROM seller_ledger_entries
+			WHERE available_at IS NOT NULL
+			  AND available_at <= $1
+			  AND (metadata->>'unfrozen') IS DISTINCT FROM 'true'
+			LIMIT $2
+			FOR UPDATE SKIP LOCKED
 		)
-		SELECT 
-			a.seller_id,
-			s.brand_name,
-			a.pending_cents,
-			a.available_cents
-		FROM agg a
-		JOIN sellers s ON s.id = a.seller_id
-		ORDER BY a.available_cents DESC
-		LIMIT $1 OFFSET $2
-	`
-	rows, err := r.db.Query(ctx, query, limit, offset)
+	`, now, limit)
 	if err != nil {
-		return nil, 0, err
+		return 0, err
 	}
-	defer rows.Close()
-
-	var list []AdminSellerBalance
-	for rows.Next() {
-		var b AdminSellerBalance
-		if err := rows.Scan(&b.SellerID, &b.SellerName, &b.PendingBalanceCents, &b.AvailableBalanceCents); err != nil {
-			return nil, 0, err
-		}
-		b.Currency = "RUB"
-		list = append(list, b)
-	}
-	if list == nil {
-		list = make([]AdminSellerBalance, 0)
-	}
-
-	var total int
-	err = r.db.QueryRow(ctx, `SELECT count(DISTINCT seller_id) FROM seller_balance_ledger`).Scan(&total)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return list, total, nil
-}
-
-func (r *Repository) ListAdminPayoutsFiltered(ctx context.Context, filter PayoutFilter, limit, offset int) ([]Payout, int, error) {
-	query := `
-		SELECT p.id, p.seller_id, p.status, p.amount_cents, p.currency, p.requested_at, p.approved_at, p.rejected_at, p.paid_at, p.admin_user_id, p.comment, p.created_at, p.updated_at
-		FROM payouts p
-		LEFT JOIN sellers s ON s.id = p.seller_id
-		WHERE 1=1
-	`
-	var args []interface{}
-	argIdx := 1
-
-	if filter.Status != "" {
-		query += ` AND p.status = $` + strconv.Itoa(argIdx)
-		args = append(args, filter.Status)
-		argIdx++
-	}
-
-	if filter.SellerID != "" {
-		if _, err := uuid.Parse(filter.SellerID); err == nil {
-			query += ` AND p.seller_id = $` + strconv.Itoa(argIdx)
-			args = append(args, filter.SellerID)
-			argIdx++
-		}
-	}
-
-	if filter.Q != "" {
-		query += ` AND (s.brand_name ILIKE $` + strconv.Itoa(argIdx) + ` OR p.id::text ILIKE $` + strconv.Itoa(argIdx) + `)`
-		args = append(args, "%"+filter.Q+"%")
-		argIdx++
-	}
-
-	countQuery := `SELECT count(*) FROM (` + query + `) as c`
-	var total int
-	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, 0, err
-	}
-
-	query += ` ORDER BY p.created_at DESC LIMIT $` + strconv.Itoa(argIdx) + ` OFFSET $` + strconv.Itoa(argIdx+1)
-	args = append(args, limit, offset)
-
-	rows, err := r.db.Query(ctx, query, args...)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-
-	var list []Payout
-	for rows.Next() {
-		var p Payout
-		if err := rows.Scan(&p.ID, &p.SellerID, &p.Status, &p.AmountCents, &p.Currency, &p.RequestedAt, &p.ApprovedAt, &p.RejectedAt, &p.PaidAt, &p.AdminUserID, &p.Comment, &p.CreatedAt, &p.UpdatedAt); err != nil {
-			return nil, 0, err
-		}
-		list = append(list, p)
-	}
-	if list == nil {
-		list = make([]Payout, 0)
-	}
-
-	return list, total, nil
+	return int(tag.RowsAffected()), nil
 }

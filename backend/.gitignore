@@ -2,3 +2,13 @@
 *.exe
 .system_generated/
 *.log
+
+# Compiled binaries
+main
+zamk-api
+cmd/**/main
+# SQLite databases
+*.sqlite
+database.sqlite
+# Profiling
+tmp_profile_*/

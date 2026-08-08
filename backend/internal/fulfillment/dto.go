@@ -26,3 +26,40 @@ type CustomerFulfillmentResponse struct {
 	ShipmentStatus  *string           `json:"shipmentStatus,omitempty"`
 	Items           []FulfillmentItem `json:"items"`
 }
+
+type ResolveReceivingCodeRequest struct {
+	Code string `json:"code"`
+}
+
+type ScanItemRequest struct {
+	Barcode         string `json:"barcode"`
+	ExpectedVersion int    `json:"expectedVersion"`
+	IdempotencyKey  string `json:"idempotencyKey"`
+}
+
+type ScannedItemState struct {
+	OrderItemID  string `json:"orderItemId"`
+	ProductID    string `json:"productId"`
+	ProductTitle string `json:"productTitle"`
+	VariantID    string `json:"variantId"`
+	SKU          string `json:"sku"`
+	ExpectedQty  int    `json:"expectedQty"`
+	ScannedQty   int    `json:"scannedQty"`
+	Status       string `json:"status"`
+}
+
+type ConfirmReceivingRequest struct {
+	SessionID       string             `json:"sessionId,omitempty"`
+	ExpectedVersion int                `json:"expectedVersion,omitempty"`
+	IdempotencyKey  string             `json:"idempotencyKey,omitempty"`
+	Comment         *string            `json:"comment,omitempty"`
+	Items           []ScannedItemState `json:"items,omitempty"`
+	Carrier         *string            `json:"carrier,omitempty"`
+}
+
+type RecordDiscrepancyRequest struct {
+	SessionID string             `json:"sessionId,omitempty"`
+	Reason    string             `json:"reason"`
+	Comment   string             `json:"comment"`
+	Items     []ScannedItemState `json:"items,omitempty"`
+}

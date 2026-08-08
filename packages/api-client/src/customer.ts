@@ -46,8 +46,18 @@ export const getCustomerOrderFulfillments = async (orderId: string): Promise<Cus
 };
 
 // P0 fix: was /pay, backend route is /payment
-export const createPayment = async (orderId: string): Promise<{ paymentUrl: string }> => {
-  return request<{ paymentUrl: string }>('POST', `/customer/orders/${orderId}/payment`);
+export const createPayment = async (orderId: string, method?: string): Promise<{
+  paymentId: string;
+  paymentNumber: string;
+  provider: string;
+  paymentMethod: string;
+  status: string;
+  amountCents: number;
+  currency: string;
+  paymentUrl: string;
+  integrationMode: string;
+}> => {
+  return request('POST', `/customer/orders/${orderId}/payment`, { body: { method } });
 };
 
 // P0 fix: path is /customer/orders/{orderId}/returns, body requires items[]

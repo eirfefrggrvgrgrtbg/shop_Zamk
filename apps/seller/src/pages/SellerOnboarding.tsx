@@ -1,10 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Store,
+  FileText,
+  Building2,
+  ArrowRight,
+  ShieldCheck,
+} from 'lucide-react';
 import { updateSellerMe, completeSellerOnboarding as apiCompleteSellerOnboarding } from '@zamk/api-client/src/seller';
 
 export function SellerOnboarding() {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,8 +26,8 @@ export function SellerOnboarding() {
     setError('');
     try {
       await updateSellerMe({
-        brandName,
-        slug,
+        brandName: brandName || 'Новый магазин',
+        slug: slug || `shop-${Date.now()}`,
         description,
         contactEmail,
         contactPhone,
@@ -37,86 +43,159 @@ export function SellerOnboarding() {
     }
   };
 
+  const isFormValid = brandName.length >= 2 && slug.length >= 3 && contactEmail.includes('@');
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Добро пожаловать в ZAMK
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Давайте настроим ваш магазин
-        </p>
-      </div>
+    <div className="relative z-10 min-h-screen pt-24 pb-24 md:pt-28 md:pb-20">
+      <div className="container mx-auto max-w-[1000px] px-4 sm:px-6">
+        <section className="glass-panel-strong p-7 md:p-10 mb-8 text-center">
+          <p className="studio-label justify-center">Onboarding</p>
+          <h1 className="mt-3 text-4xl font-serif leading-tight text-graphite dark:text-white md:text-5xl">
+            Добро пожаловать в ZAMK
+          </h1>
+          <p className="studio-subtitle mt-4 mx-auto max-w-2xl">
+            Для старта продаж необходимо настроить базовый профиль бренда.
+            Остальные шаги (договор, реквизиты) можно будет заполнить позже.
+          </p>
+        </section>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-xl">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          {error && (
-            <div className="mb-4 bg-red-50 text-red-600 p-3 rounded-md text-sm">
-              {error}
+        <div className="grid gap-6 md:grid-cols-[280px_1fr]">
+          <aside className="flex flex-col gap-3">
+            <div className="rounded-2xl border border-graphite/30 bg-white p-4 text-graphite shadow-sm dark:border-white/32 dark:bg-white/10 dark:text-white">
+              <div className="flex items-center gap-3">
+                <Store className="h-5 w-5" />
+                <span className="text-sm font-semibold">Профиль бренда</span>
+              </div>
+              <p className="mt-2 text-xs opacity-70">Заполняется сейчас</p>
             </div>
-          )}
-
-          {step === 1 && (
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Название магазина</label>
-                <input type="text" value={brandName} onChange={e => setBrandName(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+            
+            <div className="rounded-2xl border border-transparent bg-white/40 p-4 text-graphite-light dark:bg-white/5 dark:text-white/40">
+              <div className="flex items-center gap-3">
+                <Building2 className="h-5 w-5" />
+                <span className="text-sm font-semibold">Реквизиты компании</span>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">URL магазина (slug)</label>
-                <input type="text" value={slug} onChange={e => setSlug(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Описание</label>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Контактный Email</label>
-                <input type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Контактный телефон</label>
-                <input type="text" value={contactPhone} onChange={e => setContactPhone(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  className="bg-indigo-600 text-white px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                >
-                  Далее
-                </button>
-              </div>
+              <p className="mt-2 text-xs opacity-60">Доступно после модерации профиля</p>
             </div>
-          )}
 
-          {step === 2 && (
-            <div className="space-y-6">
-              <div className="bg-gray-50 p-4 rounded-md text-sm text-gray-700">
-                <h3 className="font-semibold mb-2">Условия платформы</h3>
-                <p>Здесь вы можете ознакомиться с комиссиями и условиями размещения...</p>
+            <div className="rounded-2xl border border-transparent bg-white/40 p-4 text-graphite-light dark:bg-white/5 dark:text-white/40">
+              <div className="flex items-center gap-3">
+                <FileText className="h-5 w-5" />
+                <span className="text-sm font-semibold">Подписание оферты</span>
+              </div>
+              <p className="mt-2 text-xs opacity-60">Требуется для первых выплат</p>
+            </div>
+          </aside>
+
+          <section className="glass-panel-strong p-6 md:p-8">
+            <h2 className="text-2xl font-serif text-graphite dark:text-white mb-6">
+              Информация о бренде
+            </h2>
+
+            {error && (
+              <div className="mb-6 rounded-xl bg-red-50 p-4 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-5">
+              <label className="block">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">
+                  Название бренда <span className="text-red-500">*</span>
+                </span>
+                <input 
+                  type="text" 
+                  value={brandName} 
+                  onChange={e => setBrandName(e.target.value)}
+                  placeholder="Например, ZAMK Selected"
+                  className="seller-setting-input mt-2 h-12 w-full rounded-2xl border border-border-lighter bg-white/78 px-4 text-sm text-graphite outline-none focus:border-graphite/30 dark:border-white/16 dark:bg-black/24 dark:text-white"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">
+                  URL магазина (slug) <span className="text-red-500">*</span>
+                </span>
+                <input 
+                  type="text" 
+                  value={slug} 
+                  onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                  placeholder="zamk-selected"
+                  className="seller-setting-input mt-2 h-12 w-full rounded-2xl border border-border-lighter bg-white/78 px-4 text-sm text-graphite outline-none focus:border-graphite/30 dark:border-white/16 dark:bg-black/24 dark:text-white"
+                />
+                <p className="mt-1 text-xs text-graphite-light dark:text-white/40">zamk.ru/brands/{slug || '...'}</p>
+              </label>
+
+              <label className="block">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">
+                  Контактный Email <span className="text-red-500">*</span>
+                </span>
+                <input 
+                  type="email" 
+                  value={contactEmail} 
+                  onChange={e => setContactEmail(e.target.value)}
+                  placeholder="brand@example.com"
+                  className="seller-setting-input mt-2 h-12 w-full rounded-2xl border border-border-lighter bg-white/78 px-4 text-sm text-graphite outline-none focus:border-graphite/30 dark:border-white/16 dark:bg-black/24 dark:text-white"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">
+                  Телефон для связи
+                </span>
+                <input 
+                  type="text" 
+                  value={contactPhone} 
+                  onChange={e => setContactPhone(e.target.value)}
+                  placeholder="+7 (999) 000-00-00"
+                  className="seller-setting-input mt-2 h-12 w-full rounded-2xl border border-border-lighter bg-white/78 px-4 text-sm text-graphite outline-none focus:border-graphite/30 dark:border-white/16 dark:bg-black/24 dark:text-white"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">
+                  Краткое описание
+                </span>
+                <textarea 
+                  value={description} 
+                  onChange={e => setDescription(e.target.value)}
+                  rows={3}
+                  placeholder="Расскажите о вашем бренде..."
+                  className="seller-setting-input mt-2 w-full resize-none rounded-2xl border border-border-lighter bg-white/78 px-4 py-3 text-sm text-graphite outline-none focus:border-graphite/30 dark:border-white/16 dark:bg-black/24 dark:text-white"
+                />
+              </label>
+
+              <div className="mt-8 rounded-2xl bg-ice/50 p-5 dark:bg-white/5">
+                <div className="flex items-start gap-3">
+                  <ShieldCheck className="h-5 w-5 text-graphite dark:text-white shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-semibold text-graphite dark:text-white">Условия платформы</h4>
+                    <p className="mt-1 text-xs text-graphite-light dark:text-white/60 leading-relaxed">
+                      Нажимая кнопку ниже, вы соглашаетесь с условиями работы на платформе ZAMK. 
+                      Комиссия платформы рассчитывается индивидуально после модерации ассортимента.
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex justify-between">
-                <button
-                  type="button"
-                  onClick={() => setStep(1)}
-                  className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md shadow-sm text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                >
-                  Назад
-                </button>
+              <div className="pt-4 flex justify-end">
                 <button
                   type="button"
                   onClick={completeOnboarding}
-                  disabled={loading}
-                  className="bg-indigo-600 text-white px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                  disabled={loading || !isFormValid}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-graphite px-8 text-sm font-semibold text-white transition-colors hover:bg-graphite-light disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-white/86"
                 >
-                  {loading ? 'Завершение...' : 'Завершить настройку'}
+                  {loading ? (
+                    'Отправка...'
+                  ) : (
+                    <>
+                      Завершить регистрацию
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
                 </button>
               </div>
             </div>
-          )}
+          </section>
         </div>
       </div>
     </div>

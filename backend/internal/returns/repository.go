@@ -210,14 +210,6 @@ func (r *Repository) GetSellerReturnItemsForReturn(ctx context.Context, sellerID
 	return list, nil
 }
 
-func (r *Repository) CreateRefundTx(ctx context.Context, tx pgx.Tx, ref *Refund) error {
-	query := `
-		INSERT INTO refunds (id, return_id, payment_id, order_id, status, amount_cents, currency, provider, provider_refund_id, reason)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING created_at, updated_at
-	`
-	return tx.QueryRow(ctx, query, ref.ID, ref.ReturnID, ref.PaymentID, ref.OrderID, ref.Status, ref.AmountCents, ref.Currency, ref.Provider, ref.ProviderRefundID, ref.Reason).Scan(&ref.CreatedAt, &ref.UpdatedAt)
-}
 
 func (r *Repository) GetTotalRefundedAmountForOrder(ctx context.Context, orderID uuid.UUID) (int64, error) {
 	query := `

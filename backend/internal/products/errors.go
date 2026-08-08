@@ -12,4 +12,26 @@ var (
 	ErrSellerBlocked           = errors.New("seller is blocked or archived")
 	ErrProductNotEditable      = errors.New("product cannot be edited in its current state")
 	ErrRejectionReasonRequired = errors.New("rejection reason is required")
+	ErrProductOptimisticLockFailed = errors.New("optimistic lock failed")
+	ErrInvalidPreviewToken     = errors.New("invalid or expired preview token")
+	ErrPreviewUnavailable      = errors.New("preview is currently unavailable")
+	ErrPreviewProductUnavailable = errors.New("product is not available for preview")
+	ErrRedisUnavailable        = errors.New("redis service unavailable")
 )
+
+type ErrNotPublishable struct {
+	Reasons []string
+}
+
+func (e *ErrNotPublishable) Error() string {
+	return "product is not publishable"
+}
+
+type DuplicateSKUError struct {
+	SKU string
+}
+
+func (e *DuplicateSKUError) Error() string {
+	return "SKU already exists: " + e.SKU
+}
+

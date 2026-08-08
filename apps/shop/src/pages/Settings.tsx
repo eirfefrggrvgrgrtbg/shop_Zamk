@@ -7,8 +7,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress } from '@zamk/api-client/src/customer';
 import { useToast } from '../contexts/ToastContext';
-import { CustomerProtectedRoute } from '../components/account/CustomerProtectedRoute';
-import { AccountNav } from '../components/account/AccountNav';
+import { AccountLayout } from '../components/account/AccountLayout';
 
 // --- Компоненты UI для настроек ---
 
@@ -128,22 +127,7 @@ export function Settings() {
   };
 
   return (
-    <CustomerProtectedRoute
-      title="Настройки"
-      description="Управление аккаунтом и предпочтениями."
-    >
-      <div className='relative z-10 min-h-screen pt-32 md:pt-40 pb-20'>
-        <div className='container mx-auto px-4 sm:px-6 max-w-[800px]'>
-          
-          <section className="mb-8 border-b border-border-lighter pb-8">
-            <p className="text-[13px] font-medium tracking-[0.14em] text-ash uppercase mb-3">Личный кабинет</p>
-            <h1 className="text-4xl md:text-5xl font-serif text-graphite dark:text-white tracking-tight leading-none">
-              Настройки
-            </h1>
-          </section>
-
-          <AccountNav />
-
+    <AccountLayout title="Настройки">
           <div className="mt-8">
             {/* 2. Внешний вид */}
         <Section title="Внешний вид">
@@ -316,8 +300,6 @@ export function Settings() {
           </Button>
         </div>
       </Modal>
-      </div>
-    </div>
-    </CustomerProtectedRoute>
+    </AccountLayout>
   );
 }

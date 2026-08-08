@@ -27,6 +27,7 @@ export function Checkout() {
   const [address, setAddress] = useState('');
   const [validationError, setValidationError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'tpay' | 'sbp'>('card');
 
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('new');
@@ -118,14 +119,20 @@ export function Checkout() {
         deliveryMethodId: selectedMethodId
       }, idempotencyKey);
 
-      const payment = await createPayment(order.id);
+      const payment = await createPayment(order.id, paymentMethod);
       
       setValidationError('');
       setDone(true);
       await clearCart();
       
-      if (payment.paymentUrl) {
-        window.location.href = payment.paymentUrl;
+      if (payment.integrationMode === 'mock') {
+        setTimeout(() => {
+          window.location.href = payment.paymentUrl;
+        }, 500);
+      } else {
+        if (payment.paymentUrl) {
+          window.location.href = payment.paymentUrl;
+        }
       }
     } catch (e: any) {
       if (e.message && e.message.includes('Idempotency key conflict')) {
@@ -270,14 +277,51 @@ export function Checkout() {
 
             <CheckoutPanel>
               <SectionHeader label='Шаг 3' title='Оплата' />
-              <div className='flex flex-wrap gap-2'>
-                <PillFilter label='Карта онлайн' active={true} />
-                <PillFilter label='СБП' active={false} />
-                <PillFilter label='При получении' active={false} />
-              </div>
-              <p className='mt-4 text-[13px] text-graphite-light dark:text-white/60 bg-ice dark:bg-white/5 p-3 rounded-xl border border-border-lighter dark:border-white/10'>
-                Внимание: Выполняется тестовая оплата для разработки. Реальное списание средств не производится.
-              </p>
+              {(() => {
+                const isTPayAvailable = true; // Enabled in dev / mock mode
+                return (
+                  <>
+                    <div className='flex flex-wrap gap-2 items-center'>
+                      <PillFilter label='Карта онлайн' active={paymentMethod === 'card'} onClick={() => setPaymentMethod('card')} />
+                      
+                      <button
+                        type="button"
+                        onClick={() => isTPayAvailable && setPaymentMethod('tpay')}
+                        disabled={!isTPayAvailable}
+                        className={`px-4 py-2 rounded-full text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+                          paymentMethod === 'tpay'
+                            ? 'bg-[#FFDD2D] text-black border-[#FFDD2D]'
+                            : isTPayAvailable
+                            ? 'bg-white dark:bg-white/5 text-graphite dark:text-white border-border-lighter dark:border-white/10 hover:border-graphite/30'
+                            : 'bg-gray-100 text-gray-400 border-gray-200 dark:bg-white/5 dark:text-white/30 dark:border-white/5 cursor-not-allowed'
+                        }`}
+                      >
+                        <span>T-Pay</span>
+                        {isTPayAvailable ? (
+                          <span className="text-[10px] bg-black/10 dark:bg-white/10 px-1.5 py-0.5 rounded font-medium">Тестовый режим</span>
+                        ) : (
+                          <span className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-1.5 py-0.5 rounded font-medium">Временно недоступен</span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={true}
+                        className="px-4 py-2 rounded-full text-xs font-medium border bg-gray-100 text-gray-400 border-gray-200 dark:bg-white/5 dark:text-white/30 dark:border-white/5 cursor-not-allowed flex items-center gap-1.5"
+                      >
+                        <span>СБП</span>
+                        <span className="text-[10px] bg-gray-200 text-gray-600 dark:bg-white/10 dark:text-white/50 px-1.5 py-0.5 rounded font-medium">Скоро</span>
+                      </button>
+                    </div>
+
+                    <p className='mt-4 text-[13px] text-graphite-light dark:text-white/60 bg-ice dark:bg-white/5 p-3 rounded-xl border border-border-lighter dark:border-white/10'>
+                      {paymentMethod === 'tpay'
+                        ? 'Внимание: Используется эмулятор T-Pay (Development Only). После клика «Оформить заказ» открывается тестовая страница подтверждения.'
+                        : 'Выполняется тестовая оплата по карте. Реальное списание средств не производится.'}
+                    </p>
+                  </>
+                );
+              })()}
             </CheckoutPanel>
           </div>
 

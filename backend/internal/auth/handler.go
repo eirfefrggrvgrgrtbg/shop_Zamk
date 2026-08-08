@@ -61,6 +61,30 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cleanPhone := strings.ReplaceAll(req.Phone, " ", "")
+	cleanPhone = strings.ReplaceAll(cleanPhone, "-", "")
+	cleanPhone = strings.ReplaceAll(cleanPhone, "(", "")
+	cleanPhone = strings.ReplaceAll(cleanPhone, ")", "")
+	if cleanPhone == "" {
+		h.writeError(w, http.StatusBadRequest, "invalid_phone", "Номер телефона обязателен.")
+		return
+	}
+	if !strings.HasPrefix(cleanPhone, "+") {
+		h.writeError(w, http.StatusBadRequest, "invalid_phone", "Номер телефона должен начинаться с +.")
+		return
+	}
+	if len(cleanPhone) < 11 || len(cleanPhone) > 16 {
+		h.writeError(w, http.StatusBadRequest, "invalid_phone", "Некорректная длина номера телефона.")
+		return
+	}
+	for _, c := range cleanPhone[1:] {
+		if c < '0' || c > '9' {
+			h.writeError(w, http.StatusBadRequest, "invalid_phone", "Номер телефона должен содержать только цифры после +.")
+			return
+		}
+	}
+	req.Phone = cleanPhone
+
 	ip := r.RemoteAddr
 	userAgent := r.UserAgent()
 
@@ -68,6 +92,10 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrDuplicateEmail) {
 			h.writeError(w, http.StatusConflict, "duplicate_email", err.Error())
+			return
+		}
+		if IsPasswordError(err) {
+			h.writeError(w, http.StatusBadRequest, "weak_password", err.Error())
 			return
 		}
 		log.Printf("registration failed: %v", err)

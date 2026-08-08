@@ -14,5 +14,10 @@
     "build:seller": "npm run build --workspace=seller",
     "build:admin": "npm run build --workspace=admin",
     "build": "npm run build --workspaces --if-present"
+  },
+  "dependencies": {
+    "axios": "^1.19.0",
+    "pg": "^8.22.0",
+    "playwright": "^1.62.1"
   }
 }

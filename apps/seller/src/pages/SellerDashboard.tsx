@@ -11,7 +11,7 @@ import {
   getSellerWarnings,
   getSellerViolations,
 } from '@zamk/api-client/src/seller';
-import type { InventoryItem, SellerBalance, SellerOrder, SellerProduct, SellerReturn, SellerMe, SellerWarning, SellerViolation } from '@zamk/api-client/src/types';
+import type { SellerInventoryItem, SellerBalance, SellerOrder, SellerProduct, SellerReturn, SellerMe, SellerWarning, SellerViolation } from '@zamk/api-client/src/types';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
   style: 'currency',
@@ -25,7 +25,7 @@ type DashboardState = {
   products: SellerProduct[];
   orders: SellerOrder[];
   returns: SellerReturn[];
-  inventory: InventoryItem[];
+  inventory: SellerInventoryItem[];
   balance: SellerBalance | null;
   sellerMe: SellerMe | null;
   warnings: SellerWarning[];
@@ -143,8 +143,8 @@ export function SellerDashboard() {
     };
   }, []);
 
-  const activeOrders = data.orders.filter((order) => !['delivered', 'cancelled'].includes(order.status)).length;
-  const totalStock = data.inventory.reduce((sum, item) => sum + (item.quantityAvailable ?? 0), 0);
+  const activeOrders = data.orders.filter((order) => !['delivered', 'cancelled'].includes(order.commercialStatus)).length;
+  const totalStock = data.inventory.reduce((sum, item) => sum + (item.available ?? 0), 0);
 
   const checklist = [
     { id: 'brandName', label: 'Название магазина', done: !!data.sellerMe?.seller.brandName },
@@ -217,7 +217,7 @@ export function SellerDashboard() {
               <MetricCard title="Активные заказы" value={String(activeOrders)} description="Заказы кроме доставленных и отменённых" icon={ShoppingCart} />
               <MetricCard title="Возвраты" value={String(data.returns.length)} description="Реальные возвраты продавца" icon={RotateCcw} />
               <MetricCard title="Остатки" value={String(totalStock)} description="Сумма доступных остатков" icon={Archive} />
-              <MetricCard title="Доступно к выплате" value={formatMoney(data.balance?.availableBalanceCents)} description="Баланс из API выплат" icon={Wallet} />
+              <MetricCard title="Доступно к выплате" value={formatMoney(data.balance?.availableCents)} description="Баланс из API выплат" icon={Wallet} />
               <MetricCard title="Предупреждения / нарушения" value={`${activeWarnings} / ${activeViolations}`} description="Активные предупреждения и нарушения" icon={AlertTriangle} />
             </section>
 

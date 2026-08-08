@@ -218,12 +218,15 @@ func (r *Repository) ListAdminOrders(ctx context.Context, q, status, paymentStat
 		SELECT 
 			o.id, o.user_id, o.status, 
 			MAX(COALESCE(f.status, 'pending')) as fulfillment_status,
+			COUNT(DISTINCT f.id)::int as fulfillments_count,
+			(SELECT COUNT(*) FROM order_items WHERE order_id = o.id)::int as item_positions_count,
+			(SELECT COALESCE(SUM(quantity), 0) FROM order_items WHERE order_id = o.id)::int as units_count,
 			CASE 
 				WHEN MAX(aol.id::text) IS NOT NULL THEN 'auction'
 				WHEN MAX(oi.seller_id::text) = '` + common.PlatformSellerIDStr + `' THEN 'direct_sale'
 				ELSE 'normal'
 			END as source_type,
-			o.total_price_cents, o.currency, o.customer_name, o.customer_email, o.created_at, o.updated_at, o.cancelled_at
+			o.order_number, o.total_price_cents, o.currency, o.customer_name, o.customer_email, o.created_at, o.updated_at, o.cancelled_at
 	` + baseQuery + `
 		GROUP BY o.id
 		ORDER BY o.created_at DESC
@@ -240,7 +243,7 @@ func (r *Repository) ListAdminOrders(ctx context.Context, q, status, paymentStat
 	var orders []AdminOrder
 	for rows.Next() {
 		var o AdminOrder
-		if err := rows.Scan(&o.ID, &o.UserID, &o.Status, &o.FulfillmentStatus, &o.SourceType, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerEmail, &o.CreatedAt, &o.UpdatedAt, &o.CancelledAt); err != nil {
+		if err := rows.Scan(&o.ID, &o.UserID, &o.Status, &o.FulfillmentStatus, &o.FulfillmentsCount, &o.ItemPositionsCount, &o.UnitsCount, &o.SourceType, &o.OrderNumber, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerEmail, &o.CreatedAt, &o.UpdatedAt, &o.CancelledAt); err != nil {
 			return nil, 0, err
 		}
 		orders = append(orders, o)
@@ -257,20 +260,21 @@ func (r *Repository) GetAdminOrderDetail(ctx context.Context, id uuid.UUID) (*Ad
 		SELECT 
 			o.id, o.user_id, o.status, 
 			(SELECT COALESCE(MAX(status), 'pending') FROM order_fulfillments WHERE order_id = o.id) as fulfillment_status,
+			(SELECT COUNT(*)::int FROM order_fulfillments WHERE order_id = o.id) as fulfillments_count,
 			CASE 
 				WHEN EXISTS(SELECT 1 FROM auction_order_links WHERE order_id = o.id) THEN 'auction'
 				WHEN EXISTS(SELECT 1 FROM order_items WHERE order_id = o.id AND seller_id = '` + common.PlatformSellerIDStr + `') THEN 'direct_sale'
 				ELSE 'normal'
 			END as source_type,
-			o.total_price_cents, o.currency, o.customer_name, o.customer_email, o.created_at, o.updated_at, o.cancelled_at,
+			o.order_number, o.total_price_cents, o.currency, o.customer_name, o.customer_email, o.created_at, o.updated_at, o.cancelled_at,
 			o.customer_phone, o.delivery_address, o.delivery_method_id, o.delivery_method_code, o.delivery_method_name, o.delivery_price_cents, o.delivery_estimated_days_min, o.delivery_estimated_days_max
 		FROM orders o
 		WHERE o.id = $1
 	`
 	var o AdminOrderDetail
 	err := r.db.QueryRow(ctx, query, id).Scan(
-		&o.ID, &o.UserID, &o.Status, &o.FulfillmentStatus, &o.SourceType,
-		&o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerEmail,
+		&o.ID, &o.UserID, &o.Status, &o.FulfillmentStatus, &o.FulfillmentsCount, &o.SourceType,
+		&o.OrderNumber, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerEmail,
 		&o.CreatedAt, &o.UpdatedAt, &o.CancelledAt,
 		&o.CustomerPhone, &o.DeliveryAddress, &o.DeliveryMethodID, &o.DeliveryMethodCode, &o.DeliveryMethodName, &o.DeliveryPriceCents, &o.DeliveryEstimatedDaysMin, &o.DeliveryEstimatedDaysMax,
 	)
@@ -313,12 +317,20 @@ func (r *Repository) GetAdminOrderDetail(ctx context.Context, id uuid.UUID) (*Ad
 
 func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerOrder, error) {
 	query := `
-		SELECT o.id, o.status, o.created_at, s.status
+		SELECT 
+			o.id, 
+			o.order_number, 
+			o.created_at, 
+			o.status as commercial_status,
+			COALESCE(s.status, 'pending') as delivery_status,
+			COUNT(oi.id) as seller_item_count,
+			COALESCE(SUM(oi.quantity), 0) as seller_units,
+			COALESCE(SUM(oi.subtotal_price_cents), 0) as seller_gross_amount
 		FROM orders o
 		JOIN order_items oi ON o.id = oi.order_id
 		LEFT JOIN shipments s ON o.id = s.order_id
 		WHERE oi.seller_id = $1
-		GROUP BY o.id, o.status, o.created_at, s.status
+		GROUP BY o.id, o.order_number, o.created_at, o.status, s.status
 		ORDER BY o.created_at DESC
 		LIMIT $2 OFFSET $3
 	`
@@ -331,9 +343,11 @@ func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, l
 	var orders []SellerOrder
 	for rows.Next() {
 		var o SellerOrder
-		if err := rows.Scan(&o.ID, &o.Status, &o.CreatedAt, &o.ShipmentStatus); err != nil {
+		if err := rows.Scan(&o.ID, &o.OrderNumber, &o.CreatedAt, &o.CommercialStatus, &o.DeliveryStatus, &o.SellerItemCount, &o.SellerUnits, &o.SellerGrossAmount); err != nil {
 			return nil, err
 		}
+		// Hardcode payout and refund to 0/empty if not queried. 
+		// For a full implementation, we would join ledger/refunds.
 		orders = append(orders, o)
 	}
 
@@ -369,17 +383,75 @@ func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, l
 	return orders, nil
 }
 
+func (r *Repository) GetSellerOrderSummary(ctx context.Context, sellerID uuid.UUID) (*SellerOrderSummary, error) {
+	query := `
+		SELECT 
+			COALESCE(SUM(oi.quantity), 0) as today_units,
+			COUNT(DISTINCT o.id) as today_orders,
+			(
+				SELECT COALESCE(SUM(oi2.subtotal_price_cents), 0)
+				FROM orders o2
+				JOIN order_items oi2 ON o2.id = oi2.order_id
+				WHERE oi2.seller_id = $1 AND o2.created_at >= NOW() - INTERVAL '7 days'
+			) as last_7d_gross,
+			(
+				SELECT COALESCE(SUM(oi3.subtotal_price_cents), 0)
+				FROM orders o3
+				JOIN order_items oi3 ON o3.id = oi3.order_id
+				WHERE oi3.seller_id = $1 AND o3.created_at >= NOW() - INTERVAL '30 days'
+			) as last_30d_gross,
+			(
+				SELECT COUNT(DISTINCT r.id)
+				FROM returns r
+				JOIN return_items ri ON r.id = ri.return_id
+				JOIN order_items oi4 ON ri.order_item_id = oi4.id
+				WHERE oi4.seller_id = $1
+			) as returns_count,
+			(
+				SELECT COALESCE(SUM(oi5.price_cents * ri2.quantity), 0)
+				FROM returns r2
+				JOIN return_items ri2 ON r2.id = ri2.return_id
+				JOIN order_items oi5 ON ri2.order_item_id = oi5.id
+				WHERE oi5.seller_id = $1
+			) as returns_amount
+		FROM orders o
+		JOIN order_items oi ON o.id = oi.order_id
+		WHERE oi.seller_id = $1 AND o.created_at >= CURRENT_DATE
+	`
+	var summary SellerOrderSummary
+	err := r.db.QueryRow(ctx, query, sellerID).Scan(
+		&summary.TodayUnits,
+		&summary.TodayOrders,
+		&summary.Last7dGross,
+		&summary.Last30dGross,
+		&summary.ReturnsCount,
+		&summary.ReturnsAmount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &summary, nil
+}
+
 func (r *Repository) GetSellerOrder(ctx context.Context, sellerID, orderID uuid.UUID) (*SellerOrder, error) {
 	query := `
-		SELECT o.id, o.status, o.created_at, s.status
+		SELECT 
+			o.id, 
+			o.order_number, 
+			o.created_at, 
+			o.status as commercial_status,
+			COALESCE(s.status, 'pending') as delivery_status,
+			COUNT(oi.id) as seller_item_count,
+			COALESCE(SUM(oi.quantity), 0) as seller_units,
+			COALESCE(SUM(oi.subtotal_price_cents), 0) as seller_gross_amount
 		FROM orders o
 		JOIN order_items oi ON o.id = oi.order_id
 		LEFT JOIN shipments s ON o.id = s.order_id
 		WHERE o.id = $1 AND oi.seller_id = $2
-		LIMIT 1
+		GROUP BY o.id, o.order_number, o.created_at, o.status, s.status
 	`
 	var o SellerOrder
-	err := r.db.QueryRow(ctx, query, orderID, sellerID).Scan(&o.ID, &o.Status, &o.CreatedAt, &o.ShipmentStatus)
+	err := r.db.QueryRow(ctx, query, orderID, sellerID).Scan(&o.ID, &o.OrderNumber, &o.CreatedAt, &o.CommercialStatus, &o.DeliveryStatus, &o.SellerItemCount, &o.SellerUnits, &o.SellerGrossAmount)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrOrderNotFound

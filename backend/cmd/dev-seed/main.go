@@ -108,22 +108,15 @@ func main() {
 		if err != nil {
 			return err
 		}
-		productID, err := upsertProduct(ctx, tx, sellerID, categoryID, brandID)
-		if err != nil {
-			return err
-		}
-		variantID, err := upsertVariant(ctx, tx, productID)
-		if err != nil {
-			return err
-		}
-		if err := upsertProductImage(ctx, tx, productID); err != nil {
-			return err
-		}
-		if err := upsertInventory(ctx, tx, productID, variantID, sellerID, adminID); err != nil {
+		if err := seedDevProducts(ctx, tx, sellerID, categoryID, brandID, adminID); err != nil {
 			return err
 		}
 
-		logger.Info("local dev seed ready", "adminUserId", adminID, "sellerUserId", sellerUserID, "customerUserId", customerID, "sellerId", sellerID, "productId", productID)
+		if err := upsertPaymentFixtures(ctx, tx, customerID); err != nil {
+			return err
+		}
+
+		logger.Info("local dev seed ready", "adminUserId", adminID, "sellerUserId", sellerUserID, "customerUserId", customerID, "sellerId", sellerID)
 		return nil
 	}); err != nil {
 		logger.Error("failed to seed local dev data", "error", err)
@@ -159,8 +152,9 @@ func upsertUser(ctx context.Context, tx postgres.DBTX, id uuid.UUID, name, email
 	err = tx.QueryRow(ctx, `
 		INSERT INTO users (id, name, email, password_hash, role, status, must_change_password, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, 'active', $6, now(), now())
-		ON CONFLICT (email) DO UPDATE SET
+		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
+			email = EXCLUDED.email,
 			password_hash = EXCLUDED.password_hash,
 			role = EXCLUDED.role,
 			status = 'active',
@@ -248,106 +242,245 @@ func upsertBrand(ctx context.Context, tx postgres.DBTX) (uuid.UUID, error) {
 	return brandID, nil
 }
 
-func upsertProduct(ctx context.Context, tx postgres.DBTX, sellerID, categoryID, brandID uuid.UUID) (uuid.UUID, error) {
-	var productID uuid.UUID
-	err := tx.QueryRow(ctx, `
-		INSERT INTO products (
-			id, seller_id, category_id, brand_id, title, slug, description, status, gender, color, material,
-			care_instructions, price_cents, old_price_cents, currency, main_image_url, created_at, updated_at,
-			submitted_at, approved_at, published_at, moderation_comment
-		)
-		VALUES (
-			$1, $2, $3, $4, 'Dev Wool Coat', 'dev-wool-coat',
-			'Minimal published product seeded for local manual testing.', 'published', 'unisex', 'Graphite',
-			'Wool blend', 'Dry clean only', 1299000, 1599000, 'RUB', $5, now(), now(), now(), now(), now(),
-			'Seeded for local development'
-		)
-		ON CONFLICT (slug) DO UPDATE SET
-			seller_id = EXCLUDED.seller_id,
-			category_id = EXCLUDED.category_id,
-			brand_id = EXCLUDED.brand_id,
-			title = EXCLUDED.title,
-			description = EXCLUDED.description,
-			status = 'published',
-			gender = EXCLUDED.gender,
-			color = EXCLUDED.color,
-			material = EXCLUDED.material,
-			care_instructions = EXCLUDED.care_instructions,
-			price_cents = EXCLUDED.price_cents,
-			old_price_cents = EXCLUDED.old_price_cents,
-			main_image_url = EXCLUDED.main_image_url,
-			approved_at = COALESCE(products.approved_at, now()),
-			published_at = COALESCE(products.published_at, now()),
-			moderation_comment = EXCLUDED.moderation_comment,
-			updated_at = now()
-		RETURNING id
-	`, seedIDs.Product, sellerID, categoryID, brandID, "https://placehold.co/900x1200?text=Dev+Product").Scan(&productID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("upsert product: %w", err)
+func seedDevProducts(ctx context.Context, tx postgres.DBTX, sellerID, categoryID, brandID, adminID uuid.UUID) error {
+	scenarios := []struct {
+		title         string
+		slug          string
+		status        string
+		comment       string
+		priceCents    int64
+		hasInventory  bool
+		size          string
+		color         string
+	}{
+		{"Dev Wool Coat", "dev-wool-coat", "published", "Seeded for local development", 1299000, true, "M", "Graphite"},
+		{"Draft Sweater", "draft-sweater", "draft", "", 599000, false, "L", "Navy"},
+		{"Pending Jeans", "pending-jeans", "pending_moderation", "", 799000, false, "32/32", "Blue"},
+		{"Rejected T-Shirt", "rejected-tshirt", "rejected", "Фотографии низкого качества. Пожалуйста, добавьте студийные фото.", 299000, false, "S", "White"},
+		{"Approved Sneakers", "approved-sneakers", "approved", "Отлично, можно везти на склад.", 1499000, false, "42", "Black"},
 	}
-	return productID, nil
+
+	baseNS := uuid.MustParse("88888888-8888-4888-8888-888888888888")
+
+	for i, s := range scenarios {
+		productID := uuid.NewMD5(baseNS, []byte(s.slug+"-prod"))
+		variantID := uuid.NewMD5(baseNS, []byte(s.slug+"-var"))
+		imageID := uuid.NewMD5(baseNS, []byte(s.slug+"-img"))
+		inventoryID := uuid.NewMD5(baseNS, []byte(s.slug+"-inv"))
+		movementID := uuid.NewMD5(baseNS, []byte(s.slug+"-mov"))
+
+		err := tx.QueryRow(ctx, `
+			INSERT INTO products (
+				id, seller_id, category_id, brand_id, title, slug, description, status, gender, color, material,
+				care_instructions, price_cents, old_price_cents, currency, main_image_url, created_at, updated_at,
+				submitted_at, approved_at, published_at, moderation_comment
+			)
+			VALUES (
+				$1, $2, $3, $4, $5, $6,
+				'Minimal product seeded for local manual testing.', $7, 'unisex', $8, 'Test material',
+				'Dry clean only', $9, $10, 'RUB', $11, now(), now(), now(), now(), now(), $12
+			)
+			ON CONFLICT (slug) DO UPDATE SET
+				seller_id = EXCLUDED.seller_id,
+				category_id = EXCLUDED.category_id,
+				brand_id = EXCLUDED.brand_id,
+				title = EXCLUDED.title,
+				description = EXCLUDED.description,
+				status = EXCLUDED.status,
+				gender = EXCLUDED.gender,
+				color = EXCLUDED.color,
+				material = EXCLUDED.material,
+				care_instructions = EXCLUDED.care_instructions,
+				price_cents = EXCLUDED.price_cents,
+				old_price_cents = EXCLUDED.old_price_cents,
+				main_image_url = EXCLUDED.main_image_url,
+				moderation_comment = EXCLUDED.moderation_comment,
+				updated_at = now()
+			RETURNING id
+		`, productID, sellerID, categoryID, brandID, s.title, s.slug, s.status, s.color, s.priceCents, s.priceCents+300000, "https://placehold.co/900x1200?text="+strings.ReplaceAll(s.title, " ", "+"), s.comment).Scan(&productID)
+		if err != nil {
+			return fmt.Errorf("upsert product %s: %w", s.slug, err)
+		}
+
+		sku := fmt.Sprintf("DEV-SKU-%d", i)
+		_, err = tx.Exec(ctx, `
+			INSERT INTO product_variants (id, product_id, sku, size, color, barcode, price_cents, is_active, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, true, now(), now())
+			ON CONFLICT (id) DO UPDATE SET
+				product_id = EXCLUDED.product_id,
+				sku = EXCLUDED.sku,
+				size = EXCLUDED.size,
+				color = EXCLUDED.color,
+				barcode = EXCLUDED.barcode,
+				price_cents = EXCLUDED.price_cents,
+				is_active = true,
+				updated_at = now()
+		`, variantID, productID, sku, s.size, s.color, fmt.Sprintf("00000000000%d", i), s.priceCents)
+		if err != nil {
+			return fmt.Errorf("upsert variant %s: %w", s.slug, err)
+		}
+
+		_, err = tx.Exec(ctx, `
+			INSERT INTO product_images (id, product_id, image_url, alt_text, sort_order, created_at)
+			VALUES ($1, $2, $3, 'Dev placeholder image', 0, now())
+			ON CONFLICT (id) DO UPDATE SET
+				product_id = EXCLUDED.product_id,
+				image_url = EXCLUDED.image_url,
+				alt_text = EXCLUDED.alt_text,
+				sort_order = EXCLUDED.sort_order
+		`, imageID, productID, "https://placehold.co/900x1200?text="+strings.ReplaceAll(s.title, " ", "+"))
+		if err != nil {
+			return fmt.Errorf("upsert product image %s: %w", s.slug, err)
+		}
+
+		if s.hasInventory {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, 25, 0, now(), now())
+				ON CONFLICT (product_variant_id) DO UPDATE SET
+					product_id = EXCLUDED.product_id,
+					seller_id = EXCLUDED.seller_id,
+					total_stock = GREATEST(inventory_items.total_stock, 25),
+					reserved_stock = LEAST(inventory_items.reserved_stock, GREATEST(inventory_items.total_stock, 25)),
+					updated_at = now()
+			`, inventoryID, productID, variantID, sellerID)
+			if err != nil {
+				return fmt.Errorf("upsert inventory item %s: %w", s.slug, err)
+			}
+
+			_, err = tx.Exec(ctx, `
+				INSERT INTO stock_movements (id, inventory_item_id, product_id, product_variant_id, seller_id, type, quantity, reason, actor_user_id, created_at)
+				VALUES ($1, $2, $3, $4, $5, 'receipt', 25, 'Local dev seed stock', $6, now())
+				ON CONFLICT (id) DO NOTHING
+			`, movementID, inventoryID, productID, variantID, sellerID, adminID)
+			if err != nil {
+				return fmt.Errorf("upsert stock movement %s: %w", s.slug, err)
+			}
+		}
+	}
+
+	return nil
 }
 
-func upsertVariant(ctx context.Context, tx postgres.DBTX, productID uuid.UUID) (uuid.UUID, error) {
-	var variantID uuid.UUID
-	err := tx.QueryRow(ctx, `
-		INSERT INTO product_variants (id, product_id, sku, size, color, barcode, price_cents, is_active, created_at, updated_at)
-		VALUES ($1, $2, 'DEV-COAT-M-GRAPHITE', 'M', 'Graphite', '000000000001', 1299000, true, now(), now())
-		ON CONFLICT (id) DO UPDATE SET
-			product_id = EXCLUDED.product_id,
-			sku = EXCLUDED.sku,
-			size = EXCLUDED.size,
-			color = EXCLUDED.color,
-			barcode = EXCLUDED.barcode,
-			price_cents = EXCLUDED.price_cents,
-			is_active = true,
-			updated_at = now()
-		RETURNING id
-	`, seedIDs.Variant, productID).Scan(&variantID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("upsert variant: %w", err)
-	}
-	return variantID, nil
-}
+func upsertPaymentFixtures(ctx context.Context, tx postgres.DBTX, customerID uuid.UUID) error {
+	// Predictable namespace for payment fixtures
+	baseNS := uuid.MustParse("dddddddd-dddd-4ddd-8ddd-000000000000")
 
-func upsertProductImage(ctx context.Context, tx postgres.DBTX, productID uuid.UUID) error {
-	_, err := tx.Exec(ctx, `
-		INSERT INTO product_images (id, product_id, image_url, alt_text, sort_order, created_at)
-		VALUES ($1, $2, $3, 'Dev Wool Coat placeholder image', 0, now())
-		ON CONFLICT (id) DO UPDATE SET
-			product_id = EXCLUDED.product_id,
-			image_url = EXCLUDED.image_url,
-			alt_text = EXCLUDED.alt_text,
-			sort_order = EXCLUDED.sort_order
-	`, seedIDs.Image, productID, "https://placehold.co/900x1200?text=Dev+Product")
-	if err != nil {
-		return fmt.Errorf("upsert product image: %w", err)
+	for i := 1; i <= 15; i++ {
+		// Stable UUIDs for this scenario
+		orderID := uuid.NewMD5(baseNS, []byte(fmt.Sprintf("order-%d", i)))
+		paymentID := uuid.NewMD5(baseNS, []byte(fmt.Sprintf("payment-%d", i)))
+		orderNumber := fmt.Sprintf("ORD-DEV-P-%d", i)
+		
+		oStatus := "awaiting_payment"
+		if i%2 == 0 { oStatus = "paid" }
+		if i == 5 { oStatus = "awaiting_payment" } // for SUCCEEDED_PAYMENT_ORDER_NOT_PAID
+		if i == 9 { oStatus = "paid" } // PAID_ORDER_WITHOUT_SUCCEEDED_PAYMENT
+		
+		_, err := tx.Exec(ctx, `
+			INSERT INTO orders (id, user_id, order_number, status, total_price_cents, currency, delivery_address, delivery_method_name, delivery_price_cents, customer_name, customer_email, customer_phone, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, 100000, 'RUB', 'Test Address', 'Delivery', 0, 'Test User', 'test@example.com', '+79000000000', now(), now())
+			ON CONFLICT (order_number) DO UPDATE SET status = EXCLUDED.status
+		`, orderID, customerID, orderNumber, oStatus)
+		if err != nil {
+			return err
+		}
+
+		pStatus := "pending"
+		pAmount := int64(100000)
+		createdAt := time.Now()
+
+		switch i {
+		case 1: pStatus = "succeeded" // normal paid
+		case 2: pStatus = "pending"; createdAt = time.Now().Add(-2 * time.Hour) // STUCK_PENDING
+		case 3: pStatus = "failed"
+		case 4: pStatus = "cancelled"
+		case 5: pStatus = "succeeded" // SUCCEEDED_PAYMENT_ORDER_NOT_PAID
+		case 6: pStatus = "succeeded" // partial refund
+		case 7: pStatus = "succeeded" // pending refund
+		case 8: pStatus = "succeeded" // full refund
+		case 9: pStatus = "failed" // PAID_ORDER_WITHOUT_SUCCEEDED_PAYMENT
+		case 10: pStatus = "succeeded" // SUCCEEDED_PAYMENT_ORDER_NOT_PAID
+		case 11: pStatus = "succeeded"; pAmount = 50000 // AMOUNT_MISMATCH
+		case 12: pStatus = "pending"; createdAt = time.Now().Add(-2 * time.Hour) // STUCK_PENDING
+		case 13: pStatus = "pending" // INVALID_WEBHOOK_SIGNATURE
+		case 14: pStatus = "pending" // UNPROCESSED_WEBHOOK
+		case 15: pStatus = "succeeded" // MULTIPLE_SUCCEEDED
+		default: pStatus = "pending"
+		}
+
+		_, err = tx.Exec(ctx, `
+			INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_number, idempotency_key, integration_mode, payment_method, created_at) 
+			VALUES ($1, $2, 'tbank', $3, $4, $5, 'RUB', $6, $7, 'mock', 'tpay', $8)
+			ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, amount_cents = EXCLUDED.amount_cents
+		`, paymentID, orderID, fmt.Sprintf("T-DEV-%d", i), pStatus, pAmount, fmt.Sprintf("PAY-F-DEV-%d", i), fmt.Sprintf("idem-dev-%d", i), createdAt)
+		if err != nil {
+			return err
+		}
+
+		// Retries & Multiple Succeeded
+		if i == 5 {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_number, idempotency_key, integration_mode, payment_method, created_at) 
+				VALUES ($1, $2, 'tbank', $3, 'failed', 100000, 'RUB', $4, $5, 'mock', 'tpay', now())
+				ON CONFLICT (id) DO NOTHING
+			`, uuid.NewMD5(baseNS, []byte("retry-5")), orderID, "T-DEV-5-FAIL", "PAY-F-DEV-5-FAIL", "idem-dev-5-fail")
+			if err != nil { return err }
+		}
+
+		if i == 15 {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_number, idempotency_key, integration_mode, payment_method, created_at) 
+				VALUES ($1, $2, 'tbank', $3, 'succeeded', 100000, 'RUB', $4, $5, 'mock', 'tpay', now())
+				ON CONFLICT (id) DO NOTHING
+			`, uuid.NewMD5(baseNS, []byte("mult-15")), orderID, "T-DEV-15-EXTRA", "PAY-F-DEV-15-EXTRA", "idem-dev-15-extra")
+			if err != nil { return err }
+		}
+
+		// Refunds
+		if i == 6 {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO refunds (id, payment_id, order_id, amount_cents, status, reason, currency, created_at, updated_at) 
+				VALUES ($1, $2, $3, 30000, 'succeeded', 'partial return', 'RUB', now(), now())
+				ON CONFLICT (id) DO NOTHING
+			`, uuid.NewMD5(baseNS, []byte("refund-6")), paymentID, orderID)
+			if err != nil { return err }
+		}
+		if i == 7 {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO refunds (id, payment_id, order_id, amount_cents, status, reason, currency, created_at, updated_at) 
+				VALUES ($1, $2, $3, 100000, 'pending', 'pending return', 'RUB', now(), now())
+				ON CONFLICT (id) DO NOTHING
+			`, uuid.NewMD5(baseNS, []byte("refund-7")), paymentID, orderID)
+			if err != nil { return err }
+		}
+		if i == 8 {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO refunds (id, payment_id, order_id, amount_cents, status, reason, currency, created_at, updated_at) 
+				VALUES ($1, $2, $3, 100000, 'succeeded', 'full return', 'RUB', now(), now())
+				ON CONFLICT (id) DO NOTHING
+			`, uuid.NewMD5(baseNS, []byte("refund-8")), paymentID, orderID)
+			if err != nil { return err }
+		}
+
+		// Payment Events
+		if i == 13 {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO payment_events (id, payment_id, provider, provider_payment_id, event_type, event_key, raw_payload, signature_valid, processed_at) 
+				VALUES ($1, $2, 'tbank', 'T-DEV-13', 'AUTHORIZED', 'key-13', '{}', false, now())
+				ON CONFLICT (id) DO NOTHING
+			`, uuid.NewMD5(baseNS, []byte("evt-13")), paymentID)
+			if err != nil { return err }
+		}
+		if i == 14 {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO payment_events (id, payment_id, provider, provider_payment_id, event_type, event_key, raw_payload, signature_valid, processed_at) 
+				VALUES ($1, $2, 'tbank', 'T-DEV-14', 'AUTHORIZED', 'key-14', '{}', true, NULL)
+				ON CONFLICT (id) DO NOTHING
+			`, uuid.NewMD5(baseNS, []byte("evt-14")), paymentID)
+			if err != nil { return err }
+		}
 	}
 	return nil
 }
 
-func upsertInventory(ctx context.Context, tx postgres.DBTX, productID, variantID, sellerID, actorUserID uuid.UUID) error {
-	_, err := tx.Exec(ctx, `
-		INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, 25, 0, now(), now())
-		ON CONFLICT (product_variant_id) DO UPDATE SET
-			product_id = EXCLUDED.product_id,
-			seller_id = EXCLUDED.seller_id,
-			total_stock = GREATEST(inventory_items.total_stock, 25),
-			reserved_stock = LEAST(inventory_items.reserved_stock, GREATEST(inventory_items.total_stock, 25)),
-			updated_at = now()
-	`, seedIDs.Inventory, productID, variantID, sellerID)
-	if err != nil {
-		return fmt.Errorf("upsert inventory item: %w", err)
-	}
-
-	_, err = tx.Exec(ctx, `
-		INSERT INTO stock_movements (id, inventory_item_id, product_id, product_variant_id, seller_id, type, quantity, reason, actor_user_id, created_at)
-		VALUES ($1, $2, $3, $4, $5, 'receipt', 25, 'Local dev seed stock', $6, now())
-		ON CONFLICT (id) DO NOTHING
-	`, seedIDs.Movement, seedIDs.Inventory, productID, variantID, sellerID, actorUserID)
-	if err != nil {
-		return fmt.Errorf("upsert stock movement: %w", err)
-	}
-	return nil
-}

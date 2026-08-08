@@ -444,6 +444,14 @@ func (s *Service) GetSellerOrder(ctx context.Context, userID, orderID uuid.UUID)
 	return s.repo.GetSellerOrder(ctx, sellerID, orderID)
 }
 
+func (s *Service) GetSellerOrderSummary(ctx context.Context, userID uuid.UUID) (*SellerOrderSummary, error) {
+	sellerID, err := s.repo.GetSellerIDByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.GetSellerOrderSummary(ctx, sellerID)
+}
+
 type ExpireAwaitingPaymentOrdersResult struct {
 	Checked              int `json:"checked"`
 	Expired              int `json:"expired"`

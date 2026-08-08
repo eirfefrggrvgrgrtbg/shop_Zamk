@@ -1,8 +1,7 @@
 import { SellerProduct, SellerProductSize, SellerProductStatus } from '../lib/seller-products';
 
 function mapStatus(apiStatus: string): SellerProductStatus {
-  const allowed: SellerProductStatus[] = ['draft', 'moderation', 'approved', 'published', 'rejected', 'hidden', 'blocked', 'out_of_stock'];
-  if (apiStatus === 'pending_moderation') return 'moderation';
+  const allowed: SellerProductStatus[] = ['draft', 'pending_moderation', 'in_review', 'approved', 'published', 'rejected', 'hidden', 'blocked', 'out_of_stock'];
   if (allowed.includes(apiStatus as SellerProductStatus)) {
     return apiStatus as SellerProductStatus;
   }

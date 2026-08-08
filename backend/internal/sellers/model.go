@@ -25,10 +25,10 @@ const (
 
 type Seller struct {
 	ID            uuid.UUID    `json:"id"`
-	BrandName     string       `json:"brandName"`
-	Slug          string       `json:"slug"`
+	BrandName     *string      `json:"brandName,omitempty"`
+	Slug          *string      `json:"slug,omitempty"`
 	Description   *string      `json:"description,omitempty"`
-	ContactEmail  string       `json:"contactEmail"`
+	ContactEmail  *string      `json:"contactEmail,omitempty"`
 	ContactPhone  *string      `json:"contactPhone,omitempty"`
 	AverageRating float64      `json:"averageRating"`
 	ReviewsCount  int          `json:"reviewsCount"`
@@ -51,10 +51,10 @@ type SellerUser struct {
 // SellerDetail is the internal aggregate used by GetSellerDetailByID.
 type SellerDetail struct {
 	ID            uuid.UUID
-	BrandName     string
-	Slug          string
+	BrandName     *string
+	Slug          *string
 	Description   *string
-	ContactEmail  string
+	ContactEmail  *string
 	ContactPhone  *string
 	AverageRating float64 `json:"averageRating"`
 	ReviewsCount  int     `json:"reviewsCount"`
@@ -74,8 +74,25 @@ type SellerDetail struct {
 }
 
 type SellersFilter struct {
-	Query  string
-	Status string
-	Limit  int
-	Offset int
+	Query       string
+	Status      []string
+	Store       string
+	Problems    string
+	RatingMin   *float64
+	RatingMax   *float64
+	HasReviews  *bool
+	PerformanceMin *int
+	PerformanceMax *int
+	PerformanceCategory string
+	SalesGrossMin *int64
+	SalesGrossMax *int64
+	OrdersCountMin *int
+	OrdersCountMax *int
+	HasWarnings *bool
+	HasViolations *bool
+	Blocked     *bool
+	Sort        string
+	Direction   string
+	Limit       int
+	Offset      int
 }

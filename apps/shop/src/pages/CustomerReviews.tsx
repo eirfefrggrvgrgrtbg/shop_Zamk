@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Star } from 'lucide-react';
 import { getCustomerReviews } from '@zamk/api-client/src/customer';
-import { AccountNav } from '../components/account/AccountNav';
-import { CustomerProtectedRoute } from '../components/account/CustomerProtectedRoute';
+import { AccountLayout } from '../components/account/AccountLayout';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Button } from '../components/ui/Button';
 
@@ -18,12 +17,9 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function CustomerReviews() {
   return (
-    <CustomerProtectedRoute
-      title="Мои отзывы"
-      description="Войдите, чтобы просматривать оставленные отзывы."
-    >
+    <AccountLayout title="Мои отзывы">
       <CustomerReviewsContent />
-    </CustomerProtectedRoute>
+    </AccountLayout>
   );
 }
 
@@ -37,19 +33,8 @@ function CustomerReviewsContent() {
       .then((res) => setReviews(res?.items || []))
       .catch(() => setError('Не удалось загрузить отзывы.'))
       .finally(() => setIsLoading(false));
-  }, []);
-
-  return (
-    <div className="relative z-10 min-h-screen pt-32 md:pt-40 pb-20">
-      <div className="container mx-auto px-4 sm:px-6 max-w-3xl">
-        <section className="mb-8 border-b border-border-lighter pb-8">
-          <p className="text-[13px] font-medium tracking-[0.14em] text-ash uppercase mb-3">Личный кабинет</p>
-          <h1 className="text-4xl md:text-5xl font-serif text-graphite dark:text-white tracking-tight leading-none">
-            Мои отзывы
-          </h1>
-        </section>
-
-        <AccountNav />
+  }, []);  return (
+    <>
 
         {isLoading ? (
           <div className="flex justify-center items-center h-48">
@@ -117,7 +102,6 @@ function CustomerReviewsContent() {
             ))}
           </div>
         )}
-      </div>
-    </div>
+    </>
   );
 }

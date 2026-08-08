@@ -59,6 +59,7 @@ func (s *Service) RegisterCustomer(ctx context.Context, input RegisterRequest, u
 		FirstName:    &input.FirstName,
 		LastName:     &input.LastName,
 		MiddleName:   middleName,
+		Phone:        input.Phone,
 		Email:        strings.ToLower(input.Email),
 		PasswordHash: hash,
 		Role:         users.RoleCustomer,
@@ -80,6 +81,7 @@ func (s *Service) RegisterCustomer(ctx context.Context, input RegisterRequest, u
 func (s *Service) Login(ctx context.Context, input LoginRequest, userAgent, ip string) (AuthResponse, string, error) {
 	user, err := s.userRepo.GetUserByEmail(ctx, strings.ToLower(input.Email))
 	if err != nil {
+		fmt.Printf("Login failed GetUserByEmail: %v\n", err)
 		if errors.Is(err, users.ErrNotFound) {
 			return AuthResponse{}, "", ErrInvalidCredentials
 		}
@@ -94,6 +96,7 @@ func (s *Service) Login(ctx context.Context, input LoginRequest, userAgent, ip s
 	}
 
 	if !CheckPassword(input.Password, user.PasswordHash) {
+		fmt.Printf("Login failed CheckPassword! Input hash: %v vs %v\n", input.Password, user.PasswordHash)
 		return AuthResponse{}, "", ErrInvalidCredentials
 	}
 
@@ -161,17 +164,20 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (MeResponse, error) 
 }
 
 func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword, newPassword string) error {
+	// no trim
+
+
 	user, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
 		return err
 	}
 
 	if !CheckPassword(currentPassword, user.PasswordHash) {
-		return errors.New("invalid current password")
+		return errors.New("Неверный текущий пароль")
 	}
 
 	if currentPassword == newPassword {
-		return errors.New("new password must be different from current password")
+		return errors.New("Новый пароль должен отличаться от текущего")
 	}
 
 	if err := ValidatePassword(newPassword, user.Email, user.Name); err != nil {

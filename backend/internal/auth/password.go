@@ -18,6 +18,16 @@ var (
 	ErrPasswordContainsInfo = errors.New("Пароль не должен содержать имя, фамилию или email.")
 )
 
+func IsPasswordError(err error) bool {
+	return errors.Is(err, ErrPasswordTooShort) ||
+		errors.Is(err, ErrPasswordNoUpper) ||
+		errors.Is(err, ErrPasswordNoLower) ||
+		errors.Is(err, ErrPasswordNoDigit) ||
+		errors.Is(err, ErrPasswordNoSpecial) ||
+		errors.Is(err, ErrPasswordTooSimple) ||
+		errors.Is(err, ErrPasswordContainsInfo)
+}
+
 var commonWeakPasswords = []string{
 	"password", "qwerty", "qwerty123", "123456", "123456789",
 	"admin", "admin123", "zamk", "zamk123",

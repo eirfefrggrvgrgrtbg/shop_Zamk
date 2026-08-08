@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, Star } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { AlertCircle } from 'lucide-react';
+import { SellerContextBanner } from '../components/SellerContextBanner';
 import {
   getAdminReview,
   getAdminReviewErrorMessage,
@@ -80,8 +82,14 @@ export function AdminReviews() {
 
   const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString('ru-RU') : '-';
 
+  const [searchParams] = useSearchParams();
+  const sellerId = searchParams.get('sellerId');
+
+  const filteredReviews = sellerId ? reviews.filter(r => (r as any).sellerId === sellerId) : reviews;
+
   return (
     <div className="space-y-6">
+      <SellerContextBanner />
       <div className="sm:flex sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Отзывы</h1>
       </div>
@@ -98,11 +106,9 @@ export function AdminReviews() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
           <p className="mt-2 text-sm text-gray-500">Загрузка отзывов...</p>
         </div>
-      ) : reviews.length === 0 ? (
-        <div className="text-center py-10 bg-white rounded-lg shadow">
-          <Star className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Нет отзывов</h3>
-          <p className="mt-1 text-sm text-gray-500">Отзывы пока отсутствуют.</p>
+      ) : filteredReviews.length === 0 ? (
+        <div className="bg-white rounded-lg p-12 text-center text-gray-500 border border-gray-200">
+          Отзывы не найдены.
         </div>
       ) : (
         <div className="flex flex-col">
@@ -112,15 +118,15 @@ export function AdminReviews() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Отзыв</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Товар</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Рейтинг</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
-                      <th className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Оценка</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Товар / Заказ</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Текст</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
+                      <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {reviews.map((review) => (
+                    {filteredReviews.map((review) => (
                       <tr key={review.id}>
                         <td className="px-6 py-4">
                           <div className="text-sm font-medium text-gray-900">{review.title || review.id}</div>

@@ -279,6 +279,33 @@ func (r *Repository) GetAdminFulfillment(ctx context.Context, id uuid.UUID) (*Fu
 	return &f, nil
 }
 
+func (r *Repository) GetFulfillmentItemsTx(ctx context.Context, tx pgx.Tx, fulfillmentID uuid.UUID) ([]FulfillmentItem, error) {
+	query := `
+		SELECT 
+			id, product_id, title, product_variant_id, variant_size, variant_color, sku, quantity, price_cents, subtotal_price_cents, image_url
+		FROM order_items
+		WHERE order_fulfillment_id = $1
+	`
+	rows, err := tx.Query(ctx, query, fulfillmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []FulfillmentItem
+	for rows.Next() {
+		var item FulfillmentItem
+		if err := rows.Scan(&item.OrderItemID, &item.ProductID, &item.ProductTitle, &item.VariantID, &item.VariantSize, &item.VariantColor, &item.SKU, &item.Quantity, &item.UnitPriceCents, &item.LineTotalCents, &item.ImageURL); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	if items == nil {
+		items = make([]FulfillmentItem, 0)
+	}
+	return items, nil
+}
+
 func (r *Repository) GetAdminFulfillmentTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*Fulfillment, error) {
 	query := `
 		SELECT 
@@ -293,7 +320,7 @@ func (r *Repository) GetAdminFulfillmentTx(ctx context.Context, tx pgx.Tx, id uu
 		WHERE f.id = $1
 	`
 	var f Fulfillment
-	err := r.db.QueryRow(ctx, query, id).Scan(
+	err := tx.QueryRow(ctx, query, id).Scan(
 		&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt,
 		&f.ShipmentStatus, &f.ShipmentID,
 		&f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
@@ -306,7 +333,7 @@ func (r *Repository) GetAdminFulfillmentTx(ctx context.Context, tx pgx.Tx, id uu
 		return nil, err
 	}
 
-	f.Items, err = r.GetFulfillmentItems(ctx, f.ID)
+	f.Items, err = r.GetFulfillmentItemsTx(ctx, tx, f.ID)
 	if err != nil {
 		return nil, err
 	}

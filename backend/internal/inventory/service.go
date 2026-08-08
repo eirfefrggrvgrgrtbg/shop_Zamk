@@ -289,20 +289,36 @@ func (s *Service) WriteOffStock(ctx context.Context, adminUserID uuid.UUID, req 
 // Seller Operations
 // ---------------------------------------------------------
 
-func (s *Service) ListSellerInventory(ctx context.Context, currentUserID uuid.UUID, limit, offset int) (InventoryListResponse, error) {
+func (s *Service) ListSellerInventory(ctx context.Context, currentUserID uuid.UUID, limit, offset int) (SellerInventoryListResponse, error) {
 	seller, err := s.getSellerForUser(ctx, currentUserID)
 	if err != nil {
-		return InventoryListResponse{}, err
+		return SellerInventoryListResponse{}, err
 	}
 
-	items, err := s.repo.ListInventoryBySeller(ctx, seller.ID, limit, offset)
+	items, total, err := s.repo.ListSellerInventoryRich(ctx, seller.ID, limit, offset)
 	if err != nil {
-		return InventoryListResponse{}, err
+		return SellerInventoryListResponse{}, err
 	}
 	if items == nil {
-		items = []Item{}
+		items = []SellerInventoryItem{}
 	}
-	return InventoryListResponse{Items: items, TotalCount: len(items)}, nil
+
+	lowStockThreshold := 10 // Global default for this phase
+
+	for i := range items {
+		// Calculate Availability Status
+		if items[i].Available > lowStockThreshold {
+			items[i].AvailabilityStatus = "В наличии"
+		} else if items[i].Available > 0 && items[i].Available <= lowStockThreshold {
+			items[i].AvailabilityStatus = "Заканчивается"
+		} else if items[i].Available == 0 && items[i].Inbound > 0 {
+			items[i].AvailabilityStatus = "Ожидается поставка"
+		} else {
+			items[i].AvailabilityStatus = "Нет в наличии"
+		}
+	}
+
+	return SellerInventoryListResponse{Items: items, TotalCount: total}, nil
 }
 
 func (s *Service) GetSellerInventoryItem(ctx context.Context, currentUserID uuid.UUID, id uuid.UUID) (Item, error) {

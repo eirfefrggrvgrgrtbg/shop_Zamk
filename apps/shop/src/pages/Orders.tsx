@@ -5,17 +5,13 @@ import { Drawer } from '../components/ui/Drawer';
 import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
 import { ReturnModal } from '../components/orders/ReturnModal';
 import { ReviewModal } from '../components/orders/ReviewModal';
-import { AccountNav } from '../components/account/AccountNav';
-import { CustomerProtectedRoute } from '../components/account/CustomerProtectedRoute';
+import { AccountLayout } from '../components/account/AccountLayout';
 
 export function Orders() {
   return (
-    <CustomerProtectedRoute
-      title="Мои заказы"
-      description="Войдите в аккаунт, чтобы просматривать историю заказов."
-    >
+    <AccountLayout title="Мои заказы">
       <OrdersContent />
-    </CustomerProtectedRoute>
+    </AccountLayout>
   );
 }
 
@@ -164,23 +160,13 @@ function OrdersContent() {
 
   useEffect(() => {
     loadData();
-  }, []);
-
-  return (
-    <div className='relative z-10 min-h-screen pt-24 md:pt-32 pb-20'>
-      <div className='container mx-auto px-4 sm:px-6 max-w-[800px]'>
-        
-        {/* Шапка страницы */}
-        <div className="mb-10 md:mb-12">
-          <AccountNav />
-          <div className="flex items-end justify-between mt-4">
-            <h1 className="text-4xl md:text-5xl font-serif text-graphite dark:text-white tracking-tight leading-none">
-              Мои заказы
-            </h1>
-            <span className="text-sm text-ash dark:text-white/60 mb-1 hidden sm:block">
-              {orders.length} заказа(ов)
-            </span>
-          </div>
+  }, []);  return (
+    <>
+      <div>
+        <div className="flex items-end justify-between mb-4">
+          <span className="text-sm text-ash dark:text-white/60 mb-1 hidden sm:block">
+            {orders.length} заказа(ов)
+          </span>
         </div>
 
         {/* Список заказов */}
@@ -461,6 +447,6 @@ function OrdersContent() {
           onSuccess={loadData}
         />
       )}
-    </div>
+    </>
   );
 }

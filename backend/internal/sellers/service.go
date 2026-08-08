@@ -2,7 +2,11 @@ package sellers
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"sort"
 	"regexp"
 	"strings"
 	"time"
@@ -32,52 +36,79 @@ func NewService(repo *Repository, userRepo *users.Repository, dbClient *postgres
 }
 
 func (s *Service) CreateSellerByAdmin(ctx context.Context, req *CreateSellerRequest) (*CreateSellerResponse, error) {
-	// Check for duplicate email
+	// 1. Check if user exists
 	existingUser, err := s.userRepo.GetUserByEmail(ctx, req.OwnerEmail)
-	if err == nil && existingUser != nil {
-		return nil, ErrDuplicateEmail
-	} else if err != nil && !errors.Is(err, users.ErrNotFound) {
+	if err != nil && !errors.Is(err, users.ErrNotFound) {
 		return nil, err
 	}
 
-	slug := generateSlug(req.BrandName)
-	if req.Slug != nil && *req.Slug != "" {
-		slug = *req.Slug
-	}
-
-	existingSeller, err := s.repo.GetSellerBySlug(ctx, slug)
-	if err == nil && existingSeller != nil {
-		return nil, ErrDuplicateSlug
-	} else if err != nil && !errors.Is(err, ErrSellerNotFound) {
-		return nil, err
-	}
-
-	hashedPassword, err := auth.HashPassword(req.TemporaryPassword)
-	if err != nil {
-		return nil, err
-	}
-
+	var user *users.User
+	var temporaryPassword string
 	now := time.Now()
-	user := &users.User{
-		ID:                 uuid.New(),
-		Name:               req.OwnerName,
-		Email:              req.OwnerEmail,
-		PasswordHash:       hashedPassword,
-		Role:               users.RoleSeller,
-		Status:             users.StatusActive,
-		MustChangePassword: true,
-		CreatedAt:          now,
-		UpdatedAt:          now,
+	status := "created_new"
+	var generatePassword bool
+
+	if existingUser != nil {
+		// User exists. Let's check if they are already a seller
+		seller, sellerUser, err := s.repo.GetSellerByUserID(ctx, existingUser.ID)
+		if err == nil && sellerUser != nil && seller != nil {
+			// Already a seller
+			return &CreateSellerResponse{
+				Status: "existing_seller",
+				Seller: *seller,
+				OwnerUser: *existingUser,
+			}, ErrSellerAlreadyExists
+		}
+		if err != nil && !errors.Is(err, ErrSellerNotFound) && !errors.Is(err, ErrSellerUserNotFound) {
+			return nil, err
+		}
+
+		// They are a user but not a seller.
+		if !req.GrantExistingUser {
+			return nil, ErrUserExistsPrompt
+		}
+
+		user = existingUser
+		status = "granted_existing"
+		generatePassword = false
+	} else {
+		// New user
+		generatePassword = true
+		for {
+			b := make([]byte, 8)
+			_, _ = rand.Read(b)
+			temporaryPassword = "Z!1a" + hex.EncodeToString(b)
+			if err := auth.ValidatePassword(temporaryPassword, req.OwnerName, req.OwnerEmail); err == nil {
+				break
+			}
+		}
+
+		hashedPassword, err := auth.HashPassword(temporaryPassword)
+		if err != nil {
+			return nil, err
+		}
+
+		user = &users.User{
+			ID:                 uuid.New(),
+			Name:               req.OwnerName,
+			Email:              req.OwnerEmail,
+			PasswordHash:       hashedPassword,
+			Role:               users.RoleSeller,
+			Status:             users.StatusActive,
+			MustChangePassword: true,
+			CreatedAt:          now,
+			UpdatedAt:          now,
+		}
 	}
 
 	seller := &Seller{
 		ID:           uuid.New(),
-		BrandName:    req.BrandName,
-		Slug:         slug,
-		Description:  req.Description,
-		ContactEmail: req.ContactEmail,
-		ContactPhone: req.ContactPhone,
-		Status:       StatusPendingSetup, // New sellers start as pending_setup, require onboarding
+		BrandName:    nil, // Start with nulls for clean onboarding
+		Slug:         nil,
+		Description:  nil,
+		ContactEmail: nil,
+		ContactPhone: nil,
+		Status:       StatusPendingSetup,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -92,17 +123,26 @@ func (s *Service) CreateSellerByAdmin(ctx context.Context, req *CreateSellerRequ
 
 	err = s.dbClient.RunInTx(ctx, func(tx pgx.Tx) error {
 		txUserRepo := s.userRepo.WithTx(tx)
-		if err := txUserRepo.CreateUser(ctx, user); err != nil {
-			return err
+		if generatePassword {
+			if errTx := txUserRepo.CreateUser(ctx, user); errTx != nil {
+				return errTx
+			}
+		} else {
+			if user.Role == users.RoleCustomer {
+				if errTx := txUserRepo.UpdateRole(ctx, user.ID, users.RoleSeller); errTx != nil {
+					return errTx
+				}
+				user.Role = users.RoleSeller
+			}
 		}
 
 		txSellerRepo := s.repo.WithTx(tx)
-		if err := txSellerRepo.CreateSeller(ctx, seller); err != nil {
-			return err
+		if errTx := txSellerRepo.CreateSeller(ctx, seller); errTx != nil {
+			return errTx
 		}
 
-		if err := txSellerRepo.CreateSellerUser(ctx, sellerUser); err != nil {
-			return err
+		if errTx := txSellerRepo.CreateSellerUser(ctx, sellerUser); errTx != nil {
+			return errTx
 		}
 
 		return nil
@@ -112,27 +152,227 @@ func (s *Service) CreateSellerByAdmin(ctx context.Context, req *CreateSellerRequ
 		return nil, err
 	}
 
-	if s.notifs != nil {
-		_ = s.notifs.SendSellerInvitationEmail(req.OwnerEmail, req.TemporaryPassword)
+	if s.notifs != nil && generatePassword {
+		_ = s.notifs.SendSellerInvitationEmail(req.OwnerEmail, temporaryPassword)
 	}
 
-	// Do not return password hash
 	return &CreateSellerResponse{
+		Status:                    status,
 		Seller:                    *seller,
 		OwnerUser:                 *user,
-		TemporaryPasswordReturned: false,
+		TemporaryPassword:         temporaryPassword,
+		TemporaryPasswordReturned: generatePassword,
 	}, nil
 }
 
+// generateSecurePassword is handled inline.
+
+func CalculatePerformance(s *AdminListSeller) {
+	if s.Status == "pending" || s.Status == "pending_setup" || s.BrandName == nil || *s.BrandName == "" || s.OrdersCount30d < 10 {
+		s.PerformanceCategory = "no_data"
+		s.PerformanceScore = nil
+		s.PerformanceReasons = []string{"Недостаточно данных (менее 10 заказов за 30 дней)"}
+		return
+	}
+
+	score := 100
+	reasons := []string{}
+	components := []PerformanceComponent{}
+
+	addComp := func(code, label, unit string, raw *float64, sc *int, w float64, exp string) {
+		components = append(components, PerformanceComponent{
+			Code:        code,
+			Label:       label,
+			RawValue:    raw,
+			Unit:        unit,
+			Score:       sc,
+			Weight:      w,
+			Explanation: exp,
+		})
+	}
+
+	// 1. sellerCausedCancellationRate
+	cancRate := float64(s.CancelRate30d)
+	cancScore := 100 - (s.CancelRate30d * 2)
+	if cancScore < 0 {
+		cancScore = 0
+	}
+	score -= (100 - cancScore)
+	if cancRate > 0 {
+		reasons = append(reasons, fmt.Sprintf("Высокий процент отмен (%.0f%%)", cancRate))
+	}
+	addComp("sellerCausedCancellationRate", "Отмены по вине продавца", "%", &cancRate, &cancScore, 0.3, "Снижает общий рейтинг. Цель: 0%")
+
+	// 2. rating
+	if s.ReviewsCount > 5 {
+		r := s.AverageRating
+		rs := 100
+		if r < 4.0 {
+			rs = 70
+			score -= 30
+			reasons = append(reasons, "Низкий рейтинг покупателей")
+		} else if r < 4.5 {
+			rs = 90
+			score -= 10
+			reasons = append(reasons, "Рейтинг ниже 4.5")
+		}
+		addComp("rating", "Рейтинг товаров", "⭐", &r, &rs, 0.2, "На основе отзывов покупателей")
+	} else {
+		// Not penalized for missing reviews
+		addComp("rating", "Рейтинг товаров", "⭐", nil, nil, 0.0, "Недостаточно отзывов")
+	}
+
+	// 3. warnings
+	warnCount := float64(s.WarningsActive)
+	warnScore := 100 - (s.WarningsActive * 10)
+	if warnScore < 0 {
+		warnScore = 0
+	}
+	if s.WarningsActive > 0 {
+		score -= s.WarningsActive * 10
+		reasons = append(reasons, fmt.Sprintf("Есть активные предупреждения (%d)", s.WarningsActive))
+	}
+	addComp("warnings", "Предупреждения", "шт", &warnCount, &warnScore, 0.1, "Влияет на общий рейтинг")
+
+	// 4. violations
+	violCount := float64(s.Violations)
+	violScore := 100 - (s.Violations * 20)
+	if violScore < 0 {
+		violScore = 0
+	}
+	if s.Violations > 0 {
+		score -= s.Violations * 20
+		reasons = append(reasons, fmt.Sprintf("Есть активные нарушения (%d)", s.Violations))
+	}
+	addComp("violations", "Нарушения", "шт", &violCount, &violScore, 0.2, "Серьезно снижает рейтинг")
+
+	// Placeholder metrics that are technically unavailable right now
+	addComp("assemblyOnTimeRate", "Сборка вовремя", "%", nil, nil, 0.1, "Данные временно недоступны")
+	addComp("overdueFulfillments", "Просроченные отгрузки", "шт", nil, nil, 0.05, "Данные временно недоступны")
+	addComp("averageAssemblyTimeHours", "Среднее время сборки", "ч", nil, nil, 0.05, "Данные временно недоступны")
+	addComp("handoverOnTimeRate", "Передача в доставку вовремя", "%", nil, nil, 0.0, "Данные временно недоступны")
+
+	if score < 0 {
+		score = 0
+	}
+
+	s.PerformanceScore = &score
+
+	if score >= 90 && len(reasons) == 0 {
+		s.PerformanceCategory = "high"
+	} else if score >= 70 {
+		s.PerformanceCategory = "stable"
+	} else if score >= 50 {
+		s.PerformanceCategory = "attention"
+	} else {
+		s.PerformanceCategory = "low"
+	}
+
+	if len(reasons) == 0 {
+		reasons = append(reasons, "Отличные показатели работы")
+	}
+
+	s.PerformanceReasons = reasons
+	s.PerformanceComponents = components
+}
+
 func (s *Service) ListSellers(ctx context.Context, filter SellersFilter) (*ListSellersResponse, error) {
+	if filter.Limit <= 0 {
+		filter.Limit = 25
+	}
+
 	items, total, err := s.repo.ListSellers(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 
+	// Apply performance calculation
+	for i := range items {
+		CalculatePerformance(&items[i])
+	}
+
+	// Post-filtering for performance if necessary
+	postFilterPerformance := filter.PerformanceMin != nil || filter.PerformanceMax != nil || filter.PerformanceCategory != "" || filter.Sort == "performance_score" || filter.Sort == "performance"
+	
+	if postFilterPerformance {
+		var filtered []AdminListSeller
+		for _, item := range items {
+			match := true
+			if filter.PerformanceCategory != "" && item.PerformanceCategory != filter.PerformanceCategory {
+				match = false
+			}
+			if filter.PerformanceMin != nil && (item.PerformanceScore == nil || *item.PerformanceScore < *filter.PerformanceMin) {
+				match = false
+			}
+			if filter.PerformanceMax != nil && (item.PerformanceScore == nil || *item.PerformanceScore > *filter.PerformanceMax) {
+				match = false
+			}
+			if match {
+				filtered = append(filtered, item)
+			}
+		}
+
+		// Sort
+		if filter.Sort == "performance_score" || filter.Sort == "performance" {
+			sort.Slice(filtered, func(i, j int) bool {
+				s1 := 0
+				if filtered[i].PerformanceScore != nil {
+					s1 = *filtered[i].PerformanceScore
+				}
+				s2 := 0
+				if filtered[j].PerformanceScore != nil {
+					s2 = *filtered[j].PerformanceScore
+				}
+				if filter.Direction == "asc" {
+					return s1 < s2
+				}
+				return s1 > s2
+			})
+		}
+		
+		total = len(filtered)
+		
+		// Apply Limit / Offset
+		start := filter.Offset
+		end := filter.Offset + filter.Limit
+		if start > total {
+			start = total
+		}
+		if end > total {
+			end = total
+		}
+		items = filtered[start:end]
+	}
+
+	counts, err := s.repo.GetAdminSellersStatusCounts(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	allCount := 0
+	for _, c := range counts {
+		allCount += c
+	}
+	
+	statusCounts := map[string]int{
+		"all":            allCount,
+		"pending_setup":  counts["pending_setup"],
+		"pending_review": counts["pending_review"],
+		"active":         counts["active"],
+		"blocked":        counts["blocked"],
+		"archived":       counts["archived"],
+	}
+
+	page := (filter.Offset / filter.Limit) + 1
+	totalPages := (total + filter.Limit - 1) / filter.Limit
+
 	return &ListSellersResponse{
-		Items:      items,
-		TotalCount: total,
+		Items:        items,
+		TotalCount:   total,
+		Page:         page,
+		Limit:        filter.Limit,
+		TotalPages:   totalPages,
+		StatusCounts: statusCounts,
 	}, nil
 }
 
@@ -179,11 +419,15 @@ func (s *Service) CompleteOnboarding(ctx context.Context, currentUserID uuid.UUI
 
 	err = s.repo.UpdateSellerStatus(ctx, seller.ID, StatusPending)
 	if err == nil && s.notifs != nil {
+		brandName := "Магазин"
+		if seller.BrandName != nil {
+			brandName = *seller.BrandName
+		}
 		_ = s.dbClient.RunInTx(ctx, func(tx pgx.Tx) error {
 			return s.notifs.CreateStaffNotificationTx(ctx, tx, notifications.Notification{
 				Type:       notifications.TypeSellerOnboardingCompleted,
 				Title:      "Продавец завершил настройку",
-				Body:       "Продавец " + seller.BrandName + " ожидает верификации.",
+				Body:       "Продавец " + brandName + " ожидает верификации.",
 				EntityType: "seller",
 				EntityID:   seller.ID,
 			})
@@ -239,15 +483,13 @@ func (s *Service) GetSellerDetail(ctx context.Context, sellerID uuid.UUID) (*Sel
 		CreatedAt: d.CreatedAt,
 		UpdatedAt: d.UpdatedAt,
 	}
-	slug := d.Slug
-	if slug != "" {
-		resp.Slug = &slug
+	if d.Slug != nil && *d.Slug != "" {
+		resp.Slug = d.Slug
 	}
 	resp.Description = d.Description
 	resp.LogoURL = d.LogoURL
-	email := d.ContactEmail
-	if email != "" {
-		resp.ContactEmail = &email
+	if d.ContactEmail != nil && *d.ContactEmail != "" {
+		resp.ContactEmail = d.ContactEmail
 	}
 	resp.ContactPhone = d.ContactPhone
 
@@ -263,10 +505,19 @@ func (s *Service) GetSellerDetail(ctx context.Context, sellerID uuid.UUID) (*Sel
 	resp.CommissionPolicy.BaseCommissionBps = baseCommissionBps
 	resp.CommissionPolicy.PenaltyCommissionBps = penaltyCommissionBps
 	resp.CommissionPolicy.PenaltyRule = "2 active penalty violations triggers 18% for 1 month"
-	resp.CommissionPolicy.CurrentAppliedCommissionBps = baseCommissionBps
-	resp.CommissionPolicy.AutomaticPenaltyEnabled = false
+	if d.ActivePenaltyViolations >= 2 {
+		resp.CommissionPolicy.CurrentAppliedCommissionBps = penaltyCommissionBps
+		resp.CommissionPolicy.AutomaticPenaltyEnabled = true
+	} else {
+		resp.CommissionPolicy.CurrentAppliedCommissionBps = baseCommissionBps
+		resp.CommissionPolicy.AutomaticPenaltyEnabled = false
+	}
 
 	return resp, nil
+}
+
+func (s *Service) GetSellerOverview(ctx context.Context, sellerID uuid.UUID, period string) (*SellerOverviewResponse, error) {
+	return s.repo.GetSellerOverview(ctx, sellerID, period)
 }
 
 // UpdateSellerStatusWithHistory changes seller status and writes status history.
@@ -313,16 +564,16 @@ func (s *Service) VerifySeller(ctx context.Context, sellerID uuid.UUID, actorUse
 	}
 
 	var missing []string
-	if seller.BrandName == "" {
+	if seller.BrandName == nil || *seller.BrandName == "" {
 		missing = append(missing, "brandName")
 	}
-	if seller.Slug == "" {
+	if seller.Slug == nil || *seller.Slug == "" {
 		missing = append(missing, "slug")
 	}
 	if seller.Description == nil || len(*seller.Description) < 10 {
 		missing = append(missing, "description")
 	}
-	if seller.ContactEmail == "" && (seller.ContactPhone == nil || *seller.ContactPhone == "") {
+	if (seller.ContactEmail == nil || *seller.ContactEmail == "") && (seller.ContactPhone == nil || *seller.ContactPhone == "") {
 		missing = append(missing, "contactEmail or contactPhone")
 	}
 

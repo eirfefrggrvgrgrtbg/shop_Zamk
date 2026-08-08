@@ -1,0 +1,2 @@
+ALTER TABLE seller_notes ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE seller_improvement_plans ADD COLUMN IF NOT EXISTS internal_comment TEXT NOT NULL DEFAULT '';

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
@@ -21,6 +22,58 @@ func NewRepository(db postgres.DBTX) *Repository {
 
 func (r *Repository) WithTx(tx pgx.Tx) *Repository {
 	return &Repository{db: tx}
+}
+
+// ---------------------------------------------------------
+// Concurrency and SKU Uniqueness
+// ---------------------------------------------------------
+
+func (r *Repository) LockSellerForUpdate(ctx context.Context, sellerID uuid.UUID) error {
+	var id uuid.UUID
+	err := r.db.QueryRow(ctx, "SELECT id FROM sellers WHERE id = $1 FOR NO KEY UPDATE", sellerID).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrSellerNotFound
+		}
+		return fmt.Errorf("failed to lock seller: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) FindExistingSellerSKUs(ctx context.Context, sellerID uuid.UUID, skus []string, excludeVariantIDs []uuid.UUID) ([]string, error) {
+	if len(skus) == 0 {
+		return nil, nil
+	}
+
+	query := `
+		SELECT pv.sku 
+		FROM product_variants pv
+		JOIN products p ON pv.product_id = p.id
+		WHERE p.seller_id = $1 
+		  AND LOWER(TRIM(pv.sku)) = ANY($2)
+	`
+	args := []any{sellerID, skus}
+
+	if len(excludeVariantIDs) > 0 {
+		query += " AND pv.id != ALL($3)"
+		args = append(args, excludeVariantIDs)
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query existing skus: %w", err)
+	}
+	defer rows.Close()
+
+	var existing []string
+	for rows.Next() {
+		var sku string
+		if err := rows.Scan(&sku); err != nil {
+			return nil, err
+		}
+		existing = append(existing, sku)
+	}
+	return existing, rows.Err()
 }
 
 // ---------------------------------------------------------
@@ -85,21 +138,29 @@ func (r *Repository) UpdateProduct(ctx context.Context, p *Product) error {
 }
 
 func (r *Repository) GetProductByID(ctx context.Context, id uuid.UUID) (*Product, error) {
-	return r.getProductByCondition(ctx, "id = $1", id)
+	return r.getProductByCondition(ctx, "p.id = $1", id)
 }
 
 func (r *Repository) GetProductByIDForSeller(ctx context.Context, id, sellerID uuid.UUID) (*Product, error) {
-	return r.getProductByCondition(ctx, "id = $1 AND seller_id = $2", id, sellerID)
+	return r.getProductByCondition(ctx, "p.id = $1 AND p.seller_id = $2", id, sellerID)
 }
 
 func (r *Repository) getProductByCondition(ctx context.Context, condition string, args ...any) (*Product, error) {
 	query := `
-		SELECT id, seller_id, category_id, brand_id, title, slug, description,
-			status, source, gender, color, material, care_instructions,
-			price_cents, old_price_cents, currency, main_image_url, main_image_object_key,
-			average_rating, reviews_count,
-			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
-		FROM products
+		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
+			p.status, COALESCE(p.source, 'seller') AS source, p.gender, p.color, p.material, p.care_instructions,
+			p.price_cents, p.old_price_cents, p.currency, p.main_image_url, p.main_image_object_key,
+			COALESCE(p.average_rating, 0) AS average_rating, COALESCE(p.reviews_count, 0) AS reviews_count,
+			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment,
+			p.assigned_admin_user_id, admin_user.name, p.review_started_at,
+			s.brand_name, s.slug, u.name, u.email, c.name, b.name, s.status
+		FROM products p
+		LEFT JOIN sellers s ON p.seller_id = s.id
+		LEFT JOIN seller_users su ON su.seller_id = s.id AND su.role = 'owner'
+		LEFT JOIN users u ON su.user_id = u.id
+		LEFT JOIN categories c ON p.category_id = c.id
+		LEFT JOIN brands b ON p.brand_id = b.id
+		LEFT JOIN users admin_user ON p.assigned_admin_user_id = admin_user.id
 		WHERE ` + condition + `
 	`
 	var p Product
@@ -109,6 +170,8 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 		&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL, &p.MainImageObjectKey,
 		&p.AverageRating, &p.ReviewsCount,
 		&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
+		&p.AssignedAdminUserID, &p.AssignedAdminName, &p.ReviewStartedAt,
+		&p.SellerName, &p.SellerSlug, &p.SellerOwnerName, &p.SellerOwnerEmail, &p.CategoryName, &p.BrandName, &p.SellerStatus,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -123,20 +186,13 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 		return nil, err
 	}
 
-	inStock := false
-	for _, v := range p.Variants {
-		if v.InStock != nil && *v.InStock {
-			inStock = true
-			break
-		}
-	}
-	p.InStock = &inStock
-
 	// Load Images
 	p.Images, err = r.GetProductImages(ctx, p.ID)
 	if err != nil {
 		return nil, err
 	}
+
+	PopulateProductAggregates(&p)
 
 	return &p, nil
 }
@@ -156,11 +212,11 @@ func (r *Repository) DeleteDraftProduct(ctx context.Context, productID, sellerID
 func (r *Repository) UpdateProductStatus(ctx context.Context, p *Product) error {
 	query := `
 		UPDATE products
-		SET status = $1, submitted_at = $2, approved_at = $3, published_at = $4, rejected_at = $5, moderation_comment = $6, updated_at = now()
-		WHERE id = $7
+		SET status = $1, submitted_at = $2, approved_at = $3, published_at = $4, rejected_at = $5, moderation_comment = $6, assigned_admin_user_id = $7, review_started_at = $8, updated_at = now()
+		WHERE id = $9
 	`
 	res, err := r.db.Exec(ctx, query,
-		p.Status, p.SubmittedAt, p.ApprovedAt, p.PublishedAt, p.RejectedAt, p.ModerationComment, p.ID,
+		p.Status, p.SubmittedAt, p.ApprovedAt, p.PublishedAt, p.RejectedAt, p.ModerationComment, p.AssignedAdminUserID, p.ReviewStartedAt, p.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update product status: %w", err)
@@ -201,22 +257,22 @@ func (r *Repository) MergeProductVariants(ctx context.Context, productID uuid.UU
 		if exists {
 			query := `
 				UPDATE product_variants
-				SET sku = $1, size = $2, color = $3, barcode = $4, price_cents = $5, is_active = $6, updated_at = now()
-				WHERE id = $7 AND product_id = $8
+				SET sku = $1, size = $2, color = $3, option_values = $4, barcode = $5, price_cents = $6, is_active = $7, updated_at = now()
+				WHERE id = $8 AND product_id = $9
 			`
 			_, err := r.db.Exec(ctx, query,
-				v.SKU, v.Size, v.Color, v.Barcode, v.PriceCents, v.IsActive, v.ID, productID,
+				v.SKU, v.Size, v.Color, v.OptionValues, v.Barcode, v.PriceCents, v.IsActive, v.ID, productID,
 			)
 			if err != nil {
 				return fmt.Errorf("failed to update variant: %w", err)
 			}
 		} else {
 			query := `
-				INSERT INTO product_variants (id, product_id, sku, size, color, barcode, price_cents, is_active, created_at, updated_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+				INSERT INTO product_variants (id, product_id, sku, size, color, option_values, barcode, price_cents, is_active, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			`
 			_, err := r.db.Exec(ctx, query,
-				v.ID, v.ProductID, v.SKU, v.Size, v.Color, v.Barcode, v.PriceCents, v.IsActive, v.CreatedAt, v.UpdatedAt,
+				v.ID, v.ProductID, v.SKU, v.Size, v.Color, v.OptionValues, v.Barcode, v.PriceCents, v.IsActive, v.CreatedAt, v.UpdatedAt,
 			)
 			if err != nil {
 				return fmt.Errorf("failed to insert variant: %w", err)
@@ -250,10 +306,79 @@ func (r *Repository) MergeProductVariants(ctx context.Context, productID uuid.UU
 	return nil
 }
 
+func PopulateProductAggregates(p *Product) {
+	p.SellerIsActive = (p.SellerStatus != nil && *p.SellerStatus == "active")
+
+	p.VariantsCount = len(p.Variants)
+	activeCount := 0
+	totalStock := 0
+	reservedStock := 0
+	availableStock := 0
+	hasInvRecord := false
+	var minPrice, maxPrice *int64
+
+	for _, v := range p.Variants {
+		if v.IsActive {
+			activeCount++
+			if v.PriceCents != nil {
+				if minPrice == nil || *v.PriceCents < *minPrice {
+					pVal := *v.PriceCents
+					minPrice = &pVal
+				}
+				if maxPrice == nil || *v.PriceCents > *maxPrice {
+					pVal := *v.PriceCents
+					maxPrice = &pVal
+				}
+			}
+		}
+		if v.HasInventoryRecord {
+			hasInvRecord = true
+			totalStock += v.TotalStock
+			reservedStock += v.ReservedStock
+			availableStock += v.AvailableStock
+		}
+	}
+
+	p.ActiveVariantsCount = activeCount
+	p.TotalStock = totalStock
+	p.ReservedStock = reservedStock
+	p.AvailableStock = availableStock
+	p.HasInventoryRecord = hasInvRecord
+	p.MinPriceCents = minPrice
+	p.MaxPriceCents = maxPrice
+
+	if (p.PriceCents <= 0) && minPrice != nil {
+		p.PriceCents = *minPrice
+	}
+
+	inStock := hasInvRecord && availableStock > 0
+	p.InStock = &inStock
+
+	vis := CalculateActualVisibility(p)
+	p.ActualVisibility = vis.ActualVisibility
+	p.VisibilityReasons = vis.VisibilityReasons
+
+	if p.ActualVisibility {
+		slugOrID := p.Slug
+		if slugOrID == "" && p.ID != uuid.Nil {
+			slugOrID = p.ID.String()
+		}
+		url := fmt.Sprintf("http://127.0.0.1:3000/product/%s", slugOrID)
+		if base := os.Getenv("STOREFRONT_BASE_URL"); base != "" {
+			url = fmt.Sprintf("%s/product/%s", strings.TrimRight(base, "/"), slugOrID)
+		}
+		p.StorefrontURL = &url
+	} else {
+		p.StorefrontURL = nil
+	}
+}
+
 func (r *Repository) GetProductVariants(ctx context.Context, productID uuid.UUID) ([]ProductVariant, error) {
 	query := `
-		SELECT pv.id, pv.product_id, pv.sku, pv.size, pv.color, pv.barcode, pv.price_cents, pv.is_active, pv.created_at, pv.updated_at,
-		       (COALESCE(ii.total_stock, 0) - COALESCE(ii.reserved_stock, 0) > 0) AS in_stock
+		SELECT pv.id, pv.product_id, pv.sku, pv.size, pv.color, pv.option_values, pv.barcode, pv.price_cents, pv.is_active, pv.created_at, pv.updated_at,
+		       (ii.id IS NOT NULL) AS has_inventory,
+		       COALESCE(ii.total_stock, 0) AS total_stock,
+		       COALESCE(ii.reserved_stock, 0) AS reserved_stock
 		FROM product_variants pv
 		LEFT JOIN inventory_items ii ON pv.id = ii.product_variant_id
 		WHERE pv.product_id = $1
@@ -268,12 +393,24 @@ func (r *Repository) GetProductVariants(ctx context.Context, productID uuid.UUID
 	var variants []ProductVariant
 	for rows.Next() {
 		var v ProductVariant
-		var inStock bool
-		if err := rows.Scan(&v.ID, &v.ProductID, &v.SKU, &v.Size, &v.Color, &v.Barcode, &v.PriceCents, &v.IsActive, &v.CreatedAt, &v.UpdatedAt, &inStock); err != nil {
+		var hasInv bool
+		var totalStock, reservedStock int
+		if err := rows.Scan(
+			&v.ID, &v.ProductID, &v.SKU, &v.Size, &v.Color, &v.OptionValues, &v.Barcode, &v.PriceCents, &v.IsActive, &v.CreatedAt, &v.UpdatedAt,
+			&hasInv, &totalStock, &reservedStock,
+		); err != nil {
 			return nil, err
 		}
+		v.HasInventoryRecord = hasInv
+		v.TotalStock = totalStock
+		v.ReservedStock = reservedStock
+		v.AvailableStock = totalStock - reservedStock
+		inStock := hasInv && v.AvailableStock > 0
 		v.InStock = &inStock
 		variants = append(variants, v)
+	}
+	if variants == nil {
+		variants = []ProductVariant{}
 	}
 	return variants, nil
 }
@@ -323,6 +460,9 @@ func (r *Repository) GetProductImages(ctx context.Context, productID uuid.UUID) 
 			return nil, err
 		}
 		images = append(images, i)
+	}
+	if images == nil {
+		images = []ProductImage{}
 	}
 	return images, nil
 }
@@ -377,10 +517,11 @@ func (r *Repository) AddModerationLog(ctx context.Context, log *ProductModeratio
 
 func (r *Repository) ListProductModerationLogs(ctx context.Context, productID uuid.UUID) ([]ProductModerationLog, error) {
 	query := `
-		SELECT id, product_id, admin_user_id, from_status, to_status, comment, created_at
-		FROM product_moderation_logs
-		WHERE product_id = $1
-		ORDER BY created_at DESC
+		SELECT log.id, log.product_id, log.admin_user_id, log.from_status, log.to_status, log.comment, log.created_at, u.name
+		FROM product_moderation_logs log
+		LEFT JOIN users u ON log.admin_user_id = u.id
+		WHERE log.product_id = $1
+		ORDER BY log.created_at DESC
 	`
 	rows, err := r.db.Query(ctx, query, productID)
 	if err != nil {
@@ -392,7 +533,7 @@ func (r *Repository) ListProductModerationLogs(ctx context.Context, productID uu
 	for rows.Next() {
 		var log ProductModerationLog
 		if err := rows.Scan(
-			&log.ID, &log.ProductID, &log.AdminUserID, &log.FromStatus, &log.ToStatus, &log.Comment, &log.CreatedAt,
+			&log.ID, &log.ProductID, &log.AdminUserID, &log.FromStatus, &log.ToStatus, &log.Comment, &log.CreatedAt, &log.AdminName,
 		); err != nil {
 			return nil, err
 		}
@@ -400,6 +541,9 @@ func (r *Repository) ListProductModerationLogs(ctx context.Context, productID uu
 	}
 	if rows.Err() != nil {
 		return nil, rows.Err()
+	}
+	if logs == nil {
+		logs = []ProductModerationLog{}
 	}
 	return logs, nil
 }
@@ -432,8 +576,16 @@ func (r *Repository) ListAdminProducts(ctx context.Context, filter AdminProductF
 			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
 			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
 			p.average_rating, p.reviews_count,
-			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment
+			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment,
+			p.assigned_admin_user_id, admin_user.name, p.review_started_at,
+			s.brand_name, s.slug, u.name, u.email, c.name, b.name, s.status
 		FROM products p
+		LEFT JOIN sellers s ON p.seller_id = s.id
+		LEFT JOIN seller_users su ON su.seller_id = s.id AND su.role = 'owner'
+		LEFT JOIN users u ON su.user_id = u.id
+		LEFT JOIN categories c ON p.category_id = c.id
+		LEFT JOIN brands b ON p.brand_id = b.id
+		LEFT JOIN users admin_user ON p.assigned_admin_user_id = admin_user.id
 	`)
 
 	var args []interface{}
@@ -441,13 +593,12 @@ func (r *Repository) ListAdminProducts(ctx context.Context, filter AdminProductF
 	var conditions []string
 
 	if filter.Query != nil && *filter.Query != "" {
-		queryBuilder.WriteString(` LEFT JOIN sellers s ON p.seller_id = s.id `)
-		conditions = append(conditions, fmt.Sprintf("(p.title ILIKE $%d OR p.id::text ILIKE $%d OR s.brand_name ILIKE $%d)", argID, argID, argID))
+		conditions = append(conditions, fmt.Sprintf("(p.title ILIKE $%d OR p.id::text ILIKE $%d OR s.brand_name ILIKE $%d OR c.name ILIKE $%d OR b.name ILIKE $%d)", argID, argID, argID, argID, argID))
 		args = append(args, "%"+*filter.Query+"%")
 		argID++
 	}
 
-	if filter.Status != nil && *filter.Status != "" {
+	if filter.Status != nil && *filter.Status != "" && *filter.Status != "all" {
 		conditions = append(conditions, fmt.Sprintf("p.status = $%d", argID))
 		args = append(args, *filter.Status)
 		argID++
@@ -465,19 +616,125 @@ func (r *Repository) ListAdminProducts(ctx context.Context, filter AdminProductF
 		argID++
 	}
 
+	if filter.CategoryID != nil {
+		conditions = append(conditions, fmt.Sprintf("p.category_id = $%d", argID))
+		args = append(args, *filter.CategoryID)
+		argID++
+	} else if len(filter.CategoryIDs) > 0 {
+		conditions = append(conditions, fmt.Sprintf("p.category_id = ANY($%d)", argID))
+		args = append(args, filter.CategoryIDs)
+		argID++
+	}
+
+	if filter.BrandID != nil {
+		conditions = append(conditions, fmt.Sprintf("p.brand_id = $%d", argID))
+		args = append(args, *filter.BrandID)
+		argID++
+	} else if len(filter.BrandIDs) > 0 {
+		conditions = append(conditions, fmt.Sprintf("p.brand_id = ANY($%d)", argID))
+		args = append(args, filter.BrandIDs)
+		argID++
+	}
+
+	// Date Submitted Period
+	if filter.SubmittedPeriod != nil && *filter.SubmittedPeriod != "" {
+		switch *filter.SubmittedPeriod {
+		case "today":
+			conditions = append(conditions, "p.submitted_at >= CURRENT_DATE")
+		case "3days":
+			conditions = append(conditions, "p.submitted_at >= (NOW() - INTERVAL '3 days')")
+		case "7days":
+			conditions = append(conditions, "p.submitted_at >= (NOW() - INTERVAL '7 days')")
+		case "30days":
+			conditions = append(conditions, "p.submitted_at >= (NOW() - INTERVAL '30 days')")
+		case "custom":
+			if filter.SubmittedFrom != nil {
+				conditions = append(conditions, fmt.Sprintf("p.submitted_at >= $%d", argID))
+				args = append(args, *filter.SubmittedFrom)
+				argID++
+			}
+			if filter.SubmittedTo != nil {
+				conditions = append(conditions, fmt.Sprintf("p.submitted_at <= $%d", argID))
+				args = append(args, *filter.SubmittedTo)
+				argID++
+			}
+		}
+	}
+
+	// Specific Flag Filters (+ Ещё)
+	if filter.NoMainImage != nil && *filter.NoMainImage {
+		conditions = append(conditions, "(p.main_image_url IS NULL OR TRIM(p.main_image_url) = '')")
+	}
+	if filter.NoDescription != nil && *filter.NoDescription {
+		conditions = append(conditions, "(p.description IS NULL OR TRIM(p.description) = '')")
+	}
+	if filter.NoBrand != nil && *filter.NoBrand {
+		conditions = append(conditions, "p.brand_id IS NULL")
+	}
+	if filter.NoVariants != nil && *filter.NoVariants {
+		conditions = append(conditions, "NOT EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id)")
+	}
+	if filter.NoPrice != nil && *filter.NoPrice {
+		conditions = append(conditions, "EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND (pv.price_cents IS NULL OR pv.price_cents <= 0))")
+	}
+	if filter.DuplicateSKU != nil && *filter.DuplicateSKU {
+		conditions = append(conditions, "EXISTS (SELECT LOWER(TRIM(pv1.sku)) FROM product_variants pv1 WHERE pv1.product_id = p.id AND pv1.sku IS NOT NULL AND TRIM(pv1.sku) != '' GROUP BY LOWER(TRIM(pv1.sku)) HAVING COUNT(*) > 1)")
+	}
+	if filter.NoStock != nil && *filter.NoStock {
+		conditions = append(conditions, "(EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id) AND (SELECT COALESCE(SUM(ii.total_stock - ii.reserved_stock), 0) FROM inventory_items ii WHERE ii.product_id = p.id) = 0)")
+	}
+	if filter.Resubmitted != nil && *filter.Resubmitted {
+		conditions = append(conditions, "EXISTS (SELECT 1 FROM product_moderation_logs pml WHERE pml.product_id = p.id AND pml.from_status = 'rejected')")
+	}
+
+	if filter.HasProblems != nil && *filter.HasProblems {
+		conditions = append(conditions, `((p.main_image_url IS NULL OR TRIM(p.main_image_url) = '') OR (p.description IS NULL OR TRIM(p.description) = '') OR p.brand_id IS NULL OR NOT EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id) OR EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND (pv.price_cents IS NULL OR pv.price_cents <= 0)) OR EXISTS (SELECT LOWER(TRIM(pv1.sku)) FROM product_variants pv1 WHERE pv1.product_id = p.id AND pv1.sku IS NOT NULL AND TRIM(pv1.sku) != '' GROUP BY LOWER(TRIM(pv1.sku)) HAVING COUNT(*) > 1) OR (EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id) AND (SELECT COALESCE(SUM(ii.total_stock - ii.reserved_stock), 0) FROM inventory_items ii WHERE ii.product_id = p.id) = 0) OR EXISTS (SELECT 1 FROM product_moderation_logs pml WHERE pml.product_id = p.id AND pml.from_status = 'rejected'))`)
+	}
+
 	if len(conditions) > 0 {
 		queryBuilder.WriteString(" WHERE " + strings.Join(conditions, " AND "))
 	}
 
+	fmt.Printf("DEBUG SQL: %s\n", queryBuilder.String())
+	fmt.Printf("DEBUG ARGS: %v\n", args)
+
 	// Calculate total count
-	countQuery := "SELECT COUNT(*) FROM (" + queryBuilder.String() + ") AS c"
+	countQuery := "SELECT COUNT(*) FROM (" + queryBuilder.String() + ") AS count_tbl"
 	var totalCount int
 	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get total count: %w", err)
 	}
 
-	queryBuilder.WriteString(fmt.Sprintf(" ORDER BY p.created_at DESC LIMIT $%d OFFSET $%d", argID, argID+1))
+	sortField := "COALESCE(p.submitted_at, p.created_at)"
+	sortDirection := "ASC"
+
+	if filter.SortOrder != nil && strings.ToUpper(*filter.SortOrder) == "DESC" {
+		sortDirection = "DESC"
+	}
+
+	if filter.Sort != nil {
+		switch *filter.Sort {
+		case "submitted_at", "waiting_time":
+			sortField = "COALESCE(p.submitted_at, p.created_at)"
+		case "created_at":
+			sortField = "p.created_at"
+		case "title", "product_name":
+			sortField = "p.title"
+		case "price":
+			sortField = "p.price_cents"
+		case "seller_name":
+			sortField = "COALESCE(s.brand_name, '')"
+		case "status":
+			sortField = "p.status"
+		case "variants_count":
+			sortField = "(SELECT COUNT(*) FROM product_variants pv WHERE pv.product_id = p.id)"
+		case "problems_count":
+			sortField = "((CASE WHEN p.main_image_url IS NULL THEN 1 ELSE 0 END) + (CASE WHEN p.description IS NULL THEN 1 ELSE 0 END) + (CASE WHEN p.category_id IS NULL THEN 1 ELSE 0 END) + (CASE WHEN p.brand_id IS NULL THEN 1 ELSE 0 END))"
+		}
+	}
+
+	queryBuilder.WriteString(fmt.Sprintf(" ORDER BY %s %s LIMIT $%d OFFSET $%d", sortField, sortDirection, argID, argID+1))
 	args = append(args, limit, offset)
 
 	rows, err := r.db.Query(ctx, queryBuilder.String(), args...)
@@ -495,6 +752,8 @@ func (r *Repository) ListAdminProducts(ctx context.Context, filter AdminProductF
 			&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
 			&p.AverageRating, &p.ReviewsCount,
 			&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
+			&p.AssignedAdminUserID, &p.AssignedAdminName, &p.ReviewStartedAt,
+			&p.SellerName, &p.SellerSlug, &p.SellerOwnerName, &p.SellerOwnerEmail, &p.CategoryName, &p.BrandName, &p.SellerStatus,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -508,19 +767,12 @@ func (r *Repository) ListAdminProducts(ctx context.Context, filter AdminProductF
 		variants, _ := r.GetProductVariants(ctx, products[i].ID)
 		if variants != nil {
 			products[i].Variants = variants
-			inStock := false
-			for _, v := range variants {
-				if v.InStock != nil && *v.InStock {
-					inStock = true
-					break
-				}
-			}
-			products[i].InStock = &inStock
 		}
 		images, _ := r.GetProductImages(ctx, products[i].ID)
 		if images != nil {
 			products[i].Images = images
 		}
+		PopulateProductAggregates(&products[i])
 	}
 
 	return products, totalCount, nil

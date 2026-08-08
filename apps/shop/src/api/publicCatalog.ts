@@ -1,4 +1,4 @@
-import { getProducts, getDirectSaleProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller } from '@zamk/api-client/src/public';
+import { getProducts, getDirectSaleProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller, getProductPreviewByToken } from '@zamk/api-client/src/public';
 import type { ProductSummary } from '@zamk/api-client/src/types';
 import type { Product as UIProduct, Brand as UIBrand, Category as UICategory, Review as UIReview } from '../types/catalog';
 
@@ -193,4 +193,41 @@ export async function fetchProductReviews(productId: string): Promise<UIReview[]
     text: r.comment || '',
     date: new Date(r.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })
   }));
+}
+
+export async function fetchProductPreviewByToken(token: string): Promise<UIProduct> {
+  const p = await getProductPreviewByToken(token);
+
+  const images = (p.images && p.images.length > 0)
+    ? p.images.map((img: any) => img.url)
+    : (p.mainImageUrl ? [p.mainImageUrl] : [PRODUCT_PLACEHOLDER_IMAGE]);
+
+  return {
+    id: p.id,
+    name: p.title,
+    brand: p.brand?.name || '',
+    brandId: p.brand?.id || '',
+    price: p.priceCents ? p.priceCents / 100 : 0,
+    image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
+    images: images,
+    category: p.category?.name || '',
+    sellerId: p.seller?.id,
+    sellerSlug: p.seller?.slug,
+    sellerName: p.seller?.brandName,
+    description: p.description || '',
+    materials: p.characteristics?.['Материал'] || '',
+    rating: p.rating,
+    reviewsCount: p.reviewsCount,
+    sizes: p.variants?.map((v: any) => v.size).filter(Boolean) || [],
+    colors: p.variants?.filter((v: any) => v.color).map((v: any) => ({ name: v.color, hex: '#000000' })) || [],
+    variants: p.variants?.map((v: any) => ({
+      id: v.id,
+      size: v.size,
+      color: v.color,
+      inStock: v.inStock ?? v.isActive,
+      isActive: v.isActive,
+      price: v.priceCents ? v.priceCents / 100 : undefined
+    })) || [],
+    isPreview: true,
+  };
 }

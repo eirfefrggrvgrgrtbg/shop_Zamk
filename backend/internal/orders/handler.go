@@ -250,7 +250,7 @@ func (h *Handler) UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, ErrManualPaidNotAllowed) {
-			h.writeError(w, http.StatusBadRequest, "invalid_status", err.Error())
+			h.writeError(w, http.StatusBadRequest, "payment_confirmation_required", err.Error())
 			return
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update order status")
@@ -330,6 +330,24 @@ func (h *Handler) ListSellerOrders(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) GetSellerOrderSummary(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value("userID")
+	if val == nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+	sellerID := val.(uuid.UUID)
+
+	summary, err := h.service.GetSellerOrderSummary(r.Context(), sellerID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get summary")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(summary)
 }
 
 // ---------------------------------------------------------

@@ -3,10 +3,10 @@ package auth
 import "errors"
 
 var (
-	ErrInvalidCredentials  = errors.New("invalid email or password")
+	ErrInvalidCredentials  = errors.New("Неверный email или пароль")
 	ErrUserBlocked         = errors.New("user is blocked")
 	ErrUserDeleted         = errors.New("user is deleted")
-	ErrDuplicateEmail      = errors.New("email already in use")
+	ErrDuplicateEmail      = errors.New("Аккаунт с таким email уже существует")
 	ErrInvalidToken        = errors.New("invalid token")
 	ErrSessionExpired      = errors.New("session expired")
 	ErrSessionRevoked      = errors.New("session revoked")

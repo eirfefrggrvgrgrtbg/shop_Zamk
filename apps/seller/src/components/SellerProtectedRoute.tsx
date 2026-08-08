@@ -30,12 +30,29 @@ export function SellerProtectedRoute({ children }: { children: React.ReactNode }
       setError('');
       setIsLoading(true);
 
+      if (!currentPassword) {
+        setError('Введите текущий пароль');
+        setIsLoading(false);
+        return;
+      }
+      if (!newPassword || newPassword.length < 8) {
+        setError('Новый пароль должен содержать минимум 8 символов');
+        setIsLoading(false);
+        return;
+      }
+
       try {
-        await changePassword({ currentPassword, newPassword });
+        await changePassword({ currentPassword: currentPassword, newPassword: newPassword });
         // Force re-login after password change
         await logout();
       } catch (err: any) {
-        setError(err.message || 'Ошибка смены пароля');
+        let msg = err.message || 'Ошибка смены пароля';
+        if (msg.includes('invalid current password') || msg.includes('invalid_password')) {
+          msg = 'Неверный текущий пароль';
+        } else if (msg.includes('must be different')) {
+          msg = 'Новый пароль должен отличаться от текущего';
+        }
+        setError(msg);
         setIsLoading(false);
       }
     };

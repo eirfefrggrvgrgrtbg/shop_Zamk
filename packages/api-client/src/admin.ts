@@ -1,10 +1,77 @@
 import { request } from './client';
-import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, ModerationProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse } from './types';
+import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest } from './types';
 
-// P0 fix: backend returns { items, totalCount } not bare array
-export const getAdminSellers = async (): Promise<{ items: AdminSeller[]; totalCount: number }> => {
-  const res = await request<any>('GET', '/admin/sellers');
-  return { ...res, items: res?.items || [] };
+export const getAdminSellers = async (params?: {
+  search?: string;
+  status?: string[];
+  store?: string;
+  problems?: string;
+  ratingMin?: number;
+  ratingMax?: number;
+  hasReviews?: boolean;
+  performanceMin?: number;
+  performanceMax?: number;
+  performanceCategory?: string;
+  salesGrossMin?: number;
+  salesGrossMax?: number;
+  ordersCountMin?: number;
+  ordersCountMax?: number;
+  hasWarnings?: boolean;
+  hasViolations?: boolean;
+  blocked?: boolean;
+  sort?: string;
+  direction?: string;
+  limit?: number;
+  page?: number;
+}): Promise<{ items: AdminSeller[]; totalCount: number; page: number; limit: number; totalPages: number; statusCounts: Record<string, number> }> => {
+  const query = new URLSearchParams();
+  if (params?.search) query.append('search', params.search);
+  
+  if (params?.status && params.status.length > 0) {
+    params.status.forEach(st => {
+      if (st !== 'all') query.append('status', st);
+    });
+  }
+  
+  if (params?.store && params.store !== 'all') query.append('store', params.store);
+  if (params?.problems && params.problems !== 'all') query.append('problems', params.problems);
+  
+  if (params?.ratingMin !== undefined) query.append('ratingMin', params.ratingMin.toString());
+  if (params?.ratingMax !== undefined) query.append('ratingMax', params.ratingMax.toString());
+  if (params?.hasReviews !== undefined) query.append('hasReviews', params.hasReviews.toString());
+  
+  if (params?.performanceMin !== undefined) query.append('performanceMin', params.performanceMin.toString());
+  if (params?.performanceMax !== undefined) query.append('performanceMax', params.performanceMax.toString());
+  if (params?.performanceCategory && params.performanceCategory !== 'all') query.append('performanceCategory', params.performanceCategory);
+  
+  if (params?.salesGrossMin !== undefined) query.append('salesGrossMin', params.salesGrossMin.toString());
+  if (params?.salesGrossMax !== undefined) query.append('salesGrossMax', params.salesGrossMax.toString());
+  if (params?.ordersCountMin !== undefined) query.append('ordersCountMin', params.ordersCountMin.toString());
+  if (params?.ordersCountMax !== undefined) query.append('ordersCountMax', params.ordersCountMax.toString());
+  
+  if (params?.hasWarnings !== undefined) query.append('hasWarnings', params.hasWarnings.toString());
+  if (params?.hasViolations !== undefined) query.append('hasViolations', params.hasViolations.toString());
+  if (params?.blocked !== undefined) query.append('blocked', params.blocked.toString());
+
+  if (params?.sort) query.append('sort', params.sort);
+  if (params?.direction) query.append('direction', params.direction);
+  if (params?.limit) query.append('limit', params.limit.toString());
+  if (params?.page) {
+    const offset = (params.page - 1) * (params.limit || 25);
+    query.append('offset', offset.toString());
+  }
+  
+  const qStr = query.toString() ? `?${query.toString()}` : '';
+  const res = await request<any>('GET', `/admin/sellers${qStr}`);
+  return { 
+    ...res, 
+    items: res?.items || [], 
+    totalCount: res?.total || 0,
+    page: res?.page || 1,
+    limit: res?.limit || 25,
+    totalPages: res?.totalPages || 0,
+    statusCounts: res?.statusCounts || {}
+  };
 };
 
 export const getAdminUsers = async (params?: { q?: string; role?: string; status?: string; limit?: number; offset?: number }): Promise<PaginatedAdminUsersResponse> => {
@@ -20,14 +87,31 @@ export const getAdminUsers = async (params?: { q?: string; role?: string; status
 };
 
 
-// Backend never returns plaintext temporaryPassword — only a boolean flag.
-// Frontend must show the locally-typed password to the admin after creation.
-export const createAdminSeller = async (data: any): Promise<{ seller: AdminSeller; temporaryPasswordReturned: boolean }> => {
-  return request<{ seller: AdminSeller; temporaryPasswordReturned: boolean }>('POST', '/admin/sellers', { body: data });
+import type { CreateAdminSellerRequest, CreateAdminSellerResponse } from './types';
+
+// Backend automatically generates a temporary password and returns it via temporaryPassword
+export const createAdminSeller = async (data: CreateAdminSellerRequest): Promise<CreateAdminSellerResponse> => {
+  return request<CreateAdminSellerResponse>('POST', '/admin/sellers', { body: data });
 };
 
 export const updateAdminSellerStatus = async (id: string, status: string, reason?: string): Promise<void> => {
   return request<void>('PATCH', `/admin/sellers/${id}/status`, { body: { status, reason } });
+};
+
+// ---------------------------------------------------------
+// WAREHOUSE RECEIVING
+// ---------------------------------------------------------
+
+export const startSupplyReceivingSession = async (qrToken: string): Promise<SupplyReceivingSession> => {
+  return request<SupplyReceivingSession>('POST', `/admin/receiving/sessions?qr_token=${encodeURIComponent(qrToken)}`);
+};
+
+export const recordSupplyReceivingScan = async (sessionId: string, input: RecordReceivingScanRequest): Promise<void> => {
+  return request<void>('POST', `/admin/receiving/sessions/${sessionId}/scan`, { body: input });
+};
+
+export const finalizeSupplyReceivingSession = async (sessionId: string, input: FinalizeReceivingRequest): Promise<void> => {
+  return request<void>('POST', `/admin/receiving/sessions/${sessionId}/finalize`, { body: input });
 };
 
 export const getAdminCategories = async (): Promise<Category[]> => {
@@ -55,27 +139,88 @@ export const uploadAdminBrandLogo = async (brandId: string, file: File): Promise
   return request<{ logoUrl: string }>('POST', `/admin/brands/${brandId}/logo/upload`, { body: formData });
 };
 
+export interface GetAdminProductsParams {
+  page?: number;
+  limit?: number;
+  offset?: number;
+  q?: string;
+  status?: string;
+  statuses?: string;
+  sellerId?: string;
+  categoryId?: string;
+  categoryIds?: string;
+  brandId?: string;
+  brandIds?: string;
+  submittedPeriod?: string;
+  noMainImage?: boolean;
+  noDescription?: boolean;
+  noBrand?: boolean;
+  noVariants?: boolean;
+  noPrice?: boolean;
+  duplicateSku?: boolean;
+  noStock?: boolean;
+  resubmitted?: boolean;
+  hasProblems?: boolean;
+  sortBy?: string;
+  sortOrder?: string;
+  source?: string;
+  signal?: AbortSignal;
+}
+
 export const getAdminProducts = async (
-  page: number = 1,
-  limit: number = 20,
-  filters?: {
+  pageOrParams?: number | GetAdminProductsParams,
+  limitParam?: number,
+  filtersParam?: {
     q?: string;
     status?: string;
     sellerId?: string;
     source?: string;
   }
 ): Promise<PaginatedAdminProductsResponse> => {
-  const query = new URLSearchParams({
-    page: page.toString(),
-    limit: limit.toString(),
-  });
-  if (filters?.q) query.append('q', filters.q);
-  if (filters?.status) query.append('status', filters.status);
-  if (filters?.sellerId) query.append('sellerId', filters.sellerId);
-  if (filters?.source) query.append('source', filters.source);
+  let params: GetAdminProductsParams = {};
 
-  const res = await request<any>('GET', `/admin/products?${query.toString()}`);
-  return { ...res, items: res?.items || [] };
+  if (typeof pageOrParams === 'number') {
+    params = {
+      page: pageOrParams,
+      limit: limitParam ?? 20,
+      ...filtersParam,
+    };
+  } else if (pageOrParams && typeof pageOrParams === 'object') {
+    params = pageOrParams;
+  }
+
+  const query = new URLSearchParams();
+  if (params.page !== undefined) query.append('page', params.page.toString());
+  if (params.limit !== undefined) query.append('limit', params.limit.toString());
+  if (params.offset !== undefined) query.append('offset', params.offset.toString());
+  if (params.q) query.append('q', params.q);
+  if (params.status) query.append('status', params.status);
+  if (params.statuses) query.append('statuses', params.statuses);
+  if (params.sellerId) query.append('sellerId', params.sellerId);
+  if (params.categoryId) query.append('categoryId', params.categoryId);
+  if (params.categoryIds) query.append('categoryIds', params.categoryIds);
+  if (params.brandId) query.append('brandId', params.brandId);
+  if (params.brandIds) query.append('brandIds', params.brandIds);
+  if (params.submittedPeriod) query.append('submittedPeriod', params.submittedPeriod);
+  if (params.noMainImage) query.append('noMainImage', 'true');
+  if (params.noDescription) query.append('noDescription', 'true');
+  if (params.noBrand) query.append('noBrand', 'true');
+  if (params.noVariants) query.append('noVariants', 'true');
+  if (params.noPrice) query.append('noPrice', 'true');
+  if (params.duplicateSku) query.append('duplicateSku', 'true');
+  if (params.noStock) query.append('noStock', 'true');
+  if (params.resubmitted) query.append('resubmitted', 'true');
+  if (params.hasProblems) query.append('hasProblems', 'true');
+  if (params.sortBy) query.append('sortBy', params.sortBy);
+  if (params.sortOrder) query.append('sortOrder', params.sortOrder);
+  if (params.source) query.append('source', params.source);
+
+  const queryString = query.toString() ? `?${query.toString()}` : '';
+  const res = await request<any>('GET', `/admin/products${queryString}`, { signal: params.signal });
+  return {
+    items: res?.items || (Array.isArray(res) ? res : []),
+    totalCount: res?.totalCount ?? res?.total ?? (res?.items?.length || 0),
+  };
 };
 
 export const getAdminProduct = async (id: string): Promise<AdminProduct> => {
@@ -87,33 +232,107 @@ export const getAdminProduct = async (id: string): Promise<AdminProduct> => {
   return res;
 };
 
+export interface ProductPreviewLinkResponse {
+  pageUrl: string;
+  catalogCardUrl: string;
+  expiresAt: string;
+}
+
+export const createProductPreviewLink = async (productId: string): Promise<ProductPreviewLinkResponse> => {
+  return request<ProductPreviewLinkResponse>('POST', `/admin/products/${productId}/preview-link`);
+};
+
 export const getAdminProductModerationHistory = async (productId: string): Promise<ModerationHistoryResponse> => {
   return request<ModerationHistoryResponse>('GET', `/admin/products/${productId}/moderation-logs`);
 };
 
-export const getModerationProducts = async (): Promise<ModerationProduct[]> => {
-  const res = await request<any>('GET', '/admin/moderation/products');
-  return res?.items || (Array.isArray(res) ? res : []);
+export const getModerationProducts = async (params?: {
+  q?: string;
+  status?: string;
+  sellerId?: string;
+  categoryId?: string;
+  categoryIds?: string;
+  brandId?: string;
+  brandIds?: string;
+  submittedPeriod?: string;
+  submittedFrom?: string;
+  submittedTo?: string;
+  noMainImage?: boolean;
+  noDescription?: boolean;
+  noBrand?: boolean;
+  noVariants?: boolean;
+  noPrice?: boolean;
+  duplicateSku?: boolean;
+  noStock?: boolean;
+  resubmitted?: boolean;
+  hasProblems?: boolean;
+  sortBy?: string;
+  sortOrder?: string;
+  limit?: number;
+  offset?: number;
+  signal?: AbortSignal;
+}): Promise<{ items: any[]; totalCount: number }> => {
+  const query = new URLSearchParams();
+  if (params?.q) query.append('q', params.q);
+  if (params?.status) query.append('status', params.status);
+  if (params?.sellerId) query.append('sellerId', params.sellerId);
+  if (params?.categoryId) query.append('categoryId', params.categoryId);
+  if (params?.categoryIds) query.append('categoryIds', params.categoryIds);
+  if (params?.brandId) query.append('brandId', params.brandId);
+  if (params?.brandIds) query.append('brandIds', params.brandIds);
+  if (params?.submittedPeriod) query.append('submittedPeriod', params.submittedPeriod);
+  if (params?.submittedFrom) query.append('submittedFrom', params.submittedFrom);
+  if (params?.submittedTo) query.append('submittedTo', params.submittedTo);
+  if (params?.noMainImage) query.append('noMainImage', 'true');
+  if (params?.noDescription) query.append('noDescription', 'true');
+  if (params?.noBrand) query.append('noBrand', 'true');
+  if (params?.noVariants) query.append('noVariants', 'true');
+  if (params?.noPrice) query.append('noPrice', 'true');
+  if (params?.duplicateSku) query.append('duplicateSku', 'true');
+  if (params?.noStock) query.append('noStock', 'true');
+  if (params?.resubmitted) query.append('resubmitted', 'true');
+  if (params?.hasProblems) query.append('hasProblems', 'true');
+  if (params?.sortBy) query.append('sortBy', params.sortBy);
+  if (params?.sortOrder) query.append('sortOrder', params.sortOrder);
+  if (params?.limit) query.append('limit', String(params.limit));
+  if (params?.offset) query.append('offset', String(params.offset));
+
+  const queryString = query.toString() ? `?${query.toString()}` : '';
+  const res = await request<any>('GET', `/admin/moderation/products${queryString}`, { signal: params?.signal });
+  return {
+    items: res?.items || (Array.isArray(res) ? res : []),
+    totalCount: res?.totalCount ?? (res?.items?.length || 0),
+  };
 };
 
-export const adminApproveProduct = async (id: string, comment?: string): Promise<void> => {
-  return request<void>('POST', `/admin/moderation/products/${id}/approve`, { body: { comment } });
+export const adminApproveProduct = async (id: string, comment?: string, expectedUpdatedAt?: string): Promise<void> => {
+  return request<void>('POST', `/admin/moderation/products/${id}/approve`, { body: { comment, expectedUpdatedAt } });
 };
 
-export const adminRejectProduct = async (id: string, comment: string): Promise<void> => {
-  return request<void>('POST', `/admin/moderation/products/${id}/reject`, { body: { comment } });
+export const adminStartProductReview = async (id: string, expectedUpdatedAt?: string): Promise<void> => {
+  return request<void>('POST', `/admin/moderation/products/${id}/start-review`, {
+    body: { expectedUpdatedAt },
+  });
 };
 
-export const adminPublishProduct = async (id: string, comment?: string): Promise<void> => {
-  return request<void>('POST', `/admin/moderation/products/${id}/publish`, { body: { comment } });
+export const adminRejectProduct = async (id: string, comment: string, expectedUpdatedAt?: string): Promise<void> => {
+  return request<void>('POST', `/admin/moderation/products/${id}/reject`, { body: { comment, expectedUpdatedAt } });
 };
 
-export const adminHideProduct = async (id: string, comment?: string): Promise<void> => {
-  return request<void>('POST', `/admin/moderation/products/${id}/hide`, { body: { comment } });
+export const adminPublishProduct = async (id: string, comment?: string, expectedUpdatedAt?: string): Promise<void> => {
+  return request<void>('POST', `/admin/moderation/products/${id}/publish`, { body: { comment, expectedUpdatedAt } });
 };
 
-export const adminBlockProduct = async (id: string, comment?: string): Promise<void> => {
-  return request<void>('POST', `/admin/moderation/products/${id}/block`, { body: { comment } });
+export const updateAdminProduct = async (id: string, data: any): Promise<AdminProduct> => {
+  return request<AdminProduct>('PATCH', `/admin/products/${id}`, { body: data });
+};
+
+export const adminHideProduct = async (id: string, comment?: string, expectedUpdatedAt?: string): Promise<void> => {
+  return request<void>('POST', `/admin/moderation/products/${id}/hide`, { body: { comment, expectedUpdatedAt } });
+};
+
+export const adminBlockProduct = async (id: string, comment?: string, expectedUpdatedAt?: string): Promise<void> => {
+  return request<void>('POST', `/admin/moderation/products/${id}/block`, { body: { comment, expectedUpdatedAt } });
 };
 
 export const getAdminInventory = async (params?: { q?: string; sellerId?: string; source?: string; lowStock?: boolean; limit?: number; offset?: number }): Promise<{ items: AdminInventoryItem[]; totalCount: number }> => {
@@ -175,6 +394,9 @@ export const updateAdminOrderStatus = async (id: string, data: { status: string;
 
 export const getAdminOrderFulfillments = async (orderId: string): Promise<{ items: AdminFulfillment[]; totalCount: number }> => {
   const res = await request<any>('GET', `/admin/orders/${orderId}/fulfillments`);
+  if (Array.isArray(res)) {
+    return { items: res, totalCount: res.length };
+  }
   return { ...res, items: res?.items || [] };
 };
 
@@ -192,13 +414,17 @@ export const getAdminFulfillment = async (id: string): Promise<AdminFulfillment>
   return request<AdminFulfillment>('GET', `/admin/order-fulfillments/${id}`);
 };
 
-export const getAdminPayments = async (): Promise<{ items: AdminPayment[]; totalCount: number }> => {
-  const res = await request<any>('GET', '/admin/payments');
+export const getAdminPayments = async (query: string = '', signal?: AbortSignal): Promise<{ items: AdminPayment[]; totalCount: number }> => {
+  const res = await request<any>('GET', `/admin/payments${query}`, { signal });
   return { ...res, items: res?.items || [] };
 };
 
 export const getAdminPayment = async (id: string): Promise<AdminPayment> => {
   return request<AdminPayment>('GET', `/admin/payments/${id}`);
+};
+
+export const getAdminPaymentDetail = async (id: string, signal?: AbortSignal): Promise<import('./types').AdminPaymentDetail> => {
+  return request<import('./types').AdminPaymentDetail>('GET', `/admin/payments/${id}`, { signal });
 };
 
 export const getAdminShipments = async (): Promise<AdminShipment[]> => {
@@ -334,6 +560,9 @@ export const getAdminReportsSummary = async (): Promise<any> => {
 export const getAdminSellerDetail = (id: string) =>
   request<SellerDetail>('GET', `/admin/sellers/${id}`);
 
+export const getAdminSellerOverview = (id: string, period?: string) =>
+  request<SellerOverviewData>('GET', `/admin/sellers/${id}/overview${period ? `?period=${period}` : ''}`);
+
 export const verifyAdminSeller = (id: string) =>
   request<{ sellerId: string; status: string }>('POST', `/admin/sellers/${id}/verify`);
 
@@ -370,6 +599,10 @@ import type { AdminAuction, AdminAuctionLot, AdminAuctionBid } from './types';
 export const getAdminAuctions = async (): Promise<{ items: AdminAuction[]; totalCount: number }> => {
   const res = await request<any>('GET', '/admin/auctions');
   return { ...res, items: res?.items || [] };
+};
+
+export const updateAuctionLotStatus = async (id: string, status: string, adminNote?: string): Promise<void> => {
+  return request<void>('PATCH', `/admin/auction-lots/${id}/status`, { body: { status, adminNote } });
 };
 
 export const getAdminAuction = async (id: string): Promise<AdminAuction> => {
@@ -473,3 +706,25 @@ export const getAdminSellerBalances = async (params?: { limit?: number; offset?:
   if (params?.offset) query.set('offset', params.offset.toString());
   return await request<any>('GET', `/admin/seller-balances?${query.toString()}`);
 };
+
+
+export const listSellerNotes = (id: string) =>
+  request<{ items: SellerNote[] }>('GET', `/admin/sellers/${id}/notes`);
+
+export const createSellerNote = (id: string, data: CreateSellerNoteRequest) =>
+  request<SellerNote>('POST', `/admin/sellers/${id}/notes`, { body: data });
+
+export const listImprovementPlans = (id: string) =>
+  request<{ items: SellerImprovementPlan[] }>('GET', `/admin/sellers/${id}/improvement-plans`);
+
+export const createImprovementPlan = (id: string, data: CreateSellerImprovementPlanRequest) =>
+  request<SellerImprovementPlan>('POST', `/admin/sellers/${id}/improvement-plans`, { body: data });
+
+export const updateImprovementPlanStatus = (id: string, planId: string, status: string) =>
+  request<void>('PATCH', `/admin/sellers/${id}/improvement-plans/${planId}/status`, { body: { status } });
+
+export const getAdminSellerCommissionHistory = (id: string) =>
+  request<any[]>('GET', `/admin/sellers/${id}/commission`);
+
+export const setAdminSellerCommission = (id: string, data: { rateBps: number; reason: string }) =>
+  request<void>('POST', `/admin/sellers/${id}/commission`, { body: data });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -7,21 +7,17 @@ import {
   Eye,
   Edit2,
   PackagePlus,
-  PauseCircle,
   Search,
   ShoppingBag,
   Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 import {
-  issueLabels,
   statusLabels,
   type SellerProduct,
-  type SellerProductIssue,
   type SellerProductStatus,
 } from '../lib/seller-products';
 import { getSellerProducts, getSellerMe } from '@zamk/api-client/src/seller';
-import { request } from '@zamk/api-client/src/client';
 import { adaptProductList } from '../api/adapter';
 import { cn } from '../lib/utils';
 
@@ -34,26 +30,18 @@ const currencyFormatter = new Intl.NumberFormat('ru-RU', {
 const numberFormatter = new Intl.NumberFormat('ru-RU');
 const formatCurrency = (value: number) => currencyFormatter.format(value);
 const formatNumber = (value: number) => numberFormatter.format(value);
-const formatPercent = (value: number) => `${value.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%`;
 
 const statusFilterOptions: Array<{ value: SellerProductStatus | 'all'; label: string }> = [
   { value: 'all', label: 'Все статусы' },
   { value: 'published', label: statusLabels.published },
   { value: 'draft', label: statusLabels.draft },
-  { value: 'moderation', label: statusLabels.moderation },
+  { value: 'pending_moderation', label: statusLabels.pending_moderation },
+  { value: 'in_review', label: statusLabels.in_review },
   { value: 'approved', label: statusLabels.approved },
   { value: 'rejected', label: statusLabels.rejected },
   { value: 'hidden', label: statusLabels.hidden },
   { value: 'blocked', label: statusLabels.blocked },
   { value: 'out_of_stock', label: statusLabels.out_of_stock },
-];
-
-const issueFilterOptions: Array<{ value: SellerProductIssue | 'all'; label: string }> = [
-  { value: 'all', label: 'Все сигналы' },
-  { value: 'low_stock', label: issueLabels.low_stock },
-  { value: 'weak_card', label: issueLabels.weak_card },
-  { value: 'ads_waste', label: issueLabels.ads_waste },
-  { value: 'no_issue', label: issueLabels.no_issue },
 ];
 
 function ProductBadge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'good' | 'warning' | 'danger' | 'info' }) {
@@ -71,30 +59,17 @@ function ProductBadge({ children, tone = 'neutral' }: { children: React.ReactNod
 function getStatusTone(status: SellerProductStatus) {
   const tones: Record<SellerProductStatus, 'neutral' | 'good' | 'warning' | 'danger' | 'info'> = {
     draft: 'neutral',
-    moderation: 'info',
+    pending_moderation: 'info',
+    in_review: 'info',
     approved: 'good',
     published: 'good',
     rejected: 'danger',
     hidden: 'warning',
     blocked: 'danger',
-    out_of_stock: 'warning',
-    needs_changes: 'warning',
-    low_stock: 'warning',
-    paused: 'warning',
+    out_of_stock: 'warning'
   };
 
   return tones[status] || 'neutral';
-}
-
-function getIssueTone(issue: SellerProductIssue) {
-  const tones: Record<SellerProductIssue, 'neutral' | 'good' | 'warning' | 'danger' | 'info'> = {
-    no_issue: 'good',
-    low_stock: 'warning',
-    weak_card: 'warning',
-    ads_waste: 'danger',
-  };
-
-  return tones[issue];
 }
 
 function SummaryCard({ label, value, hint, icon: Icon }: { label: string; value: string; hint: string; icon: LucideIcon }) {
@@ -111,22 +86,6 @@ function SummaryCard({ label, value, hint, icon: Icon }: { label: string; value:
         </span>
       </div>
     </article>
-  );
-}
-
-function QualityMeter({ value }: { value: number }) {
-  const tone = value >= 80 ? 'bg-emerald-500 dark:bg-emerald-300' : value >= 60 ? 'bg-amber-500 dark:bg-amber-300' : 'bg-red-500 dark:bg-red-300';
-
-  return (
-    <div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="font-semibold uppercase tracking-[0.12em] text-ash dark:text-white/62">Качество</span>
-        <span className="font-semibold text-graphite dark:text-white">{value}%</span>
-      </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-ice dark:bg-white/10">
-        <div className={cn('h-full rounded-full', tone)} style={{ width: `${value}%` }} />
-      </div>
-    </div>
   );
 }
 
@@ -152,9 +111,7 @@ function ProductAvatar({ product }: { product: SellerProduct }) {
 }
 
 function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct; sellerStatus: string }) {
-  const totalStock = product.sizes.reduce((sum, item) => sum + item.stock, 0);
-  const margin = product.price - product.cost;
-  const adShare = product.revenue > 0 ? (product.adsSpend / product.revenue) * 100 : 0;
+  const isApprovedAndNoStock = product.status === 'approved' && (!product.sizes.length || product.sizes.every(s => s.stock === 0));
 
   return (
     <aside className="glass-panel-strong p-6 md:p-8">
@@ -165,7 +122,12 @@ function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct;
           <h2 className="mt-2 text-3xl font-serif leading-tight text-graphite dark:text-white">{product.title}</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             <ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge>
-            <ProductBadge tone={getIssueTone(product.issue)}>{issueLabels[product.issue]}</ProductBadge>
+            {isApprovedAndNoStock && (
+              <ProductBadge tone="warning">Требуется поставка</ProductBadge>
+            )}
+            {(product.status === 'published' && (product.sizes?.reduce((sum, s) => sum + (s.stock || 0), 0) || 0) > 0) && (
+              <ProductBadge tone="good">В наличии</ProductBadge>
+            )}
           </div>
           {product.status === 'rejected' && product.rejectionReason && (
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-200">
@@ -176,50 +138,50 @@ function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct;
         </div>
       </div>
 
-      <div className="mt-7">
-        <QualityMeter value={product.quality} />
-      </div>
-
       <div className="mt-7 grid gap-3 sm:grid-cols-2">
-        {[
-          ['Цена', formatCurrency(product.price)],
-          ['Маржа на штуку', formatCurrency(margin)],
-          ['Остаток', `${formatNumber(totalStock)} ед.`],
-          ['Доля рекламы', formatPercent(adShare)],
-          ['Просмотры', formatNumber(product.views)],
-          ['Заказы', formatNumber(product.orders)],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-2xl border border-border-lighter bg-white/70 p-4 dark:border-white/16 dark:bg-black/24">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">{label}</p>
-            <p className="mt-2 text-lg font-semibold text-graphite dark:text-white">{value}</p>
-          </div>
-        ))}
+        <div className="rounded-2xl border border-border-lighter bg-white/70 p-4 dark:border-white/16 dark:bg-black/24">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">Цена</p>
+          <p className="mt-2 text-lg font-semibold text-graphite dark:text-white">{formatCurrency(product.price)}</p>
+        </div>
+        <div className="rounded-2xl border border-border-lighter bg-white/70 p-4 dark:border-white/16 dark:bg-black/24">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">Склад ZAMK</p>
+          <p className="mt-2 text-sm font-medium text-graphite dark:text-white">
+            Ожидается поставка
+          </p>
+        </div>
       </div>
 
       <div className="mt-7 rounded-2xl border border-border-lighter bg-white/70 p-4 dark:border-white/16 dark:bg-black/24">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">Размеры и остатки</p>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">Варианты (SKU)</p>
+        <div className="mt-3 flex flex-col gap-2">
           {product.sizes.map((item) => (
-            <span key={item.size} className="rounded-full border border-border-lighter px-3 py-1 text-xs text-graphite dark:border-white/16 dark:text-white/78">
-              {item.size}: {item.stock}
-            </span>
+            <div key={item.size} className="flex justify-between items-center rounded-xl border border-border-lighter px-3 py-2 text-sm text-graphite dark:border-white/16 dark:text-white/78">
+              <span>{item.size}</span>
+              <span className="text-graphite-light">ZAMK: 0 шт.</span>
+            </div>
           ))}
         </div>
       </div>
 
-      <p className="mt-5 text-sm leading-relaxed text-graphite-light dark:text-white/68">{product.description}</p>
+      {isApprovedAndNoStock && (
+        <div className="mt-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-800">
+          Товар одобрен. Для старта продаж необходимо оформить поставку на склад ZAMK.
+        </div>
+      )}
+
+      <p className="mt-5 text-sm leading-relaxed text-graphite-light dark:text-white/68 line-clamp-3">{product.description}</p>
       
       <div className="mt-6 flex flex-col">
         {sellerStatus === 'blocked' || sellerStatus === 'archived' ? (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-            Действия с товарами недоступны из-за статуса магазина.
+            Действия недоступны из-за статуса магазина.
           </div>
         ) : (
           <Link 
             to={`/products/${product.id}/edit`}
             className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-border-lighter bg-white/75 px-6 text-sm font-semibold text-graphite transition-colors hover:bg-white dark:border-white/16 dark:bg-white/8 dark:text-white dark:hover:bg-white/12"
           >
-            {product.status === 'moderation' || product.status === 'published' || product.status === 'approved' || product.status === 'hidden' || product.status === 'blocked' ? (
+            {['pending_moderation', 'in_review', 'approved', 'published', 'hidden', 'blocked'].includes(product.status) ? (
               <>
                 <Eye className="h-4 w-4" />
                 Просмотр товара
@@ -227,7 +189,7 @@ function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct;
             ) : product.status === 'rejected' ? (
               <>
                 <AlertTriangle className="h-4 w-4 text-red-500" />
-                Исправить и отправить
+                Исправить карточку
               </>
             ) : (
               <>
@@ -243,12 +205,12 @@ function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct;
 }
 
 export function SellerProducts() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<SellerProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<SellerProductStatus | 'all'>('all');
-  const [issue, setIssue] = useState<SellerProductIssue | 'all'>('all');
   const [selectedId, setSelectedId] = useState('');
   const [sellerStatus, setSellerStatus] = useState<string>('active');
 
@@ -277,31 +239,14 @@ export function SellerProducts() {
     return products.filter((product) => {
       const matchesQuery = !normalizedQuery || [product.title, product.sku, product.category].some((item) => item.toLowerCase().includes(normalizedQuery));
       const matchesStatus = status === 'all' || product.status === status;
-      const matchesIssue = issue === 'all' || product.issue === issue;
-      return matchesQuery && matchesStatus && matchesIssue;
+      return matchesQuery && matchesStatus;
     });
-  }, [issue, products, query, status]);
+  }, [products, query, status]);
 
   const selectedProduct = products.find((product) => product.id === selectedId) || filteredProducts[0] || products[0];
-  const totalStock = products.reduce((sum, product) => sum + product.sizes.reduce((sizeSum, item) => sizeSum + item.stock, 0), 0);
-  const problemCount = products.filter((product) => product.issue !== 'no_issue').length;
-  const moderationCount = products.filter((product) => product.status === 'moderation').length;
+  const moderationCount = products.filter((product) => product.status === 'pending_moderation' || product.status === 'in_review').length;
+  const approvedCount = products.filter((product) => product.status === 'approved').length;
   const revenue = products.reduce((sum, product) => sum + product.revenue, 0);
-
-  const updateProductStatus = async (id: string, nextStatus: SellerProductStatus) => {
-    try {
-      // Map UI status back to backend status for the PATCH
-      let apiStatus = nextStatus === 'paused' ? 'hidden' : 'draft';
-      // It's dangerous for seller to try to set 'published' directly. Backend will reject it.
-      // So we just send 'hidden' or 'draft'.
-      await request('PATCH', `/seller/products/${id}`, { body: { status: apiStatus } });
-      
-      // Update local state for immediate feedback
-      setProducts((current) => current.map((product) => (product.id === id ? { ...product, status: nextStatus, updatedAt: 'Только что' } : product)));
-    } catch (err: any) {
-      setError(err.message || 'Ошибка обновления статуса');
-    }
-  };
 
   if (isLoading) {
     return <div className="min-h-screen pt-24 pb-24 md:pt-28 md:pb-20 flex justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div></div>;
@@ -314,7 +259,7 @@ export function SellerProducts() {
   return (
     <div className="relative z-10 min-h-screen pt-24 pb-24 md:pt-28 md:pb-20">
       <div className="container mx-auto max-w-[1400px] px-4 sm:px-6">
-        <Link to="/seller-dashboard" className="inline-flex items-center gap-2 text-sm text-ash hover:text-graphite dark:text-white/60 dark:hover:text-white">
+        <Link to="/dashboard" className="inline-flex items-center gap-2 text-sm text-ash hover:text-graphite dark:text-white/60 dark:hover:text-white">
           <ArrowLeft className="h-4 w-4" />
           Кабинет продавца
         </Link>
@@ -325,11 +270,11 @@ export function SellerProducts() {
               <p className="studio-label">Ассортимент</p>
               <h1 className="mt-3 text-4xl font-serif leading-tight text-graphite dark:text-white md:text-6xl">Мои товары</h1>
               <p className="studio-subtitle mt-4 max-w-3xl">
-                Управляйте опубликованными товарами, черновиками, остатками и сигналами качества карточек в одном месте.
+                Управляйте карточками товаров. После модерации необходимо оформить поставку на склад ZAMK для старта продаж.
               </p>
             </div>
             <Link
-              to="/seller-products/new"
+              to="/products/new"
               className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-graphite px-6 text-sm font-semibold text-white transition-colors hover:bg-graphite-light dark:bg-white dark:text-black dark:hover:bg-white/86"
             >
               <PackagePlus className="h-4 w-4" />
@@ -338,21 +283,23 @@ export function SellerProducts() {
           </div>
         </section>
 
-        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <SummaryCard label="Всего товаров" value={formatNumber(products.length)} hint={`${formatNumber(totalStock)} единиц на остатках`} icon={ShoppingBag} />
-          <SummaryCard label="Выручка ассортимента" value={formatCurrency(revenue)} hint="по текущим моковым данным" icon={BarChart3} />
-          <SummaryCard label="Проблемные карточки" value={formatNumber(problemCount)} hint="требуют действия сегодня" icon={AlertTriangle} />
-          <SummaryCard label="На модерации" value={formatNumber(moderationCount)} hint="ожидают проверки площадки" icon={Sparkles} />
+        <section className="mt-6 grid gap-4 md:grid-cols-3 xl:grid-cols-4">
+          <SummaryCard label="Всего карточек" value={formatNumber(products.length)} hint="создано в системе" icon={ShoppingBag} />
+          <SummaryCard label="Одобрено" value={formatNumber(approvedCount)} hint="готово к поставке" icon={Sparkles} />
+          <SummaryCard label="На проверке" value={formatNumber(moderationCount)} hint="ожидают решения" icon={AlertTriangle} />
+          <div className="hidden xl:block">
+             <SummaryCard label="Текущая выручка" value={formatCurrency(revenue)} hint="данные отсутствуют" icon={BarChart3} />
+          </div>
         </section>
 
         <section className="mt-6 glass-panel-strong p-5 md:p-6">
-          <div className="grid gap-3 lg:grid-cols-[1fr_220px_220px]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_220px]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ash" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Поиск по названию, артикулу или категории"
+                placeholder="Поиск по названию или категории"
                 className="seller-setting-input h-12 w-full rounded-2xl border border-border-lighter bg-white/78 pl-11 pr-4 text-sm text-graphite outline-none focus:border-graphite/30 dark:border-white/16 dark:bg-black/24 dark:text-white"
               />
             </label>
@@ -362,17 +309,6 @@ export function SellerProducts() {
               className="seller-setting-input h-12 rounded-2xl border border-border-lighter bg-white/78 px-4 text-sm text-graphite outline-none dark:border-white/16 dark:bg-black/24 dark:text-white"
             >
               {statusFilterOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={issue}
-              onChange={(event) => setIssue(event.target.value as SellerProductIssue | 'all')}
-              className="seller-setting-input h-12 rounded-2xl border border-border-lighter bg-white/78 px-4 text-sm text-graphite outline-none dark:border-white/16 dark:bg-black/24 dark:text-white"
-            >
-              {issueFilterOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -388,75 +324,66 @@ export function SellerProducts() {
               </div>
               <h2 className="mb-2 text-2xl font-serif text-graphite dark:text-white">У вас пока нет товаров</h2>
               <p className="mb-8 max-w-md text-graphite-light dark:text-white/60">
-                Добавьте первый товар, чтобы отправить его на модерацию. После одобрения он появится в публичном каталоге.
+                Добавьте первый товар, чтобы отправить его на модерацию.
               </p>
-              <Link to="/seller-products/new" className="button-dark">
+              <Link to="/products/new" className="button-dark">
                 Добавить товар
               </Link>
             </div>
           ) : (
             <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
-              <section className="glass-panel-strong p-5 md:p-6">
+              <section className="glass-panel-strong p-5 md:p-6 overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="min-w-[1120px] w-full text-left text-sm">
+                  <table className="w-full text-left text-sm whitespace-nowrap">
                     <thead>
                       <tr className="border-b border-border-lighter text-[11px] uppercase tracking-[0.14em] text-ash dark:border-white/10">
-                        <th className="py-3 pr-4 font-semibold">Товар</th>
-                        <th className="py-3 pr-4 font-semibold">Статус</th>
+                        <th className="py-3 pr-4 font-semibold w-16">Фото</th>
+                        <th className="py-3 pr-4 font-semibold min-w-[200px]">Товар</th>
+                        <th className="py-3 pr-4 font-semibold">Варианты</th>
                         <th className="py-3 pr-4 font-semibold">Цена</th>
-                        <th className="py-3 pr-4 font-semibold">Остаток</th>
-                        <th className="py-3 pr-4 font-semibold">Просмотры</th>
-                        <th className="py-3 pr-4 font-semibold">Заказы</th>
-                        <th className="py-3 pr-4 font-semibold">Качество</th>
-                        <th className="py-3 pr-4 font-semibold">Сигнал</th>
-                        <th className="py-3 font-semibold">Действия</th>
+                        <th className="py-3 pr-4 font-semibold">Статус</th>
+                        <th className="py-3 pr-4 font-semibold">Склад ZAMK</th>
+                        <th className="py-3 font-semibold text-right">Наличие</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredProducts.map((product) => {
-                        const stock = product.sizes.reduce((sum, item) => sum + item.stock, 0);
                         const isSelected = product.id === selectedProduct?.id;
 
                         return (
                           <tr
                             key={product.id}
-                            className={cn('border-b border-border-lighter/70 last:border-b-0 dark:border-white/8', isSelected && 'bg-ice/50 dark:bg-white/5')}
+                            className={cn('border-b border-border-lighter/70 last:border-b-0 dark:border-white/8 cursor-pointer', isSelected && 'bg-ice/50 dark:bg-white/5')}
+                            onClick={() => setSelectedId(product.id)}
+                            onDoubleClick={() => navigate(`/products/${product.id}/edit`)}
                           >
                             <td className="py-4 pr-4">
-                              <button type="button" onClick={() => setSelectedId(product.id)} className="flex items-center gap-3 text-left">
                                 <ProductAvatar product={product} />
-                                <span>
-                                  <span className="block font-medium text-graphite dark:text-white">{product.title}</span>
-                                  <span className="mt-1 block text-xs text-graphite-light dark:text-white/58">{product.sku} · {product.category}</span>
-                                </span>
-                              </button>
                             </td>
-                            <td className="py-4 pr-4"><ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge></td>
+                            <td className="py-4 pr-4">
+                               <span className="block font-medium text-graphite dark:text-white max-w-[200px] truncate">{product.title}</span>
+                               <span className="mt-1 block text-xs text-graphite-light dark:text-white/58">{product.category}</span>
+                            </td>
+                            <td className="py-4 pr-4 text-graphite dark:text-white">{product.sizes.length} SKU</td>
                             <td className="py-4 pr-4 text-graphite dark:text-white">{formatCurrency(product.price)}</td>
-                            <td className="py-4 pr-4 text-graphite-light dark:text-white/68">{formatNumber(stock)}</td>
-                            <td className="py-4 pr-4 text-graphite-light dark:text-white/68">{formatNumber(product.views)}</td>
-                            <td className="py-4 pr-4 text-graphite-light dark:text-white/68">{formatNumber(product.orders)}</td>
-                            <td className="py-4 pr-4 min-w-[130px]"><QualityMeter value={product.quality} /></td>
-                            <td className="py-4 pr-4"><ProductBadge tone={getIssueTone(product.issue)}>{issueLabels[product.issue]}</ProductBadge></td>
-                            <td className="py-4">
-                              <div className="flex gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => updateProductStatus(product.id, product.status === 'paused' ? 'published' : 'paused')}
-                                  className="rounded-full border border-border-lighter p-2 text-graphite-light transition-colors hover:text-graphite dark:border-white/16 dark:text-white/62 dark:hover:text-white"
-                                  aria-label="Переключить продажу"
-                                >
-                                  <PauseCircle className="h-4 w-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedId(product.id)}
-                                  className="rounded-full border border-border-lighter p-2 text-graphite-light transition-colors hover:text-graphite dark:border-white/16 dark:text-white/62 dark:hover:text-white"
-                                  aria-label="Открыть детали"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </button>
-                              </div>
+                            <td className="py-4 pr-4">
+                              <div className="flex flex-col gap-1 items-start">
+                                  <ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge>
+                                  {(product.status === 'published' && (!product.sizes?.length || product.sizes.every(s => s.stock === 0))) && (
+                                    <ProductBadge tone="warning">Требуется поставка</ProductBadge>
+                                  )}
+                                  {(product.status === 'published' && (product.sizes?.reduce((sum, s) => sum + (s.stock || 0), 0) || 0) > 0) && (
+                                    <ProductBadge tone="good">В наличии</ProductBadge>
+                                  )}
+                                </div>
+                            </td>
+                            <td className="py-4 pr-4 text-graphite-light dark:text-white/68">Нет товара</td>
+                            <td className="py-4 text-right">
+                                {product.status === 'published' ? (
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">Доступен</span>
+                                ) : (
+                                    <span className="text-ash dark:text-white/40">Недоступен</span>
+                                )}
                             </td>
                           </tr>
                         );

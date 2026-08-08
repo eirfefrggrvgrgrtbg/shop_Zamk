@@ -1,4 +1,4 @@
-export type SellerProductStatus = 'draft' | 'moderation' | 'approved' | 'published' | 'rejected' | 'hidden' | 'blocked' | 'out_of_stock' | 'needs_changes' | 'low_stock' | 'paused';
+export type SellerProductStatus = 'draft' | 'pending_moderation' | 'in_review' | 'approved' | 'published' | 'rejected' | 'hidden' | 'blocked' | 'out_of_stock';
 
 export type SellerProductIssue = 'low_stock' | 'weak_card' | 'ads_waste' | 'no_issue';
 
@@ -40,17 +40,14 @@ export interface SellerProduct {
 
 export const statusLabels: Record<SellerProductStatus, string> = {
   draft: 'Черновик',
-  moderation: 'На модерации',
+  pending_moderation: 'На модерации',
+  in_review: 'На проверке',
   approved: 'Одобрен',
   published: 'Опубликован',
-  rejected: 'Отклонён',
+  rejected: 'Нужны исправления',
   hidden: 'Скрыт',
   blocked: 'Заблокирован',
-  out_of_stock: 'Нет в наличии',
-  // Legacy / custom UI mapping values if still needed
-  needs_changes: 'Нужны правки',
-  low_stock: 'Заканчивается',
-  paused: 'Снят с продажи',
+  out_of_stock: 'Нет в наличии'
 };
 
 export const issueLabels: Record<SellerProductIssue, string> = {

@@ -87,3 +87,15 @@ func RequireRole(allowedRoles ...string) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// RequireCustomerAccess allows both customers and sellers to access customer endpoints.
+func RequireCustomerAccess() func(http.Handler) http.Handler {
+	// Import "users" package constants if not available, but auth.go might need to import it or we can just use strings "customer", "seller".
+	return RequireRole("customer", "seller")
+}
+
+// RequireSellerAccess allows only sellers.
+func RequireSellerAccess() func(http.Handler) http.Handler {
+	return RequireRole("seller")
+}
+

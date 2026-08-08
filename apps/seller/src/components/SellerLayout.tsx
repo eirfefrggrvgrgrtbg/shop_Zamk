@@ -15,11 +15,13 @@ import {
   RotateCcw,
   MessageSquare,
   AlertTriangle,
+  Truck,
   Menu,
   X
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { NotificationBell } from './notifications/NotificationBell';
+import { GlobalMoneyStrip } from './finance/GlobalMoneyStrip';
 
 export function SellerLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -54,6 +56,7 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
     { name: 'Аналитика', path: '/analytics', icon: BarChart2 },
     { name: 'Выплаты', path: '/payouts', icon: Wallet },
     { name: 'Предупреждения', path: '/warnings', icon: AlertTriangle },
+    { name: 'Поставки', path: '/supplies', icon: Truck },
     { name: 'Шаблоны', path: '/templates', icon: FileText },
   ];
 
@@ -137,6 +140,8 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
             <NotificationBell />
           </div>
         </header>
+
+        <GlobalMoneyStrip />
 
         <main className="flex-1 overflow-y-auto">
           {sellerStatus === 'pending' && (

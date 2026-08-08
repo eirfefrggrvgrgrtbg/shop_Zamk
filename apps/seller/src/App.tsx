@@ -14,6 +14,9 @@ import { SellerPayouts } from './pages/SellerPayouts';
 import { SellerTemplates } from './pages/SellerTemplates';
 import { SellerSettings } from './pages/SellerSettings';
 import { SellerWarnings } from './pages/SellerWarnings';
+import { SellerSupplies } from './pages/SellerSupplies';
+import { SellerSupplyNew } from './pages/SellerSupplyNew';
+import { SellerSupplyDetail } from './pages/SellerSupplyDetail';
 import { SellerOnboarding } from './pages/SellerOnboarding';
 import { AuthProvider } from './contexts/AuthContext';
 import { SellerProtectedRoute } from './components/SellerProtectedRoute';
@@ -41,6 +44,9 @@ export default function App() {
           <Route path="/payouts" element={<SellerProtectedRoute><SellerLayout><SellerPayouts /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/templates" element={<SellerProtectedRoute><SellerLayout><SellerTemplates /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/warnings" element={<SellerProtectedRoute><SellerLayout><SellerWarnings /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/supplies" element={<SellerProtectedRoute><SellerLayout><SellerSupplies /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/supplies/new" element={<SellerProtectedRoute><SellerLayout><SellerSupplyNew /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/supplies/:id" element={<SellerProtectedRoute><SellerLayout><SellerSupplyDetail /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/settings" element={<SellerProtectedRoute><SellerLayout><SellerSettings /></SellerLayout></SellerProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

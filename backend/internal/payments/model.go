@@ -16,6 +16,9 @@ type Payment struct {
 	Currency          string     `json:"currency" db:"currency"`
 	PaymentURL        *string    `json:"paymentUrl" db:"payment_url"`
 	IdempotencyKey    string     `json:"idempotencyKey" db:"idempotency_key"`
+	PaymentNumber     string     `json:"paymentNumber" db:"payment_number"`
+	PaymentMethod     string     `json:"paymentMethod" db:"payment_method"`
+	IntegrationMode   string     `json:"integrationMode" db:"integration_mode"`
 	CreatedAt         time.Time  `json:"createdAt" db:"created_at"`
 	UpdatedAt         time.Time  `json:"updatedAt" db:"updated_at"`
 	PaidAt            *time.Time `json:"paidAt" db:"paid_at"`
@@ -29,6 +32,7 @@ type PaymentEvent struct {
 	Provider          string     `json:"provider" db:"provider"`
 	ProviderPaymentID *string    `json:"providerPaymentId" db:"provider_payment_id"`
 	EventType         string     `json:"eventType" db:"event_type"`
+	EventKey          string     `json:"eventKey" db:"event_key"`
 	RawPayload        []byte     `json:"rawPayload" db:"raw_payload"`
 	SignatureValid    bool       `json:"signatureValid" db:"signature_valid"`
 	ProcessedAt       *time.Time `json:"processedAt" db:"processed_at"`

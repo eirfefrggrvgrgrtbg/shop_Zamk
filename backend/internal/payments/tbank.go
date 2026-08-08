@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
@@ -18,10 +19,13 @@ type TBankProvider struct {
 	apiBaseURL  string
 	successURL  string
 	failURL     string
+	tpayEnabled bool
+	payType     string
+	tpayMode    string
 	client      *http.Client
 }
 
-func NewTBankProvider(terminalKey, password, apiBaseURL, successURL, failURL string) *TBankProvider {
+func NewTBankProvider(terminalKey, password, apiBaseURL, successURL, failURL string, tpayEnabled bool, payType, tpayMode string) *TBankProvider {
 	if apiBaseURL == "" {
 		apiBaseURL = "https://securepay.tinkoff.ru/v2"
 	}
@@ -31,18 +35,23 @@ func NewTBankProvider(terminalKey, password, apiBaseURL, successURL, failURL str
 		apiBaseURL:  apiBaseURL,
 		successURL:  successURL,
 		failURL:     failURL,
+		tpayEnabled: tpayEnabled,
+		payType:     payType,
+		tpayMode:    tpayMode,
 		client:      &http.Client{},
 	}
 }
 
 type initRequest struct {
-	TerminalKey string `json:"TerminalKey"`
-	Amount      int64  `json:"Amount"` // in kopecks
-	OrderId     string `json:"OrderId"`
-	Description string `json:"Description,omitempty"`
-	Token       string `json:"Token"`
-	SuccessURL  string `json:"SuccessURL,omitempty"`
-	FailURL     string `json:"FailURL,omitempty"`
+	TerminalKey string            `json:"TerminalKey"`
+	Amount      int64             `json:"Amount"` // in kopecks
+	OrderId     string            `json:"OrderId"`
+	Description string            `json:"Description,omitempty"`
+	Token       string            `json:"Token"`
+	SuccessURL  string            `json:"SuccessURL,omitempty"`
+	FailURL     string            `json:"FailURL,omitempty"`
+	PayType     string            `json:"PayType,omitempty"`
+	DATA        map[string]string `json:"DATA,omitempty"`
 }
 
 type initResponse struct {
@@ -74,12 +83,16 @@ func (p *TBankProvider) generateToken(params map[string]string) string {
 
 func (p *TBankProvider) CreatePayment(ctx context.Context, input CreatePaymentInput) (ProviderCreatePaymentResult, error) {
 	// For sandbox/stub mode, if terminalKey is "STUB", mock the response
-	if p.terminalKey == "STUB" {
+	if p.terminalKey == "STUB" || (input.Method == "tpay" && input.IntegrationMode == "mock") {
 		hash := crc32.ChecksumIEEE([]byte(input.IdempotencyKey))
 		pid := fmt.Sprintf("%d", hash)
+		paymentURL := "https://stub.payment.url/pay/" + pid
+		if input.Method == "tpay" {
+			paymentURL = "https://stub.payment.url/tpay/" + pid
+		}
 		return ProviderCreatePaymentResult{
 			ProviderPaymentID: pid,
-			PaymentURL:        "https://stub.payment.url/pay/" + pid,
+			PaymentURL:        paymentURL,
 			Status:            "NEW",
 		}, nil
 	}
@@ -91,6 +104,13 @@ func (p *TBankProvider) CreatePayment(ctx context.Context, input CreatePaymentIn
 		Description: input.Description,
 		SuccessURL:  p.successURL,
 		FailURL:     p.failURL,
+		PayType:     p.payType,
+	}
+
+	if input.Method == "tpay" && input.IntegrationMode == "quick_widget" {
+		reqData.DATA = map[string]string{
+			"connection_type": "Widget",
+		}
 	}
 
 	paramsMap := map[string]string{
@@ -105,6 +125,10 @@ func (p *TBankProvider) CreatePayment(ctx context.Context, input CreatePaymentIn
 	if p.failURL != "" {
 		paramsMap["FailURL"] = p.failURL
 	}
+	if p.payType != "" {
+		paramsMap["PayType"] = p.payType
+	}
+	// Note: According to TBank docs, DATA is not included in token signature calculation
 
 	reqData.Token = p.generateToken(paramsMap)
 
@@ -213,11 +237,37 @@ func (p *TBankProvider) ParseWebhook(ctx context.Context, body []byte) (Provider
 		status = "pending"
 	}
 
+	// Compute event key and clean raw payload
+	var data map[string]any
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	_ = dec.Decode(&data)
+	delete(data, "Token") // Exclude Token for deduplication
+
+	canonical, _ := json.Marshal(data)
+	hash := sha256.Sum256(canonical)
+	eventKey := hex.EncodeToString(hash[:])
+
 	return ProviderWebhookEvent{
 		ProviderPaymentID: strconv.FormatInt(payload.PaymentId, 10),
 		OrderID:           payload.OrderId,
 		Status:            status,
+		ProviderStatus:    payload.Status,
 		AmountCents:       payload.Amount,
-		RawPayload:        body,
+		EventKey:          eventKey,
+		RawPayload:        canonical, // Raw payload without Token
 	}, nil
+}
+
+func (p *TBankProvider) GetMode(method string) string {
+	if method == "card" {
+		return "hosted_form"
+	}
+	if method == "tpay" {
+		return p.tpayMode
+	}
+	if method == "sbp" {
+		return "unavailable"
+	}
+	return "unknown"
 }

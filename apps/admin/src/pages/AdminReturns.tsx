@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AlertCircle, RotateCcw } from 'lucide-react';
+import { SellerContextBanner } from '../components/SellerContextBanner';
 import {
   createAdminRefund,
   getAdminReturn,
@@ -117,79 +119,86 @@ export function AdminReturns() {
 
   const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString('ru-RU') : '-';
 
+  const [searchParams] = useSearchParams();
+  const sellerId = searchParams.get('sellerId');
+
+  const filteredReturns = sellerId ? returns.filter(r => (r as any).sellerId === sellerId) : returns;
+
   return (
-    <div className="space-y-6">
-      <div className="sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Возвраты</h1>
-      </div>
+    <PermissionGuard permission="returns:read">
+      <div className="space-y-6">
+        <SellerContextBanner />
+        <div className="sm:flex sm:items-center sm:justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">Возвраты</h1>
+        </div>
 
-      {error && (
-        <div className="p-4 bg-red-50 text-red-700 rounded-md flex items-center">
-          <AlertCircle className="h-5 w-5 mr-2" />
-          {error}
-        </div>
-      )}
-      {success && <div className="p-4 bg-green-50 text-green-700 rounded-md">{success}</div>}
+        {error && (
+          <div className="p-4 bg-red-50 text-red-700 rounded-md flex items-center">
+            <AlertCircle className="h-5 w-5 mr-2" />
+            {error}
+          </div>
+        )}
+        {success && <div className="p-4 bg-green-50 text-green-700 rounded-md">{success}</div>}
 
-      {isLoading ? (
-        <div className="text-center py-10">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-500">Загрузка возвратов...</p>
-        </div>
-      ) : returns.length === 0 ? (
-        <div className="text-center py-10 bg-white rounded-lg shadow">
-          <RotateCcw className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Возвратов нет</h3>
-          <p className="mt-1 text-sm text-gray-500">Заявок на возврат пока нет.</p>
-        </div>
-      ) : (
-      <div className="flex flex-col">
-        <div className="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-          <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
-            <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID возврата</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID заказа</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Покупатель</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Причина</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
-                    <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {returns.map((req) => (
-                    <tr key={req.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {req.id}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {req.orderId}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {req.customerName || req.userId || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {req.reason}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(req.status)}`}>
-                          {req.statusLabel}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onClick={() => fetchReturnDetail(req.id)} className="text-indigo-600 hover:text-indigo-900">Открыть</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {isLoading ? (
+          <div className="text-center py-10">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+            <p className="mt-2 text-sm text-gray-500">Загрузка возвратов...</p>
+          </div>
+        ) : filteredReturns.length === 0 ? (
+          <div className="text-center py-10 bg-white rounded-lg shadow">
+            <RotateCcw className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900">Возвратов нет</h3>
+            <p className="mt-1 text-sm text-gray-500">Заявок на возврат пока нет.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            <div className="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+              <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
+                <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID возврата</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID заказа</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Покупатель</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Причина</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
+                        <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredReturns.map((req) => (
+                        <tr key={req.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {req.id}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {req.orderId}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {req.customerName || req.userId || '-'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {req.reason}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(req.status)}`}>
+                              {req.statusLabel}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button onClick={() => fetchReturnDetail(req.id)} className="text-indigo-600 hover:text-indigo-900">Открыть</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-      )}
+        )}
 
       {selectedReturn && (
         <div className="bg-white shadow sm:rounded-lg p-6">
@@ -268,5 +277,6 @@ export function AdminReturns() {
         </div>
       )}
     </div>
+    </PermissionGuard>
   );
 }

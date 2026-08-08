@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AlertCircle, Boxes, Search } from 'lucide-react';
 import { HelpTooltip } from '../components/HelpTooltip';
+import { SellerContextBanner } from '../components/SellerContextBanner';
 import {
   getAdminInventory,
   getAdminInventoryErrorMessage,
@@ -32,7 +34,16 @@ export function AdminInventory() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
-  const [sellerFilter, setSellerFilter] = useState('');
+  const [searchParams] = useSearchParams();
+  const urlSellerId = searchParams.get('sellerId');
+
+  const [sellerFilter, setSellerFilter] = useState(urlSellerId || '');
+
+  useEffect(() => {
+    if (urlSellerId) {
+      setSellerFilter(urlSellerId);
+    }
+  }, [urlSellerId]);
   const [lowStockFilter, setLowStockFilter] = useState(false);
   const [pagination, setPagination] = useState({ limit: 50, offset: 0, total: 0 });
 
@@ -125,6 +136,7 @@ export function AdminInventory() {
 
   return (
     <div className="space-y-6">
+      <SellerContextBanner />
       <div className="sm:flex sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Остатки / Склад</h1>
       </div>

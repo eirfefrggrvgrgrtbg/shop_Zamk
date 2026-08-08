@@ -24,6 +24,7 @@ type Order struct {
 	DeliveryEstimatedDaysMax   *int       `json:"deliveryEstimatedDaysMax" db:"delivery_estimated_days_max"`
 	CheckoutIdempotencyKey     *uuid.UUID `json:"checkoutIdempotencyKey" db:"checkout_idempotency_key"`
 	CheckoutRequestHash        *string    `json:"-" db:"checkout_request_hash"`
+	OrderNumber                *string    `json:"orderNumber,omitempty" db:"order_number"`
 	CreatedAt                  time.Time  `json:"createdAt" db:"created_at"`
 	UpdatedAt                  time.Time  `json:"updatedAt" db:"updated_at"`
 	CancelledAt                *time.Time `json:"cancelledAt" db:"cancelled_at"`

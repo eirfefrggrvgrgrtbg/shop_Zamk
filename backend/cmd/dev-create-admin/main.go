@@ -74,5 +74,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Assign owner staff role
+	_, _ = pgClient.Pool.Exec(ctx, `
+		INSERT INTO staff_members (user_id, staff_role_id, status, created_at, updated_at)
+		SELECT $1, id, 'active', NOW(), NOW() FROM staff_roles WHERE code = 'owner'
+		ON CONFLICT (user_id) DO NOTHING
+	`, user.ID)
+
 	logger.Info("successfully created admin user", "id", user.ID, "email", user.Email)
 }

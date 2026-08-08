@@ -6,6 +6,7 @@ type RegisterRequest struct {
 	FirstName       string `json:"firstName" validate:"required,min=2,max=80"`
 	LastName        string `json:"lastName" validate:"required,min=2,max=80"`
 	MiddleName      string `json:"middleName,omitempty" validate:"omitempty,max=80"`
+	Phone           string `json:"phone" validate:"required"`
 	Email           string `json:"email" validate:"required,email"`
 	Password        string `json:"password" validate:"required,min=10,max=128"`
 	PasswordConfirm string `json:"passwordConfirm" validate:"required"`

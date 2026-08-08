@@ -23,7 +23,7 @@ interface AuthContextType {
   closeAuthModal: () => void;
   setAuthView: (view: 'login' | 'register' | 'forgot_password' | 'change_password') => void;
   login: (email: string, pass: string) => Promise<void>;
-  register: (firstName: string, lastName: string, middleName: string, email: string, pass: string, passConfirm: string) => Promise<void>;
+  register: (firstName: string, lastName: string, middleName: string, phone: string, email: string, pass: string, passConfirm: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   changePassword: (currentPass: string, newPass: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -105,9 +105,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (firstName: string, lastName: string, middleName: string, email: string, pass: string, passConfirm: string) => {
+  const register = async (firstName: string, lastName: string, middleName: string, phone: string, email: string, pass: string, passConfirm: string) => {
     try {
-      const res = await apiRegister({ firstName, lastName, middleName, email, password: pass, passwordConfirm: passConfirm });
+      const res = await apiRegister({ firstName, lastName, middleName, phone, email, password: pass, passwordConfirm: passConfirm });
       
       setUser(mapApiUser(res.user));
       closeAuthModal();

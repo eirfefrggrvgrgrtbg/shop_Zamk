@@ -25,6 +25,15 @@ export const getProduct = async (idOrSlug: string): Promise<ProductDetail> => {
   return res;
 };
 
+export const getProductPreviewByToken = async (token: string): Promise<any> => {
+  const res = await request<any>('GET', `/public/product-previews/${token}`);
+  if (res) {
+    res.images = res.images || [];
+    res.variants = res.variants || [];
+  }
+  return res;
+};
+
 export const getCategories = async (): Promise<Category[]> => {
   const res = await request<any>('GET', '/public/categories');
   return res?.items || (Array.isArray(res) ? res : []);

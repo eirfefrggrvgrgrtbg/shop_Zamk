@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 
@@ -38,18 +39,39 @@ func (h *Handler) CreateSellerByAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.BrandName == "" || req.ContactEmail == "" || req.OwnerEmail == "" || req.TemporaryPassword == "" {
-		h.respondError(w, http.StatusBadRequest, "missing required fields")
+	if req.OwnerName == "" || req.OwnerEmail == "" {
+		h.respondError(w, http.StatusBadRequest, "missing required fields (ownerName, ownerEmail)")
 		return
 	}
 
 	res, err := h.service.CreateSellerByAdmin(r.Context(), &req)
 	if err != nil {
+		if errors.Is(err, ErrUserExistsPrompt) {
+			h.respondJSON(w, http.StatusConflict, map[string]string{
+				"error": "USER_EXISTS_PROMPT",
+				"message": "User with this email already exists. Grant seller access?",
+			})
+			return
+		}
+		if errors.Is(err, ErrSellerAlreadyExists) {
+			respData := map[string]interface{}{
+				"error":   "SELLER_ALREADY_EXISTS",
+				"message": "This user is already a seller.",
+			}
+			if res != nil {
+				respData["sellerId"] = res.Seller.ID
+				respData["ownerName"] = res.OwnerUser.Name
+				respData["ownerEmail"] = res.OwnerUser.Email
+				respData["status"] = res.Seller.Status
+			}
+			h.respondJSON(w, http.StatusConflict, respData)
+			return
+		}
 		if errors.Is(err, ErrDuplicateSlug) || errors.Is(err, ErrDuplicateEmail) {
 			h.respondError(w, http.StatusConflict, err.Error())
 			return
 		}
-		h.respondError(w, http.StatusInternalServerError, "failed to create seller")
+		h.respondError(w, http.StatusInternalServerError, "failed to create seller: " + err.Error())
 		return
 	}
 
@@ -66,7 +88,7 @@ func (h *Handler) CreateSellerByAdmin(w http.ResponseWriter, r *http.Request) {
 				Action:      "seller.create_access",
 				EntityType:  "seller",
 				EntityID:    &sellerID,
-				Metadata:    staff.SanitizeMetadata(map[string]any{"ownerEmail": req.OwnerEmail, "brandName": req.BrandName}),
+				Metadata:    staff.SanitizeMetadata(map[string]any{"ownerEmail": req.OwnerEmail}),
 			})
 		}()
 	}
@@ -76,15 +98,77 @@ func (h *Handler) CreateSellerByAdmin(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListSellers(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
+	q := r.URL.Query()
+	
 	filter := SellersFilter{
-		Limit:  page.Limit,
-		Offset: page.Offset,
-		Query:  r.URL.Query().Get("q"),
-		Status: r.URL.Query().Get("status"),
+		Limit:     page.Limit,
+		Offset:    page.Offset,
+		Query:     q.Get("search"),
+		Store:     q.Get("store"),
+		Problems:  q.Get("problems"),
+		PerformanceCategory: q.Get("performanceCategory"),
+		Sort:      q.Get("sort"),
+		Direction: q.Get("direction"),
 	}
+	
+	if q.Has("status") {
+		filter.Status = q["status"] // this handles multi-select arrays if using ?status=1&status=2
+	} else if st := q.Get("status"); st != "" && st != "all" {
+		filter.Status = []string{st}
+	}
+
+	// Parse optional int/float/bool parameters manually
+	parseStrToIntPtr := func(key string) *int {
+		if v := q.Get(key); v != "" {
+			var i int
+			if _, err := fmt.Sscanf(v, "%d", &i); err == nil {
+				return &i
+			}
+		}
+		return nil
+	}
+	parseFloatPtr := func(key string) *float64 {
+		if v := q.Get(key); v != "" {
+			var f float64
+			if _, err := fmt.Sscanf(v, "%f", &f); err == nil {
+				return &f
+			}
+		}
+		return nil
+	}
+	parseBoolPtr := func(key string) *bool {
+		if v := q.Get(key); v != "" {
+			b := (v == "true" || v == "1")
+			return &b
+		}
+		return nil
+	}
+	parseInt64Ptr := func(key string) *int64 {
+		if v := q.Get(key); v != "" {
+			var i int64
+			if _, err := fmt.Sscanf(v, "%d", &i); err == nil {
+				return &i
+			}
+		}
+		return nil
+	}
+
+	filter.RatingMin = parseFloatPtr("ratingMin")
+	filter.RatingMax = parseFloatPtr("ratingMax")
+	filter.HasReviews = parseBoolPtr("hasReviews")
+	filter.PerformanceMin = parseStrToIntPtr("performanceMin")
+	filter.PerformanceMax = parseStrToIntPtr("performanceMax")
+	filter.SalesGrossMin = parseInt64Ptr("salesGrossMin")
+	filter.SalesGrossMax = parseInt64Ptr("salesGrossMax")
+	filter.OrdersCountMin = parseStrToIntPtr("ordersCountMin")
+	filter.OrdersCountMax = parseStrToIntPtr("ordersCountMax")
+	filter.HasWarnings = parseBoolPtr("hasWarnings")
+	filter.HasViolations = parseBoolPtr("hasViolations")
+	filter.Blocked = parseBoolPtr("blocked")
+
 	res, err := h.service.ListSellers(r.Context(), filter)
 	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, "failed to list sellers")
+		h.respondError(w, http.StatusInternalServerError, "failed to list sellers: "+err.Error())
 		return
 	}
 	h.respondJSON(w, http.StatusOK, res)
@@ -251,4 +335,38 @@ func (h *Handler) respondJSON(w http.ResponseWriter, status int, data any) {
 
 func (h *Handler) respondError(w http.ResponseWriter, status int, message string) {
 	h.respondJSON(w, status, map[string]string{"error": message})
+}
+
+// RequireActiveSeller is a middleware that ensures the current user is an active seller
+func (h *Handler) RequireActiveSeller(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		val := r.Context().Value("userID")
+		if val == nil {
+			h.respondError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		userID, ok := val.(uuid.UUID)
+		if !ok {
+			h.respondError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+
+		res, err := h.service.GetSellerMe(r.Context(), userID)
+		if err != nil {
+			if errors.Is(err, ErrSellerUserNotFound) {
+				h.respondError(w, http.StatusForbidden, "seller profile not found")
+				return
+			}
+			h.respondError(w, http.StatusInternalServerError, "failed to get seller profile")
+			return
+		}
+
+		if res.Seller.Status != "active" {
+			h.respondError(w, http.StatusForbidden, "seller account is not active")
+			return
+		}
+        
+        ctx := context.WithValue(r.Context(), "sellerID", res.Seller.ID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }

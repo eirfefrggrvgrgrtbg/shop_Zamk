@@ -24,6 +24,9 @@ type AppConfig struct {
 	Port          string
 	PublicBaseURL string
 	APIBaseURL    string
+	ShopPublicURL string
+	AdminFulfillmentBatchSize  int
+	PaymentStuckPendingMinutes int
 }
 
 type PostgresConfig struct {
@@ -74,11 +77,15 @@ type CORSConfig struct {
 }
 
 type TBankConfig struct {
-	TerminalKey string
-	Password    string
-	APIBaseURL  string
-	SuccessURL  string
-	FailURL     string
+	TerminalKey     string
+	Password        string
+	APIBaseURL      string
+	SuccessURL      string
+	FailURL         string
+	NotificationURL string
+	TPayEnabled     bool
+	PayType         string
+	TPayMode        string
 }
 
 type WorkerConfig struct {
@@ -112,6 +119,9 @@ func Load() (*Config, error) {
 			Port:          getEnv("APP_PORT", "8080"),
 			PublicBaseURL: getEnv("PUBLIC_BASE_URL", "http://localhost:5173"),
 			APIBaseURL:    getEnv("API_BASE_URL", "http://localhost:8080"),
+			ShopPublicURL: getEnv("SHOP_PUBLIC_URL", "http://127.0.0.1:3000"),
+			AdminFulfillmentBatchSize:  getEnvAsInt("ADMIN_FULFILLMENT_BATCH_SIZE", 50),
+			PaymentStuckPendingMinutes: getEnvAsInt("PAYMENT_STUCK_PENDING_MINUTES", 30),
 		},
 		Postgres: PostgresConfig{
 			Host:     getEnv("POSTGRES_HOST", "localhost"),
@@ -153,11 +163,15 @@ func Load() (*Config, error) {
 			AllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002")),
 		},
 		TBank: TBankConfig{
-			TerminalKey: getEnv("TBANK_TERMINAL_KEY", "STUB"),
-			Password:    getEnv("TBANK_PASSWORD", "STUB"),
-			APIBaseURL:  getEnv("TBANK_API_BASE_URL", "https://securepay.tinkoff.ru/v2"),
-			SuccessURL:  getEnv("TBANK_SUCCESS_URL", "http://localhost:3000/checkout/success"),
-			FailURL:     getEnv("TBANK_FAIL_URL", "http://localhost:3000/checkout/fail"),
+			TerminalKey:     getEnv("TBANK_TERMINAL_KEY", "STUB"),
+			Password:        getEnv("TBANK_PASSWORD", "STUB"),
+			APIBaseURL:      getEnv("TBANK_API_BASE_URL", "https://securepay.tinkoff.ru/v2"),
+			SuccessURL:      getEnv("TBANK_SUCCESS_URL", "http://localhost:3000/checkout/success"),
+			FailURL:         getEnv("TBANK_FAIL_URL", "http://localhost:3000/checkout/fail"),
+			NotificationURL: getEnv("TBANK_NOTIFICATION_URL", "http://localhost:8080/api/payments/tbank/webhook"),
+			TPayEnabled:     getEnvAsBool("TBANK_TPAY_ENABLED", false),
+			PayType:         getEnv("TBANK_PAY_TYPE", "O"),
+			TPayMode:        getEnv("TBANK_TPAY_MODE", "mock"),
 		},
 		Worker: WorkerConfig{
 			OrderExpirationIntervalSeconds: getEnvAsInt("WORKER_ORDER_EXPIRATION_INTERVAL_SECONDS", 60),
@@ -186,6 +200,10 @@ func Load() (*Config, error) {
 	cfg.Postgres.DSN = getEnvNonEmpty("POSTGRES_DSN", "postgres://"+cfg.Postgres.User+":"+cfg.Postgres.Password+"@"+cfg.Postgres.Host+":"+cfg.Postgres.Port+"/"+cfg.Postgres.Database+"?sslmode="+cfg.Postgres.SSLMode)
 	cfg.Redis.Addr = getEnvNonEmpty("REDIS_ADDR", cfg.Redis.Host+":"+cfg.Redis.Port)
 	cfg.RateLimit.FailOpenOnRedisError = cfg.App.Env == "local" && cfg.RateLimit.FailOpenLocal
+
+	if cfg.App.Env == "production" && cfg.TBank.TPayMode == "mock" {
+		panic("Cannot use mock TBank mode in production environment")
+	}
 
 	return cfg, nil
 }

@@ -26,6 +26,72 @@ export interface PaginatedAdminUsersResponse {
   offset: number;
 }
 
+export interface SellerOverviewData {
+  period: string;
+  sales: {
+    grossSalesCents: number;
+    ordersCount: number;
+    itemsSold: number;
+    averageOrderValueCents: number;
+    deliveredOrders: number;
+    cancelledOrders: number;
+    returnedOrders: number;
+    returnRate: number;
+  };
+  catalog: {
+    productsTotal: number;
+    productsPublished: number;
+    productsModeration: number;
+    productsRejected: number;
+    productsDraft: number;
+    productsOutOfStock: number;
+    productsLowStock: number;
+  };
+  fulfillment: {
+    fulfillmentsNew: number;
+    fulfillmentsProcessing: number;
+    fulfillmentsShipped: number;
+    fulfillmentsDelivered: number;
+    fulfillmentsProblematic: number;
+    fulfillmentsOverdue: number;
+  };
+  finance: {
+    paidByCustomersCents: number;
+    refundsCents: number;
+    pendingPayoutCents: number;
+    paidPayoutCents: number;
+    frozenCents: number;
+    platformCommissionCents: number;
+    commissionConfigured: boolean;
+  };
+  quality: {
+    rating: number;
+    reviewsCount: number;
+    warningsActive: number;
+    violationsActive: number;
+    openReturns: number;
+    rejectedProducts: number;
+  };
+  performance: {
+    category: 'no_data' | 'low' | 'attention' | 'stable' | 'high';
+    reasons: string[];
+  };
+  activity: {
+    lastSaleAt?: string;
+    lastActiveAt?: string;
+    daysSinceLastSale?: number;
+  };
+  profile: {
+    onboardingStage: string;
+    storeCreated: boolean;
+    storeStatus: string;
+    profileCompleteness: number;
+    missingFields: string[];
+    ownerAccessStatus: string;
+    lastLoginAt?: string;
+  };
+}
+
 // ---------------------------------------------------------
 // PUBLIC DTOs
 // ---------------------------------------------------------
@@ -77,6 +143,7 @@ export interface ProductVariant {
   sku?: string;
   size?: string;
   color?: string;
+  optionValues?: any;
   barcode?: string;
   priceCents?: number;
   isActive: boolean;
@@ -238,6 +305,71 @@ export interface ReviewCreateRequest {
 // SELLER DTOs
 // ---------------------------------------------------------
 
+export interface SellerSupplyBoxItem {
+  id: string;
+  boxId: string;
+  variantId: string;
+  sku: string;
+  quantity: number;
+}
+
+export interface SellerSupplyBox {
+  id: string;
+  supplyId: string;
+  boxNumber: string;
+  barcode: string;
+  items: SellerSupplyBoxItem[];
+}
+
+export interface SellerSupplyItem {
+  id: string;
+  supplyId: string;
+  variantId: string;
+  sku: string;
+  expectedQuantity: number;
+  acceptedQuantity: number;
+  damagedQuantity: number;
+  missingQuantity: number;
+  extraQuantity: number;
+}
+
+export interface SellerSupply {
+  id: string;
+  sellerId: string;
+  humanId: string;
+  supplyNumber?: string;
+  status: string;
+  handoffMethod: string;
+  totalExpectedBoxes: number;
+  totalExpectedItems: number;
+  totalAcceptedItems: number;
+  receivingComment?: string;
+  createdAt: string;
+  updatedAt: string;
+  items?: SellerSupplyItem[];
+  boxes?: SellerSupplyBox[];
+}
+
+export interface CreateSupplyItemRequest {
+  variantId: string;
+  expectedQuantity: number;
+}
+
+export interface CreateSupplyBoxItemRequest {
+  variantId: string;
+  quantity: number;
+}
+
+export interface CreateSupplyBoxRequest {
+  items: CreateSupplyBoxItemRequest[];
+}
+
+export interface CreateSupplyRequest {
+  handoffMethod: string;
+  items: CreateSupplyItemRequest[];
+  boxes: CreateSupplyBoxRequest[];
+}
+
 export interface SellerMe {
   user: UserDTO;
   sellerUser: {
@@ -310,17 +442,37 @@ export interface SellerProduct extends ProductDetail {
   // Any extra fields specific to SellerProduct can go here.
 }
 
-export interface InventoryItem {
+export interface SellerInventoryItem {
+  variantId: string;
   productId: string;
-  quantityAvailable: number;
-  quantityReserved: number;
+  productTitle: string;
+  image?: string;
+  optionValues?: Record<string, any>;
+  sku: string;
+  onHand: number;
+  reserved: number;
+  available: number;
+  inbound: number;
+  availabilityStatus: string;
+}
+
+export interface SellerInventoryListResponse {
+  items: SellerInventoryItem[];
+  totalCount: number;
 }
 
 export interface SellerOrder {
   id: string;
-  status: string;
-  totalPriceCents: number;
+  orderNumber?: string;
   createdAt: string;
+  commercialStatus: string;
+  deliveryStatus: string;
+  payoutStatus?: string;
+  sellerItemCount: number;
+  sellerUnits: number;
+  sellerGrossAmount: number;
+  sellerRefundAmount: number;
+  sellerNetAmount: number;
   items?: OrderItem[];
 }
 
@@ -376,23 +528,49 @@ export interface SellerReview {
 }
 
 export interface SellerBalance {
-  availableBalanceCents: number;
-  pendingBalanceCents: number;
-  requestedPayoutsCents?: number;
-  paidPayoutsCents?: number;
-  currency?: string;
+  grossSalesCents: number;
+  commissionCents: number;
+  adjustmentsCents: number;
+  frozenCents: number;
+  availableCents: number;
+  paidCents: number;
+  currency: string;
+  nextPayoutAt?: string;
 }
 
-export interface Payout {
+export interface PayoutBatch {
   id: string;
+  sellerId: string;
   amountCents: number;
   status: string;
-  requestedAt: string;
-  approvedAt?: string;
-  rejectedAt?: string;
-  paidAt?: string;
-  comment?: string;
+  scheduledFor: string;
+  processedAt?: string;
+  failureReason?: string;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface SellerLedgerEntry {
+  id: string;
+  sellerId: string;
+  orderId?: string;
+  orderItemId?: string;
+  payoutBatchId?: string;
+  type: string;
+  amountCents: number;
+  currency: string;
+  availableAt?: string;
+  createdAt: string;
+}
+
+export interface LedgerListResponse {
+  items: SellerLedgerEntry[];
+  totalCount: number;
+}
+
+export interface PayoutBatchListResponse {
+  items: PayoutBatch[];
+  totalCount: number;
 }
 
 // ---------------------------------------------------------
@@ -435,12 +613,49 @@ export interface ProductReviewModerationLog {
 // ADMIN DTOs
 // ---------------------------------------------------------
 
+export interface PerformanceComponent {
+  code: string;
+  label: string;
+  rawValue: number;
+  unit: string;
+  score: number;
+  weight: number;
+  explanation: string;
+}
+
 export interface AdminSeller {
   id: string;
-  brandName: string;
-  slug: string;
+  brandName?: string | null;
+  slug?: string | null;
   status: string;
   isPlatform?: boolean;
+  ownerName: string;
+  ownerEmail: string;
+  warningsActive: number;
+  performanceScore?: number | null;
+  performanceCategory: string;
+  performanceReasons: string[];
+  grossSales30d: number;
+  ordersCount30d: number;
+  cancelRate30d: number;
+  violations: number;
+  averageRating: number;
+  reviewsCount: number;
+  createdAt: string;
+}
+
+export interface CreateAdminSellerRequest {
+  ownerName: string;
+  ownerEmail: string;
+  grantExistingUser?: boolean;
+}
+
+export interface CreateAdminSellerResponse {
+  status: 'created_new' | 'granted_existing' | string;
+  seller: AdminSeller;
+  ownerUser: any;
+  temporaryPassword?: string;
+  temporaryPasswordReturned: boolean;
 }
 
 export interface AdminProductVariant {
@@ -527,6 +742,7 @@ export interface PaginatedAdminProductsResponse {
 export interface AdminOrder {
   id: string;
   userId?: string;
+  orderNumber?: string;
   status: string;
   fulfillmentStatus: string;
   sourceType: string;
@@ -546,19 +762,104 @@ export interface AdminOrderDetail extends AdminOrder {
   fulfillments?: AdminFulfillment[];
 }
 
-export interface AdminPayment {
+export interface PaymentProblem {
+  code: string;
+  severity: string;
+}
+
+export interface CustomerSummaryDTO {
   id: string;
+  name: string;
+  email: string;
+  phone: string;
+}
+
+export interface AdminPayment {
+  paymentId: string;
+  paymentNumber: string;
+  providerPaymentId: string | null;
+
   orderId: string;
-  provider: string;
-  providerPaymentId?: string;
+  orderNumber: string;
+
+  customer: CustomerSummaryDTO | null;
+
   amountCents: number;
   currency: string;
+
   status: string;
+  provider: string | null;
+  paymentMethod: string | null;
+  integrationMode: string | null;
+
+  attemptNumber: number;
+  attemptsCount: number;
+
+  refundState: string;
+  paidAmountCents: number;
+  succeededRefundedAmountCents: number;
+  pendingRefundAmountCents: number;
+  reservedRefundAmountCents: number;
+  netAmountCents: number;
+  availableToRefundCents: number;
+
+  problems: PaymentProblem[];
+
   createdAt: string;
-  updatedAt?: string;
-  paidAt?: string;
-  failedAt?: string;
-  cancelledAt?: string;
+  updatedAt: string;
+  paidAt: string | null;
+  failedAt: string | null;
+  cancelledAt: string | null;
+}
+
+export interface OrderSummaryDTO {
+  orderId: string;
+  orderNumber: string;
+  orderStatus: string;
+  orderTotalCents: number;
+  customer: CustomerSummaryDTO | null;
+  createdAt: string;
+}
+
+export interface AdminPaymentAttempt {
+  paymentId: string;
+  paymentNumber: string;
+  attemptNumber: number;
+  status: string;
+  provider: string | null;
+  paymentMethod: string | null;
+  amountCents: number;
+  providerPaymentId: string | null;
+  createdAt: string;
+  terminalAt: string | null;
+}
+
+export interface SafePaymentEvent {
+  eventId: string;
+  eventType: string;
+  signatureValid: boolean;
+  processedAt: string | null;
+  createdAt: string;
+  eventKey: string;
+  safePayloadSummary: Record<string, any>;
+}
+
+export interface AdminPaymentRefund {
+  refundId: string;
+  status: string;
+  amountCents: number;
+  providerRefundId: string | null;
+  createdAt: string;
+  processedAt: string | null;
+}
+
+export interface AdminPaymentDetail {
+  payment: AdminPayment;
+  order: OrderSummaryDTO;
+  attempts: AdminPaymentAttempt[];
+  providerEvents: SafePaymentEvent[];
+  refunds: AdminPaymentRefund[];
+  problems: PaymentProblem[];
 }
 
 export interface AdminShipment {
@@ -592,12 +893,22 @@ export interface AdminFulfillmentItem {
 export interface AdminFulfillment {
   id: string;
   orderId: string;
+  orderNumber?: string | null;
   sellerId: string;
   sellerName?: string | null;
   status: string;
   subtotalCents: number;
   commissionBps: number;
   sellerAmountCents: number;
+  receivingCode?: string | null;
+  receivingQrToken?: string | null;
+  packedAt?: string | null;
+  acceptedAt?: string | null;
+  acceptedByStaffId?: string | null;
+  receivingResult?: any;
+  discrepancyReason?: string | null;
+  discrepancyComment?: string | null;
+  discrepancyAt?: string | null;
   createdAt: string;
   updatedAt: string;
   shipmentId?: string | null;
@@ -1105,6 +1416,14 @@ export interface DashboardOverviewMetrics {
   activeSellers: number;
   activeProducts: number;
   lowStockCount: number;
+
+  averageDailyOrders20d: number;
+  averageDailyRevenue20dCents: number;
+  previousRevenue7dCents: number;
+  averageOrderValue7dCents: number;
+  previousAverageOrderValue7dCents: number;
+  returns7d: number;
+  previousReturns7d: number;
 }
 
 export interface DashboardOrdersMetrics {
@@ -1144,6 +1463,7 @@ export interface DashboardInventoryMetrics {
 export interface DashboardPaymentsMetrics {
   paidOrdersSumCents: number;
   pendingPayoutsCents: number;
+  paidPayoutsCents: number;
   failedPaymentsCount: number;
 }
 
@@ -1181,5 +1501,89 @@ export interface AdminSellerBalance {
   pendingBalanceCents: number;
   availableBalanceCents: number;
   currency: string;
+}
+
+
+
+// ---- Phase E: Notes and Plans ----
+
+export interface SellerNote {
+  id: string;
+  sellerId: string;
+  authorId?: string;
+  noteType: string;
+  content: string;
+  deadline?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSellerNoteRequest {
+  noteType: string;
+  content: string;
+  deadline?: string;
+}
+
+export interface SellerImprovementPlan {
+  id: string;
+  sellerId: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  creatorId?: string;
+  creatorName?: string;
+  status: string;
+  reason: string;
+  actions: { title: string; isCompleted: boolean }[];
+  deadline?: string;
+  internalComment?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
+export interface CreateSellerImprovementPlanRequest {
+  assigneeId?: string;
+  reason: string;
+  actions: { title: string; isCompleted: boolean }[];
+  deadline?: string;
+  internalComment?: string;
+}
+
+// ---------------------------------------------------------
+// WAREHOUSE RECEIVING DTOs
+// ---------------------------------------------------------
+
+export interface SupplyReceivingSession {
+  id: string;
+  supplyId: string;
+  staffId: string;
+  status: string;
+  startedAt: string;
+  endedAt?: string;
+  items?: ReceivingItem[];
+}
+
+export interface ReceivingItem {
+  id: string;
+  sessionId: string;
+  supplyItemId?: string;
+  variantId?: string;
+  sku: string;
+  barcode?: string;
+  productTitle: string;
+  expectedQuantity: number;
+  scannedQuantity: number;
+  damagedQuantity: number;
+  unexpectedQuantity: number;
+}
+
+export interface RecordReceivingScanRequest {
+  variantId: string;
+  quantity: number;
+  isDamage?: boolean;
+}
+
+export interface FinalizeReceivingRequest {
+  notes?: string;
 }
 

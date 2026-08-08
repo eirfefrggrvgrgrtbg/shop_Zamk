@@ -91,8 +91,8 @@ export const getAdminProducts = async (): Promise<PaginatedAdminProductsResponse
   return await apiGetProducts();
 };
 
-export const getModerationProducts = async (): Promise<ModerationProduct[]> => {
-  return await apiGetModerationProducts();
+export const getModerationProducts = async (params?: any): Promise<{ items: ModerationProduct[]; totalCount: number }> => {
+  return await apiGetModerationProducts(params);
 };
 
 export const approveProduct = async (id: string, comment?: string): Promise<void> => {

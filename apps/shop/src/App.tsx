@@ -13,10 +13,12 @@ import { Home } from './pages/Home';
 import { Catalog } from './pages/Catalog';
 import { DirectSale } from './pages/DirectSale';
 import { ProductDetail } from './pages/ProductDetail';
+import { ProductCardPreview } from './pages/ProductCardPreview';
 import { SellerDetail } from './pages/SellerDetail';
 import { BrandDetail } from './pages/BrandDetail';
 import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
+import { DevMockPayment } from './pages/DevMockPayment';
 import { Profile } from './pages/Profile';
 import { CustomerReviews } from './pages/CustomerReviews';
 import { Orders } from './pages/Orders';
@@ -59,6 +61,8 @@ function App() {
                     <Route path="/catalog" element={<Catalog />} />
                     <Route path="/zamk" element={<DirectSale />} />
                     <Route path="/product/:id" element={<ProductDetail />} />
+                    <Route path="/preview/products/:token" element={<ProductDetail />} />
+                    <Route path="/preview/products/:token/card" element={<ProductCardPreview />} />
                     <Route path="/auction" element={<AuctionPage />} />
                     <Route path="/auction/lots/:id" element={<AuctionLotDetail />} />
                     <Route path="/auction/wins" element={<AuctionWins />} />
@@ -66,6 +70,7 @@ function App() {
                     <Route path="/brand/:id" element={<BrandDetail />} />
                     <Route path="/cart" element={<Cart />} />
                     <Route path="/checkout" element={<Checkout />} />
+                    <Route path="/dev/payments/mock/:paymentId" element={<DevMockPayment />} />
                     <Route path="/favorites" element={<Favorites />} />
                     <Route path="/account" element={<Profile />} />
                     <Route path="/profile" element={<Profile />} />

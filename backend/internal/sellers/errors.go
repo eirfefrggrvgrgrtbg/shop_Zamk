@@ -3,10 +3,15 @@ package sellers
 import "errors"
 
 var (
-	ErrSellerNotFound     = errors.New("seller not found")
-	ErrSellerUserNotFound = errors.New("seller user not found")
-	ErrDuplicateSlug      = errors.New("seller slug already exists")
-	ErrDuplicateEmail     = errors.New("user email already exists")
+	ErrSellerNotFound       = errors.New("seller not found")
+	ErrSellerUserNotFound   = errors.New("seller user not found")
+	ErrDuplicateSlug        = errors.New("seller slug already exists")
+	ErrDuplicateEmail       = errors.New("user email already exists")
+	ErrOnboardingNotFound   = errors.New("onboarding application not found")
+	ErrStoreSlugTaken       = errors.New("store slug already taken")
+	ErrBrandSlugTaken       = errors.New("brand slug already taken")
+	ErrUserExistsPrompt     = errors.New("user exists, prompt for grant")
+	ErrSellerAlreadyExists  = errors.New("user is already a seller")
 )
 
 var (

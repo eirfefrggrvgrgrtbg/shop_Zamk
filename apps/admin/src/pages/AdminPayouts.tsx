@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AlertCircle, Wallet } from 'lucide-react';
+import { SellerContextBanner } from '../components/SellerContextBanner';
 import {
   getAdminPayout,
   getAdminPayoutErrorMessage,
@@ -17,8 +19,17 @@ export function AdminPayouts() {
   const [summary, setSummary] = useState<any>(null);
   const [selectedPayout, setSelectedPayout] = useState<AdminPayoutView | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [filters, setFilters] = useState({ q: '', sellerId: '', status: '' });
+  const [searchParams] = useSearchParams();
+  const urlSellerId = searchParams.get('sellerId');
+
+  const [filters, setFilters] = useState({ q: '', sellerId: urlSellerId || '', status: '' });
   const [debouncedFilters, setDebouncedFilters] = useState(filters);
+
+  useEffect(() => {
+    if (urlSellerId) {
+      setFilters(prev => ({ ...prev, sellerId: urlSellerId }));
+    }
+  }, [urlSellerId]);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,32 +120,31 @@ export function AdminPayouts() {
 
   return (
     <div className="space-y-6">
-      <div className="sm:flex sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Выплаты продавцам</h1>
-          <p className="mt-1 text-sm text-gray-500">Выплаты продавцам за реализованные товары. Базовая комиссия ZAMK — 15%. При 2 нарушениях комиссия может быть повышена до 18% на 1 месяц (система нарушений будет подключена отдельно).</p>
+      <SellerContextBanner />
+        <div className="sm:flex sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Выплаты продавцам</h1>
+            <p className="mt-1 text-sm text-gray-500">Выплаты продавцам за реализованные товары.</p>
+          </div>
         </div>
-      </div>
-
-      
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-4 mt-6">
-        <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
-          <dt className="truncate text-sm font-medium text-gray-500">Доступно к выплате</dt>
-          <dd className="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{summary ? (summary.totalAvailableCents / 100).toFixed(2) : '-'} ₽</dd>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-4 mt-6">
+          <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
+            <dt className="truncate text-sm font-medium text-gray-500">Доступно к выплате</dt>
+            <dd className="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{summary ? (summary.totalAvailableCents / 100).toFixed(2) : '-'} ₽</dd>
+          </div>
+          <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
+            <dt className="truncate text-sm font-medium text-gray-500">Ожидает выплаты</dt>
+            <dd className="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{summary ? (summary.totalPendingCents / 100).toFixed(2) : '-'} ₽</dd>
+          </div>
+          <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
+            <dt className="truncate text-sm font-medium text-gray-500">Уже выплачено</dt>
+            <dd className="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{summary ? (summary.totalPaidCents / 100).toFixed(2) : '-'} ₽</dd>
+          </div>
+          <div className="overflow-hidden rounded-lg bg-indigo-50 px-4 py-5 shadow sm:p-6 border border-indigo-100">
+            <dt className="truncate text-sm font-medium text-indigo-700">Комиссия ZAMK</dt>
+            <dd className="mt-1 text-3xl font-semibold tracking-tight text-indigo-900">{summary ? (summary.totalCommissionCents / 100).toFixed(2) : '-'} ₽</dd>
+          </div>
         </div>
-        <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
-          <dt className="truncate text-sm font-medium text-gray-500">Ожидает выплаты</dt>
-          <dd className="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{summary ? (summary.totalPendingCents / 100).toFixed(2) : '-'} ₽</dd>
-        </div>
-        <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
-          <dt className="truncate text-sm font-medium text-gray-500">Уже выплачено</dt>
-          <dd className="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{summary ? (summary.totalPaidCents / 100).toFixed(2) : '-'} ₽</dd>
-        </div>
-        <div className="overflow-hidden rounded-lg bg-indigo-50 px-4 py-5 shadow sm:p-6 border border-indigo-100">
-          <dt className="truncate text-sm font-medium text-indigo-700">Комиссия ZAMK</dt>
-          <dd className="mt-1 text-3xl font-semibold tracking-tight text-indigo-900">{summary ? (summary.totalCommissionCents / 100).toFixed(2) : '-'} ₽</dd>
-        </div>
-      </div>
 
       <div className="mt-4 flex flex-col sm:flex-row gap-4">
         <input

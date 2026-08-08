@@ -9,6 +9,7 @@ import (
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/reviews"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 	"github.com/google/uuid"
@@ -21,6 +22,7 @@ type Service struct {
 	dbPool     *postgres.Client
 	reviews    *reviews.Service
 	notifs     *notifications.Service
+	rdb        *redis.Client
 }
 
 func NewService(repo *Repository, sellerRepo *sellers.Repository, dbPool *postgres.Client, reviewsSvc *reviews.Service, notifs *notifications.Service) *Service {
@@ -76,6 +78,10 @@ func CanSubmitProduct(sellerStatus sellers.SellerStatus, productStatus string) b
 // ---------------------------------------------------------
 
 func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid.UUID, req CreateProductRequest) (Product, error) {
+	if err := req.ValidateSKUs(); err != nil {
+		return Product{}, err
+	}
+
 	seller, err := s.getSellerForUser(ctx, currentUserID)
 	if err != nil {
 		return Product{}, err
@@ -114,20 +120,27 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 	}
 
 	var variants []ProductVariant
+	var skusToCheck []string
 	for _, vr := range req.Variants {
-		variants = append(variants, ProductVariant{
+		v := ProductVariant{
 			ID:           uuid.New(),
 			ProductID:    p.ID,
 			SKU:          vr.SKU,
 			Size:         vr.Size,
 			Color:        vr.Color,
+			OptionValues: vr.OptionValues,
 			Barcode:      vr.Barcode,
 			PriceCents:   vr.PriceCents,
 			InitialStock: vr.InitialStock,
 			IsActive:     true,
 			CreatedAt:    now,
 			UpdatedAt:    now,
-		})
+		}
+		if v.SKU != nil && strings.TrimSpace(*v.SKU) != "" {
+			trimmed := strings.ToLower(strings.TrimSpace(*v.SKU))
+			skusToCheck = append(skusToCheck, trimmed)
+		}
+		variants = append(variants, v)
 	}
 
 	var images []ProductImage
@@ -148,6 +161,23 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 
 	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
+		
+		// Lock the seller to prevent concurrent SKU creation races
+		if err := txRepo.LockSellerForUpdate(ctx, seller.ID); err != nil {
+			return err
+		}
+		
+		// Check for cross-product duplicate SKUs for this seller
+		if len(skusToCheck) > 0 {
+			existing, err := txRepo.FindExistingSellerSKUs(ctx, seller.ID, skusToCheck, nil)
+			if err != nil {
+				return err
+			}
+			if len(existing) > 0 {
+				return &DuplicateSKUError{SKU: existing[0]}
+			}
+		}
+
 		if err := txRepo.CreateProduct(ctx, p); err != nil {
 			return err
 		}
@@ -174,6 +204,10 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 }
 
 func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid.UUID, productID uuid.UUID, req UpdateProductRequest) (Product, error) {
+	if err := req.ValidateSKUs(); err != nil {
+		return Product{}, err
+	}
+
 	seller, err := s.getSellerForUser(ctx, currentUserID)
 	if err != nil {
 		return Product{}, err
@@ -230,22 +264,28 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 	}
 
 	var variants []ProductVariant
+	var skusToCheck []string
 	if req.Variants != nil {
 		now := time.Now()
 		for _, vr := range req.Variants {
-			variants = append(variants, ProductVariant{
+			v := ProductVariant{
 				ID:         uuid.New(),
 				ProductID:  p.ID,
 				SKU:        vr.SKU,
 				Size:       vr.Size,
 				Color:      vr.Color,
+				OptionValues: vr.OptionValues,
 				Barcode:    vr.Barcode,
 				PriceCents:   vr.PriceCents,
 				InitialStock: vr.InitialStock,
 				IsActive:     true,
 				CreatedAt:    now,
 				UpdatedAt:    now,
-			})
+			}
+			if v.SKU != nil && strings.TrimSpace(*v.SKU) != "" {
+				skusToCheck = append(skusToCheck, strings.ToLower(strings.TrimSpace(*v.SKU)))
+			}
+			variants = append(variants, v)
 		}
 	}
 
@@ -273,6 +313,24 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 
 	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
+
+		if err := txRepo.LockSellerForUpdate(ctx, seller.ID); err != nil {
+			return err
+		}
+
+		if len(skusToCheck) > 0 {
+			var excludeVariantIDs []uuid.UUID
+			for _, ev := range p.Variants {
+				excludeVariantIDs = append(excludeVariantIDs, ev.ID)
+			}
+			existing, err := txRepo.FindExistingSellerSKUs(ctx, seller.ID, skusToCheck, excludeVariantIDs)
+			if err != nil {
+				return err
+			}
+			if len(existing) > 0 {
+				return &DuplicateSKUError{SKU: existing[0]}
+			}
+		}
 
 		if needsModerationReset {
 			if err := txRepo.UpdateProductStatus(ctx, p); err != nil {
@@ -423,6 +481,67 @@ func (s *Service) GetAdminProductDetail(ctx context.Context, productID uuid.UUID
 	return *p, nil
 }
 
+func (s *Service) AdminUpdateProduct(ctx context.Context, adminID uuid.UUID, productID uuid.UUID, req UpdateProductRequest) (Product, error) {
+	p, err := s.repo.GetProductByID(ctx, productID)
+	if err != nil {
+		return Product{}, err
+	}
+
+	if req.Title != nil {
+		p.Title = *req.Title
+	}
+	if req.Description != nil {
+		p.Description = req.Description
+	}
+	if req.CategoryID != nil {
+		p.CategoryID = req.CategoryID
+	}
+	if req.BrandID != nil {
+		p.BrandID = req.BrandID
+	}
+	if req.Gender != nil {
+		p.Gender = req.Gender
+	}
+	if req.Color != nil {
+		p.Color = req.Color
+	}
+	if req.Material != nil {
+		p.Material = req.Material
+	}
+	if req.CareInstructions != nil {
+		p.CareInstructions = req.CareInstructions
+	}
+	if req.PriceCents != nil {
+		p.PriceCents = *req.PriceCents
+	}
+	if req.OldPriceCents != nil {
+		p.OldPriceCents = req.OldPriceCents
+	}
+	if req.MainImageURL != nil {
+		p.MainImageURL = req.MainImageURL
+	}
+
+	p.UpdatedAt = time.Now()
+
+	if err := s.repo.UpdateProduct(ctx, p); err != nil {
+		return Product{}, err
+	}
+
+	// Create moderation log entry
+	comment := "Администратор обновил данные товара"
+	fromSt := p.Status
+	_ = s.repo.AddModerationLog(ctx, &ProductModerationLog{
+		ID:         uuid.New(),
+		ProductID:  productID,
+		FromStatus: &fromSt,
+		ToStatus:   p.Status,
+		Comment:    &comment,
+		CreatedAt:  time.Now(),
+	})
+
+	return *p, nil
+}
+
 func (s *Service) ListProductsForModeration(ctx context.Context, limit, offset int) (ProductListResponse, error) {
 	items, err := s.repo.ListProductsForModeration(ctx, limit, offset)
 	if err != nil {
@@ -541,9 +660,42 @@ func (s *Service) RejectProduct(ctx context.Context, adminUserID, productID uuid
 }
 
 func (s *Service) PublishProduct(ctx context.Context, adminUserID, productID uuid.UUID, comment *string) error {
-	return s.applyModerationTransition(ctx, adminUserID, productID, StatusPublished, comment, []string{StatusApproved, StatusHidden}, func(p *Product, t time.Time) {
-		p.PublishedAt = &t
+	p, err := s.repo.GetProductByID(ctx, productID)
+	if err != nil {
+		return err
+	}
+
+	if p.Status != StatusApproved && p.Status != StatusHidden {
+		return ErrInvalidStatusTransition
+	}
+
+	elig := ValidatePublishEligibility(p)
+	if !elig.IsEligible {
+		return &ErrNotPublishable{Reasons: elig.EligibilityReasons}
+	}
+
+	now := time.Now()
+	fromStatus := p.Status
+	p.Status = StatusPublished
+	p.PublishedAt = &now
+	p.UpdatedAt = now
+	p.ModerationComment = comment
+
+	if err := s.repo.UpdateProductStatus(ctx, p); err != nil {
+		return err
+	}
+
+	_ = s.repo.AddModerationLog(ctx, &ProductModerationLog{
+		ID:          uuid.New(),
+		ProductID:   p.ID,
+		AdminUserID: &adminUserID,
+		FromStatus:  &fromStatus,
+		ToStatus:    StatusPublished,
+		Comment:     comment,
+		CreatedAt:   now,
 	})
+
+	return nil
 }
 
 func (s *Service) HideProduct(ctx context.Context, adminUserID, productID uuid.UUID, comment *string) error {

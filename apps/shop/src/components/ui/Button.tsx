@@ -6,7 +6,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 function Button({ className, variant = 'primary', size = 'md', ...props }: ButtonProps) {
-  const baseStyles = "inline-flex items-center justify-center font-medium transition-all duration-300 active:scale-[0.98] focus-visible:outline-none disabled:opacity-50 disabled:pointer-events-none";
+  const baseStyles = "inline-flex items-center justify-center font-medium transition-all duration-300 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-graphite/40 dark:focus-visible:ring-white/40 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111214] disabled:opacity-50 disabled:pointer-events-none";
 
   const variants: Record<string, string> = {
     primary: "bg-graphite dark:bg-white text-white dark:text-black hover:bg-graphite-light dark:hover:bg-gray-100 shadow-sm hover:shadow hover:-translate-y-px rounded-lg",

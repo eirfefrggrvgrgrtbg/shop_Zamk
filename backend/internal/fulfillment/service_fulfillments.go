@@ -96,6 +96,10 @@ func (s *Service) MarkSellerFulfillmentPacked(ctx context.Context, userID, fulfi
 			return err
 		}
 
+		if _, _, err := s.repo.EnsureReceivingCodeTx(ctx, tx, fulfillmentID); err != nil {
+			return err
+		}
+
 		order, errOrder := s.ordersRepo.GetOrderForUpdateTx(ctx, tx, f.OrderID)
 		if errOrder == nil {
 			notifC := notifications.Notification{

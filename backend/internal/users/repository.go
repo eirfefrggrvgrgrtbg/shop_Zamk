@@ -89,6 +89,18 @@ func (r *Repository) UpdateUserStatus(ctx context.Context, id uuid.UUID, status 
 	return nil
 }
 
+func (r *Repository) UpdateRole(ctx context.Context, id uuid.UUID, role string) error {
+	query := `UPDATE users SET role = $1, updated_at = now() WHERE id = $2`
+	res, err := r.db.Exec(ctx, query, role, id)
+	if err != nil {
+		return fmt.Errorf("failed to update user role: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *Repository) UpdatePasswordAndMustChange(ctx context.Context, id uuid.UUID, passwordHash string, mustChange bool) error {
 	query := `
 		UPDATE users

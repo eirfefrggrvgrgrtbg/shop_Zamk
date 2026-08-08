@@ -36,6 +36,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/supplies"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
 
@@ -72,6 +73,7 @@ func New(
 	reportsHandler *reports.Handler,
 	auditHandler *audit.Handler,
 	deliveryHandler *delivery.Handler,
+	suppliesHandler *supplies.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	rateLimiter := ratelimit.NewMiddleware(
@@ -148,8 +150,10 @@ func New(
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireRole(users.RoleAdmin))
 		r.With(perm("sellers.create_access")).Post("/", sellersHandler.CreateSellerByAdmin)
+		r.With(perm("sellers.create_access")).Post("/invite", sellersHandler.InviteSeller)
 		r.With(perm("sellers.read")).Get("/", sellersHandler.ListSellers)
 		r.With(perm("sellers.read")).Get("/{id}", sellersHandler.GetAdminSellerDetail)
+		r.With(perm("sellers.read")).Get("/{id}/overview", sellersHandler.GetAdminSellerOverview)
 		r.With(perm("sellers.update_status")).Patch("/{id}/status", sellersHandler.UpdateSellerStatus)
 		r.With(perm("sellers.create_access")).Post("/{id}/reset-owner-password", sellersHandler.ResetOwnerPassword)
 		r.With(perm("sellers.verify")).Post("/{id}/verify", sellersHandler.VerifySeller)
@@ -162,11 +166,34 @@ func New(
 		r.With(perm("sellers.warn")).Post("/{id}/violations", sellersHandler.CreateSellerViolation)
 		r.With(perm("sellers.warn")).Patch("/{id}/violations/{violationId}/resolve", sellersHandler.ResolveSellerViolation)
 		r.With(perm("sellers.warn")).Patch("/{id}/violations/{violationId}/cancel", sellersHandler.CancelSellerViolation)
+
+		// Notes & Improvement Plans
+		r.With(perm("sellers.read")).Get("/{id}/notes", sellersHandler.ListSellerNotes)
+		r.With(perm("sellers.warn")).Post("/{id}/notes", sellersHandler.CreateSellerNote)
+		r.With(perm("sellers.warn")).Patch("/{id}/notes/{noteId}/archive", sellersHandler.ArchiveSellerNote)
+
+		r.With(perm("sellers.read")).Get("/{id}/improvement-plans", sellersHandler.ListImprovementPlans)
+		r.With(perm("sellers.warn")).Post("/{id}/improvement-plans", sellersHandler.CreateImprovementPlan)
+		r.With(perm("sellers.warn")).Patch("/{id}/improvement-plans/{planId}/status", sellersHandler.UpdateImprovementPlanStatus)
+
+		// Commission
+		r.With(perm("sellers.read")).Get("/{id}/commission", payoutsHandler.GetAdminSellerCommissionHistory)
+		r.With(adminDangerousLimit, perm("commission.manage")).Post("/{id}/commission", payoutsHandler.SetAdminSellerCommission)
+	})
+
+	r.Route("/api/admin/seller-onboarding", func(r chi.Router) {
+		r.Use(appMiddleware.AuthMiddleware(tokenService))
+		r.Use(appMiddleware.RequireRole(users.RoleAdmin))
+		r.With(perm("sellers.read")).Get("/", sellersHandler.ListOnboardingApplications)
+		r.With(perm("sellers.read")).Get("/{id}", sellersHandler.GetAdminOnboardingApplication)
+		r.With(perm("sellers.update_status")).Post("/{id}/request-changes", sellersHandler.RequestChangesOnboarding)
+		r.With(perm("sellers.update_status")).Post("/{id}/reject", sellersHandler.RejectOnboarding)
+		r.With(perm("sellers.update_status")).Post("/{id}/approve", sellersHandler.ApproveOnboarding)
 	})
 
 	r.Route("/api/seller/me", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Use(appMiddleware.RequireSellerAccess())
 		r.Get("/", sellersHandler.GetSellerMe)
 		r.Patch("/", sellersHandler.UpdateSellerProfile)
 		r.With(uploadLimit).Post("/logo/upload", storageHandler.UploadSellerProfileImage)
@@ -174,26 +201,39 @@ func New(
 
 	r.Route("/api/seller/onboarding", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Use(appMiddleware.RequireSellerAccess())
+		r.Get("/", sellersHandler.GetOnboardingApplication)
+		r.Put("/steps/{step}", sellersHandler.UpdateOnboardingStep)
+		r.Post("/submit", sellersHandler.SubmitOnboarding)
 		r.Post("/complete", sellersHandler.CompleteOnboarding)
 	})
 
 	r.Route("/api/seller/warnings", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Use(appMiddleware.RequireSellerAccess())
 		r.Get("/", sellersHandler.GetMyWarnings)
 	})
 
 	r.Route("/api/seller/violations", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Use(appMiddleware.RequireSellerAccess())
 		r.Get("/", sellersHandler.GetMyViolations)
+	})
+
+	r.Route("/api/seller/supplies", func(r chi.Router) {
+		r.Use(appMiddleware.AuthMiddleware(tokenService))
+		r.Use(appMiddleware.RequireSellerAccess())
+		r.Get("/", suppliesHandler.ListSupplies)
+		r.Post("/", suppliesHandler.CreateSupply)
+		r.Get("/{id}", suppliesHandler.GetSupply)
+		r.Post("/{id}/ship", suppliesHandler.MarkShipped)
 	})
 
 	r.Route("/api/public", func(r chi.Router) {
 		r.Get("/categories", catalogHandler.ListCategories)
 		r.Get("/brands", catalogHandler.ListBrands)
 		r.Get("/products", productsHandler.ListPublicProducts)
+		r.Get("/product-previews/{token}", productsHandler.GetProductPreviewByToken)
 		r.Get("/direct-sale", productsHandler.GetDirectSaleProducts)
 		r.Get("/products/{idOrSlug}", productsHandler.GetPublicProduct)
 		r.Get("/sellers/{idOrSlug}", productsHandler.GetPublicSellerStore)
@@ -210,7 +250,7 @@ func New(
 
 	r.Route("/api/customer", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleCustomer))
+		r.Use(appMiddleware.RequireCustomerAccess())
 
 		r.Get("/cart", cartHandler.GetCart)
 		r.Post("/cart/items", cartHandler.AddItem)
@@ -255,9 +295,14 @@ func New(
 
 	r.With(webhookLimit).Post("/api/payments/tbank/webhook", paymentsHandler.HandleTBankWebhook)
 
+	r.Route("/api/dev/payments/mock", func(r chi.Router) {
+		r.Get("/{id}", paymentsHandler.GetDevMockPayment)
+		r.Post("/{id}/{action}", paymentsHandler.ProcessDevMockAction)
+	})
+
 	r.Route("/api/seller/products", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
 
 		r.Get("/", productsHandler.ListSellerProducts)
 		r.Post("/", productsHandler.CreateProduct)
@@ -273,7 +318,7 @@ func New(
 
 	r.Route("/api/seller/inventory", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
 
 		r.Get("/", inventoryHandler.ListSellerInventory)
 		r.Get("/{id}", inventoryHandler.GetSellerInventoryItem)
@@ -282,26 +327,19 @@ func New(
 
 	r.Route("/api/seller/orders", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
 
 		r.Get("/", ordersHandler.ListSellerOrders)
+		r.Get("/summary", ordersHandler.GetSellerOrderSummary)
 		r.Get("/{id}", ordersHandler.GetSellerOrder)
 		r.Get("/{id}/shipment", fulfillmentHandler.GetSellerShipment)
 	})
 
-	r.Route("/api/seller/fulfillments", func(r chi.Router) {
-		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
-
-		r.Get("/", fulfillmentHandler.ListSellerFulfillments)
-		r.Get("/{id}", fulfillmentHandler.GetSellerFulfillment)
-		r.Post("/{id}/mark-assembling", fulfillmentHandler.MarkSellerFulfillmentAssembling)
-		r.Post("/{id}/mark-packed", fulfillmentHandler.MarkSellerFulfillmentPacked)
-	})
+	// /api/seller/fulfillments removed for FBO architecture
 
 	r.Route("/api/seller/returns", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
 
 		r.Get("/", returnsHandler.ListSellerReturns)
 		r.Get("/{id}", returnsHandler.GetSellerReturn)
@@ -309,22 +347,22 @@ func New(
 
 	r.Route("/api/seller/balance", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
 
 		r.Get("/", payoutsHandler.GetSellerBalance)
 	})
 
 	r.Route("/api/seller/payouts", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
 
 		r.Get("/", payoutsHandler.ListSellerPayouts)
-		r.Post("/request", payoutsHandler.RequestPayout)
+		r.Get("/ledger", payoutsHandler.ListSellerLedger)
 	})
 
 	r.Route("/api/seller/notifications", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Use(appMiddleware.RequireSellerAccess())
 
 		r.Get("/", notificationsHandler.ListSellerNotifications)
 		r.Get("/unread-count", notificationsHandler.UnreadCountSeller)
@@ -356,6 +394,13 @@ func New(
 		r.With(perm("staff.block")).Patch("/staff/members/{userId}/status", staffHandler.UpdateStaffStatus)
 		r.With(perm("staff.update")).Post("/staff/members/{userId}/reset-password", staffHandler.ResetStaffPassword)
 
+		r.Route("/receiving", func(r chi.Router) {
+			r.Use(perm("inventory.receipt"))
+			r.Post("/sessions", suppliesHandler.StartSession)
+			r.Post("/sessions/{sessionId}/scan", suppliesHandler.RecordScan)
+			r.Post("/sessions/{sessionId}/finalize", suppliesHandler.FinalizeSession)
+		})
+
 		// Catalog
 		r.With(perm("categories.read")).Get("/categories", catalogHandler.ListCategories)
 		r.With(perm("categories.create")).Post("/categories", catalogHandler.CreateCategory)
@@ -366,9 +411,12 @@ func New(
 		// Products
 		r.With(perm("products.read")).Get("/products", productsHandler.ListAdminProducts)
 		r.With(perm("products.read")).Get("/products/{id}", productsHandler.GetAdminProduct)
+		r.With(perm("products.moderate")).Patch("/products/{id}", productsHandler.AdminUpdateProduct)
+		r.With(perm("products.read")).Post("/products/{id}/preview-link", productsHandler.AdminCreateProductPreviewLink)
 		r.With(perm("products.read")).Get("/products/{id}/moderation-logs", productsHandler.GetAdminModerationHistory)
 		r.With(uploadLimit, perm("products.moderate")).Post("/products/{id}/images/upload", storageHandler.UploadAdminProductImage)
 		r.With(perm("products.moderate")).Get("/moderation/products", productsHandler.ListModerationProducts)
+		r.With(perm("products.moderate")).Post("/moderation/products/{id}/start-review", productsHandler.AdminStartProductReview)
 		r.With(adminDangerousLimit, perm("products.approve")).Post("/moderation/products/{id}/approve", productsHandler.AdminApproveProduct)
 		r.With(adminDangerousLimit, perm("products.reject")).Post("/moderation/products/{id}/reject", productsHandler.AdminRejectProduct)
 		r.With(adminDangerousLimit, perm("products.publish")).Post("/moderation/products/{id}/publish", productsHandler.AdminPublishProduct)
@@ -402,10 +450,15 @@ func New(
 		r.With(perm("shipments.read")).Get("/shipments/{id}", fulfillmentHandler.GetAdminShipment)
 		r.With(perm("shipments.update_status")).Patch("/shipments/{id}/status", fulfillmentHandler.UpdateShipmentStatus)
 
-		// Fulfillments
+		// Fulfillments & Receiving
 		r.With(perm("orders.read")).Get("/order-fulfillments", fulfillmentHandler.ListAdminFulfillments)
 		r.With(perm("orders.read")).Get("/order-fulfillments/{id}", fulfillmentHandler.GetAdminFulfillment)
 		r.With(perm("shipments.create")).Post("/fulfillments/{id}/shipment", fulfillmentHandler.CreateShipmentForFulfillment)
+		r.With(perm("orders.read")).Post("/fulfillments/resolve-receiving-code", fulfillmentHandler.ResolveReceivingCode)
+		r.With(perm("orders.read")).Post("/fulfillments/{id}/receiving/start", fulfillmentHandler.StartReceiving)
+		r.With(perm("orders.read")).Post("/fulfillments/{id}/receiving/scan-item", fulfillmentHandler.ScanReceivingItem)
+		r.With(perm("shipments.create")).Post("/fulfillments/{id}/receiving/confirm", fulfillmentHandler.ConfirmReceiving)
+		r.With(perm("orders.read")).Post("/fulfillments/{id}/receiving/discrepancy", fulfillmentHandler.RecordDiscrepancy)
 
 		// Returns
 		r.With(perm("returns.read")).Get("/returns", returnsHandler.ListAdminReturns)
@@ -417,15 +470,15 @@ func New(
 		r.With(perm("refunds.read")).Get("/refunds", returnsHandler.ListAdminRefunds)
 		r.With(perm("refunds.read")).Get("/refunds/{id}", returnsHandler.GetAdminRefund)
 
-		// Payouts — UpdateAdminPayoutStatus uses handler-level dynamic permission check
-		r.With(perm("payouts.read")).Get("/seller-balances", payoutsHandler.GetAdminSellerBalances)
+		// Payouts
 		r.Route("/payouts", func(r chi.Router) {
-			r.With(perm("payouts.read")).Get("/", payoutsHandler.ListAdminPayouts)
 			r.With(perm("payouts.read")).Get("/summary", payoutsHandler.GetAdminPayoutSummary)
-			r.With(perm("payouts.read")).Get("/{id}", payoutsHandler.GetAdminPayout)
-			r.With(adminDangerousLimit).Patch("/{id}/status", payoutsHandler.UpdateAdminPayoutStatus)
-			r.With(perm("payouts.read")).Post("/trigger-availability", payoutsHandler.TriggerAvailability)
+			r.With(adminDangerousLimit, perm("payouts.create")).Post("/batch", payoutsHandler.CreatePayoutBatch)
+			r.With(adminDangerousLimit, perm("payouts.update")).Post("/{id}/process", payoutsHandler.ProcessPayoutBatch)
+			r.With(adminDangerousLimit, perm("payouts.update")).Post("/{id}/hold", payoutsHandler.HoldPayoutBatch)
 		})
+
+
 
 		// Auctions
 		r.With(perm("auctions.read")).Get("/auctions", auctionsAdminHandler.GetAuctions)
@@ -459,7 +512,7 @@ func New(
 
 	r.Group(func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleCustomer))
+		r.Use(appMiddleware.RequireCustomerAccess())
 
 		r.Post("/api/customer/orders/{orderId}/items/{orderItemId}/review", reviewsHandler.CreateCustomerReview)
 		r.Get("/api/customer/reviews", reviewsHandler.GetCustomerReviews)
@@ -468,7 +521,7 @@ func New(
 
 	r.Group(func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
-		r.Use(appMiddleware.RequireRole(users.RoleSeller))
+		r.Use(appMiddleware.RequireSellerAccess())
 
 		r.Get("/api/seller/reviews", reviewsHandler.GetSellerReviews)
 		r.Get("/api/seller/reviews/{id}", reviewsHandler.GetSellerReview)

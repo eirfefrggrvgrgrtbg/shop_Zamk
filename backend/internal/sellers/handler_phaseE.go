@@ -31,6 +31,22 @@ func (h *Handler) GetAdminSellerDetail(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) GetAdminSellerOverview(w http.ResponseWriter, r *http.Request) {
+	sellerIDStr := chi.URLParam(r, "id")
+	sellerID, err := uuid.Parse(sellerIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid seller ID")
+		return
+	}
+	period := r.URL.Query().Get("period")
+	resp, err := h.service.GetSellerOverview(r.Context(), sellerID, period)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, "failed to get seller overview")
+		return
+	}
+	h.respondJSON(w, http.StatusOK, resp)
+}
+
 func (h *Handler) VerifySeller(w http.ResponseWriter, r *http.Request) {
 	sellerIDStr := chi.URLParam(r, "id")
 	sellerID, err := uuid.Parse(sellerIDStr)
@@ -351,6 +367,126 @@ func (h *Handler) CancelSellerViolation(w http.ResponseWriter, r *http.Request) 
 				Metadata: staff.SanitizeMetadata(map[string]any{"violationId": violationID.String()}),
 			})
 		}()
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Notes and Plans Handlers ---
+
+func (h *Handler) ListSellerNotes(w http.ResponseWriter, r *http.Request) {
+	sellerIDStr := chi.URLParam(r, "id")
+	sellerID, err := uuid.Parse(sellerIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid seller ID")
+		return
+	}
+	items, err := h.service.ListSellerNotes(r.Context(), sellerID)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, "failed to list notes")
+		return
+	}
+	if items == nil {
+		items = []SellerNoteDTO{}
+	}
+	h.respondJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *Handler) CreateSellerNote(w http.ResponseWriter, r *http.Request) {
+	sellerIDStr := chi.URLParam(r, "id")
+	sellerID, err := uuid.Parse(sellerIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid seller ID")
+		return
+	}
+	var req CreateSellerNoteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	actorID, _ := r.Context().Value("userID").(uuid.UUID)
+	note, err := h.service.CreateSellerNote(r.Context(), sellerID, &actorID, req)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, "failed to create note")
+		return
+	}
+	h.respondJSON(w, http.StatusCreated, note)
+}
+
+func (h *Handler) ArchiveSellerNote(w http.ResponseWriter, r *http.Request) {
+	noteIDStr := chi.URLParam(r, "noteId")
+	noteID, err := uuid.Parse(noteIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid note ID")
+		return
+	}
+	var req ArchiveSellerNoteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.service.ArchiveSellerNote(r.Context(), noteID, req.IsArchived); err != nil {
+		h.respondError(w, http.StatusInternalServerError, "failed to archive note")
+		return
+	}
+	h.respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) ListImprovementPlans(w http.ResponseWriter, r *http.Request) {
+	sellerIDStr := chi.URLParam(r, "id")
+	sellerID, err := uuid.Parse(sellerIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid seller ID")
+		return
+	}
+	items, err := h.service.ListImprovementPlans(r.Context(), sellerID)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, "failed to list plans")
+		return
+	}
+	if items == nil {
+		items = []ImprovementPlanDTO{}
+	}
+	h.respondJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *Handler) CreateImprovementPlan(w http.ResponseWriter, r *http.Request) {
+	sellerIDStr := chi.URLParam(r, "id")
+	sellerID, err := uuid.Parse(sellerIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid seller ID")
+		return
+	}
+	var req CreateImprovementPlanRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	actorID, _ := r.Context().Value("userID").(uuid.UUID)
+	plan, err := h.service.CreateImprovementPlan(r.Context(), sellerID, &actorID, req)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, "failed to create plan")
+		return
+	}
+	h.respondJSON(w, http.StatusCreated, plan)
+}
+
+func (h *Handler) UpdateImprovementPlanStatus(w http.ResponseWriter, r *http.Request) {
+	planIDStr := chi.URLParam(r, "planId")
+	planID, err := uuid.Parse(planIDStr)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid plan ID")
+		return
+	}
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.service.UpdateImprovementPlanStatus(r.Context(), planID, req.Status); err != nil {
+		h.respondError(w, http.StatusInternalServerError, "failed to update plan status")
+		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

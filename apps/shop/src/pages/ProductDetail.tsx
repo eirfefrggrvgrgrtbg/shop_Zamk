@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronRight, Heart, Minus, Plus, Ruler, ShoppingBag, Star, Truck, RefreshCw, Shield, ChevronDown } from 'lucide-react';
+import { ChevronRight, Heart, Minus, Plus, Ruler, ShoppingBag, Star, Truck, RefreshCw, Shield, ChevronDown, Eye } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -8,8 +8,9 @@ import { useCart } from '../contexts/CartContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { PreviewPageMetadata } from '../components/PreviewPageMetadata';
 import { formatPrice, cn } from '../lib/utils';
-import { fetchProductById, fetchProductReviews } from '../api/publicCatalog';
+import { fetchProductById, fetchProductReviews, fetchProductPreviewByToken } from '../api/publicCatalog';
 import type { Product, Review } from '../types/catalog';
 
 // Размерная сетка
@@ -28,8 +29,8 @@ const SIZE_CHART = {
 const getProductSpecs = (product: Product) =>
   [
     { label: 'Артикул', value: product.id.toUpperCase() },
-    { label: 'Бренд', value: product.brand || 'Бренд не указан' },
-    { label: 'Категория', value: product.category || 'Категория не указана' },
+    product.brand && product.brand !== 'Бренд не указан' ? { label: 'Бренд', value: product.brand } : null,
+    product.category && product.category !== 'Категория не указана' ? { label: 'Категория', value: product.category } : null,
     product.materials ? { label: 'Материал', value: product.materials } : null,
   ].filter((spec): spec is { label: string; value: string } => Boolean(spec));
 
@@ -48,7 +49,7 @@ function AccordionSection({ title, children, defaultOpen = false }: { title: str
 }
 
 export function ProductDetail() {
-  const { id } = useParams<{ id: string }>();
+  const { id, token } = useParams<{ id?: string; token?: string }>();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -65,28 +66,47 @@ export function ProductDetail() {
 
   useEffect(() => {
     async function loadProduct() {
-      if (!id) return;
+      if (!id && !token) return;
       try {
         setIsLoading(true);
-        const data = await fetchProductById(id);
+        let data: Product;
+        if (token) {
+          data = await fetchProductPreviewByToken(token);
+        } else if (id) {
+          data = await fetchProductById(id);
+        } else {
+          return;
+        }
         setProduct(data);
         setError(null);
 
-        try {
-          const revs = await fetchProductReviews(id);
-          setReviews(revs);
-        } catch (e) {
-          console.warn("Failed to fetch reviews", e);
+        if (!data.isPreview && data.id) {
+          try {
+            const revs = await fetchProductReviews(data.id);
+            setReviews(revs);
+          } catch (e) {
+            console.warn("Failed to fetch reviews", e);
+          }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to load product:', err);
-        setError('Не удалось загрузить товар');
+        if (token) {
+          if (err?.status === 404 || err?.code === 'invalid_preview_link' || err?.message?.includes('недействительна')) {
+            setError('Ссылка предпросмотра недействительна');
+          } else if (err?.status === 410 && err?.code === 'product_unavailable') {
+            setError('Предпросмотр этого товара больше недоступен');
+          } else {
+            setError('Срок действия ссылки истёк или ссылка больше недоступна');
+          }
+        } else {
+          setError('Не удалось загрузить товар');
+        }
       } finally {
         setIsLoading(false);
       }
     }
     loadProduct();
-  }, [id]);
+  }, [id, token]);
 
   const { addItem } = useCart();
   const { user } = useAuth();
@@ -96,6 +116,7 @@ export function ProductDetail() {
   if (isLoading) {
     return (
       <div className="relative z-10 min-h-screen pt-36 pb-20 flex justify-center">
+        {token && <PreviewPageMetadata />}
         <div className="animate-spin w-8 h-8 border-2 border-black border-t-transparent rounded-full dark:border-white dark:border-t-transparent" />
       </div>
     );
@@ -104,6 +125,7 @@ export function ProductDetail() {
   if (error || !product) {
     return (
       <div className="relative z-10 min-h-screen pt-36 pb-20">
+        {token && <PreviewPageMetadata />}
         <div className="container mx-auto px-4 sm:px-6 max-w-4xl text-center">
           <h1 className="text-4xl font-serif text-graphite dark:text-white">{error || 'Товар не найден'}</h1>
           <Link to="/catalog" className="inline-block mt-6">
@@ -125,6 +147,7 @@ export function ProductDetail() {
   const selectableSizes = product.sizes ?? [];
 
   const handleAddToCart = async () => {
+    if (product.isPreview) return;
     if (requiresSizeSelection && !activeSize) {
       setSizeError('Выберите размер перед добавлением в корзину');
       return;
@@ -171,7 +194,15 @@ export function ProductDetail() {
   };
 
   return (
-    <div className="relative z-10 min-h-screen pt-24 md:pt-28 pb-20">
+    <div className="relative z-10 min-h-screen pt-20 md:pt-24 pb-20">
+      {token && <PreviewPageMetadata />}
+      {product.isPreview && (
+        <div className="bg-amber-500 text-slate-950 font-bold px-4 py-3 text-center text-xs sm:text-sm sticky top-16 z-40 shadow-md flex items-center justify-center gap-2 mb-4">
+          <Eye className="w-4 h-4 flex-shrink-0" />
+          <span>Предпросмотр товара для модерации. Товар ещё не опубликован.</span>
+        </div>
+      )}
+
       <div className="container mx-auto px-4 sm:px-6 max-w-[1400px]">
 
         {/* Breadcrumbs */}
@@ -229,7 +260,7 @@ export function ProductDetail() {
           {/* Product Info */}
           <div className="lg:sticky lg:top-28 lg:self-start">
             {/* Brand / Seller */}
-            {product.sellerSlug ? (
+            {product.sellerSlug && !product.isPreview ? (
               <Link to={`/seller/${product.sellerSlug}`} className="text-sm text-ash hover:text-graphite dark:hover:text-white transition-colors">
                 {product.sellerName || product.brand}
               </Link>
@@ -285,10 +316,10 @@ export function ProductDetail() {
             </div>
 
             {/* Colors */}
-            {product.colors && (
+            {product.colors && product.colors.length > 0 && (
               <div className="mt-6">
                 <p className="text-sm text-graphite dark:text-white mb-2">
-                  Цвет: <span className="text-ash">{product.colors[activeColor].name}</span>
+                  Цвет: <span className="text-ash">{product.colors[activeColor]?.name || ''}</span>
                 </p>
                 <div className="flex gap-2">
                   {product.colors.map((color, index) => (
@@ -361,14 +392,16 @@ export function ProductDetail() {
                 <div className="flex items-center border border-border-lighter dark:border-white/20 rounded-lg">
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="w-10 h-10 flex items-center justify-center text-graphite dark:text-white hover:bg-ice dark:hover:bg-white/5 transition-colors"
+                    disabled={product.isPreview}
+                    className="w-10 h-10 flex items-center justify-center text-graphite dark:text-white hover:bg-ice dark:hover:bg-white/5 transition-colors disabled:opacity-50"
                   >
                     <Minus className="w-4 h-4" />
                   </button>
                   <span className="w-12 text-center text-sm font-medium text-graphite dark:text-white">{quantity}</span>
                   <button
                     onClick={() => setQuantity(quantity + 1)}
-                    className="w-10 h-10 flex items-center justify-center text-graphite dark:text-white hover:bg-ice dark:hover:bg-white/5 transition-colors"
+                    disabled={product.isPreview}
+                    className="w-10 h-10 flex items-center justify-center text-graphite dark:text-white hover:bg-ice dark:hover:bg-white/5 transition-colors disabled:opacity-50"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -383,7 +416,7 @@ export function ProductDetail() {
                 variant="primary"
                 className="flex-1 h-12 gap-2"
                 onClick={handleAddToCart}
-                disabled={(() => {
+                disabled={product.isPreview || (() => {
                   let vStock = product.variants?.[0]?.inStock ?? true;
                   if (product.variants && activeSize) {
                     const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
@@ -393,22 +426,26 @@ export function ProductDetail() {
                 })()}
               >
                 <ShoppingBag className="w-5 h-5" />
-                {(() => {
-                  let vStock = product.variants?.[0]?.inStock ?? true;
-                  if (product.variants && activeSize) {
-                    const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
-                    if (match) vStock = match.inStock ?? true;
-                  }
-                  return vStock ? 'Добавить в корзину' : 'Нет в наличии';
-                })()}
+                {product.isPreview
+                  ? 'Покупка недоступна в режиме предпросмотра'
+                  : (() => {
+                      let vStock = product.variants?.[0]?.inStock ?? true;
+                      if (product.variants && activeSize) {
+                        const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
+                        if (match) vStock = match.inStock ?? true;
+                      }
+                      return vStock ? 'Добавить в корзину' : 'Нет в наличии';
+                    })()}
               </Button>
               <Button
                 type="button"
                 variant="secondary"
                 size="icon"
                 className="h-12 w-12"
+                disabled={product.isPreview}
                 aria-label={liked ? 'Убрать из избранного' : 'Добавить в избранное'}
                 onClick={() => {
+                  if (product.isPreview) return;
                   if (!user) {
                     showToast('Войдите, чтобы добавить товар в избранное.');
                   }

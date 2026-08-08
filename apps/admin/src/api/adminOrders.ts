@@ -4,14 +4,20 @@ import {
   updateAdminOrderStatus as apiUpdateAdminOrderStatus,
   getAdminOrderFulfillments as apiGetAdminOrderFulfillments,
 } from '@zamk/api-client/src/admin';
+import { getAccessToken } from '@zamk/api-client/src/tokenStore';
 import { ApiError } from '@zamk/api-client/src/errors';
 import type { AdminOrder, AdminOrderDetail, OrderItem, AdminFulfillment } from '@zamk/api-client/src/types';
+import { API_URL } from '../lib/api';
 
 export interface AdminOrderView {
   id: string;
+  orderNumber?: string;
   status: string;
   statusLabel: string;
   fulfillmentStatus: string;
+  fulfillmentsCount: number;
+  itemPositionsCount: number;
+  unitsCount: number;
   sourceType: string;
   customerName?: string;
   customerPhone?: string;
@@ -31,20 +37,23 @@ export interface OrderStatusUpdateInput {
   comment?: string;
 }
 
-type ListResponse<T> = T[] | { items?: T[]; totalCount?: number };
+interface ListResponse<T> {
+  items: T[];
+  totalCount: number;
+}
 
 const orderStatusLabels: Record<string, string> = {
+  created: 'Создан',
   awaiting_payment: 'Ожидает оплаты',
   paid: 'Оплачен',
   assembling: 'Собирается',
   packed: 'Упакован',
-  shipped: 'Отгружен',
+  shipped: 'В пути',
   delivered: 'Доставлен',
   cancelled: 'Отменён',
-  failed: 'Ошибка',
 };
 
-const unwrapItems = <T>(response: ListResponse<T>): T[] => {
+const unwrapItems = <T>(response: ListResponse<T> | T[]): T[] => {
   if (Array.isArray(response)) {
     return response;
   }
@@ -54,9 +63,13 @@ const unwrapItems = <T>(response: ListResponse<T>): T[] => {
 export const mapAdminOrder = (order: AdminOrderDetail | AdminOrder): AdminOrderView => {
   return {
     id: order.id,
+    orderNumber: order.orderNumber,
     status: order.status,
     statusLabel: orderStatusLabels[order.status] ?? order.status,
     fulfillmentStatus: order.fulfillmentStatus || 'pending',
+    fulfillmentsCount: (order as any).fulfillmentsCount || 0,
+    itemPositionsCount: (order as any).itemPositionsCount || 0,
+    unitsCount: (order as any).unitsCount || 0,
     sourceType: order.sourceType || 'normal',
     customerName: order.customerName,
     customerPhone: (order as AdminOrderDetail).customerPhone,
@@ -115,6 +128,99 @@ export const updateAdminOrderStatus = async (id: string, input: OrderStatusUpdat
     throw new Error('Администратор не может вручную установить статус оплаты.');
   }
   await apiUpdateAdminOrderStatus(id, input);
+};
+
+export const getAdminFulfillments = async (params?: { status?: string }): Promise<AdminFulfillment[]> => {
+  const query = params?.status ? `?status=${encodeURIComponent(params.status)}` : '';
+  const response = await fetch(`${API_URL}/admin/order-fulfillments${query}`, {
+    headers: {
+      Authorization: `Bearer ${getAccessToken() || ''}`,
+    },
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new ApiError(data.error?.message || 'Failed to fetch fulfillments', data.error?.code, response.status);
+  }
+  const data = await response.json();
+  return data.items || data;
+};
+
+export const resolveReceivingCode = async (code: string): Promise<AdminFulfillment> => {
+  const response = await fetch(`${API_URL}/admin/fulfillments/resolve-receiving-code`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getAccessToken() || ''}`,
+    },
+    body: JSON.stringify({ code }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new ApiError(data.error?.message || 'Сборка не найдена', data.error?.code, response.status);
+  }
+  return data;
+};
+
+export const startReceiving = async (id: string): Promise<any> => {
+  const response = await fetch(`${API_URL}/admin/fulfillments/${id}/receiving/start`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${getAccessToken() || ''}`,
+    },
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new ApiError(data.error?.message || 'Ошибка начала приёмки', data.error?.code, response.status);
+  }
+  return data;
+};
+
+export const scanItem = async (id: string, payload: { barcode: string; expectedVersion: number; idempotencyKey: string }): Promise<any> => {
+  const response = await fetch(`${API_URL}/admin/fulfillments/${id}/receiving/scan-item`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getAccessToken() || ''}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new ApiError(data.error?.message || 'Ошибка сканирования товара', data.error?.code, response.status);
+  }
+  return data;
+};
+
+export const confirmReceiving = async (id: string, payload: any): Promise<any> => {
+  const response = await fetch(`${API_URL}/admin/fulfillments/${id}/receiving/confirm`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getAccessToken() || ''}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new ApiError(data.error?.message || 'Ошибка подтверждения приёмки', data.error?.code, response.status);
+  }
+  return data;
+};
+
+export const recordDiscrepancy = async (id: string, payload: any): Promise<any> => {
+  const response = await fetch(`${API_URL}/admin/fulfillments/${id}/receiving/discrepancy`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getAccessToken() || ''}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new ApiError(data.error?.message || 'Ошибка записи расхождения', data.error?.code, response.status);
+  }
+  return data;
 };
 
 export const getAdminOrderErrorMessage = (error: unknown, fallback: string): string => {

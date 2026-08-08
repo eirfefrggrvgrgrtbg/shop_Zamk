@@ -99,7 +99,8 @@ func TestC8FulfillmentCreation(t *testing.T) {
 
 	// Action: Create Order
 	dmID := uuid.New()
-	if _, err := db.Exec(ctx, "INSERT INTO delivery_methods (id, code, name, price_cents, is_active) VALUES ($1, 'mock', 'mock', 100, true)", dmID); err != nil {
+	dmCode := "mock_" + dmID.String()[:8]
+	if _, err := db.Exec(ctx, "INSERT INTO delivery_methods (id, code, name, price_cents, is_active) VALUES ($1, $2, 'mock', 100, true) ON CONFLICT DO NOTHING", dmID, dmCode); err != nil {
 		t.Fatalf("insert dm: %v", err)
 	}
 

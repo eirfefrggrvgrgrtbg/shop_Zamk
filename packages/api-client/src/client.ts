@@ -89,14 +89,14 @@ export const request = async <T>(
       // Handle nested error shape: { error: { code, message } }
       if (data && data.error && typeof data.error === 'object') {
         const code = data.error.code;
-        throw new ApiError(getSafeErrorMessage(code, data.error.message), code, response.status);
+        throw new ApiError(getSafeErrorMessage(code, data.error.message), code, response.status, data);
       }
-      // Handle flat error shape: { error: "code", message: "..." }
-      if (data && typeof data.error === 'string') {
-        const code = data.error;
-        throw new ApiError(getSafeErrorMessage(code, data.message), code, response.status);
+      // Handle flat error shape: { error: "code", message: "..." } or { code: "code", message: "..." }
+      if (data && (typeof data.error === 'string' || typeof data.code === 'string')) {
+        const code = data.error || data.code;
+        throw new ApiError(getSafeErrorMessage(code, data.message), code, response.status, data);
       }
-      throw new ApiError(`HTTP Error ${response.status}`, 'HTTP_ERROR', response.status);
+      throw new ApiError(data?.message || `HTTP Error ${response.status}`, data?.code || 'HTTP_ERROR', response.status, data);
     }
 
     return data as T;

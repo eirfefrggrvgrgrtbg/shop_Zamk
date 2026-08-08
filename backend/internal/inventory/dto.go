@@ -46,6 +46,25 @@ type InventoryListResponse struct {
 	TotalCount int    `json:"totalCount"`
 }
 
+type SellerInventoryItem struct {
+	VariantID          uuid.UUID              `json:"variantId"`
+	ProductID          uuid.UUID              `json:"productId"`
+	ProductTitle       string                 `json:"productTitle"`
+	Image              *string                `json:"image,omitempty"`
+	OptionValues       map[string]interface{} `json:"optionValues,omitempty"`
+	SKU                string                 `json:"sku"`
+	OnHand             int                    `json:"onHand"`
+	Reserved           int                    `json:"reserved"`
+	Available          int                    `json:"available"`
+	Inbound            int                    `json:"inbound"`
+	AvailabilityStatus string                 `json:"availabilityStatus"`
+}
+
+type SellerInventoryListResponse struct {
+	Items      []SellerInventoryItem `json:"items"`
+	TotalCount int                   `json:"totalCount"`
+}
+
 type StockMovementsListResponse struct {
 	Items      []StockMovement `json:"items"`
 	TotalCount int             `json:"totalCount"`

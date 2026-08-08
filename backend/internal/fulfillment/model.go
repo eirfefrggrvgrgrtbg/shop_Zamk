@@ -41,12 +41,22 @@ type Fulfillment struct {
 	SellerAmountCents int64             `json:"sellerAmountCents"`
 	CreatedAt         time.Time         `json:"createdAt"`
 	UpdatedAt         time.Time         `json:"updatedAt"`
-	ShipmentStatus    *string           `json:"shipmentStatus,omitempty"`
-	ShipmentID        *uuid.UUID        `json:"shipmentId,omitempty"`
-	DeliveryAddress   *string           `json:"deliveryAddress,omitempty"`
-	CustomerName      *string           `json:"customerName,omitempty"`
-	CustomerPhone     *string           `json:"customerPhone,omitempty"`
-	Items             []FulfillmentItem `json:"items"`
+	OrderNumber        *string           `json:"orderNumber,omitempty"`
+	ReceivingCode      *string           `json:"receivingCode,omitempty"`
+	ReceivingQRToken   *string           `json:"receivingQrToken,omitempty"`
+	PackedAt           *time.Time        `json:"packedAt,omitempty"`
+	AcceptedAt         *time.Time        `json:"acceptedAt,omitempty"`
+	AcceptedByStaffID  *uuid.UUID        `json:"acceptedByStaffId,omitempty"`
+	ReceivingResult    interface{}       `json:"receivingResult,omitempty"`
+	DiscrepancyReason  *string           `json:"discrepancyReason,omitempty"`
+	DiscrepancyComment *string           `json:"discrepancyComment,omitempty"`
+	DiscrepancyAt      *time.Time        `json:"discrepancyAt,omitempty"`
+	ShipmentStatus     *string           `json:"shipmentStatus,omitempty"`
+	ShipmentID         *uuid.UUID        `json:"shipmentId,omitempty"`
+	DeliveryAddress    *string           `json:"deliveryAddress,omitempty"`
+	CustomerName       *string           `json:"customerName,omitempty"`
+	CustomerPhone      *string           `json:"customerPhone,omitempty"`
+	Items              []FulfillmentItem `json:"items"`
 }
 
 type FulfillmentItem struct {
@@ -57,8 +67,40 @@ type FulfillmentItem struct {
 	VariantSize    *string   `json:"variantSize,omitempty"`
 	VariantColor   *string   `json:"variantColor,omitempty"`
 	SKU            *string   `json:"sku,omitempty"`
+	Barcode        *string   `json:"barcode,omitempty"`
 	Quantity       int       `json:"quantity"`
 	UnitPriceCents int64     `json:"unitPriceCents"`
 	LineTotalCents int64     `json:"lineTotalCents"`
 	ImageURL       *string   `json:"imageUrl,omitempty"`
 }
+
+type ReceivingSession struct {
+	ID               uuid.UUID       `json:"id"`
+	FulfillmentID    uuid.UUID       `json:"fulfillmentId"`
+	Status           string          `json:"status"` // active, accepted, discrepancy, cancelled
+	Version          int             `json:"version"`
+	StartedAt        time.Time       `json:"startedAt"`
+	StartedByStaffID *uuid.UUID      `json:"startedByStaffId,omitempty"`
+	CompletedAt      *time.Time      `json:"completedAt,omitempty"`
+	CreatedAt        time.Time       `json:"createdAt"`
+	UpdatedAt        time.Time       `json:"updatedAt"`
+	Items            []ReceivingItem `json:"items"`
+	CanConfirm       bool            `json:"canConfirm"`
+}
+
+type ReceivingItem struct {
+	ID                 uuid.UUID  `json:"id"`
+	SessionID          uuid.UUID  `json:"sessionId"`
+	FulfillmentItemID  *uuid.UUID `json:"fulfillmentItemId,omitempty"`
+	VariantID          *uuid.UUID `json:"variantId,omitempty"`
+	SKU                string     `json:"sku"`
+	Barcode            *string    `json:"barcode,omitempty"`
+	ProductTitle       string     `json:"productTitle"`
+	ExpectedQuantity   int        `json:"expectedQuantity"`
+	ScannedQuantity    int        `json:"scannedQuantity"`
+	DamagedQuantity    int        `json:"damagedQuantity"`
+	UnexpectedQuantity int        `json:"unexpectedQuantity"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	UpdatedAt          time.Time  `json:"updatedAt"`
+}
+
