@@ -96,7 +96,7 @@ func (s *Service) Login(ctx context.Context, input LoginRequest, userAgent, ip s
 	}
 
 	if !CheckPassword(input.Password, user.PasswordHash) {
-		fmt.Printf("Login failed CheckPassword! Input hash: %v vs %v\n", input.Password, user.PasswordHash)
+		fmt.Printf("login failed: invalid credentials\n")
 		return AuthResponse{}, "", ErrInvalidCredentials
 	}
 
