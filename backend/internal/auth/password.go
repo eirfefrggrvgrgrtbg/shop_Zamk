@@ -9,13 +9,15 @@ import (
 )
 
 var (
-	ErrPasswordTooShort     = errors.New("Пароль слишком короткий.")
-	ErrPasswordNoUpper      = errors.New("Пароль должен содержать заглавную букву.")
-	ErrPasswordNoLower      = errors.New("Пароль должен содержать строчную букву.")
-	ErrPasswordNoDigit      = errors.New("Пароль должен содержать цифру.")
-	ErrPasswordNoSpecial    = errors.New("Пароль должен содержать спецсимвол.")
-	ErrPasswordTooSimple    = errors.New("Пароль слишком простой.")
-	ErrPasswordContainsInfo = errors.New("Пароль не должен содержать имя, фамилию или email.")
+	ErrPasswordTooShort     = errors.New("Пароль должен содержать минимум 10 символов.")
+	ErrPasswordNoUpper      = errors.New("Пароль должен содержать заглавную латинскую букву (A-Z).")
+	ErrPasswordNoLower      = errors.New("Пароль должен содержать строчную латинскую букву (a-z).")
+	ErrPasswordNoDigit      = errors.New("Пароль должен содержать цифру (0-9).")
+	ErrPasswordNoSpecial    = errors.New("Пароль должен содержать спецсимвол (!@#$%^&*.?-_+=).")
+	ErrPasswordTooSimple    = errors.New("Пароль содержит слишком простую комбинацию.")
+	ErrPasswordRepeated     = errors.New("Пароль не должен содержать 3 одинаковых символа подряд.")
+	ErrPasswordSequential   = errors.New("Пароль не должен содержать простые последовательности (например, 123 или 321).")
+	ErrPasswordContainsInfo = errors.New("Пароль не должен содержать ваше имя или email.")
 )
 
 func IsPasswordError(err error) bool {
@@ -25,6 +27,8 @@ func IsPasswordError(err error) bool {
 		errors.Is(err, ErrPasswordNoDigit) ||
 		errors.Is(err, ErrPasswordNoSpecial) ||
 		errors.Is(err, ErrPasswordTooSimple) ||
+		errors.Is(err, ErrPasswordRepeated) ||
+		errors.Is(err, ErrPasswordSequential) ||
 		errors.Is(err, ErrPasswordContainsInfo)
 }
 
@@ -85,11 +89,11 @@ func ValidatePassword(password, name, email string) error {
 	}
 
 	if hasRepeatedCharacters(lowerPass) {
-		return ErrPasswordTooSimple
+		return ErrPasswordRepeated
 	}
 
 	if hasSequentialDigits(lowerPass) {
-		return ErrPasswordTooSimple
+		return ErrPasswordSequential
 	}
 
 	if containsUserInfo(lowerPass, name, email) {

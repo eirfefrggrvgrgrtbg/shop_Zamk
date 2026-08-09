@@ -22,9 +22,9 @@ func TestValidatePassword(t *testing.T) {
 		{"No special", "SuperSecr3tT", ErrPasswordNoSpecial},
 		{"Common weak", "MyQwerty123!", ErrPasswordTooSimple},
 		{"Obvious date", "Cool2024Pass!", ErrPasswordTooSimple},
-		{"Repeated chars", "Aaa123!@#$", ErrPasswordTooSimple},
-		{"Sequential digits asc", "Pass123456!", ErrPasswordTooSimple},
-		{"Sequential digits desc", "Pass654321!", ErrPasswordTooSimple},
+		{"Repeated chars", "Aaa123!@#$", ErrPasswordRepeated},
+		{"Sequential digits asc", "Pass012345!", ErrPasswordSequential},
+		{"Sequential digits desc", "Pass987654!", ErrPasswordSequential},
 		{"Contains email part", "PassJohnDoe1!", ErrPasswordContainsInfo},
 		{"Contains name part", "SecretJohn1!", ErrPasswordContainsInfo},
 	}
