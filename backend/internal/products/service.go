@@ -704,7 +704,7 @@ func (s *Service) HideProduct(ctx context.Context, adminUserID, productID uuid.U
 
 func (s *Service) BlockProduct(ctx context.Context, adminUserID, productID uuid.UUID, comment *string) error {
 	// Block can happen from any state except already blocked/deleted
-	return s.applyModerationTransition(ctx, adminUserID, productID, StatusBlocked, comment, []string{StatusDraft, StatusPendingModeration, StatusApproved, StatusPublished, StatusRejected, StatusHidden, StatusOutOfStock}, nil)
+	return s.applyModerationTransition(ctx, adminUserID, productID, StatusBlocked, comment, []string{StatusDraft, StatusPendingModeration, StatusInReview, StatusApproved, StatusPublished, StatusRejected, StatusHidden, StatusOutOfStock}, nil)
 }
 
 // ---------------------------------------------------------

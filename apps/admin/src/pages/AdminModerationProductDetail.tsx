@@ -21,6 +21,7 @@ import {
   startProductReview,
   approveProduct,
   rejectProduct,
+  blockProduct,
   createProductPreviewLink,
   getAdminProductModerationHistory,
   getModerationProducts,
@@ -188,7 +189,7 @@ export function AdminModerationProductDetail() {
           setIsSubmitting(false);
           return;
         }
-        await rejectProduct(product.id, `Отклонено (${selectedRejectReason}): ${actionComment.trim()}`);
+        await blockProduct(product.id, `Отклонено (${selectedRejectReason}): ${actionComment.trim()}`);
         setActionSuccess('Товар отклонён с указанием критического нарушения.');
       } else if (modalAction === 'revise') {
         if (!actionComment.trim() || actionComment.trim().length < 10) {
