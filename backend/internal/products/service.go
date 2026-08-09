@@ -645,7 +645,7 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 }
 
 func (s *Service) ApproveProduct(ctx context.Context, adminUserID, productID uuid.UUID, comment *string) error {
-	return s.applyModerationTransition(ctx, adminUserID, productID, StatusApproved, comment, []string{StatusPendingModeration}, func(p *Product, t time.Time) {
+	return s.applyModerationTransition(ctx, adminUserID, productID, StatusApproved, comment, []string{StatusPendingModeration, StatusInReview}, func(p *Product, t time.Time) {
 		p.ApprovedAt = &t
 	})
 }
@@ -654,7 +654,7 @@ func (s *Service) RejectProduct(ctx context.Context, adminUserID, productID uuid
 	if comment == "" {
 		return ErrRejectionReasonRequired
 	}
-	return s.applyModerationTransition(ctx, adminUserID, productID, StatusRejected, &comment, []string{StatusPendingModeration}, func(p *Product, t time.Time) {
+	return s.applyModerationTransition(ctx, adminUserID, productID, StatusRejected, &comment, []string{StatusPendingModeration, StatusInReview}, func(p *Product, t time.Time) {
 		p.RejectedAt = &t
 	})
 }
