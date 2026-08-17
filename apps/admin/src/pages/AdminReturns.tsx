@@ -23,6 +23,7 @@ export function AdminReturns() {
   const [error, setError] = useState<string | null>(null);
   const [statusDraft, setStatusDraft] = useState('');
   const [adminComment, setAdminComment] = useState('');
+  const [itemRestock, setItemRestock] = useState<Record<string, boolean>>({});
   const [refundReason, setRefundReason] = useState('');
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -70,6 +71,10 @@ export function AdminReturns() {
       await updateAdminReturnStatus(selectedReturn.id, {
         status: statusDraft,
         adminComment: adminComment || undefined,
+        itemRestock: selectedReturn.items.map(item => ({
+          returnItemId: item.id,
+          restock: itemRestock[item.id] ?? false
+        }))
       });
       await fetchReturns();
       await fetchReturnDetail(selectedReturn.id);
@@ -125,7 +130,7 @@ export function AdminReturns() {
   const filteredReturns = sellerId ? returns.filter(r => (r as any).sellerId === sellerId) : returns;
 
   return (
-    <PermissionGuard permission="returns:read">
+    <PermissionGuard permission="returns.read">
       <div className="space-y-6">
         <SellerContextBanner />
         <div className="sm:flex sm:items-center sm:justify-between">
@@ -231,7 +236,21 @@ export function AdminReturns() {
                         <td className="px-4 py-2 text-sm text-gray-500">x{item.quantity}</td>
                         <td className="px-4 py-2 text-sm text-gray-500">{item.reason || '-'}</td>
                         <td className="px-4 py-2 text-sm text-gray-500">{item.condition || '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-500">Возврат на склад: {item.restock ? 'да' : 'нет'}</td>
+                        <td className="px-4 py-2 text-sm text-gray-500">
+                          {selectedReturn.status === 'approved' ? (
+                            <label className="flex items-center space-x-2">
+                              <input 
+                                type="checkbox" 
+                                checked={itemRestock[item.id] || false}
+                                onChange={(e) => setItemRestock(prev => ({...prev, [item.id]: e.target.checked}))}
+                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <span>Вернуть на сток</span>
+                            </label>
+                          ) : (
+                            <span>Возврат на склад: {item.restock ? 'да' : 'нет'}</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

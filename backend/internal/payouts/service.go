@@ -188,6 +188,7 @@ func (s *Service) ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnI
 		if earningEntry.PayoutBatchID != nil {
 			// POST-PAYOUT RETURN RECOVERY: DEFERRED logic.
 			// The funds were already paid. We insert an adjustment to offset future payouts.
+			nowTime := time.Now()
 			err = s.repo.CreateLedgerEntryTx(ctx, tx, &SellerLedgerEntry{
 				ID:          uuid.New(),
 				SellerID:    earningEntry.SellerID,
@@ -196,6 +197,7 @@ func (s *Service) ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnI
 				Type:        "adjustment",
 				AmountCents: -deductionCents,
 				Currency:    "RUB",
+				AvailableAt: &nowTime,
 				Metadata:    []byte(`{"reason":"return_post_payout","return_id":"` + returnID.String() + `"}`),
 				CreatedAt:   time.Now(),
 			})
@@ -325,6 +327,56 @@ func (s *Service) ProcessPayoutBatch(ctx context.Context, batchID uuid.UUID) err
 	now := time.Now()
 	batch.Status = "paid"
 	batch.ProcessedAt = &now
+
+	// Batch Race Safety: 
+	// If a return happened after this batch was created but before execution,
+	// the seller might have a negative available balance. We must reduce the batch amount.
+	balance, err := s.repo.GetSellerBalanceSummaryTx(ctx, tx, batch.SellerID)
+	if err != nil {
+		return err
+	}
+	originalAmount := batch.AmountCents
+	currentUnbatchedAvailable := balance.AvailableCents
+	if currentUnbatchedAvailable < 0 {
+		reduction := -currentUnbatchedAvailable
+		if reduction > batch.AmountCents {
+			reduction = batch.AmountCents
+		}
+		batch.AmountCents -= reduction
+		
+		// If the batch was completely zeroed out, we still mark it as paid (for 0) 
+		// but we must offset the debt so the seller doesn't get double-charged.
+		// Wait, if we reduce the batch amount, we are effectively paying the debt.
+		// We need to create a positive adjustment to clear the negative balance we just consumed!
+		if reduction > 0 {
+			nowTime := time.Now()
+			err = s.repo.CreateLedgerEntryTx(ctx, tx, &SellerLedgerEntry{
+				ID:          uuid.New(),
+				SellerID:    batch.SellerID,
+				Type:        "adjustment",
+				AmountCents: reduction,
+				Currency:    "RUB",
+				AvailableAt: &nowTime,
+				Metadata:    []byte(`{"reason":"batch_race_offset","batch_id":"` + batch.ID.String() + `"}`),
+				CreatedAt:   time.Now(),
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if batch.AmountCents <= 0 {
+		batch.Status = "failed"
+		reason := "insufficient_balance"
+		batch.FailureReason = &reason
+		batch.AmountCents = originalAmount // prevent check constraint violation
+		
+		if err := s.repo.UpdatePayoutBatchTx(ctx, tx, batch); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
 
 	if err := s.repo.UpdatePayoutBatchTx(ctx, tx, batch); err != nil {
 		return err

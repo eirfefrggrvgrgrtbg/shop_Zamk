@@ -159,8 +159,16 @@ func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUI
 		SELECT 
 			ri.id, ri.return_id, r.order_id, o.order_number, ri.order_item_id, 
 			r.status, ri.quantity, ri.reason, ri.condition, 
-			oi.title, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity), 
-			r.created_at
+			oi.title, oi.variant_size, oi.variant_color, oi.sku, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity), 
+			ri.restock, r.admin_comment,
+			(SELECT amount_cents FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
+			(SELECT CASE 
+				WHEN sle.metadata->>'reason' = 'return_post_payout' THEN 'debt'
+				WHEN sle.available_at IS NULL THEN 'debt'
+				WHEN sle.available_at > now() THEN 'frozen'
+				ELSE 'available' END 
+			FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
+			r.created_at, r.updated_at
 		FROM return_items ri
 		JOIN returns r ON r.id = ri.return_id
 		JOIN order_items oi ON oi.id = ri.order_item_id
@@ -178,7 +186,7 @@ func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUI
 	var list []SellerReturnItem
 	for rows.Next() {
 		var item SellerReturnItem
-		if err := rows.Scan(&item.ReturnItemID, &item.ReturnID, &item.OrderID, &item.OrderNumber, &item.OrderItemID, &item.Status, &item.Quantity, &item.Reason, &item.Condition, &item.ProductTitle, &item.ImageURL, &item.PriceCents, &item.SubtotalPriceCents, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ReturnItemID, &item.ReturnID, &item.OrderID, &item.OrderNumber, &item.OrderItemID, &item.Status, &item.Quantity, &item.Reason, &item.Condition, &item.ProductTitle, &item.VariantSize, &item.VariantColor, &item.SKU, &item.ImageURL, &item.PriceCents, &item.SubtotalPriceCents, &item.Restock, &item.AdminComment, &item.FinancialAdjustmentCents, &item.FinancialImpactType, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, item)
@@ -194,8 +202,16 @@ func (r *Repository) GetSellerReturnItemsForReturn(ctx context.Context, sellerID
 		SELECT 
 			ri.id, ri.return_id, r.order_id, o.order_number, ri.order_item_id, 
 			r.status, ri.quantity, ri.reason, ri.condition, 
-			oi.title, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity), 
-			r.created_at
+			oi.title, oi.variant_size, oi.variant_color, oi.sku, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity), 
+			ri.restock, r.admin_comment,
+			(SELECT amount_cents FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
+			(SELECT CASE 
+				WHEN sle.metadata->>'reason' = 'return_post_payout' THEN 'debt'
+				WHEN sle.available_at IS NULL THEN 'debt'
+				WHEN sle.available_at > now() THEN 'frozen'
+				ELSE 'available' END 
+			FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
+			r.created_at, r.updated_at
 		FROM return_items ri
 		JOIN returns r ON r.id = ri.return_id
 		JOIN order_items oi ON oi.id = ri.order_item_id
@@ -211,7 +227,7 @@ func (r *Repository) GetSellerReturnItemsForReturn(ctx context.Context, sellerID
 	var list []SellerReturnItem
 	for rows.Next() {
 		var item SellerReturnItem
-		if err := rows.Scan(&item.ReturnItemID, &item.ReturnID, &item.OrderID, &item.OrderNumber, &item.OrderItemID, &item.Status, &item.Quantity, &item.Reason, &item.Condition, &item.ProductTitle, &item.ImageURL, &item.PriceCents, &item.SubtotalPriceCents, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ReturnItemID, &item.ReturnID, &item.OrderID, &item.OrderNumber, &item.OrderItemID, &item.Status, &item.Quantity, &item.Reason, &item.Condition, &item.ProductTitle, &item.VariantSize, &item.VariantColor, &item.SKU, &item.ImageURL, &item.PriceCents, &item.SubtotalPriceCents, &item.Restock, &item.AdminComment, &item.FinancialAdjustmentCents, &item.FinancialImpactType, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, item)

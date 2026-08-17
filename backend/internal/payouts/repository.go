@@ -180,6 +180,64 @@ func (r *Repository) GetSellerBalanceSummary(ctx context.Context, sellerID uuid.
 	return summary, nil
 }
 
+func (r *Repository) GetSellerBalanceSummaryTx(ctx context.Context, tx pgx.Tx, sellerID uuid.UUID) (*BalanceResponse, error) {
+	query := `
+		SELECT type, available_at <= now(), payout_batch_id IS NOT NULL, SUM(amount_cents)
+		FROM seller_ledger_entries
+		WHERE seller_id = $1
+		GROUP BY type, available_at <= now(), payout_batch_id IS NOT NULL
+	`
+	rows, err := tx.Query(ctx, query, sellerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	summary := &BalanceResponse{Currency: "RUB"}
+	var sellerEarningAvailable int64
+	var sellerEarningFrozen int64
+
+	for rows.Next() {
+		var ltype string
+		var isAvailable *bool
+		var hasBatch bool
+		var total int64
+		if err := rows.Scan(&ltype, &isAvailable, &hasBatch, &total); err != nil {
+			return nil, err
+		}
+		
+		switch ltype {
+		case "sale_gross":
+			summary.GrossSalesCents += total
+		case "zamk_commission":
+			summary.CommissionCents += total
+		case "seller_earning":
+			if !hasBatch {
+				if isAvailable != nil && *isAvailable {
+					sellerEarningAvailable += total
+				} else {
+					sellerEarningFrozen += total
+				}
+			}
+		case "adjustment":
+			if !hasBatch {
+				if isAvailable != nil && *isAvailable {
+					summary.AdjustmentsCents += total
+				} else {
+					sellerEarningFrozen += total
+				}
+			}
+		case "payout":
+			summary.PaidCents += total
+		}
+	}
+
+	summary.AvailableCents = sellerEarningAvailable + summary.AdjustmentsCents + summary.PaidCents
+	summary.FrozenCents = sellerEarningFrozen
+
+	return summary, nil
+}
+
 // Payout Batches
 func (r *Repository) ListPayoutBatches(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]PayoutBatch, int, error) {
 	query := `
@@ -231,9 +289,9 @@ func (r *Repository) CreatePayoutBatchTx(ctx context.Context, tx pgx.Tx, p *Payo
 
 func (r *Repository) UpdatePayoutBatchTx(ctx context.Context, tx pgx.Tx, p *PayoutBatch) error {
 	query := `
-		UPDATE payout_batches SET status=$1, processed_at=$2, failure_reason=$3, updated_at=now() WHERE id=$4
+		UPDATE payout_batches SET amount_cents=$1, status=$2, processed_at=$3, failure_reason=$4, updated_at=now() WHERE id=$5
 	`
-	_, err := tx.Exec(ctx, query, p.Status, p.ProcessedAt, p.FailureReason, p.ID)
+	_, err := tx.Exec(ctx, query, p.AmountCents, p.Status, p.ProcessedAt, p.FailureReason, p.ID)
 	return err
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getSellerReturns } from '@zamk/api-client/src/seller';
 import type { SellerReturn } from '@zamk/api-client/src/types';
 import { adaptReturns } from '../api/sellerOperations';
@@ -24,6 +25,7 @@ export function SellerReturns() {
   const [returns, setReturns] = useState<SellerReturn[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function fetchReturns() {
@@ -89,7 +91,11 @@ export function SellerReturns() {
                   const shortOrderId = ret.orderNumber || ret.orderId.split('-')[0];
                   
                   return (
-                    <tr key={ret.returnItemId} className="border-b border-border-soft dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                    <tr 
+                      key={ret.returnItemId} 
+                      onClick={() => navigate(`/returns/${ret.returnId}`)}
+                      className="border-b border-border-soft dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                    >
                       <td className="p-4">
                         <div className="flex items-center gap-3">
                           <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden shrink-0">
@@ -105,8 +111,9 @@ export function SellerReturns() {
                             <div className="font-medium text-graphite dark:text-white line-clamp-1" title={ret.productTitle}>
                               {ret.productTitle}
                             </div>
-                            <div className="text-sm text-ash">
-                              {ret.quantity} шт.
+                            <div className="text-sm text-ash flex items-center gap-2 mt-1">
+                              {ret.sku && <span className="font-mono text-xs bg-gray-100 dark:bg-white/10 px-1 rounded">{ret.sku}</span>}
+                              <span>{ret.quantity} шт.</span>
                             </div>
                           </div>
                         </div>

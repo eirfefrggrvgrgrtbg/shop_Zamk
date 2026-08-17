@@ -60,11 +60,19 @@ type SellerReturnItem struct {
 	Quantity           int       `json:"quantity"`
 	Reason             *string   `json:"reason"`
 	Condition          *string   `json:"condition"`
-	ProductTitle       string    `json:"productTitle"`
-	ImageURL           *string   `json:"imageUrl"`
-	PriceCents         int64     `json:"priceCents"`
-	SubtotalPriceCents int64     `json:"subtotalPriceCents"`
-	CreatedAt          time.Time `json:"createdAt"`
+	ProductTitle       string     `json:"productTitle"`
+	VariantSize        *string    `json:"variantSize"`
+	VariantColor       *string    `json:"variantColor"`
+	SKU                *string    `json:"sku"`
+	ImageURL           *string    `json:"imageUrl"`
+	PriceCents         int64      `json:"priceCents"`
+	SubtotalPriceCents int64      `json:"subtotalPriceCents"`
+	Restock            bool       `json:"restock"`
+	AdminComment       *string    `json:"adminComment"`
+	FinancialAdjustmentCents *int64 `json:"financialAdjustmentCents"`
+	FinancialImpactType      *string `json:"financialImpactType"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	UpdatedAt          time.Time  `json:"updatedAt"`
 }
 
 type SellerReturnListResponse struct {

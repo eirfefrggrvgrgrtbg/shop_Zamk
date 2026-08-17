@@ -487,10 +487,18 @@ export interface SellerReturn {
   reason?: string;
   condition?: string;
   productTitle: string;
+  variantSize?: string;
+  variantColor?: string;
+  sku?: string;
   imageUrl?: string;
   priceCents: number;
   subtotalPriceCents: number;
+  restock: boolean;
+  adminComment?: string;
+  financialAdjustmentCents?: number;
+  financialImpactType?: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface SellerFulfillmentItem {
