@@ -32,7 +32,7 @@ export function SellerReturnDetail() {
       if (!id) return;
       try {
         const data = await getSellerReturn(id);
-        setReturnItems((data as any).items || (Array.isArray(data) ? data : []));
+        setReturnItems(data.items || (Array.isArray(data) ? data : []));
       } catch (err: any) {
         setError(err.message || 'Ошибка загрузки возврата');
       } finally {

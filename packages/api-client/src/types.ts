@@ -501,6 +501,11 @@ export interface SellerReturn {
   updatedAt: string;
 }
 
+export interface SellerReturnDetailResponse {
+  items: SellerReturn[];
+  totalCount?: number;
+}
+
 export interface SellerFulfillmentItem {
   orderItemId: string;
   productId: string;

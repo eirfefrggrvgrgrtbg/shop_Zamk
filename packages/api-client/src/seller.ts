@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, SellerInventoryItem, SellerOrder, SellerReturn, SellerReview, SellerBalance, PayoutBatchListResponse, LedgerListResponse, SellerWarning, SellerViolation, SellerFulfillment, SellerSupply, CreateSupplyRequest } from './types';
+import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, SellerInventoryItem, SellerOrder, SellerReturn, SellerReturnDetailResponse, SellerReview, SellerBalance, PayoutBatchListResponse, LedgerListResponse, SellerWarning, SellerViolation, SellerFulfillment, SellerSupply, CreateSupplyRequest } from './types';
 
 export const getSellerMe = async (): Promise<SellerMe> => {
   return request<SellerMe>('GET', '/seller/me');
@@ -93,8 +93,8 @@ export const getSellerReturns = async (): Promise<{ items: SellerReturn[]; total
   return { ...res, items: res?.items || [] };
 };
 
-export const getSellerReturn = async (id: string): Promise<SellerReturn> => {
-  return request<SellerReturn>('GET', `/seller/returns/${id}`);
+export const getSellerReturn = async (id: string): Promise<SellerReturnDetailResponse> => {
+  return request<SellerReturnDetailResponse>('GET', `/seller/returns/${id}`);
 };
 
 // P0 fix: backend returns { items, totalCount } not bare array
