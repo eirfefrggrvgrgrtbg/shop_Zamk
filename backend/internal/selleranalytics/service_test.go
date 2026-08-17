@@ -381,8 +381,7 @@ func TestSellerAnalytics_EmptyStates(t *testing.T) {
 	repo := NewRepository(db)
 	svc := NewService(repo)
 
-	// Clean db
-	db.Exec(context.Background(), "TRUNCATE users, products, product_variants, orders, order_items, seller_ledger_entries CASCADE")
+	// Clean db removed for isolation
 
 	seller1 := insertSeller(t, db)
 	seller2 := insertSeller(t, db)
