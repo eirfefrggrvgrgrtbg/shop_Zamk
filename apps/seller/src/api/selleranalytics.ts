@@ -150,7 +150,7 @@ export interface InventoryResponse {
 
 export async function getAnalyticsOverview(from: string, to: string): Promise<OverviewResponse> {
   const query = new URLSearchParams({ from, to });
-  return request<OverviewResponse>('GET', `/selleranalytics/overview?${query.toString()}`);
+  return request<OverviewResponse>('GET', `/seller/analytics/overview?${query.toString()}`);
 }
 
 export interface ProductsResponse {
@@ -169,15 +169,15 @@ export async function getAnalyticsProducts(
   const query = new URLSearchParams({ 
     from, to, sort, order, limit: limit.toString(), offset: offset.toString() 
   });
-  return request<ProductsResponse>('GET', `/selleranalytics/products?${query.toString()}`);
+  return request<ProductsResponse>('GET', `/seller/analytics/products?${query.toString()}`);
 }
 
 export async function getAnalyticsProductDetail(productId: string, from: string, to: string): Promise<ProductDetailResponse> {
   const query = new URLSearchParams({ from, to });
-  return request<ProductDetailResponse>('GET', `/selleranalytics/products/${productId}?${query.toString()}`);
+  return request<ProductDetailResponse>('GET', `/seller/analytics/products/${productId}?${query.toString()}`);
 }
 
 export async function getAnalyticsInventory(from: string, to: string): Promise<InventoryResponse> {
   const query = new URLSearchParams({ from, to });
-  return request<InventoryResponse>('GET', `/selleranalytics/inventory?${query.toString()}`);
+  return request<InventoryResponse>('GET', `/seller/analytics/inventory?${query.toString()}`);
 }
