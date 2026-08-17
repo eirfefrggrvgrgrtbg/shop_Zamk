@@ -2,6 +2,7 @@ package selleranalytics
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -74,8 +75,8 @@ func (s *Service) GetOverview(ctx context.Context, sellerID uuid.UUID, from, to 
 	}
 	aovChange, aovState := calcChangePercent(float64(currAOV), float64(prevAOV))
 
-	currNet := currSummary.SellerEarningCents + currSummary.ReturnDeductionsCents + currSummary.OtherAdjustmentsCents
-	prevNet := prevSummary.SellerEarningCents + prevSummary.ReturnDeductionsCents + prevSummary.OtherAdjustmentsCents
+	currNet := currSummary.SellerEarningCents + currSummary.ReturnDeductionsCents
+	prevNet := prevSummary.SellerEarningCents + prevSummary.ReturnDeductionsCents
 	netChange, netState := calcChangePercent(float64(currNet), float64(prevNet))
 
 	grossChange, grossState := calcChangePercent(float64(currSummary.GrossSalesCents), float64(prevSummary.GrossSalesCents))
@@ -106,6 +107,45 @@ func (s *Service) GetOverview(ctx context.Context, sellerID uuid.UUID, from, to 
 		}
 	}
 
+	// Generate Insights for Top 5 Products
+	allProducts, _ := s.repo.GetProductsPerformance(ctx, sellerID, from, to)
+	allPrevProducts, _ := s.repo.GetProductsPerformance(ctx, sellerID, prevFrom, prevTo)
+	prevProductMap := make(map[uuid.UUID]ProductPerformance)
+	for _, p := range allPrevProducts {
+		prevProductMap[p.ProductID] = p
+	}
+
+	// Sort allProducts by GrossSalesCents desc manually (simple bubble/selection sort since count is small or use slice sort)
+	// Actually we'll just extract top 5
+	topCount := 5
+	if len(allProducts) < 5 {
+		topCount = len(allProducts)
+	}
+	// Sort descending
+	for i := 0; i < len(allProducts); i++ {
+		for j := i + 1; j < len(allProducts); j++ {
+			if allProducts[i].GrossSalesCents < allProducts[j].GrossSalesCents {
+				allProducts[i], allProducts[j] = allProducts[j], allProducts[i]
+			}
+		}
+	}
+
+	var insights []InsightDTO
+	days := to.Sub(from).Hours() / 24
+	if days <= 0 { days = 1 }
+
+	for i := 0; i < topCount; i++ {
+		prod := allProducts[i]
+		prevProd := prevProductMap[prod.ProductID]
+		variants, _ := s.repo.GetVariantsPerformance(ctx, sellerID, prod.ProductID, from, to)
+		fmt.Printf("Product %s has %d variants\n", prod.ProductID, len(variants))
+		for _, v := range variants {
+			fmt.Printf("Variant %s: Available=%d, Sold=%d\n", v.VariantID, v.AvailableStock, v.UnitsSold)
+		}
+		prodInsights := s.generateInsights(prod.ProductID, prod, prevProd, variants, days, currReturnRate)
+		insights = append(insights, prodInsights...)
+	}
+
 	res := OverviewResponse{
 		Period: PeriodDTO{From: from.Format(time.RFC3339), To: to.Format(time.RFC3339), Timezone: timezone},
 		GrossSales: MetricCentsDTO{CurrentCents: currSummary.GrossSalesCents, PreviousCents: prevSummary.GrossSalesCents, ChangePercent: grossChange, ComparisonState: grossState},
@@ -120,11 +160,15 @@ func (s *Service) GetOverview(ctx context.Context, sellerID uuid.UUID, from, to 
 		ReturnedUnits: MetricCountSimpleDTO{Current: currReturnedUnits, Previous: prevReturnedUnits},
 		ReturnRate: MetricPercentDTO{CurrentPercent: currReturnRate, PreviousPercent: prevReturnRate},
 		Timeseries: tsDTO,
+		Insights: insights,
+	}
+	if res.Insights == nil {
+		res.Insights = make([]InsightDTO, 0)
 	}
 	return res, nil
 }
 
-func (s *Service) GetProducts(ctx context.Context, sellerID uuid.UUID, from, to time.Time) (ProductsResponse, error) {
+func (s *Service) GetProducts(ctx context.Context, sellerID uuid.UUID, from, to time.Time, limit, offset int, sort, order string) (ProductsResponse, error) {
 	curr, err := s.repo.GetProductsPerformance(ctx, sellerID, from, to)
 	if err != nil { return ProductsResponse{}, err }
 
@@ -138,31 +182,63 @@ func (s *Service) GetProducts(ctx context.Context, sellerID uuid.UUID, from, to 
 	}
 
 	items := make([]ProductRow, len(curr))
-	for i, p := range curr {
-		prevP := prevMap[p.ProductID]
-		
-		returnRate := 0.0
-		if p.UnitsSold > 0 {
-			returnRate = float64(p.ReturnedUnits) / float64(p.UnitsSold) * 100
-		}
-		
-		chg, state := calcChangePercent(float64(p.GrossSalesCents), float64(prevP.GrossSalesCents))
-		
+	for i, c := range curr {
+		p := prevMap[c.ProductID]
+		grossChange, grossState := calcChangePercent(float64(c.GrossSalesCents), float64(p.GrossSalesCents))
+
 		items[i] = ProductRow{
-			ProductID:               p.ProductID.String(),
-			Title:                   p.Title,
-			GrossSalesCents:         p.GrossSalesCents,
-			OrdersCount:             p.OrdersCount,
-			UnitsSold:               p.UnitsSold,
-			ReturnedUnits:           p.ReturnedUnits,
-			ReturnRatePercent:       returnRate,
-			AvailableStock:          p.AvailableStock,
-			PreviousGrossSalesCents: prevP.GrossSalesCents,
-			GrossSalesChangePercent: chg,
-			ComparisonState:         state,
+			ProductID:               c.ProductID.String(),
+			Title:                   c.Title,
+			GrossSalesCents:         c.GrossSalesCents,
+			OrdersCount:             c.OrdersCount,
+			UnitsSold:               c.UnitsSold,
+			ReturnedUnits:           c.ReturnedUnits,
+			ReturnRatePercent:       func() float64 { if c.UnitsSold > 0 { return float64(c.ReturnedUnits) / float64(c.UnitsSold) * 100 }; return 0 }(),
+			AvailableStock:          c.AvailableStock,
+			PreviousGrossSalesCents: p.GrossSalesCents,
+			GrossSalesChangePercent: grossChange,
+			ComparisonState:         grossState,
 		}
 	}
-	return ProductsResponse{Items: items}, nil
+
+	// Sort items
+	for i := 0; i < len(items); i++ {
+		for j := i + 1; j < len(items); j++ {
+			var swap bool
+			switch sort {
+			case "gross_sales":
+				if order == "desc" { swap = items[i].GrossSalesCents < items[j].GrossSalesCents } else { swap = items[i].GrossSalesCents > items[j].GrossSalesCents }
+			case "orders":
+				if order == "desc" { swap = items[i].OrdersCount < items[j].OrdersCount } else { swap = items[i].OrdersCount > items[j].OrdersCount }
+			case "units":
+				if order == "desc" { swap = items[i].UnitsSold < items[j].UnitsSold } else { swap = items[i].UnitsSold > items[j].UnitsSold }
+			case "returns":
+				if order == "desc" { swap = items[i].ReturnRatePercent < items[j].ReturnRatePercent } else { swap = items[i].ReturnRatePercent > items[j].ReturnRatePercent }
+			case "stock":
+				if order == "desc" { swap = items[i].AvailableStock < items[j].AvailableStock } else { swap = items[i].AvailableStock > items[j].AvailableStock }
+			default:
+				if order == "desc" { swap = items[i].GrossSalesCents < items[j].GrossSalesCents } else { swap = items[i].GrossSalesCents > items[j].GrossSalesCents }
+			}
+			if swap {
+				items[i], items[j] = items[j], items[i]
+			}
+		}
+	}
+
+	totalCount := len(items)
+
+	// Apply pagination
+	start := offset
+	end := offset + limit
+	if start > len(items) { start = len(items) }
+	if end > len(items) { end = len(items) }
+	items = items[start:end]
+
+	res := ProductsResponse{
+		Items: items,
+		TotalCount: totalCount,
+	}
+	return res, nil
 }
 
 func (s *Service) GetProductDetail(ctx context.Context, sellerID, productID uuid.UUID, from, to time.Time, timezone string) (ProductDetailResponse, error) {

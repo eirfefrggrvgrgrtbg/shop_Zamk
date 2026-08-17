@@ -2,6 +2,7 @@ package selleranalytics
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -90,7 +91,19 @@ func (h *Handler) handleProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.svc.GetProducts(r.Context(), sellerID, from, to)
+	limitStr := r.URL.Query().Get("limit")
+	offsetStr := r.URL.Query().Get("offset")
+	sort := r.URL.Query().Get("sort")
+	if sort == "" { sort = "gross_sales" }
+	order := r.URL.Query().Get("order")
+	if order == "" { order = "desc" }
+
+	limit := 50
+	if limitStr != "" { fmt.Sscanf(limitStr, "%d", &limit) }
+	offset := 0
+	if offsetStr != "" { fmt.Sscanf(offsetStr, "%d", &offset) }
+
+	resp, err := h.svc.GetProducts(r.Context(), sellerID, from, to, limit, offset, sort, order)
 	if err != nil {
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return

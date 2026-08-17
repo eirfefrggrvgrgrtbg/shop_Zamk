@@ -111,23 +111,24 @@ func (r *Repository) GetVariantsPerformance(ctx context.Context, sellerID, produ
 			GROUP BY product_variant_id
 		)
 		SELECT 
-			COALESCE(s.product_variant_id, r.product_variant_id) as variant_id,
+			pv.id as variant_id,
 			$2 as product_id,
-			COALESCE(s.sku, (SELECT sku FROM product_variants WHERE id = COALESCE(s.product_variant_id, r.product_variant_id))) as sku,
+			COALESCE(pv.sku, '') as sku,
 			COALESCE(
 				s.display_name, 
-				(SELECT NULLIF(TRIM(CONCAT_WS(' ', size, color)), '') FROM product_variants WHERE id = COALESCE(s.product_variant_id, r.product_variant_id)),
-				s.sku,
-				(SELECT sku FROM product_variants WHERE id = COALESCE(s.product_variant_id, r.product_variant_id)),
-				COALESCE(s.product_variant_id, r.product_variant_id)::text
+				NULLIF(TRIM(CONCAT_WS(' ', pv.size, pv.color)), ''),
+				pv.sku,
+				pv.id::text
 			) as display_name,
 			COALESCE(s.units_sold, 0) as units_sold,
 			COALESCE(s.gross, 0) as gross,
 			COALESCE(r.returned_units, 0) as returned_units,
 			COALESCE(i.available_stock, 0) as available_stock
-		FROM sales s
-		FULL OUTER JOIN returns_stats r ON s.product_variant_id = r.product_variant_id
-		LEFT JOIN inventory i ON COALESCE(s.product_variant_id, r.product_variant_id) = i.product_variant_id
+		FROM product_variants pv
+		LEFT JOIN sales s ON pv.id = s.product_variant_id
+		LEFT JOIN returns_stats r ON pv.id = r.product_variant_id
+		LEFT JOIN inventory i ON pv.id = i.product_variant_id
+		WHERE pv.product_id = $2
 	`
 	rows, err := r.db.Query(ctx, query, sellerID, productID, from, to)
 	if err != nil {

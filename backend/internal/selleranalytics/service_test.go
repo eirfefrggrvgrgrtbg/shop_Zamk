@@ -2,9 +2,11 @@ package selleranalytics
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -213,7 +215,7 @@ func TestSellerAnalytics(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, int64(5000), resp.OtherAdjustments.CurrentCents)
-		assert.Equal(t, int64(5000), resp.NetCommercialEarning.CurrentCents) // Includes other adjustments
+		assert.Equal(t, int64(0), resp.NetCommercialEarning.CurrentCents) // Excludes other adjustments
 	})
 
 	t.Run("Scenario G - Multi-Seller Order", func(t *testing.T) {
@@ -320,4 +322,55 @@ func TestSellerAnalytics(t *testing.T) {
 		assert.Equal(t, 100, res.Items[0].Available)
 		assert.Equal(t, 0, res.Items[0].Inbound)
 	})
+}
+
+func TestSellerAnalytics_Insights(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewRepository(db)
+	svc := NewService(repo)
+
+	sellerID := insertSeller(t, db)
+	pID, vID := insertProduct(t, db, sellerID)
+	
+	now := time.Now()
+	from := now.Add(-1 * 24 * time.Hour)
+	to := now
+
+	// 1. low_stock evidence
+	_, err := db.Exec(context.Background(), "UPDATE inventory_items SET total_stock = 5, reserved_stock = 0 WHERE product_id = $1", pID)
+	require.NoError(t, err)
+
+	insertOrderWithLedger(t, db, sellerID, pID, vID, 10000, 1000, 9000, 1, true, now.Add(-10 * time.Minute))
+
+	res, err := svc.GetOverview(context.Background(), sellerID, from, to, "Europe/Moscow")
+	require.NoError(t, err)
+	
+	var foundLowStock bool
+	for _, i := range res.Insights {
+		if i.Type == "low_stock" {
+			foundLowStock = true
+			assert.Equal(t, pID.String(), i.ProductID)
+		}
+	}
+	assert.True(t, foundLowStock, "Expected low_stock insight")
+
+	// 2. no_sales evidence
+	pID2, vID2 := insertProduct(t, db, sellerID)
+	// Create another variant for the same product and give it a sale, so the product appears in the top products list
+	vID2_other := uuid.New()
+	db.Exec(context.Background(), "INSERT INTO product_variants (id, product_id, sku, price_cents, is_active) VALUES ($1, $2, $3, 150000, true)", vID2_other, pID2, vID2_other.String())
+	insertOrderWithLedger(t, db, sellerID, pID2, vID2_other, 150000, 1000, 149000, 1, true, now.Add(-10 * time.Minute))
+	
+	res2, _ := svc.GetOverview(context.Background(), sellerID, from, to, "Europe/Moscow")
+	var foundNoSales bool
+	b, _ := json.MarshalIndent(res2.Insights, "", "  ")
+	fmt.Printf("INSIGHTS: %s\n", string(b))
+	for _, i := range res2.Insights {
+		if i.Type == "no_sales" && i.ProductID == pID2.String() && *i.VariantID == vID2.String() {
+			foundNoSales = true
+		}
+	}
+	assert.True(t, foundNoSales, "Expected no_sales insight for new product")
 }

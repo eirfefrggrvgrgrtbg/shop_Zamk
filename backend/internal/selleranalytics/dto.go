@@ -61,6 +61,7 @@ type OverviewResponse struct {
 	ReturnedUnits              MetricCountSimpleDTO `json:"returnedUnits"`
 	ReturnRate                 MetricPercentDTO     `json:"returnRate"`
 	Timeseries                 []TimeseriesBucketDTO `json:"timeseries"`
+	Insights                   []InsightDTO          `json:"insights"`
 }
 
 type ProductRow struct {
@@ -78,7 +79,8 @@ type ProductRow struct {
 }
 
 type ProductsResponse struct {
-	Items []ProductRow `json:"items"`
+	Items      []ProductRow `json:"items"`
+	TotalCount int          `json:"totalCount"`
 }
 
 type VariantRow struct {

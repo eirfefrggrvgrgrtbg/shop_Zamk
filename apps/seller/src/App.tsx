@@ -11,6 +11,7 @@ import { SellerReturns } from './pages/SellerReturns';
 import { SellerReturnDetail } from './pages/SellerReturnDetail';
 import { SellerReviews } from './pages/SellerReviews';
 import { SellerAnalytics } from './pages/SellerAnalytics';
+import { SellerAnalyticsProduct } from './pages/SellerAnalyticsProduct';
 import { SellerPayouts } from './pages/SellerPayouts';
 import { SellerTemplates } from './pages/SellerTemplates';
 import { SellerSettings } from './pages/SellerSettings';
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="/returns/:id" element={<SellerProtectedRoute><SellerLayout><SellerReturnDetail /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/reviews" element={<SellerProtectedRoute><SellerLayout><SellerReviews /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/analytics" element={<SellerProtectedRoute><SellerLayout><SellerAnalytics /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/analytics/products/:id" element={<SellerProtectedRoute><SellerLayout><SellerAnalyticsProduct /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/payouts" element={<SellerProtectedRoute><SellerLayout><SellerPayouts /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/templates" element={<SellerProtectedRoute><SellerLayout><SellerTemplates /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/warnings" element={<SellerProtectedRoute><SellerLayout><SellerWarnings /></SellerLayout></SellerProtectedRoute>} />
