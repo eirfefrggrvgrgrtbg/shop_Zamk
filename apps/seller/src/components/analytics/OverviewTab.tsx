@@ -99,7 +99,21 @@ export function OverviewTab({ from, to }: OverviewTabProps) {
       </div>
     );
   }
+  if (!data.hasHistoricalSales) {
+    return (
+      <div className="py-16 text-center text-gray-500 bg-white border border-gray-200 rounded-xl shadow-sm">
+        <p className="text-lg">Здесь появится аналитика после первых доставленных заказов.</p>
+      </div>
+    );
+  }
 
+  if (data.grossSales.currentCents === 0 && data.orders.current === 0) {
+    return (
+      <div className="py-16 text-center text-gray-500 bg-white border border-gray-200 rounded-xl shadow-sm">
+        <p className="text-lg">За выбранный период продаж не было.</p>
+      </div>
+    );
+  }
   return (
     <div className="space-y-8">
       {/* KPI Strip */}

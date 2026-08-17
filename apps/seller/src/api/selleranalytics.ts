@@ -70,6 +70,7 @@ export interface InsightDTO {
 
 export interface OverviewResponse {
   period: PeriodDTO;
+  hasHistoricalSales: boolean;
   grossSales: MetricCentsDTO;
   orders: MetricCountDTO;
   unitsSold: MetricCountDTO;

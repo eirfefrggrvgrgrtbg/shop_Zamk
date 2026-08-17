@@ -49,6 +49,7 @@ type TimeseriesBucketDTO struct {
 
 type OverviewResponse struct {
 	Period                     PeriodDTO            `json:"period"`
+	HasHistoricalSales         bool                 `json:"hasHistoricalSales"`
 	GrossSales                 MetricCentsDTO       `json:"grossSales"`
 	Orders                     MetricCountDTO       `json:"orders"`
 	UnitsSold                  MetricCountDTO       `json:"unitsSold"`

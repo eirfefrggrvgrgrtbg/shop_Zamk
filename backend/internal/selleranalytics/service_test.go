@@ -374,3 +374,46 @@ func TestSellerAnalytics_Insights(t *testing.T) {
 	}
 	assert.True(t, foundNoSales, "Expected no_sales insight for new product")
 }
+
+func TestSellerAnalytics_EmptyStates(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+	repo := NewRepository(db)
+	svc := NewService(repo)
+
+	// Clean db
+	db.Exec(context.Background(), "TRUNCATE users, products, product_variants, orders, order_items, seller_ledger_entries CASCADE")
+
+	seller1 := insertSeller(t, db)
+	seller2 := insertSeller(t, db)
+
+	// Seller 1 has NEVER sold anything
+	
+	// Seller 2 sold something 1 year ago
+	pID, vID := insertProduct(t, db, seller2)
+	_ = pID // not needed for ledger
+	
+	insertOrderWithLedger(t, db, seller2, pID, vID, 1000, 100, 900, 1, true, time.Now().Add(-365*24*time.Hour))
+
+	ctx := context.Background()
+
+	// Case A: Never sold
+	t.Run("Never Sold", func(t *testing.T) {
+		from := time.Now().Add(-30*24*time.Hour)
+		to := time.Now()
+		resp, err := svc.GetOverview(ctx, seller1, from, to, "Europe/Moscow")
+		require.NoError(t, err)
+		require.False(t, resp.HasHistoricalSales, "Seller 1 should have NO historical sales")
+		require.Equal(t, int64(0), resp.GrossSales.CurrentCents)
+	})
+
+	// Case B: Zero period but HAS historical
+	t.Run("Zero Period with Historical", func(t *testing.T) {
+		from := time.Now().Add(-30*24*time.Hour)
+		to := time.Now()
+		resp, err := svc.GetOverview(ctx, seller2, from, to, "Europe/Moscow")
+		require.NoError(t, err)
+		require.True(t, resp.HasHistoricalSales, "Seller 2 should HAVE historical sales")
+		require.Equal(t, int64(0), resp.GrossSales.CurrentCents, "But zero sales in current period")
+	})
+}

@@ -207,3 +207,10 @@ func (r *Repository) GetOverviewTimeseries(ctx context.Context, sellerID uuid.UU
 	}
 	return result, nil
 }
+
+func (r *Repository) CheckHasHistoricalSales(ctx context.Context, sellerID uuid.UUID) (bool, error) {
+	var exists bool
+	query := `SELECT EXISTS(SELECT 1 FROM seller_ledger_entries WHERE seller_id = $1 AND type = 'sale_gross')`
+	err := r.db.QueryRow(ctx, query, sellerID).Scan(&exists)
+	return exists, err
+}

@@ -146,7 +146,7 @@ export function InventoryTab({ from, to }: InventoryTabProps) {
                       )}
                       {row.stockCoverageState === 'no_sales' && (
                         <span className="inline-flex items-center text-xs font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
-                          <Package className="w-3 h-3 mr-1" /> Нет продаж
+                          <Package className="w-3 h-3 mr-1" /> Нет продаж за период
                         </span>
                       )}
                       {row.stockCoverageState === '' && row.daysOfStock && row.daysOfStock <= 7 && (

@@ -146,8 +146,12 @@ func (s *Service) GetOverview(ctx context.Context, sellerID uuid.UUID, from, to 
 		insights = append(insights, prodInsights...)
 	}
 
+	hasHist, err := s.repo.CheckHasHistoricalSales(ctx, sellerID)
+	if err != nil { return OverviewResponse{}, err }
+
 	res := OverviewResponse{
 		Period: PeriodDTO{From: from.Format(time.RFC3339), To: to.Format(time.RFC3339), Timezone: timezone},
+		HasHistoricalSales: hasHist,
 		GrossSales: MetricCentsDTO{CurrentCents: currSummary.GrossSalesCents, PreviousCents: prevSummary.GrossSalesCents, ChangePercent: grossChange, ComparisonState: grossState},
 		Orders: MetricCountDTO{Current: currOrders, Previous: prevOrders, ChangePercent: ordersChange, ComparisonState: ordersState},
 		UnitsSold: MetricCountDTO{Current: currUnits, Previous: prevUnits, ChangePercent: unitsChange, ComparisonState: unitsState},

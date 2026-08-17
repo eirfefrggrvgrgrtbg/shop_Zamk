@@ -225,7 +225,7 @@ export function SellerAnalyticsProduct() {
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-gray-900">
                     {v.stockCoverageState === 'out_of_stock' ? 'Нет в наличии' :
-                     v.stockCoverageState === 'no_sales' ? 'Нет продаж' :
+                     v.stockCoverageState === 'no_sales' ? 'Нет продаж за период' :
                      `≈ ${v.daysOfStock?.toFixed(0)} дн.`}
                   </td>
                 </tr>
