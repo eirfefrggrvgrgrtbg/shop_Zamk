@@ -214,3 +214,13 @@ func (r *Repository) CheckHasHistoricalSales(ctx context.Context, sellerID uuid.
 	err := r.db.QueryRow(ctx, query, sellerID).Scan(&exists)
 	return exists, err
 }
+
+// ResolveSellerID resolves a user UUID (from JWT sub) to the seller UUID.
+func (r *Repository) ResolveSellerID(ctx context.Context, userID uuid.UUID) (uuid.UUID, error) {
+	var sellerID uuid.UUID
+	err := r.db.QueryRow(ctx,
+		`SELECT seller_id FROM seller_users WHERE user_id = $1 LIMIT 1`,
+		userID,
+	).Scan(&sellerID)
+	return sellerID, err
+}

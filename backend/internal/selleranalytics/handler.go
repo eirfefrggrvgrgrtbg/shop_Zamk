@@ -11,11 +11,12 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc  *Service
+	repo *Repository
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, repo *Repository) *Handler {
+	return &Handler{svc: svc, repo: repo}
 }
 
 func (h *Handler) RegisterRoutes(r chi.Router) {
@@ -41,17 +42,24 @@ func parseTimeParams(r *http.Request) (time.Time, time.Time, string, error) {
 	return from, to, tz, nil
 }
 
-func getSellerID(r *http.Request) (uuid.UUID, bool) {
+func (h *Handler) resolveSellerID(r *http.Request) (uuid.UUID, bool) {
 	val := r.Context().Value("userID")
 	if val == nil {
 		return uuid.Nil, false
 	}
-	id, ok := val.(uuid.UUID)
-	return id, ok
+	userID, ok := val.(uuid.UUID)
+	if !ok {
+		return uuid.Nil, false
+	}
+	sellerID, err := h.repo.ResolveSellerID(r.Context(), userID)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return sellerID, true
 }
 
 func (h *Handler) handleOverview(w http.ResponseWriter, r *http.Request) {
-	sellerID, ok := getSellerID(r)
+	sellerID, ok := h.resolveSellerID(r)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -79,7 +87,7 @@ func (h *Handler) handleOverview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleProducts(w http.ResponseWriter, r *http.Request) {
-	sellerID, ok := getSellerID(r)
+	sellerID, ok := h.resolveSellerID(r)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -114,7 +122,7 @@ func (h *Handler) handleProducts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleProductDetail(w http.ResponseWriter, r *http.Request) {
-	sellerID, ok := getSellerID(r)
+	sellerID, ok := h.resolveSellerID(r)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -144,7 +152,7 @@ func (h *Handler) handleProductDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleInventory(w http.ResponseWriter, r *http.Request) {
-	sellerID, ok := getSellerID(r)
+	sellerID, ok := h.resolveSellerID(r)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return

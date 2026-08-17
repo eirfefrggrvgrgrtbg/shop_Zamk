@@ -189,7 +189,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 
 	analyticsRepo := selleranalytics.NewRepository(pgClient.Pool)
 	analyticsSvc := selleranalytics.NewService(analyticsRepo)
-	analyticsHandler := selleranalytics.NewHandler(analyticsSvc)
+	analyticsHandler := selleranalytics.NewHandler(analyticsSvc, analyticsRepo)
 
 	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, auditLogHandler, deliveryHandler, suppliesHandler, analyticsHandler)
 
