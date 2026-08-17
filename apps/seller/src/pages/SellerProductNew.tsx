@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { type SellerProductStatus } from '../lib/seller-products';
 import { createSellerProduct, uploadSellerProductImage, getSellerMe, submitSellerProductModeration } from '@zamk/api-client/src/seller';
+import { request } from '@zamk/api-client/src/client';
 import type { SellerMe } from '@zamk/api-client/src/types';
 import { cn } from '../lib/utils';
 
@@ -163,9 +164,13 @@ export function SellerProductNew() {
   const [error, setError] = useState('');
   const [duplicateSku, setDuplicateSku] = useState<string | null>(null);
   const [sellerMe, setSellerMe] = useState<SellerMe | null>(null);
+  const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
+  const [brands, setBrands] = useState<{id: string, name: string}[]>([]);
 
   useEffect(() => {
     getSellerMe().then(setSellerMe).catch(console.error);
+    request('GET', '/public/categories').then((res: any) => setCategories(res.items || [])).catch(console.error);
+    request('GET', '/public/brands').then((res: any) => setBrands(res.items || [])).catch(console.error);
   }, []);
 
   const quality = useMemo(() => calculateQuality(draft), [draft]);
@@ -243,6 +248,8 @@ export function SellerProductNew() {
         material: draft.material,
         color: draft.color,
         careInstructions: draft.careInstructions,
+        categoryId: (draft.categoryId && draft.categoryId.length === 36) ? draft.categoryId : undefined,
+        brandId: (draft.brand && draft.brand.length === 36) ? draft.brand : undefined,
         // Optional attributes that were unused, mapped as empty for now or use default
         variants
       };
@@ -284,7 +291,17 @@ export function SellerProductNew() {
               <Field label="Название товара" required value={draft.title} onChange={(value) => updateDraft('title', value)} placeholder="Например, Жакет мягкой линии" helpText="Отображается в каталоге" />
             </div>
             <div className="md:col-span-2">
-              <Field label="Бренд" required value={draft.brand} onChange={(value) => updateDraft('brand', value)} placeholder="Например, ZAMK Selected" />
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">Бренд *</label>
+                <select 
+                  className="seller-setting-input h-12 mt-2 w-full rounded-2xl border bg-white/78 px-4 text-sm outline-none transition-all focus:bg-white dark:bg-black/24 dark:focus:bg-black/32 border-border-lighter text-graphite focus:border-graphite/30 dark:border-white/16 dark:text-white dark:focus:border-white/32"
+                  value={draft.brand}
+                  onChange={(e) => updateDraft('brand', e.target.value)}
+                >
+                  <option value="">Выберите бренд</option>
+                  {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
             </div>
             <div className="md:col-span-2">
               <Field label="Описание" required value={draft.description} onChange={(value) => updateDraft('description', value)} textarea placeholder="Опишите посадку, материал, сценарии носки и отличие товара." />
@@ -296,7 +313,22 @@ export function SellerProductNew() {
         return (
           <div className="grid gap-4">
             <p className="text-sm text-graphite-light dark:text-white/60 mb-2">Выберите категорию, в которой покупатели смогут найти ваш товар.</p>
-            <Field label="Категория" required value={draft.categoryName} onChange={(value) => updateDraft('categoryName', value)} placeholder="Например, Одежда > Верхняя одежда > Жакеты" />
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">Категория *</label>
+              <select 
+                className="seller-setting-input h-12 mt-2 w-full rounded-2xl border bg-white/78 px-4 text-sm outline-none transition-all focus:bg-white dark:bg-black/24 dark:focus:bg-black/32 border-border-lighter text-graphite focus:border-graphite/30 dark:border-white/16 dark:text-white dark:focus:border-white/32"
+                value={draft.categoryId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  updateDraft('categoryId', val);
+                  const cat = categories.find(c => c.id === val);
+                  updateDraft('categoryName', cat ? cat.name : '');
+                }}
+              >
+                <option value="">Выберите категорию</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
           </div>
         );
 

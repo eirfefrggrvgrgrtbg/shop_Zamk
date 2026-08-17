@@ -50,6 +50,7 @@ func (r *Repository) FindExistingSellerSKUs(ctx context.Context, sellerID uuid.U
 		FROM product_variants pv
 		JOIN products p ON pv.product_id = p.id
 		WHERE p.seller_id = $1 
+		  AND pv.is_active = true
 		  AND LOWER(TRIM(pv.sku)) = ANY($2)
 	`
 	args := []any{sellerID, skus}

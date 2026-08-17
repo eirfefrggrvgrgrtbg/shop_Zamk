@@ -170,11 +170,15 @@ export function SellerProductEdit() {
   const [productStatus, setProductStatus] = useState<string>('');
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [moderationLogs, setModerationLogs] = useState<any[]>([]);
+  const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
+  const [brands, setBrands] = useState<{id: string, name: string}[]>([]);
 
   const isReadOnly = ['pending_moderation', 'approved', 'published', 'hidden', 'blocked'].includes(productStatus);
 
   useEffect(() => {
     getSellerMe().then(setSellerMe).catch(console.error);
+    request('GET', '/public/categories').then((res: any) => setCategories(res.items || [])).catch(console.error);
+    request('GET', '/public/brands').then((res: any) => setBrands(res.items || [])).catch(console.error);
   }, []);
   
   useEffect(() => {
@@ -307,6 +311,8 @@ export function SellerProductEdit() {
 
       const payload = {
         title: draft.title || 'Новый товар',
+        categoryId: (draft.categoryId && draft.categoryId.length === 36) ? draft.categoryId : undefined,
+        brandId: (draft.brand && draft.brand.length === 36) ? draft.brand : undefined,
         slug: draft.variants[0]?.sku || `slug-${Date.now()}`,
         description: draft.description,
         priceCents,
@@ -363,7 +369,18 @@ export function SellerProductEdit() {
               <Field disabled={isReadOnly} label="Название товара" required value={draft.title} onChange={(value) => updateDraft('title', value)} placeholder="Например, Жакет мягкой линии" helpText="Отображается в каталоге" />
             </div>
             <div className="md:col-span-2">
-              <Field disabled={isReadOnly} label="Бренд" required value={draft.brand} onChange={(value) => updateDraft('brand', value)} placeholder="Например, ZAMK Selected" />
+              <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">Бренд *</label>
+              <select 
+                disabled={isReadOnly}
+                className={cn('seller-setting-input h-12 mt-2 w-full rounded-2xl border bg-white/78 px-4 text-sm outline-none transition-all focus:bg-white dark:bg-black/24 dark:focus:bg-black/32 border-border-lighter text-graphite focus:border-graphite/30 dark:border-white/16 dark:text-white dark:focus:border-white/32', isReadOnly && 'opacity-60 cursor-not-allowed')}
+                value={draft.brand}
+                onChange={(e) => updateDraft('brand', e.target.value)}
+              >
+                <option value="">Выберите бренд</option>
+                {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
             </div>
             <div className="md:col-span-2">
               <Field disabled={isReadOnly} label="Описание" required value={draft.description} onChange={(value) => updateDraft('description', value)} textarea placeholder="Опишите посадку, материал, сценарии носки и отличие товара." />
@@ -375,7 +392,23 @@ export function SellerProductEdit() {
         return (
           <div className="grid gap-4">
             <p className="text-sm text-graphite-light dark:text-white/60 mb-2">Выберите категорию, в которой покупатели смогут найти ваш товар.</p>
-            <Field disabled={isReadOnly} label="Категория" required value={draft.categoryName} onChange={(value) => updateDraft('categoryName', value)} placeholder="Например, Одежда > Верхняя одежда > Жакеты" />
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">Категория *</label>
+              <select 
+                disabled={isReadOnly}
+                className={cn('seller-setting-input h-12 mt-2 w-full rounded-2xl border bg-white/78 px-4 text-sm outline-none transition-all focus:bg-white dark:bg-black/24 dark:focus:bg-black/32 border-border-lighter text-graphite focus:border-graphite/30 dark:border-white/16 dark:text-white dark:focus:border-white/32', isReadOnly && 'opacity-60 cursor-not-allowed')}
+                value={draft.categoryId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  updateDraft('categoryId', val);
+                  const cat = categories.find(c => c.id === val);
+                  updateDraft('categoryName', cat ? cat.name : '');
+                }}
+              >
+                <option value="">Выберите категорию</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
           </div>
         );
 

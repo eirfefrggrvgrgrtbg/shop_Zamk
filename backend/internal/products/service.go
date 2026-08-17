@@ -265,11 +265,19 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 
 	var variants []ProductVariant
 	var skusToCheck []string
+	
+	getVariantID := func(id *uuid.UUID) uuid.UUID {
+		if id != nil && *id != uuid.Nil {
+			return *id
+		}
+		return uuid.New()
+	}
+
 	if req.Variants != nil {
 		now := time.Now()
 		for _, vr := range req.Variants {
 			v := ProductVariant{
-				ID:         uuid.New(),
+				ID:         getVariantID(vr.ID),
 				ProductID:  p.ID,
 				SKU:        vr.SKU,
 				Size:       vr.Size,
@@ -320,7 +328,11 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 
 		if len(skusToCheck) > 0 {
 			var excludeVariantIDs []uuid.UUID
-			for _, ev := range p.Variants {
+			existingVariants, err := txRepo.GetProductVariants(ctx, p.ID)
+			if err != nil {
+				return err
+			}
+			for _, ev := range existingVariants {
 				excludeVariantIDs = append(excludeVariantIDs, ev.ID)
 			}
 			existing, err := txRepo.FindExistingSellerSKUs(ctx, seller.ID, skusToCheck, excludeVariantIDs)

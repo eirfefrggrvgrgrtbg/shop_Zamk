@@ -80,6 +80,7 @@ func (req *UpdateProductRequest) ValidateSKUs() error {
 }
 
 type ProductVariantRequest struct {
+	ID           *uuid.UUID `json:"id,omitempty"`
 	SKU          *string `json:"sku,omitempty"`
 	Size         *string `json:"size,omitempty"`
 	Color        *string `json:"color,omitempty"`
