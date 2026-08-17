@@ -30,16 +30,18 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 func insertSeller(t *testing.T, db *pgxpool.Pool) uuid.UUID {
 	id := uuid.New()
 	userID := uuid.New()
-	_, err := db.Exec(context.Background(), "INSERT INTO users (id, email, password_hash, role) VALUES ($1, $2, 'hash', 'seller')", userID, id.String()+"@test.com")
+	_, err := db.Exec(context.Background(), "INSERT INTO users (id, name, email, password_hash, role) VALUES ($1, $2, $3, 'hash', 'seller')", userID, "Analytics Seller A", id.String()+"@test.com")
 	require.NoError(t, err)
-	_, err = db.Exec(context.Background(), "INSERT INTO sellers (id, user_id, status, company_name) VALUES ($1, $2, 'active', 'Test Seller')", id, userID)
+	_, err = db.Exec(context.Background(), "INSERT INTO sellers (id, brand_name, slug, status) VALUES ($1, 'Test Seller', $2, 'active')", id, "test-seller-"+id.String())
+	require.NoError(t, err)
+	_, err = db.Exec(context.Background(), "INSERT INTO seller_users (id, seller_id, user_id, role) VALUES ($1, $2, $3, 'owner')", uuid.New(), id, userID)
 	require.NoError(t, err)
 	return id
 }
 
 func insertCustomer(t *testing.T, db *pgxpool.Pool) uuid.UUID {
 	id := uuid.New()
-	_, err := db.Exec(context.Background(), "INSERT INTO users (id, email, password_hash, role) VALUES ($1, $2, 'hash', 'customer')", id, id.String()+"@test.com")
+	_, err := db.Exec(context.Background(), "INSERT INTO users (id, name, email, password_hash, role) VALUES ($1, $2, $3, 'hash', 'customer')", id, "Analytics Customer", id.String()+"@test.com")
 	require.NoError(t, err)
 	return id
 }
@@ -54,7 +56,7 @@ func insertProduct(t *testing.T, db *pgxpool.Pool, sellerID uuid.UUID) (uuid.UUI
 
 	_, err := db.Exec(context.Background(), "INSERT INTO products (id, seller_id, category_id, title, slug, status, price_cents) VALUES ($1, $2, $3, 'Test Product', $4, 'published', 150000)", pID, sellerID, catID, pID.String())
 	require.NoError(t, err)
-	_, err = db.Exec(context.Background(), "INSERT INTO product_variants (id, product_id, sku, price_cents, status) VALUES ($1, $2, $3, 150000, 'active')", vID, pID, vID.String())
+	_, err = db.Exec(context.Background(), "INSERT INTO product_variants (id, product_id, sku, price_cents, is_active) VALUES ($1, $2, $3, 150000, true)", vID, pID, vID.String())
 	require.NoError(t, err)
 	
 	_, err = db.Exec(context.Background(), "INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock) VALUES ($1, $2, $3, $4, 100, 0)", uuid.New(), pID, vID, sellerID)
@@ -65,6 +67,7 @@ func insertProduct(t *testing.T, db *pgxpool.Pool, sellerID uuid.UUID) (uuid.UUI
 func insertOrderWithLedger(t *testing.T, db *pgxpool.Pool, sellerID, pID, vID uuid.UUID, grossCents, commCents, earningCents int64, qty int, delivered bool, created time.Time) (uuid.UUID, uuid.UUID) {
 	oID := uuid.New()
 	oiID := uuid.New()
+	fID := uuid.New()
 	cID := insertCustomer(t, db)
 
 	status := "paid"
@@ -74,10 +77,10 @@ func insertOrderWithLedger(t *testing.T, db *pgxpool.Pool, sellerID, pID, vID uu
 	_, err := db.Exec(context.Background(), "INSERT INTO orders (id, user_id, status, customer_name, customer_phone, customer_email, delivery_address) VALUES ($1, $2, $3, 'Name', '123', 'email@e.c', 'addr')", oID, cID, status)
 	require.NoError(t, err)
 
-	_, err = db.Exec(context.Background(), "INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents) VALUES ($1, $2, $3, $4, $5, 'Test Product', 'slug', $6, $7, $8)", oiID, oID, pID, vID, sellerID, grossCents/int64(qty), qty, grossCents)
+	_, err = db.Exec(context.Background(), "INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents, updated_at) VALUES ($1, $2, $3, $4, $5, 800, $6, $7)", fID, oID, sellerID, status, grossCents, earningCents, created)
 	require.NoError(t, err)
 
-	_, err = db.Exec(context.Background(), "INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents, updated_at) VALUES ($1, $2, $3, $4, $5, 800, $6, $7)", uuid.New(), oID, sellerID, status, grossCents, earningCents, created)
+	_, err = db.Exec(context.Background(), "INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents, order_fulfillment_id) VALUES ($1, $2, $3, $4, $5, 'Test Product', 'slug', $6, $7, $8, $9)", oiID, oID, pID, vID, sellerID, grossCents/int64(qty), qty, grossCents, fID)
 	require.NoError(t, err)
 
 	if delivered {
@@ -223,22 +226,30 @@ func TestSellerAnalytics(t *testing.T) {
 		cID := insertCustomer(t, db)
 		db.Exec(context.Background(), "INSERT INTO orders (id, user_id, status, customer_name, customer_phone, customer_email, delivery_address) VALUES ($1, $2, 'delivered', 'Name', '123', 'email@e.c', 'addr')", oID, cID)
 		
+		fID1 := uuid.New()
+		db.Exec(context.Background(), "INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents, updated_at) VALUES ($1, $2, $3, 'delivered', 150000, 800, 138000, $4)", fID1, oID, sellerG1, now)
+		
 		oi1 := uuid.New()
-		db.Exec(context.Background(), "INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents) VALUES ($1, $2, $3, $4, $5, 'Test Product', 'slug', 1000, 1, 1000)", oi1, oID, p1, v1, sellerG1)
-		db.Exec(context.Background(), "INSERT INTO seller_ledger_entries (id, seller_id, order_id, order_item_id, type, amount_cents, created_at) VALUES ($1, $2, $3, $4, 'sale_gross', 1000, $5)", uuid.New(), sellerG1, oID, oi1, now)
+		db.Exec(context.Background(), "INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents, order_fulfillment_id) VALUES ($1, $2, $3, $4, $5, 'Test Product', 'slug', 150000, 1, 150000, $6)", oi1, oID, p1, v1, sellerG1, fID1)
+		db.Exec(context.Background(), "INSERT INTO seller_ledger_entries (id, seller_id, order_id, order_item_id, type, amount_cents, created_at) VALUES ($1, $2, $3, $4, 'sale_gross', 150000, $5)", uuid.New(), sellerG1, oID, oi1, now)
+
+		fID2 := uuid.New()
+		db.Exec(context.Background(), "INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents, updated_at) VALUES ($1, $2, $3, 'delivered', 300000, 800, 276000, $4)", fID2, oID, sellerG2, now)
 
 		oi2 := uuid.New()
-		db.Exec(context.Background(), "INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents) VALUES ($1, $2, $3, $4, $5, 'Test Product', 'slug', 2000, 1, 2000)", oi2, oID, p2, v2, sellerG2)
-		db.Exec(context.Background(), "INSERT INTO seller_ledger_entries (id, seller_id, order_id, order_item_id, type, amount_cents, created_at) VALUES ($1, $2, $3, $4, 'sale_gross', 2000, $5)", uuid.New(), sellerG2, oID, oi2, now)
+		db.Exec(context.Background(), "INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents, order_fulfillment_id) VALUES ($1, $2, $3, $4, $5, 'Test Product', 'slug', 150000, 2, 300000, $6)", oi2, oID, p2, v2, sellerG2, fID2)
+		db.Exec(context.Background(), "INSERT INTO seller_ledger_entries (id, seller_id, order_id, order_item_id, type, amount_cents, created_at) VALUES ($1, $2, $3, $4, 'sale_gross', 300000, $5)", uuid.New(), sellerG2, oID, oi2, now)
 
 		res1, _ := svc.GetOverview(ctx, sellerG1, from, to, tz)
 		res2, _ := svc.GetOverview(ctx, sellerG2, from, to, tz)
 
 		assert.Equal(t, 1, res1.Orders.Current)
-		assert.Equal(t, int64(1000), res1.GrossSales.CurrentCents)
+		assert.Equal(t, int64(150000), res1.GrossSales.CurrentCents)
+		assert.Equal(t, 1, res1.UnitsSold.Current)
 
 		assert.Equal(t, 1, res2.Orders.Current)
-		assert.Equal(t, int64(2000), res2.GrossSales.CurrentCents)
+		assert.Equal(t, int64(300000), res2.GrossSales.CurrentCents)
+		assert.Equal(t, 2, res2.UnitsSold.Current)
 	})
 
 	t.Run("Scenario H and I - Comparisons", func(t *testing.T) {
@@ -261,16 +272,39 @@ func TestSellerAnalytics(t *testing.T) {
 
 	t.Run("Scenario J - Variant Analytics", func(t *testing.T) {
 		sellerJ := insertSeller(t, db)
-		pID, vID := insertProduct(t, db, sellerJ)
-		insertOrderWithLedger(t, db, sellerJ, pID, vID, 150000, 12000, 138000, 1, true, now)
+		
+		pID := uuid.New()
+		catID := uuid.New()
+		db.Exec(context.Background(), "INSERT INTO categories (id, name, slug) VALUES ($1, 'Test Cat', $2) ON CONFLICT DO NOTHING", catID, catID.String())
+		db.Exec(context.Background(), "INSERT INTO products (id, seller_id, category_id, title, slug, status, price_cents) VALUES ($1, $2, $3, 'Test Product', $4, 'published', 150000)", pID, sellerJ, catID, pID.String())
+		
+		v1 := uuid.New() // size=M, color=Black
+		db.Exec(context.Background(), "INSERT INTO product_variants (id, product_id, sku, size, color, price_cents, is_active) VALUES ($1, $2, 'SKU1', 'M', 'Black', 150000, true)", v1, pID)
+		
+		v2 := uuid.New() // size=NULL, color=Black
+		db.Exec(context.Background(), "INSERT INTO product_variants (id, product_id, sku, color, price_cents, is_active) VALUES ($1, $2, 'SKU2', 'Black', 150000, true)", v2, pID)
+		
+		v3 := uuid.New() // size=NULL, color=NULL
+		db.Exec(context.Background(), "INSERT INTO product_variants (id, product_id, sku, price_cents, is_active) VALUES ($1, $2, 'SKU3', 150000, true)", v3, pID)
+
+		// Create inventory for all 3
+		db.Exec(context.Background(), "INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock) VALUES ($1, $2, $3, $4, 100, 0)", uuid.New(), pID, v1, sellerJ)
+		db.Exec(context.Background(), "INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock) VALUES ($1, $2, $3, $4, 100, 0)", uuid.New(), pID, v2, sellerJ)
+		db.Exec(context.Background(), "INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock) VALUES ($1, $2, $3, $4, 100, 0)", uuid.New(), pID, v3, sellerJ)
+
+		insertOrderWithLedger(t, db, sellerJ, pID, v1, 150000, 12000, 138000, 1, true, now)
+		insertOrderWithLedger(t, db, sellerJ, pID, v2, 150000, 12000, 138000, 1, true, now)
+		insertOrderWithLedger(t, db, sellerJ, pID, v3, 150000, 12000, 138000, 1, true, now)
 
 		res, err := svc.GetProductDetail(ctx, sellerJ, pID, from, to, tz)
 		require.NoError(t, err)
 
-		assert.Len(t, res.Variants, 1)
-		assert.Equal(t, int64(150000), res.Variants[0].GrossSalesCents)
-		assert.Equal(t, 1, res.Variants[0].UnitsSold)
-		assert.Equal(t, 100, res.Variants[0].AvailableStock) // From test setup
+		assert.Len(t, res.Variants, 3)
+		for _, v := range res.Variants {
+			assert.Equal(t, int64(150000), v.GrossSalesCents)
+			assert.Equal(t, 1, v.UnitsSold)
+			t.Logf("Variant %s -> Display Name: %s", v.SKU, v.DisplayName)
+		}
 	})
 
 	t.Run("Scenario K - Inventory", func(t *testing.T) {

@@ -22,9 +22,9 @@ func (r *Repository) GetInventoryPerformance(ctx context.Context, sellerID uuid.
 			SELECT 
 				si.variant_id,
 				SUM(GREATEST(0, si.expected_quantity - si.accepted_quantity)) as inbound_qty
-			FROM supplies s
-			JOIN supply_items si ON s.id = si.supply_id
-			WHERE s.seller_id = $1 AND s.status NOT IN ('completed', 'cancelled')
+			FROM seller_supplies s
+			JOIN seller_supply_items si ON s.id = si.supply_id
+			WHERE s.seller_id = $1 AND s.status IN ('ready_to_ship', 'shipped_by_seller', 'arrived_at_zamk', 'receiving')
 			GROUP BY si.variant_id
 		),
 		inventory AS (

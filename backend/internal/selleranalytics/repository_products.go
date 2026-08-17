@@ -84,7 +84,7 @@ func (r *Repository) GetVariantsPerformance(ctx context.Context, sellerID, produ
 			SELECT 
 				oi.product_variant_id,
 				MAX(oi.sku) as sku,
-				MAX(oi.variant_size || ' ' || oi.variant_color) as display_name,
+				MAX(NULLIF(TRIM(CONCAT_WS(' ', oi.variant_size, oi.variant_color)), '')) as display_name,
 				SUM(sle.amount_cents) as gross,
 				SUM(oi.quantity) as units_sold
 			FROM seller_ledger_entries sle
@@ -114,7 +114,13 @@ func (r *Repository) GetVariantsPerformance(ctx context.Context, sellerID, produ
 			COALESCE(s.product_variant_id, r.product_variant_id) as variant_id,
 			$2 as product_id,
 			COALESCE(s.sku, (SELECT sku FROM product_variants WHERE id = COALESCE(s.product_variant_id, r.product_variant_id))) as sku,
-			COALESCE(s.display_name, (SELECT size || ' ' || color FROM product_variants WHERE id = COALESCE(s.product_variant_id, r.product_variant_id))) as display_name,
+			COALESCE(
+				s.display_name, 
+				(SELECT NULLIF(TRIM(CONCAT_WS(' ', size, color)), '') FROM product_variants WHERE id = COALESCE(s.product_variant_id, r.product_variant_id)),
+				s.sku,
+				(SELECT sku FROM product_variants WHERE id = COALESCE(s.product_variant_id, r.product_variant_id)),
+				COALESCE(s.product_variant_id, r.product_variant_id)::text
+			) as display_name,
 			COALESCE(s.units_sold, 0) as units_sold,
 			COALESCE(s.gross, 0) as gross,
 			COALESCE(r.returned_units, 0) as returned_units,
