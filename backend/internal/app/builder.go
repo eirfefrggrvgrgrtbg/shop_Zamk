@@ -36,6 +36,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/supplies"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/selleranalytics"
 )
 
 func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Client, redisClient *redis.Client, logger *slog.Logger) (*chi.Mux, func()) {
@@ -186,7 +187,11 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 		)
 	}
 
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, auditLogHandler, deliveryHandler, suppliesHandler)
+	analyticsRepo := selleranalytics.NewRepository(pgClient.Pool)
+	analyticsSvc := selleranalytics.NewService(analyticsRepo)
+	analyticsHandler := selleranalytics.NewHandler(analyticsSvc)
+
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, auditLogHandler, deliveryHandler, suppliesHandler, analyticsHandler)
 
 	return r, cancelWorkers
 }

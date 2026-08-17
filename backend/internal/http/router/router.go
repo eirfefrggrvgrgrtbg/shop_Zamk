@@ -38,6 +38,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/supplies"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/selleranalytics"
 )
 
 func New(
@@ -74,6 +75,7 @@ func New(
 	auditHandler *audit.Handler,
 	deliveryHandler *delivery.Handler,
 	suppliesHandler *supplies.Handler,
+	sellerAnalyticsHandler *selleranalytics.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	rateLimiter := ratelimit.NewMiddleware(
@@ -368,6 +370,13 @@ func New(
 		r.Get("/unread-count", notificationsHandler.UnreadCountSeller)
 		r.Post("/{id}/read", notificationsHandler.ReadSellerNotification)
 		r.Post("/read-all", notificationsHandler.ReadAllSeller)
+	})
+
+	r.Route("/api/seller/analytics", func(r chi.Router) {
+		r.Use(appMiddleware.AuthMiddleware(tokenService))
+		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
+		
+		sellerAnalyticsHandler.RegisterRoutes(r)
 	})
 
 	r.Route("/api/admin", func(r chi.Router) {
