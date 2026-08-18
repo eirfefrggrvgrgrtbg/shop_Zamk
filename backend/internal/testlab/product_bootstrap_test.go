@@ -212,3 +212,90 @@ func TestProductBootstrap_BasicSales(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, count, "Unrelated product must remain after cleanup")
 }
+
+func TestProductBootstrap_ZeroCurrentPeriod(t *testing.T) {
+	pool, _, _, cfg, router := setupIntegration(t)
+	token, _ := createAdminToken(t, pool, cfg)
+
+	reqBody := `{"preset":"ZERO_CURRENT_PERIOD"}`
+	req := httptest.NewRequest("POST", "/api/admin/testing/analytics/scenarios/apply", bytes.NewBufferString(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code, "Expected OK response for ZERO_CURRENT_PERIOD, got: %s", rr.Body.String())
+
+	var result struct {
+		RunId    string    `json:"runId"`
+		SellerId uuid.UUID `json:"sellerId"`
+		Expected struct {
+			HasHistoricalSales bool `json:"hasHistoricalSales"`
+			GrossSales struct {
+				CurrentCents int `json:"currentCents"`
+			} `json:"grossSales"`
+			Orders struct {
+				Current int `json:"current"`
+			} `json:"orders"`
+			UnitsSold struct {
+				Current int `json:"current"`
+			} `json:"unitsSold"`
+		} `json:"expectedResult"`
+	}
+	err := json.Unmarshal(rr.Body.Bytes(), &result)
+	require.NoError(t, err)
+
+	require.True(t, result.Expected.HasHistoricalSales)
+	require.Equal(t, 0, result.Expected.GrossSales.CurrentCents)
+	require.Equal(t, 0, result.Expected.Orders.Current)
+	require.Equal(t, 0, result.Expected.UnitsSold.Current)
+
+	ctx := context.Background()
+	var historicalSalesCount int
+	err = pool.QueryRow(ctx, "SELECT count(*) FROM seller_ledger_entries WHERE type = 'sale_gross' AND seller_id = $1", result.SellerId).Scan(&historicalSalesCount)
+	require.NoError(t, err)
+	require.Equal(t, 2, historicalSalesCount, "Must have exactly 2 canonical sales generated in the past")
+}
+
+func TestProductBootstrap_InventoryAndInbound(t *testing.T) {
+	pool, _, _, cfg, router := setupIntegration(t)
+	token, _ := createAdminToken(t, pool, cfg)
+
+	reqBody := `{"preset":"INVENTORY_AND_INBOUND"}`
+	req := httptest.NewRequest("POST", "/api/admin/testing/analytics/scenarios/apply", bytes.NewBufferString(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code, "Expected OK response for INVENTORY_AND_INBOUND, got: %s", rr.Body.String())
+
+	var result struct {
+		RunId    string    `json:"runId"`
+		SellerId uuid.UUID `json:"sellerId"`
+	}
+	err := json.Unmarshal(rr.Body.Bytes(), &result)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	// 1. Verify onHand
+	var onHand int
+	err = pool.QueryRow(ctx, "SELECT total_stock FROM inventory_items WHERE product_id IN (SELECT id FROM products WHERE seller_id = $1) LIMIT 1", result.SellerId).Scan(&onHand)
+	require.NoError(t, err)
+	require.Equal(t, 20, onHand)
+
+	// 2. Verify reservations
+	var reserved int
+	err = pool.QueryRow(ctx, "SELECT reserved_stock FROM inventory_items WHERE product_id IN (SELECT id FROM products WHERE seller_id = $1) LIMIT 1", result.SellerId).Scan(&reserved)
+	require.NoError(t, err)
+	require.Equal(t, 4, reserved)
+	
+	// 3. Verify inbound
+	var inbound int
+	err = pool.QueryRow(ctx, "SELECT expected_quantity FROM seller_supply_items WHERE supply_id IN (SELECT id FROM seller_supplies WHERE seller_id = $1) LIMIT 1", result.SellerId).Scan(&inbound)
+	require.NoError(t, err)
+	require.Equal(t, 10, inbound)
+}

@@ -96,7 +96,7 @@ func (e *ScenarioEngine) Run(ctx context.Context, adminUserID uuid.UUID, cfg Sce
 		}
 
 		// 1. Create a basic product
-		product, err := e.createCanonicalProduct(ctx, adminUserID, ownerUserID, runID)
+		product, err := e.createCanonicalProduct(ctx, adminUserID, ownerUserID, runID, 150000, 10)
 		if err != nil {
 			return nil, err
 		}
@@ -174,9 +174,124 @@ func (e *ScenarioEngine) Run(ctx context.Context, adminUserID uuid.UUID, cfg Sce
 		)
 
 	case PresetZeroCurrentPeriod:
+		// 1. Create a product with 0 stock (we don't need stock for historical orders if we just simulate it, but we can use 2)
+		product, err := e.createCanonicalProduct(ctx, adminUserID, ownerUserID, runID, 250000, 2)
+		if err != nil {
+			return nil, err
+		}
+		variantID := product.Variants[0].ID
+
+		// 2. Create isolated buyer
+		buyerUserID, err := e.createCanonicalBuyer(ctx, runID)
+		if err != nil {
+			return nil, err
+		}
+
+		// 3. We need 2 orders, 1 unit each. Price is 2500 RUB (250,000 cents) each, so total Gross = 500,000 cents
+		// The preset expects: BuildZeroCurrentPeriod(period, 500000, 2, 2, 45000)
+		// So total Gross = 500,000, Orders = 2, Units = 2.
+		// Commission = 45000 cents.
+		err = e.deps.PayoutSvc.SetCommissionRate(ctx, sellerID, payouts.AdminSellerCommissionRequest{
+			RateBPS: 900,
+			Reason:  "Test Lab Historical Run",
+		}, adminUserID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Calculate historical time (well before the period)
+		historicalTime := period.From.AddDate(0, 0, -2)
+
+		for i := 0; i < 2; i++ {
+			// Add to Cart (qty: 1)
+			_, err = e.deps.CartSvc.AddItem(ctx, buyerUserID, cart.AddItemRequest{
+				ProductID:        product.ID,
+				ProductVariantID: variantID,
+				Quantity:         1,
+			})
+			if err != nil {
+				return nil, err
+			}
+			
+			// Checkout
+			dmID, err := e.deps.TestRepo.GetAnyDeliveryMethod(ctx)
+			if err != nil {
+				return nil, err
+			}
+			order, err := e.deps.OrderSvc.CreateOrder(ctx, buyerUserID, orders.CreateOrderRequest{
+				CustomerName:     "TestLab Historical Buyer",
+				CustomerPhone:    "+70020000000",
+				CustomerEmail:    "historical@zamk.ru",
+				DeliveryAddress:  "Test Lab St",
+				DeliveryMethodID: dmID,
+			}, nil)
+			if err != nil {
+				return nil, err
+			}
+			
+			// Payout
+			err = e.deps.PayoutSvc.CreatePendingSalesForOrder(ctx, order.ID)
+			if err != nil {
+				return nil, err
+			}
+
+			// Backdate
+			err = e.deps.TestRepo.SetOrderCreatedAt(ctx, order.ID, historicalTime)
+			if err != nil {
+				return nil, err
+			}
+			err = e.deps.TestRepo.SetLedgerEntryCreatedAt(ctx, order.ID, historicalTime)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		run.ExpectedResult = e.deps.Calc.BuildZeroCurrentPeriod(period, 500000, 2, 2, 45000)
 
 	case PresetInventoryAndInbound:
+		// Required: onHand=20, reserved=4, available=16, inbound=10
+		product, err := e.createCanonicalProduct(ctx, adminUserID, ownerUserID, runID, 150000, 20)
+		if err != nil {
+			return nil, err
+		}
+		variantID := product.Variants[0].ID
+
+		// Buyer
+		buyerUserID, err := e.createCanonicalBuyer(ctx, runID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Reserve 4 units via Cart Checkout (without fulfillment)
+		_, err = e.deps.CartSvc.AddItem(ctx, buyerUserID, cart.AddItemRequest{
+			ProductID:        product.ID,
+			ProductVariantID: variantID,
+			Quantity:         4,
+		})
+		if err != nil {
+			return nil, err
+		}
+		dmID, err := e.deps.TestRepo.GetAnyDeliveryMethod(ctx)
+		if err != nil {
+			return nil, err
+		}
+		_, err = e.deps.OrderSvc.CreateOrder(ctx, buyerUserID, orders.CreateOrderRequest{
+			CustomerName:     "TestLab Inv Buyer",
+			CustomerPhone:    "+70030000000",
+			CustomerEmail:    "inv@zamk.ru",
+			DeliveryAddress:  "Test Lab St",
+			DeliveryMethodID: dmID,
+		}, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		// Inbound supply of 10
+		err = e.deps.TestRepo.CreateInboundSupply(ctx, sellerID, variantID, 10)
+		if err != nil {
+			return nil, err
+		}
+
 		run.ExpectedResult = e.deps.Calc.BuildInventoryAndInbound(period)
 
 	default:
@@ -253,21 +368,19 @@ func (e *ScenarioEngine) createCanonicalBuyer(ctx context.Context, runID string)
 	return buyerUser.ID, err
 }
 
-func (e *ScenarioEngine) createCanonicalProduct(ctx context.Context, adminUserID, ownerUserID uuid.UUID, runID string) (products.Product, error) {
-	price := int64(150000) // 1500 RUB
+func (e *ScenarioEngine) createCanonicalProduct(ctx context.Context, adminUserID, ownerUserID uuid.UUID, runID string, priceCents int64, initStock int) (products.Product, error) {
 	sku := uuid.New().String()[:8]
 	size := "M"
-	initStock := 10
 
 	req := products.CreateProductRequest{
 		Title:      fmt.Sprintf("TestLab Canonical Product %s", runID),
-		PriceCents: price,
+		PriceCents: priceCents,
 		Currency:   "RUB",
 		Variants: []products.ProductVariantRequest{
 			{
 				SKU:          &sku,
 				Size:         &size,
-				PriceCents:   &price,
+				PriceCents:   &priceCents,
 				InitialStock: &initStock,
 			},
 		},

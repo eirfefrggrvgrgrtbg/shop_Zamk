@@ -139,6 +139,16 @@ func (r *Repository) CleanupRun(ctx context.Context, runID string) error {
 		return err
 	}
 
+	// Delete supplies
+	_, err = tx.Exec(ctx, "DELETE FROM seller_supply_items WHERE supply_id IN (SELECT id FROM seller_supplies WHERE seller_id = $1)", sellerID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, "DELETE FROM seller_supplies WHERE seller_id = $1", sellerID)
+	if err != nil {
+		return err
+	}
+
 	// Delete products
 	_, err = tx.Exec(ctx, "DELETE FROM product_images WHERE product_id IN (SELECT id FROM products WHERE seller_id = $1)", sellerID)
 	if err != nil {
@@ -218,3 +228,32 @@ func (r *Repository) GetAnyDeliveryMethod(ctx context.Context) (uuid.UUID, error
 	err := r.db.QueryRow(ctx, "SELECT id FROM delivery_methods LIMIT 1").Scan(&id)
 	return id, err
 }
+
+// CreateInboundSupply manually inserts an open canonical supply to satisfy inbound test lab state.
+func (r *Repository) CreateInboundSupply(ctx context.Context, sellerID, variantID uuid.UUID, expectedQty int) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	supplyID := uuid.New()
+	_, err = tx.Exec(ctx, `
+		INSERT INTO seller_supplies (id, seller_id, status, supply_number, handoff_method, qr_token, created_at, updated_at) 
+		VALUES ($1, $2, 'ready_to_ship', $3, 'pvz', $4, now(), now())`,
+		supplyID, sellerID, fmt.Sprintf("SUP-%s", supplyID.String()[:8]), supplyID.String())
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO seller_supply_items (id, supply_id, variant_id, expected_quantity, accepted_quantity, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, 0, now(), now())`,
+		uuid.New(), supplyID, variantID, expectedQty)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
