@@ -54,14 +54,17 @@ func TestTestLabRBAC(t *testing.T) {
 	insertUser := func(t *testing.T, role string) uuid.UUID {
 		t.Helper()
 		id := uuid.New()
-		phone := "7888" + id.String()[:7]
+		phone := "7881" + id.String()[:7]
 		_, err := pgClient.Pool.Exec(ctx, `
 			INSERT INTO users (id, email, phone, name, password_hash, role, status, created_at, updated_at)
-			VALUES ($1, $2, $3, 'Test', 'hash', $4, 'active', NOW(), NOW())
-		`, id, id.String()+"@test.com", phone, role)
+			VALUES ($1, $2, $3, 'Test Lab RBAC', 'hash', $4, 'active', NOW(), NOW())
+		`, id, id.String()+"@testlabrbac.com", phone, role)
 		if err != nil {
 			t.Fatalf("insertUser: %v", err)
 		}
+		t.Cleanup(func() {
+			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, id)
+		})
 		return id
 	}
 
@@ -69,25 +72,36 @@ func TestTestLabRBAC(t *testing.T) {
 		t.Helper()
 		roleID := uuid.New()
 		code := roleID.String()[:8]
-		_, err := pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'TestRole')`, roleID, code)
+		_, err := pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'TestLabRole')`, roleID, code)
 		if err != nil {
 			t.Fatalf("insertAdminRole: %v", err)
 		}
+		t.Cleanup(func() {
+			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_roles WHERE id = $1`, roleID)
+		})
+
 		for _, p := range perms {
 			_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, $2)`, roleID, p)
 			if err != nil {
 				t.Fatalf("insertPerm %s: %v", p, err)
 			}
 		}
+		t.Cleanup(func() {
+			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_role_permissions WHERE role_id = $1`, roleID)
+		})
+
 		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')`, userID, roleID)
 		if err != nil {
 			t.Fatalf("insertStaffMember: %v", err)
 		}
+		t.Cleanup(func() {
+			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_members WHERE user_id = $1 AND staff_role_id = $2`, userID, roleID)
+		})
 	}
 
 	makeToken := func(t *testing.T, userID uuid.UUID, role string) string {
 		t.Helper()
-		tok, err := tokenService.GenerateAccessToken(userID, userID.String()+"@test.com", role)
+		tok, err := tokenService.GenerateAccessToken(userID, userID.String()+"@testlabrbac.com", role)
 		if err != nil {
 			t.Fatalf("makeToken: %v", err)
 		}
@@ -158,14 +172,17 @@ func TestTestLabProductionGuard(t *testing.T) {
 	insertUser := func(t *testing.T, role string) uuid.UUID {
 		t.Helper()
 		id := uuid.New()
-		phone := "7999" + id.String()[:7]
+		phone := "7991" + id.String()[:7]
 		_, err := pgClient.Pool.Exec(ctx, `
 			INSERT INTO users (id, email, phone, name, password_hash, role, status, created_at, updated_at)
-			VALUES ($1, $2, $3, 'Test Prod', 'hash', $4, 'active', NOW(), NOW())
-		`, id, id.String()+"@prod.com", phone, role)
+			VALUES ($1, $2, $3, 'Test Lab Prod', 'hash', $4, 'active', NOW(), NOW())
+		`, id, id.String()+"@testlabprod.com", phone, role)
 		if err != nil {
 			t.Fatalf("insertUser: %v", err)
 		}
+		t.Cleanup(func() {
+			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, id)
+		})
 		return id
 	}
 
@@ -173,25 +190,36 @@ func TestTestLabProductionGuard(t *testing.T) {
 		t.Helper()
 		roleID := uuid.New()
 		code := roleID.String()[:8]
-		_, err := pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'TestRoleProd')`, roleID, code)
+		_, err := pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'TestLabRoleProd')`, roleID, code)
 		if err != nil {
 			t.Fatalf("insertAdminRole: %v", err)
 		}
+		t.Cleanup(func() {
+			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_roles WHERE id = $1`, roleID)
+		})
+
 		for _, p := range perms {
 			_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, $2)`, roleID, p)
 			if err != nil {
 				t.Fatalf("insertPerm %s: %v", p, err)
 			}
 		}
+		t.Cleanup(func() {
+			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_role_permissions WHERE role_id = $1`, roleID)
+		})
+
 		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')`, userID, roleID)
 		if err != nil {
 			t.Fatalf("insertStaffMember: %v", err)
 		}
+		t.Cleanup(func() {
+			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_members WHERE user_id = $1 AND staff_role_id = $2`, userID, roleID)
+		})
 	}
 
 	makeToken := func(t *testing.T, userID uuid.UUID, role string) string {
 		t.Helper()
-		tok, err := tokenService.GenerateAccessToken(userID, userID.String()+"@prod.com", role)
+		tok, err := tokenService.GenerateAccessToken(userID, userID.String()+"@testlabprod.com", role)
 		if err != nil {
 			t.Fatalf("makeToken: %v", err)
 		}

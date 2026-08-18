@@ -21,7 +21,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupIntegration(t *testing.T) (*pgxpool.Pool, *postgres.Client, *redis.Client, *config.Config, http.Handler, func()) {
+func setupIntegration(t *testing.T) (*pgxpool.Pool, *postgres.Client, *redis.Client, *config.Config, http.Handler) {
+	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set")
@@ -47,47 +48,63 @@ func setupIntegration(t *testing.T) (*pgxpool.Pool, *postgres.Client, *redis.Cli
 
 	pgClient, err := postgres.NewClient(ctx, dsn)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		pgClient.Close()
+	})
 
 	redisClient, err := redis.NewClient(ctx, "localhost:6379", "", 1)
 	if err != nil {
 		t.Logf("redis connect failed, skipping test: %v", err)
 		t.Skip("redis not available")
 	}
+	t.Cleanup(func() {
+		redisClient.Close()
+	})
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	router, cancel := app.BuildRouter(ctx, cfg, pgClient, redisClient, logger)
-
-	return pgClient.Pool, pgClient, redisClient, cfg, router, func() {
+	t.Cleanup(func() {
 		cancel()
-		redisClient.Close()
-		pgClient.Close()
-	}
+	})
+
+	return pgClient.Pool, pgClient, redisClient, cfg, router
 }
 
 func createAdminToken(t *testing.T, db *pgxpool.Pool, cfg *config.Config) (string, uuid.UUID) {
 	adminID := uuid.New()
-	_, err := db.Exec(context.Background(), "INSERT INTO users (id, name, email, password_hash, role, status) VALUES ($1, 'Admin', $2, 'hash', 'admin', 'active')", adminID, adminID.String()+"@zamk.ru")
+	_, err := db.Exec(context.Background(), "INSERT INTO users (id, name, email, password_hash, role, status) VALUES ($1, 'Test Lab Bootstrap Admin', $2, 'hash', 'admin', 'active')", adminID, adminID.String()+"@testlabbootstrap.zamk.ru")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = db.Exec(context.Background(), "DELETE FROM users WHERE id = $1", adminID)
+	})
 
 	roleID := uuid.New()
-	_, err = db.Exec(context.Background(), "INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'TestRole')", roleID, roleID.String()[:8])
+	_, err = db.Exec(context.Background(), "INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'TestLabBootstrapRole')", roleID, roleID.String()[:8])
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = db.Exec(context.Background(), "DELETE FROM staff_roles WHERE id = $1", roleID)
+	})
 
 	_, err = db.Exec(context.Background(), "INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, 'testing.manage')", roleID)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = db.Exec(context.Background(), "DELETE FROM staff_role_permissions WHERE role_id = $1", roleID)
+	})
 
 	_, err = db.Exec(context.Background(), "INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')", adminID, roleID)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = db.Exec(context.Background(), "DELETE FROM staff_members WHERE user_id = $1 AND staff_role_id = $2", adminID, roleID)
+	})
 
 	ts := auth.NewTokenService(cfg.JWT.AccessTokenSecret, cfg.JWT.RefreshTokenSecret, 15)
-	accessToken, err := ts.GenerateAccessToken(adminID, adminID.String()+"@zamk.ru", "admin")
+	accessToken, err := ts.GenerateAccessToken(adminID, adminID.String()+"@testlabbootstrap.zamk.ru", "admin")
 	require.NoError(t, err)
 	return accessToken, adminID
 }
 
 func TestProductBootstrap_BasicSales(t *testing.T) {
-	pool, _, _, cfg, router, cleanup := setupIntegration(t)
-	defer cleanup()
+	pool, _, _, cfg, router := setupIntegration(t)
 
 	token, _ := createAdminToken(t, pool, cfg)
 
