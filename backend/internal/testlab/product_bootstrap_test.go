@@ -40,6 +40,9 @@ func setupIntegration(t *testing.T) (*pgxpool.Pool, *postgres.Client, *redis.Cli
 			CookieSecure:   false,
 			CookieSameSite: "Lax",
 		},
+		App: config.AppConfig{
+			Env: "test",
+		},
 	}
 
 	pgClient, err := postgres.NewClient(ctx, dsn)

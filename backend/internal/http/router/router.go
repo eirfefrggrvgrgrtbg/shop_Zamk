@@ -389,7 +389,7 @@ func New(
 		r.Get("/me", staffHandler.GetAdminMe)
 		r.With(perm("dashboard.read")).Get("/dashboard/summary", dashboardHandler.GetDashboardSummary)
 
-		if cfg.App.Env != "production" {
+		if testLabHandler != nil {
 			r.Route("/testing/analytics/scenarios", func(r chi.Router) {
 				r.Use(perm("testing.manage"))
 				testLabHandler.RegisterRoutes(r)
