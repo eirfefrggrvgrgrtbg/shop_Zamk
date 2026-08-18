@@ -33,12 +33,13 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/reviews"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/selleranalytics"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/supplies"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testlab"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/selleranalytics"
 )
 
 func New(
@@ -76,6 +77,7 @@ func New(
 	deliveryHandler *delivery.Handler,
 	suppliesHandler *supplies.Handler,
 	sellerAnalyticsHandler *selleranalytics.Handler,
+	testLabHandler *testlab.Handler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	rateLimiter := ratelimit.NewMiddleware(
@@ -386,6 +388,13 @@ func New(
 		// /api/admin/me — no fine-grained permission required, role=admin is enough
 		r.Get("/me", staffHandler.GetAdminMe)
 		r.With(perm("dashboard.read")).Get("/dashboard/summary", dashboardHandler.GetDashboardSummary)
+
+		if cfg.App.Env != "production" {
+			r.Route("/testing/analytics/scenarios", func(r chi.Router) {
+				r.Use(perm("testing.manage"))
+				testLabHandler.RegisterRoutes(r)
+			})
+		}
 
 		r.Get("/notifications", notificationsHandler.ListAdminNotifications)
 		r.Get("/notifications/unread-count", notificationsHandler.UnreadCountAdmin)

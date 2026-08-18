@@ -31,12 +31,13 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/reviews"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/selleranalytics"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/supplies"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testlab"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/selleranalytics"
 )
 
 func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Client, redisClient *redis.Client, logger *slog.Logger) (*chi.Mux, func()) {
@@ -191,7 +192,23 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	analyticsSvc := selleranalytics.NewService(analyticsRepo)
 	analyticsHandler := selleranalytics.NewHandler(analyticsSvc, analyticsRepo)
 
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, auditLogHandler, deliveryHandler, suppliesHandler, analyticsHandler)
+	testLabRepo := testlab.NewRepository(pgClient.Pool)
+	testLabCalc := testlab.NewCalculator()
+	testLabEngine := testlab.NewScenarioEngine(testlab.EngineDeps{
+		UserRepo:   userRepo,
+		SellerSvc:  sellersService,
+		ProductSvc: productsService,
+		InvSvc:     inventoryService,
+		CartSvc:    cartService,
+		OrderSvc:   ordersService,
+		PayoutSvc:  payoutsService,
+		TestRepo:   testLabRepo,
+		Calc:       testLabCalc,
+	})
+	testLabSvc := testlab.NewService(testLabRepo, testLabEngine)
+	testLabHandler := testlab.NewHandler(testLabSvc, cfg.App.Env)
+
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, auditLogHandler, deliveryHandler, suppliesHandler, analyticsHandler, testLabHandler)
 
 	return r, cancelWorkers
 }
