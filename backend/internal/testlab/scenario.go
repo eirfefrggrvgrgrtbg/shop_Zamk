@@ -116,6 +116,7 @@ func (e *ScenarioEngine) Run(ctx context.Context, adminUserID uuid.UUID, cfg Sce
 		if err != nil {
 			return nil, err
 		}
+		run.AuxUserIDs = append(run.AuxUserIDs, buyerID)
 
 		// 4. Add to cart
 		_, err = e.deps.CartSvc.AddItem(ctx, buyerID, cart.AddItemRequest{
@@ -186,6 +187,7 @@ func (e *ScenarioEngine) Run(ctx context.Context, adminUserID uuid.UUID, cfg Sce
 		if err != nil {
 			return nil, err
 		}
+		run.AuxUserIDs = append(run.AuxUserIDs, buyerUserID)
 
 		// 3. We need 2 orders, 1 unit each. Price is 2500 RUB (250,000 cents) each, so total Gross = 500,000 cents
 		// The preset expects: BuildZeroCurrentPeriod(period, 500000, 2, 2, 45000)
@@ -261,6 +263,7 @@ func (e *ScenarioEngine) Run(ctx context.Context, adminUserID uuid.UUID, cfg Sce
 		if err != nil {
 			return nil, err
 		}
+		run.AuxUserIDs = append(run.AuxUserIDs, buyerUserID)
 
 		// Reserve 4 units via Cart Checkout (without fulfillment)
 		_, err = e.deps.CartSvc.AddItem(ctx, buyerUserID, cart.AddItemRequest{

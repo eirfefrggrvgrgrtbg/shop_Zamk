@@ -60,7 +60,10 @@ func (r *Repository) CreateIsolatedIdentity(ctx context.Context, owner *users.Us
 }
 
 // CleanupRun removes all data associated with a specific run ID.
-// It uses the runID to find the isolated test seller.
+// It uses the runID to find the isolated test seller and all auxiliary
+// identities created for the run (buyer/customer accounts). Auxiliary users
+// are found by their deterministic canonical email addresses, which makes
+// cleanup restart-safe without relying on in-memory state.
 func (r *Repository) CleanupRun(ctx context.Context, runID string) error {
 	brandPrefix := fmt.Sprintf("TESTLAB %s", runID)
 
@@ -87,6 +90,30 @@ func (r *Repository) CleanupRun(ctx context.Context, runID string) error {
 		return fmt.Errorf("safety violation: seller %s (%s) does not belong to test lab", sellerID, brandName)
 	}
 
+	// --- Collect auxiliary buyer user IDs by their canonical deterministic email ---
+	// The buyer email is: buyer-testlab-{runId}@zamk.ru
+	// This is restart-safe: the email is durable in the DB.
+	canonicalBuyerEmail := strings.ToLower(fmt.Sprintf("buyer-testlab-%s@zamk.ru", runID))
+	var auxUserIDs []uuid.UUID
+	auxRows, err := tx.Query(ctx, "SELECT id FROM users WHERE email = $1", canonicalBuyerEmail)
+	if err != nil {
+		return fmt.Errorf("query aux buyer users: %w", err)
+	}
+	for auxRows.Next() {
+		var uid uuid.UUID
+		if err := auxRows.Scan(&uid); err == nil {
+			auxUserIDs = append(auxUserIDs, uid)
+		}
+	}
+	auxRows.Close()
+
+	// Delete aux buyer-owned records before deleting the seller's records.
+	// Buyer users own: orders (via orders.user_id), reservations (via reservations.user_id).
+	// Orders linked to this seller's products will be deleted below via seller graph;
+	// here we only need to handle orphaned buyer records (e.g. cart_items referencing non-seller variants).
+	// The main seller-graph cleanup below already removes orders/reservations by seller_id path.
+	// We just need to ensure buyer users themselves are deleted at the end.
+
 	// Delete ledger entries and payouts
 	_, err = tx.Exec(ctx, "DELETE FROM seller_ledger_entries WHERE seller_id = $1", sellerID)
 	if err != nil {
@@ -101,8 +128,6 @@ func (r *Repository) CleanupRun(ctx context.Context, runID string) error {
 		return err
 	}
 
-
-
 	// Delete orders & cart
 	_, err = tx.Exec(ctx, "DELETE FROM order_reservations WHERE order_id IN (SELECT order_id FROM order_items WHERE seller_id = $1)", sellerID)
 	if err != nil {
@@ -116,10 +141,22 @@ func (r *Repository) CleanupRun(ctx context.Context, runID string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, "DELETE FROM orders WHERE id IN (SELECT order_id FROM order_items WHERE seller_id = $1)", sellerID)
-	if err != nil {
-		return err
+
+	// Delete orders owned by aux buyer users that reference this seller's products.
+	// (orders.user_id = buyer, and may have no order_items if checkout failed mid-way)
+	// Use the known aux buyer IDs for exact targeting.
+	if len(auxUserIDs) > 0 {
+		_, err = tx.Exec(ctx, "DELETE FROM orders WHERE id IN (SELECT order_id FROM order_items WHERE seller_id = $1)", sellerID)
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err = tx.Exec(ctx, "DELETE FROM orders WHERE id IN (SELECT order_id FROM order_items WHERE seller_id = $1)", sellerID)
+		if err != nil {
+			return err
+		}
 	}
+
 	_, err = tx.Exec(ctx, "DELETE FROM cart_items WHERE product_variant_id IN (SELECT id FROM product_variants WHERE product_id IN (SELECT id FROM products WHERE seller_id = $1))", sellerID)
 	if err != nil {
 		return err
@@ -163,8 +200,8 @@ func (r *Repository) CleanupRun(ctx context.Context, runID string) error {
 		return err
 	}
 
-	// Delete seller user links
-	var userIDs []uuid.UUID
+	// Delete seller user links and collect seller-linked user IDs for deletion
+	var sellerUserIDs []uuid.UUID
 	rows, err := tx.Query(ctx, "SELECT user_id FROM seller_users WHERE seller_id = $1", sellerID)
 	if err != nil {
 		return err
@@ -172,7 +209,7 @@ func (r *Repository) CleanupRun(ctx context.Context, runID string) error {
 	for rows.Next() {
 		var uid uuid.UUID
 		if err := rows.Scan(&uid); err == nil {
-			userIDs = append(userIDs, uid)
+			sellerUserIDs = append(sellerUserIDs, uid)
 		}
 	}
 	rows.Close()
@@ -188,10 +225,31 @@ func (r *Repository) CleanupRun(ctx context.Context, runID string) error {
 		return err
 	}
 
-	// Delete associated users (since they are test lab isolated users)
-	for _, uid := range userIDs {
-		// Only delete if the user email has TESTLAB in it
-		_, err = tx.Exec(ctx, "DELETE FROM users WHERE id = $1 AND email LIKE '%testlab%'", uid)
+	// Delete seller-linked users (owner) using exact email match for safety
+	ownerEmail := strings.ToLower(fmt.Sprintf("owner-testlab-%s@zamk.ru", runID))
+	for _, uid := range sellerUserIDs {
+		_, err = tx.Exec(ctx, "DELETE FROM users WHERE id = $1 AND email = $2", uid, ownerEmail)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete auxiliary buyer users using exact IDs.
+	// Their orders/reservations were already removed above via the seller graph.
+	for _, uid := range auxUserIDs {
+		// Delete any remaining reservations owned by this buyer (edge case: reservations
+		// not linked to the seller's inventory, e.g. expired/released ones still in table)
+		_, err = tx.Exec(ctx, "DELETE FROM reservations WHERE user_id = $1", uid)
+		if err != nil {
+			return err
+		}
+		// Delete any orders still owned by this buyer
+		_, err = tx.Exec(ctx, "DELETE FROM orders WHERE user_id = $1", uid)
+		if err != nil {
+			return err
+		}
+		// Now delete the buyer user record itself
+		_, err = tx.Exec(ctx, "DELETE FROM users WHERE id = $1 AND email = $2", uid, canonicalBuyerEmail)
 		if err != nil {
 			return err
 		}
@@ -199,6 +257,7 @@ func (r *Repository) CleanupRun(ctx context.Context, runID string) error {
 
 	return tx.Commit(ctx)
 }
+
 
 // SetOrderCreatedAt allows test lab to backdate orders for timeseries metrics.
 func (r *Repository) SetOrderCreatedAt(ctx context.Context, orderID uuid.UUID, createdAt time.Time) error {

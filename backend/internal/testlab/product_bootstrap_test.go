@@ -256,6 +256,75 @@ func TestProductBootstrap_ZeroCurrentPeriod(t *testing.T) {
 	err = pool.QueryRow(ctx, "SELECT count(*) FROM seller_ledger_entries WHERE type = 'sale_gross' AND seller_id = $1", result.SellerId).Scan(&historicalSalesCount)
 	require.NoError(t, err)
 	require.Equal(t, 2, historicalSalesCount, "Must have exactly 2 canonical sales generated in the past")
+
+	// Clean up the run so no residue remains
+	cleanupReq := httptest.NewRequest("DELETE", fmt.Sprintf("/api/admin/testing/analytics/scenarios/%s", result.RunId), nil)
+	cleanupReq.Header.Set("Authorization", "Bearer "+token)
+	cleanupRr := httptest.NewRecorder()
+	router.ServeHTTP(cleanupRr, cleanupReq)
+	require.Equal(t, http.StatusNoContent, cleanupRr.Code, "ZeroCurrentPeriod cleanup failed: %s", cleanupRr.Body.String())
+}
+
+
+// TestAuxiliaryIdentityHygiene is the permanent regression test for auxiliary user leak.
+// It verifies that after applying and cleaning up each preset, no NEW auxiliary Test Lab
+// users remain. Runs the apply+cleanup cycle twice to prove zero accumulation.
+func TestAuxiliaryIdentityHygiene(t *testing.T) {
+	pool, _, _, cfg, router := setupIntegration(t)
+	token, _ := createAdminToken(t, pool, cfg)
+
+	presets := []string{"BASIC_SALES", "NEVER_SOLD", "ZERO_CURRENT_PERIOD", "INVENTORY_AND_INBOUND"}
+
+	ctx := context.Background()
+
+	// Snapshot counts BEFORE our test cycles so we can detect any additions.
+	// (Legacy residue from prior broken runs is already in the DB; we only care
+	// that OUR cycles produce zero net change.)
+	var baselineBuyerCount int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM users WHERE email LIKE 'buyer-testlab-%'").Scan(&baselineBuyerCount))
+	var baselineOwnerCount int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM users WHERE email LIKE 'owner-testlab-%'").Scan(&baselineOwnerCount))
+	t.Logf("Baseline before cycles: buyer-testlab=%d, owner-testlab=%d", baselineBuyerCount, baselineOwnerCount)
+
+	// Run two full cycles to prove no accumulation
+	for cycle := 1; cycle <= 2; cycle++ {
+		t.Logf("Cycle %d: applying and cleaning all presets", cycle)
+
+		for _, preset := range presets {
+			body := fmt.Sprintf(`{"preset":%q}`, preset)
+			applyReq := httptest.NewRequest("POST", "/api/admin/testing/analytics/scenarios/apply", bytes.NewBufferString(body))
+			applyReq.Header.Set("Content-Type", "application/json")
+			applyReq.Header.Set("Authorization", "Bearer "+token)
+			applyRr := httptest.NewRecorder()
+			router.ServeHTTP(applyRr, applyReq)
+			require.Equal(t, http.StatusOK, applyRr.Code, "preset %s apply failed: %s", preset, applyRr.Body.String())
+
+			var result struct {
+				RunId string `json:"runId"`
+			}
+			require.NoError(t, json.Unmarshal(applyRr.Body.Bytes(), &result))
+			require.NotEmpty(t, result.RunId, "runId must be returned for preset %s", preset)
+
+			cleanupReq := httptest.NewRequest("DELETE", fmt.Sprintf("/api/admin/testing/analytics/scenarios/%s", result.RunId), nil)
+			cleanupReq.Header.Set("Authorization", "Bearer "+token)
+			cleanupRr := httptest.NewRecorder()
+			router.ServeHTTP(cleanupRr, cleanupReq)
+			require.Equal(t, http.StatusNoContent, cleanupRr.Code, "preset %s cleanup failed: %s", preset, cleanupRr.Body.String())
+		}
+
+		// After each cycle, counts must not have increased beyond baseline.
+		var afterBuyerCount int
+		require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM users WHERE email LIKE 'buyer-testlab-%'").Scan(&afterBuyerCount))
+		var afterOwnerCount int
+		require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM users WHERE email LIKE 'owner-testlab-%'").Scan(&afterOwnerCount))
+		t.Logf("Cycle %d after: buyer-testlab=%d (baseline=%d), owner-testlab=%d (baseline=%d)",
+			cycle, afterBuyerCount, baselineBuyerCount, afterOwnerCount, baselineOwnerCount)
+
+		require.Equal(t, baselineBuyerCount, afterBuyerCount,
+			"cycle %d: buyer-testlab count must not increase (no new buyers leaked)", cycle)
+		require.Equal(t, baselineOwnerCount, afterOwnerCount,
+			"cycle %d: owner-testlab count must not increase (no new owners leaked)", cycle)
+	}
 }
 
 func TestProductBootstrap_InventoryAndInbound(t *testing.T) {
@@ -298,4 +367,11 @@ func TestProductBootstrap_InventoryAndInbound(t *testing.T) {
 	err = pool.QueryRow(ctx, "SELECT expected_quantity FROM seller_supply_items WHERE supply_id IN (SELECT id FROM seller_supplies WHERE seller_id = $1) LIMIT 1", result.SellerId).Scan(&inbound)
 	require.NoError(t, err)
 	require.Equal(t, 10, inbound)
+
+	// Clean up the run so no residue remains
+	cleanupReq := httptest.NewRequest("DELETE", fmt.Sprintf("/api/admin/testing/analytics/scenarios/%s", result.RunId), nil)
+	cleanupReq.Header.Set("Authorization", "Bearer "+token)
+	cleanupRr := httptest.NewRecorder()
+	router.ServeHTTP(cleanupRr, cleanupReq)
+	require.Equal(t, http.StatusNoContent, cleanupRr.Code, "InventoryAndInbound cleanup failed: %s", cleanupRr.Body.String())
 }

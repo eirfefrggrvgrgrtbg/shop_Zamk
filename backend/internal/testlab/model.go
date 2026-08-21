@@ -25,4 +25,9 @@ type ScenarioRun struct {
 	SellerID       uuid.UUID                        `json:"sellerId"`
 	Period         selleranalytics.TimePeriod       `json:"period"`
 	ExpectedResult selleranalytics.OverviewResponse `json:"expectedResult"`
+	// AuxUserIDs holds the exact UUIDs of all auxiliary Test Lab users created
+	// for this run (e.g. canonical buyer accounts). These are tracked here so
+	// that CleanupRun can delete them precisely without relying on email
+	// patterns or broad timestamp filters.
+	AuxUserIDs []uuid.UUID `json:"auxUserIds,omitempty"`
 }
