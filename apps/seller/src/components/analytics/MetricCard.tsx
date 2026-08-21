@@ -14,7 +14,7 @@ export function MetricCard({ title, value, comparisonState, changePercent }: Met
       <h3 className="text-sm font-medium text-gray-500 mb-1">{title}</h3>
       <div className="flex items-baseline gap-3">
         <span className="text-2xl font-bold text-gray-900">{value}</span>
-        {comparisonState && comparisonState !== 'new' && changePercent !== null && changePercent !== undefined && (
+        {comparisonState && comparisonState !== 'new' && changePercent != null && !isNaN(changePercent) && isFinite(changePercent) && (
           <span
             className={cn(
               "flex items-center text-sm font-medium",
@@ -31,7 +31,7 @@ export function MetricCard({ title, value, comparisonState, changePercent }: Met
         )}
         {comparisonState === 'new' && (
           <span className="text-sm font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-            Новый результат
+            Новое
           </span>
         )}
       </div>

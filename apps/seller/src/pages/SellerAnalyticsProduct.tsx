@@ -126,22 +126,49 @@ export function SellerAnalyticsProduct() {
           <h1 className="text-2xl font-bold text-gray-900">{data.title}</h1>
         </div>
         
-        <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
-          {(['today', '7d', '30d', '90d'] as PeriodOption[]).map((p) => {
-            const isActive = period === p;
-            return (
-              <button
-                key={p}
-                onClick={() => handlePeriodChange(p)}
-                className={cn(
-                  "px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                  isActive ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"
-                )}
-              >
-                {p === 'today' ? 'Сегодня' : p === '7d' ? '7 дней' : p === '30d' ? '30 дней' : '90 дней'}
-              </button>
-            )
-          })}
+        <div className="flex flex-col sm:flex-row items-end sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
+          {period === 'custom' && (
+            <div className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg p-1 text-sm">
+              <input 
+                type="date" 
+                className="bg-transparent outline-none px-2 text-gray-700" 
+                value={from.split('T')[0]} 
+                onChange={(e) => {
+                  const newParams = new URLSearchParams(searchParams);
+                  newParams.set('from', `${e.target.value}T00:00:00+03:00`);
+                  setSearchParams(newParams);
+                }}
+              />
+              <span className="text-gray-400">—</span>
+              <input 
+                type="date" 
+                className="bg-transparent outline-none px-2 text-gray-700" 
+                value={to.split('T')[0]} 
+                onChange={(e) => {
+                  const newParams = new URLSearchParams(searchParams);
+                  newParams.set('to', `${e.target.value}T23:59:59.999+03:00`);
+                  setSearchParams(newParams);
+                }}
+              />
+            </div>
+          )}
+          <div className="flex items-center space-x-1 bg-gray-100 p-1 rounded-lg overflow-x-auto max-w-full">
+            {(['today', '7d', '30d', '90d', 'custom'] as PeriodOption[]).map((p) => {
+              const isActive = period === p;
+              return (
+                <button
+                  key={p}
+                  onClick={() => handlePeriodChange(p)}
+                  className={cn(
+                    "px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap",
+                    isActive ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"
+                  )}
+                >
+                  {p === 'today' ? 'Сегодня' : p === '7d' ? '7 дней' : p === '30d' ? '30 дней' : p === '90d' ? '90 дней' : 'Произвольный'}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 
@@ -205,9 +232,9 @@ export function SellerAnalyticsProduct() {
               {data.variants.map((v: VariantRow) => (
                 <tr key={v.variantId} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">
-                    {v.displayName || 'По умолчанию'}
+                    {v.displayName || v.sku || 'Без названия'}
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{v.sku}</td>
+                  <td className="px-4 py-3 text-gray-500">{v.sku || '—'}</td>
                   <td className="px-4 py-3 text-right font-semibold text-gray-900">
                     {formatCents(v.grossSalesCents)}
                   </td>

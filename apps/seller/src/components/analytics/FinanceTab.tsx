@@ -101,10 +101,10 @@ export function FinanceTab({ from, to }: FinanceTabProps) {
             </div>
 
             {/* Returns */}
-            <div className="flex justify-between items-center py-2 text-red-600">
+            <div className="flex justify-between items-center py-2 text-gray-900">
               <div className="flex items-center gap-2">
-                <span>Возвраты</span>
-                <span className="text-xs font-medium bg-red-100 px-2 py-0.5 rounded-full">
+                <span>Удержания по возвратам</span>
+                <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
                   {data.returnedUnits.current} шт.
                 </span>
               </div>
@@ -123,7 +123,7 @@ export function FinanceTab({ from, to }: FinanceTabProps) {
 
             {/* Total */}
             <div className="flex justify-between items-center py-4 border-t border-gray-200 mt-2">
-              <span className="text-lg font-bold text-gray-900">Доход после возвратов</span>
+              <span className="text-lg font-bold text-gray-900">Коммерческий результат</span>
               <span className="text-xl font-bold text-gray-900">
                 {formatCents(data.netCommercialEarning.currentCents)}
               </span>

@@ -116,8 +116,8 @@ export function OverviewTab({ from, to }: OverviewTabProps) {
   }
   return (
     <div className="space-y-8">
-      {/* KPI Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* Primary KPI Strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Продажи"
           value={formatCents(data.grossSales.currentCents)}
@@ -131,7 +131,7 @@ export function OverviewTab({ from, to }: OverviewTabProps) {
           changePercent={data.orders.changePercent}
         />
         <MetricCard
-          title="Продано"
+          title="Продано товаров"
           value={`${data.unitsSold.current} шт.`}
           comparisonState={data.unitsSold.comparisonState as any}
           changePercent={data.unitsSold.changePercent}
@@ -142,18 +142,28 @@ export function OverviewTab({ from, to }: OverviewTabProps) {
           comparisonState={data.averageOrderValue.comparisonState as any}
           changePercent={data.averageOrderValue.changePercent}
         />
-        <MetricCard
-          title="Доход после возвратов"
-          value={formatCents(data.netCommercialEarning.currentCents)}
-          comparisonState={data.netCommercialEarning.comparisonState as any}
-          changePercent={data.netCommercialEarning.changePercent}
-        />
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-          <h3 className="text-sm font-medium text-gray-500 mb-1">Возвраты</h3>
-          <div className="flex items-baseline gap-3">
-            <span className="text-2xl font-bold text-gray-900">{data.returnRate.currentPercent.toFixed(1)}%</span>
-            <span className="text-sm text-gray-500">{data.returnedUnits.current} шт.</span>
+      </div>
+
+      {/* Secondary Financial Metrics */}
+      <div className="bg-gray-50 rounded-xl p-4 md:p-5 flex flex-col md:flex-row gap-4 md:gap-8 overflow-x-auto">
+        <div>
+          <h3 className="text-xs font-medium text-gray-500 mb-1">Комиссия ZAMK</h3>
+          <p className="text-sm font-semibold text-gray-900">{formatCents(data.commission.currentCents)}</p>
+        </div>
+        <div>
+          <h3 className="text-xs font-medium text-gray-500 mb-1">Доход продавца</h3>
+          <p className="text-sm font-semibold text-gray-900">{formatCents(data.sellerEarningBeforeReturns.currentCents)}</p>
+        </div>
+        <div>
+          <h3 className="text-xs font-medium text-gray-500 mb-1">Возвраты / удержания</h3>
+          <div className="flex items-baseline gap-2">
+            <p className="text-sm font-semibold text-gray-900">{formatCents(data.returnDeductions.currentCents)}</p>
+            <span className="text-xs text-gray-500">({data.returnRate.currentPercent.toFixed(1)}%, {data.returnedUnits.current} шт.)</span>
           </div>
+        </div>
+        <div>
+          <h3 className="text-xs font-medium text-gray-500 mb-1">Коммерческий результат</h3>
+          <p className="text-sm font-bold text-gray-900">{formatCents(data.netCommercialEarning.currentCents)}</p>
         </div>
       </div>
 
