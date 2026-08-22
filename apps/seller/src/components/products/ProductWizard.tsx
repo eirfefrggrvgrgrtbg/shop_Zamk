@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useBlocker } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { getSellerCategories, getSellerCategorySchema, createSellerProduct, updateSellerProduct, submitSellerProductModeration, updateSellerProductPrices, type SellerCategory, type SellerCategorySchema } from '@zamk/api-client/src/seller';
 
@@ -90,10 +90,28 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
 
   const isDirty = contentDirty || priceDirty;
 
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      isDirty && currentLocation.pathname !== nextLocation.pathname
-  );
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+
+  const handleBackNavigation = () => {
+    if (isDirty) {
+      setShowLeaveModal(true);
+      setPendingNavigation('/products');
+    } else {
+      navigate('/products');
+    }
+  };
+
+  const confirmLeave = () => {
+    if (pendingNavigation) {
+      navigate(pendingNavigation);
+    }
+  };
+
+  const cancelLeave = () => {
+    setShowLeaveModal(false);
+    setPendingNavigation(null);
+  };
 
   const [categories, setCategories] = useState<SellerCategory[]>([]);
   const [schema, setSchema] = useState<SellerCategorySchema | null>(null);
@@ -420,7 +438,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
     <div className="max-w-5xl mx-auto py-8">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center space-x-4">
-          <button onClick={() => navigate('/products')} className="text-gray-500 hover:text-gray-900">
+          <button onClick={handleBackNavigation} className="text-gray-500 hover:text-gray-900">
             <ArrowLeft className="w-6 h-6" />
           </button>
           <h1 className="text-3xl font-semibold tracking-tight">
@@ -517,7 +535,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         </div>
       )}
 
-      {blocker.state === 'blocked' && (
+      {showLeaveModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
           <div className="bg-white rounded-lg p-6 max-w-sm w-full">
             <h3 className="text-lg font-medium">Есть несохранённые изменения</h3>
@@ -525,8 +543,8 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
               Если вы уйдёте со страницы, изменения будут потеряны.
             </p>
             <div className="mt-4 flex justify-end gap-3">
-              <button onClick={() => blocker.reset()} className="px-3 py-1.5 border rounded">Остаться</button>
-              <button onClick={() => blocker.proceed()} className="px-3 py-1.5 bg-red-600 text-white rounded">Выйти без сохранения</button>
+              <button onClick={cancelLeave} className="px-3 py-1.5 border rounded">Остаться</button>
+              <button onClick={confirmLeave} className="px-3 py-1.5 bg-red-600 text-white rounded">Выйти без сохранения</button>
             </div>
           </div>
         </div>
