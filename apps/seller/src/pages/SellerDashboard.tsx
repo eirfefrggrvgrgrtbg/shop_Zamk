@@ -162,7 +162,13 @@ export function SellerDashboard() {
   const isNewSeller = data.products.length === 0;
 
   const attentionItems = [];
-  if (!isProfileComplete) attentionItems.push({ label: 'Заполните профиль магазина для активации всех функций', to: '/settings' });
+  if (!isProfileComplete) {
+    const isActive = data.sellerMe?.seller.status === 'active';
+    attentionItems.push({ 
+      label: isActive ? 'Завершите оформление профиля магазина (логотип, контакты)' : 'Заполните профиль магазина для активации всех функций', 
+      to: '/settings' 
+    });
+  }
   if (isNewSeller) attentionItems.push({ label: 'Добавьте свой первый товар в каталог', to: '/products/new' });
   if (totalIssues > 0) attentionItems.push({ label: `У вас ${pluralize(totalIssues, ['новое предупреждение', 'новых предупреждения', 'новых предупреждений'])}`, to: '/warnings', alert: true });
   if (data.returns.length > 0) attentionItems.push({ label: `Обработайте ${pluralize(data.returns.length, ['новый возврат', 'новых возврата', 'новых возвратов'])}`, to: '/returns' });

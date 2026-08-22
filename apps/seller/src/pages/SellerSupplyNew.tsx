@@ -46,7 +46,7 @@ export function SellerSupplyNew() {
     try {
       setLoading(true);
       const data = await getSellerProducts();
-      setProducts(data.filter(p => p.status === 'approved'));
+      setProducts(data.filter(p => p.status === 'approved' || p.status === 'published'));
     } catch (err: any) {
       setError(err.message || 'Ошибка загрузки товаров');
     } finally {

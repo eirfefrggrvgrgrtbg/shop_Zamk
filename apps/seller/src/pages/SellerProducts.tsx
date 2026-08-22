@@ -245,7 +245,7 @@ export function SellerProducts() {
 
   const selectedProduct = products.find((product) => product.id === selectedId) || filteredProducts[0] || products[0];
   const moderationCount = products.filter((product) => product.status === 'pending_moderation' || product.status === 'in_review').length;
-  const approvedCount = products.filter((product) => product.status === 'approved').length;
+  const approvedCount = products.filter((product) => product.status === 'approved' || product.status === 'published').length;
   const revenue = products.reduce((sum, product) => sum + product.revenue, 0);
 
   if (isLoading) {

@@ -325,10 +325,7 @@ export function SellerSettings() {
           </div>
         </div>
 
-        {/* Info block */}
-        <div className="rounded-xl border border-gray-100 bg-white p-4 text-xs text-gray-400">
-          ID магазина: {sellerData?.seller.id ?? '—'} · Роль: {sellerData?.sellerUser.role ?? '—'}
-        </div>
+
 
       </div>
     </div>

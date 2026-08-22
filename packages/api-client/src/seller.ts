@@ -135,8 +135,8 @@ export const getSellerWarnings = async (): Promise<SellerWarning[]> => {
 };
 
 export const getSellerViolations = async (): Promise<SellerViolation[]> => {
-  const res = await request<{ items: SellerViolation[] }>('GET', '/seller/violations');
-  return res.items || [];
+  const res = await request<any>('GET', '/seller/violations');
+  return res?.items || (Array.isArray(res) ? res : []);
 };
 
 export const getSellerSupplies = async (): Promise<SellerSupply[]> => {
