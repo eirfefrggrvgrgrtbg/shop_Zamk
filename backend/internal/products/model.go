@@ -238,3 +238,10 @@ type ProductSizeChartRow struct {
 	SizeValueID  uuid.UUID              `json:"sizeValueId"`
 	Measurements map[string]interface{} `json:"measurements"`
 }
+
+type CategorySizeSystem struct {
+	CategoryID   uuid.UUID `json:"categoryId"`
+	SizeSystemID uuid.UUID `json:"sizeSystemId"`
+	IsDefault    bool      `json:"isDefault"`
+	SortOrder    int       `json:"sortOrder"`
+}

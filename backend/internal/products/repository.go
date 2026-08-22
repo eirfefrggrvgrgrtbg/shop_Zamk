@@ -1215,7 +1215,7 @@ func (r *Repository) InsertSizeChart(ctx context.Context, productID uuid.UUID, c
 		return nil
 	}
 	var chartID uuid.UUID
-	err = r.db.QueryRow(ctx, "INSERT INTO product_size_charts (product_id, category_id) VALUES ($1, $2) RETURNING id", productID, categoryID).Scan(&chartID)
+	err = r.db.QueryRow(ctx, "INSERT INTO product_size_charts (id, product_id, category_id) VALUES (gen_random_uuid(), $1, $2) RETURNING id", productID, categoryID).Scan(&chartID)
 	if err != nil {
 		return err
 	}
@@ -1310,4 +1310,22 @@ func (r *Repository) GetProductSizeChart(ctx context.Context, productID uuid.UUI
 		chart.Rows = append(chart.Rows, rRow)
 	}
 	return &chart, nil
+}
+
+func (r *Repository) GetDictionaryValues(ctx context.Context, dictionaryID uuid.UUID) ([]AttributeDictionaryValue, error) {
+	rows, err := r.db.Query(ctx, "SELECT id, dictionary_id, code, name_ru, sort_order, is_active FROM attribute_dictionary_values WHERE dictionary_id = $1 AND is_active = true ORDER BY name_ru", dictionaryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var vals []AttributeDictionaryValue
+	for rows.Next() {
+		var v AttributeDictionaryValue
+		if err := rows.Scan(&v.ID, &v.DictionaryID, &v.Code, &v.NameRU, &v.SortOrder, &v.IsActive); err != nil {
+			return nil, err
+		}
+		vals = append(vals, v)
+	}
+	return vals, nil
 }

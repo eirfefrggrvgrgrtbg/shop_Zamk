@@ -104,10 +104,7 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 		}
 	}
 	if req.CategoryID != nil {
-		if err := s.validateSizeChart(ctx, *req.CategoryID, req.SizeChartRows); err != nil {
-			return Product{}, err
-		}
-		if err := s.validateAttributes(ctx, *req.CategoryID, req.Attributes, req.Variants); err != nil {
+		if err := s.validateCategorySchema(ctx, *req.CategoryID, req.Attributes, req.Variants, req.MaterialComposition, req.SizeChartRows); err != nil {
 			return Product{}, err
 		}
 	}
@@ -191,6 +188,44 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 		})
 	}
 
+
+	if req.Attributes != nil {
+		var pAttrs []ProductAttributeValue
+		for _, a := range req.Attributes {
+			pAttrs = append(pAttrs, ProductAttributeValue{
+				AttributeDefinitionID: a.AttributeDefinitionID,
+				EnumValueID:           a.EnumValueID,
+				TextValue:             a.TextValue,
+				NumberValue:           a.NumberValue,
+				BoolValue:             a.BoolValue,
+			})
+		}
+		p.Attributes = pAttrs
+	}
+	if req.MaterialComposition != nil {
+		var comps []ProductMaterialComposition
+		for _, c := range req.MaterialComposition {
+			comps = append(comps, ProductMaterialComposition{
+				MaterialID: c.MaterialID,
+				Percentage: c.Percentage,
+			})
+		}
+		p.MaterialComposition = comps
+	}
+	if req.SizeChartRows != nil && p.CategoryID != nil {
+		chart := ProductSizeChart{
+			ProductID: p.ID,
+			CategoryID: *p.CategoryID,
+		}
+		for _, r := range req.SizeChartRows {
+			chart.Rows = append(chart.Rows, ProductSizeChartRow{
+				SizeValueID:  r.SizeValueID,
+				Measurements: r.Measurements,
+			})
+		}
+		p.SizeChart = &chart
+	}
+
 	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
 		
@@ -213,6 +248,23 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 		if err := txRepo.CreateProduct(ctx, p); err != nil {
 			return err
 		}
+		
+		if p.Attributes != nil {
+			if err := txRepo.InsertProductAttributeValues(ctx, p.ID, p.Attributes); err != nil {
+				return err
+			}
+		}
+		if p.MaterialComposition != nil {
+			if err := txRepo.InsertMaterialComposition(ctx, p.ID, p.MaterialComposition); err != nil {
+				return err
+			}
+		}
+		if p.SizeChart != nil {
+			if err := txRepo.InsertSizeChart(ctx, p.ID, p.SizeChart.CategoryID, p.SizeChart.Rows); err != nil {
+				return err
+			}
+		}
+
 		if len(variants) > 0 {
 			if err := txRepo.MergeProductVariants(ctx, p.ID, variants); err != nil {
 				return err
@@ -264,10 +316,7 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		}
 	}
 	if p.CategoryID != nil {
-		if err := s.validateSizeChart(ctx, *p.CategoryID, req.SizeChartRows); err != nil {
-			return Product{}, err
-		}
-		if err := s.validateAttributes(ctx, *p.CategoryID, req.Attributes, req.Variants); err != nil {
+		if err := s.validateCategorySchema(ctx, *p.CategoryID, req.Attributes, req.Variants, req.MaterialComposition, req.SizeChartRows); err != nil {
 			return Product{}, err
 		}
 	}
@@ -352,6 +401,44 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			}
 			variants = append(variants, v)
 		}
+	}
+
+
+	if req.Attributes != nil {
+		var pAttrs []ProductAttributeValue
+		for _, a := range req.Attributes {
+			pAttrs = append(pAttrs, ProductAttributeValue{
+				AttributeDefinitionID: a.AttributeDefinitionID,
+				EnumValueID:           a.EnumValueID,
+				TextValue:             a.TextValue,
+				NumberValue:           a.NumberValue,
+				BoolValue:             a.BoolValue,
+			})
+		}
+		p.Attributes = pAttrs
+	}
+	if req.MaterialComposition != nil {
+		var comps []ProductMaterialComposition
+		for _, c := range req.MaterialComposition {
+			comps = append(comps, ProductMaterialComposition{
+				MaterialID: c.MaterialID,
+				Percentage: c.Percentage,
+			})
+		}
+		p.MaterialComposition = comps
+	}
+	if req.SizeChartRows != nil && p.CategoryID != nil {
+		chart := ProductSizeChart{
+			ProductID: p.ID,
+			CategoryID: *p.CategoryID,
+		}
+		for _, r := range req.SizeChartRows {
+			chart.Rows = append(chart.Rows, ProductSizeChartRow{
+				SizeValueID:  r.SizeValueID,
+				Measurements: r.Measurements,
+			})
+		}
+		p.SizeChart = &chart
 	}
 
 	var modLog *ProductModerationLog
@@ -456,6 +543,44 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				CreatedAt:  now,
 			}
 		}
+	}
+
+
+	if req.Attributes != nil {
+		var pAttrs []ProductAttributeValue
+		for _, a := range req.Attributes {
+			pAttrs = append(pAttrs, ProductAttributeValue{
+				AttributeDefinitionID: a.AttributeDefinitionID,
+				EnumValueID:           a.EnumValueID,
+				TextValue:             a.TextValue,
+				NumberValue:           a.NumberValue,
+				BoolValue:             a.BoolValue,
+			})
+		}
+		p.Attributes = pAttrs
+	}
+	if req.MaterialComposition != nil {
+		var comps []ProductMaterialComposition
+		for _, c := range req.MaterialComposition {
+			comps = append(comps, ProductMaterialComposition{
+				MaterialID: c.MaterialID,
+				Percentage: c.Percentage,
+			})
+		}
+		p.MaterialComposition = comps
+	}
+	if req.SizeChartRows != nil && p.CategoryID != nil {
+		chart := ProductSizeChart{
+			ProductID: p.ID,
+			CategoryID: *p.CategoryID,
+		}
+		for _, r := range req.SizeChartRows {
+			chart.Rows = append(chart.Rows, ProductSizeChartRow{
+				SizeValueID:  r.SizeValueID,
+				Measurements: r.Measurements,
+			})
+		}
+		p.SizeChart = &chart
 	}
 
 	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
@@ -1076,6 +1201,9 @@ func (s *Service) UpdateVariantPricesForSeller(ctx context.Context, currentUserI
 		return Product{}, err
 	}
 
+
+	
+
 	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
 		for variantID, priceCents := range req.Prices {
@@ -1136,84 +1264,18 @@ func (s *Service) validateMaterialComposition(ctx context.Context, comp []Produc
 }
 
 
-func (s *Service) validateSizeChart(ctx context.Context, categoryID uuid.UUID, rows []ProductSizeChartRowRequest) error {
-	var required bool
-	err := s.dbPool.Pool.QueryRow(ctx, "SELECT size_chart_required FROM categories WHERE id = $1", categoryID).Scan(&required)
-	if err != nil {
-		return err
-	}
-	if required && len(rows) == 0 {
-		return errors.New("category requires a size chart")
-	}
-	if len(rows) == 0 {
-		return nil
-	}
-	
-	// Fetch schema
-	fieldRows, err := s.dbPool.Pool.Query(ctx, "SELECT code, is_required FROM category_size_chart_fields WHERE category_id = $1", categoryID)
-	if err != nil {
-		return err
-	}
-	defer fieldRows.Close()
-	
-	schema := make(map[string]bool)
-	for fieldRows.Next() {
-		var code string
-		var req bool
-		if err := fieldRows.Scan(&code, &req); err != nil {
-			return err
-		}
-		schema[code] = req
-	}
-	fieldRows.Close() // explicitly close
-	
-	seenSizes := make(map[uuid.UUID]bool)
-	for _, r := range rows {
-		if seenSizes[r.SizeValueID] {
-			return fmt.Errorf("duplicate size row for size_value_id: %s", r.SizeValueID)
-		}
-		seenSizes[r.SizeValueID] = true
-		
-		var active bool
-		err := s.dbPool.Pool.QueryRow(ctx, "SELECT is_active FROM size_values WHERE id = $1", r.SizeValueID).Scan(&active)
-		if err != nil || !active {
-			return fmt.Errorf("size_value_id %s is inactive or does not exist", r.SizeValueID)
-		}
-		
-		// Check required fields
-		for code, req := range schema {
-			if req {
-				if _, ok := r.Measurements[code]; !ok {
-					return fmt.Errorf("missing required measurement %s in size chart row", code)
-				}
-			}
-		}
-		
-		// Check that all provided fields are in schema and numeric > 0
-		for k, v := range r.Measurements {
-			if _, ok := schema[k]; !ok {
-				return fmt.Errorf("measurement %s is not valid for this category", k)
-			}
-			
-			// Validate numeric > 0
-			valFloat, ok := v.(float64)
-			if !ok {
-				return fmt.Errorf("measurement %s must be a number", k)
-			}
-			if valFloat <= 0 {
-				return fmt.Errorf("measurement %s must be greater than 0", k)
-			}
-		}
-	}
 
-	return nil
-}
-
-
-func (s *Service) validateAttributes(ctx context.Context, categoryID uuid.UUID, productAttrs []ProductAttributeValueRequest, variants []ProductVariantRequest) error {
+func (s *Service) validateCategorySchema(
+	ctx context.Context, 
+	categoryID uuid.UUID, 
+	pAttrs []ProductAttributeValueRequest, 
+	vReqs []ProductVariantRequest, 
+	comps []ProductMaterialCompositionRequest, 
+	sizeChartRows []ProductSizeChartRowRequest,
+) error {
 	// Fetch schema
 	rows, err := s.dbPool.Pool.Query(ctx, `
-		SELECT ad.id, ad.value_type, ad.scope, cad.required, cad.dictionary_id, cad.min_values, cad.max_values
+		SELECT ad.id, ad.code, ad.value_type, ad.value_source, ad.scope, cad.required, cad.dictionary_id, cad.min_values, cad.max_values
 		FROM category_attribute_definitions cad
 		JOIN attribute_definitions ad ON cad.attribute_definition_id = ad.id
 		WHERE cad.category_id = $1 AND ad.is_active = true
@@ -1225,7 +1287,9 @@ func (s *Service) validateAttributes(ctx context.Context, categoryID uuid.UUID, 
 
 	type schemaDef struct {
 		ID           uuid.UUID
+		Code         string
 		ValueType    string
+		ValueSource  string
 		Scope        string
 		Required     bool
 		DictionaryID *uuid.UUID
@@ -1236,16 +1300,32 @@ func (s *Service) validateAttributes(ctx context.Context, categoryID uuid.UUID, 
 	schemaMap := make(map[uuid.UUID]schemaDef)
 	for rows.Next() {
 		var d schemaDef
-		if err := rows.Scan(&d.ID, &d.ValueType, &d.Scope, &d.Required, &d.DictionaryID, &d.MinValues, &d.MaxValues); err != nil {
+		if err := rows.Scan(&d.ID, &d.Code, &d.ValueType, &d.ValueSource, &d.Scope, &d.Required, &d.DictionaryID, &d.MinValues, &d.MaxValues); err != nil {
 			return err
 		}
 		schemaMap[d.ID] = d
 	}
-	rows.Close() // explicitly close connection before making more queries!
+	rows.Close()
 
-	// Validate Product Attributes
+	// Get allowed size systems
+	sysRows, err := s.dbPool.Pool.Query(ctx, "SELECT size_system_id FROM category_size_systems WHERE category_id = $1", categoryID)
+	if err != nil {
+		return err
+	}
+	defer sysRows.Close()
+	allowedSizeSystems := make(map[uuid.UUID]bool)
+	for sysRows.Next() {
+		var sysID uuid.UUID
+		if err := sysRows.Scan(&sysID); err != nil {
+			return err
+		}
+		allowedSizeSystems[sysID] = true
+	}
+	sysRows.Close()
+
+	// Generic Product Attributes
 	pAttrMap := make(map[uuid.UUID]int)
-	for _, a := range productAttrs {
+	for _, a := range pAttrs {
 		def, ok := schemaMap[a.AttributeDefinitionID]
 		if !ok {
 			return fmt.Errorf("attribute %s is not valid for this category or inactive", a.AttributeDefinitionID)
@@ -1253,37 +1333,54 @@ func (s *Service) validateAttributes(ctx context.Context, categoryID uuid.UUID, 
 		if def.Scope != "PRODUCT" {
 			return fmt.Errorf("attribute %s has PRODUCT scope but definition is %s", a.AttributeDefinitionID, def.Scope)
 		}
+		if def.ValueSource == "MATERIAL_COMPOSITION" {
+			return fmt.Errorf("attribute %s is MATERIAL_COMPOSITION and should not be passed in generic attributes", a.AttributeDefinitionID)
+		}
 		
-		if def.ValueType == "ENUM" || def.ValueType == "MULTI_ENUM" {
-			if a.EnumValueID == nil {
-				return fmt.Errorf("attribute %s requires an enum value", a.AttributeDefinitionID)
-			}
-			var active bool
-			err := s.dbPool.Pool.QueryRow(ctx, "SELECT is_active FROM attribute_dictionary_values WHERE id = $1 AND dictionary_id = $2", *a.EnumValueID, def.DictionaryID).Scan(&active)
-			if err != nil || !active {
-				return fmt.Errorf("enum value %s is invalid or inactive for attribute %s", *a.EnumValueID, a.AttributeDefinitionID)
-			}
+		if err := s.validateGenericAttributeValue(ctx, def, a); err != nil {
+			return err
 		}
 		pAttrMap[a.AttributeDefinitionID]++
 	}
 
+	// Validate Product Level Schema Rules
 	for id, def := range schemaMap {
 		if def.Scope == "PRODUCT" {
-			count := pAttrMap[id]
-			if def.Required && count == 0 {
-				return fmt.Errorf("required product attribute missing: %s", id)
-			}
-			if def.MinValues != nil && count < *def.MinValues {
-				return fmt.Errorf("product attribute %s requires at least %d values", id, *def.MinValues)
-			}
-			if def.MaxValues != nil && count > *def.MaxValues {
-				return fmt.Errorf("product attribute %s requires at most %d values", id, *def.MaxValues)
+			if def.ValueSource == "MATERIAL_COMPOSITION" {
+				if def.Required && len(comps) == 0 {
+					return fmt.Errorf("required product attribute missing: %s (MATERIAL_COMPOSITION)", def.Code)
+				}
+				if len(comps) > 0 {
+					var total float64
+					for _, c := range comps {
+						total += c.Percentage
+						var active bool
+						err := s.dbPool.Pool.QueryRow(ctx, "SELECT is_active FROM materials WHERE id = $1", c.MaterialID).Scan(&active)
+						if err != nil || !active {
+							return fmt.Errorf("material %s is invalid or inactive", c.MaterialID)
+						}
+					}
+					if total < 99.9 || total > 100.1 {
+						return fmt.Errorf("material composition must total exactly 100%%, got %f", total)
+					}
+				}
+			} else {
+				count := pAttrMap[id]
+				if def.Required && count == 0 {
+					return fmt.Errorf("required product attribute missing: %s", id)
+				}
+				if def.MinValues != nil && count < *def.MinValues {
+					return fmt.Errorf("product attribute %s requires at least %d values", id, *def.MinValues)
+				}
+				if def.MaxValues != nil && count > *def.MaxValues {
+					return fmt.Errorf("product attribute %s requires at most %d values", id, *def.MaxValues)
+				}
 			}
 		}
 	}
 
-	// Validate Variant Attributes
-	for i, v := range variants {
+	// Validate Variants
+	for i, v := range vReqs {
 		vAttrMap := make(map[uuid.UUID]int)
 		for _, a := range v.Attributes {
 			def, ok := schemaMap[a.AttributeDefinitionID]
@@ -1293,44 +1390,209 @@ func (s *Service) validateAttributes(ctx context.Context, categoryID uuid.UUID, 
 			if def.Scope != "VARIANT" {
 				return fmt.Errorf("attribute %s has VARIANT scope but definition is %s", a.AttributeDefinitionID, def.Scope)
 			}
-			if def.ValueType == "ENUM" || def.ValueType == "MULTI_ENUM" {
-				if a.EnumValueID == nil {
-					return fmt.Errorf("attribute %s requires an enum value", a.AttributeDefinitionID)
-				}
-				var active bool
-				err := s.dbPool.Pool.QueryRow(ctx, "SELECT is_active FROM attribute_dictionary_values WHERE id = $1 AND dictionary_id = $2", *a.EnumValueID, def.DictionaryID).Scan(&active)
-				if err != nil || !active {
-					return fmt.Errorf("enum value %s is invalid or inactive for attribute %s", *a.EnumValueID, a.AttributeDefinitionID)
-				}
+			if def.ValueSource == "VARIANT_COLOR" || def.ValueSource == "VARIANT_SIZE" {
+				return fmt.Errorf("attribute %s is %s and should not be passed in generic attributes", a.AttributeDefinitionID, def.ValueSource)
+			}
+			
+			if err := s.validateGenericAttributeValue(ctx, def, a); err != nil {
+				return err
 			}
 			vAttrMap[a.AttributeDefinitionID]++
 		}
 		
 		for id, def := range schemaMap {
 			if def.Scope == "VARIANT" {
-				count := vAttrMap[id]
-				if def.Required && count == 0 {
-					return fmt.Errorf("required variant attribute missing: %s on variant %d", id, i)
-				}
-				if def.MinValues != nil && count < *def.MinValues {
-					return fmt.Errorf("variant attribute %s requires at least %d values", id, *def.MinValues)
-				}
-				if def.MaxValues != nil && count > *def.MaxValues {
-					return fmt.Errorf("variant attribute %s requires at most %d values", id, *def.MaxValues)
+				if def.ValueSource == "VARIANT_COLOR" {
+					if def.Required && v.ColorID == nil {
+						return fmt.Errorf("required variant attribute missing: %s (COLOR) on variant %d", def.Code, i)
+					}
+					if v.ColorID != nil {
+						var active bool
+						err := s.dbPool.Pool.QueryRow(ctx, "SELECT is_active FROM colors WHERE id = $1", *v.ColorID).Scan(&active)
+						if err != nil || !active {
+							return fmt.Errorf("color %s is invalid or inactive", *v.ColorID)
+						}
+					}
+				} else if def.ValueSource == "VARIANT_SIZE" {
+					if def.Required && v.SizeValueID == nil {
+						return fmt.Errorf("required variant attribute missing: %s (SIZE) on variant %d", def.Code, i)
+					}
+					if v.SizeValueID != nil {
+						var active bool
+						var sysID uuid.UUID
+						err := s.dbPool.Pool.QueryRow(ctx, "SELECT is_active, size_system_id FROM size_values WHERE id = $1", *v.SizeValueID).Scan(&active, &sysID)
+						if err != nil || !active {
+							return fmt.Errorf("size_value_id %s is invalid or inactive", *v.SizeValueID)
+						}
+						// Check allowed size system if configured
+						if len(allowedSizeSystems) > 0 && !allowedSizeSystems[sysID] {
+							return fmt.Errorf("size_value_id %s belongs to a size system not allowed for this category", *v.SizeValueID)
+						}
+					}
+				} else {
+					count := vAttrMap[id]
+					if def.Required && count == 0 {
+						return fmt.Errorf("required variant attribute missing: %s on variant %d", id, i)
+					}
+					if def.MinValues != nil && count < *def.MinValues {
+						return fmt.Errorf("variant attribute %s requires at least %d values", id, *def.MinValues)
+					}
+					if def.MaxValues != nil && count > *def.MaxValues {
+						return fmt.Errorf("variant attribute %s requires at most %d values", id, *def.MaxValues)
+					}
 				}
 			}
 		}
 	}
 	
+	// Validate Size Chart
+	var requiredChart bool
+	err = s.dbPool.Pool.QueryRow(ctx, "SELECT size_chart_required FROM categories WHERE id = $1", categoryID).Scan(&requiredChart)
+	if err != nil {
+		return err
+	}
+	if requiredChart && len(sizeChartRows) == 0 {
+		return errors.New("category requires a size chart")
+	}
+	if len(sizeChartRows) > 0 {
+		fieldRows, err := s.dbPool.Pool.Query(ctx, "SELECT code, is_required FROM category_size_chart_fields WHERE category_id = $1", categoryID)
+		if err != nil {
+			return err
+		}
+		defer fieldRows.Close()
+		
+		schemaFields := make(map[string]bool)
+		for fieldRows.Next() {
+			var code string
+			var req bool
+			if err := fieldRows.Scan(&code, &req); err != nil {
+				return err
+			}
+			schemaFields[code] = req
+		}
+		fieldRows.Close() // Explicitly close
+		
+		seenSizes := make(map[uuid.UUID]bool)
+		for _, r := range sizeChartRows {
+			if seenSizes[r.SizeValueID] {
+				return fmt.Errorf("duplicate size row for size_value_id: %s", r.SizeValueID)
+			}
+			seenSizes[r.SizeValueID] = true
+			
+			var active bool
+			var sysID uuid.UUID
+			err := s.dbPool.Pool.QueryRow(ctx, "SELECT is_active, size_system_id FROM size_values WHERE id = $1", r.SizeValueID).Scan(&active, &sysID)
+			if err != nil || !active {
+				return fmt.Errorf("size_value_id %s is inactive or does not exist", r.SizeValueID)
+			}
+			
+			// Check allowed size system if configured
+			if len(allowedSizeSystems) > 0 && !allowedSizeSystems[sysID] {
+				return fmt.Errorf("size_value_id %s in size chart belongs to a size system not allowed for this category", r.SizeValueID)
+			}
+			
+			for code, req := range schemaFields {
+				if req {
+					if _, ok := r.Measurements[code]; !ok {
+						return fmt.Errorf("missing required measurement %s in size chart row", code)
+					}
+				}
+			}
+			
+			for k, v := range r.Measurements {
+				if _, ok := schemaFields[k]; !ok {
+					return fmt.Errorf("measurement %s is not valid for this category", k)
+				}
+				valFloat, ok := v.(float64)
+				if !ok {
+					return fmt.Errorf("measurement %s must be a number", k)
+				}
+				if valFloat <= 0 {
+					return fmt.Errorf("measurement %s must be greater than 0", k)
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
+func (s *Service) validateGenericAttributeValue(ctx context.Context, def struct {
+	ID           uuid.UUID
+	Code         string
+	ValueType    string
+	ValueSource  string
+	Scope        string
+	Required     bool
+	DictionaryID *uuid.UUID
+	MinValues    *int
+	MaxValues    *int
+}, a interface{}) error {
+	var enumVal *uuid.UUID
+	var txtVal *string
+	var numVal *float64
+	var boolVal *bool
+
+	if pa, ok := a.(ProductAttributeValueRequest); ok {
+		enumVal = pa.EnumValueID
+		txtVal = pa.TextValue
+		numVal = pa.NumberValue
+		boolVal = pa.BoolValue
+	} else if va, ok := a.(VariantAttributeValueRequest); ok {
+		enumVal = va.EnumValueID
+		txtVal = va.TextValue
+		numVal = va.NumberValue
+		boolVal = va.BoolValue
+	}
+
+	if def.ValueSource == "TEXT" || def.ValueType == "TEXT" {
+		if txtVal == nil || strings.TrimSpace(*txtVal) == "" {
+			return fmt.Errorf("attribute %s requires text_value", def.ID)
+		}
+		if enumVal != nil || numVal != nil || boolVal != nil {
+			return fmt.Errorf("attribute %s is TEXT type and cannot contain other value fields", def.ID)
+		}
+	} else if def.ValueSource == "NUMBER" || def.ValueType == "NUMBER" {
+		if numVal == nil {
+			return fmt.Errorf("attribute %s requires number_value", def.ID)
+		}
+		if enumVal != nil || txtVal != nil || boolVal != nil {
+			return fmt.Errorf("attribute %s is NUMBER type and cannot contain other value fields", def.ID)
+		}
+	} else if def.ValueSource == "BOOLEAN" || def.ValueType == "BOOLEAN" {
+		if boolVal == nil {
+			return fmt.Errorf("attribute %s requires bool_value", def.ID)
+		}
+		if enumVal != nil || txtVal != nil || numVal != nil {
+			return fmt.Errorf("attribute %s is BOOLEAN type and cannot contain other value fields", def.ID)
+		}
+	} else if def.ValueSource == "DICTIONARY" || def.ValueType == "ENUM" || def.ValueType == "MULTI_ENUM" {
+		if enumVal == nil {
+			return fmt.Errorf("attribute %s requires enum_value_id", def.ID)
+		}
+		if txtVal != nil || numVal != nil || boolVal != nil {
+			return fmt.Errorf("attribute %s is DICTIONARY type and cannot contain other value fields", def.ID)
+		}
+		var active bool
+		err := s.dbPool.Pool.QueryRow(ctx, "SELECT is_active FROM attribute_dictionary_values WHERE id = $1 AND dictionary_id = $2", *enumVal, def.DictionaryID).Scan(&active)
+		if err != nil || !active {
+			return fmt.Errorf("enum value %s is invalid or inactive for attribute %s", *enumVal, def.ID)
+		}
+	}
+	return nil
+}
+
+
+
+
+
 // --- Reference Data Read Contracts ---
 
+
 func (s *Service) GetCategoryAttributeSchema(ctx context.Context, categoryID uuid.UUID) (interface{}, error) {
-	// Simple pass-through or structured query
-	rows, err := s.dbPool.Pool.Query(ctx, `
-		SELECT ad.code, ad.name_ru, ad.value_type, ad.scope, cad.required, cad.min_values, cad.max_values, cad.dictionary_id
+	// 1. Attributes
+	attrRows, err := s.dbPool.Pool.Query(ctx, `
+		SELECT ad.id, ad.code, ad.name_ru, ad.value_type, ad.value_source, ad.scope, cad.required, cad.min_values, cad.max_values, cad.dictionary_id
 		FROM category_attribute_definitions cad
 		JOIN attribute_definitions ad ON cad.attribute_definition_id = ad.id
 		WHERE cad.category_id = $1 AND ad.is_active = true
@@ -1338,23 +1600,85 @@ func (s *Service) GetCategoryAttributeSchema(ctx context.Context, categoryID uui
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var res []map[string]interface{}
-	for rows.Next() {
-		var code, nameRu, valType, scope string
+	defer attrRows.Close()
+	
+	var attributes []map[string]interface{}
+	for attrRows.Next() {
+		var id uuid.UUID
+		var code, nameRu, valType, valSource, scope string
 		var required bool
 		var minV, maxV *int
 		var dictID *uuid.UUID
-		if err := rows.Scan(&code, &nameRu, &valType, &scope, &required, &minV, &maxV, &dictID); err != nil {
+		if err := attrRows.Scan(&id, &code, &nameRu, &valType, &valSource, &scope, &required, &minV, &maxV, &dictID); err != nil {
 			return nil, err
 		}
-		res = append(res, map[string]interface{}{
-			"code": code, "nameRu": nameRu, "valueType": valType, "scope": scope,
+		attributes = append(attributes, map[string]interface{}{
+			"id": id, "code": code, "nameRu": nameRu, "valueType": valType, "valueSource": valSource, "scope": scope,
 			"required": required, "minValues": minV, "maxValues": maxV, "dictionaryId": dictID,
+			"filterable": true, "variantAxis": scope == "VARIANT",
 		})
 	}
-	return res, nil
+	attrRows.Close()
+
+	// 2. Allowed Size Systems
+	sysRows, err := s.dbPool.Pool.Query(ctx, `
+		SELECT css.size_system_id, ss.code, ss.name, css.is_default
+		FROM category_size_systems css
+		JOIN size_systems ss ON css.size_system_id = ss.id
+		WHERE css.category_id = $1 AND ss.is_active = true
+		ORDER BY css.sort_order
+	`, categoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer sysRows.Close()
+	
+	var allowedSizeSystems []map[string]interface{}
+	for sysRows.Next() {
+		var id uuid.UUID
+		var code, name string
+		var isDef bool
+		if err := sysRows.Scan(&id, &code, &name, &isDef); err != nil {
+			return nil, err
+		}
+		allowedSizeSystems = append(allowedSizeSystems, map[string]interface{}{
+			"id": id, "code": code, "name": name, "isDefault": isDef,
+		})
+	}
+	sysRows.Close()
+
+	// 3. Size Chart Requirements
+	var requiredChart bool
+	err = s.dbPool.Pool.QueryRow(ctx, "SELECT size_chart_required FROM categories WHERE id = $1", categoryID).Scan(&requiredChart)
+	if err != nil {
+		return nil, err
+	}
+
+	chartFieldRows, err := s.dbPool.Pool.Query(ctx, "SELECT code, is_required FROM category_size_chart_fields WHERE category_id = $1", categoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer chartFieldRows.Close()
+	var sizeChartFields []map[string]interface{}
+	for chartFieldRows.Next() {
+		var code string
+		var req bool
+		if err := chartFieldRows.Scan(&code, &req); err != nil {
+			return nil, err
+		}
+		sizeChartFields = append(sizeChartFields, map[string]interface{}{
+			"code": code, "isRequired": req,
+		})
+	}
+
+	return map[string]interface{}{
+		"attributes": attributes,
+		"allowedSizeSystems": allowedSizeSystems,
+		"sizeChartRequired": requiredChart,
+		"sizeChartFields": sizeChartFields,
+	}, nil
 }
+
 
 func (s *Service) ListColors(ctx context.Context) ([]Color, error) {
 	rows, err := s.dbPool.Pool.Query(ctx, "SELECT id, code, name_ru, hex, sort_order FROM colors WHERE is_active = true ORDER BY sort_order")
@@ -1422,4 +1746,8 @@ func (s *Service) ListSizeValues(ctx context.Context, systemID uuid.UUID) ([]Siz
 		res = append(res, sv)
 	}
 	return res, nil
+}
+
+func (s *Service) GetDictionaryValues(ctx context.Context, dictionaryID uuid.UUID) ([]AttributeDictionaryValue, error) {
+	return s.repo.GetDictionaryValues(ctx, dictionaryID)
 }

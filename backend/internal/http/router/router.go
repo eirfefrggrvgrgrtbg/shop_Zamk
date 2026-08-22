@@ -304,6 +304,19 @@ func New(
 		r.Post("/{id}/{action}", paymentsHandler.ProcessDevMockAction)
 	})
 
+
+	r.Route("/api/seller/reference", func(r chi.Router) {
+		r.Use(appMiddleware.AuthMiddleware(tokenService))
+		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
+
+		r.Get("/categories/{id}/schema", productsHandler.GetCategorySchema)
+		r.Get("/colors", productsHandler.ListColors)
+		r.Get("/materials", productsHandler.ListMaterials)
+		r.Get("/size-systems", productsHandler.ListSizeSystems)
+		r.Get("/size-systems/{id}/values", productsHandler.ListSizeValues)
+		r.Get("/dictionaries/{id}/values", productsHandler.ListDictionaryValues)
+	})
+
 	r.Route("/api/seller/products", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
