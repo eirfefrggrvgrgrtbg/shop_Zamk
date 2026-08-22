@@ -48,40 +48,49 @@ export function SellerPayouts() {
     return <div className="min-h-screen pt-24 pb-24 flex justify-center text-red-500">{error}</div>;
   }
 
+  const inTransit = payouts
+    .filter((p: any) => p.status === 'scheduled' || p.status === 'held' || p.status === 'processing')
+    .reduce((sum, p) => sum + p.amount, 0);
+
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-bold mb-2">Финансы и выплаты</h1>
-        <p className="text-gray-600 mb-4">Здесь вы можете управлять балансом и просматривать операции.</p>
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-          <p className="font-medium">Выплаты формируются автоматически один раз в неделю. Суммы замораживаются на 14 дней с момента доставки покупателю.</p>
+        <p className="text-gray-600 mb-6">Детализация баланса и история автоматических выплат.</p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <h3 className="font-semibold text-gray-900 mb-2">Как работают выплаты</h3>
+            <p className="text-sm text-gray-600">
+              Выплаты формируются автоматически на регулярной основе. Запрашивать вывод вручную не требуется.
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <h3 className="font-semibold text-gray-900 mb-2">Заморозка и возвраты</h3>
+            <p className="text-sm text-gray-600">
+              Доход от продажи замораживается на 14 дней с момента доставки для покрытия возможных возвратов. Если товар возвращают до разморозки, сумма списывается из замороженного баланса.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Balance Cards (Global Money Strip) */}
+      {/* Balance Cards */}
       {balance && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Продажи (Gross)</p>
-            <p className="text-2xl font-bold text-gray-900">{currencyFormatter.format(balance.grossSales)}</p>
-          </div>
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Удержания (ZAMK)</p>
-            <p className="text-2xl font-bold text-red-600">-{currencyFormatter.format(balance.commission)}</p>
-          </div>
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-orange-200 flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-orange-400"></div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Заморожено</p>
-            <p className="text-2xl font-bold text-gray-900">{currencyFormatter.format(balance.frozen)}</p>
-          </div>
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-green-200 flex flex-col justify-between relative overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-green-200 flex flex-col justify-between relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Доступно к выплате</p>
-            <p className="text-2xl font-bold text-green-700">{currencyFormatter.format(balance.available)}</p>
+            <p className="text-3xl font-bold text-green-700">{currencyFormatter.format(balance.available)}</p>
           </div>
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Уже выплачено</p>
-            <p className="text-2xl font-bold text-gray-900">{currencyFormatter.format(balance.paid)}</p>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-gray-400"></div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Заморожено (до 14 дн.)</p>
+            <p className="text-3xl font-bold text-gray-900">{currencyFormatter.format(balance.frozen)}</p>
+          </div>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-200 flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-blue-400"></div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">В пути (ожидает выплаты)</p>
+            <p className="text-3xl font-bold text-blue-700">{currencyFormatter.format(inTransit)}</p>
           </div>
         </div>
       )}
@@ -110,7 +119,11 @@ export function SellerPayouts() {
                     <td className="px-4 py-3 whitespace-nowrap text-gray-900">{l.createdAt}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className="font-medium text-gray-700">
-                        {l.type === 'return_deduction' ? 'Возврат покупателю' : l.type}
+                        {l.type === 'seller_earning' ? 'Чистый доход' : 
+                         l.type === 'sale_gross' ? 'Сумма продажи' :
+                         l.type === 'zamk_commission' ? 'Удержание комиссии' : 
+                         l.type === 'adjustment' ? 'Корректировка' : 
+                         l.type === 'payout' ? 'Вывод средств' : l.type}
                       </span>
                       {l.orderId && <div className="text-xs text-gray-400 mt-0.5">Заказ</div>}
                     </td>
@@ -153,9 +166,14 @@ export function SellerPayouts() {
                       <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
                         ${p.status === 'paid' ? 'bg-green-100 text-green-800' : 
                           p.status === 'scheduled' ? 'bg-blue-100 text-blue-800' : 
+                          p.status === 'processing' ? 'bg-blue-100 text-blue-800' :
                           p.status === 'held' ? 'bg-orange-100 text-orange-800' :
                           'bg-gray-100 text-gray-800'}`}>
-                        {p.status}
+                        {p.status === 'paid' ? 'Выплачено' :
+                         p.status === 'scheduled' ? 'В очереди' :
+                         p.status === 'processing' ? 'В обработке' :
+                         p.status === 'held' ? 'Приостановлено' :
+                         p.status === 'failed' ? 'Ошибка' : p.status}
                       </span>
                     </td>
                   </tr>
