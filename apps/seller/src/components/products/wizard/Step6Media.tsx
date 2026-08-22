@@ -7,13 +7,15 @@ export function Step6Media({
   updateState, 
   schema, 
   onNext, 
-  onPrev 
+  onPrev,
+  onError
 }: { 
   state: WizardState; 
   updateState: (u: Partial<WizardState>) => void; 
   schema: SellerCategorySchema | null;
   onNext: () => void; 
-  onPrev: () => void; 
+  onPrev: () => void;
+  onError?: (msg: string) => void; 
 }) {
   const [colors, setColors] = useState<SellerColor[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -29,7 +31,7 @@ export function Step6Media({
     if (!file) return;
 
     if (!state.id) {
-      alert('Сначала сохраните черновик, чтобы загрузить фото.');
+      onError?.('Сначала сохраните черновик, чтобы загрузить фото.');
       return;
     }
 
@@ -46,7 +48,7 @@ export function Step6Media({
         updateState({ commonImages: [...state.commonImages, { url: res.imageUrl, sortOrder: state.commonImages.length }] });
       }
     } catch (err: any) {
-      alert('Ошибка загрузки: ' + err.message);
+      onError?.('Ошибка загрузки: ' + err.message);
     } finally {
       setUploading(false);
       e.target.value = ''; // reset input

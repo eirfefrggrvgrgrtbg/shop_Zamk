@@ -7,12 +7,14 @@ export function Step7Pricing({
   state, 
   updateState, 
   onNext, 
-  onPrev 
+  onPrev,
+  onError
 }: { 
   state: WizardState; 
   updateState: (u: Partial<WizardState>) => void; 
   onNext: () => void; 
-  onPrev: () => void; 
+  onPrev: () => void;
+  onError?: (msg: string) => void; 
 }) {
   const [colors, setColors] = useState<SellerColor[]>([]);
   const [sizeValues, setSizeValues] = useState<SellerSizeValue[]>([]);
@@ -52,7 +54,7 @@ export function Step7Pricing({
       });
       updateState({ variants: nw });
     } catch (err: any) {
-      alert('Ошибка генерации артикулов: ' + err.message);
+      onError?.('Ошибка генерации артикулов: ' + err.message);
     } finally {
       setGeneratingSkus(false);
     }

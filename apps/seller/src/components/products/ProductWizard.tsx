@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useBlocker } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
-import { getSellerCategories, getSellerCategorySchema, createSellerProduct, updateSellerProduct, submitSellerProductModeration, type SellerCategory, type SellerCategorySchema } from '@zamk/api-client/src/seller';
+import { getSellerCategories, getSellerCategorySchema, createSellerProduct, updateSellerProduct, submitSellerProductModeration, updateSellerProductPrices, type SellerCategory, type SellerCategorySchema } from '@zamk/api-client/src/seller';
 
 import { initialWizardState, type WizardState } from './wizard/WizardState';
 import { Step1Basics } from './wizard/Step1Basics';
@@ -34,19 +34,62 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
 
 
 
-  // Add dirtiness check
-  const [initialStateStr] = useState(() => JSON.stringify(initialData || {}));
-  useEffect(() => {
-    const isDirty = JSON.stringify(state) !== initialStateStr;
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirty) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [state, initialStateStr]);
+
+
+  
+  const normalizeState = (s: WizardState) => {
+    return JSON.stringify({
+      title: s.title,
+      description: s.description,
+      categoryId: s.categoryId,
+      materialComposition: s.materialComposition,
+      productAttributes: s.productAttributes,
+      selectedColorIds: [...(s.selectedColorIds || [])].sort(),
+      shadeNamesByColor: s.shadeNamesByColor,
+      selectedSizeSystemId: s.selectedSizeSystemId,
+      selectedSizeValueIds: [...(s.selectedSizeValueIds || [])].sort(),
+      sizeChartRows: s.sizeChartRows,
+      commonImages: (s.commonImages || []).map(i => ({url: i.url, sortOrder: i.sortOrder})),
+      colorImages: Object.fromEntries(Object.entries(s.colorImages || {}).map(([k,v]) => [k, v.map(i => ({url: i.url, sortOrder: i.sortOrder}))])),
+      variants: (s.variants || []).map(v => ({
+        id: v.id,
+        colorId: v.colorId,
+        sizeValueId: v.sizeValueId,
+        sellerSku: v.sellerSku,
+        barcode: v.barcode,
+        priceCents: v.priceCents,
+        active: v.active,
+        attributes: v.attributes
+      }))
+    });
+  };
+
+  const [lastSavedStateStr, setLastSavedStateStr] = useState<string>('');
+
+  const contentDirty = useMemo(() => {
+    if (!lastSavedStateStr) return false;
+    const current = JSON.parse(normalizeState(state));
+    const saved = JSON.parse(lastSavedStateStr);
+    current.variants.forEach((v: any) => delete v.priceCents);
+    saved.variants.forEach((v: any) => delete v.priceCents);
+    return JSON.stringify(current) !== JSON.stringify(saved);
+  }, [state, lastSavedStateStr]);
+
+  const priceDirty = useMemo(() => {
+    if (!lastSavedStateStr) return false;
+    const current = JSON.parse(normalizeState(state));
+    const saved = JSON.parse(lastSavedStateStr);
+    const currPrices = current.variants.filter((v:any) => v.active).map((v:any) => `${v.id}-${v.priceCents}`).sort();
+    const savedPrices = saved.variants.filter((v:any) => v.active).map((v:any) => `${v.id}-${v.priceCents}`).sort();
+    return JSON.stringify(currPrices) !== JSON.stringify(savedPrices);
+  }, [state, lastSavedStateStr]);
+
+  const isDirty = contentDirty || priceDirty;
+
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      isDirty && currentLocation.pathname !== nextLocation.pathname
+  );
 
   const [categories, setCategories] = useState<SellerCategory[]>([]);
   const [schema, setSchema] = useState<SellerCategorySchema | null>(null);
@@ -128,7 +171,8 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         });
       }
 
-      setState({
+
+      const newState = {
         title: p.title || '',
         description: p.description || '',
         id: p.id,
@@ -143,9 +187,19 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         sizeChartRows: sChartRows,
         commonImages: commonImgs,
         colorImages: colorImgs
-      });
+      };
+      setState(newState);
+      setLastSavedStateStr(normalizeState(newState));
+
     }
   }, [isEdit, initialData]);
+
+
+  useEffect(() => {
+    if (!isEdit) {
+      setLastSavedStateStr(normalizeState(state));
+    }
+  }, []);
 
   useEffect(() => {
     getSellerCategories().then(setCategories).catch(console.error);
@@ -258,14 +312,18 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
       setSavingDraft(true);
       const payload = buildPayload();
       
+
       if (isEdit && initialData?.id) {
         await updateSellerProduct(initialData.id, payload);
         showToast('Черновик обновлен', 'success');
+        setLastSavedStateStr(normalizeState(state));
       } else {
         const p = await createSellerProduct(payload);
         showToast('Черновик сохранен', 'success');
+        setLastSavedStateStr(normalizeState(state));
         navigate(`/products/${p.id}/edit`, { replace: true });
       }
+
     } catch (err: any) {
       showToast('Ошибка сохранения: ' + err.message, 'error');
     } finally {
@@ -274,12 +332,32 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
   };
 
   
-  const handleInitialSubmit = () => {
+
+  const handleInitialSubmit = async () => {
     if (!isEdit || !initialData?.id) {
       showToast('Сначала сохраните черновик перед модерацией.', 'error');
       return;
     }
     if (initialData?.status === 'PUBLISHED') {
+      if (priceDirty && !contentDirty) {
+        // Price only flow!
+        try {
+
+          const saved = JSON.parse(lastSavedStateStr);
+          const changedVariants = state.variants.filter(v => v.active).filter(v => {
+            const sv = saved.variants.find((svv:any) => svv.id === v.id);
+            return !sv || sv.priceCents !== v.priceCents;
+          });
+          const variantsPayload = changedVariants.map(v => ({ id: v.id, priceCents: v.priceCents || 0 }));
+          await updateSellerProductPrices(initialData.id, { variants: variantsPayload });
+
+          showToast('Цены успешно обновлены (модерация не требуется)', 'success');
+          setLastSavedStateStr(normalizeState(state));
+        } catch (err: any) {
+          showToast('Ошибка обновления цен: ' + err.message, 'error');
+        }
+        return;
+      }
       setShowPublishedModal(true);
     } else {
       executeSubmit('HIDE');
@@ -287,16 +365,40 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
   };
 
 
+
+
   const executeSubmit = async (strategy: 'CONTINUE_SELLING' | 'HIDE') => {
     try {
       setSubmitting(true);
+      const payload = buildPayload();
+
       if (initialData?.status === 'PUBLISHED') {
+        if (priceDirty) {
+          const saved = JSON.parse(lastSavedStateStr);
+          const changedVariants = state.variants.filter(v => v.active).filter(v => {
+            const sv = saved.variants.find((svv:any) => svv.id === v.id);
+            return !sv || sv.priceCents !== v.priceCents;
+          });
+          const variantsPayload = changedVariants.map(v => ({ id: v.id, priceCents: v.priceCents || 0 }));
+          await updateSellerProductPrices(initialData.id, { variants: variantsPayload });
+          
+          state.variants.forEach(v => {
+            const sv = saved.variants.find((svv:any) => svv.id === v.id);
+            if (sv) sv.priceCents = v.priceCents;
+          });
+          setLastSavedStateStr(JSON.stringify(saved));
+        }
+
         const isContinue = strategy === 'CONTINUE_SELLING';
-        await updateSellerProduct(initialData.id, { continueSelling: isContinue });
+        await updateSellerProduct(initialData.id, { ...payload, continueSelling: isContinue });
+      } else {
+        await updateSellerProduct(initialData!.id, payload);
       }
-      await submitSellerProductModeration(initialData.id, undefined);
+      
+      await submitSellerProductModeration(initialData!.id, undefined);
       setShowPublishedModal(false);
       showToast('Товар отправлен на модерацию!', 'success');
+      setLastSavedStateStr(normalizeState(state));
       navigate('/products');
     } catch (err: any) {
       showToast('Ошибка модерации: ' + err.message, 'error');
@@ -371,8 +473,8 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
           {step === 3 && <Step3Attributes state={state} updateState={updateState} schema={schema} onNext={() => setStep(4)} onPrev={() => setStep(2)} />}
           {step === 4 && <Step4Variants state={state} updateState={updateState} schema={schema} onNext={() => setStep(5)} onPrev={() => setStep(3)} />}
           {step === 5 && <Step5SizeChart state={state} updateState={updateState} schema={schema} onNext={() => setStep(6)} onPrev={() => setStep(4)} />}
-          {step === 6 && <Step6Media state={state} updateState={updateState} schema={schema} onNext={() => setStep(7)} onPrev={() => setStep(5)} />}
-          {step === 7 && <Step7Pricing state={state} updateState={updateState} onNext={() => setStep(8)} onPrev={() => setStep(6)} />}
+          {step === 6 && <Step6Media state={state} updateState={updateState} schema={schema} onNext={() => setStep(7)} onPrev={() => setStep(5)} onError={(msg) => showToast(msg, 'error')} />}
+          {step === 7 && <Step7Pricing state={state} updateState={updateState} onNext={() => setStep(8)} onPrev={() => setStep(6)} onError={(msg) => showToast(msg, 'error')} />}
           {step === 8 && <Step8Review state={state} onPrev={() => setStep(7)} onSubmit={handleInitialSubmit} />}
         </div>
       </div>
@@ -403,6 +505,21 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
       {toast && (
         <div className={`fixed bottom-4 right-4 p-4 rounded shadow-lg text-white ${toast.type === 'error' ? 'bg-red-600' : 'bg-green-600'} z-50 transition-all`}>
           {toast.message}
+        </div>
+      )}
+
+      {blocker.state === 'blocked' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full">
+            <h3 className="text-lg font-medium">Есть несохранённые изменения</h3>
+            <p className="mt-2 text-sm text-gray-500">
+              Если вы уйдёте со страницы, изменения будут потеряны.
+            </p>
+            <div className="mt-4 flex justify-end gap-3">
+              <button onClick={() => blocker.reset()} className="px-3 py-1.5 border rounded">Остаться</button>
+              <button onClick={() => blocker.proceed()} className="px-3 py-1.5 bg-red-600 text-white rounded">Выйти без сохранения</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
