@@ -183,3 +183,110 @@ export const markSellerNotificationRead = async (id: string): Promise<void> => {
 export const markAllSellerNotificationsRead = async (): Promise<void> => {
   return request<void>('POST', '/seller/notifications/read-all');
 };
+
+
+export interface SellerCategory {
+  id: string;
+  name: string;
+  slug: string;
+  parentId?: string;
+}
+
+export interface SellerColor {
+  id: string;
+  code: string;
+  nameRu: string;
+  hexValue: string;
+}
+
+export interface SellerMaterial {
+  id: string;
+  code: string;
+  nameRu: string;
+}
+
+export interface SellerSizeSystem {
+  id: string;
+  code: string;
+  nameRu: string;
+}
+
+export interface SellerSizeValue {
+  id: string;
+  sizeSystemId: string;
+  value: string;
+  sortOrder: number;
+}
+
+export interface SellerDictionaryValue {
+  id: string;
+  dictionaryId: string;
+  code: string;
+  nameRu: string;
+}
+
+export interface SellerCategorySchema {
+  id: string;
+  name: string;
+  slug: string;
+  sizeChartRequired: boolean;
+  attributes: {
+    id: string;
+    code: string;
+    nameRu: string;
+    valueType: string;
+    valueSource: string;
+    scope: string;
+    required: boolean;
+    filterable: boolean;
+    variantAxis: boolean;
+    sortOrder: number;
+    dictionaryId?: string;
+  }[];
+  allowedSizeSystems: SellerSizeSystem[];
+  sizeChartFields: {
+    code: string;
+    name: string;
+    unit: string;
+    isRequired: boolean;
+    sortOrder: number;
+  }[];
+}
+
+export const getSellerCategories = async (): Promise<SellerCategory[]> => {
+  const res = await request<{ categories: SellerCategory[] }>('GET', '/seller/reference/categories');
+  return res.categories || [];
+};
+
+export const getSellerCategorySchema = async (id: string): Promise<SellerCategorySchema> => {
+  return request<SellerCategorySchema>('GET', `/seller/reference/categories/${id}/schema`);
+};
+
+export const getSellerColors = async (): Promise<SellerColor[]> => {
+  const res = await request<{ colors: SellerColor[] }>('GET', '/seller/reference/colors');
+  return res.colors || [];
+};
+
+export const getSellerMaterials = async (): Promise<SellerMaterial[]> => {
+  const res = await request<{ materials: SellerMaterial[] }>('GET', '/seller/reference/materials');
+  return res.materials || [];
+};
+
+export const getSellerSizeSystems = async (): Promise<SellerSizeSystem[]> => {
+  const res = await request<{ sizeSystems: SellerSizeSystem[] }>('GET', '/seller/reference/size-systems');
+  return res.sizeSystems || [];
+};
+
+export const getSellerSizeValues = async (systemId: string): Promise<SellerSizeValue[]> => {
+  const res = await request<{ sizeValues: SellerSizeValue[] }>('GET', `/seller/reference/size-systems/${systemId}/values`);
+  return res.sizeValues || [];
+};
+
+export const getSellerDictionaryValues = async (dictId: string): Promise<SellerDictionaryValue[]> => {
+  const res = await request<{ dictionaryValues: SellerDictionaryValue[] }>('GET', `/seller/reference/dictionaries/${dictId}/values`);
+  return res.dictionaryValues || [];
+};
+
+export const updateSellerProductPrices = async (id: string, payload: any): Promise<void> => {
+  return request<void>('PATCH', `/seller/products/${id}/prices`, { body: payload });
+};
