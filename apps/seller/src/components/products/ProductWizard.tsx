@@ -335,7 +335,9 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
     }));
 
     return {
-      title: state.title,
+      title: state.title || 'Новый товар',
+      currency: 'RUB',
+      priceCents: 0,
       description: state.description,
       categoryId: state.categoryId || undefined,
       materialComposition: state.materialComposition.length > 0 ? state.materialComposition : undefined,

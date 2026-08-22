@@ -159,3 +159,42 @@ func TestCompositionValidation(t *testing.T) {
 		require.ErrorContains(t, err, "inactive material")
 	})
 }
+
+func TestDraftSaveSemantics(t *testing.T) {
+	dbClient, svc, sellerID := setupBlockATestDB(t)
+	pool := dbClient.Pool
+	ctx := context.Background()
+
+	t.Run("incomplete draft can save before Photo upload", func(t *testing.T) {
+		req := products.CreateProductRequest{
+			Title:    "Minimal Draft " + uuid.New().String(),
+			Currency: "RUB", // As now required by frontend
+		}
+		p, err := svc.CreateProductForSeller(ctx, sellerID, req)
+		require.NoError(t, err)
+		require.NotEmpty(t, p.ID)
+
+		// Assert no inventory is created from draft save
+		var invCount int
+		err = pool.QueryRow(ctx, "SELECT count(*) FROM inventory_items WHERE product_id = $1", p.ID).Scan(&invCount)
+		require.NoError(t, err)
+		require.Equal(t, 0, invCount, "No inventory should be created for draft save")
+	})
+
+	t.Run("draft with composition <100 can save", func(t *testing.T) {
+		var materialID uuid.UUID
+		err := pool.QueryRow(ctx, "SELECT id FROM materials WHERE is_active = true LIMIT 1").Scan(&materialID)
+		require.NoError(t, err)
+
+		req := products.CreateProductRequest{
+			Title:    "Draft Comp " + uuid.New().String(),
+			Currency: "RUB",
+			MaterialComposition: []products.ProductMaterialCompositionRequest{
+				{MaterialID: materialID, Percentage: 50},
+			},
+		}
+		p, err := svc.CreateProductForSeller(ctx, sellerID, req)
+		require.NoError(t, err)
+		require.NotEmpty(t, p.ID)
+	})
+}
