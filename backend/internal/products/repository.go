@@ -279,18 +279,6 @@ func (r *Repository) MergeProductVariants(ctx context.Context, productID uuid.UU
 				return fmt.Errorf("failed to insert variant: %w", err)
 			}
 
-			if v.InitialStock != nil && *v.InitialStock > 0 {
-				invQuery := `
-					INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at)
-					VALUES ($1, $2, $3, $4, $5, 0, $6, $7)
-				`
-				_, err = r.db.Exec(ctx, invQuery,
-					uuid.New(), v.ProductID, v.ID, sellerID, *v.InitialStock, v.CreatedAt, v.UpdatedAt,
-				)
-				if err != nil {
-					return fmt.Errorf("failed to insert inventory_item: %w", err)
-				}
-			}
 		}
 	}
 
@@ -1075,4 +1063,16 @@ func (r *Repository) ReorderProductImages(ctx context.Context, productID uuid.UU
 		}
 	}
 	return nil
+}
+
+func (r *Repository) GetPrimaryBrandForSeller(ctx context.Context, sellerID uuid.UUID) (*uuid.UUID, error) {
+	var brandID uuid.UUID
+	err := r.db.QueryRow(ctx, "SELECT brand_id FROM seller_brands WHERE seller_id = $1 AND is_primary = true AND status = 'active'", sellerID).Scan(&brandID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &brandID, nil
 }

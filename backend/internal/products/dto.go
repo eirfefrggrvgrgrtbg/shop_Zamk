@@ -22,6 +22,7 @@ type CreateProductRequest struct {
 	MainImageURL     *string                 `json:"mainImageUrl,omitempty"`
 	Variants         []ProductVariantRequest `json:"variants,omitempty"`
 	Images           []ProductImageRequest   `json:"images,omitempty"`
+	ContinueSelling  *bool                   `json:"continueSelling,omitempty"`
 }
 
 func (req *CreateProductRequest) ValidateSKUs() error {
@@ -58,6 +59,7 @@ type UpdateProductRequest struct {
 	MainImageURL     *string                 `json:"mainImageUrl,omitempty"`
 	Variants         []ProductVariantRequest `json:"variants,omitempty"`
 	Images           []ProductImageRequest   `json:"images,omitempty"`
+	ContinueSelling  *bool                   `json:"continueSelling,omitempty"`
 }
 
 func (req *UpdateProductRequest) ValidateSKUs() error {
@@ -85,6 +87,10 @@ type ProductVariantRequest struct {
 	Size         *string `json:"size,omitempty"`
 	Color        *string `json:"color,omitempty"`
 	OptionValues map[string]interface{} `json:"optionValues,omitempty"`
+	SellerSKU          *string `json:"sellerSku,omitempty"`
+	ColorID            *uuid.UUID `json:"colorId,omitempty"`
+	SizeValueID        *uuid.UUID `json:"sizeValueId,omitempty"`
+	ShadeName          *string `json:"shadeName,omitempty"`
 	Barcode      *string `json:"barcode,omitempty"`
 	PriceCents   *int64  `json:"priceCents,omitempty" validate:"omitempty,min=0"`
 	InitialStock *int    `json:"initialStock,omitempty" validate:"omitempty,min=0"`
@@ -140,6 +146,7 @@ type PublicProduct struct {
 
 	Variants []PublicProductVariant `json:"variants,omitempty"`
 	Images   []PublicProductImage   `json:"images,omitempty"`
+	ContinueSelling  *bool                   `json:"continueSelling,omitempty"`
 	Rating   *RatingSummary         `json:"rating,omitempty"`
 }
 
@@ -149,6 +156,10 @@ type PublicProductVariant struct {
 	Size         *string   `json:"size,omitempty"`
 	Color        *string   `json:"color,omitempty"`
 	OptionValues map[string]interface{} `json:"optionValues,omitempty"`
+	SellerSKU          *string `json:"sellerSku,omitempty"`
+	ColorID            *uuid.UUID `json:"colorId,omitempty"`
+	SizeValueID        *uuid.UUID `json:"sizeValueId,omitempty"`
+	ShadeName          *string `json:"shadeName,omitempty"`
 	PriceCents   *int64    `json:"priceCents,omitempty"`
 	IsActive     bool      `json:"isActive"`
 	InStock      *bool     `json:"inStock,omitempty"`

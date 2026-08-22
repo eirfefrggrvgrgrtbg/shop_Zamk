@@ -55,6 +55,7 @@ type Product struct {
 	PublishedAt         *time.Time `json:"publishedAt,omitempty"`
 	RejectedAt          *time.Time `json:"rejectedAt,omitempty"`
 	ModerationComment   *string    `json:"moderationComment,omitempty"`
+	LiveRevisionID    *uuid.UUID `json:"liveRevisionId,omitempty"`
 	InStock             *bool      `json:"inStock,omitempty"`
 
 	// Aggregated DTO fields for Admin & Visibility Rules Engine
@@ -92,6 +93,10 @@ type ProductVariant struct {
 	Size               *string   `json:"size,omitempty"`
 	Color              *string   `json:"color,omitempty"`
 	OptionValues       map[string]interface{} `json:"optionValues,omitempty"`
+	SellerSKU          *string   `json:"sellerSku,omitempty"`
+	ColorID            *uuid.UUID `json:"colorId,omitempty"`
+	SizeValueID        *uuid.UUID `json:"sizeValueId,omitempty"`
+	ShadeName          *string   `json:"shadeName,omitempty"`
 	Barcode            *string   `json:"barcode,omitempty"`
 	PriceCents         *int64    `json:"priceCents,omitempty"`
 	IsActive           bool      `json:"isActive"`
@@ -124,4 +129,51 @@ type ProductModerationLog struct {
 	ToStatus    string     `json:"toStatus"`
 	Comment     *string    `json:"comment,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
+}
+
+type Color struct {
+	ID        uuid.UUID `json:"id"`
+	Code      string    `json:"code"`
+	NameRU    string    `json:"nameRu"`
+	Hex       *string   `json:"hex,omitempty"`
+	SortOrder int       `json:"sortOrder"`
+	IsActive  bool      `json:"isActive"`
+}
+
+type Material struct {
+	ID        uuid.UUID `json:"id"`
+	Code      string    `json:"code"`
+	NameRU    string    `json:"nameRu"`
+	SortOrder int       `json:"sortOrder"`
+	IsActive  bool      `json:"isActive"`
+}
+
+type SizeSystem struct {
+	ID       uuid.UUID `json:"id"`
+	Code     string    `json:"code"`
+	Name     string    `json:"name"`
+	IsActive bool      `json:"isActive"`
+}
+
+type SizeValue struct {
+	ID           uuid.UUID `json:"id"`
+	SizeSystemID uuid.UUID `json:"sizeSystemId"`
+	Value        string    `json:"value"`
+	SortOrder    int       `json:"sortOrder"`
+	IsActive     bool      `json:"isActive"`
+}
+
+type ProductMaterialComposition struct {
+	ProductID  uuid.UUID `json:"productId"`
+	MaterialID uuid.UUID `json:"materialId"`
+	Percentage float64   `json:"percentage"`
+}
+
+type ProductRevision struct {
+	ID              uuid.UUID              `json:"id"`
+	ProductID       uuid.UUID              `json:"productId"`
+	Status          string                 `json:"status"`
+	ContentSnapshot map[string]interface{} `json:"contentSnapshot"`
+	CreatedAt       time.Time              `json:"createdAt"`
+	UpdatedAt       time.Time              `json:"updatedAt"`
 }

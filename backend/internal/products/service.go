@@ -97,12 +97,17 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 	}
 	slug = generateSlug(slug)
 
+	primaryBrandID, err := s.repo.GetPrimaryBrandForSeller(ctx, seller.ID)
+	if err != nil {
+		return Product{}, err
+	}
+
 	now := time.Now()
 	p := &Product{
 		ID:               uuid.New(),
 		SellerID:         seller.ID,
 		CategoryID:       req.CategoryID,
-		BrandID:          req.BrandID,
+		BrandID:          primaryBrandID,
 		Title:            req.Title,
 		Slug:             slug,
 		Description:      req.Description,
@@ -129,6 +134,10 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 			Size:         vr.Size,
 			Color:        vr.Color,
 			OptionValues: vr.OptionValues,
+			SellerSKU:    vr.SellerSKU,
+			ColorID:      vr.ColorID,
+			SizeValueID:  vr.SizeValueID,
+			ShadeName:    vr.ShadeName,
 			Barcode:      vr.Barcode,
 			PriceCents:   vr.PriceCents,
 			InitialStock: vr.InitialStock,
@@ -136,7 +145,11 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		}
-		if v.SKU != nil && strings.TrimSpace(*v.SKU) != "" {
+		if v.Barcode == nil || *v.Barcode == "" {
+				generated := "ZMK-" + uuid.New().String()[:12]
+				v.Barcode = &generated
+			}
+			if v.SKU != nil && strings.TrimSpace(*v.SKU) != "" {
 			trimmed := strings.ToLower(strings.TrimSpace(*v.SKU))
 			skusToCheck = append(skusToCheck, trimmed)
 		}
@@ -238,8 +251,9 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 	if req.CategoryID != nil {
 		p.CategoryID = req.CategoryID
 	}
-	if req.BrandID != nil {
-		p.BrandID = req.BrandID
+	primaryBrandID, err := s.repo.GetPrimaryBrandForSeller(ctx, seller.ID)
+	if err == nil {
+		p.BrandID = primaryBrandID
 	}
 	if req.Gender != nil {
 		p.Gender = req.Gender
@@ -283,12 +297,20 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				Size:       vr.Size,
 				Color:      vr.Color,
 				OptionValues: vr.OptionValues,
+			SellerSKU:    vr.SellerSKU,
+			ColorID:      vr.ColorID,
+			SizeValueID:  vr.SizeValueID,
+			ShadeName:    vr.ShadeName,
 				Barcode:    vr.Barcode,
 				PriceCents:   vr.PriceCents,
 				InitialStock: vr.InitialStock,
 				IsActive:     true,
 				CreatedAt:    now,
 				UpdatedAt:    now,
+			}
+			if v.Barcode == nil || *v.Barcode == "" {
+				generated := "ZMK-" + uuid.New().String()[:12]
+				v.Barcode = &generated
 			}
 			if v.SKU != nil && strings.TrimSpace(*v.SKU) != "" {
 				skusToCheck = append(skusToCheck, strings.ToLower(strings.TrimSpace(*v.SKU)))
@@ -297,25 +319,36 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		}
 	}
 
-	needsModerationReset := false
-	if p.Status == StatusPublished || p.Status == StatusApproved {
-		needsModerationReset = true
-	}
-
 	var modLog *ProductModerationLog
-	if needsModerationReset {
-		oldStatus := p.Status
-		p.Status = StatusPendingModeration
-		now := time.Now()
-		p.SubmittedAt = &now
+	var revision *ProductRevision
 
-		modLog = &ProductModerationLog{
-			ID:         uuid.New(),
-			ProductID:  p.ID,
-			FromStatus: &oldStatus,
-			ToStatus:   StatusPendingModeration,
-			Comment:    func(s string) *string { return &s }("Автоматический сброс модерации при редактировании"),
-			CreatedAt:  now,
+	if p.Status == StatusPublished || p.Status == StatusApproved {
+		if req.ContinueSelling != nil && *req.ContinueSelling {
+			now := time.Now()
+			revID := uuid.New()
+			revision = &ProductRevision{
+				ID: revID,
+				ProductID: p.ID,
+				Status: "pending",
+				ContentSnapshot: map[string]interface{}{"note": "pending revision content"},
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+			p.LiveRevisionID = &revID
+		} else {
+			oldStatus := p.Status
+			p.Status = StatusPendingModeration
+			now := time.Now()
+			p.SubmittedAt = &now
+
+			modLog = &ProductModerationLog{
+				ID:         uuid.New(),
+				ProductID:  p.ID,
+				FromStatus: &oldStatus,
+				ToStatus:   StatusPendingModeration,
+				Comment:    func(s string) *string { return &s }("Автоматический сброс модерации при редактировании"),
+				CreatedAt:  now,
+			}
 		}
 	}
 
@@ -344,7 +377,7 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			}
 		}
 
-		if needsModerationReset {
+		if modLog != nil {
 			if err := txRepo.UpdateProductStatus(ctx, p); err != nil {
 				return err
 			}
@@ -353,6 +386,14 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			}
 		}
 
+		if revision != nil {
+			revQuery := `INSERT INTO product_revisions (id, product_id, status, content_snapshot, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`
+			_, err := tx.Exec(ctx, revQuery, revision.ID, revision.ProductID, revision.Status, revision.ContentSnapshot, revision.CreatedAt, revision.UpdatedAt)
+			if err != nil {
+				return fmt.Errorf("failed to insert revision: %w", err)
+			}
+		}
+		
 		if err := txRepo.UpdateProduct(ctx, p); err != nil {
 			return err
 		}
