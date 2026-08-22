@@ -129,19 +129,18 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 md:py-4">
+        <header className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 md:py-3">
           <div className="flex items-center gap-3">
             <button onClick={() => setMobileOpen(true)} className="p-1 rounded-md text-gray-600 hover:bg-gray-100 md:hidden">
               <Menu className="h-5 w-5" />
             </button>
             <span className="text-base font-semibold text-gray-900 md:hidden">ZAMK Seller</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 ml-auto">
+            <GlobalMoneyStrip />
             <NotificationBell />
           </div>
         </header>
-
-        <GlobalMoneyStrip />
 
         <main className="flex-1 overflow-y-auto">
           {sellerStatus === 'pending' && (
