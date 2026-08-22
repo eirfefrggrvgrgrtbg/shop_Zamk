@@ -54,12 +54,12 @@ func TestCreateProduct_RejectsNonLeafCategory(t *testing.T) {
 	
 	// Create parent
 	parentID := uuid.New()
-	_, err := pool.Exec(ctx, "INSERT INTO categories (id, name, slug, sort_order) VALUES ($1, 'Parent123', 'parent123', 1)", parentID)
+	_, err := pool.Exec(ctx, "INSERT INTO categories (id, name, slug, sort_order) VALUES ($1, 'Parent123', $2, 1)", parentID, parentID.String())
 	require.NoError(t, err)
 	
 	// Create child
 	childID := uuid.New()
-	_, err = pool.Exec(ctx, "INSERT INTO categories (id, parent_id, name, slug, sort_order) VALUES ($1, $2, 'Child123', 'child123', 2)", childID, parentID)
+	_, err = pool.Exec(ctx, "INSERT INTO categories (id, parent_id, name, slug, sort_order) VALUES ($1, $2, 'Child123', $3, 2)", childID, parentID, childID.String())
 	require.NoError(t, err)
 	
 	// Try creating with parent

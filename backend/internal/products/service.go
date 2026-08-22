@@ -1501,13 +1501,24 @@ func (s *Service) validateCategorySchema(
 				}
 				if len(comps) > 0 {
 					var total float64
+					seen := make(map[uuid.UUID]bool)
 					for _, c := range comps {
+						if c.Percentage <= 0 || c.Percentage > 100 {
+							return fmt.Errorf("material percentage must be > 0 and <= 100, got %f", c.Percentage)
+						}
+						if seen[c.MaterialID] {
+							return fmt.Errorf("duplicate material entry in composition")
+						}
+						seen[c.MaterialID] = true
 						total += c.Percentage
 						var active bool
 						err := s.dbPool.Pool.QueryRow(ctx, "SELECT is_active FROM materials WHERE id = $1", c.MaterialID).Scan(&active)
 						if err != nil || !active {
 							return fmt.Errorf("material %s is invalid or inactive", c.MaterialID)
 						}
+					}
+					if total > 100.1 {
+						return fmt.Errorf("material composition must not exceed 100%%, got %f", total)
 					}
 					if !isDraft && (total < 99.9 || total > 100.1) {
 						return fmt.Errorf("material composition must total exactly 100%%, got %f", total)

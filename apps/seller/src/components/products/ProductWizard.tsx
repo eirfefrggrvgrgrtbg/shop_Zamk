@@ -346,7 +346,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
     };
   };
 
-  const handleSaveDraft = async () => {
+  const handleSaveDraft = async (skipNavigate = false): Promise<string | undefined> => {
     try {
       setSavingDraft(true);
       const payload = buildPayload();
@@ -356,15 +356,23 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         await updateSellerProduct(initialData.id, payload);
         showToast('Черновик обновлен', 'success');
         setLastSavedStateStr(normalizeState(state));
+        return initialData.id;
       } else {
         const p = await createSellerProduct(payload);
         showToast('Черновик сохранен', 'success');
         setLastSavedStateStr(normalizeState(state));
-        navigate(`/products/${p.id}/edit`, { replace: true });
+        if (!skipNavigate) {
+          navigate(`/products/${p.id}/edit`, { replace: true });
+        } else {
+          // If we skip navigate, we must update the state ID manually so the wizard knows it's persisted
+          updateState({ id: p.id });
+        }
+        return p.id;
       }
 
     } catch (err: any) {
       showToast('Ошибка сохранения: ' + err.message, 'error');
+      return undefined;
     } finally {
       setSavingDraft(false);
     }
@@ -464,7 +472,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         </div>
         <div className="flex items-center space-x-3">
           <button
-            onClick={handleSaveDraft}
+            onClick={() => handleSaveDraft(false)}
             disabled={savingDraft || !state.title}
             className="px-4 py-2 border rounded-md shadow-sm text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
           >
@@ -517,7 +525,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
           {step === 3 && <Step3Attributes state={state} updateState={updateState} schema={schema} schemaLoading={schemaLoading} schemaError={schemaError} onRetrySchema={loadSchema} onNext={() => setStep(4)} onPrev={() => setStep(2)} />}
           {step === 4 && <Step4Variants state={state} updateState={updateState} schema={schema} onNext={() => setStep(5)} onPrev={() => setStep(3)} />}
           {step === 5 && <Step5SizeChart state={state} updateState={updateState} schema={schema} onNext={() => setStep(6)} onPrev={() => setStep(4)} />}
-          {step === 6 && <Step6Media state={state} updateState={updateState} schema={schema} onNext={() => setStep(7)} onPrev={() => setStep(5)} onError={(msg) => showToast(msg, 'error')} />}
+          {step === 6 && <Step6Media state={state} updateState={updateState} schema={schema} onNext={() => setStep(7)} onPrev={() => setStep(5)} onError={(msg) => showToast(msg, 'error')} onSaveDraft={() => handleSaveDraft(true)} />}
           {step === 7 && <Step7Pricing state={state} updateState={updateState} onNext={() => setStep(8)} onPrev={() => setStep(6)} onError={(msg) => showToast(msg, 'error')} />}
           {step === 8 && <Step8Review state={state} onPrev={() => setStep(7)} onSubmit={handleInitialSubmit} />}
         </div>

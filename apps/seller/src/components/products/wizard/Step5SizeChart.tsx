@@ -61,19 +61,33 @@ export function Step5SizeChart({
             </tr>
           </thead>
           <tbody>
-            {state.selectedSizeValueIds.map(sId => {
+            {[...state.selectedSizeValueIds].sort((a,b) => {
+              const sa = sizeValues.find(x => x.id === a);
+              const sb = sizeValues.find(x => x.id === b);
+              return (sa?.sortOrder || 0) - (sb?.sortOrder || 0);
+            }).map(sId => {
               const s = sizeValues.find(x => x.id === sId);
               if (!s) return null;
               return (
-                <tr key={sId} className="border-b last:border-0">
-                  <td className="p-2 font-medium">{s.value}</td>
+                <tr key={sId} className="border-b last:border-0 hover:bg-gray-50/50">
+                  <td className="p-2 font-medium bg-gray-50/50">{s.value}</td>
                   {fields.map(f => (
                     <td key={f.code} className="p-2">
                       <input 
-                        type="number" 
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         value={state.sizeChartRows[sId]?.[f.code] || ''}
-                        onChange={e => updateCell(sId, f.code, Number(e.target.value))}
-                        className="border rounded p-1 w-24"
+                        onChange={e => {
+                          const val = e.target.value.replace(/[^0-9]/g, '');
+                          if (val) updateCell(sId, f.code, parseInt(val, 10));
+                          else {
+                            const nw = { ...state.sizeChartRows };
+                            if (nw[sId]) delete nw[sId][f.code];
+                            updateState({ sizeChartRows: nw });
+                          }
+                        }}
+                        className="border border-gray-200 rounded p-1.5 w-24 text-center focus:ring-1 focus:ring-black outline-none"
                       />
                     </td>
                   ))}

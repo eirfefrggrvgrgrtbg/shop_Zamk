@@ -8,7 +8,8 @@ export function Step6Media({
   schema, 
   onNext, 
   onPrev,
-  onError
+  onError,
+  onSaveDraft
 }: { 
   state: WizardState; 
   updateState: (u: Partial<WizardState>) => void; 
@@ -16,6 +17,7 @@ export function Step6Media({
   onNext: () => void; 
   onPrev: () => void;
   onError?: (msg: string) => void; 
+  onSaveDraft?: () => Promise<string | undefined>;
 }) {
   const [colors, setColors] = useState<SellerColor[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -30,14 +32,23 @@ export function Step6Media({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!state.id) {
+    let productId = state.id;
+    if (!productId && onSaveDraft) {
+      setUploading(true);
+      productId = await onSaveDraft();
+      if (!productId) {
+        setUploading(false);
+        onError?.('Не удалось сохранить черновик. Попробуйте еще раз.');
+        return;
+      }
+    } else if (!productId) {
       onError?.('Сначала сохраните черновик, чтобы загрузить фото.');
       return;
     }
 
     try {
       setUploading(true);
-      const res = await uploadSellerProductImage(state.id, file);
+      const res = await uploadSellerProductImage(productId, file);
       
       if (colorId) {
         const nw = { ...state.colorImages };
@@ -69,12 +80,6 @@ export function Step6Media({
     <div className="space-y-6">
       <h2 className="text-xl font-medium">Фото</h2>
       
-      {!state.id && (
-        <div className="bg-yellow-50 p-4 border border-yellow-200 rounded text-yellow-800 text-sm">
-          Пожалуйста, сохраните черновик товара перед загрузкой фотографий.
-        </div>
-      )}
-
       <div>
         <h3 className="font-medium mb-2">Общие фото</h3>
         <div className="flex gap-2 flex-wrap">
@@ -84,9 +89,13 @@ export function Step6Media({
               <button onClick={() => removeCommon(i)} className="absolute top-1 right-1 bg-white rounded-full p-1 shadow text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
             </div>
           ))}
-          <label className={`w-24 h-24 border border-dashed rounded flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 cursor-pointer ${uploading || !state.id ? 'opacity-50 cursor-not-allowed' : ''}`}>
-            <span className="text-2xl">+</span>
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUpload(e)} disabled={uploading || !state.id} />
+          <label className={`w-24 h-24 border border-dashed rounded flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+            {uploading ? (
+              <span className="text-sm">Загрузка...</span>
+            ) : (
+              <span className="text-2xl">+</span>
+            )}
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUpload(e)} disabled={uploading} />
           </label>
         </div>
       </div>
@@ -110,9 +119,13 @@ export function Step6Media({
                       <button onClick={() => removeColorImg(cId, i)} className="absolute top-1 right-1 bg-white rounded-full p-1 shadow text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
                     </div>
                   ))}
-                  <label className={`w-24 h-24 border border-dashed rounded flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 cursor-pointer ${uploading || !state.id ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                    <span className="text-2xl">+</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUpload(e, cId)} disabled={uploading || !state.id} />
+                  <label className={`w-24 h-24 border border-dashed rounded flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                    {uploading ? (
+                      <span className="text-sm">Загрузка...</span>
+                    ) : (
+                      <span className="text-2xl">+</span>
+                    )}
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUpload(e, cId)} disabled={uploading} />
                   </label>
                 </div>
               </div>

@@ -23,20 +23,33 @@ export function Step8Review({
         </div>
 
         <div>
-          <h3 className="text-sm text-gray-500 font-medium">Варианты ({activeVariants.length})</h3>
-          <div className="mt-2 space-y-2">
-            {activeVariants.map((v, i) => (
-              <div key={i} className="flex justify-between items-center bg-white p-3 border rounded text-sm">
-                <div>
-                  <span className="font-medium text-gray-900">{v.sellerSku || 'Нет SKU'}</span>
-                  {v.barcode ? <span className="ml-4 text-gray-500">Штрихкод: {v.barcode}</span> : <span className="ml-4 text-gray-400 italic">Штрихкод ZAMK</span>}
-                </div>
-                <div className="font-medium">
-                  {v.priceCents ? `${(v.priceCents / 100).toFixed(2)} ₽` : 'Нет цены'}
-                </div>
+          <h3 className="text-sm text-gray-500 font-medium mb-2">Варианты ({activeVariants.length})</h3>
+          {activeVariants.length > 0 ? (
+            <div className="bg-white border rounded-lg overflow-hidden">
+              <div className="max-h-[300px] overflow-y-auto">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-gray-50 sticky top-0 border-b">
+                    <tr>
+                      <th className="p-2 font-medium text-gray-500">SKU</th>
+                      <th className="p-2 font-medium text-gray-500">Штрихкод</th>
+                      <th className="p-2 font-medium text-gray-500 text-right">Цена</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {activeVariants.map((v, i) => (
+                      <tr key={i} className="hover:bg-gray-50/50">
+                        <td className="p-2 font-medium">{v.sellerSku || <span className="text-gray-400 font-normal italic">Нет SKU</span>}</td>
+                        <td className="p-2">{v.barcode ? v.barcode : <span className="text-gray-400 italic">Сгенерирует ZAMK</span>}</td>
+                        <td className="p-2 text-right font-medium">{v.priceCents ? `${(v.priceCents / 100).toFixed(2)} ₽` : <span className="text-red-500">Нет цены</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500 italic">Нет активных вариантов</div>
+          )}
         </div>
 
         <div>

@@ -75,7 +75,14 @@ export function Step4Variants({
   const regenerateMatrix = () => {
     const newVariants: VariantDraft[] = [];
     const colorIds = hasColor && state.selectedColorIds.length > 0 ? state.selectedColorIds : [undefined];
-    const sizeIds = hasSize && state.selectedSizeValueIds.length > 0 ? state.selectedSizeValueIds : [undefined];
+    
+    const sizeIds = hasSize && state.selectedSizeValueIds.length > 0 
+      ? [...state.selectedSizeValueIds].sort((a, b) => {
+          const sa = sizeValues.find(x => x.id === a);
+          const sb = sizeValues.find(x => x.id === b);
+          return (sa?.sortOrder || 0) - (sb?.sortOrder || 0);
+        })
+      : [undefined];
 
     colorIds.forEach(c => {
       sizeIds.forEach(s => {
@@ -104,6 +111,13 @@ export function Step4Variants({
     nw[vIdx].attributes![attrId] = value;
     updateState({ variants: nw });
   };
+
+  const groupedVariants = state.variants.reduce((acc, v, index) => {
+    const cId = v.colorId || 'no_color';
+    if (!acc[cId]) acc[cId] = [];
+    acc[cId].push({ v, index });
+    return acc;
+  }, {} as Record<string, { v: VariantDraft; index: number }[]>);
 
   return (
     <div className="space-y-6">
@@ -151,7 +165,7 @@ export function Step4Variants({
           )}
           {sizeValues.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {sizeValues.map(s => (
+              {sizeValues.sort((a,b) => a.sortOrder - b.sortOrder).map(s => (
                 <button 
                   key={s.id}
                   onClick={() => toggleSize(s.id)}
@@ -170,84 +184,101 @@ export function Step4Variants({
       </div>
 
       {state.variants.length > 0 && (
-        <div className="mt-4 space-y-4">
-          {state.variants.map((v, i) => {
-            const c = colors.find(x => x.id === v.colorId);
-            const s = sizeValues.find(x => x.id === v.sizeValueId);
+        <div className="mt-6 space-y-6">
+          {Object.entries(groupedVariants).map(([colorId, items]) => {
+            const c = colors.find(x => x.id === colorId);
             return (
-              <div key={i} className="border p-4 rounded bg-gray-50">
-                <div className="flex items-center justify-between font-medium">
-                  <span>{c?.nameRu || ''} {s?.value ? `- Размер ${s.value}` : ''}</span>
-                  <label className="flex items-center gap-2 text-sm font-normal">
-                    <input 
-                      type="checkbox" 
-                      checked={v.active} 
-                      onChange={e => {
-                        const nw = [...state.variants];
-                        nw[i].active = e.target.checked;
-                        updateState({ variants: nw });
-                      }} 
-                    />
-                    Активен
-                  </label>
-                </div>
-                
-                {genericVariantAttrs.length > 0 && v.active && (
-                  <div className="mt-4 space-y-3 pl-4 border-l-2">
-                    {genericVariantAttrs.map(attr => (
-                      <div key={attr.id}>
-                        <label className="block text-xs font-medium text-gray-700">{attr.nameRu} {attr.required && '*'}</label>
-                        {attr.valueSource === 'DICTIONARY' && attr.valueType === 'ENUM' && (
-                          <select 
-                            value={(v.attributes && v.attributes[attr.id] as string) || ''}
-                            onChange={e => updateVariantAttr(i, attr.id, e.target.value)}
-                            className="mt-1 block w-full border p-1 rounded text-sm bg-white"
-                          >
-                            <option value="">Не выбрано</option>
-                            {(dicts[attr.dictionaryId || ''] || []).map(d => <option key={d.id} value={d.id}>{d.nameRu}</option>)}
-                          </select>
-                        )}
-                        {attr.valueSource === 'DICTIONARY' && attr.valueType === 'MULTI_ENUM' && (
-                          <select 
-                            multiple
-                            value={(v.attributes && v.attributes[attr.id] as string[]) || []}
-                            onChange={e => {
-                              const values = Array.from(e.target.selectedOptions, option => option.value);
-                              updateVariantAttr(i, attr.id, values);
-                            }}
-                            className="mt-1 block w-full border p-1 rounded text-sm bg-white h-24"
-                          >
-                            {(dicts[attr.dictionaryId || ''] || []).map(d => <option key={d.id} value={d.id}>{d.nameRu}</option>)}
-                          </select>
-                        )}
-                        {attr.valueSource !== 'DICTIONARY' && attr.valueType === 'TEXT' && (
-                          <input 
-                            type="text" 
-                            value={(v.attributes && v.attributes[attr.id] as string) || ''}
-                            onChange={e => updateVariantAttr(i, attr.id, e.target.value)}
-                            className="mt-1 block w-full border p-1 rounded text-sm bg-white"
-                          />
-                        )}
-                        {attr.valueSource !== 'DICTIONARY' && attr.valueType === 'NUMBER' && (
-                          <input 
-                            type="number" 
-                            value={(v.attributes && v.attributes[attr.id] as number) || ''}
-                            onChange={e => updateVariantAttr(i, attr.id, Number(e.target.value))}
-                            className="mt-1 block w-full border p-1 rounded text-sm bg-white"
-                          />
-                        )}
-                        {attr.valueSource !== 'DICTIONARY' && attr.valueType === 'BOOLEAN' && (
-                          <input 
-                            type="checkbox" 
-                            checked={(v.attributes && v.attributes[attr.id] as boolean) || false}
-                            onChange={e => updateVariantAttr(i, attr.id, e.target.checked)}
-                            className="mt-1"
-                          />
-                        )}
-                      </div>
-                    ))}
+              <div key={colorId} className="border border-gray-200 rounded-lg overflow-hidden">
+                {c && (
+                  <div className="bg-gray-50 p-3 border-b border-gray-200 flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full border border-gray-300" style={{ backgroundColor: c.hexValue }} />
+                    <span className="font-medium">{c.nameRu}</span>
                   </div>
                 )}
+                <div className="divide-y divide-gray-100">
+                  {items.map(({ v, index: i }) => {
+                    const s = sizeValues.find(x => x.id === v.sizeValueId);
+                    return (
+                      <div key={i} className={`p-3 ${!v.active ? 'bg-gray-50/50' : 'bg-white'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-gray-900 w-24">
+                            {s?.value ? s.value : 'Единый'}
+                          </span>
+                          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={v.active} 
+                              onChange={e => {
+                                const nw = [...state.variants];
+                                nw[i].active = e.target.checked;
+                                updateState({ variants: nw });
+                              }} 
+                              className="rounded text-black focus:ring-black"
+                            />
+                            Активен
+                          </label>
+                        </div>
+                        
+                        {genericVariantAttrs.length > 0 && v.active && (
+                          <div className="mt-3 grid grid-cols-2 gap-3 pl-4 border-l-2 border-gray-200">
+                            {genericVariantAttrs.map(attr => (
+                              <div key={attr.id} className="flex flex-col">
+                                <label className="text-xs font-medium text-gray-500 mb-1">{attr.nameRu} {attr.required && '*'}</label>
+                                {attr.valueSource === 'DICTIONARY' && attr.valueType === 'ENUM' && (
+                                  <select 
+                                    value={(v.attributes && v.attributes[attr.id] as string) || ''}
+                                    onChange={e => updateVariantAttr(i, attr.id, e.target.value)}
+                                    className="border border-gray-200 p-1.5 rounded text-sm bg-white"
+                                  >
+                                    <option value="">Не выбрано</option>
+                                    {(dicts[attr.dictionaryId || ''] || []).map(d => <option key={d.id} value={d.id}>{d.nameRu}</option>)}
+                                  </select>
+                                )}
+                                {attr.valueSource === 'DICTIONARY' && attr.valueType === 'MULTI_ENUM' && (
+                                  <select 
+                                    multiple
+                                    value={(v.attributes && v.attributes[attr.id] as string[]) || []}
+                                    onChange={e => {
+                                      const values = Array.from(e.target.selectedOptions, option => option.value);
+                                      updateVariantAttr(i, attr.id, values);
+                                    }}
+                                    className="border border-gray-200 p-1.5 rounded text-sm bg-white h-16"
+                                  >
+                                    {(dicts[attr.dictionaryId || ''] || []).map(d => <option key={d.id} value={d.id}>{d.nameRu}</option>)}
+                                  </select>
+                                )}
+                                {attr.valueSource !== 'DICTIONARY' && attr.valueType === 'TEXT' && (
+                                  <input 
+                                    type="text" 
+                                    value={(v.attributes && v.attributes[attr.id] as string) || ''}
+                                    onChange={e => updateVariantAttr(i, attr.id, e.target.value)}
+                                    className="border border-gray-200 p-1.5 rounded text-sm bg-white"
+                                  />
+                                )}
+                                {attr.valueSource !== 'DICTIONARY' && attr.valueType === 'NUMBER' && (
+                                  <input 
+                                    type="number" 
+                                    value={(v.attributes && v.attributes[attr.id] as number) || ''}
+                                    onChange={e => updateVariantAttr(i, attr.id, Number(e.target.value))}
+                                    className="border border-gray-200 p-1.5 rounded text-sm bg-white"
+                                  />
+                                )}
+                                {attr.valueSource !== 'DICTIONARY' && attr.valueType === 'BOOLEAN' && (
+                                  <input 
+                                    type="checkbox" 
+                                    checked={(v.attributes && v.attributes[attr.id] as boolean) || false}
+                                    onChange={e => updateVariantAttr(i, attr.id, e.target.checked)}
+                                    className="mt-1"
+                                  />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}

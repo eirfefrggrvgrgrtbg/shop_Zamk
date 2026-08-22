@@ -55,6 +55,26 @@ export function Step3Attributes({
   };
 
   const compTotal = state.materialComposition.reduce((sum, c) => sum + (c.percentage || 0), 0);
+  const compErrors: string[] = [];
+  
+  if (compAttr) {
+    if (state.materialComposition.length > 0) {
+      if (compTotal > 100) compErrors.push('Суммарный состав не может превышать 100%');
+      if (compAttr.required && compTotal < 100) compErrors.push('Суммарный состав должен равняться 100%');
+      
+      const seen = new Set<string>();
+      state.materialComposition.forEach(c => {
+        if (!c.materialId) compErrors.push('Выберите материал');
+        if (c.percentage <= 0 || c.percentage > 100) compErrors.push('Процент должен быть от 1 до 100');
+        if (c.materialId && seen.has(c.materialId)) compErrors.push('Материалы не должны повторяться');
+        if (c.materialId) seen.add(c.materialId);
+      });
+    } else if (compAttr.required) {
+      compErrors.push('Необходим хотя бы один материал');
+    }
+  }
+
+  const isNextDisabled = compErrors.length > 0;
 
   return (
     <div className="space-y-6">
@@ -86,14 +106,25 @@ export function Step3Attributes({
             <div key={i} className="flex gap-2 mb-2">
               <select value={c.materialId} onChange={e => updateComp(i, e.target.value, c.percentage)} className="flex-1 border p-2 rounded">
                 <option value="">Выберите материал</option>
-                {materials.map(m => <option key={m.id} value={m.id}>{m.nameRu}</option>)}
+                {materials.map(m => <option key={m.id} value={m.id} disabled={state.materialComposition.some((existing, idx) => idx !== i && existing.materialId === m.id)}>{m.nameRu}</option>)}
               </select>
-              <input type="number" min="0" max="100" value={c.percentage || ''} onChange={e => updateComp(i, c.materialId, Number(e.target.value))} className="w-24 border p-2 rounded" placeholder="%" />
+              <input type="number" min="1" max="100" value={c.percentage || ''} onChange={e => updateComp(i, c.materialId, Number(e.target.value))} className="w-24 border p-2 rounded" placeholder="%" />
               <button onClick={() => removeComp(i)} className="text-red-500 px-2">Удалить</button>
             </div>
           ))}
           <button onClick={addComp} className="text-sm text-blue-600">+ Добавить материал</button>
-          <div className="mt-2 text-sm text-gray-500">Итого: {compTotal}%</div>
+          
+          <div className={`mt-2 text-sm ${compTotal > 100 ? 'text-red-600 font-medium' : compTotal === 100 ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+            Итого: {compTotal}%
+          </div>
+          
+          {compErrors.length > 0 && (
+            <div className="mt-2 text-sm text-red-600">
+              <ul className="list-disc pl-4">
+                {Array.from(new Set(compErrors)).map((err, i) => <li key={i}>{err}</li>)}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
@@ -157,9 +188,16 @@ export function Step3Attributes({
       )}
 
       <div className="flex justify-between pt-4">
-        <button onClick={onPrev} className="px-4 py-2 border rounded">Назад</button>
-        <button onClick={onNext} className="px-4 py-2 bg-black text-white rounded">Далее</button>
+        <button onClick={onPrev} className="px-4 py-2 border rounded hover:bg-gray-50">Назад</button>
+        <button 
+          onClick={onNext} 
+          disabled={isNextDisabled}
+          className={`px-4 py-2 rounded ${isNextDisabled ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-gray-800'}`}
+        >
+          Далее
+        </button>
       </div>
     </div>
   );
 }
+
