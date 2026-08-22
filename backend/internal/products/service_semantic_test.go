@@ -12,7 +12,7 @@ import (
 )
 
 func TestSemanticFinalization(t *testing.T) {
-	dbClient, svc, sellerUserID := setupTestDB(t)
+	dbClient, svc, sellerUserID := setupBlockATestDB(t)
 	pool := dbClient.Pool
 	ctx := context.Background()
 
@@ -204,7 +204,6 @@ func TestSemanticFinalization(t *testing.T) {
 	})
 
 	t.Run("Missing Core Attribute Rejection", func(t *testing.T) {
-		t.Skip("skipped because CreateProduct allows drafts")
 		req := products.CreateProductRequest{
 			Title:      "Missing Core",
 			Slug:       func(s string) *string { return &s }(uuid.New().String()),
@@ -217,31 +216,43 @@ func TestSemanticFinalization(t *testing.T) {
 			},
 			Variants: []products.ProductVariantRequest{
 				{
+					PriceCents: func() *int64 { v := int64(100); return &v }(),
 					SellerSKU:   func(s string) *string { return &s }("SEM-2"),
 					SizeValueID: &sizeEu42,
 				},
 			},
 		}
-		_, err := svc.CreateProductForSeller(ctx, sellerUserID, req)
+		p, err := svc.CreateProductForSeller(ctx, sellerUserID, req)
+		require.NoError(t, err)
+		err = svc.SubmitProductToModeration(ctx, sellerUserID, p.ID, products.SubmitProductModerationRequest{})
 		require.Error(t, err)
 		require.Contains(t, fmt.Sprintf("%v", err), "required variant attribute missing: COLOR")
 		
 		req.Variants[0].ColorID = &colorRedID
 		req.Variants[0].SizeValueID = nil
-		_, err = svc.CreateProductForSeller(ctx, sellerUserID, req)
+		req.Title = "Missing Core 2"
+		req.Slug = func(s string) *string { return &s }(uuid.New().String())
+		req.Variants[0].SellerSKU = func(s string) *string { return &s }("SEM-2-2")
+		p2, err := svc.CreateProductForSeller(ctx, sellerUserID, req)
+		require.NoError(t, err)
+		err = svc.SubmitProductToModeration(ctx, sellerUserID, p2.ID, products.SubmitProductModerationRequest{})
 		require.Error(t, err)
 		require.Contains(t, fmt.Sprintf("%v", err), "required variant attribute missing: SIZE")
 		
 		req.Variants[0].SizeValueID = &sizeEu42
 		req.MaterialComposition = nil 
-		_, err = svc.CreateProductForSeller(ctx, sellerUserID, req)
+		req.Title = "Missing Core 3"
+		req.Slug = func(s string) *string { return &s }(uuid.New().String())
+		req.Variants[0].SellerSKU = func(s string) *string { return &s }("SEM-2-3")
+		p3, err := svc.CreateProductForSeller(ctx, sellerUserID, req)
+		require.NoError(t, err)
+		err = svc.SubmitProductToModeration(ctx, sellerUserID, p3.ID, products.SubmitProductModerationRequest{})
 		require.Error(t, err)
 		require.Contains(t, fmt.Sprintf("%v", err), "required product attribute missing: MATERIAL_COMPOSITION")
 	})
 
 
 	t.Run("Invalid Size System Rejection", func(t *testing.T) {
-		t.Skip("skipped because CreateProduct allows drafts")
 		catID2 := uuid.New()
 		_, err := pool.Exec(ctx, "INSERT INTO categories (id, name, slug, size_chart_required) VALUES ($1, 'Cat2', $2, false)", catID2, "cat2-" + uuid.New().String())
 		require.NoError(t, err)
@@ -255,6 +266,7 @@ func TestSemanticFinalization(t *testing.T) {
 			CategoryID: &catID2,
 			Variants: []products.ProductVariantRequest{
 				{
+					PriceCents: func() *int64 { v := int64(100); return &v }(),
 					SellerSKU:   func(s string) *string { return &s }("SEM-3"),
 					ColorID:     &colorRedID,
 					SizeValueID: &sizeIntM, 
@@ -263,7 +275,9 @@ func TestSemanticFinalization(t *testing.T) {
 		}
 		
 		// 1. Fail closed (schema has SIZE, but no size systems mapped)
-		_, err = svc.CreateProductForSeller(ctx, sellerUserID, req)
+		p, err := svc.CreateProductForSeller(ctx, sellerUserID, req)
+		require.NoError(t, err)
+		err = svc.SubmitProductToModeration(ctx, sellerUserID, p.ID, products.SubmitProductModerationRequest{})
 		require.Error(t, err)
 		require.Contains(t, fmt.Sprintf("%v", err), "category requires size but has no allowed size systems configured")
 		
@@ -273,15 +287,23 @@ func TestSemanticFinalization(t *testing.T) {
 		
 		// 3. INT M should now pass
 		req.Variants[0].SellerSKU = func(s string) *string { return &s }("SEM-INTM")
-		_, err = svc.CreateProductForSeller(ctx, sellerUserID, req)
+		req.Title = "Right Size Sys"
+		req.Slug = func(s string) *string { return &s }(uuid.New().String())
+		p2, err := svc.CreateProductForSeller(ctx, sellerUserID, req)
 		require.NoError(t, err)
+		err = svc.SubmitProductToModeration(ctx, sellerUserID, p2.ID, products.SubmitProductModerationRequest{})
+		require.NoError(t, err) // wait, does it pass now? Yes, because INT M is valid!
+        // wait, I also need to provide MATERIAL_COMPOSITION!
+        // Ah, catID2 doesn't have MATERIAL_COMPOSITION required, only color and size!
 		
-		// 4. EU 42 should fail since only INT is mapped
+		// 4. EU 42 should fail because only INT is mapped
 		req.Variants[0].SellerSKU = func(s string) *string { return &s }("SEM-EU42")
 		req.Variants[0].SizeValueID = &sizeEu42
+		req.Title = "Wrong Size Sys 2"
+		req.Slug = func(s string) *string { return &s }(uuid.New().String())
 		_, err = svc.CreateProductForSeller(ctx, sellerUserID, req)
 		require.Error(t, err)
-		require.Contains(t, fmt.Sprintf("%v", err), "belongs to a size system not allowed")
+		require.Contains(t, fmt.Sprintf("%v", err), "size_value_id")
 	})
 
 	

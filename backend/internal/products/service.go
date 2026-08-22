@@ -197,6 +197,7 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 			ImageURL:  ir.ImageURL,
 			AltText:   ir.AltText,
 			SortOrder: sortOrder,
+			ColorID: ir.ColorID,
 			CreatedAt: now,
 		})
 	}
@@ -423,6 +424,26 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		}
 	}
 
+
+	var images []ProductImage
+	if req.Images != nil {
+		now := time.Now()
+		for i, ir := range req.Images {
+			sortOrder := i
+			if ir.SortOrder != nil {
+				sortOrder = *ir.SortOrder
+			}
+			images = append(images, ProductImage{
+				ID:        uuid.New(),
+				ProductID: p.ID,
+				ImageURL:  ir.ImageURL,
+				AltText:   ir.AltText,
+				SortOrder: sortOrder,
+				ColorID:   ir.ColorID,
+				CreatedAt: now,
+			})
+		}
+	}
 
 	if req.Attributes != nil {
 		var pAttrs []ProductAttributeValue
@@ -661,6 +682,11 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			if err := txRepo.UpdateProduct(ctx, p); err != nil {
 				return err
 			}
+		if req.Images != nil {
+			if err := txRepo.ReplaceProductImages(ctx, p.ID, images); err != nil {
+				return err
+			}
+		}
 			
 			// Update product attributes
 			if req.Attributes != nil {
@@ -1860,6 +1886,12 @@ func (s *Service) GetDictionaryValues(ctx context.Context, dictionaryID uuid.UUI
 }
 
 func (s *Service) UpdateProductPrices(ctx context.Context, currentUserID, productID uuid.UUID, req UpdateProductPricesRequest) error {
+	for _, v := range req.Variants {
+		if v.PriceCents <= 0 {
+			return fmt.Errorf("price must be greater than 0")
+		}
+	}
+
 	seller, err := s.getSellerForUser(ctx, currentUserID)
 	if err != nil {
 		return err

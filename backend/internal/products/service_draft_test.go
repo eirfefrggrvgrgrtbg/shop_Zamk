@@ -10,7 +10,7 @@ import (
 )
 
 func TestDraftAndModeration(t *testing.T) {
-	dbClient, svc, sellerUserID := setupTestDB(t)
+	dbClient, svc, sellerUserID := setupBlockATestDB(t)
 	pool := dbClient.Pool
 	ctx := context.Background()
 

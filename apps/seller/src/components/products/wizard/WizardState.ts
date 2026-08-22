@@ -7,13 +7,15 @@ export type VariantDraft = {
   sellerSku: string;
   barcode: string;
   priceCents?: number;
+  attributes?: Record<string, string | number | boolean | string[]>;
 };
 
 export type WizardState = {
+  id?: string;
   title: string;
   description: string;
   categoryId: string;
-  productAttributes: Record<string, string | boolean | number>;
+  productAttributes: Record<string, string | boolean | number | string[]>;
   materialComposition: { materialId: string; percentage: number }[];
   selectedColorIds: string[];
   shadeNamesByColor: Record<string, string>;

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { WizardState } from './WizardState';
-import { getSellerColors, getSellerSizeValues, type SellerColor, type SellerSizeValue } from '@zamk/api-client/src/seller';
+import { getSellerColors, getSellerSizeValues, generateSellerSKUs, type SellerColor, type SellerSizeValue } from '@zamk/api-client/src/seller';
+import { Loader2 } from 'lucide-react';
 
 export function Step7Pricing({ 
   state, 
@@ -15,7 +16,9 @@ export function Step7Pricing({
 }) {
   const [colors, setColors] = useState<SellerColor[]>([]);
   const [sizeValues, setSizeValues] = useState<SellerSizeValue[]>([]);
-  const [bulkPrice, setBulkPrice] = useState('');
+  const [bulkPriceRub, setBulkPriceRub] = useState('');
+  const [generatingSkus, setGeneratingSkus] = useState(false);
+  const [manualBarcodes, setManualBarcodes] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     getSellerColors().then(setColors).catch(console.error);
@@ -25,23 +28,34 @@ export function Step7Pricing({
   }, [state.selectedSizeSystemId]);
 
   const applyBulkPrice = () => {
-    const val = Number(bulkPrice);
+    const val = Number(bulkPriceRub);
     if (val > 0) {
-      const nw = state.variants.map(v => ({ ...v, priceCents: val }));
+      const cents = Math.round(val * 100);
+      const nw = state.variants.map(v => ({ ...v, priceCents: cents }));
       updateState({ variants: nw });
     }
   };
 
-  const generateSkus = () => {
-    const nw = state.variants.map(v => {
-      if (v.sellerSku) return v;
-      const c = colors.find(x => x.id === v.colorId);
-      const s = sizeValues.find(x => x.id === v.sizeValueId);
-      const cCode = c ? c.code : 'XX';
-      const sCode = s ? s.value : 'XX';
-      return { ...v, sellerSku: `ZMK-${cCode}-${sCode}-${Math.floor(Math.random() * 1000)}` };
-    });
-    updateState({ variants: nw });
+  const generateSkus = async () => {
+    try {
+      setGeneratingSkus(true);
+      const neededCount = state.variants.filter(v => v.active && !v.sellerSku).length;
+      if (neededCount === 0) return;
+
+      const res = await generateSellerSKUs(neededCount);
+      
+      let skuIdx = 0;
+      const nw = state.variants.map(v => {
+        if (!v.active || v.sellerSku) return v;
+        const assignedSku = res.skus[skuIdx++];
+        return { ...v, sellerSku: assignedSku };
+      });
+      updateState({ variants: nw });
+    } catch (err: any) {
+      alert('Ошибка генерации артикулов: ' + err.message);
+    } finally {
+      setGeneratingSkus(false);
+    }
   };
 
   return (
@@ -51,11 +65,23 @@ export function Step7Pricing({
       <div className="p-4 border rounded bg-gray-50 flex gap-4 items-end">
         <div>
           <label className="block text-sm mb-1">Применить цену ко всем вариантам</label>
-          <input type="number" value={bulkPrice} onChange={e => setBulkPrice(e.target.value)} className="border p-2 rounded w-48" placeholder="Цена в копейках" />
+          <div className="relative">
+            <input 
+              type="number" 
+              value={bulkPriceRub} 
+              onChange={e => setBulkPriceRub(e.target.value)} 
+              className="border p-2 rounded w-48 pr-8" 
+              placeholder="Цена (₽)" 
+            />
+            <span className="absolute right-3 top-2.5 text-gray-500">₽</span>
+          </div>
         </div>
         <button onClick={applyBulkPrice} className="px-4 py-2 bg-white border rounded shadow-sm hover:bg-gray-100">Применить</button>
         <div className="flex-1 text-right">
-          <button onClick={generateSkus} className="px-4 py-2 bg-white border rounded shadow-sm hover:bg-gray-100">Сгенерировать артикулы</button>
+          <button onClick={generateSkus} disabled={generatingSkus} className="px-4 py-2 bg-white border rounded shadow-sm hover:bg-gray-100 flex items-center justify-center ml-auto">
+            {generatingSkus ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            Сгенерировать артикулы
+          </button>
         </div>
       </div>
 
@@ -65,8 +91,8 @@ export function Step7Pricing({
             <tr>
               <th className="p-2 border-b">Вариант</th>
               <th className="p-2 border-b">Артикул продавца *</th>
-              <th className="p-2 border-b">Штрихкод</th>
-              <th className="p-2 border-b">Цена (копейки) *</th>
+              <th className="p-2 border-b min-w-[200px]">Штрихкод</th>
+              <th className="p-2 border-b">Цена (₽) *</th>
             </tr>
           </thead>
           <tbody>
@@ -75,12 +101,15 @@ export function Step7Pricing({
               const s = sizeValues.find(x => x.id === v.sizeValueId);
               const name = [c?.nameRu, s?.value].filter(Boolean).join(' / ') || 'Базовый';
               
-              const updateV = (field: string, val: any) => {
+              const updateV = (field: keyof typeof v, val: any) => {
                 const nw = [...state.variants];
                 const activeIdx = state.variants.findIndex(x => x === v);
                 nw[activeIdx] = { ...nw[activeIdx], [field]: val };
                 updateState({ variants: nw });
               };
+
+              const activeIdx = state.variants.findIndex(x => x === v);
+              const isManualBarcode = !!v.barcode || manualBarcodes[activeIdx];
 
               return (
                 <tr key={i} className="border-b last:border-0">
@@ -89,10 +118,31 @@ export function Step7Pricing({
                     <input type="text" value={v.sellerSku || ''} onChange={e => updateV('sellerSku', e.target.value)} className="border p-1 rounded w-32" />
                   </td>
                   <td className="p-2">
-                    <input type="text" value={v.barcode || ''} onChange={e => updateV('barcode', e.target.value)} className="border p-1 rounded w-32" placeholder="ZAMK сгенерирует" />
+                    {isManualBarcode ? (
+                      <div className="flex items-center gap-2">
+                        <input type="text" value={v.barcode || ''} onChange={e => updateV('barcode', e.target.value)} className="border p-1 rounded w-32" />
+                        <button onClick={() => {
+                          setManualBarcodes(p => ({ ...p, [activeIdx]: false }));
+                          updateV('barcode', '');
+                        }} className="text-xs text-red-500">Сбросить</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-500 italic">Сгенерируется ZAMK</span>
+                        <button onClick={() => setManualBarcodes(p => ({ ...p, [activeIdx]: true }))} className="text-xs text-blue-500 ml-2">Свой штрихкод</button>
+                      </div>
+                    )}
                   </td>
                   <td className="p-2">
-                    <input type="number" value={v.priceCents || ''} onChange={e => updateV('priceCents', Number(e.target.value))} className="border p-1 rounded w-32" />
+                    <div className="relative w-32">
+                      <input 
+                        type="number" 
+                        value={v.priceCents ? Math.round(v.priceCents / 100) : ''} 
+                        onChange={e => updateV('priceCents', Math.round(Number(e.target.value) * 100))} 
+                        className="border p-1 rounded w-full pr-6" 
+                      />
+                      <span className="absolute right-2 top-1.5 text-gray-500 text-xs">₽</span>
+                    </div>
                   </td>
                 </tr>
               );

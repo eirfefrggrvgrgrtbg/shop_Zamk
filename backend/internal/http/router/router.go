@@ -324,6 +324,7 @@ func New(
 
 		r.Get("/", productsHandler.ListSellerProducts)
 		r.Post("/", productsHandler.CreateProduct)
+		r.Post("/generate-skus", productsHandler.GenerateSKUs)
 		r.Get("/{id}", productsHandler.GetSellerProduct)
 		r.Patch("/{id}", productsHandler.UpdateProduct)
 		r.Delete("/{id}", productsHandler.DeleteDraftProduct)

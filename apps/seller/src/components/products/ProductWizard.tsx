@@ -24,10 +24,128 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
   const [savingDraft, setSavingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showPublishedModal, setShowPublishedModal] = useState(false);
-    const [state, setState] = useState<WizardState>({ ...initialWizardState, ...initialData });
+
+  const [toast, setToast] = useState<{message: string, type: 'error' | 'success'} | null>(null);
+  const showToast = (message: string, type: 'error' | 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+    const [state, setState] = useState<WizardState>(initialWizardState);
+
+
+
+  // Add dirtiness check
+  const [initialStateStr] = useState(() => JSON.stringify(initialData || {}));
+  useEffect(() => {
+    const isDirty = JSON.stringify(state) !== initialStateStr;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [state, initialStateStr]);
 
   const [categories, setCategories] = useState<SellerCategory[]>([]);
   const [schema, setSchema] = useState<SellerCategorySchema | null>(null);
+
+  useEffect(() => {
+    if (isEdit && initialData && !state.categoryId) {
+      const p = initialData;
+      
+      const pAttrs: Record<string, any> = {};
+      if (p.attributes) {
+        p.attributes.forEach((a: any) => {
+          if (a.enumValueId) {
+            // handle multi enum vs single enum below when schema loads
+            if (pAttrs[a.attributeDefinitionId]) {
+              if (Array.isArray(pAttrs[a.attributeDefinitionId])) {
+                pAttrs[a.attributeDefinitionId].push(a.enumValueId);
+              } else {
+                pAttrs[a.attributeDefinitionId] = [pAttrs[a.attributeDefinitionId], a.enumValueId];
+              }
+            } else {
+              pAttrs[a.attributeDefinitionId] = a.enumValueId;
+            }
+          }
+          if (a.textValue) pAttrs[a.attributeDefinitionId] = a.textValue;
+          if (a.numberValue) pAttrs[a.attributeDefinitionId] = a.numberValue;
+          if (a.boolValue !== undefined) pAttrs[a.attributeDefinitionId] = a.boolValue;
+        });
+      }
+
+      const commonImgs: any[] = [];
+      const colorImgs: Record<string, any[]> = {};
+      if (p.images) {
+        p.images.forEach((img: any) => {
+          const mapped = { url: img.imageUrl, sortOrder: img.sortOrder || 0 };
+          if (img.colorId) {
+            if (!colorImgs[img.colorId]) colorImgs[img.colorId] = [];
+            colorImgs[img.colorId].push(mapped);
+          } else {
+            commonImgs.push(mapped);
+          }
+        });
+      }
+      
+      const vShades: Record<string, string> = {};
+      const vColors = new Set<string>();
+      const vSizes = new Set<string>();
+      const mappedVariants = (p.variants || []).map((v: any) => {
+        if (v.colorId) vColors.add(v.colorId);
+        if (v.sizeValueId) vSizes.add(v.sizeValueId);
+        if (v.shadeName && v.colorId) vShades[v.colorId] = v.shadeName;
+        
+        const vAttrMap: Record<string, any> = {};
+        if (v.attributes) {
+           // wait backend doesn't return variant attributes yet, but if it did:
+           v.attributes.forEach((a: any) => {
+             if (a.enumValueId) vAttrMap[a.attributeDefinitionId] = a.enumValueId;
+             if (a.textValue) vAttrMap[a.attributeDefinitionId] = a.textValue;
+             if (a.numberValue) vAttrMap[a.attributeDefinitionId] = a.numberValue;
+             if (a.boolValue !== undefined) vAttrMap[a.attributeDefinitionId] = a.boolValue;
+           });
+        }
+        
+        return {
+          id: v.id,
+          colorId: v.colorId || undefined,
+          sizeValueId: v.sizeValueId || undefined,
+          sellerSku: v.sellerSku || '',
+          barcode: v.barcode || '',
+          priceCents: v.priceCents,
+          active: v.isActive !== false,
+          attributes: Object.keys(vAttrMap).length > 0 ? vAttrMap : undefined
+        };
+      });
+
+      const sChartRows: Record<string, any> = {};
+      if (p.sizeChart?.rows) {
+        p.sizeChart.rows.forEach((r: any) => {
+          sChartRows[r.sizeValueId] = r.measurements;
+        });
+      }
+
+      setState({
+        title: p.title || '',
+        description: p.description || '',
+        id: p.id,
+        categoryId: p.categoryId || '',
+        materialComposition: p.materialComposition || [],
+        productAttributes: pAttrs,
+        selectedColorIds: Array.from(vColors),
+        shadeNamesByColor: vShades,
+        selectedSizeSystemId: p.sizeChart?.rows?.[0]?.sizeSystemId || '',
+        selectedSizeValueIds: Array.from(vSizes),
+        variants: mappedVariants,
+        sizeChartRows: sChartRows,
+        commonImages: commonImgs,
+        colorImages: colorImgs
+      });
+    }
+  }, [isEdit, initialData]);
 
   useEffect(() => {
     getSellerCategories().then(setCategories).catch(console.error);
@@ -52,31 +170,86 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
     'Проверка'
   ];
 
+
   const buildPayload = () => {
+    // Flatten product level attributes
+    const mappedAttrs: any[] = [];
+    Object.entries(state.productAttributes).forEach(([defId, val]) => {
+      const attrDef = schema?.attributes.find(a => a.id === defId);
+      if (!attrDef) return;
+
+      if (attrDef.valueSource === 'DICTIONARY' && attrDef.valueType === 'MULTI_ENUM') {
+        const arr = Array.isArray(val) ? val : [val];
+        arr.forEach(enumVal => {
+          if (enumVal) mappedAttrs.push({ attributeDefinitionId: defId, enumValueId: enumVal });
+        });
+      } else {
+        mappedAttrs.push({
+          attributeDefinitionId: defId,
+          textValue: attrDef.valueType === 'TEXT' ? val : undefined,
+          numberValue: attrDef.valueType === 'NUMBER' ? val : undefined,
+          boolValue: attrDef.valueType === 'BOOLEAN' ? val : undefined,
+          enumValueId: attrDef.valueSource === 'DICTIONARY' ? val : undefined
+        });
+      }
+    });
+
+    const mappedVariants = state.variants.filter(v => v.active).map(v => {
+      const vAttrs: any[] = [];
+      if (v.attributes) {
+        Object.entries(v.attributes).forEach(([defId, val]) => {
+          const attrDef = schema?.attributes.find(a => a.id === defId);
+          if (!attrDef) return;
+          if (attrDef.valueSource === 'DICTIONARY' && attrDef.valueType === 'MULTI_ENUM') {
+            const arr = Array.isArray(val) ? val : [val];
+            arr.forEach(enumVal => {
+              if (enumVal) vAttrs.push({ attributeDefinitionId: defId, enumValueId: enumVal });
+            });
+          } else {
+            vAttrs.push({
+              attributeDefinitionId: defId,
+              textValue: attrDef.valueType === 'TEXT' ? val : undefined,
+              numberValue: attrDef.valueType === 'NUMBER' ? val : undefined,
+              boolValue: attrDef.valueType === 'BOOLEAN' ? val : undefined,
+              enumValueId: attrDef.valueSource === 'DICTIONARY' ? val : undefined
+            });
+          }
+        });
+      }
+
+      return {
+        id: v.id,
+        colorId: v.colorId,
+        sizeValueId: v.sizeValueId,
+        sellerSku: v.sellerSku || undefined,
+        barcode: v.barcode || undefined,
+        priceCents: v.priceCents || undefined,
+        shadeName: v.colorId && state.shadeNamesByColor[v.colorId] ? state.shadeNamesByColor[v.colorId] : undefined,
+        attributes: vAttrs.length > 0 ? vAttrs : undefined
+      };
+    });
+
+    const mappedImages = [
+      ...state.commonImages.map(ci => ({ imageUrl: ci.url, sortOrder: ci.sortOrder, colorId: undefined })),
+      ...Object.entries(state.colorImages).flatMap(([colorId, imgs]) => 
+        imgs.map(ci => ({ imageUrl: ci.url, sortOrder: ci.sortOrder, colorId }))
+      )
+    ];
+
+    const sizeChartRows = Object.entries(state.sizeChartRows).map(([sizeId, measures]) => ({
+      sizeValueId: sizeId,
+      measurements: measures
+    }));
+
     return {
       title: state.title,
       description: state.description,
       categoryId: state.categoryId || undefined,
-      materialComposition: state.materialComposition,
-      variants: state.variants.filter(v => v.active).map(v => ({
-        id: v.id,
-        colorId: v.colorId,
-        sizeValueId: v.sizeValueId,
-        sellerSku: v.sellerSku,
-        barcode: v.barcode,
-        priceCents: v.priceCents
-      })),
-      // Mapped generic attributes
-      attributes: Object.entries(state.productAttributes).map(([defId, val]) => {
-        const attrDef = schema?.attributes.find(a => a.id === defId);
-        return {
-          attributeDefinitionId: defId,
-          textValue: attrDef?.valueType === 'TEXT' ? val : undefined,
-          numberValue: attrDef?.valueType === 'NUMBER' ? val : undefined,
-          boolValue: attrDef?.valueType === 'BOOLEAN' ? val : undefined,
-          enumValueId: attrDef?.valueType === 'DICTIONARY' ? val : undefined
-        };
-      })
+      materialComposition: state.materialComposition.length > 0 ? state.materialComposition : undefined,
+      attributes: mappedAttrs.length > 0 ? mappedAttrs : undefined,
+      variants: mappedVariants.length > 0 ? mappedVariants : undefined,
+      images: mappedImages.length > 0 ? mappedImages : undefined,
+      sizeChartRows: sizeChartRows.length > 0 ? sizeChartRows : undefined
     };
   };
 
@@ -87,14 +260,14 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
       
       if (isEdit && initialData?.id) {
         await updateSellerProduct(initialData.id, payload);
-        alert('Черновик обновлен');
+        showToast('Черновик обновлен', 'success');
       } else {
         const p = await createSellerProduct(payload);
-        alert('Черновик сохранен');
+        showToast('Черновик сохранен', 'success');
         navigate(`/products/${p.id}/edit`, { replace: true });
       }
     } catch (err: any) {
-      alert('Ошибка сохранения черновика: ' + err.message);
+      showToast('Ошибка сохранения: ' + err.message, 'error');
     } finally {
       setSavingDraft(false);
     }
@@ -103,7 +276,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
   
   const handleInitialSubmit = () => {
     if (!isEdit || !initialData?.id) {
-      alert('Сначала сохраните черновик перед модерацией.');
+      showToast('Сначала сохраните черновик перед модерацией.', 'error');
       return;
     }
     if (initialData?.status === 'PUBLISHED') {
@@ -113,16 +286,20 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
     }
   };
 
-  const executeSubmit = async (_strategy: 'CONTINUE_SELLING' | 'HIDE') => {
+
+  const executeSubmit = async (strategy: 'CONTINUE_SELLING' | 'HIDE') => {
     try {
       setSubmitting(true);
-      // In a real app we'd pass the strategy. The API currently just takes comment.
-      await submitSellerProductModeration(initialData.id);
+      if (initialData?.status === 'PUBLISHED') {
+        const isContinue = strategy === 'CONTINUE_SELLING';
+        await updateSellerProduct(initialData.id, { continueSelling: isContinue });
+      }
+      await submitSellerProductModeration(initialData.id, undefined);
       setShowPublishedModal(false);
-      alert('Товар отправлен на модерацию!');
+      showToast('Товар отправлен на модерацию!', 'success');
       navigate('/products');
     } catch (err: any) {
-      alert('Ошибка модерации: ' + err.message);
+      showToast('Ошибка модерации: ' + err.message, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -222,6 +399,12 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         </div>
       )}
 
+
+      {toast && (
+        <div className={`fixed bottom-4 right-4 p-4 rounded shadow-lg text-white ${toast.type === 'error' ? 'bg-red-600' : 'bg-green-600'} z-50 transition-all`}>
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 };

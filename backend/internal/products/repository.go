@@ -443,11 +443,11 @@ func (r *Repository) ReplaceProductImages(ctx context.Context, productID uuid.UU
 
 	for _, img := range images {
 		query := `
-			INSERT INTO product_images (id, product_id, image_url, object_key, alt_text, sort_order, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			INSERT INTO product_images (id, product_id, image_url, object_key, alt_text, sort_order, color_id, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		`
 		_, err := r.db.Exec(ctx, query,
-			img.ID, img.ProductID, img.ImageURL, img.ObjectKey, img.AltText, img.SortOrder, img.CreatedAt,
+			img.ID, img.ProductID, img.ImageURL, img.ObjectKey, img.AltText, img.SortOrder, img.ColorID, img.CreatedAt,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert image: %w", err)
@@ -458,7 +458,7 @@ func (r *Repository) ReplaceProductImages(ctx context.Context, productID uuid.UU
 
 func (r *Repository) GetProductImages(ctx context.Context, productID uuid.UUID) ([]ProductImage, error) {
 	query := `
-		SELECT id, product_id, image_url, object_key, alt_text, sort_order, created_at
+		SELECT id, product_id, image_url, object_key, alt_text, sort_order, color_id, created_at
 		FROM product_images
 		WHERE product_id = $1
 		ORDER BY sort_order ASC
@@ -472,7 +472,7 @@ func (r *Repository) GetProductImages(ctx context.Context, productID uuid.UUID) 
 	var images []ProductImage
 	for rows.Next() {
 		var i ProductImage
-		if err := rows.Scan(&i.ID, &i.ProductID, &i.ImageURL, &i.ObjectKey, &i.AltText, &i.SortOrder, &i.CreatedAt); err != nil {
+		if err := rows.Scan(&i.ID, &i.ProductID, &i.ImageURL, &i.ObjectKey, &i.AltText, &i.SortOrder, &i.ColorID, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		images = append(images, i)
@@ -485,11 +485,11 @@ func (r *Repository) GetProductImages(ctx context.Context, productID uuid.UUID) 
 
 func (r *Repository) AddProductImage(ctx context.Context, img *ProductImage) error {
 	query := `
-		INSERT INTO product_images (id, product_id, image_url, object_key, alt_text, sort_order, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO product_images (id, product_id, image_url, object_key, alt_text, sort_order, color_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 	_, err := r.db.Exec(ctx, query,
-		img.ID, img.ProductID, img.ImageURL, img.ObjectKey, img.AltText, img.SortOrder, img.CreatedAt,
+		img.ID, img.ProductID, img.ImageURL, img.ObjectKey, img.AltText, img.SortOrder, img.ColorID, img.CreatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to add product image: %w", err)
@@ -1070,7 +1070,7 @@ func (r *Repository) listProductsQuery(ctx context.Context, query string, args .
 
 func (r *Repository) GetProductImageByID(ctx context.Context, imageID uuid.UUID) (ProductImage, error) {
 	query := `
-		SELECT id, product_id, image_url, object_key, alt_text, sort_order, created_at
+		SELECT id, product_id, image_url, object_key, alt_text, sort_order, color_id, created_at
 		FROM product_images
 		WHERE id = $1
 	`
@@ -1331,3 +1331,16 @@ func (r *Repository) GetDictionaryValues(ctx context.Context, dictionaryID uuid.
 }
 
 
+
+func (r *Repository) CheckSellerSKUExists(ctx context.Context, sellerID uuid.UUID, sku string) (bool, error) {
+	var exists bool
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM product_variants pv
+			JOIN products p ON pv.product_id = p.id
+			WHERE p.seller_id = $1 AND LOWER(TRIM(pv.seller_sku)) = LOWER(TRIM($2))
+		)
+	`
+	err := r.db.QueryRow(ctx, query, sellerID, sku).Scan(&exists)
+	return exists, err
+}

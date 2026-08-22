@@ -1,8 +1,9 @@
 package products_test
 
 import (
-	"context"
 	"fmt"
+
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -15,6 +16,11 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 )
+
+
+func ptr[T any](v T) *T {
+	return &v
+}
 
 func setupBlockATestDB(t *testing.T) (*postgres.Client, *products.Service, uuid.UUID) {
 	dsn := os.Getenv("TEST_DATABASE_URL")
@@ -364,25 +370,43 @@ func TestBlockABarcodeAndSKUUniqueness(t *testing.T) {
 }
 
 func TestBlockASizeChartValidation(t *testing.T) {
-	t.Skip("skipped because CreateProduct now allows draft mode without strict size chart validation")
     db, svc, userID := setupBlockATestDB(t)
 	defer db.Close()
 	ctx := context.Background()
     
     // Create a category requiring size chart
     catID := uuid.New()
-    _, err := db.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug, size_chart_required) VALUES ($1, 'Shoes', $2, true)\", catID, \"shoes-\" + uuid.New().String())", catID)
-	_, err = db.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug, size_chart_required) VALUES ($1, 'Shoes', $2, true)", catID, "shoes-" + uuid.New().String())
-
+	_, err := db.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug, size_chart_required) VALUES ($1, 'Shoes', $2, true)", catID, "shoes-" + uuid.New().String())
+    require.NoError(t, err)
     
     _, err = db.Pool.Exec(ctx, "INSERT INTO category_size_chart_fields (id, category_id, code, name, is_required) VALUES ($1, $2, 'length_cm', 'Length CM', true)", uuid.New(), catID)
     require.NoError(t, err)
     
     req := products.CreateProductRequest{
 		Title: "Shoe Prod " + uuid.New().String(),
+		Slug: func(s string) *string { return &s }(uuid.New().String()),
         CategoryID: &catID,
 	}
-    _, err = svc.CreateProductForSeller(ctx, userID, req)
+    p, err := svc.CreateProductForSeller(ctx, userID, req)
+    require.NoError(t, err)
+    
+    err = svc.SubmitProductToModeration(ctx, userID, p.ID, products.SubmitProductModerationRequest{})
     require.Error(t, err)
-    assert.Contains(t, err.Error(), "category requires a size chart")
+    require.Contains(t, err.Error(), "category requires a size chart")
+	
+	req.Title = "Shoe Prod 2 " + uuid.New().String()
+	req.Slug = func(s string) *string { return &s }(uuid.New().String())
+	req.SizeChartRows = []products.ProductSizeChartRowRequest{
+		{
+			SizeValueID: func() uuid.UUID {
+				var sID uuid.UUID
+				db.Pool.QueryRow(ctx, "SELECT id FROM size_values WHERE value = 'M' LIMIT 1").Scan(&sID)
+				return sID
+			}(),
+			Measurements: map[string]interface{}{}, 
+		},
+	}
+	_, err = svc.CreateProductForSeller(ctx, userID, req)
+    require.Error(t, err)
+    require.Contains(t, err.Error(), "missing required measurement length_cm in size chart row")
 }

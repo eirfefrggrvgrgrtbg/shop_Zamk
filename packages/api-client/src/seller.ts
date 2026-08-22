@@ -285,3 +285,7 @@ export const getSellerDictionaryValues = async (dictId: string): Promise<SellerD
 export const updateSellerProductPrices = async (id: string, payload: any): Promise<void> => {
   return request<void>('PATCH', `/seller/products/${id}/prices`, { body: payload });
 };
+
+export const generateSellerSKUs = async (count: number): Promise<{ skus: string[] }> => {
+  return request<{ skus: string[] }>('POST', '/seller/products/generate-skus', { body: { count } });
+};

@@ -25,7 +25,7 @@ export function Step3Attributes({
   useEffect(() => {
     if (!schema) return;
     schema.attributes.forEach(attr => {
-      if (attr.valueType === 'DICTIONARY' && attr.dictionaryId && !dicts[attr.dictionaryId]) {
+      if (attr.valueSource === 'DICTIONARY' && attr.dictionaryId && !dicts[attr.dictionaryId]) {
         getSellerDictionaryValues(attr.dictionaryId).then(vals => {
           setDicts(prev => ({ ...prev, [attr.dictionaryId!]: vals }));
         }).catch(console.error);
@@ -76,7 +76,8 @@ export function Step3Attributes({
       {genericAttrs.map(attr => (
         <div key={attr.id}>
           <label className="block text-sm">{attr.nameRu} {attr.required && '*'}</label>
-          {attr.valueType === 'DICTIONARY' && (
+          
+          {attr.valueSource === 'DICTIONARY' && attr.valueType === 'ENUM' && (
             <select 
               value={state.productAttributes[attr.id] as string || ''}
               onChange={e => updateState({ productAttributes: { ...state.productAttributes, [attr.id]: e.target.value }})}
@@ -86,7 +87,22 @@ export function Step3Attributes({
               {(dicts[attr.dictionaryId || ''] || []).map(d => <option key={d.id} value={d.id}>{d.nameRu}</option>)}
             </select>
           )}
-          {attr.valueType === 'TEXT' && (
+
+          {attr.valueSource === 'DICTIONARY' && attr.valueType === 'MULTI_ENUM' && (
+            <select 
+              multiple
+              value={(state.productAttributes[attr.id] as unknown as string[]) || []}
+              onChange={e => {
+                const values = Array.from(e.target.selectedOptions, option => option.value);
+                updateState({ productAttributes: { ...state.productAttributes, [attr.id]: values }});
+              }}
+              className="mt-1 block w-full border p-2 rounded h-32"
+            >
+              {(dicts[attr.dictionaryId || ''] || []).map(d => <option key={d.id} value={d.id}>{d.nameRu}</option>)}
+            </select>
+          )}
+
+          {attr.valueSource !== 'DICTIONARY' && attr.valueType === 'TEXT' && (
             <input 
               type="text" 
               value={state.productAttributes[attr.id] as string || ''}
@@ -94,7 +110,7 @@ export function Step3Attributes({
               className="mt-1 block w-full border p-2 rounded"
             />
           )}
-          {attr.valueType === 'NUMBER' && (
+          {attr.valueSource !== 'DICTIONARY' && attr.valueType === 'NUMBER' && (
             <input 
               type="number" 
               value={state.productAttributes[attr.id] as number || ''}
@@ -102,7 +118,7 @@ export function Step3Attributes({
               className="mt-1 block w-full border p-2 rounded"
             />
           )}
-          {attr.valueType === 'BOOLEAN' && (
+          {attr.valueSource !== 'DICTIONARY' && attr.valueType === 'BOOLEAN' && (
             <input 
               type="checkbox" 
               checked={state.productAttributes[attr.id] as boolean || false}
