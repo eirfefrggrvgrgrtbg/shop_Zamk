@@ -16,6 +16,7 @@ Steps:
 5. Prefer the repository migration check only if it is proven compatible with ZAMK DB safety rules.
 6. If a clean scratch database is required: use an isolated temporary scratch DB, never zamk or zamk_test, and remove only that scratch DB afterward.
 7. Verify normal up chain. If the task specifically requires down/up validation, do it only on scratch.
+8. Whenever a workflow runs terminal commands, execute EACH command as a separate terminal tool invocation. Do NOT combine commands using: ;, &&, ||.
 
 Return:
 

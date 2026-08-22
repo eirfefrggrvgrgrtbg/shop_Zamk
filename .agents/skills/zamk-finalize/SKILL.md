@@ -9,10 +9,13 @@ Purpose: standard git closure after all technical checks already PASS.
 
 Steps:
 
-1. Run:
-   `git diff --check`
-   `git status --short`
-   `git diff --stat`
+1. run `git diff --check`
+
+   then separately:
+   run `git status --short`
+
+   then separately:
+   run `git diff --stat`
 
 2. Inspect changed files.
 
@@ -28,11 +31,14 @@ Steps:
 
 6. Commit.
 
-7. Run:
-   `git rev-parse HEAD`
-   `git status --short`
+7. run `git rev-parse HEAD`
+
+   then separately:
+   run `git status --short`
 
 Required final worktree: clean.
+
+Whenever a workflow runs terminal commands, execute EACH command as a separate terminal tool invocation. Do NOT combine commands using: ;, &&, ||.
 
 Return:
 

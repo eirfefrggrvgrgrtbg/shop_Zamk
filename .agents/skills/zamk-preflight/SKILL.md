@@ -9,11 +9,16 @@ Purpose: standard safe start before implementation.
 
 Steps:
 
-1. Run:
-   `git branch --show-current`
-   `git rev-parse HEAD`
-   `git status --short`
-   `git log -5 --oneline`
+1. run `git branch --show-current`
+
+   then separately:
+   run `git rev-parse HEAD`
+
+   then separately:
+   run `git status --short`
+
+   then separately:
+   run `git log -5 --oneline`
 
 2. Compare HEAD with the expected HEAD stated in the current task, if any.
 
@@ -21,6 +26,8 @@ Steps:
    STOP and report exact files.
 
 4. Do not edit anything during preflight.
+
+5. Whenever a workflow runs terminal commands, execute EACH command as a separate terminal tool invocation. Do NOT combine commands using: ;, &&, ||.
 
 Return only:
 branch

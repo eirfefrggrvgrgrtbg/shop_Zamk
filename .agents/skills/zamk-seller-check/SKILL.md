@@ -9,8 +9,7 @@ Purpose: standard Seller frontend technical check.
 
 Steps:
 
-Run:
-`npm run build --prefix apps/seller`
+run `npm run build --prefix apps/seller`
 
 Then search Product/Seller source when relevant for:
 alert(
@@ -22,6 +21,8 @@ Math.random
 
 Use grep/rg.
 Do not treat unrelated historical matches outside the changed feature as failure; report them separately.
+
+Whenever a workflow runs terminal commands, execute EACH command as a separate terminal tool invocation. Do NOT combine commands using: ;, &&, ||.
 
 Return:
 

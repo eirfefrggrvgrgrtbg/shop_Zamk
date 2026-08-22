@@ -18,6 +18,7 @@ Steps:
 7. If Product media is in scope: verify backend storage provider initialized successfully, not merely that MinIO container is running.
 8. Do NOT create/modify Product business state just to claim readiness.
 9. Do NOT perform visual acceptance.
+10. Whenever a workflow runs terminal commands, execute EACH command as a separate terminal tool invocation. Do NOT combine commands using: ;, &&, ||.
 
 Return:
 
