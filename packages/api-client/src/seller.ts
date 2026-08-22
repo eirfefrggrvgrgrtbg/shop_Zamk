@@ -254,8 +254,8 @@ export interface SellerCategorySchema {
 }
 
 export const getSellerCategories = async (): Promise<SellerCategory[]> => {
-  const res = await request<{ categories: SellerCategory[] }>('GET', '/seller/reference/categories');
-  return res.categories || [];
+  const res = await request<{ items: SellerCategory[] }>('GET', '/seller/reference/categories');
+  return res.items || [];
 };
 
 export const getSellerCategorySchema = async (id: string): Promise<SellerCategorySchema> => {
@@ -263,28 +263,23 @@ export const getSellerCategorySchema = async (id: string): Promise<SellerCategor
 };
 
 export const getSellerColors = async (): Promise<SellerColor[]> => {
-  const res = await request<{ colors: SellerColor[] }>('GET', '/seller/reference/colors');
-  return res.colors || [];
+  return request<SellerColor[]>('GET', '/seller/reference/colors');
 };
 
 export const getSellerMaterials = async (): Promise<SellerMaterial[]> => {
-  const res = await request<{ materials: SellerMaterial[] }>('GET', '/seller/reference/materials');
-  return res.materials || [];
+  return request<SellerMaterial[]>('GET', '/seller/reference/materials');
 };
 
 export const getSellerSizeSystems = async (): Promise<SellerSizeSystem[]> => {
-  const res = await request<{ sizeSystems: SellerSizeSystem[] }>('GET', '/seller/reference/size-systems');
-  return res.sizeSystems || [];
+  return request<SellerSizeSystem[]>('GET', '/seller/reference/size-systems');
 };
 
 export const getSellerSizeValues = async (systemId: string): Promise<SellerSizeValue[]> => {
-  const res = await request<{ sizeValues: SellerSizeValue[] }>('GET', `/seller/reference/size-systems/${systemId}/values`);
-  return res.sizeValues || [];
+  return request<SellerSizeValue[]>('GET', `/seller/reference/size-systems/${systemId}/values`);
 };
 
 export const getSellerDictionaryValues = async (dictId: string): Promise<SellerDictionaryValue[]> => {
-  const res = await request<{ dictionaryValues: SellerDictionaryValue[] }>('GET', `/seller/reference/dictionaries/${dictId}/values`);
-  return res.dictionaryValues || [];
+  return request<SellerDictionaryValue[]>('GET', `/seller/reference/dictionaries/${dictId}/values`);
 };
 
 export const updateSellerProductPrices = async (id: string, payload: any): Promise<void> => {

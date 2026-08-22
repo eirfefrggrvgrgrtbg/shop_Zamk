@@ -1,34 +1,46 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft,
-  CheckCircle2,
-} from 'lucide-react';
-import {
-  createSellerProduct,
-  updateSellerProduct,
-} from '@zamk/api-client/src/seller';
+import { ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { getSellerCategories, getSellerCategorySchema, createSellerProduct, updateSellerProduct, submitSellerProductModeration, type SellerCategory, type SellerCategorySchema } from '@zamk/api-client/src/seller';
 
-
+import { initialWizardState, type WizardState } from './wizard/WizardState';
+import { Step1Basics } from './wizard/Step1Basics';
+import { Step2Category } from './wizard/Step2Category';
+import { Step3Attributes } from './wizard/Step3Attributes';
+import { Step4Variants } from './wizard/Step4Variants';
+import { Step5SizeChart } from './wizard/Step5SizeChart';
+import { Step6Media } from './wizard/Step6Media';
+import { Step7Pricing } from './wizard/Step7Pricing';
+import { Step8Review } from './wizard/Step8Review';
 
 export type ProductWizardProps = {
-  initialData?: any; // If editing
+  initialData?: any; 
   isEdit?: boolean;
 };
 
 export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdit }) => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-    const [savingDraft, setSavingDraft] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [showPublishedModal, setShowPublishedModal] = useState(false);
+    const [state, setState] = useState<WizardState>({ ...initialWizardState, ...initialData });
 
-  // Form State
-  const [title, setTitle] = useState(initialData?.title || '');
-  const [description, setDescription] = useState(initialData?.description || '');
-  
-  const [categoryId] = useState<string>(initialData?.categoryId || '');
+  const [categories, setCategories] = useState<SellerCategory[]>([]);
+  const [schema, setSchema] = useState<SellerCategorySchema | null>(null);
 
+  useEffect(() => {
+    getSellerCategories().then(setCategories).catch(console.error);
+  }, []);
 
-  // Steps Configuration
+  useEffect(() => {
+    if (state.categoryId) {
+      getSellerCategorySchema(state.categoryId).then(setSchema).catch(console.error);
+    }
+  }, [state.categoryId]);
+
+  const updateState = (update: Partial<WizardState>) => setState(prev => ({ ...prev, ...update }));
+
   const steps = [
     'Основное',
     'Категория',
@@ -40,30 +52,79 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
     'Проверка'
   ];
 
-  // Helper to handle Save Draft
+  const buildPayload = () => {
+    return {
+      title: state.title,
+      description: state.description,
+      categoryId: state.categoryId || undefined,
+      materialComposition: state.materialComposition,
+      variants: state.variants.filter(v => v.active).map(v => ({
+        id: v.id,
+        colorId: v.colorId,
+        sizeValueId: v.sizeValueId,
+        sellerSku: v.sellerSku,
+        barcode: v.barcode,
+        priceCents: v.priceCents
+      })),
+      // Mapped generic attributes
+      attributes: Object.entries(state.productAttributes).map(([defId, val]) => {
+        const attrDef = schema?.attributes.find(a => a.id === defId);
+        return {
+          attributeDefinitionId: defId,
+          textValue: attrDef?.valueType === 'TEXT' ? val : undefined,
+          numberValue: attrDef?.valueType === 'NUMBER' ? val : undefined,
+          boolValue: attrDef?.valueType === 'BOOLEAN' ? val : undefined,
+          enumValueId: attrDef?.valueType === 'DICTIONARY' ? val : undefined
+        };
+      })
+    };
+  };
+
   const handleSaveDraft = async () => {
     try {
       setSavingDraft(true);
-      // Construct payload
-      const payload = {
-        title,
-        description,
-        categoryId: categoryId || undefined,
-        // TODO: Map other fields
-      };
+      const payload = buildPayload();
       
       if (isEdit && initialData?.id) {
         await updateSellerProduct(initialData.id, payload);
-        console.log('Черновик обновлен');
+        alert('Черновик обновлен');
       } else {
         const p = await createSellerProduct(payload);
-        console.log('Черновик сохранен');
+        alert('Черновик сохранен');
         navigate(`/products/${p.id}/edit`, { replace: true });
       }
     } catch (err: any) {
-      console.error('Ошибка сохранения черновика', { description: err.message });
+      alert('Ошибка сохранения черновика: ' + err.message);
     } finally {
       setSavingDraft(false);
+    }
+  };
+
+  
+  const handleInitialSubmit = () => {
+    if (!isEdit || !initialData?.id) {
+      alert('Сначала сохраните черновик перед модерацией.');
+      return;
+    }
+    if (initialData?.status === 'PUBLISHED') {
+      setShowPublishedModal(true);
+    } else {
+      executeSubmit('HIDE');
+    }
+  };
+
+  const executeSubmit = async (_strategy: 'CONTINUE_SELLING' | 'HIDE') => {
+    try {
+      setSubmitting(true);
+      // In a real app we'd pass the strategy. The API currently just takes comment.
+      await submitSellerProductModeration(initialData.id);
+      setShowPublishedModal(false);
+      alert('Товар отправлен на модерацию!');
+      navigate('/products');
+    } catch (err: any) {
+      alert('Ошибка модерации: ' + err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -81,7 +142,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         <div className="flex items-center space-x-3">
           <button
             onClick={handleSaveDraft}
-            disabled={savingDraft || !title}
+            disabled={savingDraft || !state.title}
             className="px-4 py-2 border rounded-md shadow-sm text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
           >
             {savingDraft ? 'Сохранение...' : 'Сохранить черновик'}
@@ -90,7 +151,6 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
       </div>
 
       <div className="flex">
-        {/* Stepper Sidebar */}
         <div className="w-64 pr-8">
           <nav aria-label="Progress">
             <ol role="list" className="overflow-hidden">
@@ -128,67 +188,40 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
           </nav>
         </div>
 
-        {/* Form Content */}
         <div className="flex-1 min-w-0 bg-white shadow rounded-lg p-8">
-          {step === 1 && (
-            <div className="space-y-6">
-              <h2 className="text-xl font-medium">Основное</h2>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Название *</label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-black focus:ring-black sm:text-sm"
-                  placeholder="Например: Футболка базовая"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Описание *</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={6}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-black focus:ring-black sm:text-sm"
-                  placeholder="Подробное описание товара..."
-                />
-              </div>
-              
-              <div className="pt-5 flex justify-end">
-                <button
-                  onClick={() => setStep(2)}
-                  disabled={!title || !description}
-                  className="px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800 disabled:opacity-50"
-                >
-                  Далее
-                </button>
-              </div>
-            </div>
-          )}
-          
-          {step > 1 && (
-             <div className="space-y-6">
-                <h2 className="text-xl font-medium">{steps[step - 1]}</h2>
-                <p className="text-gray-500">В разработке (для демонстрации)</p>
-                <div className="pt-5 flex justify-between">
-                  <button
-                    onClick={() => setStep(step - 1)}
-                    className="px-4 py-2 border rounded-md shadow-sm text-sm font-medium hover:bg-gray-50"
-                  >
-                    Назад
-                  </button>
-                  <button
-                    onClick={() => setStep(step + 1)}
-                    disabled={step === 8}
-                    className="px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800 disabled:opacity-50"
-                  >
-                    Далее
-                  </button>
-                </div>
-             </div>
-          )}
+          {step === 1 && <Step1Basics state={state} updateState={updateState} onNext={() => setStep(2)} />}
+          {step === 2 && <Step2Category state={state} updateState={updateState} categories={categories} onNext={() => setStep(3)} onPrev={() => setStep(1)} />}
+          {step === 3 && <Step3Attributes state={state} updateState={updateState} schema={schema} onNext={() => setStep(4)} onPrev={() => setStep(2)} />}
+          {step === 4 && <Step4Variants state={state} updateState={updateState} schema={schema} onNext={() => setStep(5)} onPrev={() => setStep(3)} />}
+          {step === 5 && <Step5SizeChart state={state} updateState={updateState} schema={schema} onNext={() => setStep(6)} onPrev={() => setStep(4)} />}
+          {step === 6 && <Step6Media state={state} updateState={updateState} schema={schema} onNext={() => setStep(7)} onPrev={() => setStep(5)} />}
+          {step === 7 && <Step7Pricing state={state} updateState={updateState} onNext={() => setStep(8)} onPrev={() => setStep(6)} />}
+          {step === 8 && <Step8Review state={state} onPrev={() => setStep(7)} onSubmit={handleInitialSubmit} />}
         </div>
       </div>
+    
+      {showPublishedModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium mb-4">Что делать с товаром, пока изменения проходят модерацию?</h3>
+            <div className="space-y-3">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input type="radio" name="strategy" defaultChecked className="mt-1" />
+                <span>Продолжать продавать текущую версию</span>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input type="radio" name="strategy" className="mt-1" />
+                <span>Снять товар с публикации до проверки</span>
+              </label>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button onClick={() => setShowPublishedModal(false)} className="px-4 py-2 border rounded">Отмена</button>
+              <button onClick={() => executeSubmit('CONTINUE_SELLING')} disabled={submitting} className="px-4 py-2 bg-black text-white rounded">Отправить изменения</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
