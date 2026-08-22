@@ -1,0 +1,1 @@
+ALTER TABLE product_images ADD COLUMN color_id UUID REFERENCES colors(id) ON DELETE SET NULL;

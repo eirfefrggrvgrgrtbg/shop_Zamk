@@ -1076,7 +1076,7 @@ func (r *Repository) GetProductImageByID(ctx context.Context, imageID uuid.UUID)
 	`
 	var img ProductImage
 	err := r.db.QueryRow(ctx, query, imageID).Scan(
-		&img.ID, &img.ProductID, &img.ImageURL, &img.ObjectKey, &img.AltText, &img.SortOrder, &img.CreatedAt,
+		&img.ID, &img.ProductID, &img.ImageURL, &img.ObjectKey, &img.AltText, &img.SortOrder, &img.ColorID, &img.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1329,3 +1329,5 @@ func (r *Repository) GetDictionaryValues(ctx context.Context, dictionaryID uuid.
 	}
 	return vals, nil
 }
+
+

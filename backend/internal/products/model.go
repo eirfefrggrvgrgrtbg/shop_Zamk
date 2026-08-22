@@ -121,6 +121,7 @@ type ProductImage struct {
 	ObjectKey *string   `json:"objectKey,omitempty"`
 	AltText   *string   `json:"altText,omitempty"`
 	SortOrder int       `json:"sortOrder"`
+	ColorID   *uuid.UUID `json:"colorId,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 

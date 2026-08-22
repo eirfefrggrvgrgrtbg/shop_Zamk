@@ -948,3 +948,33 @@ func (h *Handler) GetPublicSellerStore(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
+
+func (h *Handler) UpdatePrices(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	productID, ok := h.parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+
+	userID, ok := h.getUserID(w, r)
+	if !ok {
+		return
+	}
+
+	var req UpdateProductPricesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+		return
+	}
+	if err := h.validator.Struct(req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "validation_failed", err.Error())
+		return
+	}
+
+	if err := h.service.UpdateProductPrices(ctx, userID, productID, req); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

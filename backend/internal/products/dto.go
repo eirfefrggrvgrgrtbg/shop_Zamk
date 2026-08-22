@@ -109,6 +109,7 @@ type ProductImageRequest struct {
 	ImageURL  string  `json:"imageUrl" validate:"required"`
 	AltText   *string `json:"altText,omitempty"`
 	SortOrder *int    `json:"sortOrder,omitempty"`
+	ColorID   *uuid.UUID `json:"colorId,omitempty"`
 }
 
 type SubmitProductModerationRequest struct {
@@ -295,4 +296,14 @@ type VariantAttributeValueRequest struct {
 	TextValue             *string    `json:"textValue,omitempty"`
 	NumberValue           *float64   `json:"numberValue,omitempty"`
 	BoolValue             *bool      `json:"boolValue,omitempty"`
+}
+
+type UpdateProductPricesRequest struct {
+	Variants []VariantPriceUpdateRequest `json:"variants" validate:"required,min=1"`
+}
+
+type VariantPriceUpdateRequest struct {
+	ID            uuid.UUID `json:"id" validate:"required"`
+	PriceCents    int64     `json:"priceCents" validate:"required,gt=0"`
+	OldPriceCents *int64    `json:"oldPriceCents,omitempty" validate:"omitempty,min=0"`
 }

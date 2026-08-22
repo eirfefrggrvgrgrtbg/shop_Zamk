@@ -104,7 +104,7 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 		}
 	}
 	if req.CategoryID != nil {
-		if err := s.validateCategorySchema(ctx, *req.CategoryID, req.Attributes, req.Variants, req.MaterialComposition, req.SizeChartRows); err != nil {
+		if err := s.validateCategorySchema(ctx, *req.CategoryID, req.Attributes, req.Variants, req.MaterialComposition, req.SizeChartRows, true); err != nil {
 			return Product{}, err
 		}
 	}
@@ -336,7 +336,7 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		}
 	}
 	if p.CategoryID != nil {
-		if err := s.validateCategorySchema(ctx, *p.CategoryID, req.Attributes, req.Variants, req.MaterialComposition, req.SizeChartRows); err != nil {
+		if err := s.validateCategorySchema(ctx, *p.CategoryID, req.Attributes, req.Variants, req.MaterialComposition, req.SizeChartRows, true); err != nil {
 			return Product{}, err
 		}
 	}
@@ -806,10 +806,79 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 	if err != nil {
 		return err
 	}
-
 	if !CanSubmitProduct(seller.Status, p.Status) {
 		return fmt.Errorf("%w: can only submit draft or rejected products", ErrInvalidStatusTransition)
 	}
+
+	if p.CategoryID == nil {
+		return fmt.Errorf("category is required for moderation")
+	}
+
+	var pAttrs []ProductAttributeValueRequest
+	for _, a := range p.Attributes {
+		pAttrs = append(pAttrs, ProductAttributeValueRequest{
+			AttributeDefinitionID: a.AttributeDefinitionID,
+			EnumValueID:           a.EnumValueID,
+			TextValue:             a.TextValue,
+			NumberValue:           a.NumberValue,
+			BoolValue:             a.BoolValue,
+		})
+	}
+	var vReqs []ProductVariantRequest
+	for _, v := range p.Variants {
+		var vAttrs []VariantAttributeValueRequest
+		for _, a := range v.Attributes {
+			vAttrs = append(vAttrs, VariantAttributeValueRequest{
+				AttributeDefinitionID: a.AttributeDefinitionID,
+				EnumValueID:           a.EnumValueID,
+				TextValue:             a.TextValue,
+				NumberValue:           a.NumberValue,
+				BoolValue:             a.BoolValue,
+			})
+		}
+		vReqs = append(vReqs, ProductVariantRequest{
+			ID:          &v.ID,
+			ColorID:     v.ColorID,
+			SizeValueID: v.SizeValueID,
+			PriceCents:  v.PriceCents,
+			Attributes:  vAttrs,
+			SellerSKU:   v.SellerSKU,
+		})
+	}
+	var comps []ProductMaterialCompositionRequest
+	for _, c := range p.MaterialComposition {
+		comps = append(comps, ProductMaterialCompositionRequest{
+			MaterialID: c.MaterialID,
+			Percentage: c.Percentage,
+		})
+	}
+	var sizeChartRows []ProductSizeChartRowRequest
+	if p.SizeChart != nil {
+		for _, r := range p.SizeChart.Rows {
+			sizeChartRows = append(sizeChartRows, ProductSizeChartRowRequest{
+				SizeValueID: r.SizeValueID,
+				Measurements: r.Measurements,
+			})
+		}
+	}
+
+	if err := s.validateCategorySchema(ctx, *p.CategoryID, pAttrs, vReqs, comps, sizeChartRows, false); err != nil {
+		return fmt.Errorf("moderation validation failed: %w", err)
+	}
+	
+	// Check variant prices and SKUs explicitly for moderation
+	if len(p.Variants) == 0 {
+		return fmt.Errorf("moderation validation failed: at least one active variant is required")
+	}
+	for _, v := range p.Variants {
+		if v.PriceCents == nil || *v.PriceCents <= 0 {
+			return fmt.Errorf("moderation validation failed: variant price must be greater than 0")
+		}
+		if v.SellerSKU == nil || *v.SellerSKU == "" {
+			return fmt.Errorf("moderation validation failed: variant seller SKU is required")
+		}
+	}
+
 
 	fromStatus := p.Status
 	now := time.Now()
@@ -1292,6 +1361,7 @@ func (s *Service) validateCategorySchema(
 	vReqs []ProductVariantRequest, 
 	comps []ProductMaterialCompositionRequest, 
 	sizeChartRows []ProductSizeChartRowRequest,
+	isDraft bool,
 ) error {
 	// Fetch schema
 	rows, err := s.dbPool.Pool.Query(ctx, `
@@ -1353,7 +1423,7 @@ func (s *Service) validateCategorySchema(
 		}
 	}
 
-	if hasVariantSize && len(allowedSizeSystems) == 0 {
+	if !isDraft && hasVariantSize && len(allowedSizeSystems) == 0 {
 		return fmt.Errorf("category schema configuration error: category requires size but has no allowed size systems configured")
 	}
 
@@ -1381,7 +1451,7 @@ func (s *Service) validateCategorySchema(
 	for id, def := range schemaMap {
 		if def.Scope == "PRODUCT" {
 			if def.ValueSource == "MATERIAL_COMPOSITION" {
-				if def.Required && len(comps) == 0 {
+				if !isDraft && def.Required && len(comps) == 0 {
 					return fmt.Errorf("required product attribute missing: %s (MATERIAL_COMPOSITION)", def.Code)
 				}
 				if len(comps) > 0 {
@@ -1394,13 +1464,13 @@ func (s *Service) validateCategorySchema(
 							return fmt.Errorf("material %s is invalid or inactive", c.MaterialID)
 						}
 					}
-					if total < 99.9 || total > 100.1 {
+					if !isDraft && (total < 99.9 || total > 100.1) {
 						return fmt.Errorf("material composition must total exactly 100%%, got %f", total)
 					}
 				}
 			} else {
 				count := pAttrMap[id]
-				if def.Required && count == 0 {
+				if !isDraft && def.Required && count == 0 {
 					return fmt.Errorf("required product attribute missing: %s", id)
 				}
 				if def.MinValues != nil && count < *def.MinValues {
@@ -1437,7 +1507,7 @@ func (s *Service) validateCategorySchema(
 		for id, def := range schemaMap {
 			if def.Scope == "VARIANT" {
 				if def.ValueSource == "VARIANT_COLOR" {
-					if def.Required && v.ColorID == nil {
+					if !isDraft && def.Required && v.ColorID == nil {
 						return fmt.Errorf("required variant attribute missing: %s (COLOR) on variant %d", def.Code, i)
 					}
 					if v.ColorID != nil {
@@ -1448,7 +1518,7 @@ func (s *Service) validateCategorySchema(
 						}
 					}
 				} else if def.ValueSource == "VARIANT_SIZE" {
-					if def.Required && v.SizeValueID == nil {
+					if !isDraft && def.Required && v.SizeValueID == nil {
 						return fmt.Errorf("required variant attribute missing: %s (SIZE) on variant %d", def.Code, i)
 					}
 					if v.SizeValueID != nil {
@@ -1465,7 +1535,7 @@ func (s *Service) validateCategorySchema(
 					}
 				} else {
 					count := vAttrMap[id]
-					if def.Required && count == 0 {
+					if !isDraft && def.Required && count == 0 {
 						return fmt.Errorf("required variant attribute missing: %s on variant %d", id, i)
 					}
 					if def.MinValues != nil && count < *def.MinValues {
@@ -1485,7 +1555,7 @@ func (s *Service) validateCategorySchema(
 	if err != nil {
 		return err
 	}
-	if requiredChart && len(sizeChartRows) == 0 {
+	if !isDraft && requiredChart && len(sizeChartRows) == 0 {
 		return errors.New("category requires a size chart")
 	}
 	if len(sizeChartRows) > 0 {
@@ -1787,4 +1857,45 @@ func (s *Service) ListSizeValues(ctx context.Context, systemID uuid.UUID) ([]Siz
 
 func (s *Service) GetDictionaryValues(ctx context.Context, dictionaryID uuid.UUID) ([]AttributeDictionaryValue, error) {
 	return s.repo.GetDictionaryValues(ctx, dictionaryID)
+}
+
+func (s *Service) UpdateProductPrices(ctx context.Context, currentUserID, productID uuid.UUID, req UpdateProductPricesRequest) error {
+	seller, err := s.getSellerForUser(ctx, currentUserID)
+	if err != nil {
+		return err
+	}
+
+	if seller.Status == sellers.StatusBlocked || seller.Status == sellers.StatusArchived {
+		return ErrSellerBlocked
+	}
+	if seller.Status == sellers.StatusPending {
+		return ErrSellerNotActive
+	}
+
+	p, err := s.repo.GetProductByIDForSeller(ctx, productID, seller.ID)
+	if err != nil {
+		return err
+	}
+
+	// Update prices for variants that belong to this product
+	for _, vUpdate := range req.Variants {
+		// Verify variant belongs to product
+		found := false
+		for _, v := range p.Variants {
+			if v.ID == vUpdate.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("variant %s does not belong to product %s", vUpdate.ID, productID)
+		}
+		
+		err := s.repo.UpdateVariantPrice(ctx, vUpdate.ID, vUpdate.PriceCents)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
