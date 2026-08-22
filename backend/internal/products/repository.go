@@ -181,11 +181,28 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 		return nil, fmt.Errorf("failed to get product: %w", err)
 	}
 
+
 	// Load Variants
 	p.Variants, err = r.GetProductVariants(ctx, p.ID)
 	if err != nil {
 		return nil, err
 	}
+
+	p.Attributes, err = r.GetProductAttributes(ctx, p.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	p.MaterialComposition, err = r.GetProductMaterialComposition(ctx, p.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	p.SizeChart, err = r.GetProductSizeChart(ctx, p.ID)
+	if err != nil {
+		return nil, err
+	}
+
 
 	// Load Images
 	p.Images, err = r.GetProductImages(ctx, p.ID)
@@ -396,11 +413,21 @@ func (r *Repository) GetProductVariants(ctx context.Context, productID uuid.UUID
 		v.AvailableStock = totalStock - reservedStock
 		inStock := hasInv && v.AvailableStock > 0
 		v.InStock = &inStock
-		variants = append(variants, v)
+				variants = append(variants, v)
 	}
+	rows.Close() // Explicitly close
+
 	if variants == nil {
 		variants = []ProductVariant{}
 	}
+
+	for i := range variants {
+		variants[i].Attributes, err = r.GetVariantAttributes(ctx, variants[i].ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return variants, nil
 }
 
@@ -951,11 +978,28 @@ func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug
 		return nil, fmt.Errorf("failed to get product: %w", err)
 	}
 
+
 	// Load Variants
 	p.Variants, err = r.GetProductVariants(ctx, p.ID)
 	if err != nil {
 		return nil, err
 	}
+
+	p.Attributes, err = r.GetProductAttributes(ctx, p.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	p.MaterialComposition, err = r.GetProductMaterialComposition(ctx, p.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	p.SizeChart, err = r.GetProductSizeChart(ctx, p.ID)
+	if err != nil {
+		return nil, err
+	}
+
 
 	inStock := false
 	for _, v := range p.Variants {
@@ -999,6 +1043,7 @@ func (r *Repository) listProductsQuery(ctx context.Context, query string, args .
 	if rows.Err() != nil {
 		return nil, rows.Err()
 	}
+	rows.Close() // Explicitly close to release connection before N+1 queries
 
 	for i := range products {
 		variants, _ := r.GetProductVariants(ctx, products[i].ID)
@@ -1102,4 +1147,167 @@ func (r *Repository) UpdateVariantPrice(ctx context.Context, variantID uuid.UUID
 	query := `UPDATE product_variants SET price_cents = $1, updated_at = now() WHERE id = $2`
 	_, err := r.db.Exec(ctx, query, priceCents, variantID)
 	return err
+}
+
+func (r *Repository) InsertProductAttributeValues(ctx context.Context, productID uuid.UUID, attrs []ProductAttributeValue) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM product_attribute_values WHERE product_id = $1", productID)
+	if err != nil {
+		return err
+	}
+	if len(attrs) == 0 {
+		return nil
+	}
+	for _, a := range attrs {
+		_, err := r.db.Exec(ctx, `
+			INSERT INTO product_attribute_values (id, product_id, attribute_definition_id, enum_value_id, text_value, number_value, bool_value)
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
+		`, productID, a.AttributeDefinitionID, a.EnumValueID, a.TextValue, a.NumberValue, a.BoolValue)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Repository) InsertVariantAttributeValues(ctx context.Context, variantID uuid.UUID, attrs []VariantAttributeValue) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM variant_attribute_values WHERE product_variant_id = $1", variantID)
+	if err != nil {
+		return err
+	}
+	if len(attrs) == 0 {
+		return nil
+	}
+	for _, a := range attrs {
+		_, err := r.db.Exec(ctx, `
+			INSERT INTO variant_attribute_values (id, product_variant_id, attribute_definition_id, enum_value_id, text_value, number_value, bool_value)
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
+		`, variantID, a.AttributeDefinitionID, a.EnumValueID, a.TextValue, a.NumberValue, a.BoolValue)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Repository) InsertMaterialComposition(ctx context.Context, productID uuid.UUID, comp []ProductMaterialComposition) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM product_material_composition WHERE product_id = $1", productID)
+	if err != nil {
+		return err
+	}
+	for _, c := range comp {
+		_, err := r.db.Exec(ctx, `
+			INSERT INTO product_material_composition (product_id, material_id, percentage)
+			VALUES ($1, $2, $3)
+		`, productID, c.MaterialID, c.Percentage)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Repository) InsertSizeChart(ctx context.Context, productID uuid.UUID, categoryID uuid.UUID, rows []ProductSizeChartRow) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM product_size_charts WHERE product_id = $1", productID)
+	if err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	var chartID uuid.UUID
+	err = r.db.QueryRow(ctx, "INSERT INTO product_size_charts (product_id, category_id) VALUES ($1, $2) RETURNING id", productID, categoryID).Scan(&chartID)
+	if err != nil {
+		return err
+	}
+	for _, rRow := range rows {
+		_, err := r.db.Exec(ctx, `
+			INSERT INTO product_size_chart_rows (size_chart_id, size_value_id, measurements)
+			VALUES ($1, $2, $3)
+		`, chartID, rRow.SizeValueID, rRow.Measurements)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Repository) GetProductMaterialComposition(ctx context.Context, productID uuid.UUID) ([]ProductMaterialComposition, error) {
+	rows, err := r.db.Query(ctx, "SELECT material_id, percentage FROM product_material_composition WHERE product_id = $1", productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var res []ProductMaterialComposition
+	for rows.Next() {
+		var c ProductMaterialComposition
+		c.ProductID = productID
+		if err := rows.Scan(&c.MaterialID, &c.Percentage); err != nil {
+			return nil, err
+		}
+		res = append(res, c)
+	}
+	return res, nil
+}
+
+func (r *Repository) GetProductAttributes(ctx context.Context, productID uuid.UUID) ([]ProductAttributeValue, error) {
+	rows, err := r.db.Query(ctx, "SELECT id, attribute_definition_id, enum_value_id, text_value, number_value, bool_value, created_at, updated_at FROM product_attribute_values WHERE product_id = $1", productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var res []ProductAttributeValue
+	for rows.Next() {
+		var a ProductAttributeValue
+		a.ProductID = productID
+		if err := rows.Scan(&a.ID, &a.AttributeDefinitionID, &a.EnumValueID, &a.TextValue, &a.NumberValue, &a.BoolValue, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			return nil, err
+		}
+		res = append(res, a)
+	}
+	return res, nil
+}
+
+func (r *Repository) GetVariantAttributes(ctx context.Context, variantID uuid.UUID) ([]VariantAttributeValue, error) {
+	rows, err := r.db.Query(ctx, "SELECT id, attribute_definition_id, enum_value_id, text_value, number_value, bool_value, created_at, updated_at FROM variant_attribute_values WHERE product_variant_id = $1", variantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var res []VariantAttributeValue
+	for rows.Next() {
+		var a VariantAttributeValue
+		a.ProductVariantID = variantID
+		if err := rows.Scan(&a.ID, &a.AttributeDefinitionID, &a.EnumValueID, &a.TextValue, &a.NumberValue, &a.BoolValue, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			return nil, err
+		}
+		res = append(res, a)
+	}
+	return res, nil
+}
+
+func (r *Repository) GetProductSizeChart(ctx context.Context, productID uuid.UUID) (*ProductSizeChart, error) {
+	var chart ProductSizeChart
+	err := r.db.QueryRow(ctx, "SELECT id, category_id FROM product_size_charts WHERE product_id = $1", productID).Scan(&chart.ID, &chart.CategoryID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	chart.ProductID = productID
+	
+	rows, err := r.db.Query(ctx, "SELECT size_value_id, measurements FROM product_size_chart_rows WHERE size_chart_id = $1", chart.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var rRow ProductSizeChartRow
+		rRow.SizeChartID = chart.ID
+		if err := rows.Scan(&rRow.SizeValueID, &rRow.Measurements); err != nil {
+			return nil, err
+		}
+		chart.Rows = append(chart.Rows, rRow)
+	}
+	return &chart, nil
 }

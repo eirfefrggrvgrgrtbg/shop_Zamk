@@ -79,6 +79,9 @@ type Product struct {
 
 	// Metrics
 	Rating *RatingSummary `json:"rating,omitempty"`
+	Attributes []ProductAttributeValue `json:"attributes,omitempty"`
+	MaterialComposition []ProductMaterialComposition `json:"materialComposition,omitempty"`
+	SizeChart *ProductSizeChart `json:"sizeChart,omitempty"`
 }
 
 type RatingSummary struct {
@@ -108,6 +111,7 @@ type ProductVariant struct {
 	AvailableStock     int       `json:"availableStock"`
 	CreatedAt          time.Time `json:"createdAt"`
 	UpdatedAt          time.Time `json:"updatedAt"`
+	Attributes []VariantAttributeValue `json:"attributes,omitempty"`
 }
 
 type ProductImage struct {
@@ -176,4 +180,61 @@ type ProductRevision struct {
 	ContentSnapshot map[string]interface{} `json:"contentSnapshot"`
 	CreatedAt       time.Time              `json:"createdAt"`
 	UpdatedAt       time.Time              `json:"updatedAt"`
+}
+
+type AttributeDictionary struct {
+	ID        uuid.UUID `json:"id"`
+	Code      string    `json:"code"`
+	NameRU    string    `json:"nameRu"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type AttributeDictionaryValue struct {
+	ID              uuid.UUID              `json:"id"`
+	DictionaryID    uuid.UUID              `json:"dictionaryId"`
+	Code            string                 `json:"code"`
+	NameRU          string                 `json:"nameRu"`
+	DisplayMetadata map[string]interface{} `json:"displayMetadata,omitempty"`
+	SortOrder       int                    `json:"sortOrder"`
+	IsActive        bool                   `json:"isActive"`
+	CreatedAt       time.Time              `json:"createdAt"`
+	UpdatedAt       time.Time              `json:"updatedAt"`
+}
+
+type ProductAttributeValue struct {
+	ID                    uuid.UUID  `json:"id"`
+	ProductID             uuid.UUID  `json:"productId"`
+	AttributeDefinitionID uuid.UUID  `json:"attributeDefinitionId"`
+	EnumValueID           *uuid.UUID `json:"enumValueId,omitempty"`
+	TextValue             *string    `json:"textValue,omitempty"`
+	NumberValue           *float64   `json:"numberValue,omitempty"`
+	BoolValue             *bool      `json:"boolValue,omitempty"`
+	CreatedAt             time.Time  `json:"createdAt"`
+	UpdatedAt             time.Time  `json:"updatedAt"`
+}
+
+type VariantAttributeValue struct {
+	ID                    uuid.UUID  `json:"id"`
+	ProductVariantID      uuid.UUID  `json:"productVariantId"`
+	AttributeDefinitionID uuid.UUID  `json:"attributeDefinitionId"`
+	EnumValueID           *uuid.UUID `json:"enumValueId,omitempty"`
+	TextValue             *string    `json:"textValue,omitempty"`
+	NumberValue           *float64   `json:"numberValue,omitempty"`
+	BoolValue             *bool      `json:"boolValue,omitempty"`
+	CreatedAt             time.Time  `json:"createdAt"`
+	UpdatedAt             time.Time  `json:"updatedAt"`
+}
+
+type ProductSizeChart struct {
+	ID         uuid.UUID             `json:"id"`
+	ProductID  uuid.UUID             `json:"productId"`
+	CategoryID uuid.UUID             `json:"categoryId"`
+	Rows       []ProductSizeChartRow `json:"rows"`
+}
+
+type ProductSizeChartRow struct {
+	SizeChartID  uuid.UUID              `json:"sizeChartId"`
+	SizeValueID  uuid.UUID              `json:"sizeValueId"`
+	Measurements map[string]interface{} `json:"measurements"`
 }

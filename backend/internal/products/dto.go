@@ -26,6 +26,7 @@ type CreateProductRequest struct {
 
 	MaterialComposition []ProductMaterialCompositionRequest `json:"materialComposition,omitempty"`
 	SizeChartRows       []ProductSizeChartRowRequest        `json:"sizeChartRows,omitempty"`
+	Attributes          []ProductAttributeValueRequest      `json:"attributes,omitempty"`
 }
 
 func (req *CreateProductRequest) ValidateSKUs() error {
@@ -66,6 +67,7 @@ type UpdateProductRequest struct {
 
 	MaterialComposition []ProductMaterialCompositionRequest `json:"materialComposition,omitempty"`
 	SizeChartRows       []ProductSizeChartRowRequest        `json:"sizeChartRows,omitempty"`
+	Attributes          []ProductAttributeValueRequest      `json:"attributes,omitempty"`
 }
 
 func (req *UpdateProductRequest) ValidateSKUs() error {
@@ -98,6 +100,7 @@ type ProductVariantRequest struct {
 	SizeValueID        *uuid.UUID `json:"sizeValueId,omitempty"`
 	ShadeName          *string `json:"shadeName,omitempty"`
 	Barcode      *string `json:"barcode,omitempty"`
+	Attributes   []VariantAttributeValueRequest `json:"attributes,omitempty"`
 	PriceCents   *int64  `json:"priceCents,omitempty" validate:"omitempty,min=0"`
 	InitialStock *int    `json:"initialStock,omitempty" validate:"omitempty,min=0"`
 }
@@ -276,4 +279,20 @@ type ProductSizeChartRowRequest struct {
 
 type UpdateVariantPricesRequest struct {
 	Prices map[uuid.UUID]int64 `json:"prices" validate:"required,dive,min=0"`
+}
+
+type ProductAttributeValueRequest struct {
+	AttributeDefinitionID uuid.UUID  `json:"attributeDefinitionId"`
+	EnumValueID           *uuid.UUID `json:"enumValueId,omitempty"`
+	TextValue             *string    `json:"textValue,omitempty"`
+	NumberValue           *float64   `json:"numberValue,omitempty"`
+	BoolValue             *bool      `json:"boolValue,omitempty"`
+}
+
+type VariantAttributeValueRequest struct {
+	AttributeDefinitionID uuid.UUID  `json:"attributeDefinitionId"`
+	EnumValueID           *uuid.UUID `json:"enumValueId,omitempty"`
+	TextValue             *string    `json:"textValue,omitempty"`
+	NumberValue           *float64   `json:"numberValue,omitempty"`
+	BoolValue             *bool      `json:"boolValue,omitempty"`
 }
