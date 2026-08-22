@@ -190,6 +190,7 @@ export interface SellerCategory {
   name: string;
   slug: string;
   parentId?: string;
+  sortOrder: number;
 }
 
 export interface SellerColor {

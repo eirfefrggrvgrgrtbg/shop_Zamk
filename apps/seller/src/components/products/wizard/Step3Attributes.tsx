@@ -5,13 +5,17 @@ import { getSellerMaterials, getSellerDictionaryValues, type SellerCategorySchem
 export function Step3Attributes({ 
   state, 
   updateState, 
-  schema, 
+  schema,
+  schemaLoading,
+  schemaError, 
   onNext, 
   onPrev 
 }: { 
   state: WizardState; 
   updateState: (u: Partial<WizardState>) => void; 
   schema: SellerCategorySchema | null;
+  schemaLoading?: boolean;
+  schemaError?: boolean;
   onNext: () => void; 
   onPrev: () => void; 
 }) {
@@ -24,7 +28,7 @@ export function Step3Attributes({
 
   useEffect(() => {
     if (!schema) return;
-    schema.attributes.forEach(attr => {
+    (schema?.attributes || []).forEach(attr => {
       if (attr.valueSource === 'DICTIONARY' && attr.dictionaryId && !dicts[attr.dictionaryId]) {
         getSellerDictionaryValues(attr.dictionaryId).then(vals => {
           setDicts(prev => ({ ...prev, [attr.dictionaryId!]: vals }));
@@ -33,7 +37,7 @@ export function Step3Attributes({
     });
   }, [schema]);
 
-  const pAttrs = schema?.attributes.filter(a => a.scope === 'PRODUCT') || [];
+  const pAttrs = (schema?.attributes || []).filter(a => a.scope === 'PRODUCT') || [];
   const compAttr = pAttrs.find(a => a.valueSource === 'MATERIAL_COMPOSITION');
   const genericAttrs = pAttrs.filter(a => a.valueSource !== 'MATERIAL_COMPOSITION');
 
@@ -54,6 +58,25 @@ export function Step3Attributes({
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-medium">Характеристики</h2>
+      
+      {schemaLoading && (
+        <div className="p-8 text-center text-gray-500">Загрузка характеристик...</div>
+      )}
+      
+      {schemaError && (
+        <div className="p-4 border border-red-200 bg-red-50 text-red-700 rounded-md">
+          Ошибка при загрузке характеристик. Попробуйте обновить страницу или выбрать категорию заново.
+        </div>
+      )}
+      
+      {!schemaLoading && !schemaError && !compAttr && genericAttrs.length === 0 && (
+        <div className="p-8 text-center text-gray-500 border rounded-md bg-gray-50">
+          Для этой категории дополнительных характеристик нет
+        </div>
+      )}
+      
+      {!schemaLoading && !schemaError && (
+        <>
       
       {compAttr && (
         <div className="p-4 border rounded-md">
@@ -128,6 +151,9 @@ export function Step3Attributes({
           )}
         </div>
       ))}
+
+      </>
+      )}
 
       <div className="flex justify-between pt-4">
         <button onClick={onPrev} className="px-4 py-2 border rounded">Назад</button>

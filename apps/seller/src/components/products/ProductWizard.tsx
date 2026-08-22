@@ -115,6 +115,8 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
 
   const [categories, setCategories] = useState<SellerCategory[]>([]);
   const [schema, setSchema] = useState<SellerCategorySchema | null>(null);
+  const [schemaLoading, setSchemaLoading] = useState(false);
+  const [schemaError, setSchemaError] = useState(false);
 
   useEffect(() => {
     if (isEdit && initialData && !state.categoryId) {
@@ -229,7 +231,18 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
 
   useEffect(() => {
     if (state.categoryId) {
-      getSellerCategorySchema(state.categoryId).then(setSchema).catch(console.error);
+      setSchemaLoading(true);
+      setSchemaError(false);
+      getSellerCategorySchema(state.categoryId)
+        .then(res => {
+          setSchema(res);
+          setSchemaLoading(false);
+        })
+        .catch(err => {
+          console.error(err);
+          setSchemaError(true);
+          setSchemaLoading(false);
+        });
     }
   }, [state.categoryId]);
 
@@ -497,7 +510,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         <div className="flex-1 min-w-0 bg-white shadow rounded-lg p-8">
           {step === 1 && <Step1Basics state={state} updateState={updateState} onNext={() => setStep(2)} />}
           {step === 2 && <Step2Category state={state} updateState={updateState} categories={categories} onNext={() => setStep(3)} onPrev={() => setStep(1)} />}
-          {step === 3 && <Step3Attributes state={state} updateState={updateState} schema={schema} onNext={() => setStep(4)} onPrev={() => setStep(2)} />}
+          {step === 3 && <Step3Attributes state={state} updateState={updateState} schema={schema} schemaLoading={schemaLoading} schemaError={schemaError} onNext={() => setStep(4)} onPrev={() => setStep(2)} />}
           {step === 4 && <Step4Variants state={state} updateState={updateState} schema={schema} onNext={() => setStep(5)} onPrev={() => setStep(3)} />}
           {step === 5 && <Step5SizeChart state={state} updateState={updateState} schema={schema} onNext={() => setStep(6)} onPrev={() => setStep(4)} />}
           {step === 6 && <Step6Media state={state} updateState={updateState} schema={schema} onNext={() => setStep(7)} onPrev={() => setStep(5)} onError={(msg) => showToast(msg, 'error')} />}

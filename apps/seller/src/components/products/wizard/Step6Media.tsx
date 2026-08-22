@@ -24,7 +24,7 @@ export function Step6Media({
     getSellerColors().then(setColors).catch(console.error);
   }, []);
 
-  const hasColor = schema?.attributes.some(a => a.valueSource === 'VARIANT_COLOR') || false;
+  const hasColor = (schema?.attributes || []).some(a => a.valueSource === 'VARIANT_COLOR') || false;
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>, colorId?: string) => {
     const file = e.target.files?.[0];

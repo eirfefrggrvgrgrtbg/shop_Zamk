@@ -23,11 +23,11 @@ export function Step4Variants({
     getSellerColors().then(setColors).catch(console.error);
   }, []);
 
-  const hasColor = schema?.attributes.some(a => a.valueSource === 'VARIANT_COLOR') || false;
-  const hasSize = schema?.attributes.some(a => a.valueSource === 'VARIANT_SIZE') || false;
+  const hasColor = (schema?.attributes || []).some(a => a.valueSource === 'VARIANT_COLOR') || false;
+  const hasSize = (schema?.attributes || []).some(a => a.valueSource === 'VARIANT_SIZE') || false;
   const allowedSystems = schema?.allowedSizeSystems || [];
 
-  const genericVariantAttrs = schema?.attributes.filter(a => a.scope === 'VARIANT' && !a.variantAxis) || [];
+  const genericVariantAttrs = (schema?.attributes || []).filter(a => a.scope === 'VARIANT' && !a.variantAxis) || [];
 
   useEffect(() => {
     if (!schema) return;
