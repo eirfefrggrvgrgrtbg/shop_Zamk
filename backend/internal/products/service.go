@@ -1391,7 +1391,16 @@ func (s *Service) validateCategorySchema(
 ) error {
 	// Ensure category is a leaf
 	var childCount int
-	err := s.dbPool.Pool.QueryRow(ctx, "SELECT count(*) FROM categories WHERE parent_id = $1", categoryID).Scan(&childCount)
+	var isActive bool
+	err := s.dbPool.Pool.QueryRow(ctx, "SELECT is_active FROM categories WHERE id = $1", categoryID).Scan(&isActive)
+	if err != nil {
+		return err
+	}
+	if !isActive {
+		return fmt.Errorf("cannot use inactive category %s", categoryID)
+	}
+
+	err = s.dbPool.Pool.QueryRow(ctx, "SELECT count(*) FROM categories WHERE parent_id = $1", categoryID).Scan(&childCount)
 	if err != nil {
 		return err
 	}

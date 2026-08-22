@@ -72,3 +72,22 @@ func TestCreateProduct_RejectsNonLeafCategory(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot use non-leaf category")
 }
+
+func TestCreateProduct_RejectsInactiveCategory(t *testing.T) {
+	dbClient, svc, sellerID := setupBlockATestDB(t)
+	pool := dbClient.Pool
+	ctx := context.Background()
+	
+	// Create inactive leaf
+	inactiveID := uuid.New()
+	_, err := pool.Exec(ctx, "INSERT INTO categories (id, name, slug, sort_order, is_active) VALUES ($1, 'Inactive Cat', $2, 1, false)", inactiveID, inactiveID.String())
+	require.NoError(t, err)
+	
+	// Try creating with inactive category
+	_, err = svc.CreateProductForSeller(ctx, sellerID, products.CreateProductRequest{
+		Title: "Test",
+		CategoryID: &inactiveID,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cannot use inactive category")
+}

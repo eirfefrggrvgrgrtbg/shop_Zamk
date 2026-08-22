@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -48,7 +49,7 @@ func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListCategories(w http.ResponseWriter, r *http.Request) {
-	activeOnly := r.URL.Query().Get("active") == "true" || r.URL.Query().Get("active_only") == "true" || true // By default, seller might not pass it, but wait! We can just use the path to check if it's seller reference?
+	activeOnly := r.URL.Query().Get("active") == "true" || r.URL.Query().Get("active_only") == "true" || strings.Contains(r.URL.Path, "/seller/")
 
 	resp, err := h.service.ListCategories(r.Context(), activeOnly)
 	if err != nil {

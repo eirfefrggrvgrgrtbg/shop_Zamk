@@ -62,7 +62,7 @@ func (r *Repository) ListCategories(ctx context.Context, activeOnly bool) ([]Cat
 		WHERE ($1::boolean = false OR is_active = true)
 		ORDER BY sort_order ASC, name ASC
 	`
-	rows, err := r.db.Query(ctx, query)
+	rows, err := r.db.Query(ctx, query, activeOnly)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list categories: %w", err)
 	}
