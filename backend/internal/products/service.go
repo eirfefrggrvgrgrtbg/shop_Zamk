@@ -157,6 +157,19 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		}
+		if vr.Attributes != nil {
+			var vAttrs []VariantAttributeValue
+			for _, a := range vr.Attributes {
+				vAttrs = append(vAttrs, VariantAttributeValue{
+					AttributeDefinitionID: a.AttributeDefinitionID,
+					EnumValueID:           a.EnumValueID,
+					TextValue:             a.TextValue,
+					NumberValue:           a.NumberValue,
+					BoolValue:             a.BoolValue,
+				})
+			}
+			v.Attributes = vAttrs
+		}
 		if v.Barcode == nil || *v.Barcode == "" {
 				generated := "ZMK-" + uuid.New().String()[:12]
 				v.Barcode = &generated
@@ -268,6 +281,13 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 		if len(variants) > 0 {
 			if err := txRepo.MergeProductVariants(ctx, p.ID, variants); err != nil {
 				return err
+			}
+			for _, v := range variants {
+				if len(v.Attributes) > 0 {
+					if err := txRepo.InsertVariantAttributeValues(ctx, v.ID, v.Attributes); err != nil {
+						return err
+					}
+				}
 			}
 		}
 		if len(images) > 0 {
@@ -1323,6 +1343,20 @@ func (s *Service) validateCategorySchema(
 	}
 	sysRows.Close()
 
+
+	// Check if VARIANT_SIZE exists in schema
+	hasVariantSize := false
+	for _, d := range schemaMap {
+		if d.ValueSource == "VARIANT_SIZE" {
+			hasVariantSize = true
+			break
+		}
+	}
+
+	if hasVariantSize && len(allowedSizeSystems) == 0 {
+		return fmt.Errorf("category schema configuration error: category requires size but has no allowed size systems configured")
+	}
+
 	// Generic Product Attributes
 	pAttrMap := make(map[uuid.UUID]int)
 	for _, a := range pAttrs {
@@ -1592,7 +1626,7 @@ func (s *Service) validateGenericAttributeValue(ctx context.Context, def struct 
 func (s *Service) GetCategoryAttributeSchema(ctx context.Context, categoryID uuid.UUID) (interface{}, error) {
 	// 1. Attributes
 	attrRows, err := s.dbPool.Pool.Query(ctx, `
-		SELECT ad.id, ad.code, ad.name_ru, ad.value_type, ad.value_source, ad.scope, cad.required, cad.min_values, cad.max_values, cad.dictionary_id
+		SELECT ad.id, ad.code, ad.name_ru, ad.value_type, ad.value_source, ad.scope, cad.required, cad.min_values, cad.max_values, cad.dictionary_id, cad.filterable, cad.variant_axis, cad.sort_order
 		FROM category_attribute_definitions cad
 		JOIN attribute_definitions ad ON cad.attribute_definition_id = ad.id
 		WHERE cad.category_id = $1 AND ad.is_active = true
@@ -1606,16 +1640,17 @@ func (s *Service) GetCategoryAttributeSchema(ctx context.Context, categoryID uui
 	for attrRows.Next() {
 		var id uuid.UUID
 		var code, nameRu, valType, valSource, scope string
-		var required bool
+		var required, filterable, variantAxis bool
+		var sortOrder int
 		var minV, maxV *int
 		var dictID *uuid.UUID
-		if err := attrRows.Scan(&id, &code, &nameRu, &valType, &valSource, &scope, &required, &minV, &maxV, &dictID); err != nil {
+		if err := attrRows.Scan(&id, &code, &nameRu, &valType, &valSource, &scope, &required, &minV, &maxV, &dictID, &filterable, &variantAxis, &sortOrder); err != nil {
 			return nil, err
 		}
 		attributes = append(attributes, map[string]interface{}{
 			"id": id, "code": code, "nameRu": nameRu, "valueType": valType, "valueSource": valSource, "scope": scope,
 			"required": required, "minValues": minV, "maxValues": maxV, "dictionaryId": dictID,
-			"filterable": true, "variantAxis": scope == "VARIANT",
+			"filterable": filterable, "variantAxis": variantAxis, "sortOrder": sortOrder,
 		})
 	}
 	attrRows.Close()
@@ -1654,20 +1689,22 @@ func (s *Service) GetCategoryAttributeSchema(ctx context.Context, categoryID uui
 		return nil, err
 	}
 
-	chartFieldRows, err := s.dbPool.Pool.Query(ctx, "SELECT code, is_required FROM category_size_chart_fields WHERE category_id = $1", categoryID)
+		chartFieldRows, err := s.dbPool.Pool.Query(ctx, "SELECT code, name, unit, is_required, sort_order FROM category_size_chart_fields WHERE category_id = $1 ORDER BY sort_order", categoryID)
 	if err != nil {
 		return nil, err
 	}
 	defer chartFieldRows.Close()
 	var sizeChartFields []map[string]interface{}
 	for chartFieldRows.Next() {
-		var code string
+		var code, name string
+		var unit *string
 		var req bool
-		if err := chartFieldRows.Scan(&code, &req); err != nil {
+		var sortOrder int
+		if err := chartFieldRows.Scan(&code, &name, &unit, &req, &sortOrder); err != nil {
 			return nil, err
 		}
 		sizeChartFields = append(sizeChartFields, map[string]interface{}{
-			"code": code, "isRequired": req,
+			"code": code, "name": name, "unit": unit, "isRequired": req, "sortOrder": sortOrder,
 		})
 	}
 

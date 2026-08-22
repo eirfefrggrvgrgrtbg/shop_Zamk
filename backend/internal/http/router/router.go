@@ -309,6 +309,7 @@ func New(
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
 
+		r.Get("/categories", catalogHandler.ListCategories)
 		r.Get("/categories/{id}/schema", productsHandler.GetCategorySchema)
 		r.Get("/colors", productsHandler.ListColors)
 		r.Get("/materials", productsHandler.ListMaterials)
