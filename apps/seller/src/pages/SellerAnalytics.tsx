@@ -23,11 +23,13 @@ export function SellerAnalytics() {
     
     const getBounds = (daysOffset: number) => {
       const d = new Date(now.getTime() + daysOffset * 24 * 60 * 60 * 1000);
-      const ymd = formatInTimeZone(d, TIMEZONE, 'yyyy-MM-dd');
+      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const ymdStart = formatInTimeZone(d, TIMEZONE, 'yyyy-MM-dd');
+      const ymdEnd = formatInTimeZone(tomorrow, TIMEZONE, 'yyyy-MM-dd');
       // Moscow is fixed UTC+3
       return {
-        start: `${ymd}T00:00:00+03:00`,
-        end: `${ymd}T23:59:59.999+03:00`
+        start: `${ymdStart}T00:00:00+03:00`,
+        end: `${ymdEnd}T00:00:00+03:00`
       };
     };
 
