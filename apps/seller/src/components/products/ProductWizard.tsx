@@ -229,7 +229,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
     getSellerCategories().then(setCategories).catch(console.error);
   }, []);
 
-  useEffect(() => {
+  const loadSchema = () => {
     if (state.categoryId) {
       setSchemaLoading(true);
       setSchemaError(false);
@@ -244,6 +244,10 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
           setSchemaLoading(false);
         });
     }
+  };
+
+  useEffect(() => {
+    loadSchema();
   }, [state.categoryId]);
 
   const updateState = (update: Partial<WizardState>) => setState(prev => ({ ...prev, ...update }));
@@ -510,7 +514,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         <div className="flex-1 min-w-0 bg-white shadow rounded-lg p-8">
           {step === 1 && <Step1Basics state={state} updateState={updateState} onNext={() => setStep(2)} />}
           {step === 2 && <Step2Category state={state} updateState={updateState} categories={categories} onNext={() => setStep(3)} onPrev={() => setStep(1)} />}
-          {step === 3 && <Step3Attributes state={state} updateState={updateState} schema={schema} schemaLoading={schemaLoading} schemaError={schemaError} onNext={() => setStep(4)} onPrev={() => setStep(2)} />}
+          {step === 3 && <Step3Attributes state={state} updateState={updateState} schema={schema} schemaLoading={schemaLoading} schemaError={schemaError} onRetrySchema={loadSchema} onNext={() => setStep(4)} onPrev={() => setStep(2)} />}
           {step === 4 && <Step4Variants state={state} updateState={updateState} schema={schema} onNext={() => setStep(5)} onPrev={() => setStep(3)} />}
           {step === 5 && <Step5SizeChart state={state} updateState={updateState} schema={schema} onNext={() => setStep(6)} onPrev={() => setStep(4)} />}
           {step === 6 && <Step6Media state={state} updateState={updateState} schema={schema} onNext={() => setStep(7)} onPrev={() => setStep(5)} onError={(msg) => showToast(msg, 'error')} />}

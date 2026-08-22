@@ -16,6 +16,7 @@ export function Step3Attributes({
   schema: SellerCategorySchema | null;
   schemaLoading?: boolean;
   schemaError?: boolean;
+  onRetrySchema?: () => void;
   onNext: () => void; 
   onPrev: () => void; 
 }) {
