@@ -38,8 +38,8 @@ func (s *Service) CreateCategory(ctx context.Context, req CreateCategoryRequest)
 	return *c, nil
 }
 
-func (s *Service) ListCategories(ctx context.Context) (CategoryListResponse, error) {
-	items, err := s.repo.ListCategories(ctx)
+func (s *Service) ListCategories(ctx context.Context, activeOnly bool) (CategoryListResponse, error) {
+	items, err := s.repo.ListCategories(ctx, activeOnly)
 	if err != nil {
 		return CategoryListResponse{}, err
 	}

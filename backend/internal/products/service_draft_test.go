@@ -46,3 +46,29 @@ func TestDraftAndModeration(t *testing.T) {
 		require.Contains(t, fmt.Sprintf("%v", err), "moderation validation failed")
 	})
 }
+
+func TestCreateProduct_RejectsNonLeafCategory(t *testing.T) {
+	dbClient, svc, sellerID := setupBlockATestDB(t)
+	pool := dbClient.Pool
+	ctx := context.Background()
+	
+	// Create parent
+	parentID := uuid.New()
+	_, err := pool.Exec(ctx, "INSERT INTO categories (id, name, slug, sort_order) VALUES ($1, 'Parent123', 'parent123', 1)", parentID)
+	require.NoError(t, err)
+	
+	// Create child
+	childID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO categories (id, parent_id, name, slug, sort_order) VALUES ($1, $2, 'Child123', 'child123', 2)", childID, parentID)
+	require.NoError(t, err)
+	
+	// Try creating with parent
+	_, err = svc.CreateProductForSeller(ctx, sellerID, products.CreateProductRequest{
+		Title: "Test",
+		Description: nil,
+		CategoryID: &parentID,
+		
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cannot use non-leaf category")
+}

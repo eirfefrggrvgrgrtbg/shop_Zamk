@@ -55,10 +55,11 @@ func (r *Repository) GetCategoryBySlug(ctx context.Context, slug string) (*Categ
 	return &c, nil
 }
 
-func (r *Repository) ListCategories(ctx context.Context) ([]Category, error) {
+func (r *Repository) ListCategories(ctx context.Context, activeOnly bool) ([]Category, error) {
 	query := `
 		SELECT id, parent_id, name, slug, description, sort_order, is_active, created_at, updated_at
 		FROM categories
+		WHERE ($1::boolean = false OR is_active = true)
 		ORDER BY sort_order ASC, name ASC
 	`
 	rows, err := r.db.Query(ctx, query)

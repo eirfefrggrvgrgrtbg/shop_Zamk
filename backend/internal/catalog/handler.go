@@ -48,7 +48,9 @@ func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListCategories(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.service.ListCategories(r.Context())
+	activeOnly := r.URL.Query().Get("active") == "true" || r.URL.Query().Get("active_only") == "true" || true // By default, seller might not pass it, but wait! We can just use the path to check if it's seller reference?
+
+	resp, err := h.service.ListCategories(r.Context(), activeOnly)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list categories")
 		return

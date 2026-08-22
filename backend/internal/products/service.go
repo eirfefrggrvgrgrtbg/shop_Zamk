@@ -1389,6 +1389,16 @@ func (s *Service) validateCategorySchema(
 	sizeChartRows []ProductSizeChartRowRequest,
 	isDraft bool,
 ) error {
+	// Ensure category is a leaf
+	var childCount int
+	err := s.dbPool.Pool.QueryRow(ctx, "SELECT count(*) FROM categories WHERE parent_id = $1", categoryID).Scan(&childCount)
+	if err != nil {
+		return err
+	}
+	if childCount > 0 {
+		return fmt.Errorf("cannot use non-leaf category %s", categoryID)
+	}
+
 	// Fetch schema
 	rows, err := s.dbPool.Pool.Query(ctx, `
 		SELECT ad.id, ad.code, ad.value_type, ad.value_source, ad.scope, cad.required, cad.dictionary_id, cad.min_values, cad.max_values
