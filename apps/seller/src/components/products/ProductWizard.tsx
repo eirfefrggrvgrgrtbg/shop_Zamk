@@ -352,11 +352,11 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
       const payload = buildPayload();
       
 
-      if (isEdit && initialData?.id) {
-        await updateSellerProduct(initialData.id, payload);
+      if (state.id) {
+        await updateSellerProduct(state.id, payload);
         showToast('Черновик обновлен', 'success');
         setLastSavedStateStr(normalizeState(state));
-        return initialData.id;
+        return state.id;
       } else {
         const p = await createSellerProduct(payload);
         showToast('Черновик сохранен', 'success');

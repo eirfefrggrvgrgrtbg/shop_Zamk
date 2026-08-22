@@ -1,6 +1,7 @@
 package products
 
 import (
+	"math"
 	"encoding/json"
 	"context"
 	"errors"
@@ -99,7 +100,7 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 	slug = generateSlug(slug)
 
 	if req.MaterialComposition != nil {
-		if err := s.validateMaterialComposition(ctx, req.MaterialComposition); err != nil {
+		if err := s.validateMaterialComposition(ctx, req.MaterialComposition, true); err != nil {
 			return Product{}, err
 		}
 	}
@@ -332,7 +333,7 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 	}
 
 	if req.MaterialComposition != nil {
-		if err := s.validateMaterialComposition(ctx, req.MaterialComposition); err != nil {
+		if err := s.validateMaterialComposition(ctx, req.MaterialComposition, true); err != nil {
 			return Product{}, err
 		}
 	}
@@ -1350,15 +1351,18 @@ func (s *Service) UpdateVariantPricesForSeller(ctx context.Context, currentUserI
 	return *updated, nil
 }
 
-func (s *Service) validateMaterialComposition(ctx context.Context, comp []ProductMaterialCompositionRequest) error {
+func (s *Service) validateMaterialComposition(ctx context.Context, comp []ProductMaterialCompositionRequest, isDraft bool) error {
 	if len(comp) == 0 {
 		return nil
 	}
 	var total float64
 	seen := make(map[uuid.UUID]bool)
 	for _, c := range comp {
+		if c.Percentage <= 0 || c.Percentage > 100 {
+			return fmt.Errorf("percentage must be > 0 and <= 100")
+		}
 		if seen[c.MaterialID] {
-			return fmt.Errorf("duplicate material entry")
+			return fmt.Errorf("duplicate material entry in composition")
 		}
 		seen[c.MaterialID] = true
 		total += c.Percentage
@@ -1372,8 +1376,11 @@ func (s *Service) validateMaterialComposition(ctx context.Context, comp []Produc
 			return fmt.Errorf("inactive material %s", c.MaterialID)
 		}
 	}
-	if total != 100.0 {
-		return fmt.Errorf("material composition must sum to 100, got %f", total)
+	if total > 100.0 {
+		return fmt.Errorf("total material composition exceeds 100%%")
+	}
+	if !isDraft && math.Abs(total-100.0) > 0.01 {
+		return fmt.Errorf("total material composition must be exactly 100%%, got %f", total)
 	}
 	return nil
 }

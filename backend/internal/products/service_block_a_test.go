@@ -154,11 +154,18 @@ func TestBlockAMaterialCompositionValidation(t *testing.T) {
             {MaterialID: materialID, Percentage: 50.0},
         },
 	}
+    // Draft allows < 100
+    _, err = svc.CreateProductForSeller(ctx, userID, req)
+    require.NoError(t, err)
+
+    req.MaterialComposition[0].Percentage = 150.0
     _, err = svc.CreateProductForSeller(ctx, userID, req)
     require.Error(t, err)
-    assert.Contains(t, err.Error(), "must sum to 100")
+    assert.Contains(t, err.Error(), "percentage must be > 0 and <= 100")
     
     req.MaterialComposition[0].Percentage = 100.0
+    req.Title = "Composition Product " + uuid.New().String()
+    // Now it should pass again (valid draft)
     _, err = svc.CreateProductForSeller(ctx, userID, req)
     require.NoError(t, err)
 }
