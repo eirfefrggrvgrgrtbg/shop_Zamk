@@ -108,6 +108,9 @@ func main() {
 		if err != nil {
 			return err
 		}
+		if err := upsertSellerBrand(ctx, tx, sellerID, brandID); err != nil {
+			return err
+		}
 		if err := seedDevProducts(ctx, tx, sellerID, categoryID, brandID, adminID); err != nil {
 			return err
 		}
@@ -240,6 +243,21 @@ func upsertBrand(ctx context.Context, tx postgres.DBTX) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("upsert brand: %w", err)
 	}
 	return brandID, nil
+}
+
+func upsertSellerBrand(ctx context.Context, tx postgres.DBTX, sellerID, brandID uuid.UUID) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO seller_brands (id, seller_id, brand_id, status, is_primary, created_at, updated_at)
+		VALUES ($1, $2, $3, 'active', true, now(), now())
+		ON CONFLICT (seller_id, brand_id) DO UPDATE SET
+			status = 'active',
+			is_primary = true,
+			updated_at = now()
+	`, uuid.New(), sellerID, brandID)
+	if err != nil {
+		return fmt.Errorf("upsert seller brand: %w", err)
+	}
+	return nil
 }
 
 func seedDevProducts(ctx context.Context, tx postgres.DBTX, sellerID, categoryID, brandID, adminID uuid.UUID) error {

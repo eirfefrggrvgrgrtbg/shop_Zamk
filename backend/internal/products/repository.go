@@ -1110,8 +1110,6 @@ func (r *Repository) ReorderProductImages(ctx context.Context, productID uuid.UU
 	return nil
 }
 
-var ErrSellerHasNoPrimaryBrand = fmt.Errorf("seller has no active primary brand")
-var ErrSellerHasMultiplePrimaryBrands = fmt.Errorf("seller has multiple active primary brands")
 
 func (r *Repository) GetPrimaryBrandForSeller(ctx context.Context, sellerID uuid.UUID) (*uuid.UUID, error) {
 	rows, err := r.db.Query(ctx, "SELECT brand_id FROM seller_brands WHERE seller_id = $1 AND is_primary = true AND status = 'active'", sellerID)

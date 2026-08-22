@@ -10,6 +10,8 @@ var (
 	ErrSellerNotFound          = errors.New("seller profile not found for user")
 	ErrSellerNotActive         = errors.New("seller is not active")
 	ErrSellerBlocked           = errors.New("seller is blocked or archived")
+	ErrSellerHasNoPrimaryBrand = errors.New("seller has no active primary brand")
+	ErrSellerHasMultiplePrimaryBrands = errors.New("seller has multiple active primary brands")
 	ErrProductNotEditable      = errors.New("product cannot be edited in its current state")
 	ErrRejectionReasonRequired = errors.New("rejection reason is required")
 	ErrProductOptimisticLockFailed = errors.New("optimistic lock failed")

@@ -131,6 +131,14 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusForbidden, "seller_blocked", "Магазин заблокирован или архивирован. Действие недоступно.")
 			return
 		}
+		if errors.Is(err, ErrSellerHasNoPrimaryBrand) {
+			h.writeError(w, http.StatusConflict, "SELLER_PRIMARY_BRAND_NOT_CONFIGURED", "Seller has no active primary brand configured")
+			return
+		}
+		if errors.Is(err, ErrSellerHasMultiplePrimaryBrands) {
+			h.writeError(w, http.StatusConflict, "SELLER_MULTIPLE_PRIMARY_BRANDS", "Seller has multiple active primary brands configured")
+			return
+		}
 		fmt.Println("Create Product Error:", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create product")
 		return
@@ -229,6 +237,14 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, ErrProductNotEditable) {
 			h.writeError(w, http.StatusConflict, "product_not_editable", "Действие с товаром недоступно в его текущем статусе.")
+			return
+		}
+		if errors.Is(err, ErrSellerHasNoPrimaryBrand) {
+			h.writeError(w, http.StatusConflict, "SELLER_PRIMARY_BRAND_NOT_CONFIGURED", "Seller has no active primary brand configured")
+			return
+		}
+		if errors.Is(err, ErrSellerHasMultiplePrimaryBrands) {
+			h.writeError(w, http.StatusConflict, "SELLER_MULTIPLE_PRIMARY_BRANDS", "Seller has multiple active primary brands configured")
 			return
 		}
 		log.Printf("[ERROR] Failed to update product: %v", err)
