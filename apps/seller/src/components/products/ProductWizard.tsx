@@ -79,9 +79,13 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
     if (!lastSavedStateStr) return false;
     const current = JSON.parse(normalizeState(state));
     const saved = JSON.parse(lastSavedStateStr);
-    const currPrices = current.variants.filter((v:any) => v.active).map((v:any) => `${v.id}-${v.priceCents}`).sort();
-    const savedPrices = saved.variants.filter((v:any) => v.active).map((v:any) => `${v.id}-${v.priceCents}`).sort();
-    return JSON.stringify(currPrices) !== JSON.stringify(savedPrices);
+    
+    return current.variants.some((v: any) => {
+      if (!v.active || !v.id) return false;
+      const sv = saved.variants.find((svv: any) => svv.id === v.id);
+      if (!sv) return false;
+      return sv.priceCents !== v.priceCents;
+    });
   }, [state, lastSavedStateStr]);
 
   const isDirty = contentDirty || priceDirty;
@@ -345,8 +349,10 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
 
           const saved = JSON.parse(lastSavedStateStr);
           const changedVariants = state.variants.filter(v => v.active).filter(v => {
+            if (!v.id) return false;
             const sv = saved.variants.find((svv:any) => svv.id === v.id);
-            return !sv || sv.priceCents !== v.priceCents;
+            if (!sv) return false;
+            return sv.priceCents !== v.priceCents;
           });
           const variantsPayload = changedVariants.map(v => ({ id: v.id, priceCents: v.priceCents || 0 }));
           await updateSellerProductPrices(initialData.id, { variants: variantsPayload });
@@ -376,13 +382,16 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         if (priceDirty) {
           const saved = JSON.parse(lastSavedStateStr);
           const changedVariants = state.variants.filter(v => v.active).filter(v => {
+            if (!v.id) return false;
             const sv = saved.variants.find((svv:any) => svv.id === v.id);
-            return !sv || sv.priceCents !== v.priceCents;
+            if (!sv) return false;
+            return sv.priceCents !== v.priceCents;
           });
           const variantsPayload = changedVariants.map(v => ({ id: v.id, priceCents: v.priceCents || 0 }));
           await updateSellerProductPrices(initialData.id, { variants: variantsPayload });
           
           state.variants.forEach(v => {
+            if (!v.id) return;
             const sv = saved.variants.find((svv:any) => svv.id === v.id);
             if (sv) sv.priceCents = v.priceCents;
           });
