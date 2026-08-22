@@ -16,12 +16,9 @@ const parseDateOnly = (dateStr: string) => {
 const formatDateOnly = (d: Date) => format(d, 'yyyy-MM-dd');
 const formatDisplay = (d: Date) => format(d, 'dd.MM.yyyy');
 
-export function AnalyticsPeriodPicker() {
+export function AnalyticsPeriodPicker({ from, to }: { from: string, to: string }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPeriod = (searchParams.get('period') || '30d') as PeriodOption;
-  
-  const pFrom = searchParams.get('from');
-  const pTo = searchParams.get('to');
   
   const [isOpen, setIsOpen] = useState(false);
   
@@ -34,12 +31,12 @@ export function AnalyticsPeriodPicker() {
 
   useEffect(() => {
     if (isOpen) {
-      if (pFrom && pTo) {
-        const fromDateStr = pFrom.split('T')[0];
-        const toDateStr = pTo.split('T')[0];
+      if (from && to) {
+        const fromDateStr = from.split('T')[0];
+        const toDateStr = to.split('T')[0];
         
         const fDate = parseDateOnly(fromDateStr);
-        // We subtract 1 day from the parsed pTo date to get the inclusive UI end date
+        // We subtract 1 day from the parsed to date to get the inclusive UI end date
         const tDateObj = parseDateOnly(toDateStr);
         tDateObj.setDate(tDateObj.getDate() - 1);
 
@@ -52,7 +49,7 @@ export function AnalyticsPeriodPicker() {
         setCurrentMonth(startOfMonth(new Date()));
       }
     }
-  }, [isOpen, pFrom, pTo]);
+  }, [isOpen, from, to]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -129,8 +126,26 @@ export function AnalyticsPeriodPicker() {
   const paddingOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
   const paddingDays = Array.from({ length: paddingOffset }, (_, i) => i);
 
+  let visibleText = '';
+  if (from && to) {
+    const fDate = parseDateOnly(from.split('T')[0]);
+    const tDateObj = parseDateOnly(to.split('T')[0]);
+    tDateObj.setDate(tDateObj.getDate() - 1);
+    if (isSameDay(fDate, tDateObj)) {
+      visibleText = formatDisplay(fDate);
+    } else {
+      visibleText = `${formatDisplay(fDate)} — ${formatDisplay(tDateObj)}`;
+    }
+  }
+
   return (
-    <div className="relative flex items-center" ref={popoverRef}>
+    <div className="relative flex items-center gap-4" ref={popoverRef}>
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors"
+      >
+        {visibleText}
+      </button>
       <div className="flex flex-nowrap items-center space-x-1 bg-gray-100 p-1 rounded-lg overflow-x-auto">
         {(['today', '7d', '30d', '90d', 'custom'] as PeriodOption[]).map((p) => {
           const isActive = currentPeriod === p;

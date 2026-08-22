@@ -148,11 +148,7 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
               Магазин на проверке. Заполните профиль магазина. После проверки администратор активирует продавца.
             </div>
           )}
-          {sellerStatus === 'active' && (
-            <div className="bg-green-50 p-4 text-sm text-green-800 border-b border-green-200">
-              Магазин активен. Вы можете добавлять товары и отправлять их на модерацию.
-            </div>
-          )}
+
           {sellerStatus === 'blocked' && (
             <div className="bg-red-50 p-4 text-sm text-red-800 border-b border-red-200">
               Магазин заблокирован. Обратитесь к администрации.
