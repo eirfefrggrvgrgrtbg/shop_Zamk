@@ -97,6 +97,17 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 	}
 	slug = generateSlug(slug)
 
+	if req.MaterialComposition != nil {
+		if err := s.validateMaterialComposition(ctx, req.MaterialComposition); err != nil {
+			return Product{}, err
+		}
+	}
+	if req.CategoryID != nil {
+		if err := s.validateSizeChart(ctx, *req.CategoryID, req.SizeChartRows); err != nil {
+			return Product{}, err
+		}
+	}
+
 	primaryBrandID, err := s.repo.GetPrimaryBrandForSeller(ctx, seller.ID)
 	if err != nil {
 		return Product{}, err
@@ -118,7 +129,7 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 		CareInstructions: req.CareInstructions,
 		PriceCents:       req.PriceCents,
 		OldPriceCents:    req.OldPriceCents,
-		Currency:         req.Currency,
+		Currency:         func() string { if req.Currency == "" { return "RUB" }; return req.Currency }(),
 		MainImageURL:     req.MainImageURL,
 		CreatedAt:        now,
 		UpdatedAt:        now,
@@ -149,8 +160,12 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 				generated := "ZMK-" + uuid.New().String()[:12]
 				v.Barcode = &generated
 			}
-			if v.SKU != nil && strings.TrimSpace(*v.SKU) != "" {
-			trimmed := strings.ToLower(strings.TrimSpace(*v.SKU))
+			if v.Barcode == nil || *v.Barcode == "" {
+				generated := "ZMK-" + uuid.New().String()[:12]
+				v.Barcode = &generated
+			}
+			if v.SellerSKU != nil && strings.TrimSpace(*v.SellerSKU) != "" {
+			trimmed := strings.ToLower(strings.TrimSpace(*v.SellerSKU))
 			skusToCheck = append(skusToCheck, trimmed)
 		}
 		variants = append(variants, v)
@@ -239,6 +254,17 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		return Product{}, fmt.Errorf("%w: cannot edit product in status %s with seller status %s", ErrProductNotEditable, p.Status, seller.Status)
 	}
 
+	if req.MaterialComposition != nil {
+		if err := s.validateMaterialComposition(ctx, req.MaterialComposition); err != nil {
+			return Product{}, err
+		}
+	}
+	if p.CategoryID != nil {
+		if err := s.validateSizeChart(ctx, *p.CategoryID, req.SizeChartRows); err != nil {
+			return Product{}, err
+		}
+	}
+
 	if req.Title != nil {
 		p.Title = *req.Title
 	}
@@ -312,8 +338,12 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				generated := "ZMK-" + uuid.New().String()[:12]
 				v.Barcode = &generated
 			}
-			if v.SKU != nil && strings.TrimSpace(*v.SKU) != "" {
-				skusToCheck = append(skusToCheck, strings.ToLower(strings.TrimSpace(*v.SKU)))
+			if v.Barcode == nil || *v.Barcode == "" {
+				generated := "ZMK-" + uuid.New().String()[:12]
+				v.Barcode = &generated
+			}
+			if v.SellerSKU != nil && strings.TrimSpace(*v.SellerSKU) != "" {
+				skusToCheck = append(skusToCheck, strings.ToLower(strings.TrimSpace(*v.SellerSKU)))
 			}
 			variants = append(variants, v)
 		}
@@ -323,22 +353,36 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 	var revision *ProductRevision
 
 	if p.Status == StatusPublished || p.Status == StatusApproved {
-		if req.ContinueSelling != nil && *req.ContinueSelling {
-			now := time.Now()
-			revID := uuid.New()
-			revision = &ProductRevision{
-				ID: revID,
-				ProductID: p.ID,
-				Status: "pending",
-				ContentSnapshot: map[string]interface{}{"note": "pending revision content"},
-				CreatedAt: now,
-				UpdatedAt: now,
-			}
-			p.LiveRevisionID = &revID
-		} else {
+		now := time.Now()
+		revID := uuid.New()
+		snapshot := map[string]interface{}{
+			"title": req.Title,
+			"description": req.Description,
+			"categoryId": req.CategoryID,
+			"brandId": req.BrandID,
+			"gender": req.Gender,
+			"color": req.Color,
+			"material": req.Material,
+			"careInstructions": req.CareInstructions,
+			"mainImageUrl": req.MainImageURL,
+			"variants": req.Variants,
+			"images": req.Images,
+			"materialComposition": req.MaterialComposition,
+			"sizeChartRows": req.SizeChartRows,
+		}
+		revision = &ProductRevision{
+			ID: revID,
+			ProductID: p.ID,
+			Status: "pending",
+			ContentSnapshot: snapshot,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		p.LiveRevisionID = &revID
+
+		if req.ContinueSelling == nil || !*req.ContinueSelling {
 			oldStatus := p.Status
 			p.Status = StatusPendingModeration
-			now := time.Now()
 			p.SubmittedAt = &now
 
 			modLog = &ProductModerationLog{
@@ -392,12 +436,26 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			if err != nil {
 				return fmt.Errorf("failed to insert revision: %w", err)
 			}
+			
+			if modLog != nil {
+				// ContinueSelling=false -> hide it
+				updQuery := `UPDATE products SET live_revision_id = $1, status = $2, submitted_at = $3, updated_at = now() WHERE id = $4`
+				if _, err := tx.Exec(ctx, updQuery, revision.ID, StatusPendingModeration, p.SubmittedAt, p.ID); err != nil {
+					return fmt.Errorf("failed to link revision and update status: %w", err)
+				}
+			} else {
+				// ContinueSelling=true -> keep published
+				updQuery := `UPDATE products SET live_revision_id = $1, updated_at = now() WHERE id = $2`
+				if _, err := tx.Exec(ctx, updQuery, revision.ID, p.ID); err != nil {
+					return fmt.Errorf("failed to link revision to product: %w", err)
+				}
+			}
+		} else {
+			if err := txRepo.UpdateProduct(ctx, p); err != nil {
+				return err
+			}
 		}
-		
-		if err := txRepo.UpdateProduct(ctx, p); err != nil {
-			return err
-		}
-		if req.Variants != nil {
+		if req.Variants != nil && revision == nil {
 			if err := txRepo.MergeProductVariants(ctx, p.ID, variants); err != nil {
 				return err
 			}
@@ -868,4 +926,139 @@ func (s *Service) GetPublicProduct(ctx context.Context, idOrSlug string) (Public
 	}
 
 	return mapToPublicProduct(*p), nil
+}
+
+
+func (s *Service) UpdateVariantPricesForSeller(ctx context.Context, currentUserID uuid.UUID, productID uuid.UUID, req UpdateVariantPricesRequest) (Product, error) {
+	seller, err := s.getSellerForUser(ctx, currentUserID)
+	if err != nil {
+		return Product{}, err
+	}
+
+	if seller.Status == sellers.StatusBlocked || seller.Status == sellers.StatusArchived {
+		return Product{}, ErrSellerBlocked
+	}
+
+	p, err := s.repo.GetProductByIDForSeller(ctx, productID, seller.ID)
+	if err != nil {
+		return Product{}, err
+	}
+
+	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.repo.WithTx(tx)
+		for variantID, priceCents := range req.Prices {
+			found := false
+			for _, v := range p.Variants {
+				if v.ID == variantID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("variant %s not found in product %s", variantID, p.ID)
+			}
+			if err := txRepo.UpdateVariantPrice(ctx, variantID, priceCents); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return Product{}, err
+	}
+	
+	updated, err := s.repo.GetProductByIDForSeller(ctx, productID, seller.ID)
+	if err != nil {
+		return Product{}, err
+	}
+	return *updated, nil
+}
+
+func (s *Service) validateMaterialComposition(ctx context.Context, comp []ProductMaterialCompositionRequest) error {
+	if len(comp) == 0 {
+		return nil
+	}
+	var total float64
+	seen := make(map[uuid.UUID]bool)
+	for _, c := range comp {
+		if seen[c.MaterialID] {
+			return fmt.Errorf("duplicate material entry")
+		}
+		seen[c.MaterialID] = true
+		total += c.Percentage
+
+		var isActive bool
+		err := s.dbPool.Pool.QueryRow(ctx, "SELECT is_active FROM materials WHERE id = $1", c.MaterialID).Scan(&isActive)
+		if err != nil {
+			return fmt.Errorf("unknown material %s", c.MaterialID)
+		}
+		if !isActive {
+			return fmt.Errorf("inactive material %s", c.MaterialID)
+		}
+	}
+	if total != 100.0 {
+		return fmt.Errorf("material composition must sum to 100, got %f", total)
+	}
+	return nil
+}
+
+func (s *Service) validateSizeChart(ctx context.Context, categoryID uuid.UUID, rows []ProductSizeChartRowRequest) error {
+	var required bool
+	err := s.dbPool.Pool.QueryRow(ctx, "SELECT size_chart_required FROM categories WHERE id = $1", categoryID).Scan(&required)
+	if err != nil {
+		return err
+	}
+	if required && len(rows) == 0 {
+		return fmt.Errorf("category requires a size chart")
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	
+	// Fetch schema
+	dbRows, err := s.dbPool.Pool.Query(ctx, "SELECT code, is_required FROM category_size_chart_fields WHERE category_id = $1", categoryID)
+	if err != nil {
+		return err
+	}
+	defer dbRows.Close()
+
+	schema := make(map[string]bool)
+	for dbRows.Next() {
+		var code string
+		var isReq bool
+		if err := dbRows.Scan(&code, &isReq); err != nil {
+			return err
+		}
+		schema[code] = isReq
+	}
+
+	for _, r := range rows {
+		var isValidSize bool
+		err := s.dbPool.Pool.QueryRow(ctx, "SELECT true FROM size_values WHERE id = $1 AND is_active = true", r.SizeValueID).Scan(&isValidSize)
+		if err != nil || !isValidSize {
+			return fmt.Errorf("invalid or inactive size value %s", r.SizeValueID)
+		}
+
+		for k, isReq := range schema {
+			if isReq {
+				if _, ok := r.Measurements[k]; !ok {
+					return fmt.Errorf("missing required measurement %s", k)
+				}
+			}
+		}
+		for k, v := range r.Measurements {
+			if _, ok := schema[k]; !ok {
+				return fmt.Errorf("unknown measurement key %s", k)
+			}
+			num, ok := v.(float64)
+			if !ok {
+				return fmt.Errorf("measurement %s must be numeric", k)
+			}
+			if num <= 0 {
+				return fmt.Errorf("measurement %s must be > 0", k)
+			}
+		}
+	}
+	return nil
 }

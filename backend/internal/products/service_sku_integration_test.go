@@ -56,6 +56,13 @@ func setupTestDB(t *testing.T) (*postgres.Client, *products.Service, uuid.UUID) 
 	_, err = db.Pool.Exec(ctx, "INSERT INTO seller_users (id, seller_id, user_id, role) VALUES ($1, $2, $3, 'owner')", uuid.New(), sellerID, userID)
 	require.NoError(t, err)
 
+	brandID := uuid.New()
+	_, err = db.Pool.Exec(ctx, "INSERT INTO brands (id, name, slug) VALUES ($1, $2, $3)", brandID, "Test Brand Name", slug)
+	require.NoError(t, err)
+
+	_, err = db.Pool.Exec(ctx, "INSERT INTO seller_brands (id, seller_id, brand_id, is_primary, relationship_type, status) VALUES ($1, $2, $3, true, 'owner', 'active')", uuid.New(), sellerID, brandID)
+	require.NoError(t, err)
+
 	t.Cleanup(func() {
 		db.Pool.Exec(context.Background(), "DELETE FROM product_variants WHERE product_id IN (SELECT id FROM products WHERE seller_id = $1)", sellerID)
 		db.Pool.Exec(context.Background(), "DELETE FROM products WHERE seller_id = $1", sellerID)
@@ -81,8 +88,8 @@ func TestSKUUniqueness(t *testing.T) {
 			Currency:   "RUB",
 			PriceCents: 100,
 			Variants: []products.ProductVariantRequest{
-				{SKU: ptr("ABC-001")},
-				{SKU: ptr(" ABC-001 ")},
+				{SellerSKU: ptr("ABC-001")},
+				{SellerSKU: ptr(" ABC-001 ")},
 			},
 		}
 		_, err := svc.CreateProductForSeller(ctx, seller1UserID, req)
@@ -100,7 +107,7 @@ func TestSKUUniqueness(t *testing.T) {
 			Currency:   "RUB",
 			PriceCents: 100,
 			Variants: []products.ProductVariantRequest{
-				{SKU: ptr("ABC-002")},
+				{SellerSKU: ptr("ABC-002")},
 			},
 		}
 		_, err := svc.CreateProductForSeller(ctx, seller1UserID, req1)
@@ -112,7 +119,7 @@ func TestSKUUniqueness(t *testing.T) {
 			Currency:   "RUB",
 			PriceCents: 100,
 			Variants: []products.ProductVariantRequest{
-				{SKU: ptr("abc-002")},
+				{SellerSKU: ptr("abc-002")},
 			},
 		}
 		_, err = svc.CreateProductForSeller(ctx, seller1UserID, req2)
@@ -129,7 +136,7 @@ func TestSKUUniqueness(t *testing.T) {
 			Currency:   "RUB",
 			PriceCents: 100,
 			Variants: []products.ProductVariantRequest{
-				{SKU: ptr("ABC-003")},
+				{SellerSKU: ptr("ABC-003")},
 			},
 		}
 		_, err := svc.CreateProductForSeller(ctx, seller1UserID, req1)
@@ -141,7 +148,7 @@ func TestSKUUniqueness(t *testing.T) {
 			Currency:   "RUB",
 			PriceCents: 100,
 			Variants: []products.ProductVariantRequest{
-				{SKU: ptr("ABC-003")},
+				{SellerSKU: ptr("ABC-003")},
 			},
 		}
 		_, err = svc.CreateProductForSeller(ctx, seller2UserID, req2)
@@ -156,7 +163,7 @@ func TestSKUUniqueness(t *testing.T) {
 			Currency:   "RUB",
 			PriceCents: 100,
 			Variants: []products.ProductVariantRequest{
-				{SKU: ptr("ABC-004")},
+				{SellerSKU: ptr("ABC-004")},
 			},
 		}
 		p, err := svc.CreateProductForSeller(ctx, seller1UserID, req)
@@ -164,7 +171,7 @@ func TestSKUUniqueness(t *testing.T) {
 
 		reqUpdate := products.UpdateProductRequest{
 			Variants: []products.ProductVariantRequest{
-				{SKU: ptr("ABC-004")},
+				{SellerSKU: ptr("ABC-004")},
 			},
 		}
 		_, err = svc.UpdateProductForSeller(ctx, seller1UserID, p.ID, reqUpdate)
@@ -179,7 +186,7 @@ func TestSKUUniqueness(t *testing.T) {
 			Currency:   "RUB",
 			PriceCents: 100,
 			Variants: []products.ProductVariantRequest{
-				{SKU: ptr("ABC-005")},
+				{SellerSKU: ptr("ABC-005")},
 			},
 		}
 		_, err := svc.CreateProductForSeller(ctx, seller1UserID, req1)
@@ -191,7 +198,7 @@ func TestSKUUniqueness(t *testing.T) {
 			Currency:   "RUB",
 			PriceCents: 100,
 			Variants: []products.ProductVariantRequest{
-				{SKU: ptr("ABC-006")},
+				{SellerSKU: ptr("ABC-006")},
 			},
 		}
 		p2, err := svc.CreateProductForSeller(ctx, seller1UserID, req2)
@@ -199,7 +206,7 @@ func TestSKUUniqueness(t *testing.T) {
 
 		reqUpdate := products.UpdateProductRequest{
 			Variants: []products.ProductVariantRequest{
-				{SKU: ptr("ABC-005")},
+				{SellerSKU: ptr("ABC-005")},
 			},
 		}
 		_, err = svc.UpdateProductForSeller(ctx, seller1UserID, p2.ID, reqUpdate)
@@ -222,7 +229,7 @@ func TestSKUUniqueness(t *testing.T) {
 					Currency:   "RUB",
 					PriceCents: 100,
 					Variants: []products.ProductVariantRequest{
-						{SKU: ptr("CONCURRENT-001")},
+						{SellerSKU: ptr("CONCURRENT-001")},
 					},
 				}
 				_, err := svc.CreateProductForSeller(context.Background(), seller1UserID, req)

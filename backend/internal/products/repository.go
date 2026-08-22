@@ -46,12 +46,12 @@ func (r *Repository) FindExistingSellerSKUs(ctx context.Context, sellerID uuid.U
 	}
 
 	query := `
-		SELECT pv.sku 
+		SELECT pv.seller_sku 
 		FROM product_variants pv
 		JOIN products p ON pv.product_id = p.id
 		WHERE p.seller_id = $1 
 		  AND pv.is_active = true
-		  AND LOWER(TRIM(pv.sku)) = ANY($2)
+		  AND LOWER(TRIM(pv.seller_sku)) = ANY($2)
 	`
 	args := []any{sellerID, skus}
 
@@ -258,22 +258,22 @@ func (r *Repository) MergeProductVariants(ctx context.Context, productID uuid.UU
 		if exists {
 			query := `
 				UPDATE product_variants
-				SET sku = $1, size = $2, color = $3, option_values = $4, barcode = $5, price_cents = $6, is_active = $7, updated_at = now()
+				SET sku = $1, size = $2, color = $3, option_values = $4, barcode = $5, price_cents = $6, is_active = $7, seller_sku = $10, color_id = $11, size_value_id = $12, shade_name = $13, updated_at = now()
 				WHERE id = $8 AND product_id = $9
 			`
 			_, err := r.db.Exec(ctx, query,
-				v.SKU, v.Size, v.Color, v.OptionValues, v.Barcode, v.PriceCents, v.IsActive, v.ID, productID,
+				v.SKU, v.Size, v.Color, v.OptionValues, v.Barcode, v.PriceCents, v.IsActive, v.ID, productID, v.SellerSKU, v.ColorID, v.SizeValueID, v.ShadeName,
 			)
 			if err != nil {
 				return fmt.Errorf("failed to update variant: %w", err)
 			}
 		} else {
 			query := `
-				INSERT INTO product_variants (id, product_id, sku, size, color, option_values, barcode, price_cents, is_active, created_at, updated_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				INSERT INTO product_variants (id, product_id, sku, size, color, option_values, barcode, price_cents, is_active, created_at, updated_at, seller_sku, color_id, size_value_id, shade_name)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 			`
 			_, err := r.db.Exec(ctx, query,
-				v.ID, v.ProductID, v.SKU, v.Size, v.Color, v.OptionValues, v.Barcode, v.PriceCents, v.IsActive, v.CreatedAt, v.UpdatedAt,
+				v.ID, v.ProductID, v.SKU, v.Size, v.Color, v.OptionValues, v.Barcode, v.PriceCents, v.IsActive, v.CreatedAt, v.UpdatedAt, v.SellerSKU, v.ColorID, v.SizeValueID, v.ShadeName,
 			)
 			if err != nil {
 				return fmt.Errorf("failed to insert variant: %w", err)
@@ -364,7 +364,7 @@ func PopulateProductAggregates(p *Product) {
 
 func (r *Repository) GetProductVariants(ctx context.Context, productID uuid.UUID) ([]ProductVariant, error) {
 	query := `
-		SELECT pv.id, pv.product_id, pv.sku, pv.size, pv.color, pv.option_values, pv.barcode, pv.price_cents, pv.is_active, pv.created_at, pv.updated_at,
+		SELECT pv.id, pv.product_id, pv.sku, pv.size, pv.color, pv.option_values, pv.seller_sku, pv.color_id, pv.size_value_id, pv.shade_name, pv.barcode, pv.price_cents, pv.is_active, pv.created_at, pv.updated_at,
 		       (ii.id IS NOT NULL) AS has_inventory,
 		       COALESCE(ii.total_stock, 0) AS total_stock,
 		       COALESCE(ii.reserved_stock, 0) AS reserved_stock
@@ -385,7 +385,7 @@ func (r *Repository) GetProductVariants(ctx context.Context, productID uuid.UUID
 		var hasInv bool
 		var totalStock, reservedStock int
 		if err := rows.Scan(
-			&v.ID, &v.ProductID, &v.SKU, &v.Size, &v.Color, &v.OptionValues, &v.Barcode, &v.PriceCents, &v.IsActive, &v.CreatedAt, &v.UpdatedAt,
+			&v.ID, &v.ProductID, &v.SKU, &v.Size, &v.Color, &v.OptionValues, &v.SellerSKU, &v.ColorID, &v.SizeValueID, &v.ShadeName, &v.Barcode, &v.PriceCents, &v.IsActive, &v.CreatedAt, &v.UpdatedAt,
 			&hasInv, &totalStock, &reservedStock,
 		); err != nil {
 			return nil, err
@@ -1065,14 +1065,41 @@ func (r *Repository) ReorderProductImages(ctx context.Context, productID uuid.UU
 	return nil
 }
 
+var ErrSellerHasNoPrimaryBrand = fmt.Errorf("seller has no active primary brand")
+var ErrSellerHasMultiplePrimaryBrands = fmt.Errorf("seller has multiple active primary brands")
+
 func (r *Repository) GetPrimaryBrandForSeller(ctx context.Context, sellerID uuid.UUID) (*uuid.UUID, error) {
-	var brandID uuid.UUID
-	err := r.db.QueryRow(ctx, "SELECT brand_id FROM seller_brands WHERE seller_id = $1 AND is_primary = true AND status = 'active'", sellerID).Scan(&brandID)
+	rows, err := r.db.Query(ctx, "SELECT brand_id FROM seller_brands WHERE seller_id = $1 AND is_primary = true AND status = 'active'", sellerID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
 		return nil, err
 	}
-	return &brandID, nil
+	defer rows.Close()
+
+	var brandIDs []uuid.UUID
+	for rows.Next() {
+		var brandID uuid.UUID
+		if err := rows.Scan(&brandID); err != nil {
+			return nil, err
+		}
+		brandIDs = append(brandIDs, brandID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(brandIDs) == 0 {
+		return nil, ErrSellerHasNoPrimaryBrand
+	}
+	if len(brandIDs) > 1 {
+		return nil, ErrSellerHasMultiplePrimaryBrands
+	}
+
+	return &brandIDs[0], nil
+}
+
+func (r *Repository) UpdateVariantPrice(ctx context.Context, variantID uuid.UUID, priceCents int64) error {
+	query := `UPDATE product_variants SET price_cents = $1, updated_at = now() WHERE id = $2`
+	_, err := r.db.Exec(ctx, query, priceCents, variantID)
+	return err
 }

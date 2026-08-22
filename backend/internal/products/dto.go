@@ -23,19 +23,22 @@ type CreateProductRequest struct {
 	Variants         []ProductVariantRequest `json:"variants,omitempty"`
 	Images           []ProductImageRequest   `json:"images,omitempty"`
 	ContinueSelling  *bool                   `json:"continueSelling,omitempty"`
+
+	MaterialComposition []ProductMaterialCompositionRequest `json:"materialComposition,omitempty"`
+	SizeChartRows       []ProductSizeChartRowRequest        `json:"sizeChartRows,omitempty"`
 }
 
 func (req *CreateProductRequest) ValidateSKUs() error {
 	seen := make(map[string]bool)
 	for i := range req.Variants {
 		v := &req.Variants[i]
-		if v.SKU != nil {
+		if v.SellerSKU != nil {
 			// ZAMK Rule: SKU unique per Seller.
 			// Normalization: trim surrounding whitespace and case-insensitive comparison.
-			trimmed := strings.ToLower(strings.TrimSpace(*v.SKU))
+			trimmed := strings.ToLower(strings.TrimSpace(*v.SellerSKU))
 			if trimmed != "" {
 				if seen[trimmed] {
-					return &DuplicateSKUError{SKU: strings.TrimSpace(*v.SKU)}
+					return &DuplicateSKUError{SKU: strings.TrimSpace(*v.SellerSKU)}
 				}
 				seen[trimmed] = true
 			}
@@ -60,19 +63,22 @@ type UpdateProductRequest struct {
 	Variants         []ProductVariantRequest `json:"variants,omitempty"`
 	Images           []ProductImageRequest   `json:"images,omitempty"`
 	ContinueSelling  *bool                   `json:"continueSelling,omitempty"`
+
+	MaterialComposition []ProductMaterialCompositionRequest `json:"materialComposition,omitempty"`
+	SizeChartRows       []ProductSizeChartRowRequest        `json:"sizeChartRows,omitempty"`
 }
 
 func (req *UpdateProductRequest) ValidateSKUs() error {
 	seen := make(map[string]bool)
 	for i := range req.Variants {
 		v := &req.Variants[i]
-		if v.SKU != nil {
+		if v.SellerSKU != nil {
 			// ZAMK Rule: SKU unique per Seller.
 			// Normalization: trim surrounding whitespace and case-insensitive comparison.
-			trimmed := strings.ToLower(strings.TrimSpace(*v.SKU))
+			trimmed := strings.ToLower(strings.TrimSpace(*v.SellerSKU))
 			if trimmed != "" {
 				if seen[trimmed] {
-					return &DuplicateSKUError{SKU: strings.TrimSpace(*v.SKU)}
+					return &DuplicateSKUError{SKU: strings.TrimSpace(*v.SellerSKU)}
 				}
 				seen[trimmed] = true
 			}
@@ -257,3 +263,17 @@ type ProductPublishErrorResponse struct {
 	Reasons []string `json:"reasons"`
 }
 
+
+type ProductMaterialCompositionRequest struct {
+	MaterialID uuid.UUID `json:"materialId"`
+	Percentage float64   `json:"percentage"`
+}
+
+type ProductSizeChartRowRequest struct {
+	SizeValueID  uuid.UUID              `json:"sizeValueId"`
+	Measurements map[string]interface{} `json:"measurements"`
+}
+
+type UpdateVariantPricesRequest struct {
+	Prices map[uuid.UUID]int64 `json:"prices" validate:"required,dive,min=0"`
+}
