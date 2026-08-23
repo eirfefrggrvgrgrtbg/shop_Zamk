@@ -22,13 +22,14 @@ func (m *receivingTestMockPayoutsService) CreatePendingSalesForOrder(ctx context
 	return nil
 }
 
-func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, uuid.UUID, error) {
+func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, uuid.UUID, string, error) {
 	staffID := uuid.MustParse("99999999-9999-4999-8999-999999999999")
 	sellerID := uuid.MustParse("11111111-1111-4111-8111-000000000001")
 	orderID := uuid.New()
 	fulfillmentID := uuid.New()
 	productID := uuid.New()
 	variantID := uuid.New()
+
 	orderItemID := uuid.New()
 
 	// Cleanup existing test artifacts if any
@@ -42,7 +43,7 @@ func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, u
 		ON CONFLICT (id) DO NOTHING
 	`, staffID)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
+		return uuid.Nil, uuid.Nil, "", err
 	}
 
 	_, err = db.Pool.Exec(ctx, `
@@ -51,7 +52,7 @@ func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, u
 		ON CONFLICT (id) DO NOTHING
 	`, sellerID)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
+		return uuid.Nil, uuid.Nil, "", err
 	}
 
 	// Product & Variant
@@ -60,15 +61,15 @@ func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, u
 		VALUES ($1, $2, 'Parallel Test Product', $3, 10000, 'RUB', 'published')
 	`, productID, sellerID, "parallel-test-"+productID.String())
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
+		return uuid.Nil, uuid.Nil, "", err
 	}
 
 	_, err = db.Pool.Exec(ctx, `
 		INSERT INTO product_variants (id, product_id, sku, barcode, price_cents, is_active)
-		VALUES ($1, $2, 'PARALLEL-SKU-01', '4601234567890', 10000, true)
-	`, variantID, productID)
+		VALUES ($1, $2, 'PARALLEL-SKU-01', $3, 10000, true)
+	`, variantID, productID, variantID.String()[:13])
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
+		return uuid.Nil, uuid.Nil, "", err
 	}
 
 	// Order & Fulfillment
@@ -77,7 +78,7 @@ func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, u
 		VALUES ($1, $2, 'paid', 10000, 'RUB', 'Test Customer', '+79990000000', 'cust@test.com', 'Test Address')
 	`, orderID, staffID)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
+		return uuid.Nil, uuid.Nil, "", err
 	}
 
 	_, err = db.Pool.Exec(ctx, `
@@ -85,7 +86,7 @@ func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, u
 		VALUES ($1, $2, $3, 'packed', 10000, 1500, 8500, $4)
 	`, fulfillmentID, orderID, sellerID, "FUL-PARALLEL-"+fulfillmentID.String()[:8])
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
+		return uuid.Nil, uuid.Nil, "", err
 	}
 
 	_, err = db.Pool.Exec(ctx, `
@@ -93,10 +94,10 @@ func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, u
 		VALUES ($1, $2, $3, $4, $5, $6, 'Parallel Test Product', 'parallel-test', 'PARALLEL-SKU-01', 10000, 1, 10000)
 	`, orderItemID, orderID, fulfillmentID, productID, variantID, sellerID)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
+		return uuid.Nil, uuid.Nil, "", err
 	}
 
-	return fulfillmentID, staffID, nil
+	return fulfillmentID, staffID, variantID.String()[:13], nil
 }
 
 func TestParallelConfirmReceiving_CreatesExactlyOneShipment(t *testing.T) {
@@ -112,7 +113,7 @@ func TestParallelConfirmReceiving_CreatesExactlyOneShipment(t *testing.T) {
 	require.NoError(t, err, "Failed to connect to postgres test db")
 	defer db.Close()
 
-	fulfillmentID, staffID, err := seedTestFulfillment(ctx, db)
+	fulfillmentID, staffID, barcode, err := seedTestFulfillment(ctx, db)
 	require.NoError(t, err)
 
 	repo := fulfillment.NewRepository(db.Pool)
@@ -126,7 +127,7 @@ func TestParallelConfirmReceiving_CreatesExactlyOneShipment(t *testing.T) {
 
 	// Scan item to 100% match
 	scannedSess, err := svc.ScanReceivingItem(ctx, fulfillmentID, fulfillment.ScanItemRequest{
-		Barcode:         "4601234567890",
+		Barcode:         barcode,
 		ExpectedVersion: sess.Version,
 		IdempotencyKey:  "test-idemp-001",
 	})

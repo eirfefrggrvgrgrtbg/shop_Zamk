@@ -24,7 +24,7 @@ export const login = async (input: any): Promise<AuthResponse> => {
 };
 
 export const refresh = async (): Promise<AuthResponse> => {
-  const res = await request<AuthResponse>('POST', '/auth/refresh');
+  const res = await request<AuthResponse>('POST', '/auth/refresh', { skipAuthRefresh: true });
   if (res.accessToken) {
     setAccessToken(res.accessToken);
   }

@@ -26,13 +26,14 @@ func discTestDBURL() string {
 
 // seedDiscFulfillment создаёт изолированный набор данных для тестов расхождения.
 // Возвращает fulfillmentID, sellerID (sellers.id), staffID (users.id).
-func seedDiscFulfillment(ctx context.Context, db *postgres.Client) (fulfillmentID, sellerID, staffID uuid.UUID, err error) {
+func seedDiscFulfillment(ctx context.Context, db *postgres.Client) (fulfillmentID, sellerID, staffID uuid.UUID, barcode string, err error) {
 	staffID = uuid.New()
 	sellerID = uuid.New()
 	orderID := uuid.New()
 	fulfillmentID = uuid.New()
 	productID := uuid.New()
 	variantID := uuid.New()
+	barcode = variantID.String()[:13]
 	orderItemID := uuid.New()
 
 	suffix := fulfillmentID.String()[:8]
@@ -63,8 +64,8 @@ func seedDiscFulfillment(ctx context.Context, db *postgres.Client) (fulfillmentI
 	}
 	if _, err = db.Pool.Exec(ctx, `
 		INSERT INTO product_variants (id, product_id, sku, barcode, price_cents, is_active)
-		VALUES ($1, $2, $3, '4609999900001', 10000, true)
-	`, variantID, productID, "DISC-SKU-"+suffix); err != nil {
+		VALUES ($1, $2, $3, $4, 10000, true)
+	`, variantID, productID, "DISC-SKU-"+suffix, variantID.String()[:13]); err != nil {
 		return
 	}
 	if _, err = db.Pool.Exec(ctx, `
@@ -110,7 +111,7 @@ func TestRecordDiscrepancy_PersistsResultWithoutShipment(t *testing.T) {
 	require.NoError(t, err, "connect to test db")
 	defer db.Close()
 
-	fulfillmentID, sellerID, staffID, err := seedDiscFulfillment(ctx, db)
+	fulfillmentID, sellerID, staffID, barcode, err := seedDiscFulfillment(ctx, db)
 	require.NoError(t, err, "seed test data")
 
 	// Real notification service (writes to the same test DB)
@@ -129,14 +130,18 @@ func TestRecordDiscrepancy_PersistsResultWithoutShipment(t *testing.T) {
 	require.Equal(t, "active", sess.Status)
 
 	// Partial scan (1 of 2 items) → leaves a discrepancy
+	t.Logf("Scanning item with barcode: %s", barcode)
+
 	_, err = svc.ScanReceivingItem(ctx, fulfillmentID, fulfillment.ScanItemRequest{
-		Barcode:         "4609999900001",
+		Barcode:         barcode,
 		ExpectedVersion: sess.Version,
 		IdempotencyKey:  "disc-scan-" + fulfillmentID.String(),
 	})
 	require.NoError(t, err, "scan one item")
 
 	// ==== CALL UNDER TEST ====
+	t.Logf("Testing with barcode: %s", barcode)
+
 	err = svc.RecordDiscrepancy(ctx, staffID, fulfillmentID, fulfillment.RecordDiscrepancyRequest{
 		SessionID: sess.ID.String(),
 		Reason:    "shortage",

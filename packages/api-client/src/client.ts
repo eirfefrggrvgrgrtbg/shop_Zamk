@@ -1,5 +1,5 @@
 import { ApiError } from './errors';
-import { getAccessToken } from './tokenStore';
+import { getAccessToken, setAccessToken, clearAccessToken } from './tokenStore';
 
 export interface ApiClientConfig {
   baseURL: string;
@@ -16,66 +16,77 @@ export const createApiClient = (newConfig: ApiClientConfig) => {
 export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: any;
   params?: Record<string, string | number | boolean | undefined>;
+  skipAuthRefresh?: boolean;
 }
+
+let refreshPromise: Promise<string | null> | null = null;
 
 export const request = async <T>(
   method: string,
   path: string,
   options: RequestOptions = {}
 ): Promise<T> => {
-  const { body: inputBody, params, headers: optionHeaders, ...fetchOptions } = options;
-  let url = `${config.baseURL}${path}`;
+  const execute = async (isRetry = false): Promise<any> => {
+    const { body: inputBody, params, headers: optionHeaders, skipAuthRefresh, ...fetchOptions } = options;
+    let url = `${config.baseURL}${path}`;
 
-  if (params) {
-    const searchParams = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== null) {
-        searchParams.append(key, String(value));
+    if (params) {
+      const searchParams = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== null) {
+          searchParams.append(key, String(value));
+        }
+      }
+      const queryString = searchParams.toString();
+      if (queryString) {
+        url += `?${queryString}`;
       }
     }
-    const queryString = searchParams.toString();
-    if (queryString) {
-      url += `?${queryString}`;
+
+    const headers = new Headers(optionHeaders || {});
+
+    // Determine if body is JSON or FormData
+    let body: BodyInit | null = null;
+    if (inputBody instanceof FormData) {
+      body = inputBody;
+    } else if (inputBody !== undefined && inputBody !== null) {
+      body = JSON.stringify(inputBody);
+      headers.set('Content-Type', 'application/json');
     }
-  }
 
-  const headers = new Headers(optionHeaders || {});
+    const accessToken = getAccessToken();
+    if (accessToken) {
+      headers.set('Authorization', `Bearer ${accessToken}`);
+    }
 
-  // Determine if body is JSON or FormData
-  let body: BodyInit | null = null;
-  if (inputBody instanceof FormData) {
-    body = inputBody;
-    // Don't set Content-Type for FormData, the browser sets it automatically with the boundary
-  } else if (inputBody !== undefined && inputBody !== null) {
-    body = JSON.stringify(inputBody);
-    headers.set('Content-Type', 'application/json');
-  }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15_000);
 
-  const accessToken = getAccessToken();
-  if (accessToken) {
-    headers.set('Authorization', `Bearer ${accessToken}`);
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
-
-  try {
-    const response = await fetch(url, {
-      ...fetchOptions,
-      method,
-      headers,
-      body,
-      credentials: fetchOptions.credentials ?? 'include', // Important for refresh token httpOnly cookies
-      signal: fetchOptions.signal ?? controller.signal,
-    });
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...fetchOptions,
+        method,
+        headers,
+        body,
+        credentials: fetchOptions.credentials ?? 'include',
+        signal: fetchOptions.signal ?? controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ApiError('Сервер не отвечает. Проверьте, запущен ли backend.', 'TIMEOUT_ERROR');
+      }
+      throw new ApiError('Не удалось подключиться к серверу. Проверьте, запущен ли backend.', 'NETWORK_ERROR');
+    }
 
     let data: any = null;
     const contentType = response.headers.get('content-type');
     if (contentType && contentType.includes('application/json')) {
-      data = await response.json();
+      data = await response.json().catch(() => null);
     } else {
-      const text = await response.text();
+      const text = await response.text().catch(() => '');
       if (text) {
         try {
           data = JSON.parse(text);
@@ -86,6 +97,34 @@ export const request = async <T>(
     }
 
     if (!response.ok) {
+      // 401 Unauthorized interceptor
+      if (response.status === 401 && !skipAuthRefresh && !isRetry) {
+        if (!refreshPromise) {
+          refreshPromise = (async () => {
+            try {
+              const refreshOptions: RequestOptions = { skipAuthRefresh: true };
+              const refreshRes = await request<any>('POST', '/auth/refresh', refreshOptions);
+              if (refreshRes && refreshRes.accessToken) {
+                setAccessToken(refreshRes.accessToken);
+                return refreshRes.accessToken;
+              }
+              return null;
+            } catch (err) {
+              clearAccessToken();
+              return null;
+            } finally {
+              refreshPromise = null;
+            }
+          })();
+        }
+
+        const newAccessToken = await refreshPromise;
+        if (newAccessToken) {
+          // Retry original request
+          return execute(true);
+        }
+      }
+
       // Handle nested error shape: { error: { code, message } }
       if (data && data.error && typeof data.error === 'object') {
         const code = data.error.code;
@@ -94,28 +133,27 @@ export const request = async <T>(
       // Handle flat error shape: { error: "code", message: "..." } or { code: "code", message: "..." }
       if (data && (typeof data.error === 'string' || typeof data.code === 'string')) {
         const code = data.error || data.code;
+
+        // Special logic for distinguishing Expired Session / Invalid Credentials
+        if (response.status === 401) {
+          if (path === '/auth/login') {
+            throw new ApiError('Неверный email или пароль', 'INVALID_CREDENTIALS', 401, data);
+          }
+          if (path === '/auth/refresh') {
+            throw new ApiError('Сессия истекла. Пожалуйста, войдите снова.', 'SESSION_EXPIRED', 401, data);
+          }
+        }
+
         throw new ApiError(getSafeErrorMessage(code, data.message), code, response.status, data);
       }
+
       throw new ApiError(data?.message || `HTTP Error ${response.status}`, data?.code || 'HTTP_ERROR', response.status, data);
     }
 
-    return data as T;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new ApiError(
-        'Сервер не отвечает. Проверьте, запущен ли backend.',
-        'TIMEOUT_ERROR'
-      );
-    }
-    throw new ApiError(
-      'Не удалось подключиться к серверу. Проверьте, запущен ли backend.',
-      'NETWORK_ERROR'
-    );
-  }
+    return data;
+  };
+
+  return execute();
 };
 
 const getSafeErrorMessage = (code?: string, fallback?: string): string => {

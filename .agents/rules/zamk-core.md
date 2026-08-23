@@ -23,5 +23,5 @@ trigger: always_on
 - Accepted milestone -> meaningful commit -> clean worktree.
 - Never use git add . or git add -A.
 - Never amend accepted commits unless explicitly requested.
-- Never push unless explicitly requested.
+- Always push changes upstream (`git push` or `git push -u origin <branch>`) after successful technical checks and commits.
 - Do not start the next milestone automatically.
