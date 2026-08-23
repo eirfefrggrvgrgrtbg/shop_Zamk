@@ -169,9 +169,10 @@ type SizeValue struct {
 }
 
 type ProductMaterialComposition struct {
-	ProductID  uuid.UUID `json:"productId"`
-	MaterialID uuid.UUID `json:"materialId"`
-	Percentage float64   `json:"percentage"`
+	ProductID    uuid.UUID `json:"productId"`
+	MaterialID   uuid.UUID `json:"materialId"`
+	MaterialName *string   `json:"materialName,omitempty"`
+	Percentage   float64   `json:"percentage"`
 }
 
 type ProductRevision struct {
@@ -235,9 +236,10 @@ type ProductSizeChart struct {
 }
 
 type ProductSizeChartRow struct {
-	SizeChartID  uuid.UUID              `json:"sizeChartId"`
-	SizeValueID  uuid.UUID              `json:"sizeValueId"`
-	Measurements map[string]interface{} `json:"measurements"`
+	SizeChartID   uuid.UUID              `json:"sizeChartId"`
+	SizeValueID   uuid.UUID              `json:"sizeValueId"`
+	SizeValueName *string                `json:"sizeValueName,omitempty"`
+	Measurements  map[string]interface{} `json:"measurements"`
 }
 
 type CategorySizeSystem struct {

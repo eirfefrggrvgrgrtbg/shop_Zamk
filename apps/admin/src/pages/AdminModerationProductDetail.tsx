@@ -15,6 +15,8 @@ import {
   Layers,
   DollarSign,
   History,
+  Tag,
+  Ruler,
 } from 'lucide-react';
 import {
   getAdminProduct,
@@ -514,6 +516,29 @@ export function AdminModerationProductDetail() {
             </div>
           </div>
 
+          {/* Material Composition & Attributes */}
+          {((product.materialComposition && product.materialComposition.length > 0) || (product.attributes && product.attributes.length > 0)) && (
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 border-b pb-2">
+                <Tag className="w-4 h-4 text-indigo-600" />
+                <span>Состав и характеристики</span>
+              </h2>
+
+              {product.materialComposition && product.materialComposition.length > 0 && (
+                <div>
+                  <span className="text-slate-500 text-xs block mb-1.5 font-medium">Состав материалов:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {product.materialComposition.map((m, idx) => (
+                      <span key={m.materialId || idx} className="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700">
+                        {m.materialName || 'Материал'}: {m.percentage}%
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Photo Gallery */}
           <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
             <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 border-b pb-2">
@@ -526,9 +551,26 @@ export function AdminModerationProductDetail() {
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {product.gallery.map((img, idx) => (
-                  <div key={img.id || idx} className="group relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 aspect-square">
-                    <img src={img.url} alt={img.altText || product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  <div key={img.id || idx} className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 aspect-square flex items-center justify-center">
+                    <img
+                      src={img.url}
+                      alt={img.altText || product.title}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLElement).style.display = 'none';
+                        const parent = (e.currentTarget as HTMLElement).parentElement;
+                        if (parent) {
+                          const fb = parent.querySelector('.img-fallback');
+                          if (fb) (fb as HTMLElement).style.display = 'flex';
+                        }
+                      }}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    />
+                    <div className="img-fallback hidden w-full h-full flex-col items-center justify-center p-3 text-center text-slate-400">
+                      <Package className="w-8 h-8 opacity-40 mb-1" />
+                      <span className="text-[10px] font-medium leading-tight">Файл фото: {img.altText || 'Изображение'}</span>
+                    </div>
                     {idx === 0 && <span className="absolute top-1.5 left-1.5 px-2 py-0.5 bg-black/70 text-white text-[10px] rounded-md font-bold">Главное</span>}
+                    {img.colorId && <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 bg-indigo-900/80 text-white text-[10px] rounded-md font-bold">Цвет</span>}
                   </div>
                 ))}
               </div>
@@ -546,19 +588,21 @@ export function AdminModerationProductDetail() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase text-[10px]">
-                    <th className="py-2.5 px-3">Размер / Цвет</th>
-                    <th className="py-2.5 px-3">SKU</th>
+                    <th className="py-2.5 px-3">Цвет / Размер</th>
+                    <th className="py-2.5 px-3">Артикул продавца (SKU)</th>
+                    <th className="py-2.5 px-3">Штрихкод</th>
                     <th className="py-2.5 px-3 text-right">Цена</th>
-                    <th className="py-2.5 px-3 text-center">Статус варианта</th>
+                    <th className="py-2.5 px-3 text-center">Статус</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {product.variants.map((v, i) => (
                     <tr key={v.id || i}>
                       <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-white">
-                        {[v.size, v.color].filter(Boolean).join(' / ') || '—'}
+                        {[v.color ? (v.shadeName ? `${v.color} (${v.shadeName})` : v.color) : null, v.size].filter(Boolean).join(' / ') || '—'}
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600">{v.sku || '—'}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">{v.sellerSku || v.sku || '—'}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-500 text-[11px]">{v.barcode || '—'}</td>
                       <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white">
                         {v.price != null ? formatPrice(v.price) : '—'}
                       </td>
@@ -573,6 +617,43 @@ export function AdminModerationProductDetail() {
               </table>
             </div>
           </div>
+
+          {/* Size Chart */}
+          {product.sizeChart && product.sizeChart.rows && product.sizeChart.rows.length > 0 && (
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 border-b pb-2">
+                <Ruler className="w-4 h-4 text-indigo-600" />
+                <span>Таблица размеров ({product.sizeChart.rows.length} {product.sizeChart.rows.length === 1 ? 'размер' : 'размеров'})</span>
+              </h2>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase text-[10px]">
+                      <th className="py-2.5 px-3 font-bold">Размер</th>
+                      {Object.keys(product.sizeChart.rows[0].measurements || {}).map((fieldKey) => (
+                        <th key={fieldKey} className="py-2.5 px-3">{fieldKey} (см)</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {product.sizeChart.rows.map((row, idx) => (
+                      <tr key={row.sizeValueId || idx}>
+                        <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">
+                          {row.sizeValueName || '—'}
+                        </td>
+                        {Object.keys(product.sizeChart!.rows[0].measurements || {}).map((fieldKey) => (
+                          <td key={fieldKey} className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
+                            {row.measurements[fieldKey] != null ? `${row.measurements[fieldKey]} см` : '—'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Sidebar Column: Moderation History & SLA */}

@@ -661,8 +661,9 @@ export function AdminProductDetail() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase text-[10px]">
-                    <th className="py-2.5 px-3">Размер / Цвет</th>
-                    <th className="py-2.5 px-3">SKU</th>
+                    <th className="py-2.5 px-3">Цвет / Размер</th>
+                    <th className="py-2.5 px-3">Артикул продавца (SKU)</th>
+                    <th className="py-2.5 px-3">Штрихкод</th>
                     <th className="py-2.5 px-3 text-right">Цена</th>
                     <th className="py-2.5 px-3 text-center">Статус варианта</th>
                   </tr>
@@ -671,9 +672,10 @@ export function AdminProductDetail() {
                   {product.variants.map((v, i) => (
                     <tr key={v.id || i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-white">
-                        {[v.size, v.color].filter(Boolean).join(' / ') || '—'}
+                        {[v.color ? (v.shadeName ? `${v.color} (${v.shadeName})` : v.color) : null, v.size].filter(Boolean).join(' / ') || '—'}
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">{v.sku || '—'}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">{v.sellerSku || v.sku || '—'}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-500 text-[11px]">{v.barcode || '—'}</td>
                       <td className="py-2.5 px-3 text-right font-semibold text-slate-900 dark:text-white">
                         {v.price != null ? formatMoneyRubles(v.price) : '—'}
                       </td>

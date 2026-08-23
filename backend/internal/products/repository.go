@@ -408,11 +408,17 @@ func PopulateProductAggregates(p *Product) {
 
 func (r *Repository) GetProductVariants(ctx context.Context, productID uuid.UUID) ([]ProductVariant, error) {
 	query := `
-		SELECT pv.id, pv.product_id, pv.sku, pv.size, pv.color, pv.option_values, pv.seller_sku, pv.color_id, pv.size_value_id, pv.shade_name, pv.barcode, pv.price_cents, pv.is_active, pv.created_at, pv.updated_at,
+		SELECT pv.id, pv.product_id,
+		       COALESCE(pv.sku, pv.seller_sku) AS sku,
+		       COALESCE(pv.size, sv.value) AS size,
+		       COALESCE(pv.color, c.name_ru) AS color,
+		       pv.option_values, pv.seller_sku, pv.color_id, pv.size_value_id, pv.shade_name, pv.barcode, pv.price_cents, pv.is_active, pv.created_at, pv.updated_at,
 		       (ii.id IS NOT NULL) AS has_inventory,
 		       COALESCE(ii.total_stock, 0) AS total_stock,
 		       COALESCE(ii.reserved_stock, 0) AS reserved_stock
 		FROM product_variants pv
+		LEFT JOIN size_values sv ON pv.size_value_id = sv.id
+		LEFT JOIN colors c ON pv.color_id = c.id
 		LEFT JOIN inventory_items ii ON pv.id = ii.product_variant_id
 		WHERE pv.product_id = $1
 		ORDER BY pv.created_at ASC
@@ -1257,7 +1263,12 @@ func (r *Repository) InsertSizeChart(ctx context.Context, productID uuid.UUID, c
 }
 
 func (r *Repository) GetProductMaterialComposition(ctx context.Context, productID uuid.UUID) ([]ProductMaterialComposition, error) {
-	rows, err := r.db.Query(ctx, "SELECT material_id, percentage FROM product_material_composition WHERE product_id = $1", productID)
+	rows, err := r.db.Query(ctx, `
+		SELECT pmc.material_id, m.name_ru, pmc.percentage
+		FROM product_material_composition pmc
+		LEFT JOIN materials m ON pmc.material_id = m.id
+		WHERE pmc.product_id = $1
+	`, productID)
 	if err != nil {
 		return nil, err
 	}
@@ -1266,7 +1277,7 @@ func (r *Repository) GetProductMaterialComposition(ctx context.Context, productI
 	for rows.Next() {
 		var c ProductMaterialComposition
 		c.ProductID = productID
-		if err := rows.Scan(&c.MaterialID, &c.Percentage); err != nil {
+		if err := rows.Scan(&c.MaterialID, &c.MaterialName, &c.Percentage); err != nil {
 			return nil, err
 		}
 		res = append(res, c)
@@ -1321,7 +1332,12 @@ func (r *Repository) GetProductSizeChart(ctx context.Context, productID uuid.UUI
 	}
 	chart.ProductID = productID
 	
-	rows, err := r.db.Query(ctx, "SELECT size_value_id, measurements FROM product_size_chart_rows WHERE size_chart_id = $1", chart.ID)
+	rows, err := r.db.Query(ctx, `
+		SELECT pscr.size_value_id, sv.value, pscr.measurements
+		FROM product_size_chart_rows pscr
+		LEFT JOIN size_values sv ON pscr.size_value_id = sv.id
+		WHERE pscr.size_chart_id = $1
+	`, chart.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -1329,7 +1345,7 @@ func (r *Repository) GetProductSizeChart(ctx context.Context, productID uuid.UUI
 	for rows.Next() {
 		var rRow ProductSizeChartRow
 		rRow.SizeChartID = chart.ID
-		if err := rows.Scan(&rRow.SizeValueID, &rRow.Measurements); err != nil {
+		if err := rows.Scan(&rRow.SizeValueID, &rRow.SizeValueName, &rRow.Measurements); err != nil {
 			return nil, err
 		}
 		chart.Rows = append(chart.Rows, rRow)

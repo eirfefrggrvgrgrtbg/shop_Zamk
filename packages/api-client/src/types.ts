@@ -684,12 +684,20 @@ export interface AdminProductVariant {
   id: string;
   productId: string;
   sku?: string;
+  sellerSku?: string;
   size?: string;
+  sizeValue?: string;
   color?: string;
+  colorName?: string;
+  shadeName?: string;
   barcode?: string;
   priceCents?: number;
   isActive: boolean;
   inStock?: boolean;
+  hasInventoryRecord?: boolean;
+  totalStock?: number;
+  reservedStock?: number;
+  availableStock?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -701,7 +709,29 @@ export interface AdminProductImage {
   objectKey?: string;
   altText?: string;
   sortOrder: number;
+  colorId?: string;
   createdAt: string;
+}
+
+export interface AdminProductMaterialComposition {
+  productId?: string;
+  materialId: string;
+  materialName?: string;
+  percentage: number;
+}
+
+export interface AdminProductSizeChartRow {
+  sizeChartId?: string;
+  sizeValueId: string;
+  sizeValueName?: string;
+  measurements: Record<string, any>;
+}
+
+export interface AdminProductSizeChart {
+  id?: string;
+  productId?: string;
+  categoryId?: string;
+  rows: AdminProductSizeChartRow[];
 }
 
 export interface AdminProduct {
@@ -733,6 +763,9 @@ export interface AdminProduct {
   reviewsCount?: number;
   variants?: AdminProductVariant[];
   images?: AdminProductImage[];
+  materialComposition?: AdminProductMaterialComposition[];
+  sizeChart?: AdminProductSizeChart;
+  attributes?: any[];
 }
 
 export interface ModerationProduct {

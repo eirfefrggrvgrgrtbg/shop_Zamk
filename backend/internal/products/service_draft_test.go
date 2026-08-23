@@ -501,3 +501,134 @@ func TestProductRejectionAndResubmissionFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, products.StatusPendingModeration, pResubmitted.Status)
 }
+
+func TestAdminDossierCanonicalFieldsAndPreview(t *testing.T) {
+	dbClient, svc, sellerID := setupBlockATestDB(t)
+	pool := dbClient.Pool
+	ctx := context.Background()
+
+	// 1. Fetch category, color, size, material
+	var catID uuid.UUID
+	err := pool.QueryRow(ctx, "SELECT c.id FROM categories c WHERE c.is_active = true AND NOT EXISTS (SELECT 1 FROM categories sub WHERE sub.parent_id = c.id) LIMIT 1").Scan(&catID)
+	require.NoError(t, err)
+
+	var colorID uuid.UUID
+	var colorName string
+	err = pool.QueryRow(ctx, "SELECT id, name_ru FROM colors WHERE is_active = true LIMIT 1").Scan(&colorID, &colorName)
+	require.NoError(t, err)
+
+	var sizeValueID uuid.UUID
+	var sizeValue string
+	err = pool.QueryRow(ctx, "SELECT id, value FROM size_values WHERE is_active = true LIMIT 1").Scan(&sizeValueID, &sizeValue)
+	require.NoError(t, err)
+
+	var materialID uuid.UUID
+	var materialName string
+	err = pool.QueryRow(ctx, "SELECT id, name_ru FROM materials WHERE is_active = true LIMIT 1").Scan(&materialID, &materialName)
+	require.NoError(t, err)
+
+	title := "Dossier Test Product " + uuid.New().String()
+	sku := "DOSSIER-SKU-" + uuid.New().String()
+	imageUrl := "http://localhost:9000/zamk-local/products/test.png"
+	p, err := svc.CreateProductForSeller(ctx, sellerID, products.CreateProductRequest{
+		Title:        title,
+		CategoryID:   &catID,
+		Currency:     "RUB",
+		PriceCents:   450000,
+		MainImageURL: &imageUrl,
+		MaterialComposition: []products.ProductMaterialCompositionRequest{
+			{MaterialID: materialID, Percentage: 100},
+		},
+		Variants: []products.ProductVariantRequest{
+			{
+				SellerSKU:   &sku,
+				ColorID:     &colorID,
+				SizeValueID: &sizeValueID,
+				ShadeName:   ptr("Deep Shade"),
+				PriceCents:  func() *int64 { v := int64(450000); return &v }(),
+			},
+		},
+		SizeChartRows: []products.ProductSizeChartRowRequest{
+			{
+				SizeValueID: sizeValueID,
+				Measurements: map[string]interface{}{
+					"CHEST":  float64(100),
+					"LENGTH": float64(70),
+					"SLEEVE": float64(60),
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// A. Admin product detail returns canonical variant color/size/SKU/barcode
+	adminProd, err := svc.GetAdminProductDetail(ctx, p.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, adminProd.Variants)
+	v := adminProd.Variants[0]
+	require.NotNil(t, v.Color)
+	require.Equal(t, colorName, *v.Color)
+	require.NotNil(t, v.Size)
+	require.Equal(t, sizeValue, *v.Size)
+	require.NotNil(t, v.SellerSKU)
+	require.Equal(t, sku, *v.SellerSKU)
+	require.NotNil(t, v.SKU)
+	require.Equal(t, sku, *v.SKU)
+	require.NotNil(t, v.Barcode)
+	require.NotEmpty(t, *v.Barcode)
+	require.NotNil(t, v.ShadeName)
+	require.Equal(t, "Deep Shade", *v.ShadeName)
+
+	// Material composition and size chart resolved names
+	require.NotEmpty(t, adminProd.MaterialComposition)
+	require.NotNil(t, adminProd.MaterialComposition[0].MaterialName)
+	require.Equal(t, materialName, *adminProd.MaterialComposition[0].MaterialName)
+
+	require.NotNil(t, adminProd.SizeChart)
+	require.NotEmpty(t, adminProd.SizeChart.Rows)
+	require.NotNil(t, adminProd.SizeChart.Rows[0].SizeValueName)
+	require.Equal(t, sizeValue, *adminProd.SizeChart.Rows[0].SizeValueName)
+
+	// B. Admin media DTO returns browser-consumable media reference
+	require.NotNil(t, adminProd.MainImageURL)
+	require.Equal(t, imageUrl, *adminProd.MainImageURL)
+
+	// C. Pending Product preview link works without publishing Product
+	adminUserID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, name, email, password_hash, role) VALUES ($1, 'Admin Preview', $2, 'hash', 'admin')", adminUserID, "admin-prev-"+uuid.New().String()+"@test.local")
+	require.NoError(t, err)
+
+	token, err := svc.CreateProductPreviewLink(ctx, adminUserID, p.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, token)
+
+	previewProduct, err := svc.GetProductPreviewByToken(ctx, token)
+	require.NoError(t, err)
+	require.Equal(t, p.ID, previewProduct.ID)
+	require.Equal(t, title, previewProduct.Title)
+
+	// D. Pending Product remains excluded from public catalog
+	publicList, err := svc.ListPublicProducts(ctx, products.PublicProductFilter{}, 100, 0)
+	require.NoError(t, err)
+	for _, item := range publicList.Items {
+		require.NotEqual(t, p.ID, item.ID, "Pending product must NOT appear in public catalog")
+	}
+
+	// E. Zero-stock approved Product remains excluded from public catalog
+	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
+	require.NoError(t, err)
+
+	err = svc.ApproveProduct(ctx, adminUserID, p.ID, ptr("Approved for testing"))
+	require.NoError(t, err)
+
+	pApproved, err := svc.GetAdminProductDetail(ctx, p.ID)
+	require.NoError(t, err)
+	require.Equal(t, products.StatusApproved, pApproved.Status)
+	require.Equal(t, 0, pApproved.AvailableStock)
+
+	publicListAfterApprove, err := svc.ListPublicProducts(ctx, products.PublicProductFilter{}, 100, 0)
+	require.NoError(t, err)
+	for _, item := range publicListAfterApprove.Items {
+		require.NotEqual(t, p.ID, item.ID, "Approved zero-stock product must NOT appear in public catalog")
+	}
+}

@@ -40,14 +40,18 @@ export interface AdminProductGalleryImage {
   url: string;
   altText?: string;
   sortOrder?: number;
+  colorId?: string;
 }
 
 export interface AdminProductVariantDisplay {
   id: string;
   label: string;
   sku?: string;
+  sellerSku?: string;
   size?: string;
   color?: string;
+  shadeName?: string;
+  barcode?: string;
   price?: number; // in Rubles
   priceCents?: number; // in Cents
   isActive: boolean;
@@ -56,6 +60,24 @@ export interface AdminProductVariantDisplay {
   totalStock?: number;
   reservedStock?: number;
   availableStock?: number;
+}
+
+export interface AdminProductCompositionItem {
+  materialId: string;
+  materialName?: string;
+  percentage: number;
+}
+
+export interface AdminProductSizeChartRow {
+  sizeValueId: string;
+  sizeValueName?: string;
+  measurements: Record<string, any>;
+}
+
+export interface AdminProductSizeChart {
+  id?: string;
+  categoryId?: string;
+  rows: AdminProductSizeChartRow[];
 }
 
 export interface AdminProductView {
@@ -101,6 +123,9 @@ export interface AdminProductView {
   rating?: number;
   gallery: AdminProductGalleryImage[];
   variants: AdminProductVariantDisplay[];
+  materialComposition?: AdminProductCompositionItem[];
+  sizeChart?: AdminProductSizeChart;
+  attributes?: any[];
   status: AdminProductStatus | string;
   statusLabel: string;
   createdAt?: string;
@@ -135,6 +160,7 @@ const mapGallery = (product: AdminProduct | ModerationProduct): AdminProductGall
     url: image.imageUrl,
     altText: image.altText,
     sortOrder: image.sortOrder,
+    colorId: (image as any).colorId,
   }));
 
   if (product.mainImageUrl && !images.some((image) => image.url === product.mainImageUrl)) {
@@ -146,13 +172,22 @@ const mapGallery = (product: AdminProduct | ModerationProduct): AdminProductGall
 
 const mapVariants = (variants?: any[]): AdminProductVariantDisplay[] => {
   return (variants ?? []).map((variant) => {
-    const parts = [variant.size, variant.color].filter(Boolean);
+    const size = variant.size || variant.sizeValue;
+    const color = variant.color || variant.colorName;
+    const shade = variant.shadeName;
+    const colorDisplay = color ? (shade ? `${color} (${shade})` : color) : undefined;
+    const parts = [colorDisplay || color, size].filter(Boolean);
+    const sku = variant.sellerSku || variant.sku;
+
     return {
       id: variant.id,
-      label: parts.length > 0 ? parts.join(' / ') : variant.sku || variant.id,
-      sku: variant.sku,
-      size: variant.size,
-      color: variant.color,
+      label: parts.length > 0 ? parts.join(' / ') : sku || variant.id,
+      sku: sku,
+      sellerSku: variant.sellerSku,
+      size: size,
+      color: color,
+      shadeName: shade,
+      barcode: variant.barcode,
       price: centsToPrice(variant.priceCents),
       priceCents: variant.priceCents,
       isActive: variant.isActive,
@@ -223,6 +258,9 @@ export const mapAdminProduct = (product: AdminProduct | ModerationProduct): Admi
     rating: typeof flexibleProduct.averageRating === 'number' ? flexibleProduct.averageRating : (typeof flexibleProduct.rating === 'number' ? flexibleProduct.rating : undefined),
     gallery,
     variants: mapVariants(product.variants),
+    materialComposition: (flexibleProduct.materialComposition as any) || (product as any).materialComposition,
+    sizeChart: (flexibleProduct.sizeChart as any) || (product as any).sizeChart,
+    attributes: (flexibleProduct.attributes as any) || (product as any).attributes,
     status: product.status,
     statusLabel: statusLabels[product.status as AdminProductStatus] ?? product.status,
     createdAt: product.createdAt,
