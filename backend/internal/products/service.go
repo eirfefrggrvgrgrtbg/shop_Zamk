@@ -1289,6 +1289,13 @@ func mapToPublicProduct(p Product) PublicProduct {
 			AltText:   i.AltText,
 			SortOrder: i.SortOrder,
 			ColorID: i.ColorID,
+			Width:    i.Width,
+			Height:   i.Height,
+			CropX:    i.CropX,
+			CropY:    i.CropY,
+			CropWidth: i.CropWidth,
+			CropHeight: i.CropHeight,
+			IsMain:   i.IsMain,
 		})
 	}
 

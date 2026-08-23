@@ -273,3 +273,48 @@ func (h *Handler) ReorderSellerProductImages(w http.ResponseWriter, r *http.Requ
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (h *Handler) CropSellerProductImage(w http.ResponseWriter, r *http.Request) {
+	productIDStr := chi.URLParam(r, "id")
+	productID, err := uuid.Parse(productIDStr)
+	if err != nil {
+		h.writeJSONError(w, http.StatusBadRequest, "invalid product id")
+		return
+	}
+
+	imageIDStr := chi.URLParam(r, "imageId")
+	imageID, err := uuid.Parse(imageIDStr)
+	if err != nil {
+		h.writeJSONError(w, http.StatusBadRequest, "invalid image id")
+		return
+	}
+
+	sellerIDRaw := r.Context().Value("userID")
+	userID, ok := sellerIDRaw.(uuid.UUID)
+	if !ok {
+		h.writeJSONError(w, http.StatusUnauthorized, "user id not found in context")
+		return
+	}
+
+	var req CropImageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	resp, err := h.service.CropAndSetMainImage(r.Context(), userID, productID, imageID, req)
+	if err != nil {
+		if err == ErrProductNotOwned || err == products.ErrProductNotEditable {
+			h.writeJSONError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		if err.Error() == "image does not belong to product" {
+			h.writeJSONError(w, http.StatusNotFound, "image not found")
+			return
+		}
+		h.writeJSONError(w, http.StatusInternalServerError, "failed to crop image: "+err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, resp)
+}

@@ -1,18 +1,23 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -92,7 +97,26 @@ func (s *Service) UploadSellerProductImage(ctx context.Context, userID, productI
 
 	objectKey := fmt.Sprintf("products/%s/%s/%s%s", seller.ID.String(), productID.String(), uuid.New().String(), ext)
 
-	stored, err := s.provider.UploadImage(ctx, reader, size, objectKey, contentType)
+	// Read into memory for dimension extraction and upload
+	buf := new(bytes.Buffer)
+	if _, err := buf.ReadFrom(reader); err != nil {
+		return nil, fmt.Errorf("failed to read image: %w", err)
+	}
+	fileBytes := buf.Bytes()
+	size = int64(len(fileBytes))
+
+	// Decode dimensions
+	var width, height *int
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(fileBytes))
+	if err == nil {
+		w := cfg.Width
+		h := cfg.Height
+		width = &w
+		height = &h
+	}
+
+	stored, err := s.provider.UploadImage(ctx, bytes.NewReader(fileBytes), size, objectKey, contentType)
+
 	if err != nil {
 		return nil, err
 	}
@@ -113,6 +137,9 @@ func (s *Service) UploadSellerProductImage(ctx context.Context, userID, productI
 		ObjectKey: &stored.ObjectKey,
 		AltText:   nil,
 		SortOrder: opts.SortOrder,
+		Width:     width,
+		Height:    height,
+		IsMain:    false,
 		CreatedAt: time.Now().UTC(),
 	}
 	if opts.AltText != "" {
@@ -152,7 +179,26 @@ func (s *Service) UploadAdminProductImage(ctx context.Context, productID uuid.UU
 
 	objectKey := fmt.Sprintf("products/%s/%s/%s%s", prod.SellerID.String(), productID.String(), uuid.New().String(), ext)
 
-	stored, err := s.provider.UploadImage(ctx, reader, size, objectKey, contentType)
+	// Read into memory for dimension extraction and upload
+	buf := new(bytes.Buffer)
+	if _, err := buf.ReadFrom(reader); err != nil {
+		return nil, fmt.Errorf("failed to read image: %w", err)
+	}
+	fileBytes := buf.Bytes()
+	size = int64(len(fileBytes))
+
+	// Decode dimensions
+	var width, height *int
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(fileBytes))
+	if err == nil {
+		w := cfg.Width
+		h := cfg.Height
+		width = &w
+		height = &h
+	}
+
+	stored, err := s.provider.UploadImage(ctx, bytes.NewReader(fileBytes), size, objectKey, contentType)
+
 	if err != nil {
 		return nil, err
 	}
@@ -172,6 +218,9 @@ func (s *Service) UploadAdminProductImage(ctx context.Context, productID uuid.UU
 		ObjectKey: &stored.ObjectKey,
 		AltText:   nil,
 		SortOrder: opts.SortOrder,
+		Width:     width,
+		Height:    height,
+		IsMain:    false,
 		CreatedAt: time.Now().UTC(),
 	}
 	if opts.AltText != "" {
@@ -211,7 +260,17 @@ func (s *Service) UploadAdminBrandLogo(ctx context.Context, brandID uuid.UUID, r
 
 	objectKey := fmt.Sprintf("brands/%s/%s%s", brandID.String(), uuid.New().String(), ext)
 
-	stored, err := s.provider.UploadImage(ctx, reader, size, objectKey, contentType)
+	// Read into memory for dimension extraction and upload
+	buf := new(bytes.Buffer)
+	if _, err := buf.ReadFrom(reader); err != nil {
+		return nil, fmt.Errorf("failed to read image: %w", err)
+	}
+	fileBytes := buf.Bytes()
+	size = int64(len(fileBytes))
+
+	// Decode dimensions
+	stored, err := s.provider.UploadImage(ctx, bytes.NewReader(fileBytes), size, objectKey, contentType)
+
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +305,17 @@ func (s *Service) UploadSellerProfileImage(ctx context.Context, userID uuid.UUID
 
 	objectKey := fmt.Sprintf("sellers/%s/%s%s", seller.ID.String(), uuid.New().String(), ext)
 
-	stored, err := s.provider.UploadImage(ctx, reader, size, objectKey, contentType)
+	// Read into memory for dimension extraction and upload
+	buf := new(bytes.Buffer)
+	if _, err := buf.ReadFrom(reader); err != nil {
+		return nil, fmt.Errorf("failed to read image: %w", err)
+	}
+	fileBytes := buf.Bytes()
+	size = int64(len(fileBytes))
+
+	// Decode dimensions
+	stored, err := s.provider.UploadImage(ctx, bytes.NewReader(fileBytes), size, objectKey, contentType)
+
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +373,7 @@ func (s *Service) DeleteSellerProductImage(ctx context.Context, userID, productI
 	if img.ObjectKey != nil {
 		_ = s.provider.DeleteObject(context.Background(), *img.ObjectKey)
 	}
-	
+
 	// If it was the main image, reset it
 	if prod.MainImageURL != nil && *prod.MainImageURL == img.ImageURL {
 		// Just clear it for simplicity, UI/User can set another one or we can pick the first remaining
@@ -316,7 +385,7 @@ func (s *Service) DeleteSellerProductImage(ctx context.Context, userID, productI
 			}
 			_ = s.productsRepo.SetMainImage(ctx, productID, remaining[0].ImageURL, objKey)
 		} else {
-			_ = s.productsRepo.SetMainImage(ctx, productID, "", "") 
+			_ = s.productsRepo.SetMainImage(ctx, productID, "", "")
 		}
 	}
 	return nil

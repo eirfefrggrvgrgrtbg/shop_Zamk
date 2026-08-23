@@ -49,8 +49,8 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
       selectedSizeSystemId: s.selectedSizeSystemId,
       selectedSizeValueIds: [...(s.selectedSizeValueIds || [])].sort(),
       sizeChartRows: s.sizeChartRows,
-      commonImages: (s.commonImages || []).map(i => ({url: i.url, sortOrder: i.sortOrder})),
-      colorImages: Object.fromEntries(Object.entries(s.colorImages || {}).map(([k,v]) => [k, v.map(i => ({url: i.url, sortOrder: i.sortOrder}))])),
+      commonImages: (s.commonImages || []).map(i => ({id: i.id, url: i.url, sortOrder: i.sortOrder, isMain: i.isMain})),
+      colorImages: Object.fromEntries(Object.entries(s.colorImages || {}).map(([k,v]) => [k, v.map(i => ({id: i.id, url: i.url, sortOrder: i.sortOrder, isMain: i.isMain}))])),
       variants: (s.variants || []).map(v => ({
         id: v.id,
         colorId: v.colorId,
@@ -147,7 +147,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
       const colorImgs: Record<string, any[]> = {};
       if (p.images) {
         p.images.forEach((img: any) => {
-          const mapped = { url: img.imageUrl, sortOrder: img.sortOrder || 0 };
+          const mapped = { id: img.id, url: img.imageUrl, sortOrder: img.sortOrder || 0, isMain: !!img.isMain };
           if (img.colorId) {
             if (!colorImgs[img.colorId]) colorImgs[img.colorId] = [];
             colorImgs[img.colorId].push(mapped);

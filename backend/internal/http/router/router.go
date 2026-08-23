@@ -333,6 +333,7 @@ func New(
 		r.With(uploadLimit).Post("/{id}/images/upload", storageHandler.UploadSellerProductImage)
 		r.Delete("/{id}/images/{imageId}", storageHandler.DeleteSellerProductImage)
 		r.Put("/{id}/images/reorder", storageHandler.ReorderSellerProductImages)
+		r.Post("/{id}/images/{imageId}/crop", storageHandler.CropSellerProductImage)
 	})
 
 	r.Route("/api/seller/inventory", func(r chi.Router) {

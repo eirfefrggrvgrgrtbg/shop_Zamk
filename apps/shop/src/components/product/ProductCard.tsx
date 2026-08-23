@@ -107,7 +107,7 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
               className="block w-full h-full"
             >
               <img
-                src={product.images?.[0]?.url || product.image || 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image'}
+                src={product.image || product.images?.[0]?.url || 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image'}
                 alt={product.name}
                 className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
                 loading="lazy"
@@ -236,7 +236,7 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
       <Modal isOpen={isQuickBuyOpen} onClose={() => setIsQuickBuyOpen(false)} title="Быстрая покупка">
         <div className="flex gap-4 mb-6">
           <img
-            src={product.images?.[0]?.url || product.image || 'https://placehold.co/400x500'}
+            src={product.image || product.images?.[0]?.url || 'https://placehold.co/400x500'}
             alt={product.name}
             className="w-24 h-32 object-cover rounded-lg"
           />

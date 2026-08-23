@@ -193,6 +193,13 @@ func (s *Service) GetProductPreviewByToken(ctx context.Context, token string) (*
 				AltText:   img.AltText,
 				SortOrder: img.SortOrder,
 				ColorID: img.ColorID,
+				Width:    img.Width,
+				Height:   img.Height,
+				CropX:    img.CropX,
+				CropY:    img.CropY,
+				CropWidth: img.CropWidth,
+				CropHeight: img.CropHeight,
+				IsMain:   img.IsMain,
 			})
 		}
 	}

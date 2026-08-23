@@ -187,6 +187,14 @@ type PublicProductImage struct {
 	AltText   *string   `json:"altText,omitempty"`
 	SortOrder int       `json:"sortOrder"`
 	ColorID   *uuid.UUID `json:"colorId,omitempty"`
+
+	Width     *int       `json:"width,omitempty"`
+	Height    *int       `json:"height,omitempty"`
+	CropX     *float64   `json:"cropX,omitempty"`
+	CropY     *float64   `json:"cropY,omitempty"`
+	CropWidth *float64   `json:"cropWidth,omitempty"`
+	CropHeight *float64  `json:"cropHeight,omitempty"`
+	IsMain    bool       `json:"isMain"`
 }
 
 type PublicProductListResponse struct {

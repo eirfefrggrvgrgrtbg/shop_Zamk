@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -73,4 +74,18 @@ func (s *S3Client) BuildPublicURL(objectKey string) string {
 		endpoint = fmt.Sprintf("%s:%s", endpoint, s.cfg.Port)
 	}
 	return fmt.Sprintf("%s://%s/%s/%s", scheme, endpoint, s.cfg.Bucket, objectKey)
+}
+
+func (s *S3Client) DownloadObject(ctx context.Context, objectKey string) ([]byte, error) {
+	obj, err := s.client.GetObject(ctx, s.cfg.Bucket, objectKey, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer obj.Close()
+
+	buf := new(bytes.Buffer)
+	if _, err := buf.ReadFrom(obj); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
