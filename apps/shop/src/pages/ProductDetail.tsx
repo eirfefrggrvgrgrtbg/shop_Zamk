@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronRight, Heart, Minus, Plus, Ruler, ShoppingBag, Star, Truck, RefreshCw, Shield, ChevronDown, Eye } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { useCart } from '../contexts/CartContext';
@@ -12,6 +11,278 @@ import { PreviewPageMetadata } from '../components/PreviewPageMetadata';
 import { formatPrice, cn } from '../lib/utils';
 import { fetchProductById, fetchProductReviews, fetchProductPreviewByToken } from '../api/publicCatalog';
 import type { Product, Review } from '../types/catalog';
+
+export interface MeasurementMeta {
+  label: string;      // with unit e.g. "Грудь, см"
+  shortLabel: string; // concise label e.g. "Грудь"
+  instruction: string;// explanation e.g. "Горизонтально по наиболее выступающим точкам груди."
+}
+
+export const MEASUREMENT_FIELDS_MAP: Record<string, MeasurementMeta> = {
+  CHEST: {
+    label: 'Грудь, см',
+    shortLabel: 'Грудь',
+    instruction: 'Горизонтально по наиболее выступающим точкам груди.',
+  },
+  WAIST: {
+    label: 'Талия, см',
+    shortLabel: 'Талия',
+    instruction: 'Горизонтально вокруг самой узкой части талии.',
+  },
+  HIPS: {
+    label: 'Бёдра, см',
+    shortLabel: 'Бёдра',
+    instruction: 'Горизонтально по наиболее выступающим точкам ягодиц.',
+  },
+  LENGTH: {
+    label: 'Длина изделия, см',
+    shortLabel: 'Длина изделия',
+    instruction: 'Вертикально от высшей точки плеча до нижнего края изделия.',
+  },
+  SLEEVE: {
+    label: 'Длина рукава, см',
+    shortLabel: 'Длина рукава',
+    instruction: 'От плечевого шва по внешней стороне руки до запястья.',
+  },
+  INSEAM: {
+    label: 'Внутренний шов, см',
+    shortLabel: 'Внутренний шов',
+    instruction: 'По внутреннему шву брючины от промежности до низа изделия.',
+  },
+  FOOT_LENGTH: {
+    label: 'Длина стопы, см',
+    shortLabel: 'Длина стопы',
+    instruction: 'От задней точки пятки до кончика самого длинного пальца стопы.',
+  },
+  HEAD_CIRCUMFERENCE: {
+    label: 'Обхват головы, см',
+    shortLabel: 'Обхват головы',
+    instruction: 'По окружности головы над бровями и ушами.',
+  },
+};
+
+export const getMeasurementMeta = (field: string): MeasurementMeta => {
+  if (MEASUREMENT_FIELDS_MAP[field]) {
+    return MEASUREMENT_FIELDS_MAP[field];
+  }
+  const formatted = field.toLowerCase().replace(/_/g, ' ');
+  return {
+    label: `${formatted}, см`,
+    shortLabel: formatted,
+    instruction: 'Измеряйте согласно стандартам производителя.',
+  };
+};
+
+export function isLightColor(hex?: string): boolean {
+  if (!hex) return false;
+  let c = hex.trim().replace('#', '');
+  if (c.length === 3) {
+    c = c.split('').map(x => x + x).join('');
+  }
+  if (c.length !== 6) return false;
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return false;
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  return brightness > 190;
+}
+
+export const SizeGuideIllustration = ({ activeFields }: { activeFields: string[] }) => {
+  const isFootwear = activeFields.includes('FOOT_LENGTH');
+  const isHeadwear = activeFields.includes('HEAD_CIRCUMFERENCE') && !activeFields.includes('CHEST') && !activeFields.includes('WAIST');
+  const isBottoms = activeFields.includes('INSEAM') || (
+    (activeFields.includes('WAIST') || activeFields.includes('HIPS')) &&
+    !activeFields.includes('CHEST') &&
+    !activeFields.includes('SLEEVE')
+  );
+
+  if (isFootwear) {
+    return (
+      <svg viewBox="0 0 240 160" className="w-full max-w-[220px] h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Footwear silhouette */}
+        <path
+          d="M30 110 C30 85 45 75 75 75 C100 75 125 70 145 50 C160 35 180 35 195 55 C210 75 220 95 220 115 C220 125 210 130 190 130 C130 130 90 130 30 130 Z"
+          className="fill-ice/70 dark:fill-white/5 stroke-graphite/40 dark:stroke-white/40"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+        {/* Sole line */}
+        <path d="M25 130 L220 130" className="stroke-graphite/40 dark:stroke-white/40" strokeWidth="1.5" />
+
+        {/* Foot length dimension */}
+        {activeFields.includes('FOOT_LENGTH') && (
+          <g className="text-graphite dark:text-white">
+            <line x1="30" y1="145" x2="220" y2="145" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+            <line x1="30" y1="140" x2="30" y2="150" stroke="currentColor" strokeWidth="1.5" />
+            <line x1="220" y1="140" x2="220" y2="150" stroke="currentColor" strokeWidth="1.5" />
+            <text x="125" y="157" fontSize="10" fill="currentColor" fontWeight="600" textAnchor="middle">
+              Длина стопы
+            </text>
+          </g>
+        )}
+      </svg>
+    );
+  }
+
+  if (isHeadwear) {
+    return (
+      <svg viewBox="0 0 240 180" className="w-full max-w-[220px] h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Cap/Beanie silhouette */}
+        <path
+          d="M50 130 C45 70 75 35 120 35 C165 35 195 70 190 130 Z"
+          className="fill-ice/70 dark:fill-white/5 stroke-graphite/40 dark:stroke-white/40"
+          strokeWidth="1.5"
+        />
+        {activeFields.includes('HEAD_CIRCUMFERENCE') && (
+          <g className="text-graphite dark:text-white">
+            <line x1="45" y1="130" x2="195" y2="130" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+            <circle cx="45" cy="130" r="2.5" fill="currentColor" />
+            <circle cx="195" cy="130" r="2.5" fill="currentColor" />
+            <text x="120" y="148" fontSize="10" fill="currentColor" fontWeight="600" textAnchor="middle">
+              Обхват головы
+            </text>
+          </g>
+        )}
+      </svg>
+    );
+  }
+
+  if (isBottoms) {
+    return (
+      <svg viewBox="0 0 240 240" className="w-full max-w-[220px] h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Pants silhouette */}
+        <path
+          d="M70 35 L170 35 L175 75 L160 215 L125 215 L120 100 L115 215 L80 215 L65 75 Z"
+          className="fill-ice/70 dark:fill-white/5 stroke-graphite/40 dark:stroke-white/40"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+
+        {/* WAIST */}
+        {activeFields.includes('WAIST') && (
+          <g className="text-graphite dark:text-white">
+            <line x1="65" y1="35" x2="175" y2="35" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+            <line x1="65" y1="31" x2="65" y2="39" stroke="currentColor" strokeWidth="1.5" />
+            <line x1="175" y1="31" x2="175" y2="39" stroke="currentColor" strokeWidth="1.5" />
+            <text x="120" y="27" fontSize="10" fill="currentColor" fontWeight="600" textAnchor="middle">
+              Талия
+            </text>
+          </g>
+        )}
+
+        {/* HIPS */}
+        {activeFields.includes('HIPS') && (
+          <g className="text-graphite dark:text-white">
+            <line x1="60" y1="75" x2="180" y2="75" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+            <line x1="60" y1="71" x2="60" y2="79" stroke="currentColor" strokeWidth="1.5" />
+            <line x1="180" y1="71" x2="180" y2="79" stroke="currentColor" strokeWidth="1.5" />
+            <text x="120" y="70" fontSize="10" fill="currentColor" fontWeight="600" textAnchor="middle">
+              Бёдра
+            </text>
+          </g>
+        )}
+
+        {/* INSEAM */}
+        {activeFields.includes('INSEAM') && (
+          <g className="text-graphite dark:text-white">
+            <line x1="120" y1="100" x2="95" y2="215" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+            <circle cx="120" cy="100" r="2" fill="currentColor" />
+            <circle cx="95" cy="215" r="2" fill="currentColor" />
+            <text x="128" y="160" fontSize="9" fill="currentColor" fontWeight="600" textAnchor="start">
+              Шов
+            </text>
+          </g>
+        )}
+
+        {/* LENGTH */}
+        {activeFields.includes('LENGTH') && (
+          <g className="text-graphite dark:text-white">
+            <line x1="50" y1="35" x2="50" y2="215" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+            <line x1="46" y1="35" x2="54" y2="35" stroke="currentColor" strokeWidth="1.5" />
+            <line x1="46" y1="215" x2="54" y2="215" stroke="currentColor" strokeWidth="1.5" />
+            <text x="42" y="125" fontSize="9" fill="currentColor" fontWeight="600" textAnchor="end">
+              Длина
+            </text>
+          </g>
+        )}
+      </svg>
+    );
+  }
+
+  // Upper Apparel (Default)
+  return (
+    <svg viewBox="0 0 240 240" className="w-full max-w-[220px] h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Upper apparel silhouette */}
+      <path
+        d="M85 35 Q120 48 155 35 L205 75 L180 115 L160 95 L160 210 L80 210 L80 95 L60 115 L35 75 Z"
+        className="fill-ice/70 dark:fill-white/5 stroke-graphite/40 dark:stroke-white/40"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+
+      {/* CHEST (Width across chest) */}
+      {activeFields.includes('CHEST') && (
+        <g className="text-graphite dark:text-white">
+          <line x1="75" y1="110" x2="165" y2="110" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+          <line x1="75" y1="105" x2="75" y2="115" stroke="currentColor" strokeWidth="1.5" />
+          <line x1="165" y1="105" x2="165" y2="115" stroke="currentColor" strokeWidth="1.5" />
+          <text x="120" y="103" fontSize="10" fill="currentColor" fontWeight="600" textAnchor="middle">
+            Грудь
+          </text>
+        </g>
+      )}
+
+      {/* LENGTH (Garment length from shoulder to hem) */}
+      {activeFields.includes('LENGTH') && (
+        <g className="text-graphite dark:text-white">
+          <line x1="70" y1="40" x2="70" y2="210" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+          <line x1="66" y1="40" x2="74" y2="40" stroke="currentColor" strokeWidth="1.5" />
+          <line x1="66" y1="210" x2="74" y2="210" stroke="currentColor" strokeWidth="1.5" />
+          <text x="62" y="135" fontSize="9" fill="currentColor" fontWeight="600" textAnchor="end">
+            Длина
+          </text>
+        </g>
+      )}
+
+      {/* SLEEVE (Shoulder seam to cuff) */}
+      {activeFields.includes('SLEEVE') && (
+        <g className="text-graphite dark:text-white">
+          <line x1="155" y1="35" x2="195" y2="95" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+          <circle cx="155" cy="35" r="2" fill="currentColor" />
+          <circle cx="195" cy="95" r="2" fill="currentColor" />
+          <text x="185" y="60" fontSize="9" fill="currentColor" fontWeight="600" textAnchor="start">
+            Рукав
+          </text>
+        </g>
+      )}
+
+      {/* WAIST (Only if WAIST is active in this schema!) */}
+      {activeFields.includes('WAIST') && (
+        <g className="text-graphite dark:text-white">
+          <line x1="80" y1="155" x2="160" y2="155" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+          <line x1="80" y1="151" x2="80" y2="159" stroke="currentColor" strokeWidth="1.5" />
+          <line x1="160" y1="151" x2="160" y2="159" stroke="currentColor" strokeWidth="1.5" />
+          <text x="120" y="150" fontSize="10" fill="currentColor" fontWeight="600" textAnchor="middle">
+            Талия
+          </text>
+        </g>
+      )}
+
+      {/* HIPS (Only if HIPS is active in this schema!) */}
+      {activeFields.includes('HIPS') && (
+        <g className="text-graphite dark:text-white">
+          <line x1="80" y1="200" x2="160" y2="200" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+          <line x1="80" y1="196" x2="80" y2="204" stroke="currentColor" strokeWidth="1.5" />
+          <line x1="160" y1="196" x2="160" y2="204" stroke="currentColor" strokeWidth="1.5" />
+          <text x="120" y="195" fontSize="10" fill="currentColor" fontWeight="600" textAnchor="middle">
+            Бёдра
+          </text>
+        </g>
+      )}
+    </svg>
+  );
+};
 
 const getProductSpecs = (product: Product, selectedVariant?: any) =>
   [
@@ -34,43 +305,6 @@ function AccordionSection({ title, children, defaultOpen = false }: { title: str
   );
 }
 
-const SizeGuideIllustration = ({ category }: { category: string }) => {
-  const isLower = category.toLowerCase().includes('брюки') || category.toLowerCase().includes('джинсы') || category.toLowerCase().includes('шорты') || category.toLowerCase().includes('юбки');
-  const isFootwear = category.toLowerCase().includes('обувь') || category.toLowerCase().includes('кроссовки') || category.toLowerCase().includes('ботинки');
-
-  if (isFootwear) {
-    return (
-      <svg viewBox="0 0 100 100" className="w-full max-w-[200px] h-auto text-ash/30" fill="currentColor">
-        <path d="M70,80 Q90,80 90,60 Q90,40 60,30 Q40,20 20,40 Q10,50 10,70 Q10,80 30,80 Z" />
-        <line x1="10" y1="90" x2="90" y2="90" stroke="red" strokeWidth="2" strokeDasharray="4 4" />
-        <text x="50" y="98" fontSize="6" fill="red" textAnchor="middle">Длина стопы</text>
-      </svg>
-    );
-  }
-
-  if (isLower) {
-    return (
-      <svg viewBox="0 0 100 100" className="w-full max-w-[200px] h-auto text-ash/30" fill="currentColor">
-        <path d="M30,10 L70,10 L75,30 L70,90 L55,90 L50,40 L45,90 L30,90 L25,30 Z" />
-        <line x1="20" y1="15" x2="80" y2="15" stroke="red" strokeWidth="2" strokeDasharray="2 2" />
-        <text x="85" y="17" fontSize="6" fill="red">Талия</text>
-        <line x1="20" y1="30" x2="80" y2="30" stroke="red" strokeWidth="2" strokeDasharray="2 2" />
-        <text x="85" y="32" fontSize="6" fill="red">Бёдра</text>
-      </svg>
-    );
-  }
-
-  // Default Upper Apparel
-  return (
-    <svg viewBox="0 0 100 100" className="w-full max-w-[200px] h-auto text-ash/30" fill="currentColor">
-      <path d="M35,10 Q50,20 65,10 L85,30 L75,40 L70,30 L70,90 L30,90 L30,30 L25,40 L15,30 Z" />
-      <line x1="20" y1="35" x2="80" y2="35" stroke="red" strokeWidth="2" strokeDasharray="2 2" />
-      <text x="85" y="37" fontSize="6" fill="red">Грудь</text>
-      <line x1="25" y1="55" x2="75" y2="55" stroke="red" strokeWidth="2" strokeDasharray="2 2" />
-      <text x="80" y="57" fontSize="6" fill="red">Талия</text>
-    </svg>
-  );
-};
 export function ProductDetail() {
   const { id, token } = useParams<{ id?: string; token?: string }>();
 
@@ -86,6 +320,22 @@ export function ProductDetail() {
   const [showSizeChart, setShowSizeChart] = useState(false);
   const [sizeError, setSizeError] = useState('');
   const [activeTab, setActiveTab] = useState<'description' | 'specs' | 'reviews'>('description');
+  const [mediaOrientations, setMediaOrientations] = useState<Record<string, 'portrait' | 'landscape' | 'square'>>({});
+
+  const handleImageLoad = (url: string, e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    if (!img.naturalWidth || !img.naturalHeight) return;
+    const ratio = img.naturalWidth / img.naturalHeight;
+    let orientation: 'portrait' | 'landscape' | 'square' = 'portrait';
+    if (ratio > 1.15) {
+      orientation = 'landscape';
+    } else if (ratio >= 0.85) {
+      orientation = 'square';
+    } else {
+      orientation = 'portrait';
+    }
+    setMediaOrientations(prev => (prev[url] === orientation ? prev : { ...prev, [url]: orientation }));
+  };
 
   useEffect(() => {
     async function loadProduct() {
@@ -166,16 +416,35 @@ export function ProductDetail() {
 
   const liked = isFavorite(product.id);
 
-  const colorMap = new Map<string, { id: string, name: string, hex: string }>();
+  const colorMap = new Map<string, { id: string, name: string, hex: string, shadeName?: string }>();
   product.variants?.forEach(v => {
     if (v.colorId && v.colorName) {
       if (!colorMap.has(v.colorId)) {
-        colorMap.set(v.colorId, { id: v.colorId, name: v.colorName, hex: v.colorHex || '#000000' });
+        colorMap.set(v.colorId, {
+          id: v.colorId,
+          name: v.colorName,
+          hex: v.colorHex || '#71717a',
+          shadeName: (v as any).colorShadeName || undefined
+        });
       }
     }
   });
   const colors = Array.from(colorMap.values());
   const activeColorObj = colors[activeColor] || null;
+
+  const handleColorChange = (newIndex: number) => {
+    setActiveColor(newIndex);
+    setActiveImage(0);
+    const newColorObj = colors[newIndex];
+    if (activeSize && newColorObj) {
+      const sizeStillValid = product.variants?.some(
+        v => v.isActive && v.colorId === newColorObj.id && v.size === activeSize
+      );
+      if (!sizeStillValid) {
+        setActiveSize(null);
+      }
+    }
+  };
 
   const sizeMap = new Map<string, { id: string, label: string }>();
   product.variants?.forEach(v => {
@@ -223,6 +492,12 @@ export function ProductDetail() {
   const visibleImages = allImages.filter((img: any) => !img.colorId || (activeColorObj && img.colorId === activeColorObj.id));
   if (visibleImages.length === 0 && allImages.length > 0) visibleImages.push(allImages[0]);
   const currentActiveImage = activeImage < visibleImages.length ? activeImage : 0;
+  const currentImageUrl = visibleImages[currentActiveImage]?.url || defaultImage.url;
+  const currentOrientation = mediaOrientations[currentImageUrl] || 'portrait';
+
+  const activeFields: string[] = product.sizeChart?.rows?.[0]?.measurements
+    ? Object.keys(product.sizeChart.rows[0].measurements)
+    : [];
 
   const handleAddToCart = async () => {
     if (product.isPreview) return;
@@ -279,20 +554,31 @@ export function ProductDetail() {
 
           {/* Gallery */}
           <div className="space-y-4">
-            {/* Main image */}
-            <div className="relative bg-[#f5f5f7] dark:bg-[#1a1a1c] rounded-xl overflow-hidden w-full flex items-center justify-center" style={{ aspectRatio: '4/5', maxHeight: '80vh' }}>
+            {/* Main image container */}
+            <div
+              className={cn(
+                "relative bg-[#f5f5f7] dark:bg-[#1a1a1c] border border-black/5 dark:border-white/5 rounded-2xl overflow-hidden w-full flex items-center justify-center transition-all duration-300",
+                currentOrientation === 'landscape'
+                  ? "aspect-[16/10] max-h-[58vh]"
+                  : currentOrientation === 'square'
+                  ? "aspect-square max-h-[70vh]"
+                  : "aspect-[4/5] max-h-[78vh]"
+              )}
+            >
               <img
-                src={visibleImages[currentActiveImage]?.url || defaultImage.url}
+                key={currentImageUrl}
+                src={currentImageUrl}
                 alt={product.name}
-                className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal"
+                onLoad={(e) => handleImageLoad(currentImageUrl, e)}
+                className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal transition-opacity duration-200"
               />
               {product.isNew && (
-                <span className="absolute top-4 left-4 px-3 py-1 rounded bg-graphite text-white dark:text-black text-xs font-semibold uppercase">
+                <span className="absolute top-4 left-4 px-3 py-1 rounded-md bg-graphite text-white dark:bg-white dark:text-black text-xs font-semibold uppercase tracking-wider shadow-sm">
                   Новинка
                 </span>
               )}
               {product.discountPrice && (
-                <span className="absolute top-4 right-4 px-3 py-1 rounded bg-red-500 text-white text-xs font-semibold uppercase">
+                <span className="absolute top-4 right-4 px-3 py-1 rounded-md bg-red-500 text-white text-xs font-semibold uppercase tracking-wider shadow-sm">
                   -{Math.round((1 - product.discountPrice / product.price) * 100)}%
                 </span>
               )}
@@ -300,17 +586,24 @@ export function ProductDetail() {
 
             {/* Thumbnails */}
             {visibleImages.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-2">
+              <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide">
                 {visibleImages.map((image: any, index: number) => (
                   <button
                     key={index + image.url}
+                    type="button"
                     onClick={() => setActiveImage(index)}
                     className={cn(
-                      "w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f7] dark:bg-[#1a1a1c] border-2 transition-colors flex items-center justify-center",
-                      currentActiveImage === index ? "border-graphite dark:border-white" : "border-transparent"
+                      "w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden bg-[#f5f5f7] dark:bg-[#1a1a1c] border-2 transition-all p-1 flex items-center justify-center",
+                      currentActiveImage === index
+                        ? "border-graphite dark:border-white ring-1 ring-graphite/20 dark:ring-white/20 scale-[1.02]"
+                        : "border-transparent hover:border-border-lighter dark:hover:border-white/20 opacity-80 hover:opacity-100"
                     )}
                   >
-                    <img src={image.url} alt="" className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal" />
+                    <img
+                      src={image.url}
+                      alt=""
+                      className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal"
+                    />
                   </button>
                 ))}
               </div>
@@ -373,23 +666,49 @@ export function ProductDetail() {
             {/* Colors */}
             {colors.length > 0 && (
               <div className="mt-6">
-                <p className="text-sm text-graphite dark:text-white mb-2">
-                  Цвет: <span className="text-ash">{activeColorObj?.name || ''}</span>
-                </p>
-                <div className="flex gap-2">
-                  {colors.map((color, index) => (
-                    <button
-                      key={color.id}
-                      onClick={() => { setActiveColor(index); setActiveImage(0); }}
-                      style={{ backgroundColor: color.hex }}
-                      className={cn(
-                        "w-10 h-10 rounded-full border-2 transition-all",
-                        activeColor === index
-                          ? "border-graphite dark:border-white ring-2 ring-graphite/20 dark:ring-white/20"
-                          : "border-border-lighter dark:border-white/20 hover:scale-105"
-                      )}
-                    />
-                  ))}
+                <div className="flex items-center justify-between mb-2.5">
+                  <p className="text-sm font-medium text-graphite dark:text-white">
+                    Цвет:{' '}
+                    <span className="text-ash font-normal">
+                      {activeColorObj?.name || 'Не выбран'}
+                      {activeColorObj?.shadeName ? ` (${activeColorObj.shadeName})` : ''}
+                    </span>
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3 items-center" role="radiogroup" aria-label="Выбор цвета">
+                  {colors.map((color, index) => {
+                    const isSelected = activeColor === index;
+                    const isWhiteOrLight = isLightColor(color.hex);
+                    return (
+                      <button
+                        key={color.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        aria-label={color.name + (color.shadeName ? ` (${color.shadeName})` : '')}
+                        title={color.name + (color.shadeName ? ` (${color.shadeName})` : '')}
+                        onClick={() => handleColorChange(index)}
+                        className={cn(
+                          "relative w-9 h-9 rounded-full transition-all duration-150 flex items-center justify-center",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                          isSelected
+                            ? "ring-2 ring-graphite dark:ring-white ring-offset-2 ring-offset-white dark:ring-offset-[#121214] scale-105"
+                            : "hover:scale-105 hover:ring-1 hover:ring-black/20 dark:hover:ring-white/30 opacity-90 hover:opacity-100"
+                        )}
+                      >
+                        {/* Swatch circle with crisp border ensuring light/white colors are clearly visible */}
+                        <span
+                          style={{ backgroundColor: color.hex || '#71717a' }}
+                          className={cn(
+                            "w-full h-full rounded-full border shadow-inner",
+                            isWhiteOrLight
+                              ? "border-black/25 dark:border-white/30"
+                              : "border-black/10 dark:border-white/15"
+                          )}
+                        />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -398,13 +717,13 @@ export function ProductDetail() {
             {requiresSizeSelection && (
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-graphite dark:text-white">
-                    Размер: <span className="text-ash">{activeSize || 'Не выбран'}</span>
+                  <p className="text-sm font-medium text-graphite dark:text-white">
+                    Размер: <span className="text-ash font-normal">{activeSize || 'Не выбран'}</span>
                   </p>
                   <button
                     type="button"
                     onClick={() => setShowSizeChart(true)}
-                    className="flex items-center gap-1 text-sm text-primary hover:underline"
+                    className="flex items-center gap-1.5 text-sm text-primary hover:underline font-medium"
                   >
                     <Ruler className="w-4 h-4" />
                     Таблица размеров
@@ -422,7 +741,7 @@ export function ProductDetail() {
                       className={cn(
                         "h-10 min-w-[48px] px-4 rounded-lg border text-sm font-medium transition-all",
                         activeSize === sizeObj.label
-                            ? "bg-graphite text-white border-graphite dark:bg-white dark:text-black dark:border-white"
+                            ? "bg-graphite text-white border-graphite dark:bg-white dark:text-black dark:border-white shadow-sm"
                           : "bg-white dark:bg-transparent border-border-lighter dark:border-white/20 text-graphite dark:text-white hover:border-graphite dark:hover:border-white"
                       )}
                     >
@@ -440,7 +759,7 @@ export function ProductDetail() {
 
             {/* Quantity */}
             <div className="mt-6">
-              <p className="text-sm text-graphite dark:text-white mb-2">Количество</p>
+              <p className="text-sm font-medium text-graphite dark:text-white mb-2">Количество</p>
               <div className="flex items-center gap-3">
                 <div className="flex items-center border border-border-lighter dark:border-white/20 rounded-lg">
                   <button
@@ -663,58 +982,82 @@ export function ProductDetail() {
         </section>
 
       </div>
+
       {/* Size Chart Modal */}
-      <Modal isOpen={showSizeChart} onClose={() => setShowSizeChart(false)} title="Как выбрать размер">
-        {product.sizeChart && product.sizeChart.rows ? (
-          <div className="flex flex-col md:flex-row gap-8">
-            <div className="flex-1 overflow-x-auto">
-              <h3 className="font-medium text-graphite dark:text-white mb-4">Размерная сетка</h3>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border-lighter dark:border-white/10">
-                    <th className="py-3 px-4 text-left font-medium text-graphite dark:text-white">Размер</th>
-                    {Object.keys(product.sizeChart.rows[0]?.measurements || {}).map((header) => {
-                      const label = {
-                        CHEST: 'Грудь', WAIST: 'Талия', HIPS: 'Бёдра', LENGTH: 'Длина изделия',
-                        SLEEVE: 'Длина рукава', FOOT_LENGTH: 'Длина стопы', INSEAM: 'Внутренний шов',
-                        HEAD_CIRCUMFERENCE: 'Обхват головы'
-                      }[header] || header;
-                      return (
-                        <th key={header} className="py-3 px-4 text-left font-medium text-graphite dark:text-white">
-                          {label}
+      <Modal
+        isOpen={showSizeChart}
+        onClose={() => setShowSizeChart(false)}
+        title="Таблица размеров и мерки"
+        maxWidth="5xl"
+      >
+        {product.sizeChart && product.sizeChart.rows && product.sizeChart.rows.length > 0 ? (
+          <div className="flex flex-col lg:flex-row gap-8 items-start">
+            {/* Left: Table */}
+            <div className="flex-1 min-w-0 w-full overflow-x-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-base text-graphite dark:text-white">
+                  Таблица измерений изделия
+                </h3>
+                <span className="text-xs text-ash bg-ice/60 dark:bg-white/5 px-2.5 py-1 rounded-full">
+                  в сантиметрах (см)
+                </span>
+              </div>
+              <div className="border border-border-lighter dark:border-white/10 rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-ice/50 dark:bg-white/5 border-b border-border-lighter dark:border-white/10">
+                    <tr>
+                      <th className="py-3.5 px-4 text-left font-semibold text-graphite dark:text-white whitespace-nowrap">
+                        Размер
+                      </th>
+                      {activeFields.map((field) => (
+                        <th key={field} className="py-3.5 px-4 text-left font-semibold text-graphite dark:text-white whitespace-nowrap">
+                          {getMeasurementMeta(field).label}
                         </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  {product.sizeChart.rows.map((row: any, i: number) => (
-                    <tr key={i} className="border-b border-border-lighter dark:border-white/10">
-                      <td className="py-3 px-4 font-medium text-graphite dark:text-white">{row.sizeValueName}</td>
-                      {Object.values(row.measurements || {}).map((val: any, j: number) => (
-                        <td key={j} className="py-3 px-4 text-ash">{val}</td>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-border-lighter dark:divide-white/10">
+                    {product.sizeChart.rows.map((row: any, i: number) => (
+                      <tr key={i} className="hover:bg-ice/30 dark:hover:bg-white/[0.02] transition-colors">
+                        <td className="py-3 px-4 font-semibold text-graphite dark:text-white whitespace-nowrap">
+                          {row.sizeValueName}
+                        </td>
+                        {activeFields.map((field) => (
+                          <td key={field} className="py-3 px-4 text-ash font-mono text-xs sm:text-sm whitespace-nowrap">
+                            {row.measurements?.[field] ?? '—'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 text-xs text-ash">
+                * Все замеры сняты по готовому изделию в разложенном виде. Допустимая погрешность ±1-2 см.
+              </p>
             </div>
-            <div className="w-full md:w-64 flex-shrink-0 bg-ice/30 dark:bg-white/5 p-6 rounded-xl flex flex-col items-center">
-              <h3 className="font-medium text-graphite dark:text-white mb-4 self-start">Как снять мерки</h3>
-              <SizeGuideIllustration category={product.category || ''} />
-              <div className="mt-6 space-y-3 w-full">
-                {Object.keys(product.sizeChart.rows[0]?.measurements || {}).map((header) => {
-                  const inst = {
-                    CHEST: { l: 'Грудь', d: 'измеряйте горизонтально по наиболее выступающим точкам.' },
-                    WAIST: { l: 'Талия', d: 'измеряйте вокруг естественной линии талии.' },
-                    HIPS: { l: 'Бёдра', d: 'по наиболее выступающим точкам бёдер.' },
-                    FOOT_LENGTH: { l: 'Длина стопы', d: 'от пятки до наиболее выступающего пальца.' }
-                  }[header];
-                  if (!inst) return null;
+
+            {/* Right: Illustration and instructions */}
+            <div className="w-full lg:w-80 flex-shrink-0 bg-[#f8f9fb] dark:bg-white/5 p-5 rounded-2xl border border-border-lighter dark:border-white/10 flex flex-col items-center">
+              <h3 className="font-semibold text-sm text-graphite dark:text-white mb-2 self-start">
+                Как снять мерки
+              </h3>
+
+              <div className="w-full max-w-[220px] my-2 flex items-center justify-center">
+                <SizeGuideIllustration activeFields={activeFields} />
+              </div>
+
+              <div className="mt-4 space-y-3 w-full border-t border-border-lighter dark:border-white/10 pt-4">
+                {activeFields.map((field) => {
+                  const meta = getMeasurementMeta(field);
                   return (
-                    <div key={header} className="text-xs">
-                      <span className="font-medium text-graphite dark:text-white block">{inst.l}</span>
-                      <span className="text-ash block">{inst.d}</span>
+                    <div key={field} className="text-xs">
+                      <span className="font-semibold text-graphite dark:text-white block">
+                        {meta.shortLabel}
+                      </span>
+                      <span className="text-ash block mt-0.5 leading-relaxed">
+                        {meta.instruction}
+                      </span>
                     </div>
                   );
                 })}
@@ -722,7 +1065,7 @@ export function ProductDetail() {
             </div>
           </div>
         ) : (
-          <div className="text-center text-ash p-4">Размерная сетка недоступна</div>
+          <div className="text-center text-ash p-8">Размерная сетка пока не добавлена для этого товара.</div>
         )}
       </Modal>
     </div>

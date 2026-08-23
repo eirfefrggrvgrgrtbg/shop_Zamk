@@ -7,9 +7,22 @@ interface ModalProps {
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | 'wide';
 }
 
-export function Modal({ isOpen, onClose, title, children }: ModalProps) {
+const maxWidthMap: Record<string, string> = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-xl',
+  '2xl': 'max-w-2xl',
+  '3xl': 'max-w-3xl',
+  '4xl': 'max-w-4xl',
+  '5xl': 'max-w-5xl',
+  wide: 'max-w-[1050px]',
+};
+
+export function Modal({ isOpen, onClose, title, children, maxWidth = 'lg' }: ModalProps) {
   // Prevent scrolling when modal is open
   useEffect(() => {
     if (isOpen) {
@@ -19,6 +32,8 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
     }
     return () => { document.body.style.overflow = 'unset'; };
   }, [isOpen]);
+
+  const maxWClass = maxWidthMap[maxWidth] || maxWidthMap.lg;
 
   return (
     <AnimatePresence>
@@ -40,7 +55,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="pointer-events-auto w-full max-w-lg bg-white dark:bg-black border border-border-lighter dark:border-white/20 rounded-2xl overflow-hidden flex flex-col max-h-[90vh] shadow-xl"
+              className={`pointer-events-auto w-full ${maxWClass} bg-white dark:bg-black border border-border-lighter dark:border-white/20 rounded-2xl overflow-hidden flex flex-col max-h-[90vh] shadow-xl`}
             >
               {/* Header */}
               <div className="flex items-center justify-between p-5 border-b border-border-lighter dark:border-white/20">
