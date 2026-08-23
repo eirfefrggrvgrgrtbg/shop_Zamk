@@ -98,7 +98,7 @@ export const request = async <T>(
 
     if (!response.ok) {
       // 401 Unauthorized interceptor
-      if (response.status === 401 && !skipAuthRefresh && !isRetry) {
+      if (response.status === 401 && !skipAuthRefresh && !isRetry && path !== '/auth/login' && path !== '/auth/register' && path !== '/auth/refresh') {
         if (!refreshPromise) {
           refreshPromise = (async () => {
             try {
