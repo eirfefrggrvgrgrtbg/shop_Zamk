@@ -411,3 +411,93 @@ func TestDraftSave_CategoryWithoutOrWithIncompleteSizeChart(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "moderation validation failed")
 }
+
+func TestProductRejectionAndResubmissionFlow(t *testing.T) {
+	dbClient, svc, sellerID := setupBlockATestDB(t)
+	pool := dbClient.Pool
+	ctx := context.Background()
+
+	// 1. Create a leaf category without size chart requirement for simplicity
+	var catID uuid.UUID
+	err := pool.QueryRow(ctx, "SELECT c.id FROM categories c WHERE c.size_chart_required = false AND c.is_active = true AND NOT EXISTS (SELECT 1 FROM categories sub WHERE sub.parent_id = c.id) LIMIT 1").Scan(&catID)
+	require.NoError(t, err)
+
+	// Fetch color
+	var colorID uuid.UUID
+	err = pool.QueryRow(ctx, "SELECT id FROM colors WHERE is_active = true LIMIT 1").Scan(&colorID)
+	require.NoError(t, err)
+
+	// Fetch size value
+	var sizeValueID uuid.UUID
+	err = pool.QueryRow(ctx, "SELECT id FROM size_values WHERE is_active = true LIMIT 1").Scan(&sizeValueID)
+	require.NoError(t, err)
+
+	// Fetch material
+	var materialID uuid.UUID
+	err = pool.QueryRow(ctx, "SELECT id FROM materials WHERE is_active = true LIMIT 1").Scan(&materialID)
+	require.NoError(t, err)
+
+	title := "Rejection Test Product " + uuid.New().String()
+	sku := "REJ-SKU-" + uuid.New().String()
+	p, err := svc.CreateProductForSeller(ctx, sellerID, products.CreateProductRequest{
+		Title:      title,
+		CategoryID: &catID,
+		Currency:   "RUB",
+		PriceCents: 2000,
+		MaterialComposition: []products.ProductMaterialCompositionRequest{
+			{MaterialID: materialID, Percentage: 100},
+		},
+		Variants: []products.ProductVariantRequest{
+			{
+				SellerSKU:   &sku,
+				ColorID:     &colorID,
+				SizeValueID: &sizeValueID,
+				PriceCents:  func() *int64 { v := int64(2000); return &v }(),
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Submit to moderation
+	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
+	require.NoError(t, err)
+
+	// Admin rejects product with reason
+	adminUserID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, name, email, password_hash, role) VALUES ($1, 'Admin User', $2, 'hash', 'admin')", adminUserID, "admin-"+uuid.New().String()+"@test.local")
+	require.NoError(t, err)
+
+	rejectionReason := "Качественные фотографии не соответствуют правилам каталога"
+	err = svc.RejectProduct(ctx, adminUserID, p.ID, rejectionReason)
+	require.NoError(t, err)
+
+	// C. Rejection reason persists
+	pRejected, err := svc.GetSellerProduct(ctx, sellerID, p.ID)
+	require.NoError(t, err)
+	require.Equal(t, products.StatusRejected, pRejected.Status)
+	require.NotNil(t, pRejected.ModerationComment)
+	require.Equal(t, rejectionReason, *pRejected.ModerationComment)
+
+	logs, err := svc.GetProductModerationHistory(ctx, p.SellerID, p.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, logs)
+	require.Equal(t, products.StatusRejected, logs[0].ToStatus)
+	require.NotNil(t, logs[0].Comment)
+	require.Equal(t, rejectionReason, *logs[0].Comment)
+
+	// D. Rejected product can be corrected and resubmitted
+	newTitle := "Corrected Rejection Test Product " + uuid.New().String()
+	pUpdated, err := svc.UpdateProductForSeller(ctx, sellerID, p.ID, products.UpdateProductRequest{
+		Title: &newTitle,
+	})
+	require.NoError(t, err)
+	require.Equal(t, newTitle, pUpdated.Title)
+
+	// Resubmit to moderation
+	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
+	require.NoError(t, err)
+
+	pResubmitted, err := svc.GetSellerProduct(ctx, sellerID, p.ID)
+	require.NoError(t, err)
+	require.Equal(t, products.StatusPendingModeration, pResubmitted.Status)
+}
