@@ -23,11 +23,17 @@ export function Step5SizeChart({
     }
   }, [state.selectedSizeSystemId]);
 
-  if (!schema?.sizeChartRequired) {
+  const fields = [...(schema?.sizeChartFields || [])].sort((a, b) => a.sortOrder - b.sortOrder);
+
+  if (!schema?.sizeChartRequired || fields.length === 0) {
     return (
       <div className="space-y-6">
         <h2 className="text-xl font-medium">Таблица размеров</h2>
-        <p className="text-gray-500">Для этой категории таблица размеров не требуется.</p>
+        <p className="text-gray-500">
+          {!schema?.sizeChartRequired
+            ? 'Для этой категории таблица размеров не требуется.'
+            : 'Для этой категории таблица размеров не настроена.'}
+        </p>
         <div className="flex justify-between pt-4">
           <button onClick={onPrev} className="px-4 py-2 border rounded">Назад</button>
           <button onClick={onNext} className="px-4 py-2 bg-black text-white rounded">Далее</button>
@@ -35,8 +41,6 @@ export function Step5SizeChart({
       </div>
     );
   }
-
-  const fields = [...(schema?.sizeChartFields || [])].sort((a, b) => a.sortOrder - b.sortOrder);
 
   const updateCell = (sizeId: string, fieldCode: string, val: number) => {
     const nw = { ...state.sizeChartRows };

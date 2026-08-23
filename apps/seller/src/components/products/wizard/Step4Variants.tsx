@@ -287,7 +287,17 @@ export function Step4Variants({
 
       <div className="flex justify-between pt-4">
         <button onClick={onPrev} className="px-4 py-2 border rounded">Назад</button>
-        <button onClick={onNext} className="px-4 py-2 bg-black text-white rounded">Далее</button>
+        <button
+          onClick={() => {
+            if (state.variants.length === 0 && (state.selectedColorIds.length > 0 || state.selectedSizeValueIds.length > 0 || (!hasColor && !hasSize))) {
+              regenerateMatrix();
+            }
+            onNext();
+          }}
+          className="px-4 py-2 bg-black text-white rounded"
+        >
+          Далее
+        </button>
       </div>
     </div>
   );

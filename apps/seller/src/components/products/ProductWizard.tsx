@@ -329,10 +329,12 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
       )
     ];
 
-    const sizeChartRows = Object.entries(state.sizeChartRows).map(([sizeId, measures]) => ({
-      sizeValueId: sizeId,
-      measurements: measures
-    }));
+    const sizeChartRows = Object.entries(state.sizeChartRows)
+      .filter(([_, measures]) => measures && Object.keys(measures).length > 0)
+      .map(([sizeId, measures]) => ({
+        sizeValueId: sizeId,
+        measurements: measures
+      }));
 
     return {
       title: state.title || 'Новый товар',

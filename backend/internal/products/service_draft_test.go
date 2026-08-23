@@ -309,3 +309,105 @@ func TestSubmitModeration_DuplicateAndLifecycle(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, products.ErrInvalidStatusTransition, "Submitting product already in pending_moderation must fail")
 }
+
+func TestCategorySchema_RepresentativeCategories(t *testing.T) {
+	dbClient, svc, _ := setupBlockATestDB(t)
+	pool := dbClient.Pool
+	ctx := context.Background()
+
+	// 1. Tops: Майки и топы
+	var tankTopID uuid.UUID
+	err := pool.QueryRow(ctx, "SELECT id FROM categories WHERE slug = 'tank-tops'").Scan(&tankTopID)
+	require.NoError(t, err)
+	schemaTopsRaw, err := svc.GetCategoryAttributeSchema(ctx, tankTopID)
+	require.NoError(t, err)
+	schemaTops := schemaTopsRaw.(map[string]interface{})
+	require.True(t, schemaTops["sizeChartRequired"].(bool))
+	fieldsTops := schemaTops["sizeChartFields"].([]map[string]interface{})
+	require.Len(t, fieldsTops, 2)
+	require.Equal(t, "CHEST", fieldsTops[0]["code"])
+	require.Equal(t, "LENGTH", fieldsTops[1]["code"])
+
+	// 2. Tops with sleeves: Худи
+	var hoodieID uuid.UUID
+	err = pool.QueryRow(ctx, "SELECT id FROM categories WHERE slug = 'hoodies'").Scan(&hoodieID)
+	require.NoError(t, err)
+	schemaHoodieRaw, err := svc.GetCategoryAttributeSchema(ctx, hoodieID)
+	require.NoError(t, err)
+	schemaHoodie := schemaHoodieRaw.(map[string]interface{})
+	require.True(t, schemaHoodie["sizeChartRequired"].(bool))
+	fieldsHoodie := schemaHoodie["sizeChartFields"].([]map[string]interface{})
+	require.Len(t, fieldsHoodie, 3)
+
+	// 3. Bottoms: Брюки
+	var pantsID uuid.UUID
+	err = pool.QueryRow(ctx, "SELECT id FROM categories WHERE slug = 'pants'").Scan(&pantsID)
+	require.NoError(t, err)
+	schemaPantsRaw, err := svc.GetCategoryAttributeSchema(ctx, pantsID)
+	require.NoError(t, err)
+	schemaPants := schemaPantsRaw.(map[string]interface{})
+	require.True(t, schemaPants["sizeChartRequired"].(bool))
+	fieldsPants := schemaPants["sizeChartFields"].([]map[string]interface{})
+	require.Len(t, fieldsPants, 3)
+	require.Equal(t, "WAIST", fieldsPants[0]["code"])
+	require.Equal(t, "HIPS", fieldsPants[1]["code"])
+	require.Equal(t, "LENGTH", fieldsPants[2]["code"])
+
+	// 4. Footwear: Кроссовки
+	var sneakersID uuid.UUID
+	err = pool.QueryRow(ctx, "SELECT id FROM categories WHERE slug = 'sneakers'").Scan(&sneakersID)
+	require.NoError(t, err)
+	schemaSneakersRaw, err := svc.GetCategoryAttributeSchema(ctx, sneakersID)
+	require.NoError(t, err)
+	schemaSneakers := schemaSneakersRaw.(map[string]interface{})
+	require.True(t, schemaSneakers["sizeChartRequired"].(bool))
+	fieldsSneakers := schemaSneakers["sizeChartFields"].([]map[string]interface{})
+	require.Len(t, fieldsSneakers, 1)
+	require.Equal(t, "FOOT_LENGTH", fieldsSneakers[0]["code"])
+
+	// 5. Accessory: Кепки
+	var capsID uuid.UUID
+	err = pool.QueryRow(ctx, "SELECT id FROM categories WHERE slug = 'caps'").Scan(&capsID)
+	require.NoError(t, err)
+	schemaCapsRaw, err := svc.GetCategoryAttributeSchema(ctx, capsID)
+	require.NoError(t, err)
+	schemaCaps := schemaCapsRaw.(map[string]interface{})
+	require.False(t, schemaCaps["sizeChartRequired"].(bool))
+	fieldsCaps := schemaCaps["sizeChartFields"].([]map[string]interface{})
+	require.Empty(t, fieldsCaps)
+}
+
+func TestDraftSave_CategoryWithoutOrWithIncompleteSizeChart(t *testing.T) {
+	dbClient, svc, sellerID := setupBlockATestDB(t)
+	pool := dbClient.Pool
+	ctx := context.Background()
+
+	var tankTopID uuid.UUID
+	err := pool.QueryRow(ctx, "SELECT id FROM categories WHERE slug = 'tank-tops'").Scan(&tankTopID)
+	require.NoError(t, err)
+
+	// 1. Create draft without size chart (incomplete draft autosave)
+	p, err := svc.CreateProductForSeller(ctx, sellerID, products.CreateProductRequest{
+		Title:      "Tank Top Draft",
+		CategoryID: &tankTopID,
+		Currency:   "RUB",
+	})
+	require.NoError(t, err)
+	require.Equal(t, products.StatusDraft, p.Status)
+
+	// 2. Update draft still without size chart
+	updatedTitle := "Tank Top Draft Updated"
+	updateReq := products.UpdateProductRequest{
+		Title:       &updatedTitle,
+		Description: p.Description,
+		CategoryID:  &tankTopID,
+	}
+	pUpdated, err := svc.UpdateProductForSeller(ctx, sellerID, p.ID, updateReq)
+	require.NoError(t, err)
+	require.Equal(t, p.ID, pUpdated.ID)
+
+	// 3. Moderation should reject when required size chart / attributes are missing
+	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "moderation validation failed")
+}
