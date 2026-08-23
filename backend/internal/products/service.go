@@ -1288,6 +1288,7 @@ func mapToPublicProduct(p Product) PublicProduct {
 			ImageURL:  i.ImageURL,
 			AltText:   i.AltText,
 			SortOrder: i.SortOrder,
+			ColorID: i.ColorID,
 		})
 	}
 

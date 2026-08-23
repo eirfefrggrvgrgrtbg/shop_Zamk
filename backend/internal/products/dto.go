@@ -172,6 +172,8 @@ type PublicProductVariant struct {
 	SellerSKU          *string `json:"sellerSku,omitempty"`
 	ColorID            *uuid.UUID `json:"colorId,omitempty"`
 	SizeValueID        *uuid.UUID `json:"sizeValueId,omitempty"`
+	ColorName          *string `json:"colorName,omitempty"`
+	ColorHex           *string `json:"colorHex,omitempty"`
 	ShadeName          *string `json:"shadeName,omitempty"`
 	PriceCents   *int64    `json:"priceCents,omitempty"`
 	IsActive     bool      `json:"isActive"`
@@ -184,6 +186,7 @@ type PublicProductImage struct {
 	ImageURL  string    `json:"imageUrl"`
 	AltText   *string   `json:"altText,omitempty"`
 	SortOrder int       `json:"sortOrder"`
+	ColorID   *uuid.UUID `json:"colorId,omitempty"`
 }
 
 type PublicProductListResponse struct {

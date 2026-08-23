@@ -17,7 +17,7 @@ export interface Product {
   oldPrice?: number;
   discountPrice?: number;
   image: string;
-  images?: string[];
+  images?: { url: string; colorId?: string }[];
   category: string;
   styles?: string[];
   description?: string;
@@ -35,6 +35,10 @@ export interface Product {
     isActive?: boolean;
     sellerSku?: string;
     priceCents?: number;
+    colorName?: string;
+    colorHex?: string;
+    colorId?: string;
+    sizeValueId?: string;
   }[];
   isNew?: boolean;
   isBestseller?: boolean;

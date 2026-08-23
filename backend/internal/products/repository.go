@@ -412,7 +412,7 @@ func (r *Repository) GetProductVariants(ctx context.Context, productID uuid.UUID
 		       COALESCE(pv.sku, pv.seller_sku) AS sku,
 		       COALESCE(pv.size, sv.value) AS size,
 		       COALESCE(pv.color, c.name_ru) AS color,
-		       pv.option_values, pv.seller_sku, pv.color_id, pv.size_value_id, pv.shade_name, pv.barcode, pv.price_cents, pv.is_active, pv.created_at, pv.updated_at,
+		       pv.option_values, pv.seller_sku, pv.color_id, pv.size_value_id, c.name_ru AS color_name, c.hex AS color_hex, pv.shade_name, pv.barcode, pv.price_cents, pv.is_active, pv.created_at, pv.updated_at,
 		       (ii.id IS NOT NULL) AS has_inventory,
 		       COALESCE(ii.total_stock, 0) AS total_stock,
 		       COALESCE(ii.reserved_stock, 0) AS reserved_stock
@@ -435,7 +435,7 @@ func (r *Repository) GetProductVariants(ctx context.Context, productID uuid.UUID
 		var hasInv bool
 		var totalStock, reservedStock int
 		if err := rows.Scan(
-			&v.ID, &v.ProductID, &v.SKU, &v.Size, &v.Color, &v.OptionValues, &v.SellerSKU, &v.ColorID, &v.SizeValueID, &v.ShadeName, &v.Barcode, &v.PriceCents, &v.IsActive, &v.CreatedAt, &v.UpdatedAt,
+			&v.ID, &v.ProductID, &v.SKU, &v.Size, &v.Color, &v.OptionValues, &v.SellerSKU, &v.ColorID, &v.SizeValueID, &v.ColorName, &v.ColorHex, &v.ShadeName, &v.Barcode, &v.PriceCents, &v.IsActive, &v.CreatedAt, &v.UpdatedAt,
 			&hasInv, &totalStock, &reservedStock,
 		); err != nil {
 			return nil, err

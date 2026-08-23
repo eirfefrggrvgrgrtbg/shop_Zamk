@@ -172,6 +172,8 @@ func (s *Service) GetProductPreviewByToken(ctx context.Context, token string) (*
 				SellerSKU:   v.SellerSKU,
 				ColorID:     v.ColorID,
 				SizeValueID: v.SizeValueID,
+				ColorName: v.ColorName,
+				ColorHex: v.ColorHex,
 				ShadeName:   v.ShadeName,
 				OptionValues: v.OptionValues,
 				PriceCents: v.PriceCents,
@@ -190,6 +192,7 @@ func (s *Service) GetProductPreviewByToken(ctx context.Context, token string) (*
 				ImageURL:  img.ImageURL,
 				AltText:   img.AltText,
 				SortOrder: img.SortOrder,
+				ColorID: img.ColorID,
 			})
 		}
 	}

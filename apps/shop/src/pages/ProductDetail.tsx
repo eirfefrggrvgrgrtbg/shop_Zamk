@@ -13,19 +13,6 @@ import { formatPrice, cn } from '../lib/utils';
 import { fetchProductById, fetchProductReviews, fetchProductPreviewByToken } from '../api/publicCatalog';
 import type { Product, Review } from '../types/catalog';
 
-// Размерная сетка
-const SIZE_CHART = {
-  headers: ['Размер', 'Грудь (см)', 'Талия (см)', 'Бёдра (см)'],
-  rows: [
-    ['XS', '82-86', '62-66', '88-92'],
-    ['S', '86-90', '66-70', '92-96'],
-    ['M', '90-94', '70-74', '96-100'],
-    ['L', '94-98', '74-78', '100-104'],
-    ['XL', '98-102', '78-82', '104-108'],
-    ['XXL', '102-106', '82-86', '108-112'],
-  ],
-};
-
 const getProductSpecs = (product: Product, selectedVariant?: any) =>
   [
     (selectedVariant?.sellerSku || !product.id) ? { label: 'Артикул', value: (selectedVariant?.sellerSku || product.id).toUpperCase() } : null,
@@ -34,7 +21,6 @@ const getProductSpecs = (product: Product, selectedVariant?: any) =>
     product.materials ? { label: 'Материал', value: product.materials } : null,
   ].filter((spec): spec is { label: string; value: string } => Boolean(spec));
 
-// Аккордеон секция
 function AccordionSection({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
@@ -48,6 +34,43 @@ function AccordionSection({ title, children, defaultOpen = false }: { title: str
   );
 }
 
+const SizeGuideIllustration = ({ category }: { category: string }) => {
+  const isLower = category.toLowerCase().includes('брюки') || category.toLowerCase().includes('джинсы') || category.toLowerCase().includes('шорты') || category.toLowerCase().includes('юбки');
+  const isFootwear = category.toLowerCase().includes('обувь') || category.toLowerCase().includes('кроссовки') || category.toLowerCase().includes('ботинки');
+
+  if (isFootwear) {
+    return (
+      <svg viewBox="0 0 100 100" className="w-full max-w-[200px] h-auto text-ash/30" fill="currentColor">
+        <path d="M70,80 Q90,80 90,60 Q90,40 60,30 Q40,20 20,40 Q10,50 10,70 Q10,80 30,80 Z" />
+        <line x1="10" y1="90" x2="90" y2="90" stroke="red" strokeWidth="2" strokeDasharray="4 4" />
+        <text x="50" y="98" fontSize="6" fill="red" textAnchor="middle">Длина стопы</text>
+      </svg>
+    );
+  }
+
+  if (isLower) {
+    return (
+      <svg viewBox="0 0 100 100" className="w-full max-w-[200px] h-auto text-ash/30" fill="currentColor">
+        <path d="M30,10 L70,10 L75,30 L70,90 L55,90 L50,40 L45,90 L30,90 L25,30 Z" />
+        <line x1="20" y1="15" x2="80" y2="15" stroke="red" strokeWidth="2" strokeDasharray="2 2" />
+        <text x="85" y="17" fontSize="6" fill="red">Талия</text>
+        <line x1="20" y1="30" x2="80" y2="30" stroke="red" strokeWidth="2" strokeDasharray="2 2" />
+        <text x="85" y="32" fontSize="6" fill="red">Бёдра</text>
+      </svg>
+    );
+  }
+
+  // Default Upper Apparel
+  return (
+    <svg viewBox="0 0 100 100" className="w-full max-w-[200px] h-auto text-ash/30" fill="currentColor">
+      <path d="M35,10 Q50,20 65,10 L85,30 L75,40 L70,30 L70,90 L30,90 L30,30 L25,40 L15,30 Z" />
+      <line x1="20" y1="35" x2="80" y2="35" stroke="red" strokeWidth="2" strokeDasharray="2 2" />
+      <text x="85" y="37" fontSize="6" fill="red">Грудь</text>
+      <line x1="25" y1="55" x2="75" y2="55" stroke="red" strokeWidth="2" strokeDasharray="2 2" />
+      <text x="80" y="57" fontSize="6" fill="red">Талия</text>
+    </svg>
+  );
+};
 export function ProductDetail() {
   const { id, token } = useParams<{ id?: string; token?: string }>();
 
@@ -136,22 +159,70 @@ export function ProductDetail() {
     );
   }
 
-  const defaultImage = 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image';
-  const images = (product.images && product.images.length > 0)
+  const defaultImage = { url: 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image' };
+  const allImages = (product.images && product.images.length > 0)
     ? product.images
-    : (product.image ? [product.image] : [defaultImage]);
-  // We use brandId for link but use string brand for name
+    : (product.image ? [{ url: product.image }] : [defaultImage]);
+
   const liked = isFavorite(product.id);
 
-  const requiresSizeSelection = Boolean(product.sizes && product.sizes.length > 0 && !product.sizes.includes('Единый'));
-  const selectableSizes = product.sizes ?? [];
+  const colorMap = new Map<string, { id: string, name: string, hex: string }>();
+  product.variants?.forEach(v => {
+    if (v.colorId && v.colorName) {
+      if (!colorMap.has(v.colorId)) {
+        colorMap.set(v.colorId, { id: v.colorId, name: v.colorName, hex: v.colorHex || '#000000' });
+      }
+    }
+  });
+  const colors = Array.from(colorMap.values());
+  const activeColorObj = colors[activeColor] || null;
 
-  const selectedVariant = product.variants?.find(v =>
-    v.size === activeSize &&
-    (!product.colors || !product.colors[activeColor] || v.color === product.colors[activeColor].name)
-  ) || product.variants?.[0];
+  const sizeMap = new Map<string, { id: string, label: string }>();
+  product.variants?.forEach(v => {
+    if (!v.size || !v.isActive) return;
+    if (colors.length > 0) {
+      if (activeColorObj && v.colorId === activeColorObj.id) {
+        if (!sizeMap.has(v.size)) {
+           sizeMap.set(v.size, { id: v.sizeValueId || v.size, label: v.size });
+        }
+      }
+    } else {
+      if (!sizeMap.has(v.size)) {
+         sizeMap.set(v.size, { id: v.sizeValueId || v.size, label: v.size });
+      }
+    }
+  });
+
+  const selectableSizes = Array.from(sizeMap.values());
+  if (product.sizeChart?.rows) {
+    const sortOrder = product.sizeChart.rows.map((r: any) => r.sizeValueName);
+    selectableSizes.sort((a, b) => {
+      const idxA = sortOrder.indexOf(a.label);
+      const idxB = sortOrder.indexOf(b.label);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return 0;
+    });
+  }
+
+  const requiresSizeSelection = selectableSizes.length > 0 && !selectableSizes.some(s => s.label === 'Единый');
+
+  let selectedVariant = product.variants?.[0];
+  if (requiresSizeSelection) {
+    selectedVariant = product.variants?.find(v =>
+      v.size === activeSize && v.isActive &&
+      (colors.length === 0 || v.colorId === activeColorObj?.id)
+    );
+  } else if (colors.length > 0) {
+    selectedVariant = product.variants?.find(v => v.isActive && v.colorId === activeColorObj?.id);
+  }
 
   const specs = getProductSpecs(product, selectedVariant);
+
+  const visibleImages = allImages.filter((img: any) => !img.colorId || (activeColorObj && img.colorId === activeColorObj.id));
+  if (visibleImages.length === 0 && allImages.length > 0) visibleImages.push(allImages[0]);
+  const currentActiveImage = activeImage < visibleImages.length ? activeImage : 0;
 
   const handleAddToCart = async () => {
     if (product.isPreview) return;
@@ -161,28 +232,18 @@ export function ProductDetail() {
     }
     setSizeError('');
 
-    let variantId = product.variants?.[0]?.id;
-    let variantInStock = product.variants?.[0]?.inStock ?? true;
-    if (product.variants && activeSize) {
-      const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
-      if (match) {
-         variantId = match.id;
-         variantInStock = match.inStock ?? true;
-      }
-    }
-
-    if (!variantId) {
+    if (!selectedVariant) {
       showToast('Для товара не указан вариант. Добавление в корзину недоступно.');
       return;
     }
 
-    if (!variantInStock) {
+    if (!(selectedVariant.inStock ?? true)) {
       showToast('Выбранный вариант товара закончился.');
       return;
     }
 
     try {
-      await addItem(product.id, variantId, quantity);
+      await addItem(product.id, selectedVariant.id, quantity);
       showToast('Товар добавлен в корзину');
     } catch (e: any) {
       showToast(e.message || 'Ошибка при добавлении');
@@ -190,14 +251,7 @@ export function ProductDetail() {
   };
 
   const getDisplayPrice = () => {
-    let currentPrice = product.price;
-    if (product.variants && activeSize) {
-      const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
-      if (match && match.priceCents) {
-        currentPrice = match.priceCents;
-      }
-    }
-    return currentPrice;
+    return selectedVariant?.priceCents ? selectedVariant.priceCents / 100 : product.price;
   };
 
   return (
@@ -226,13 +280,12 @@ export function ProductDetail() {
           {/* Gallery */}
           <div className="space-y-4">
             {/* Main image */}
-            <div className="relative bg-[#f5f5f7] dark:bg-[#1a1a1c] rounded-xl overflow-hidden" style={{ aspectRatio: '4/5' }}>
+            <div className="relative bg-[#f5f5f7] dark:bg-[#1a1a1c] rounded-xl overflow-hidden w-full flex items-center justify-center" style={{ aspectRatio: '4/5', maxHeight: '80vh' }}>
               <img
-                src={images[activeImage]}
+                src={visibleImages[currentActiveImage]?.url || defaultImage.url}
                 alt={product.name}
-                className="w-full h-full object-contain p-4"
+                className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal"
               />
-              {/* Badges */}
               {product.isNew && (
                 <span className="absolute top-4 left-4 px-3 py-1 rounded bg-graphite text-white dark:text-black text-xs font-semibold uppercase">
                   Новинка
@@ -246,27 +299,25 @@ export function ProductDetail() {
             </div>
 
             {/* Thumbnails */}
-            {images.length > 1 && (
+            {visibleImages.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-2">
-                {images.map((image, index) => (
+                {visibleImages.map((image: any, index: number) => (
                   <button
-                    key={image}
+                    key={index + image.url}
                     onClick={() => setActiveImage(index)}
                     className={cn(
-                      "w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f7] dark:bg-[#1a1a1c] border-2 transition-colors",
-                      activeImage === index ? "border-graphite dark:border-white" : "border-transparent"
+                      "w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f7] dark:bg-[#1a1a1c] border-2 transition-colors flex items-center justify-center",
+                      currentActiveImage === index ? "border-graphite dark:border-white" : "border-transparent"
                     )}
                   >
-                    <img src={image} alt="" className="w-full h-full object-contain p-1" />
+                    <img src={image.url} alt="" className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal" />
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Product Info */}
           <div className="lg:sticky lg:top-28 lg:self-start">
-            {/* Brand / Seller */}
             {product.sellerSlug && !product.isPreview ? (
               <Link to={`/seller/${product.sellerSlug}`} className="text-sm text-ash hover:text-graphite dark:hover:text-white transition-colors">
                 {product.sellerName || product.brand}
@@ -277,12 +328,10 @@ export function ProductDetail() {
               </span>
             )}
 
-            {/* Title */}
             <h1 className="mt-2 text-2xl md:text-3xl font-serif text-graphite dark:text-white leading-tight">
               {product.name}
             </h1>
 
-            {/* Rating */}
             {product.rating && (
               <div className="flex items-center gap-2 mt-3">
                 <div className="flex items-center">
@@ -310,7 +359,6 @@ export function ProductDetail() {
               </div>
             )}
 
-            {/* Price */}
             <div className="mt-4 flex items-baseline gap-3">
               {product.discountPrice ? (
                 <>
@@ -323,16 +371,16 @@ export function ProductDetail() {
             </div>
 
             {/* Colors */}
-            {product.colors && product.colors.length > 0 && (
+            {colors.length > 0 && (
               <div className="mt-6">
                 <p className="text-sm text-graphite dark:text-white mb-2">
-                  Цвет: <span className="text-ash">{product.colors[activeColor]?.name || ''}</span>
+                  Цвет: <span className="text-ash">{activeColorObj?.name || ''}</span>
                 </p>
                 <div className="flex gap-2">
-                  {product.colors.map((color, index) => (
+                  {colors.map((color, index) => (
                     <button
-                      key={color.name}
-                      onClick={() => setActiveColor(index)}
+                      key={color.id}
+                      onClick={() => { setActiveColor(index); setActiveImage(0); }}
                       style={{ backgroundColor: color.hex }}
                       className={cn(
                         "w-10 h-10 rounded-full border-2 transition-all",
@@ -359,28 +407,26 @@ export function ProductDetail() {
                     className="flex items-center gap-1 text-sm text-primary hover:underline"
                   >
                     <Ruler className="w-4 h-4" />
-                    Размерная сетка
+                    Таблица размеров
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {selectableSizes.map((size) => (
+                  {selectableSizes.map((sizeObj) => (
                     <button
-                      key={size}
+                      key={sizeObj.id}
                       type="button"
                       onClick={() => {
-                        setActiveSize(size);
-                        if (sizeError) {
-                          setSizeError('');
-                        }
+                        setActiveSize(sizeObj.label);
+                        if (sizeError) setSizeError('');
                       }}
                       className={cn(
                         "h-10 min-w-[48px] px-4 rounded-lg border text-sm font-medium transition-all",
-                        activeSize === size
+                        activeSize === sizeObj.label
                             ? "bg-graphite text-white border-graphite dark:bg-white dark:text-black dark:border-white"
                           : "bg-white dark:bg-transparent border-border-lighter dark:border-white/20 text-graphite dark:text-white hover:border-graphite dark:hover:border-white"
                       )}
                     >
-                      {size}
+                      {sizeObj.label}
                     </button>
                   ))}
                 </div>
@@ -423,14 +469,7 @@ export function ProductDetail() {
                 variant="primary"
                 className="flex-1 h-12 gap-2"
                 onClick={handleAddToCart}
-                disabled={product.isPreview || (() => {
-                  let vStock = product.variants?.[0]?.inStock ?? true;
-                  if (product.variants && activeSize) {
-                    const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
-                    if (match) vStock = match.inStock ?? true;
-                  }
-                  return !vStock;
-                })()}
+                disabled={product.isPreview || !selectedVariant || !(selectedVariant.inStock ?? true)}
               >
                 <ShoppingBag className="w-5 h-5" />
                 {product.isPreview
@@ -441,7 +480,7 @@ export function ProductDetail() {
                         const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
                         if (match) vStock = match.inStock ?? true;
                       }
-                      return vStock ? 'Добавить в корзину' : 'Нет в наличии';
+                      return (selectedVariant?.inStock ?? true) ? 'Добавить в корзину' : 'Нет в наличии';
                     })()}
               </Button>
               <Button
@@ -625,31 +664,62 @@ export function ProductDetail() {
 
       </div>
       {/* Size Chart Modal */}
-      <Modal isOpen={showSizeChart} onClose={() => setShowSizeChart(false)} title="Размерная сетка">
+      <Modal isOpen={showSizeChart} onClose={() => setShowSizeChart(false)} title="Как выбрать размер">
         {product.sizeChart && product.sizeChart.rows ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border-lighter dark:border-white/10">
-                  <th className="py-3 px-4 text-left font-medium text-graphite dark:text-white">Размер</th>
-                  {Object.keys(product.sizeChart.rows[0]?.measurements || {}).map((header) => (
-                    <th key={header} className="py-3 px-4 text-left font-medium text-graphite dark:text-white">
-                      {header}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {product.sizeChart.rows.map((row: any, i: number) => (
-                  <tr key={i} className="border-b border-border-lighter dark:border-white/10">
-                    <td className="py-3 px-4 font-medium text-graphite dark:text-white">{row.sizeValueName}</td>
-                    {Object.values(row.measurements || {}).map((val: any, j: number) => (
-                      <td key={j} className="py-3 px-4 text-ash">{val}</td>
-                    ))}
+          <div className="flex flex-col md:flex-row gap-8">
+            <div className="flex-1 overflow-x-auto">
+              <h3 className="font-medium text-graphite dark:text-white mb-4">Размерная сетка</h3>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border-lighter dark:border-white/10">
+                    <th className="py-3 px-4 text-left font-medium text-graphite dark:text-white">Размер</th>
+                    {Object.keys(product.sizeChart.rows[0]?.measurements || {}).map((header) => {
+                      const label = {
+                        CHEST: 'Грудь', WAIST: 'Талия', HIPS: 'Бёдра', LENGTH: 'Длина изделия',
+                        SLEEVE: 'Длина рукава', FOOT_LENGTH: 'Длина стопы', INSEAM: 'Внутренний шов',
+                        HEAD_CIRCUMFERENCE: 'Обхват головы'
+                      }[header] || header;
+                      return (
+                        <th key={header} className="py-3 px-4 text-left font-medium text-graphite dark:text-white">
+                          {label}
+                        </th>
+                      );
+                    })}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {product.sizeChart.rows.map((row: any, i: number) => (
+                    <tr key={i} className="border-b border-border-lighter dark:border-white/10">
+                      <td className="py-3 px-4 font-medium text-graphite dark:text-white">{row.sizeValueName}</td>
+                      {Object.values(row.measurements || {}).map((val: any, j: number) => (
+                        <td key={j} className="py-3 px-4 text-ash">{val}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="w-full md:w-64 flex-shrink-0 bg-ice/30 dark:bg-white/5 p-6 rounded-xl flex flex-col items-center">
+              <h3 className="font-medium text-graphite dark:text-white mb-4 self-start">Как снять мерки</h3>
+              <SizeGuideIllustration category={product.category || ''} />
+              <div className="mt-6 space-y-3 w-full">
+                {Object.keys(product.sizeChart.rows[0]?.measurements || {}).map((header) => {
+                  const inst = {
+                    CHEST: { l: 'Грудь', d: 'измеряйте горизонтально по наиболее выступающим точкам.' },
+                    WAIST: { l: 'Талия', d: 'измеряйте вокруг естественной линии талии.' },
+                    HIPS: { l: 'Бёдра', d: 'по наиболее выступающим точкам бёдер.' },
+                    FOOT_LENGTH: { l: 'Длина стопы', d: 'от пятки до наиболее выступающего пальца.' }
+                  }[header];
+                  if (!inst) return null;
+                  return (
+                    <div key={header} className="text-xs">
+                      <span className="font-medium text-graphite dark:text-white block">{inst.l}</span>
+                      <span className="text-ash block">{inst.d}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         ) : (
           <div className="text-center text-ash p-4">Размерная сетка недоступна</div>

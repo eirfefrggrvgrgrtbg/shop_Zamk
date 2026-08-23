@@ -99,6 +99,8 @@ type ProductVariant struct {
 	SellerSKU          *string   `json:"sellerSku,omitempty"`
 	ColorID            *uuid.UUID `json:"colorId,omitempty"`
 	SizeValueID        *uuid.UUID `json:"sizeValueId,omitempty"`
+	ColorName          *string `json:"colorName,omitempty"`
+	ColorHex           *string `json:"colorHex,omitempty"`
 	ShadeName          *string   `json:"shadeName,omitempty"`
 	Barcode            *string   `json:"barcode,omitempty"`
 	PriceCents         *int64    `json:"priceCents,omitempty"`

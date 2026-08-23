@@ -42,7 +42,7 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
     e.stopPropagation();
     if (product.isPreview) return;
     setIsQuickBuyOpen(true);
-    
+
     if (!productVariants) {
       setIsLoadingVariants(true);
       try {
@@ -107,7 +107,7 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
               className="block w-full h-full"
             >
               <img
-                src={product.images?.[0] || product.image || 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image'}
+                src={product.images?.[0]?.url || product.image || 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image'}
                 alt={product.name}
                 className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
                 loading="lazy"
@@ -161,7 +161,7 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
 
         {/* Бумажный чек (Инфо-блок) */}
         <div className="relative z-10 w-[92%] -mt-6 bg-[#f4f4f4] dark:bg-zinc-900 p-4 pt-4 shadow-lg dark:shadow-black/60 border border-gray-200/80 dark:border-zinc-700 flex flex-col transform rotate-1 group-hover:rotate-0 transition-transform duration-500 font-mono">
-          
+
           {/* Контент чека */}
           <div className="flex flex-col text-[11px] leading-relaxed text-black dark:text-gray-100 font-medium">
             <div className="uppercase tracking-widest text-[9px] mb-2 border-b border-dashed border-gray-400 dark:border-zinc-500 pb-2">
@@ -197,7 +197,7 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
                 <span>{formatPrice(product.price)}</span>
               )}
             </div>
-                
+
             {displayReviewsCount > 0 ? (
               <div className="flex items-center gap-1.5 mt-2">
                 <div className="flex text-[11px] tracking-tighter">
@@ -218,7 +218,7 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
 
             {/* Декоративный штрихкод */}
             <div className="flex flex-col items-center w-full mt-4 pt-3 border-t border-dashed border-gray-400 dark:border-zinc-500">
-              <div 
+              <div
                 className="w-full h-6 opacity-80 dark:opacity-60 mix-blend-multiply dark:mix-blend-lighten"
                 style={{
                   backgroundImage: 'repeating-linear-gradient(to right, currentColor 0, currentColor 2px, transparent 2px, transparent 4px, currentColor 4px, currentColor 5px, transparent 5px, transparent 8px, currentColor 8px, currentColor 11px, transparent 11px, transparent 13px, currentColor 13px, currentColor 14px, transparent 14px, transparent 17px)',
@@ -235,8 +235,8 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
 
       <Modal isOpen={isQuickBuyOpen} onClose={() => setIsQuickBuyOpen(false)} title="Быстрая покупка">
         <div className="flex gap-4 mb-6">
-          <img 
-            src={product.images?.[0] || product.image || 'https://placehold.co/400x500'} 
+          <img
+            src={product.images?.[0]?.url || product.image || 'https://placehold.co/400x500'}
             alt={product.name}
             className="w-24 h-32 object-cover rounded-lg"
           />

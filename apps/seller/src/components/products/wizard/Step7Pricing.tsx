@@ -3,24 +3,24 @@ import type { WizardState } from './WizardState';
 import { getSellerColors, getSellerSizeValues, generateSellerSKUs, type SellerColor, type SellerSizeValue } from '@zamk/api-client/src/seller';
 import { Loader2 } from 'lucide-react';
 
-export function Step7Pricing({ 
-  state, 
-  updateState, 
-  onNext, 
+export function Step7Pricing({
+  state,
+  updateState,
+  onNext,
   onPrev,
   onError
-}: { 
-  state: WizardState; 
-  updateState: (u: Partial<WizardState>) => void; 
-  onNext: () => void; 
+}: {
+  state: WizardState;
+  updateState: (u: Partial<WizardState>) => void;
+  onNext: () => void;
   onPrev: () => void;
-  onError?: (msg: string) => void; 
+  onError?: (msg: string) => void;
 }) {
   const [colors, setColors] = useState<SellerColor[]>([]);
   const [sizeValues, setSizeValues] = useState<SellerSizeValue[]>([]);
   const [bulkPriceRub, setBulkPriceRub] = useState('');
   const [generatingSkus, setGeneratingSkus] = useState(false);
-  const [manualBarcodes, setManualBarcodes] = useState<Record<number, boolean>>({});
+
 
   useEffect(() => {
     getSellerColors().then(setColors).catch(console.error);
@@ -45,7 +45,7 @@ export function Step7Pricing({
       if (neededCount === 0) return;
 
       const res = await generateSellerSKUs(neededCount);
-      
+
       let skuIdx = 0;
       const nw = state.variants.map(v => {
         if (!v.active || v.sellerSku) return v;
@@ -63,17 +63,17 @@ export function Step7Pricing({
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-medium">Цена и идентификаторы</h2>
-      
+
       <div className="p-4 border rounded bg-gray-50 flex gap-4 items-end">
         <div>
           <label className="block text-sm mb-1">Применить цену ко всем вариантам</label>
           <div className="relative">
-            <input 
-              type="number" 
-              value={bulkPriceRub} 
-              onChange={e => setBulkPriceRub(e.target.value)} 
-              className="border p-2 rounded w-48 pr-8" 
-              placeholder="Цена (₽)" 
+            <input
+              type="number"
+              value={bulkPriceRub}
+              onChange={e => setBulkPriceRub(e.target.value)}
+              className="border p-2 rounded w-48 pr-8"
+              placeholder="Цена (₽)"
             />
             <span className="absolute right-3 top-2.5 text-gray-500">₽</span>
           </div>
@@ -102,16 +102,15 @@ export function Step7Pricing({
               const c = colors.find(x => x.id === v.colorId);
               const s = sizeValues.find(x => x.id === v.sizeValueId);
               const name = [c?.nameRu, s?.value].filter(Boolean).join(' / ') || 'Базовый';
-              
+
               const updateV = (field: keyof typeof v, val: any) => {
                 const nw = [...state.variants];
-                const activeIdx = state.variants.findIndex(x => x === v);
+
                 nw[activeIdx] = { ...nw[activeIdx], [field]: val };
                 updateState({ variants: nw });
               };
 
               const activeIdx = state.variants.findIndex(x => x === v);
-              const isManualBarcode = !!v.barcode || manualBarcodes[activeIdx];
 
               return (
                 <tr key={i} className="border-b last:border-0">
@@ -120,28 +119,22 @@ export function Step7Pricing({
                     <input type="text" value={v.sellerSku || ''} onChange={e => updateV('sellerSku', e.target.value)} className="border p-1 rounded w-32" />
                   </td>
                   <td className="p-2">
-                    {isManualBarcode ? (
-                      <div className="flex items-center gap-2">
-                        <input type="text" value={v.barcode || ''} onChange={e => updateV('barcode', e.target.value)} className="border p-1 rounded w-32" />
-                        <button onClick={() => {
-                          setManualBarcodes(p => ({ ...p, [activeIdx]: false }));
-                          updateV('barcode', '');
-                        }} className="text-xs text-red-500">Сбросить</button>
+                    {v.barcode ? (
+                      <div className="flex flex-col">
+                        <span className="font-mono text-xs">{v.barcode}</span>
+                        <span className="text-[10px] text-gray-400">Штрихкод ZAMK</span>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-500 italic">Сгенерируется ZAMK</span>
-                        <button onClick={() => setManualBarcodes(p => ({ ...p, [activeIdx]: true }))} className="text-xs text-blue-500 ml-2">Свой штрихкод</button>
-                      </div>
+                      <span className="text-gray-500 italic text-xs">Создан автоматически</span>
                     )}
                   </td>
                   <td className="p-2">
                     <div className="relative w-32">
-                      <input 
-                        type="number" 
-                        value={v.priceCents ? Math.round(v.priceCents / 100) : ''} 
-                        onChange={e => updateV('priceCents', Math.round(Number(e.target.value) * 100))} 
-                        className="border p-1 rounded w-full pr-6" 
+                      <input
+                        type="number"
+                        value={v.priceCents ? Math.round(v.priceCents / 100) : ''}
+                        onChange={e => updateV('priceCents', Math.round(Number(e.target.value) * 100))}
+                        className="border p-1 rounded w-full pr-6"
                       />
                       <span className="absolute right-2 top-1.5 text-gray-500 text-xs">₽</span>
                     </div>

@@ -26,7 +26,7 @@ export function mapProductSummaryToCatalog(
     oldPrice,
     discountPrice: oldPrice && oldPrice > price ? price : undefined,
     image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
-    images: p.mainImageUrl ? [p.mainImageUrl] : [],
+    images: p.mainImageUrl ? [{ url: p.mainImageUrl }] : [],
     category: p.categoryId || 'Категория не указана',
     sellerId: p.sellerId,
     sellerSlug: p.sellerSlug,
@@ -53,7 +53,7 @@ export async function fetchBrands(): Promise<UIBrand[]> {
     country: 'Страна не указана',
     image: b.logoUrl || ''
   }));
-  
+
   cachedBrands = {};
   mapped.forEach(b => { cachedBrands[b.id] = b.name; });
   return mapped;
@@ -128,7 +128,7 @@ export async function fetchPublicSeller(slugOrId: string, params?: any): Promise
   }
 
   const res = await getPublicSeller(slugOrId, params);
-  
+
   return {
     seller: res.seller,
     items: res.items.map((p: any) => ({
@@ -155,9 +155,9 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
   if (Object.keys(cachedBrands).length === 0) {
     await fetchBrands().catch(() => {});
   }
-  
+
   const p = await getProduct(idOrSlug);
-  
+
   return {
     id: p.id,
     name: p.title,
@@ -166,9 +166,11 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
     price: p.priceCents / 100,
     oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
     image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
-    images: (p.images && p.images.length > 0) ? p.images.map((img: any) => img.imageUrl || img.imageURL || img.url) : (p.mainImageUrl ? [p.mainImageUrl] : []),
+    images: (p.images && p.images.length > 0) ? p.images.map((img: any) => ({ url: img.imageUrl || img.imageURL || img.url, colorId: img.colorId })) : (p.mainImageUrl ? [{ url: p.mainImageUrl }] : []),
     category: p.categoryId || 'Категория не указана',
     sellerId: p.sellerId,
+    sellerSlug: p.sellerSlug,
+    sellerName: p.sellerName,
     description: p.description || '',
     materialComposition: (p as any).materialComposition,
     careInstructions: (p as any).careInstructions,
@@ -183,7 +185,11 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
       inStock: v.inStock ?? v.isActive,
       isActive: v.isActive,
       sellerSku: v.sellerSku,
-      price: v.priceCents ? v.priceCents / 100 : undefined
+      price: v.priceCents ? v.priceCents / 100 : undefined,
+      colorName: (v as any).colorName,
+      colorHex: (v as any).colorHex,
+      colorId: v.colorId,
+      sizeValueId: v.sizeValueId
     }))
   };
 }
@@ -202,7 +208,7 @@ export async function fetchProductReviews(productId: string): Promise<UIReview[]
 export async function fetchProductPreviewByToken(token: string): Promise<UIProduct> {
   const p = await getProductPreviewByToken(token);
 
-  const images = (p.images && p.images.length > 0) ? p.images.map((img: any) => img.imageUrl || img.imageURL || img.url) : (p.mainImageUrl ? [p.mainImageUrl] : [PRODUCT_PLACEHOLDER_IMAGE]);
+  const images = (p.images && p.images.length > 0) ? p.images.map((img: any) => ({ url: img.imageUrl || img.imageURL || img.url, colorId: img.colorId })) : (p.mainImageUrl ? [{ url: p.mainImageUrl }] : [{ url: PRODUCT_PLACEHOLDER_IMAGE }]);
 
   return {
     id: p.id,
@@ -213,9 +219,9 @@ export async function fetchProductPreviewByToken(token: string): Promise<UIProdu
     image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
     images: images,
     category: p.category?.name || '',
-    sellerId: p.seller?.id,
-    sellerSlug: p.seller?.slug,
-    sellerName: p.seller?.brandName,
+    sellerId: p.sellerId,
+    sellerSlug: p.sellerSlug,
+    sellerName: p.sellerName,
     description: p.description || '',
     materialComposition: (p as any).materialComposition,
     careInstructions: (p as any).careInstructions,
@@ -232,7 +238,11 @@ export async function fetchProductPreviewByToken(token: string): Promise<UIProdu
       inStock: v.inStock ?? v.isActive,
       isActive: v.isActive,
       sellerSku: v.sellerSku,
-      price: v.priceCents ? v.priceCents / 100 : undefined
+      price: v.priceCents ? v.priceCents / 100 : undefined,
+      colorName: (v as any).colorName,
+      colorHex: (v as any).colorHex,
+      colorId: v.colorId,
+      sizeValueId: v.sizeValueId
     })) || [],
     isPreview: true,
   };
