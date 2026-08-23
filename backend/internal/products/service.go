@@ -332,13 +332,18 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		return Product{}, fmt.Errorf("%w: cannot edit product in status %s with seller status %s", ErrProductNotEditable, p.Status, seller.Status)
 	}
 
+	targetCategoryID := p.CategoryID
+	if req.CategoryID != nil {
+		targetCategoryID = req.CategoryID
+	}
+
 	if req.MaterialComposition != nil {
 		if err := s.validateMaterialComposition(ctx, req.MaterialComposition, true); err != nil {
 			return Product{}, err
 		}
 	}
-	if p.CategoryID != nil {
-		if err := s.validateCategorySchema(ctx, *p.CategoryID, req.Attributes, req.Variants, req.MaterialComposition, req.SizeChartRows, true); err != nil {
+	if targetCategoryID != nil {
+		if err := s.validateCategorySchema(ctx, *targetCategoryID, req.Attributes, req.Variants, req.MaterialComposition, req.SizeChartRows, true); err != nil {
 			return Product{}, err
 		}
 	}
@@ -383,29 +388,61 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 
 	var variants []ProductVariant
 	var skusToCheck []string
-	
-	getVariantID := func(id *uuid.UUID) uuid.UUID {
-		if id != nil && *id != uuid.Nil {
-			return *id
+
+	existingVariants, err := s.repo.GetProductVariants(ctx, p.ID)
+	if err != nil {
+		return Product{}, err
+	}
+	matchedExisting := make(map[uuid.UUID]bool)
+
+	getVariantID := func(vr ProductVariantRequest) (uuid.UUID, *string) {
+		if vr.ID != nil && *vr.ID != uuid.Nil {
+			matchedExisting[*vr.ID] = true
+			return *vr.ID, vr.Barcode
 		}
-		return uuid.New()
+		if vr.ColorID != nil && vr.SizeValueID != nil {
+			for _, ev := range existingVariants {
+				if !matchedExisting[ev.ID] && ev.ColorID != nil && *ev.ColorID == *vr.ColorID && ev.SizeValueID != nil && *ev.SizeValueID == *vr.SizeValueID {
+					matchedExisting[ev.ID] = true
+					bc := vr.Barcode
+					if bc == nil || *bc == "" {
+						bc = ev.Barcode
+					}
+					return ev.ID, bc
+				}
+			}
+		}
+		if vr.SellerSKU != nil && *vr.SellerSKU != "" {
+			for _, ev := range existingVariants {
+				if !matchedExisting[ev.ID] && ev.SellerSKU != nil && strings.EqualFold(strings.TrimSpace(*ev.SellerSKU), strings.TrimSpace(*vr.SellerSKU)) {
+					matchedExisting[ev.ID] = true
+					bc := vr.Barcode
+					if bc == nil || *bc == "" {
+						bc = ev.Barcode
+					}
+					return ev.ID, bc
+				}
+			}
+		}
+		return uuid.New(), vr.Barcode
 	}
 
 	if req.Variants != nil {
 		now := time.Now()
 		for _, vr := range req.Variants {
+			varID, barcode := getVariantID(vr)
 			v := ProductVariant{
-				ID:         getVariantID(vr.ID),
-				ProductID:  p.ID,
-				SKU:        vr.SKU,
-				Size:       vr.Size,
-				Color:      vr.Color,
+				ID:           varID,
+				ProductID:    p.ID,
+				SKU:          vr.SKU,
+				Size:         vr.Size,
+				Color:        vr.Color,
 				OptionValues: vr.OptionValues,
-			SellerSKU:    vr.SellerSKU,
-			ColorID:      vr.ColorID,
-			SizeValueID:  vr.SizeValueID,
-			ShadeName:    vr.ShadeName,
-				Barcode:    vr.Barcode,
+				SellerSKU:    vr.SellerSKU,
+				ColorID:      vr.ColorID,
+				SizeValueID:  vr.SizeValueID,
+				ShadeName:    vr.ShadeName,
+				Barcode:      barcode,
 				PriceCents:   vr.PriceCents,
 				InitialStock: vr.InitialStock,
 				IsActive:     true,
@@ -416,7 +453,6 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			if v.Barcode == nil || *v.Barcode == "" {
 				generated := "ZMK-" + uuid.New().String()[:12]
 				v.Barcode = &generated
-				
 			}
 			if v.SellerSKU != nil && strings.TrimSpace(*v.SellerSKU) != "" {
 				skusToCheck = append(skusToCheck, strings.ToLower(strings.TrimSpace(*v.SellerSKU)))

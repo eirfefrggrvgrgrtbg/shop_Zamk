@@ -2,10 +2,12 @@ import type { WizardState } from './WizardState';
 
 export function Step8Review({ 
   state, 
+  submitting,
   onSubmit, 
   onPrev 
 }: { 
   state: WizardState; 
+  submitting?: boolean;
   onSubmit: () => void; 
   onPrev: () => void; 
 }) {
@@ -60,8 +62,14 @@ export function Step8Review({
       </div>
 
       <div className="flex justify-between pt-4">
-        <button onClick={onPrev} className="px-4 py-2 border rounded">Назад</button>
-        <button onClick={onSubmit} className="px-4 py-2 bg-black text-white rounded font-medium">Отправить на модерацию</button>
+        <button onClick={onPrev} disabled={submitting} className="px-4 py-2 border rounded hover:bg-gray-50 disabled:opacity-50">Назад</button>
+        <button
+          onClick={onSubmit}
+          disabled={submitting}
+          className="px-4 py-2 bg-black text-white rounded font-medium hover:bg-zinc-800 disabled:opacity-50"
+        >
+          {submitting ? 'Отправка...' : 'Отправить на модерацию'}
+        </button>
       </div>
     </div>
   );

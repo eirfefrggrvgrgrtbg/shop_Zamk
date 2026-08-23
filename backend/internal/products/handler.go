@@ -94,6 +94,28 @@ func (h *Handler) parseUUIDParam(w http.ResponseWriter, r *http.Request, param s
 // Seller Handlers
 // ---------------------------------------------------------
 
+func isDomainValidationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var valErr *ValidationError
+	if errors.As(err, &valErr) || errors.Is(err, ErrValidation) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "validation failed") ||
+		strings.Contains(msg, "is required") ||
+		strings.Contains(msg, "cannot use non-leaf") ||
+		strings.Contains(msg, "cannot use inactive") ||
+		strings.Contains(msg, "not valid for this category") ||
+		strings.Contains(msg, "material composition") ||
+		strings.Contains(msg, "material percentage") ||
+		strings.Contains(msg, "required product attribute") ||
+		strings.Contains(msg, "required variant attribute") ||
+		strings.Contains(msg, "size chart") ||
+		strings.Contains(msg, "category schema configuration error")
+}
+
 func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	userID, ok := h.getUserID(w, r)
 	if !ok {
@@ -137,6 +159,10 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, ErrSellerHasMultiplePrimaryBrands) {
 			h.writeError(w, http.StatusConflict, "SELLER_MULTIPLE_PRIMARY_BRANDS", "Seller has multiple active primary brands configured")
+			return
+		}
+		if isDomainValidationError(err) {
+			h.writeError(w, http.StatusUnprocessableEntity, "validation_error", err.Error())
 			return
 		}
 		fmt.Println("Create Product Error:", err)
@@ -247,6 +273,10 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusConflict, "SELLER_MULTIPLE_PRIMARY_BRANDS", "Seller has multiple active primary brands configured")
 			return
 		}
+		if isDomainValidationError(err) {
+			h.writeError(w, http.StatusUnprocessableEntity, "validation_error", err.Error())
+			return
+		}
 		log.Printf("[ERROR] Failed to update product: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update product")
 		return
@@ -355,6 +385,11 @@ func (h *Handler) SubmitForModeration(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusForbidden, "seller_not_active", "Магазин ещё не активирован. Отправка товаров на модерацию будет доступна после проверки.")
 			return
 		}
+		if isDomainValidationError(err) {
+			h.writeError(w, http.StatusUnprocessableEntity, "validation_error", err.Error())
+			return
+		}
+		log.Printf("[ERROR] Failed to submit product: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to submit product")
 		return
 	}

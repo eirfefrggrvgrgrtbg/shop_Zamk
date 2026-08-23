@@ -266,10 +266,48 @@ func (r *Repository) MergeProductVariants(ctx context.Context, productID uuid.UU
 		existingMap[v.ID] = v
 	}
 
+	claimedExisting := make(map[uuid.UUID]bool)
 	incomingMap := make(map[uuid.UUID]bool)
 
-	for _, v := range variants {
+	// Phase 1: resolve variant IDs (by ID or by canonical color+size combination)
+	for i := range variants {
+		v := &variants[i]
+		if _, exists := existingMap[v.ID]; exists && !claimedExisting[v.ID] {
+			claimedExisting[v.ID] = true
+			incomingMap[v.ID] = true
+			continue
+		}
+
+		// Try matching by canonical combination (color_id + size_value_id)
+		if v.ColorID != nil && v.SizeValueID != nil {
+			for _, ev := range existingVariants {
+				if !claimedExisting[ev.ID] && ev.ColorID != nil && *ev.ColorID == *v.ColorID && ev.SizeValueID != nil && *ev.SizeValueID == *v.SizeValueID {
+					v.ID = ev.ID
+					if v.Barcode == nil || *v.Barcode == "" {
+						v.Barcode = ev.Barcode
+					}
+					claimedExisting[ev.ID] = true
+					incomingMap[ev.ID] = true
+					break
+				}
+			}
+		}
 		incomingMap[v.ID] = true
+	}
+
+	// Phase 2: Soft delete any existing variants not in incomingMap BEFORE inserting/updating
+	for id := range existingMap {
+		if !incomingMap[id] {
+			softDeleteQuery := `UPDATE product_variants SET is_active = false, updated_at = now() WHERE id = $1 AND product_id = $2`
+			_, err := r.db.Exec(ctx, softDeleteQuery, id, productID)
+			if err != nil {
+				return fmt.Errorf("failed to soft-delete variant: %w", err)
+			}
+		}
+	}
+
+	// Phase 3: Insert or update incoming variants
+	for _, v := range variants {
 		_, exists := existingMap[v.ID]
 
 		if exists {
@@ -294,17 +332,6 @@ func (r *Repository) MergeProductVariants(ctx context.Context, productID uuid.UU
 			)
 			if err != nil {
 				return fmt.Errorf("failed to insert variant: %w", err)
-			}
-
-		}
-	}
-
-	for id := range existingMap {
-		if !incomingMap[id] {
-			softDeleteQuery := `UPDATE product_variants SET is_active = false, updated_at = now() WHERE id = $1 AND product_id = $2`
-			_, err := r.db.Exec(ctx, softDeleteQuery, id, productID)
-			if err != nil {
-				return fmt.Errorf("failed to soft-delete variant: %w", err)
 			}
 		}
 	}

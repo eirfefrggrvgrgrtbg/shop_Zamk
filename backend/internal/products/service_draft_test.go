@@ -198,3 +198,114 @@ func TestDraftSaveSemantics(t *testing.T) {
 		require.NotEmpty(t, p.ID)
 	})
 }
+
+func TestDraftUpdate_PhotoToReviewLifecycle(t *testing.T) {
+	dbClient, svc, sellerID := setupBlockATestDB(t)
+	pool := dbClient.Pool
+	ctx := context.Background()
+
+	// Get a valid leaf category
+	var catID uuid.UUID
+	err := pool.QueryRow(ctx, "SELECT id FROM categories WHERE is_active = true AND NOT EXISTS (SELECT 1 FROM categories c2 WHERE c2.parent_id = categories.id) LIMIT 1").Scan(&catID)
+	require.NoError(t, err)
+
+	var colorID uuid.UUID
+	err = pool.QueryRow(ctx, "SELECT id FROM colors WHERE is_active = true LIMIT 1").Scan(&colorID)
+	require.NoError(t, err)
+
+	var sizeValueID uuid.UUID
+	err = pool.QueryRow(ctx, "SELECT id FROM size_values WHERE is_active = true LIMIT 1").Scan(&sizeValueID)
+	require.NoError(t, err)
+
+	// 1. Initial creation at Photo step (autosave)
+	createReq := products.CreateProductRequest{
+		Title:      "Photo Step Draft " + uuid.New().String(),
+		CategoryID: &catID,
+		Currency:   "RUB",
+		Variants: []products.ProductVariantRequest{
+			{
+				ColorID:     &colorID,
+				SizeValueID: &sizeValueID,
+			},
+		},
+	}
+	p1, err := svc.CreateProductForSeller(ctx, sellerID, createReq)
+	require.NoError(t, err)
+	require.NotEmpty(t, p1.ID)
+	require.Len(t, p1.Variants, 1)
+	initialVariantID := p1.Variants[0].ID
+	initialBarcode := p1.Variants[0].Barcode
+	require.NotEmpty(t, initialVariantID)
+	require.NotEmpty(t, initialBarcode)
+
+	// 2. Review step: update latest state without variant IDs
+	price := int64(150000)
+	sku := "SKU-" + uuid.New().String()[:8]
+	titleUpd := "Updated Title " + uuid.New().String()
+	updateReq := products.UpdateProductRequest{
+		Title:      &titleUpd,
+		CategoryID: &catID,
+		Variants: []products.ProductVariantRequest{
+			{
+				ColorID:     &colorID,
+				SizeValueID: &sizeValueID,
+				PriceCents:  &price,
+				SellerSKU:   &sku,
+			},
+		},
+	}
+
+	p2, err := svc.UpdateProductForSeller(ctx, sellerID, p1.ID, updateReq)
+	require.NoError(t, err)
+	require.Equal(t, p1.ID, p2.ID, "Same product ID must be preserved")
+	require.Len(t, p2.Variants, 1)
+	require.Equal(t, initialVariantID, p2.Variants[0].ID, "Variant ID must be preserved via canonical combination matching")
+	require.Equal(t, initialBarcode, p2.Variants[0].Barcode, "Barcode must be preserved")
+	require.Equal(t, &price, p2.Variants[0].PriceCents)
+	require.Equal(t, &sku, p2.Variants[0].SellerSKU)
+
+	// Assert no inventory created from save
+	var invCount int
+	err = pool.QueryRow(ctx, "SELECT count(*) FROM inventory_items WHERE product_id = $1", p1.ID).Scan(&invCount)
+	require.NoError(t, err)
+	require.Equal(t, 0, invCount, "No inventory should be created from draft save/update")
+}
+
+func TestSubmitModeration_DuplicateAndLifecycle(t *testing.T) {
+	dbClient, svc, sellerID := setupBlockATestDB(t)
+	pool := dbClient.Pool
+	ctx := context.Background()
+
+	// Get a valid leaf category
+	var catID uuid.UUID
+	err := pool.QueryRow(ctx, "SELECT id FROM categories WHERE is_active = true AND NOT EXISTS (SELECT 1 FROM categories c2 WHERE c2.parent_id = categories.id) LIMIT 1").Scan(&catID)
+	require.NoError(t, err)
+
+	// 1. Create a product draft without variants
+	createReq := products.CreateProductRequest{
+		Title:      "Draft Incomplete " + uuid.New().String(),
+		CategoryID: &catID,
+		Currency:   "RUB",
+	}
+	p, err := svc.CreateProductForSeller(ctx, sellerID, createReq)
+	require.NoError(t, err)
+
+	// 2. Moderation validation failure
+	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "moderation validation failed")
+
+	// Draft remains in draft status after failed submission
+	pSaved, err := svc.GetSellerProduct(ctx, sellerID, p.ID)
+	require.NoError(t, err)
+	require.Equal(t, products.StatusDraft, pSaved.Status)
+
+	// 3. Second call on already transitioned product
+	// Set status to pending_moderation manually to test double submission rejection
+	_, err = pool.Exec(ctx, "UPDATE products SET status = 'pending_moderation' WHERE id = $1", p.ID)
+	require.NoError(t, err)
+
+	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
+	require.Error(t, err)
+	require.ErrorIs(t, err, products.ErrInvalidStatusTransition, "Submitting product already in pending_moderation must fail")
+}

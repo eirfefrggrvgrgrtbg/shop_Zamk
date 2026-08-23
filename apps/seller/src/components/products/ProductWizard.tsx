@@ -348,50 +348,74 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
     };
   };
 
+  const syncStateFromProduct = (p: any, partialUpdate: Partial<WizardState> = {}) => {
+    const updatedVariants = [...state.variants];
+    if (p.variants && Array.isArray(p.variants)) {
+      p.variants.forEach((pv: any) => {
+        const idx = updatedVariants.findIndex(v =>
+          (v.id && v.id === pv.id) ||
+          (v.colorId === pv.colorId && v.sizeValueId === pv.sizeValueId) ||
+          (v.sellerSku && pv.sellerSku && v.sellerSku.trim().toLowerCase() === pv.sellerSku.trim().toLowerCase())
+        );
+        if (idx !== -1) {
+          updatedVariants[idx] = {
+            ...updatedVariants[idx],
+            id: pv.id,
+            barcode: pv.barcode || updatedVariants[idx].barcode,
+            sellerSku: pv.sellerSku || updatedVariants[idx].sellerSku,
+            priceCents: pv.priceCents !== undefined ? pv.priceCents : updatedVariants[idx].priceCents
+          };
+        }
+      });
+    }
+
+    const nextState: WizardState = {
+      ...state,
+      ...partialUpdate,
+      id: p.id || state.id,
+      variants: updatedVariants
+    };
+    setState(nextState);
+    setLastSavedStateStr(normalizeState(nextState));
+    return nextState;
+  };
+
   const handleSaveDraft = async (skipNavigate = false): Promise<string | undefined> => {
+    if (savingDraft || submitting) return state.id;
     try {
       setSavingDraft(true);
       const payload = buildPayload();
-      
 
       if (state.id) {
-        await updateSellerProduct(state.id, payload);
+        const p = await updateSellerProduct(state.id, payload);
+        syncStateFromProduct(p);
         showToast('Черновик обновлен', 'success');
-        setLastSavedStateStr(normalizeState(state));
         return state.id;
       } else {
         const p = await createSellerProduct(payload);
+        syncStateFromProduct(p, { id: p.id });
         showToast('Черновик сохранен', 'success');
-        setLastSavedStateStr(normalizeState(state));
         if (!skipNavigate) {
           navigate(`/products/${p.id}/edit`, { replace: true });
-        } else {
-          // If we skip navigate, we must update the state ID manually so the wizard knows it's persisted
-          updateState({ id: p.id });
         }
         return p.id;
       }
-
     } catch (err: any) {
-      showToast('Ошибка сохранения: ' + err.message, 'error');
+      showToast('Ошибка сохранения: ' + (err.message || 'Не удалось сохранить товар'), 'error');
       return undefined;
     } finally {
       setSavingDraft(false);
     }
   };
 
-  
-
   const handleInitialSubmit = async () => {
-    if (!isEdit || !initialData?.id) {
-      showToast('Сначала сохраните черновик перед модерацией.', 'error');
-      return;
-    }
+    if (submitting || savingDraft) return;
+
     if (initialData?.status === 'PUBLISHED') {
       if (priceDirty && !contentDirty) {
         // Price only flow!
         try {
-
+          setSubmitting(true);
           const saved = JSON.parse(lastSavedStateStr);
           const changedVariants = state.variants.filter(v => v.active).filter(v => {
             if (!v.id) return false;
@@ -406,6 +430,8 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
           setLastSavedStateStr(normalizeState(state));
         } catch (err: any) {
           showToast('Ошибка обновления цен: ' + err.message, 'error');
+        } finally {
+          setSubmitting(false);
         }
         return;
       }
@@ -415,13 +441,13 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
     }
   };
 
-
-
-
   const executeSubmit = async (strategy: 'CONTINUE_SELLING' | 'HIDE') => {
+    if (submitting) return;
     try {
       setSubmitting(true);
       const payload = buildPayload();
+
+      let targetId = state.id;
 
       if (initialData?.status === 'PUBLISHED') {
         if (priceDirty) {
@@ -444,18 +470,28 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         }
 
         const isContinue = strategy === 'CONTINUE_SELLING';
-        await updateSellerProduct(initialData.id, { ...payload, continueSelling: isContinue });
+        const p = await updateSellerProduct(initialData.id, { ...payload, continueSelling: isContinue });
+        syncStateFromProduct(p);
+        targetId = initialData.id;
+      } else if (targetId) {
+        const p = await updateSellerProduct(targetId, payload);
+        syncStateFromProduct(p);
       } else {
-        await updateSellerProduct(initialData!.id, payload);
+        const p = await createSellerProduct(payload);
+        syncStateFromProduct(p, { id: p.id });
+        targetId = p.id;
+      }
+
+      if (!targetId) {
+        throw new Error('Не удалось получить идентификатор товара');
       }
       
-      await submitSellerProductModeration(initialData!.id, undefined);
+      await submitSellerProductModeration(targetId, undefined);
       setShowPublishedModal(false);
       showToast('Товар отправлен на модерацию!', 'success');
-      setLastSavedStateStr(normalizeState(state));
       navigate('/products');
     } catch (err: any) {
-      showToast('Ошибка модерации: ' + err.message, 'error');
+      showToast('Ошибка модерации: ' + (err.message || 'Не удалось отправить на модерацию'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -475,7 +511,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         <div className="flex items-center space-x-3">
           <button
             onClick={() => handleSaveDraft(false)}
-            disabled={savingDraft || !state.title}
+            disabled={savingDraft || submitting || !state.title}
             className="px-4 py-2 border rounded-md shadow-sm text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
           >
             {savingDraft ? 'Сохранение...' : 'Сохранить черновик'}
@@ -529,7 +565,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
           {step === 5 && <Step5SizeChart state={state} updateState={updateState} schema={schema} onNext={() => setStep(6)} onPrev={() => setStep(4)} />}
           {step === 6 && <Step6Media state={state} updateState={updateState} schema={schema} onNext={() => setStep(7)} onPrev={() => setStep(5)} onError={(msg) => showToast(msg, 'error')} onSaveDraft={() => handleSaveDraft(true)} />}
           {step === 7 && <Step7Pricing state={state} updateState={updateState} onNext={() => setStep(8)} onPrev={() => setStep(6)} onError={(msg) => showToast(msg, 'error')} />}
-          {step === 8 && <Step8Review state={state} onPrev={() => setStep(7)} onSubmit={handleInitialSubmit} />}
+          {step === 8 && <Step8Review state={state} submitting={submitting} onPrev={() => setStep(7)} onSubmit={handleInitialSubmit} />}
         </div>
       </div>
     

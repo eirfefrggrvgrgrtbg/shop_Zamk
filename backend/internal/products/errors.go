@@ -19,7 +19,16 @@ var (
 	ErrPreviewUnavailable      = errors.New("preview is currently unavailable")
 	ErrPreviewProductUnavailable = errors.New("product is not available for preview")
 	ErrRedisUnavailable        = errors.New("redis service unavailable")
+	ErrValidation              = errors.New("validation failed")
 )
+
+type ValidationError struct {
+	Message string
+}
+
+func (e *ValidationError) Error() string {
+	return e.Message
+}
 
 type ErrNotPublishable struct {
 	Reasons []string
