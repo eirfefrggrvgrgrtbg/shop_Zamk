@@ -131,10 +131,13 @@ export interface ProductSummary {
 
 export interface ProductDetail extends ProductSummary {
   description: string;
-  images: string[];
+  images: any[];
   variants?: ProductVariant[];
   material?: string;
   color?: string;
+  materialComposition?: AdminProductMaterialComposition[];
+  careInstructions?: string;
+  sizeChart?: AdminProductSizeChart;
 }
 
 export interface ProductVariant {
@@ -143,6 +146,10 @@ export interface ProductVariant {
   sku?: string;
   size?: string;
   color?: string;
+  sellerSku?: string;
+  colorId?: string;
+  sizeValueId?: string;
+  shadeName?: string;
   optionValues?: any;
   barcode?: string;
   priceCents?: number;

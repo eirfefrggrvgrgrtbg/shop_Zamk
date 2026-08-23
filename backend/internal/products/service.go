@@ -151,7 +151,7 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 			ColorID:      vr.ColorID,
 			SizeValueID:  vr.SizeValueID,
 			ShadeName:    vr.ShadeName,
-			Barcode:      vr.Barcode,
+			Barcode:      nil, // Seller cannot provide barcode
 			PriceCents:   vr.PriceCents,
 			InitialStock: vr.InitialStock,
 			IsActive:     true,
@@ -172,10 +172,6 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 			v.Attributes = vAttrs
 		}
 		if v.Barcode == nil || *v.Barcode == "" {
-				generated := "ZMK-" + uuid.New().String()[:12]
-				v.Barcode = &generated
-			}
-			if v.Barcode == nil || *v.Barcode == "" {
 				generated := "ZMK-" + uuid.New().String()[:12]
 				v.Barcode = &generated
 			}
@@ -398,17 +394,20 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 	getVariantID := func(vr ProductVariantRequest) (uuid.UUID, *string) {
 		if vr.ID != nil && *vr.ID != uuid.Nil {
 			matchedExisting[*vr.ID] = true
-			return *vr.ID, vr.Barcode
+			var existingBc *string
+			for _, ev := range existingVariants {
+				if ev.ID == *vr.ID {
+					existingBc = ev.Barcode
+					break
+				}
+			}
+			return *vr.ID, existingBc
 		}
 		if vr.ColorID != nil && vr.SizeValueID != nil {
 			for _, ev := range existingVariants {
 				if !matchedExisting[ev.ID] && ev.ColorID != nil && *ev.ColorID == *vr.ColorID && ev.SizeValueID != nil && *ev.SizeValueID == *vr.SizeValueID {
 					matchedExisting[ev.ID] = true
-					bc := vr.Barcode
-					if bc == nil || *bc == "" {
-						bc = ev.Barcode
-					}
-					return ev.ID, bc
+					return ev.ID, ev.Barcode
 				}
 			}
 		}
@@ -416,15 +415,11 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			for _, ev := range existingVariants {
 				if !matchedExisting[ev.ID] && ev.SellerSKU != nil && strings.EqualFold(strings.TrimSpace(*ev.SellerSKU), strings.TrimSpace(*vr.SellerSKU)) {
 					matchedExisting[ev.ID] = true
-					bc := vr.Barcode
-					if bc == nil || *bc == "" {
-						bc = ev.Barcode
-					}
-					return ev.ID, bc
+					return ev.ID, ev.Barcode
 				}
 			}
 		}
-		return uuid.New(), vr.Barcode
+		return uuid.New(), nil
 	}
 
 	if req.Variants != nil {
@@ -1262,6 +1257,9 @@ func mapToPublicProduct(p Product) PublicProduct {
 		AverageRating:    p.AverageRating,
 		ReviewsCount:     p.ReviewsCount,
 		InStock:          p.InStock,
+		MaterialComposition: p.MaterialComposition,
+		SizeChart:           p.SizeChart,
+
 		CreatedAt:        p.CreatedAt,
 		Rating:           p.Rating,
 	}
@@ -1272,6 +1270,11 @@ func mapToPublicProduct(p Product) PublicProduct {
 			ProductID:  v.ProductID,
 			Size:       v.Size,
 			Color:      v.Color,
+			SellerSKU:   v.SellerSKU,
+			ColorID:     v.ColorID,
+			SizeValueID: v.SizeValueID,
+			ShadeName:   v.ShadeName,
+			OptionValues: v.OptionValues,
 			PriceCents: v.PriceCents,
 			IsActive:   v.IsActive,
 			InStock:    v.InStock,

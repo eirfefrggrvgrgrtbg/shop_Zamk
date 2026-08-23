@@ -363,8 +363,10 @@ func TestBlockABarcodeAndSKUUniqueness(t *testing.T) {
             { SellerSKU: ptr("DEF-456"), Barcode: &bcode },
         },
 	}
-    _, err = svc.CreateProductForSeller(ctx, userID, req3)
+    p3, err := svc.CreateProductForSeller(ctx, userID, req3)
     require.NoError(t, err)
+    require.NotEqual(t, bcode, *p3.Variants[0].Barcode)
+    require.Contains(t, *p3.Variants[0].Barcode, "ZMK-")
 
     req4 := products.CreateProductRequest{
 		Title: "Prod 4 " + uuid.New().String(),
@@ -372,8 +374,9 @@ func TestBlockABarcodeAndSKUUniqueness(t *testing.T) {
             { SellerSKU: ptr("DEF-457"), Barcode: &bcode },
         },
 	}
-    _, err = svc.CreateProductForSeller(ctx, userID, req4)
-    require.Error(t, err)
+    p4, err := svc.CreateProductForSeller(ctx, userID, req4)
+    require.NoError(t, err)
+    require.NotEqual(t, *p3.Variants[0].Barcode, *p4.Variants[0].Barcode)
 }
 
 func TestBlockASizeChartValidation(t *testing.T) {

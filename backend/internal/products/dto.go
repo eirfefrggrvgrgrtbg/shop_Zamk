@@ -154,6 +154,9 @@ type PublicProduct struct {
 	InStock          *bool                  `json:"inStock,omitempty"`
 	CreatedAt        time.Time              `json:"createdAt"`
 
+	MaterialComposition []ProductMaterialComposition `json:"materialComposition,omitempty"`
+	SizeChart   *ProductSizeChart `json:"sizeChart,omitempty"`
+
 	Variants []PublicProductVariant `json:"variants,omitempty"`
 	Images   []PublicProductImage   `json:"images,omitempty"`
 	ContinueSelling  *bool                   `json:"continueSelling,omitempty"`

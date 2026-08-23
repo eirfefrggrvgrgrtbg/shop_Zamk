@@ -166,10 +166,13 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
     price: p.priceCents / 100,
     oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
     image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
-    images: p.images || (p.mainImageUrl ? [p.mainImageUrl] : []),
+    images: (p.images && p.images.length > 0) ? p.images.map((img: any) => img.imageUrl || img.imageURL || img.url) : (p.mainImageUrl ? [p.mainImageUrl] : []),
     category: p.categoryId || 'Категория не указана',
     sellerId: p.sellerId,
     description: p.description || '',
+    materialComposition: (p as any).materialComposition,
+    careInstructions: (p as any).careInstructions,
+    sizeChart: (p as any).sizeChart,
     rating: p.rating?.average,
     reviewsCount: p.rating?.count,
     sizes: p.variants?.map(v => v.size).filter(Boolean) as string[] || [],
@@ -179,6 +182,7 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
       color: v.color,
       inStock: v.inStock ?? v.isActive,
       isActive: v.isActive,
+      sellerSku: v.sellerSku,
       price: v.priceCents ? v.priceCents / 100 : undefined
     }))
   };
@@ -198,9 +202,7 @@ export async function fetchProductReviews(productId: string): Promise<UIReview[]
 export async function fetchProductPreviewByToken(token: string): Promise<UIProduct> {
   const p = await getProductPreviewByToken(token);
 
-  const images = (p.images && p.images.length > 0)
-    ? p.images.map((img: any) => img.url)
-    : (p.mainImageUrl ? [p.mainImageUrl] : [PRODUCT_PLACEHOLDER_IMAGE]);
+  const images = (p.images && p.images.length > 0) ? p.images.map((img: any) => img.imageUrl || img.imageURL || img.url) : (p.mainImageUrl ? [p.mainImageUrl] : [PRODUCT_PLACEHOLDER_IMAGE]);
 
   return {
     id: p.id,
@@ -215,6 +217,9 @@ export async function fetchProductPreviewByToken(token: string): Promise<UIProdu
     sellerSlug: p.seller?.slug,
     sellerName: p.seller?.brandName,
     description: p.description || '',
+    materialComposition: (p as any).materialComposition,
+    careInstructions: (p as any).careInstructions,
+    sizeChart: (p as any).sizeChart,
     materials: p.characteristics?.['Материал'] || '',
     rating: p.rating,
     reviewsCount: p.reviewsCount,
@@ -226,6 +231,7 @@ export async function fetchProductPreviewByToken(token: string): Promise<UIProdu
       color: v.color,
       inStock: v.inStock ?? v.isActive,
       isActive: v.isActive,
+      sellerSku: v.sellerSku,
       price: v.priceCents ? v.priceCents / 100 : undefined
     })) || [],
     isPreview: true,

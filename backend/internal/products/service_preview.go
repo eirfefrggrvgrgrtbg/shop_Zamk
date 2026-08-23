@@ -156,6 +156,9 @@ func (s *Service) GetProductPreviewByToken(ctx context.Context, token string) (*
 		CategoryID:    p.CategoryID,
 		BrandID:       p.BrandID,
 		Status:        p.Status,
+		MaterialComposition: p.MaterialComposition,
+		SizeChart:           p.SizeChart,
+
 	}
 
 	variants, err := s.repo.GetProductVariants(ctx, p.ID)
@@ -166,6 +169,11 @@ func (s *Service) GetProductPreviewByToken(ctx context.Context, token string) (*
 				ProductID:  v.ProductID,
 				Size:       v.Size,
 				Color:      v.Color,
+				SellerSKU:   v.SellerSKU,
+				ColorID:     v.ColorID,
+				SizeValueID: v.SizeValueID,
+				ShadeName:   v.ShadeName,
+				OptionValues: v.OptionValues,
 				PriceCents: v.PriceCents,
 				IsActive:   v.IsActive,
 				InStock:    v.InStock,

@@ -26,9 +26,9 @@ const SIZE_CHART = {
   ],
 };
 
-const getProductSpecs = (product: Product) =>
+const getProductSpecs = (product: Product, selectedVariant?: any) =>
   [
-    { label: 'Артикул', value: product.id.toUpperCase() },
+    (selectedVariant?.sellerSku || !product.id) ? { label: 'Артикул', value: (selectedVariant?.sellerSku || product.id).toUpperCase() } : null,
     product.brand && product.brand !== 'Бренд не указан' ? { label: 'Бренд', value: product.brand } : null,
     product.category && product.category !== 'Категория не указана' ? { label: 'Категория', value: product.category } : null,
     product.materials ? { label: 'Материал', value: product.materials } : null,
@@ -142,9 +142,16 @@ export function ProductDetail() {
     : (product.image ? [product.image] : [defaultImage]);
   // We use brandId for link but use string brand for name
   const liked = isFavorite(product.id);
-  const specs = getProductSpecs(product);
+
   const requiresSizeSelection = Boolean(product.sizes && product.sizes.length > 0 && !product.sizes.includes('Единый'));
   const selectableSizes = product.sizes ?? [];
+
+  const selectedVariant = product.variants?.find(v =>
+    v.size === activeSize &&
+    (!product.colors || !product.colors[activeColor] || v.color === product.colors[activeColor].name)
+  ) || product.variants?.[0];
+
+  const specs = getProductSpecs(product, selectedVariant);
 
   const handleAddToCart = async () => {
     if (product.isPreview) return;
@@ -502,10 +509,21 @@ export function ProductDetail() {
               </AccordionSection>
 
               <AccordionSection title="Состав и уход">
-                <p className="text-sm text-graphite-light dark:text-white/70 leading-relaxed mb-3">
-                  {product.materials || 'Информация пока не указана.'}
-                </p>
-                {!product.materials && <p className="text-xs text-ash">Данные появятся позже.</p>}
+                {product.materialComposition && product.materialComposition.length > 0 ? (
+                  <p className="text-sm text-graphite-light dark:text-white/70 leading-relaxed mb-3">
+                    Состав: {product.materialComposition.map((mc: any) => `${mc.materialName} — ${mc.percentage}%`).join(', ')}
+                  </p>
+                ) : null}
+                {product.careInstructions ? (
+                  <p className="text-sm text-graphite-light dark:text-white/70 leading-relaxed mb-3">
+                    Уход: {product.careInstructions}
+                  </p>
+                ) : null}
+                {!(product.materialComposition && product.materialComposition.length > 0) && !product.careInstructions && (
+                  <p className="text-sm text-graphite-light dark:text-white/70 leading-relaxed mb-3">
+                    {product.materials || 'Информация пока не указана.'}
+                  </p>
+                )}
               </AccordionSection>
 
               <AccordionSection title="Характеристики">
@@ -608,33 +626,34 @@ export function ProductDetail() {
       </div>
       {/* Size Chart Modal */}
       <Modal isOpen={showSizeChart} onClose={() => setShowSizeChart(false)} title="Размерная сетка">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border-lighter dark:border-white/10">
-                {SIZE_CHART.headers.map((header) => (
-                  <th key={header} className="py-3 px-4 text-left font-medium text-graphite dark:text-white">
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {SIZE_CHART.rows.map((row, i) => (
-                <tr key={i} className="border-b border-border-lighter dark:border-white/10">
-                  {row.map((cell, j) => (
-                    <td key={j} className={cn("py-3 px-4", j === 0 ? "font-medium text-graphite dark:text-white" : "text-ash")}>
-                      {cell}
-                    </td>
+        {product.sizeChart && product.sizeChart.rows ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border-lighter dark:border-white/10">
+                  <th className="py-3 px-4 text-left font-medium text-graphite dark:text-white">Размер</th>
+                  {Object.keys(product.sizeChart.rows[0]?.measurements || {}).map((header) => (
+                    <th key={header} className="py-3 px-4 text-left font-medium text-graphite dark:text-white">
+                      {header}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-4 text-xs text-ash">
-          * Размеры указаны в сантиметрах. Рекомендуем измерить ваши параметры и сравнить с таблицей.
-        </p>
+              </thead>
+              <tbody>
+                {product.sizeChart.rows.map((row: any, i: number) => (
+                  <tr key={i} className="border-b border-border-lighter dark:border-white/10">
+                    <td className="py-3 px-4 font-medium text-graphite dark:text-white">{row.sizeValueName}</td>
+                    {Object.values(row.measurements || {}).map((val: any, j: number) => (
+                      <td key={j} className="py-3 px-4 text-ash">{val}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center text-ash p-4">Размерная сетка недоступна</div>
+        )}
       </Modal>
     </div>
   );

@@ -22,6 +22,9 @@ export interface Product {
   styles?: string[];
   description?: string;
   materials?: string;
+  materialComposition?: any[];
+  careInstructions?: string;
+  sizeChart?: any;
   sizes?: string[];
   colors?: { name: string; hex: string }[];
   variants?: {
@@ -30,6 +33,7 @@ export interface Product {
     color?: string;
     inStock?: boolean;
     isActive?: boolean;
+    sellerSku?: string;
     priceCents?: number;
   }[];
   isNew?: boolean;
