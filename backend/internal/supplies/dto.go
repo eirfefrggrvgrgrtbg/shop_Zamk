@@ -12,7 +12,6 @@ type CreateSupplyRequest struct {
 	TrackingNumber      *string                  `json:"trackingNumber,omitempty"`
 	ExpectedArrivalDate *time.Time               `json:"expectedArrivalDate,omitempty"`
 	Items               []CreateSupplyItemRequest `json:"items"`
-	Boxes               []CreateSupplyBoxRequest  `json:"boxes"`
 }
 
 type CreateSupplyItemRequest struct {

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
@@ -25,38 +26,18 @@ func NewService(db postgres.DBTX, repo *Repository) *Service {
 }
 
 func (s *Service) CreateSupply(ctx context.Context, sellerID uuid.UUID, req CreateSupplyRequest) (*Supply, error) {
-	// Validate total quantities match box quantities
-	variantExpected := make(map[uuid.UUID]int)
+	if len(req.Items) == 0 {
+		return nil, ErrInvalidQuantities
+	}
+
 	var variantIDs []uuid.UUID
 	for _, item := range req.Items {
-		if _, ok := variantExpected[item.VariantID]; !ok {
-			variantIDs = append(variantIDs, item.VariantID)
-		}
-		variantExpected[item.VariantID] += item.ExpectedQuantity
+		variantIDs = append(variantIDs, item.VariantID)
 	}
 
 	err := s.repo.VerifyVariantsOwnership(ctx, sellerID, variantIDs)
 	if err != nil {
 		return nil, ErrUnauthorized
-	}
-
-	variantBoxed := make(map[uuid.UUID]int)
-	for _, box := range req.Boxes {
-		for _, bi := range box.Items {
-			variantBoxed[bi.VariantID] += bi.Quantity
-		}
-	}
-
-	for vID, exp := range variantExpected {
-		if boxed := variantBoxed[vID]; exp != boxed {
-			return nil, ErrInvalidQuantities
-		}
-	}
-
-	for vID, boxed := range variantBoxed {
-		if exp := variantExpected[vID]; exp != boxed {
-			return nil, ErrInvalidQuantities
-		}
 	}
 
 	// Begin TX
@@ -98,9 +79,23 @@ func (s *Service) CreateSupply(ctx context.Context, sellerID uuid.UUID, req Crea
 		UpdatedAt:           now,
 	}
 
-	// Build Items
-	variantToSupplyItemID := make(map[uuid.UUID]uuid.UUID)
+	// Implicit V1 Box
+	boxToken, err := generateRandomToken()
+	if err != nil {
+		return nil, err
+	}
+	defaultBox := SupplyBox{
+		ID:        uuid.New(),
+		SupplyID:  supply.ID,
+		BoxNumber: fmt.Sprintf("%s-B1", supplyNumber),
+		QRToken:   &boxToken,
+		CreatedAt: now,
+	}
+
 	for _, reqItem := range req.Items {
+		if reqItem.ExpectedQuantity <= 0 {
+			continue // skip empty
+		}
 		item := SupplyItem{
 			ID:               uuid.New(),
 			SupplyID:         supply.ID,
@@ -110,32 +105,16 @@ func (s *Service) CreateSupply(ctx context.Context, sellerID uuid.UUID, req Crea
 			UpdatedAt:        now,
 		}
 		supply.Items = append(supply.Items, item)
-		variantToSupplyItemID[item.VariantID] = item.ID
+		
+		bi := SupplyBoxItem{
+			BoxID:        defaultBox.ID,
+			SupplyItemID: item.ID,
+			Quantity:     item.ExpectedQuantity,
+		}
+		defaultBox.Items = append(defaultBox.Items, bi)
 	}
 
-	// Build Boxes
-	for _, reqBox := range req.Boxes {
-		boxToken, err := generateRandomToken()
-		if err != nil {
-			return nil, err
-		}
-		box := SupplyBox{
-			ID:        uuid.New(),
-			SupplyID:  supply.ID,
-			BoxNumber: reqBox.BoxNumber,
-			QRToken:   &boxToken,
-			CreatedAt: now,
-		}
-		for _, reqBoxItem := range reqBox.Items {
-			bi := SupplyBoxItem{
-				BoxID:        box.ID,
-				SupplyItemID: variantToSupplyItemID[reqBoxItem.VariantID],
-				Quantity:     reqBoxItem.Quantity,
-			}
-			box.Items = append(box.Items, bi)
-		}
-		supply.Boxes = append(supply.Boxes, box)
-	}
+	supply.Boxes = append(supply.Boxes, defaultBox)
 
 	err = repoTx.CreateSupply(ctx, supply)
 	if err != nil {

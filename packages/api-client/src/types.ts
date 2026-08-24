@@ -325,6 +325,7 @@ export interface SellerSupplyBox {
   supplyId: string;
   boxNumber: string;
   barcode: string;
+  qrToken?: string;
   items: SellerSupplyBoxItem[];
 }
 
@@ -345,6 +346,7 @@ export interface SellerSupply {
   sellerId: string;
   humanId: string;
   supplyNumber?: string;
+  qrToken?: string;
   status: string;
   handoffMethod: string;
   totalExpectedBoxes: number;
@@ -356,6 +358,7 @@ export interface SellerSupply {
   items?: SellerSupplyItem[];
   boxes?: SellerSupplyBox[];
 }
+
 
 export interface CreateSupplyItemRequest {
   variantId: string;
@@ -373,8 +376,9 @@ export interface CreateSupplyBoxRequest {
 
 export interface CreateSupplyRequest {
   handoffMethod: string;
+  carrierName?: string;
+  trackingNumber?: string;
   items: CreateSupplyItemRequest[];
-  boxes: CreateSupplyBoxRequest[];
 }
 
 export interface SellerMe {

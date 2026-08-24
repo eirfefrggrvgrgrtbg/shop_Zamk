@@ -13,9 +13,6 @@ func createShippedSupply(t *testing.T, tc *TestContext) *supplies.Supply {
 		Items: []supplies.CreateSupplyItemRequest{
 			{VariantID: tc.Variant1, ExpectedQuantity: 10},
 		},
-		Boxes: []supplies.CreateSupplyBoxRequest{
-			{BoxNumber: "1", Items: []supplies.CreateSupplyBoxItemRequest{{VariantID: tc.Variant1, Quantity: 10}}},
-		},
 	}
 	supply, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, req)
 	if err != nil {
@@ -195,9 +192,6 @@ func TestReceivingDamagePersistsCorrectly(t *testing.T) {
 		HandoffMethod: "pvz",
 		Items: []supplies.CreateSupplyItemRequest{
 			{VariantID: tc.Variant1, ExpectedQuantity: 20},
-		},
-		Boxes: []supplies.CreateSupplyBoxRequest{
-			{BoxNumber: "1", Items: []supplies.CreateSupplyBoxItemRequest{{VariantID: tc.Variant1, Quantity: 20}}},
 		},
 	}
 	supply, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, req)

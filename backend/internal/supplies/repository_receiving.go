@@ -12,10 +12,12 @@ import (
 
 func (r *Repository) GetSupplyByQRToken(ctx context.Context, token string) (*Supply, error) {
 	query := `
-		SELECT id, supply_number, seller_id, status, handoff_method, carrier_name, tracking_number, expected_arrival_date,
-			qr_token, created_at, shipped_at, arrived_at, receiving_started_at, completed_at, updated_at
-		FROM seller_supplies
-		WHERE qr_token = $1
+		SELECT s.id, s.supply_number, s.seller_id, s.status, s.handoff_method, s.carrier_name, s.tracking_number, s.expected_arrival_date,
+			s.qr_token, s.created_at, s.shipped_at, s.arrived_at, s.receiving_started_at, s.completed_at, s.updated_at
+		FROM seller_supplies s
+		LEFT JOIN seller_supply_boxes b ON b.supply_id = s.id
+		WHERE s.qr_token = $1 OR s.supply_number = $1 OR b.qr_token = $1 OR b.box_number = $1
+		LIMIT 1
 	`
 	var s Supply
 	err := r.db.QueryRow(ctx, query, token).Scan(

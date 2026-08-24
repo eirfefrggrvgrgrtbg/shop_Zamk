@@ -221,7 +221,7 @@ export function SellerSupplyDetail() {
             <div className="flex flex-col items-center mb-8 p-4 bg-gray-50 rounded-xl">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Главный QR поставки</span>
               <div className="bg-white p-3 rounded-lg shadow-sm">
-                <QRCodeSVG value={supply.supplyNumber || ''} size={140} level="H" />
+                <QRCodeSVG value={supply.qrToken || supply.supplyNumber || ''} size={140} level="H" />
               </div>
               <span className="mt-3 font-mono font-bold text-lg">{supply.supplyNumber || ''}</span>
             </div>
@@ -231,11 +231,11 @@ export function SellerSupplyDetail() {
               {supply.boxes?.map((box, idx) => (
                 <div key={box.id} className="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
                   <div className="bg-white p-1.5 rounded shadow-sm mr-4">
-                    <QRCodeSVG value={box.id} size={48} level="M" />
+                    <QRCodeSVG value={box.qrToken || box.boxNumber || box.id} size={48} level="M" />
                   </div>
                   <div>
                     <p className="font-bold text-sm text-gray-900">Короб {idx + 1}</p>
-                    <p className="font-mono text-xs text-gray-500">{box.id}</p>
+                    <p className="font-mono text-xs text-gray-500">{box.boxNumber || box.id}</p>
                   </div>
                 </div>
               ))}
