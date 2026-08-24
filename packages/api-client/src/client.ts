@@ -175,7 +175,61 @@ const getSafeErrorMessage = (code?: string, fallback?: string): string => {
       return 'Ошибка поиска поставки.';
     case 'supply_not_found':
     case 'SUPPLY_NOT_FOUND':
-      return 'Поставка не найдена.';
+      return 'Поставка или грузоместо не найдено.';
+    case 'supply_not_arrived':
+    case 'SUPPLY_NOT_ARRIVED':
+      return 'Поставка ещё не прибыла на склад.';
+    case 'supply_not_ready_for_receiving':
+    case 'SUPPLY_NOT_READY_FOR_RECEIVING':
+      return 'Поставка ещё не готова к приёмке.';
+    case 'supply_already_completed':
+    case 'SUPPLY_ALREADY_COMPLETED':
+      return 'Приёмка по этой поставке уже завершена.';
+    case 'supply_cancelled':
+    case 'SUPPLY_CANCELLED':
+      return 'Поставка отменена.';
+    case 'receiving_session_already_active':
+    case 'RECEIVING_SESSION_ALREADY_ACTIVE':
+      return 'Для этой поставки уже открыта приёмка.';
+    case 'invalid_receiving_code':
+    case 'INVALID_RECEIVING_CODE':
+      return 'Введите номер поставки, грузоместа или отсканируйте QR-код.';
+    case 'supply_unit_identity_mismatch':
+    case 'SUPPLY_UNIT_IDENTITY_MISMATCH':
+      return 'Идентификаторы товарных единиц не совпадают с составом поставки.';
+    case 'unit_already_scanned':
+    case 'UNIT_ALREADY_SCANNED':
+      return 'Эта единица уже отсканирована.';
+    case 'unit_not_found':
+    case 'UNIT_NOT_FOUND':
+      return 'Этикетка ZAMK не найдена.';
+    case 'unit_not_in_supply':
+    case 'UNIT_NOT_IN_SUPPLY':
+      return 'Эта единица относится к другой поставке.';
+    case 'serialized_unit_code_required':
+    case 'SERIALIZED_UNIT_CODE_REQUIRED':
+      return 'Для этой поставки сканируйте уникальную этикетку ZMU.';
+    case 'scan_not_found':
+    case 'SCAN_NOT_FOUND':
+      return 'Скан не найден.';
+    case 'scan_already_voided':
+    case 'SCAN_ALREADY_VOIDED':
+      return 'Этот скан уже был отменён.';
+    case 'scan_not_in_session':
+    case 'SCAN_NOT_IN_SESSION':
+      return 'Скан не принадлежит этой сессии.';
+    case 'receiving_session_finalized':
+    case 'RECEIVING_SESSION_FINALIZED':
+      return 'Сессия приёмки уже завершена.';
+    case 'invalid_receiving_condition':
+    case 'INVALID_RECEIVING_CONDITION':
+      return 'Недопустимое состояние товара (допустимо: ok или damaged).';
+    case 'supply_not_serialized':
+    case 'SUPPLY_NOT_SERIALIZED':
+      return 'Эта поставка использует старую схему приёмки по ZMK.';
+    case 'serialized_finalize_not_supported':
+    case 'SERIALIZED_FINALIZE_NOT_SUPPORTED':
+      return 'Завершение приёмки будет доступно после проверки всех единиц.';
     case 'supply_not_shipped':
     case 'SUPPLY_NOT_SHIPPED':
       return 'Поставка еще не отправлена продавцом.';

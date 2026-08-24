@@ -23,13 +23,27 @@ func (s *Service) MarkSupplyArrived(ctx context.Context, adminID uuid.UUID, supp
 }
 
 func (s *Service) StartReceivingSession(ctx context.Context, staffID uuid.UUID, qrToken string) (*ReceivingSession, error) {
+	qrToken = strings.TrimSpace(qrToken)
+	if qrToken == "" {
+		return nil, ErrInvalidReceivingCode
+	}
+
 	supply, err := s.repo.GetSupplyByQRToken(ctx, qrToken)
 	if err != nil {
 		return nil, err
 	}
 
+	if supply.Status == "draft" || supply.Status == "ready_to_ship" {
+		return nil, ErrSupplyNotReadyForReceiving
+	}
 	if supply.Status == "shipped_by_seller" {
 		return nil, ErrSupplyNotArrived
+	}
+	if supply.Status == "completed" {
+		return nil, ErrSupplyAlreadyCompleted
+	}
+	if supply.Status == "cancelled" {
+		return nil, ErrSupplyCancelled
 	}
 	if supply.Status != "arrived_at_zamk" && supply.Status != "receiving" {
 		return nil, ErrInvalidStatus

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,12 +13,16 @@ import (
 )
 
 func (r *Repository) GetSupplyByQRToken(ctx context.Context, token string) (*Supply, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, ErrSupplyNotFound
+	}
 	query := `
 		SELECT s.id, s.supply_number, s.seller_id, s.status, s.handoff_method, s.carrier_name, s.tracking_number, s.expected_arrival_date,
 			s.qr_token, s.created_at, s.shipped_at, s.arrived_at, s.receiving_started_at, s.completed_at, s.updated_at
 		FROM seller_supplies s
 		LEFT JOIN seller_supply_boxes b ON b.supply_id = s.id
-		WHERE s.qr_token = $1 OR s.supply_number = $1 OR b.qr_token = $1 OR b.box_number = $1
+		WHERE s.qr_token = $1 OR UPPER(s.supply_number) = UPPER($1) OR b.qr_token = $1 OR UPPER(b.box_number) = UPPER($1)
 		LIMIT 1
 	`
 	var s Supply

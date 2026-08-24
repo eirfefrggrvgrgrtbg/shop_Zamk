@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -796,6 +797,122 @@ func TestSuppliesAuth(t *testing.T) {
 		r.ServeHTTP(rr2, req2)
 		if rr2.Code != http.StatusConflict {
 			t.Errorf("expected 409 on second undo, got %d body=%s", rr2.Code, rr2.Body.String())
+		}
+	})
+
+	// ====================================================================
+	// L. Start Receiving Session by Supply Number, Box Number, and Error Cases
+	// ====================================================================
+	t.Run("L. start session by supply/box numbers and structured error response", func(t *testing.T) {
+		adminID := insertUser(t, "admin")
+		insertAdminWithPerms(t, adminID, []string{"inventory.receipt"})
+		adminTok := makeToken(t, adminID, "admin")
+
+		sellerUserID := insertUser(t, "seller")
+		sellerID := insertSeller(t, sellerUserID)
+		_, variantID := insertProductAndVariant(t, sellerID)
+
+		repo := supplies.NewRepository(pgClient.Pool)
+		svc := supplies.NewService(pgClient.Pool, repo)
+		carrier := "СДЭК"
+		tracking := "777666555"
+		supply, err := svc.CreateSupply(ctx, sellerID, supplies.CreateSupplyRequest{
+			HandoffMethod:  "carrier_delivery",
+			CarrierName:    &carrier,
+			TrackingNumber: &tracking,
+			Items:          []supplies.CreateSupplyItemRequest{{VariantID: variantID, ExpectedQuantity: 3}},
+		})
+		if err != nil {
+			t.Fatalf("CreateSupply: %v", err)
+		}
+
+		// 1. Before arrived -> start session returns 400 supply_not_ready_for_receiving
+		reqNotShipped := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token="+supply.SupplyNumber, nil)
+		reqNotShipped.Header.Set("Authorization", "Bearer "+adminTok)
+		rrNotShipped := httptest.NewRecorder()
+		r.ServeHTTP(rrNotShipped, reqNotShipped)
+		if rrNotShipped.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for ready_to_ship supply, got %d body=%s", rrNotShipped.Code, rrNotShipped.Body.String())
+		}
+		if !strings.Contains(rrNotShipped.Header().Get("Content-Type"), "application/json") {
+			t.Fatalf("expected application/json Content-Type, got %s", rrNotShipped.Header().Get("Content-Type"))
+		}
+		if !strings.Contains(rrNotShipped.Body.String(), "supply_not_ready_for_receiving") {
+			t.Fatalf("expected code supply_not_ready_for_receiving, got %s", rrNotShipped.Body.String())
+		}
+
+		// 2. Mark shipped -> start session returns 400 supply_not_arrived
+		if _, err = svc.MarkShipped(ctx, sellerID, supply.ID); err != nil {
+			t.Fatalf("MarkShipped: %v", err)
+		}
+		reqShipped := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token="+supply.SupplyNumber, nil)
+		reqShipped.Header.Set("Authorization", "Bearer "+adminTok)
+		rrShipped := httptest.NewRecorder()
+		r.ServeHTTP(rrShipped, reqShipped)
+		if rrShipped.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for shipped-only supply, got %d body=%s", rrShipped.Code, rrShipped.Body.String())
+		}
+		if !strings.Contains(rrShipped.Body.String(), "supply_not_arrived") {
+			t.Fatalf("expected code supply_not_arrived, got %s", rrShipped.Body.String())
+		}
+
+		// 3. Mark arrived -> start session by Supply Number succeeds with 200
+		if err = svc.MarkSupplyArrived(ctx, adminID, supply.ID); err != nil {
+			t.Fatalf("MarkSupplyArrived: %v", err)
+		}
+		reqArrived := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token="+supply.SupplyNumber, nil)
+		reqArrived.Header.Set("Authorization", "Bearer "+adminTok)
+		rrArrived := httptest.NewRecorder()
+		r.ServeHTTP(rrArrived, reqArrived)
+		if rrArrived.Code != http.StatusOK {
+			t.Fatalf("expected 200 starting session by supply number, got %d body=%s", rrArrived.Code, rrArrived.Body.String())
+		}
+		var session supplies.ReceivingSession
+		if err := json.NewDecoder(rrArrived.Body).Decode(&session); err != nil {
+			t.Fatalf("failed to decode session: %v", err)
+		}
+		if session.ReceivingMode != "serialized" {
+			t.Fatalf("expected receiving_mode serialized, got %s", session.ReceivingMode)
+		}
+
+		// 4. Resume active session by Box Number -> returns 200 with same session ID
+		supplyWithBoxes, _ := repo.GetSupplyByID(ctx, supply.ID)
+		boxNumber := supplyWithBoxes.Boxes[0].BoxNumber
+		reqBox := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token="+boxNumber, nil)
+		reqBox.Header.Set("Authorization", "Bearer "+adminTok)
+		rrBox := httptest.NewRecorder()
+		r.ServeHTTP(rrBox, reqBox)
+		if rrBox.Code != http.StatusOK {
+			t.Fatalf("expected 200 resuming session by box number, got %d body=%s", rrBox.Code, rrBox.Body.String())
+		}
+		var resumedSession supplies.ReceivingSession
+		json.NewDecoder(rrBox.Body).Decode(&resumedSession)
+		if resumedSession.ID != session.ID {
+			t.Fatalf("expected resumed session ID %s, got %s", session.ID, resumedSession.ID)
+		}
+
+		// 5. Unknown identifier -> 404 JSON with supply_not_found
+		reqUnknown := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token=SUP-NONEXISTENT", nil)
+		reqUnknown.Header.Set("Authorization", "Bearer "+adminTok)
+		rrUnknown := httptest.NewRecorder()
+		r.ServeHTTP(rrUnknown, reqUnknown)
+		if rrUnknown.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 for unknown code, got %d body=%s", rrUnknown.Code, rrUnknown.Body.String())
+		}
+		if !strings.Contains(rrUnknown.Body.String(), "supply_not_found") {
+			t.Fatalf("expected code supply_not_found, got %s", rrUnknown.Body.String())
+		}
+
+		// 6. Blank identifier -> 400 JSON with invalid_receiving_code
+		reqBlank := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token=", nil)
+		reqBlank.Header.Set("Authorization", "Bearer "+adminTok)
+		rrBlank := httptest.NewRecorder()
+		r.ServeHTTP(rrBlank, reqBlank)
+		if rrBlank.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for blank code, got %d body=%s", rrBlank.Code, rrBlank.Body.String())
+		}
+		if !strings.Contains(rrBlank.Body.String(), "invalid_receiving_code") {
+			t.Fatalf("expected code invalid_receiving_code, got %s", rrBlank.Body.String())
 		}
 	})
 }

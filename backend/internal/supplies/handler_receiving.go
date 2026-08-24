@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -14,30 +15,34 @@ import (
 func (h *Handler) MarkArrived(w http.ResponseWriter, r *http.Request) {
 	role, okRole := r.Context().Value("role").(string)
 	if !okRole || (role != "admin" && role != "super_admin") {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 	adminID, okUser := r.Context().Value("userID").(uuid.UUID)
 	if !okUser {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 
 	supplyIDStr := chi.URLParam(r, "supplyId")
 	supplyID, err := uuid.Parse(supplyIDStr)
 	if err != nil {
-		http.Error(w, "Invalid supply ID", http.StatusBadRequest)
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid supply ID")
 		return
 	}
 
 	err = h.svc.MarkSupplyArrived(r.Context(), adminID, supplyID)
 	if err != nil {
-		if err == ErrInvalidStatus {
+		if errors.Is(err, ErrInvalidStatus) {
 			h.logger.Error("supply arrival failed", "event", "supply_arrival_invalid_status", "error", err.Error(), "supply_id", supplyID.String())
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			h.writeError(w, http.StatusBadRequest, "invalid_status", "Supply is not in shipped status")
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, ErrSupplyNotFound) {
+			h.writeError(w, http.StatusNotFound, "supply_not_found", "Supply not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
 
@@ -48,17 +53,21 @@ func (h *Handler) MarkArrived(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) LookupSupply(w http.ResponseWriter, r *http.Request) {
 	role, okRole := r.Context().Value("role").(string)
 	if !okRole || (role != "admin" && role != "super_admin") {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
-	qrToken := r.URL.Query().Get("qr_token")
+	qrToken := strings.TrimSpace(r.URL.Query().Get("qr_token"))
 	if qrToken == "" {
-		http.Error(w, "qr_token is required", http.StatusBadRequest)
+		h.writeError(w, http.StatusBadRequest, "invalid_receiving_code", "qr_token is required")
 		return
 	}
 	supply, err := h.svc.repo.GetSupplyByQRToken(r.Context(), qrToken)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		if errors.Is(err, ErrSupplyNotFound) {
+			h.writeError(w, http.StatusNotFound, "supply_not_found", "Поставка или грузоместо не найдено.")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -68,57 +77,119 @@ func (h *Handler) LookupSupply(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) StartSession(w http.ResponseWriter, r *http.Request) {
 	role, okRole := r.Context().Value("role").(string)
 	if !okRole || (role != "admin" && role != "super_admin") {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 	userID, okUser := r.Context().Value("userID").(uuid.UUID)
 	if !okUser {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 	reqID := middleware.GetReqID(r.Context())
 
-	qrToken := r.URL.Query().Get("qr_token")
+	qrToken := strings.TrimSpace(r.URL.Query().Get("qr_token"))
+	if qrToken == "" && r.Body != nil && r.ContentLength > 0 {
+		var body struct {
+			QRToken string `json:"qr_token"`
+			Token   string `json:"token"`
+			Code    string `json:"code"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+			if body.QRToken != "" {
+				qrToken = strings.TrimSpace(body.QRToken)
+			} else if body.Token != "" {
+				qrToken = strings.TrimSpace(body.Token)
+			} else if body.Code != "" {
+				qrToken = strings.TrimSpace(body.Code)
+			}
+		}
+	}
+
 	if qrToken == "" {
-		http.Error(w, "qr_token is required", http.StatusBadRequest)
+		h.writeError(w, http.StatusBadRequest, "invalid_receiving_code", "Введите номер поставки, грузоместа или отсканируйте QR-код.")
 		return
 	}
 
 	session, err := h.svc.StartReceivingSession(r.Context(), userID, qrToken)
 	if err != nil {
-		if err == ErrInvalidStatus {
-			h.logger.Error("supply receiving lookup failed due to invalid status",
-				"event", "supply_receiving_lookup_failed",
-				"request_id", reqID,
-				"admin_id", userID.String(),
-				"error_code", "supply_invalid_status",
-				"status", http.StatusBadRequest,
-			)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if err == ErrSupplyNotArrived {
-			h.logger.Error("supply receiving lookup failed not arrived",
-				"event", "supply_receiving_lookup_failed",
-				"request_id", reqID,
-				"admin_id", userID.String(),
-				"error_code", "supply_not_arrived",
-				"status", http.StatusBadRequest,
-			)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if err == ErrSupplyNotFound {
-			h.logger.Error("supply receiving lookup failed not found",
+		if errors.Is(err, ErrSupplyNotFound) {
+			h.logger.Warn("supply receiving lookup failed not found",
 				"event", "supply_receiving_lookup_failed",
 				"request_id", reqID,
 				"admin_id", userID.String(),
 				"error_code", "supply_not_found",
 				"status", http.StatusNotFound,
 			)
-			http.Error(w, err.Error(), http.StatusNotFound)
+			h.writeError(w, http.StatusNotFound, "supply_not_found", "Поставка или грузоместо не найдено.")
 			return
 		}
+		if errors.Is(err, ErrSupplyNotArrived) {
+			h.logger.Warn("supply receiving lookup failed not arrived",
+				"event", "supply_receiving_lookup_failed",
+				"request_id", reqID,
+				"admin_id", userID.String(),
+				"error_code", "supply_not_arrived",
+				"status", http.StatusBadRequest,
+			)
+			h.writeError(w, http.StatusBadRequest, "supply_not_arrived", "Поставка ещё не прибыла на склад.")
+			return
+		}
+		if errors.Is(err, ErrSupplyNotReadyForReceiving) {
+			h.logger.Warn("supply receiving lookup failed not ready",
+				"event", "supply_receiving_lookup_failed",
+				"request_id", reqID,
+				"admin_id", userID.String(),
+				"error_code", "supply_not_ready_for_receiving",
+				"status", http.StatusBadRequest,
+			)
+			h.writeError(w, http.StatusBadRequest, "supply_not_ready_for_receiving", "Поставка ещё не готова к приёмке.")
+			return
+		}
+		if errors.Is(err, ErrSupplyAlreadyCompleted) {
+			h.logger.Warn("supply receiving lookup failed already completed",
+				"event", "supply_receiving_lookup_failed",
+				"request_id", reqID,
+				"admin_id", userID.String(),
+				"error_code", "supply_already_completed",
+				"status", http.StatusBadRequest,
+			)
+			h.writeError(w, http.StatusBadRequest, "supply_already_completed", "Приёмка по этой поставке уже завершена.")
+			return
+		}
+		if errors.Is(err, ErrSupplyCancelled) {
+			h.logger.Warn("supply receiving lookup failed cancelled",
+				"event", "supply_receiving_lookup_failed",
+				"request_id", reqID,
+				"admin_id", userID.String(),
+				"error_code", "supply_cancelled",
+				"status", http.StatusBadRequest,
+			)
+			h.writeError(w, http.StatusBadRequest, "supply_cancelled", "Поставка отменена.")
+			return
+		}
+		if errors.Is(err, ErrSupplyUnitIdentityMismatch) {
+			h.logger.Error("supply receiving lookup failed identity mismatch",
+				"event", "supply_receiving_lookup_failed",
+				"request_id", reqID,
+				"admin_id", userID.String(),
+				"error_code", "supply_unit_identity_mismatch",
+				"status", http.StatusUnprocessableEntity,
+			)
+			h.writeError(w, http.StatusUnprocessableEntity, "supply_unit_identity_mismatch", "Идентификаторы товарных единиц не совпадают с составом поставки.")
+			return
+		}
+		if errors.Is(err, ErrInvalidStatus) {
+			h.logger.Warn("supply receiving lookup failed invalid status",
+				"event", "supply_receiving_lookup_failed",
+				"request_id", reqID,
+				"admin_id", userID.String(),
+				"error_code", "supply_not_ready_for_receiving",
+				"status", http.StatusBadRequest,
+			)
+			h.writeError(w, http.StatusBadRequest, "supply_not_ready_for_receiving", "Поставка ещё не готова к приёмке.")
+			return
+		}
+
 		h.logger.Error("supply receiving lookup failed",
 			"event", "supply_receiving_lookup_failed",
 			"request_id", reqID,
@@ -126,7 +197,7 @@ func (h *Handler) StartSession(w http.ResponseWriter, r *http.Request) {
 			"error_code", "internal_error",
 			"status", http.StatusInternalServerError,
 		)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
 
@@ -149,31 +220,43 @@ func (h *Handler) StartSession(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) RecordScan(w http.ResponseWriter, r *http.Request) {
 	role, okRole := r.Context().Value("role").(string)
 	if !okRole || (role != "admin" && role != "super_admin") {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 	userID, okUser := r.Context().Value("userID").(uuid.UUID)
 	if !okUser {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 
 	sessionIDStr := chi.URLParam(r, "sessionId")
 	sessionID, err := uuid.Parse(sessionIDStr)
 	if err != nil {
-		http.Error(w, "Invalid session ID", http.StatusBadRequest)
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid session ID")
 		return
 	}
 
 	var req RecordReceivingScanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
 		return
 	}
 
 	err = h.svc.RecordScan(r.Context(), userID, sessionID, req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, ErrSessionNotFound) {
+			h.writeError(w, http.StatusNotFound, "session_not_found", err.Error())
+			return
+		}
+		if errors.Is(err, ErrItemNotFound) {
+			h.writeError(w, http.StatusNotFound, "item_not_found", err.Error())
+			return
+		}
+		if errors.Is(err, ErrReceivingSessionFinalized) {
+			h.writeError(w, http.StatusConflict, "receiving_session_finalized", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
 
@@ -183,25 +266,25 @@ func (h *Handler) RecordScan(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) FinalizeSession(w http.ResponseWriter, r *http.Request) {
 	role, okRole := r.Context().Value("role").(string)
 	if !okRole || (role != "admin" && role != "super_admin") {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 	userID, okUser := r.Context().Value("userID").(uuid.UUID)
 	if !okUser {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 
 	sessionIDStr := chi.URLParam(r, "sessionId")
 	sessionID, err := uuid.Parse(sessionIDStr)
 	if err != nil {
-		http.Error(w, "Invalid session ID", http.StatusBadRequest)
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid session ID")
 		return
 	}
 
 	var req FinalizeReceivingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
 		return
 	}
 
@@ -211,7 +294,15 @@ func (h *Handler) FinalizeSession(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusUnprocessableEntity, "serialized_finalize_not_supported", "serialized unit finalization is not enabled yet")
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, ErrSessionNotFound) {
+			h.writeError(w, http.StatusNotFound, "session_not_found", err.Error())
+			return
+		}
+		if errors.Is(err, ErrReceivingSessionFinalized) {
+			h.writeError(w, http.StatusConflict, "receiving_session_finalized", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
 

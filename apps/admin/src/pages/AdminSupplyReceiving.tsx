@@ -33,10 +33,29 @@ function playBeepSound(type: 'success' | 'error' = 'success') {
 }
 
 function mapReceivingError(err: any): string {
-  const code = err?.error?.code || err?.code || err?.message || '';
+  const code = err?.error?.code || err?.code || '';
+  const message = err?.error?.message || err?.message || '';
+
   switch (code) {
+    case 'supply_not_found':
+      return 'Поставка или грузоместо не найдено.';
+    case 'supply_not_arrived':
+      return 'Поставка ещё не прибыла на склад.';
+    case 'supply_not_ready_for_receiving':
+    case 'supply_invalid_status':
+      return 'Поставка ещё не готова к приёмке.';
+    case 'supply_already_completed':
+      return 'Приёмка по этой поставке уже завершена.';
+    case 'supply_cancelled':
+      return 'Поставка отменена.';
+    case 'receiving_session_already_active':
+      return 'Для этой поставки уже открыта приёмка.';
+    case 'invalid_receiving_code':
+      return 'Введите номер поставки, грузоместа или отсканируйте QR-код.';
     case 'unit_already_scanned':
       return 'Эта единица уже отсканирована.';
+    case 'unit_already_received':
+      return 'Эта единица уже принята.';
     case 'unit_not_found':
       return 'Этикетка ZAMK не найдена.';
     case 'unit_not_in_supply':
@@ -60,7 +79,10 @@ function mapReceivingError(err: any): string {
     case 'serialized_finalize_not_supported':
       return 'Завершение приёмки будет доступно после проверки всех единиц.';
     default:
-      return err?.error?.message || err?.message || 'Произошла ошибка при сканировании.';
+      if (message && !message.startsWith('HTTP Error')) {
+        return message;
+      }
+      return 'Поставка или грузоместо не найдено.';
   }
 }
 

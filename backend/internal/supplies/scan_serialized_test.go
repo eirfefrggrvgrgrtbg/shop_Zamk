@@ -608,3 +608,107 @@ func TestLegacySupplyRejectsSerializedScan(t *testing.T) {
 		t.Fatalf("expected legacy aggregate scan to succeed, got %v", err)
 	}
 }
+
+func TestStartReceivingSessionLookupIdentifiersAndErrors(t *testing.T) {
+	tc := setupTestContext(t)
+
+	// A, B, C, D: Test lookup by Supply Number, Supply QR, Box Number, Box QR
+	supply := createShippedSupply(t, tc)
+	if len(supply.Boxes) == 0 {
+		t.Fatalf("expected supply to have at least one box")
+	}
+	box := supply.Boxes[0]
+
+	// 1. Start by Supply number
+	sessionByNum, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, supply.SupplyNumber)
+	if err != nil {
+		t.Fatalf("failed to start session by supply number: %v", err)
+	}
+	if sessionByNum.ReceivingMode != "serialized" {
+		t.Fatalf("expected ReceivingMode 'serialized', got %s", sessionByNum.ReceivingMode)
+	}
+
+	// 2. Re-lookup / resume active session by Supply QR token
+	sessionByQR, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	if err != nil {
+		t.Fatalf("failed to resume session by supply QR: %v", err)
+	}
+	if sessionByQR.ID != sessionByNum.ID {
+		t.Fatalf("expected resumed session ID %s, got %s", sessionByNum.ID, sessionByQR.ID)
+	}
+
+	// 3. Re-lookup / resume active session by Box Number
+	sessionByBoxNum, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, box.BoxNumber)
+	if err != nil {
+		t.Fatalf("failed to resume session by box number: %v", err)
+	}
+	if sessionByBoxNum.ID != sessionByNum.ID {
+		t.Fatalf("expected resumed session ID %s, got %s", sessionByNum.ID, sessionByBoxNum.ID)
+	}
+
+	// 4. Re-lookup / resume active session by Box QR token
+	sessionByBoxQR, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *box.QRToken)
+	if err != nil {
+		t.Fatalf("failed to resume session by box QR: %v", err)
+	}
+	if sessionByBoxQR.ID != sessionByNum.ID {
+		t.Fatalf("expected resumed session ID %s, got %s", sessionByNum.ID, sessionByBoxQR.ID)
+	}
+
+	// E. Unknown identifier -> ErrSupplyNotFound
+	_, err = tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, "NONEXISTENT-CODE-999")
+	if !errors.Is(err, supplies.ErrSupplyNotFound) {
+		t.Fatalf("expected ErrSupplyNotFound for unknown code, got %v", err)
+	}
+
+	// Empty identifier -> ErrInvalidReceivingCode
+	_, err = tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, "   ")
+	if !errors.Is(err, supplies.ErrInvalidReceivingCode) {
+		t.Fatalf("expected ErrInvalidReceivingCode for blank code, got %v", err)
+	}
+
+	// F. Status: shipped_by_seller (not arrived yet) -> ErrSupplyNotArrived
+	carrier := "СДЭК"
+	tracking := "999888777"
+	unArrivedReq := supplies.CreateSupplyRequest{
+		HandoffMethod:  "carrier_delivery",
+		CarrierName:    &carrier,
+		TrackingNumber: &tracking,
+		Items: []supplies.CreateSupplyItemRequest{
+			{VariantID: tc.Variant1, ExpectedQuantity: 5},
+		},
+	}
+	unArrivedSupply, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, unArrivedReq)
+	if err != nil {
+		t.Fatalf("failed to create unarrived supply: %v", err)
+	}
+	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, unArrivedSupply.ID)
+	if err != nil {
+		t.Fatalf("failed to mark unarrived supply shipped: %v", err)
+	}
+
+	_, err = tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, unArrivedSupply.SupplyNumber)
+	if !errors.Is(err, supplies.ErrSupplyNotArrived) {
+		t.Fatalf("expected ErrSupplyNotArrived for shipped-only supply, got %v", err)
+	}
+
+	// G. Status: ready_to_ship (not even shipped) -> ErrSupplyNotReadyForReceiving
+	notShippedSupply, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, unArrivedReq)
+	if err != nil {
+		t.Fatalf("failed to create not shipped supply: %v", err)
+	}
+	_, err = tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, notShippedSupply.SupplyNumber)
+	if !errors.Is(err, supplies.ErrSupplyNotReadyForReceiving) {
+		t.Fatalf("expected ErrSupplyNotReadyForReceiving for ready_to_ship supply, got %v", err)
+	}
+
+	// H. Corrupt serialized supply -> ErrSupplyUnitIdentityMismatch
+	corruptSupply := createShippedSupply(t, tc)
+	// Delete one inventory unit from DB to corrupt expected vs actual count
+	testDB.Exec(tc.Ctx, "DELETE FROM inventory_units WHERE id = (SELECT id FROM inventory_units WHERE origin_supply_id = $1 LIMIT 1)", corruptSupply.ID)
+
+	_, err = tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, corruptSupply.SupplyNumber)
+	if !errors.Is(err, supplies.ErrSupplyUnitIdentityMismatch) {
+		t.Fatalf("expected ErrSupplyUnitIdentityMismatch for corrupted unit count, got %v", err)
+	}
+}
