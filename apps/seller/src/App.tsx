@@ -20,6 +20,7 @@ import { SellerSupplies } from './pages/SellerSupplies';
 import { SellerSupplyNew } from './pages/SellerSupplyNew';
 import { SellerSupplyDetail } from './pages/SellerSupplyDetail';
 import { SellerSupplyBoxLabel } from './pages/SellerSupplyBoxLabel';
+import { SellerSupplyUnitLabels } from './pages/SellerSupplyUnitLabels';
 import { SellerOnboarding } from './pages/SellerOnboarding';
 import { AuthProvider } from './contexts/AuthContext';
 import { SellerProtectedRoute } from './components/SellerProtectedRoute';
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="/supplies/:id" element={<SellerProtectedRoute><SellerLayout><SellerSupplyDetail /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/supplies/:id/label" element={<SellerProtectedRoute><SellerSupplyBoxLabel /></SellerProtectedRoute>} />
           <Route path="/supplies/:id/boxes/:boxId/label" element={<SellerProtectedRoute><SellerSupplyBoxLabel /></SellerProtectedRoute>} />
+          <Route path="/supplies/:id/unit-labels" element={<SellerProtectedRoute><SellerSupplyUnitLabels /></SellerProtectedRoute>} />
           <Route path="/settings" element={<SellerProtectedRoute><SellerLayout><SellerSettings /></SellerLayout></SellerProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

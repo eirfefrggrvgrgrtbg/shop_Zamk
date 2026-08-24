@@ -175,6 +175,63 @@ func (r *Repository) ListUnitsBySupplyID(ctx context.Context, supplyID uuid.UUID
 	return units, nil
 }
 
+func (r *Repository) GetEnrichedUnitLabelsBySupplyID(ctx context.Context, supplyID uuid.UUID) ([]SupplyUnitLabelDTO, error) {
+	query := `
+		SELECT
+			u.id AS inventory_unit_id,
+			u.unit_code,
+			u.unit_index,
+			u.origin_supply_item_id AS supply_item_id,
+			u.product_variant_id,
+			p.title AS product_title,
+			COALESCE(c.name_ru, v.color) AS color_name,
+			COALESCE(sv.value, v.size) AS size_name,
+			COALESCE(v.seller_sku, v.sku) AS seller_sku,
+			v.barcode AS variant_barcode,
+			b.box_number
+		FROM inventory_units u
+		JOIN seller_supply_items i ON i.id = u.origin_supply_item_id
+		JOIN product_variants v ON v.id = u.product_variant_id
+		JOIN products p ON p.id = v.product_id
+		LEFT JOIN colors c ON c.id = v.color_id
+		LEFT JOIN size_values sv ON sv.id = v.size_value_id
+		LEFT JOIN seller_supply_boxes b ON b.id = u.origin_box_id
+		WHERE u.origin_supply_id = $1
+		ORDER BY i.created_at ASC, i.id ASC, u.unit_index ASC
+	`
+	rows, err := r.db.Query(ctx, query, supplyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query enriched unit labels: %w", err)
+	}
+	defer rows.Close()
+
+	var labels []SupplyUnitLabelDTO
+	for rows.Next() {
+		var l SupplyUnitLabelDTO
+		err := rows.Scan(
+			&l.InventoryUnitID,
+			&l.UnitCode,
+			&l.UnitIndex,
+			&l.SupplyItemID,
+			&l.ProductVariantID,
+			&l.ProductTitle,
+			&l.ColorName,
+			&l.SizeName,
+			&l.SellerSKU,
+			&l.VariantBarcode,
+			&l.BoxNumber,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan unit label DTO: %w", err)
+		}
+		labels = append(labels, l)
+	}
+	if labels == nil {
+		labels = []SupplyUnitLabelDTO{}
+	}
+	return labels, nil
+}
+
 func (r *Repository) UpdateSupplyStatus(ctx context.Context, supplyID uuid.UUID, status string) error {
 	query := `UPDATE seller_supplies SET status = $1, updated_at = now() WHERE id = $2`
 	res, err := r.db.Exec(ctx, query, status, supplyID)

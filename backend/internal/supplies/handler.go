@@ -106,6 +106,49 @@ func (h *Handler) GetSupply(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(supply)
 }
 
+func (h *Handler) GetUnitLabels(w http.ResponseWriter, r *http.Request) {
+	role, okRole := r.Context().Value("role").(string)
+	userID, okUser := r.Context().Value("userID").(uuid.UUID)
+	if !okRole || !okUser || role != "seller" {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid supply ID")
+		return
+	}
+
+	sellerID, err := h.svc.repo.GetSellerIDByUserID(r.Context(), userID)
+	if err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Seller profile not found")
+		return
+	}
+
+	res, err := h.svc.GetSupplyUnitLabels(r.Context(), sellerID, id)
+	if err != nil {
+		if errors.Is(err, ErrSupplyNotFound) {
+			h.writeError(w, http.StatusNotFound, "supply_not_found", "Supply not found")
+			return
+		}
+		if errors.Is(err, ErrUnauthorized) {
+			h.writeError(w, http.StatusForbidden, "supply_forbidden", "Access denied")
+			return
+		}
+		if errors.Is(err, ErrSupplyUnitIdentityMismatch) {
+			h.writeError(w, http.StatusUnprocessableEntity, "supply_unit_identity_mismatch", "Supply unit count does not match expected quantity")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
+}
+
 func (h *Handler) CreateSupply(w http.ResponseWriter, r *http.Request) {
 	reqID := middleware.GetReqID(r.Context())
 	role, okRole := r.Context().Value("role").(string)

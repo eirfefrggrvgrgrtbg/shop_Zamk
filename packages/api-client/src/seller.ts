@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, SellerInventoryItem, SellerOrder, SellerReturn, SellerReturnDetailResponse, SellerReview, SellerBalance, PayoutBatchListResponse, LedgerListResponse, SellerWarning, SellerViolation, SellerFulfillment, SellerSupply, CreateSupplyRequest } from './types';
+import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, SellerInventoryItem, SellerOrder, SellerReturn, SellerReturnDetailResponse, SellerReview, SellerBalance, PayoutBatchListResponse, LedgerListResponse, SellerWarning, SellerViolation, SellerFulfillment, SellerSupply, CreateSupplyRequest, SellerSupplyUnitLabelsResponse } from './types';
 
 export const getSellerMe = async (): Promise<SellerMe> => {
   return request<SellerMe>('GET', '/seller/me');
@@ -150,6 +150,10 @@ export const createSellerSupply = async (input: CreateSupplyRequest): Promise<Se
 
 export const getSellerSupply = async (id: string): Promise<SellerSupply> => {
   return request<SellerSupply>('GET', `/seller/supplies/${id}`);
+};
+
+export const getSellerSupplyUnitLabels = async (id: string): Promise<SellerSupplyUnitLabelsResponse> => {
+  return request<SellerSupplyUnitLabelsResponse>('GET', `/seller/supplies/${id}/unit-labels`);
 };
 
 export const shipSellerSupply = async (id: string): Promise<SellerSupply> => {

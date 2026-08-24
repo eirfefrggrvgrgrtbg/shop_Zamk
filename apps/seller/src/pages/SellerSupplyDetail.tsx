@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Printer, CheckCircle, Truck, PackageCheck, FileWarning, HelpCircle, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, Truck, PackageCheck, FileWarning, AlertCircle } from 'lucide-react';
 import { getSellerSupply, shipSellerSupply } from '@zamk/api-client/src/seller';
 import type { SellerSupply } from '@zamk/api-client/src/types';
 import { QRCodeSVG } from 'qrcode.react';
@@ -211,33 +211,76 @@ export function SellerSupplyDetail() {
             </div>
           </div>
 
-          {/* Gruzomesto Card */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-6">Грузоместо 1</h3>
+          {/* Marking Section */}
+          <div className="space-y-6">
+            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest px-1">Маркировка</h3>
 
-            <div className="flex flex-col items-center p-6 bg-gray-50 rounded-xl border border-gray-100 mb-6">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">{qrLabel}</span>
-              <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
-                <QRCodeSVG value={qrValue} size={160} level="H" />
+            {/* Cargo Place Card */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h4 className="font-bold text-gray-900">Грузоместо</h4>
+                  <p className="text-xs text-gray-500">1 этикетка · {boxCode}</p>
+                </div>
+                <span className="text-[11px] font-bold uppercase tracking-wider bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
+                  {qrLabel}
+                </span>
               </div>
-              <div className="text-center">
-                <p className="text-xs text-gray-500 mb-1">Код</p>
-                <p className="font-mono font-bold text-lg tracking-wider text-gray-900">{boxCode}</p>
+
+              <div className="flex flex-col items-center p-4 bg-gray-50 rounded-xl border border-gray-100 mb-4">
+                <div className="bg-white p-3 rounded-lg shadow-sm mb-2">
+                  <QRCodeSVG value={qrValue} size={120} level="H" />
+                </div>
+                <p className="font-mono font-bold text-sm tracking-wider text-gray-900">{boxCode}</p>
               </div>
+
+              <p className="text-xs text-gray-500 mb-4 text-center">
+                Наклейте на коробку или другое грузоместо.
+              </p>
+
+              <Link
+                to={`/supplies/${supply.id}/boxes/${box?.id || 'default'}/label`}
+                className="w-full flex items-center justify-center py-2.5 bg-gray-100 text-gray-800 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors"
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Распечатать этикетку грузоместа
+              </Link>
             </div>
 
-            <p className="text-xs text-center text-gray-500 mb-6 flex items-center justify-center">
-              <HelpCircle className="w-4 h-4 mr-1.5" />
-              Сотрудник ZAMK отсканирует код при приёмке.
-            </p>
+            {/* Unit Labels Card */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h4 className="font-bold text-gray-900">Товары</h4>
+                  <p className="text-xs text-gray-500">{supply.totalExpectedItems} {supply.totalExpectedItems === 1 ? 'этикетка' : supply.totalExpectedItems < 5 ? 'этикетки' : 'этикеток'}</p>
+                </div>
+                <span className="text-[11px] font-bold uppercase tracking-wider bg-black text-white px-2 py-0.5 rounded">
+                  ZMU Barcode
+                </span>
+              </div>
 
-            <Link
-              to={`/supplies/${supply.id}/boxes/${box?.id || 'default'}/label`}
-              className="w-full flex items-center justify-center py-3 border border-gray-300 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              Открыть этикетку
-            </Link>
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 mb-4 text-center">
+                <p className="text-xs font-medium text-gray-700 mb-1">
+                  Индивидуальная маркировка единиц (58 × 40 мм)
+                </p>
+                <p className="text-[11px] text-gray-500">
+                  Уникальный Code128 barcode для каждого физического товара
+                </p>
+              </div>
+
+              <div className="space-y-1.5 text-xs text-gray-500 mb-4">
+                <p className="text-center">Наклейте одну уникальную этикетку на каждую единицу товара.</p>
+                <p className="text-[11px] text-gray-400 text-center">При повторной печати коды ZMU не изменяются.</p>
+              </div>
+
+              <Link
+                to={`/supplies/${supply.id}/unit-labels`}
+                className="w-full flex items-center justify-center py-2.5 bg-black text-white rounded-xl text-sm font-bold hover:bg-gray-800 transition-colors shadow-sm"
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                {supply.status === 'ready_to_ship' ? 'Распечатать этикетки товаров' : 'Повторная печать этикеток товаров'}
+              </Link>
+            </div>
           </div>
         </div>
 

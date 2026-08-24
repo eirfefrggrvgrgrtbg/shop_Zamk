@@ -87,11 +87,11 @@ func setupTestContext(t *testing.T) *TestContext {
 	testDB.Exec(ctx, "INSERT INTO products (id, seller_id, title, slug, price_cents, status, created_at, updated_at) VALUES ($1, $2, 'Other Product', 'other-slug', 200, 'published', now(), now())", otherProductID, otherSellerID)
 
 	v1, v2, v3, v4, vOther := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU1', 100, now(), now())", v1, productID)
-	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU2', 200, now(), now())", v2, productID)
-	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU3', 300, now(), now())", v3, productID)
-	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU4', 400, now(), now())", v4, productID)
-	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU-OTHER', 300, now(), now())", vOther, otherProductID)
+	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU1', 'SKU-TEST-1', 'ZMK-TEST-1', 100, now(), now())", v1, productID)
+	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU2', 'SKU-TEST-2', 'ZMK-TEST-2', 200, now(), now())", v2, productID)
+	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU3', 'SKU-TEST-3', 'ZMK-TEST-3', 300, now(), now())", v3, productID)
+	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU4', 'SKU-TEST-4', 'ZMK-TEST-4', 400, now(), now())", v4, productID)
+	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU-OTHER', 'SKU-TEST-OTHER', 'ZMK-TEST-OTHER', 300, now(), now())", vOther, otherProductID)
 
 	// Create inventory records to avoid foreign key issues during finalization
 	testDB.Exec(ctx, "INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock) VALUES ($1, $2, $3, $4, 0)", uuid.New(), productID, v1, sellerID)

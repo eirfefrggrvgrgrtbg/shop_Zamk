@@ -123,16 +123,8 @@ func TestSuppliesAuth(t *testing.T) {
 		return tok
 	}
 
-	// Create a shipped supply for use in cases H and I
-	// We need a full supply fixture: seller, product, variant, supply
-	setupShippedSupplyFixture := func(t *testing.T) (sellerUserID uuid.UUID, sellerID uuid.UUID, qrToken string, sessionID uuid.UUID) {
+	insertProductAndVariant := func(t *testing.T, sellerID uuid.UUID) (uuid.UUID, uuid.UUID) {
 		t.Helper()
-
-		// Seller user + seller
-		sellerUserID = insertUser(t, "seller")
-		sellerID = insertSeller(t, sellerUserID)
-
-		// Product + variant + inventory
 		productID := uuid.New()
 		_, err := pgClient.Pool.Exec(ctx, `
 			INSERT INTO products (id, seller_id, title, slug, price_cents, status, created_at, updated_at)
@@ -143,9 +135,9 @@ func TestSuppliesAuth(t *testing.T) {
 		}
 		variantID := uuid.New()
 		_, err = pgClient.Pool.Exec(ctx, `
-			INSERT INTO product_variants (id, product_id, sku, price_cents, created_at, updated_at)
-			VALUES ($1, $2, $3, 100, NOW(), NOW())
-		`, variantID, productID, "AUTH-SKU-"+variantID.String()[:8])
+			INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, 100, NOW(), NOW())
+		`, variantID, productID, "AUTH-SKU-"+variantID.String()[:8], "SKU-"+variantID.String()[:8], "ZMK-"+variantID.String()[:8])
 		if err != nil {
 			t.Fatalf("insert variant: %v", err)
 		}
@@ -156,6 +148,20 @@ func TestSuppliesAuth(t *testing.T) {
 		if err != nil {
 			t.Fatalf("insert inventory: %v", err)
 		}
+		return productID, variantID
+	}
+
+	// Create a shipped supply for use in cases H and I
+	// We need a full supply fixture: seller, product, variant, supply
+	setupShippedSupplyFixture := func(t *testing.T) (sellerUserID uuid.UUID, sellerID uuid.UUID, qrToken string, sessionID uuid.UUID) {
+		t.Helper()
+
+		// Seller user + seller
+		sellerUserID = insertUser(t, "seller")
+		sellerID = insertSeller(t, sellerUserID)
+
+		// Product + variant + inventory
+		_, variantID := insertProductAndVariant(t, sellerID)
 
 		// Create supply via service
 		repo := supplies.NewRepository(pgClient.Pool)
@@ -367,6 +373,81 @@ func TestSuppliesAuth(t *testing.T) {
 
 		if rr.Code != http.StatusNoContent && rr.Code != http.StatusOK {
 			t.Errorf("expected 204 or 200, got %d body=%s", rr.Code, rr.Body.String())
+		}
+	})
+
+	// ====================================================================
+	// J. Seller A GET /api/seller/supplies/{id}/unit-labels -> 200
+	// ====================================================================
+	t.Run("J. seller A GET unit-labels own supply -> 200", func(t *testing.T) {
+		sellerUserA := insertUser(t, "seller")
+		sellerA := insertSeller(t, sellerUserA)
+		tokenA := makeToken(t, sellerUserA, "seller")
+
+		_, variantA := insertProductAndVariant(t, sellerA)
+
+		createReq := supplies.CreateSupplyRequest{
+			HandoffMethod:  "carrier_delivery",
+			CarrierName:    func(s string) *string { return &s }("СДЭК"),
+			TrackingNumber: func(s string) *string { return &s }("TRK-ROUTER-TEST"),
+			Items: []supplies.CreateSupplyItemRequest{
+				{VariantID: variantA, ExpectedQuantity: 2},
+			},
+		}
+		body, _ := json.Marshal(createReq)
+		postReq := httptest.NewRequest("POST", "/api/seller/supplies", bytes.NewReader(body))
+		postReq.Header.Set("Authorization", "Bearer "+tokenA)
+		postReq.Header.Set("Content-Type", "application/json")
+		postRR := httptest.NewRecorder()
+		r.ServeHTTP(postRR, postReq)
+
+		if postRR.Code != http.StatusCreated && postRR.Code != http.StatusOK {
+			t.Fatalf("failed creating supply: %d body=%s", postRR.Code, postRR.Body.String())
+		}
+
+		var createdSupply struct {
+			ID string `json:"id"`
+		}
+		json.NewDecoder(postRR.Body).Decode(&createdSupply)
+
+		getReq := httptest.NewRequest("GET", "/api/seller/supplies/"+createdSupply.ID+"/unit-labels", nil)
+		getReq.Header.Set("Authorization", "Bearer "+tokenA)
+		getRR := httptest.NewRecorder()
+		r.ServeHTTP(getRR, getReq)
+
+		if getRR.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", getRR.Code, getRR.Body.String())
+		}
+
+		var res supplies.SupplyUnitLabelsResponse
+		if err := json.NewDecoder(getRR.Body).Decode(&res); err != nil {
+			t.Fatalf("failed decoding labels response: %v", err)
+		}
+		if !res.Serialized || res.TotalUnits != 2 || len(res.Units) != 2 {
+			t.Errorf("unexpected response structure: %+v", res)
+		}
+
+		// K. Seller B GET /api/seller/supplies/{id}/unit-labels -> 403 Forbidden
+		sellerUserB := insertUser(t, "seller")
+		_ = insertSeller(t, sellerUserB)
+		tokenB := makeToken(t, sellerUserB, "seller")
+
+		getReqB := httptest.NewRequest("GET", "/api/seller/supplies/"+createdSupply.ID+"/unit-labels", nil)
+		getReqB.Header.Set("Authorization", "Bearer "+tokenB)
+		getRRB := httptest.NewRecorder()
+		r.ServeHTTP(getRRB, getReqB)
+
+		if getRRB.Code != http.StatusForbidden {
+			t.Errorf("expected 403 Forbidden for seller B, got %d body=%s", getRRB.Code, getRRB.Body.String())
+		}
+
+		// L. Unauthenticated GET /api/seller/supplies/{id}/unit-labels -> 401 Unauthorized
+		getReqAnon := httptest.NewRequest("GET", "/api/seller/supplies/"+createdSupply.ID+"/unit-labels", nil)
+		getRRAnon := httptest.NewRecorder()
+		r.ServeHTTP(getRRAnon, getReqAnon)
+
+		if getRRAnon.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 Unauthorized, got %d body=%s", getRRAnon.Code, getRRAnon.Body.String())
 		}
 	})
 }

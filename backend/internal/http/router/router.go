@@ -231,6 +231,7 @@ func New(
 		r.Post("/", suppliesHandler.CreateSupply)
 		r.Get("/{id}", suppliesHandler.GetSupply)
 		r.Post("/{id}/ship", suppliesHandler.MarkShipped)
+		r.Get("/{id}/unit-labels", suppliesHandler.GetUnitLabels)
 	})
 
 	r.Route("/api/public", func(r chi.Router) {

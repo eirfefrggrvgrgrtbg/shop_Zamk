@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 type Service struct {
 	repo              *Repository
 	db                postgres.DBTX
+	logger            *slog.Logger
 	unitCodeGenerator func() (string, error)
 }
 
@@ -24,7 +26,14 @@ func NewService(db postgres.DBTX, repo *Repository) *Service {
 	return &Service{
 		repo:              repo,
 		db:                db,
+		logger:            slog.Default(),
 		unitCodeGenerator: GenerateUnitCode,
+	}
+}
+
+func (s *Service) SetLogger(logger *slog.Logger) {
+	if logger != nil {
+		s.logger = logger
 	}
 }
 
@@ -217,6 +226,69 @@ func (s *Service) MarkShipped(ctx context.Context, sellerID uuid.UUID, supplyID 
 	}
 
 	return s.repo.GetSupplyByID(ctx, supplyID)
+}
+
+func (s *Service) GetSupplyUnitLabels(ctx context.Context, sellerID uuid.UUID, supplyID uuid.UUID) (*SupplyUnitLabelsResponse, error) {
+	supply, err := s.repo.GetSupplyByID(ctx, supplyID)
+	if err != nil {
+		return nil, err
+	}
+	if supply.SellerID != sellerID {
+		return nil, ErrUnauthorized
+	}
+
+	expectedUnits := 0
+	for _, item := range supply.Items {
+		expectedUnits += item.ExpectedQuantity
+	}
+
+	units, err := s.repo.GetEnrichedUnitLabelsBySupplyID(ctx, supplyID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Legacy supply: zero units created
+	if len(units) == 0 {
+		return &SupplyUnitLabelsResponse{
+			SupplyID:     supply.ID,
+			SupplyNumber: supply.SupplyNumber,
+			Serialized:   false,
+			TotalUnits:   0,
+			Units:        []SupplyUnitLabelDTO{},
+		}, nil
+	}
+
+	// Invariant check: expectedUnits must equal actual units
+	if len(units) != expectedUnits {
+		if s.logger != nil {
+			s.logger.Error("supply_unit_labels_invariant_failed",
+				"event", "supply_unit_labels_invariant_failed",
+				"supply_id", supply.ID,
+				"supply_number", supply.SupplyNumber,
+				"seller_id", supply.SellerID,
+				"expected_units", expectedUnits,
+				"actual_units", len(units),
+			)
+		}
+		return nil, ErrSupplyUnitIdentityMismatch
+	}
+
+	var boxDTO *SupplyUnitLabelBoxDTO
+	if len(supply.Boxes) > 0 {
+		boxDTO = &SupplyUnitLabelBoxDTO{
+			ID:        supply.Boxes[0].ID,
+			BoxNumber: supply.Boxes[0].BoxNumber,
+		}
+	}
+
+	return &SupplyUnitLabelsResponse{
+		SupplyID:     supply.ID,
+		SupplyNumber: supply.SupplyNumber,
+		Serialized:   true,
+		TotalUnits:   len(units),
+		Box:          boxDTO,
+		Units:        units,
+	}, nil
 }
 
 func generateRandomToken() (string, error) {

@@ -49,3 +49,31 @@ type RecordReceivingScanRequest struct {
 type FinalizeReceivingRequest struct {
 	// Any extra finalization notes
 }
+
+type SupplyUnitLabelsResponse struct {
+	SupplyID     uuid.UUID              `json:"supplyId"`
+	SupplyNumber string                 `json:"supplyNumber"`
+	Serialized   bool                   `json:"serialized"`
+	TotalUnits   int                    `json:"totalUnits"`
+	Box          *SupplyUnitLabelBoxDTO `json:"box,omitempty"`
+	Units        []SupplyUnitLabelDTO   `json:"units"`
+}
+
+type SupplyUnitLabelBoxDTO struct {
+	ID        uuid.UUID `json:"id"`
+	BoxNumber string    `json:"boxNumber"`
+}
+
+type SupplyUnitLabelDTO struct {
+	InventoryUnitID  uuid.UUID `json:"inventoryUnitId"`
+	UnitCode         string    `json:"unitCode"`
+	UnitIndex        int       `json:"unitIndex"`
+	SupplyItemID     uuid.UUID `json:"supplyItemId"`
+	ProductVariantID uuid.UUID `json:"productVariantId"`
+	ProductTitle     string    `json:"productTitle"`
+	ColorName        *string   `json:"colorName,omitempty"`
+	SizeName         *string   `json:"sizeName,omitempty"`
+	SellerSKU        *string   `json:"sellerSku,omitempty"`
+	VariantBarcode   *string   `json:"variantBarcode,omitempty"`
+	BoxNumber        *string   `json:"boxNumber,omitempty"`
+}

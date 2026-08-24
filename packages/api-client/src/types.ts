@@ -378,6 +378,34 @@ export interface SellerSupply {
   boxes?: SellerSupplyBox[];
 }
 
+export interface SellerSupplyUnitLabelBox {
+  id: string;
+  boxNumber: string;
+}
+
+export interface SellerSupplyUnitLabel {
+  inventoryUnitId: string;
+  unitCode: string;
+  unitIndex: number;
+  supplyItemId: string;
+  productVariantId: string;
+  productTitle: string;
+  colorName?: string;
+  sizeName?: string;
+  sellerSku?: string;
+  variantBarcode?: string;
+  boxNumber?: string;
+}
+
+export interface SellerSupplyUnitLabelsResponse {
+  supplyId: string;
+  supplyNumber: string;
+  serialized: boolean;
+  totalUnits: number;
+  box?: SellerSupplyUnitLabelBox;
+  units: SellerSupplyUnitLabel[];
+}
+
 
 export interface CreateSupplyItemRequest {
   variantId: string;
