@@ -14,3 +14,5 @@ var (
 	ErrSessionAlreadyActive   = errors.New("receiving session already active")
 	ErrItemNotFound           = errors.New("item not found in supply")
 )
+
+var ErrSupplyNotArrived = errors.New("supply is not arrived yet")

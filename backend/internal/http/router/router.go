@@ -431,6 +431,8 @@ func New(
 
 		r.Route("/receiving", func(r chi.Router) {
 			r.Use(perm("inventory.receipt"))
+			r.Post("/{supplyId}/arrive", suppliesHandler.MarkArrived)
+			r.Get("/lookup", suppliesHandler.LookupSupply)
 			r.Post("/sessions", suppliesHandler.StartSession)
 			r.Post("/sessions/{sessionId}/scan", suppliesHandler.RecordScan)
 			r.Post("/sessions/{sessionId}/finalize", suppliesHandler.FinalizeSession)

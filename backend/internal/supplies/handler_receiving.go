@@ -5,8 +5,63 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 )
+
+func (h *Handler) MarkArrived(w http.ResponseWriter, r *http.Request) {
+	role, okRole := r.Context().Value("role").(string)
+	if !okRole || (role != "admin" && role != "super_admin") {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	adminID, okUser := r.Context().Value("userID").(uuid.UUID)
+	if !okUser {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	supplyIDStr := chi.URLParam(r, "supplyId")
+	supplyID, err := uuid.Parse(supplyIDStr)
+	if err != nil {
+		http.Error(w, "Invalid supply ID", http.StatusBadRequest)
+		return
+	}
+
+	err = h.svc.MarkSupplyArrived(r.Context(), adminID, supplyID)
+	if err != nil {
+		if err == ErrInvalidStatus {
+			h.logger.Error("supply arrival failed", "event", "supply_arrival_invalid_status", "error", err.Error(), "supply_id", supplyID.String())
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("supply marked as arrived", "event", "supply_arrived", "supply_id", supplyID.String())
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) LookupSupply(w http.ResponseWriter, r *http.Request) {
+	role, okRole := r.Context().Value("role").(string)
+	if !okRole || (role != "admin" && role != "super_admin") {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	qrToken := r.URL.Query().Get("qr_token")
+	if qrToken == "" {
+		http.Error(w, "qr_token is required", http.StatusBadRequest)
+		return
+	}
+	supply, err := h.svc.repo.GetSupplyByQRToken(r.Context(), qrToken)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(supply)
+}
 
 func (h *Handler) StartSession(w http.ResponseWriter, r *http.Request) {
 	role, okRole := r.Context().Value("role").(string)
@@ -19,6 +74,7 @@ func (h *Handler) StartSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	reqID := middleware.GetReqID(r.Context())
 
 	qrToken := r.URL.Query().Get("qr_token")
 	if qrToken == "" {
@@ -29,16 +85,60 @@ func (h *Handler) StartSession(w http.ResponseWriter, r *http.Request) {
 	session, err := h.svc.StartReceivingSession(r.Context(), userID, qrToken)
 	if err != nil {
 		if err == ErrInvalidStatus {
+			h.logger.Error("supply receiving lookup failed due to invalid status",
+				"event", "supply_receiving_lookup_failed",
+				"request_id", reqID,
+				"admin_id", userID.String(),
+				"error_code", "supply_invalid_status",
+				"status", http.StatusBadRequest,
+			)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err == ErrSupplyNotArrived {
+			h.logger.Error("supply receiving lookup failed not arrived",
+				"event", "supply_receiving_lookup_failed",
+				"request_id", reqID,
+				"admin_id", userID.String(),
+				"error_code", "supply_not_arrived",
+				"status", http.StatusBadRequest,
+			)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		if err == ErrSupplyNotFound {
+			h.logger.Error("supply receiving lookup failed not found",
+				"event", "supply_receiving_lookup_failed",
+				"request_id", reqID,
+				"admin_id", userID.String(),
+				"error_code", "supply_not_found",
+				"status", http.StatusNotFound,
+			)
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
+		h.logger.Error("supply receiving lookup failed",
+			"event", "supply_receiving_lookup_failed",
+			"request_id", reqID,
+			"admin_id", userID.String(),
+			"error_code", "internal_error",
+			"status", http.StatusInternalServerError,
+		)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	expectedUnits := 0
+	for _, item := range session.Items {
+		expectedUnits += item.ExpectedQuantity
+	}
+
+	h.logger.Info("supply receiving started",
+		"event", "supply_receiving_started",
+		"supply_id", session.SupplyID.String(),
+		"session_id", session.ID.String(),
+		"expected_units", expectedUnits,
+	)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(session)
@@ -108,6 +208,11 @@ func (h *Handler) FinalizeSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	h.logger.Info("supply receiving completed",
+		"event", "supply_receiving_completed",
+		"session_id", sessionID.String(),
+	)
 
 	w.WriteHeader(http.StatusNoContent)
 }

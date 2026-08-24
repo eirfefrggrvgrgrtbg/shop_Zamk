@@ -322,6 +322,7 @@ func TestSuppliesAuth(t *testing.T) {
 	var sessionIDForI uuid.UUID
 	t.Run("H. admin with receipt perm POST receiving/sessions valid QR -> 200", func(t *testing.T) {
 		_, _, qrToken, _ := setupShippedSupplyFixture(t)
+			pgClient.Pool.Exec(context.Background(), "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE qr_token = $1", qrToken)
 
 		uid := insertUser(t, "admin")
 		insertAdminWithPerms(t, uid, []string{"inventory.receipt"})

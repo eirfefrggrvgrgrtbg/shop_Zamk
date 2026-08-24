@@ -102,6 +102,14 @@ export const updateAdminSellerStatus = async (id: string, status: string, reason
 // WAREHOUSE RECEIVING
 // ---------------------------------------------------------
 
+export const lookupSupplyByCode = (qrToken: string): Promise<any> => {
+  return request<any>('GET', `/admin/receiving/lookup?qr_token=${encodeURIComponent(qrToken)}`);
+};
+
+export const markSupplyArrived = (supplyId: string): Promise<void> => {
+  return request<void>('POST', `/admin/receiving/${supplyId}/arrive`);
+};
+
 export const startSupplyReceivingSession = async (qrToken: string): Promise<SupplyReceivingSession> => {
   return request<SupplyReceivingSession>('POST', `/admin/receiving/sessions?qr_token=${encodeURIComponent(qrToken)}`);
 };

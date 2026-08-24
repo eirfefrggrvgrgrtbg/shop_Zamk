@@ -8,18 +8,12 @@ import {
   getAdminInventoryErrorMessage,
   getAdminInventoryItem,
   getAdminInventoryMovements,
-  adjustAdminInventory,
+  
 } from '../api/adminInventory';
 import type { AdminInventoryMovementView, AdminInventoryView } from '../api/adminInventory';
-import { PermissionGuard } from '../components/PermissionGuard';
 
-type InventoryAction = 'receipt' | 'adjustment' | 'write_off';
 
-const actionLabels: Record<InventoryAction, string> = {
-  receipt: 'Приёмка',
-  adjustment: 'Корректировка',
-  write_off: 'Списание',
-};
+
 
 export function AdminInventory() {
   const [inventory, setInventory] = useState<AdminInventoryView[]>([]);
@@ -28,11 +22,7 @@ export function AdminInventory() {
   const [isLoading, setIsLoading] = useState(true);
   const [isMovementsLoading, setIsMovementsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [action, setAction] = useState<InventoryAction>('receipt');
-  const [quantity, setQuantity] = useState('');
-  const [reason, setReason] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+          const [searchQuery, setSearchQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
   const [searchParams] = useSearchParams();
   const urlSellerId = searchParams.get('sellerId');
@@ -91,46 +81,6 @@ export function AdminInventory() {
     fetchInventory();
   }, [searchQuery, sourceFilter, sellerFilter, lowStockFilter, pagination.limit, pagination.offset]);
 
-  const resetForm = () => {
-    setQuantity('');
-    setReason('');
-  };
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!selectedItem) return;
-
-    const parsedQuantity = Number(quantity);
-    if (!Number.isFinite(parsedQuantity) || parsedQuantity === 0) {
-      setError('Количество должно быть ненулевым числом.');
-      return;
-    }
-    if ((action === 'receipt' || action === 'write_off') && parsedQuantity <= 0) {
-      setError('Для приёмки и списания количество должно быть больше нуля.');
-      return;
-    }
-    if (action === 'write_off' && !window.confirm('Вы уверены, что хотите списать этот товар?')) {
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      setError(null);
-      const input = {
-        type: action,
-        quantity: parsedQuantity,
-        reason,
-      };
-      await adjustAdminInventory(selectedItem.id, input);
-      resetForm();
-      await fetchInventory();
-      await fetchMovements(selectedItem);
-    } catch (err: unknown) {
-      setError(getAdminInventoryErrorMessage(err, `Не удалось выполнить действие: ${actionLabels[action].toLowerCase()}.`));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const formatDate = (value?: string) => value ? new Date(value).toLocaleString('ru-RU') : '-';
 
@@ -216,17 +166,17 @@ export function AdminInventory() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Товар / Вариант</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Источник / Продавец</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Доступно
-                      <HelpTooltip content="Количество товара, доступное для продажи (Всего - Зарезервировано)." />
+                      На складе
+                      <HelpTooltip content="Количество товара, доступное для продажи (Доступно - Зарезервировано)." />
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Резерв
+                      В резерве
                       <HelpTooltip content="Товар, который находится в активных корзинах или неоплаченных заказах." />
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Всего
+                      Доступно
                       <HelpTooltip content="Физическое количество товара на складе." />
                     </th>
                     <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
@@ -269,7 +219,7 @@ export function AdminInventory() {
                         {item.totalStock}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onClick={() => fetchMovements(item)} className="text-indigo-600 hover:text-indigo-900">Просмотр / Изменить</button>
+                        <button onClick={() => fetchMovements(item)} className="text-indigo-600 hover:text-indigo-900">Открыть</button>
                       </td>
                     </tr>
                   ))}
@@ -282,39 +232,7 @@ export function AdminInventory() {
       )}
 
       {selectedItem && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="bg-white shadow sm:rounded-lg p-6">
-            <h2 className="text-lg font-medium text-gray-900">Операция с остатками</h2>
-            <p className="mt-1 text-sm text-gray-500">Вариант: {selectedItem.variant}</p>
-            <PermissionGuard
-              permission={['inventory.receipt', 'inventory.adjust', 'inventory.write_off']}
-              fallback={<p className="mt-4 text-sm text-gray-500">У вас нет прав для выполнения операций со складом.</p>}
-            >
-              <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Действие</label>
-                  <select value={action} onChange={(event) => setAction(event.target.value as InventoryAction)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                    <PermissionGuard permission="inventory.receipt"><option value="receipt">Приёмка</option></PermissionGuard>
-                    <PermissionGuard permission="inventory.adjust"><option value="adjustment">Корректировка</option></PermissionGuard>
-                    <PermissionGuard permission="inventory.write_off"><option value="write_off">Списание</option></PermissionGuard>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Количество</label>
-                  <input required type="number" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-                  {action === 'adjustment' && <p className="mt-1 text-xs text-gray-500">Укажите положительную или отрицательную дельту. Бэкенд проверяет лимиты.</p>}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Причина</label>
-                  <textarea required={action !== 'receipt'} rows={3} value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-                </div>
-                <button type="submit" disabled={isSubmitting} className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50">
-                  {isSubmitting ? 'Отправка...' : actionLabels[action]}
-                </button>
-              </form>
-            </PermissionGuard>
-          </div>
-
+        <div className="grid gap-6 lg:grid-cols-1">
           <div className="bg-white shadow sm:rounded-lg p-6">
             <h2 className="text-lg font-medium text-gray-900">Движения остатков</h2>
             {isMovementsLoading ? (

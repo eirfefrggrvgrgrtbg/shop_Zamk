@@ -170,6 +170,15 @@ const getSafeErrorMessage = (code?: string, fallback?: string): string => {
     case 'supply_items_required':
     case 'SUPPLY_ITEMS_REQUIRED':
       return 'Укажите количество хотя бы для одного товара.';
+    case 'supply_receiving_lookup_failed':
+    case 'SUPPLY_RECEIVING_LOOKUP_FAILED':
+      return 'Ошибка поиска поставки.';
+    case 'supply_not_found':
+    case 'SUPPLY_NOT_FOUND':
+      return 'Поставка не найдена.';
+    case 'supply_not_shipped':
+    case 'SUPPLY_NOT_SHIPPED':
+      return 'Поставка еще не отправлена продавцом.';
     case 'supply_invalid_status':
     case 'SUPPLY_INVALID_STATUS':
       return 'Недопустимый статус поставки для выполнения действия.';

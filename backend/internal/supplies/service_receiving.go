@@ -10,13 +10,27 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func (s *Service) MarkSupplyArrived(ctx context.Context, adminID uuid.UUID, supplyID uuid.UUID) error {
+	supply, err := s.repo.GetSupplyByID(ctx, supplyID)
+	if err != nil {
+		return err
+	}
+	if supply.Status != "shipped_by_seller" {
+		return ErrInvalidStatus
+	}
+	return s.repo.UpdateSupplyStatus(ctx, supplyID, "arrived_at_zamk")
+}
+
 func (s *Service) StartReceivingSession(ctx context.Context, staffID uuid.UUID, qrToken string) (*ReceivingSession, error) {
 	supply, err := s.repo.GetSupplyByQRToken(ctx, qrToken)
 	if err != nil {
 		return nil, err
 	}
 
-	if supply.Status != "shipped_by_seller" && supply.Status != "arrived_at_zamk" && supply.Status != "receiving" {
+	if supply.Status == "shipped_by_seller" {
+		return nil, ErrSupplyNotArrived
+	}
+	if supply.Status != "arrived_at_zamk" && supply.Status != "receiving" {
 		return nil, ErrInvalidStatus
 	}
 
