@@ -2,10 +2,10 @@
 import { useState, useEffect } from 'react';
 import type { WizardState } from './WizardState';
 import { getSellerColors, uploadSellerProductImage, cropSellerProductImage, setMainSellerProductImage, type SellerCategorySchema, type SellerColor } from '@zamk/api-client/src/seller';
-import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop';
+import ReactCrop, { type Crop, type PercentCrop, centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
-function centerAspectCrop(mediaWidth: number, mediaHeight: number, aspect: number) {
+function centerAspectCrop(mediaWidth: number, mediaHeight: number, aspect: number): PercentCrop {
   return centerCrop(
     makeAspectCrop({ unit: '%', width: 90 }, aspect, mediaWidth, mediaHeight),
     mediaWidth,
@@ -37,7 +37,7 @@ export function Step6Media({
 
   const [crop, setCrop] = useState<Crop>();
   const [cropError, setCropError] = useState<string | null>(null);
-  const [completedCrop, setCompletedCrop] = useState<Crop>();
+  const [completedPercentCrop, setCompletedPercentCrop] = useState<PercentCrop>();
   const [imageRef, setImageRef] = useState<HTMLImageElement | null>(null);
 
   useEffect(() => {
@@ -46,10 +46,7 @@ export function Step6Media({
 
   const hasColor = (schema?.attributes || []).some(a => a.valueSource === 'VARIANT_COLOR') || false;
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>, colorId?: string) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const proceedUpload = async (file: File, colorId?: string) => {
     let productId = state.id;
     if (!productId && onSaveDraft) {
       setUploading(true);
@@ -71,17 +68,46 @@ export function Step6Media({
       if (colorId) {
         const nw = { ...state.colorImages };
         if (!nw[colorId]) nw[colorId] = [];
-        nw[colorId] = [...nw[colorId], { id: res.id, url: res.imageUrl, sortOrder: nw[colorId].length, isMain: false }];
+        nw[colorId] = [...nw[colorId], { id: res.id, url: res.imageUrl, sortOrder: nw[colorId].length, isMain: false, isReady: false }];
         updateState({ colorImages: nw });
       } else {
-        updateState({ commonImages: [...state.commonImages, { id: res.id, url: res.imageUrl, sortOrder: state.commonImages.length, isMain: false }] });
+        updateState({ commonImages: [...state.commonImages, { id: res.id, url: res.imageUrl, sortOrder: state.commonImages.length, isMain: false, isReady: false }] });
       }
     } catch (err: any) {
-      onError?.('Ошибка загрузки: ' + err.message);
+      onError?.(err?.message || 'Не удалось загрузить изображение');
     } finally {
       setUploading(false);
-      e.target.value = ''; // reset input
     }
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>, colorId?: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Client-side image pre-check for dimensions
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      if (img.naturalWidth >= img.naturalHeight) {
+        onError?.('Для товара нужны вертикальные фотографии.\nЗагрузите изображение в вертикальном формате.');
+        e.target.value = '';
+        return;
+      }
+      if (img.naturalWidth < 800 || img.naturalHeight < 1000) {
+        onError?.('Изображение слишком маленькое.\nМинимальный размер — 800×1000 пикселей.');
+        e.target.value = '';
+        return;
+      }
+      proceedUpload(file, colorId);
+      e.target.value = '';
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      proceedUpload(file, colorId);
+      e.target.value = '';
+    };
+    img.src = objectUrl;
   };
 
   const removeCommon = (idx: number) => {
@@ -96,12 +122,12 @@ export function Step6Media({
 
   const openCropModal = (img: { id: string, url: string }, colorId?: string) => {
     if (!img.id) {
-      onError?.('Сначала сохраните черновик, чтобы обновить фото');
+      onError?.('Сначала сохраните черновик, чтобы настроить фото');
       return;
     }
     setCropTarget({ ...img, colorId });
     setCrop(undefined);
-    setCompletedCrop(undefined);
+    setCompletedPercentCrop(undefined);
     setCropError(null);
     setCropModalOpen(true);
   };
@@ -109,28 +135,30 @@ export function Step6Media({
   const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { width, height } = e.currentTarget;
     setImageRef(e.currentTarget);
-    setCrop(centerAspectCrop(width, height, 4 / 5));
+    const initialCrop = centerAspectCrop(width, height, 4 / 5);
+    setCrop(initialCrop);
+    setCompletedPercentCrop(initialCrop);
   };
 
   const handleSaveCrop = async () => {
-    if (!completedCrop || !cropTarget || !imageRef || !state.id) return;
+    const activeCrop = completedPercentCrop || (crop?.unit === '%' ? (crop as PercentCrop) : undefined);
+    if (!activeCrop || !cropTarget || !imageRef || !state.id) return;
     setCropError(null);
 
-    // We check if the original image is reasonably large enough
     const originalW = imageRef.naturalWidth;
     const originalH = imageRef.naturalHeight;
     if (originalW < 800 || originalH < 1000) {
-      setCropError('Изображение слишком маленькое. Минимум 800x1000.');
+      setCropError('Изображение слишком маленькое. Минимальный размер — 800×1000 пикселей.');
       return;
     }
 
     try {
       setUploading(true);
       const payload = {
-        cropX: completedCrop.x / 100,
-        cropY: completedCrop.y / 100,
-        cropWidth: completedCrop.width / 100,
-        cropHeight: completedCrop.height / 100
+        cropX: activeCrop.x / 100,
+        cropY: activeCrop.y / 100,
+        cropWidth: activeCrop.width / 100,
+        cropHeight: activeCrop.height / 100
       };
 
       const res = await cropSellerProductImage(state.id, cropTarget.id, payload);
@@ -150,7 +178,8 @@ export function Step6Media({
       updateState({ commonImages: newCommon, colorImages: newColorImages });
       setCropModalOpen(false);
     } catch(err: any) {
-      onError?.(err.message);
+      setCropError(err.message || 'Не удалось сохранить кадр 4:5. Попробуйте выбрать область фотографии ещё раз.');
+      onError?.(err.message || 'Не удалось сохранить кадр 4:5. Попробуйте выбрать область фотографии ещё раз.');
     } finally {
       setUploading(false);
     }
@@ -212,7 +241,7 @@ export function Step6Media({
                 <button onClick={() => removeCommon(i)} className="absolute top-1 right-1 bg-white rounded-full p-1 shadow text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 z-10 transition-opacity">✕</button>
               </div>
               {!img.isReady && (
-                 <button onClick={() => openCropModal(img)} className="text-xs text-blue-600 hover:underline text-center w-full">НАСТРОИТЬ КАДР</button>
+                 <button onClick={() => openCropModal(img)} className="text-xs text-blue-600 hover:underline text-center w-full">Настроить фото</button>
               )}
               {img.isReady && !img.isMain && (
                  <button onClick={() => handleSetMainImage(img.id)} className="text-xs text-blue-600 hover:underline text-center w-full">Сделать главным</button>
@@ -260,7 +289,7 @@ export function Step6Media({
                         <button onClick={() => removeColorImg(cId, i)} className="absolute top-1 right-1 bg-white rounded-full p-1 shadow text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 z-10 transition-opacity">✕</button>
                       </div>
                       {!img.isReady && (
-                        <button onClick={() => openCropModal(img, cId)} className="text-xs text-blue-600 hover:underline text-center w-full">НАСТРОИТЬ КАДР</button>
+                        <button onClick={() => openCropModal(img, cId)} className="text-xs text-blue-600 hover:underline text-center w-full">Настроить фото</button>
                       )}
                       {img.isReady && !img.isMain && (
                         <button onClick={() => handleSetMainImage(img.id)} className="text-xs text-blue-600 hover:underline text-center w-full">Сделать главным</button>
@@ -285,14 +314,14 @@ export function Step6Media({
       {cropModalOpen && cropTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
           <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] flex flex-col">
-            <h3 className="text-lg font-medium mb-4">Настроить кадр (4:5)</h3>
-            <p className="text-sm text-gray-500 mb-4">Для главного фото выберите кадр 4:5. Каталог покажет ровно эту область.</p>
+            <h3 className="text-lg font-medium mb-1">Настроить фото</h3>
+            <p className="text-sm text-gray-500 mb-4">Выберите область, которая будет показана покупателю. Формат изображения — 4:5.</p>
 
             <div className="flex-1 overflow-auto bg-gray-50 flex items-center justify-center min-h-[400px]">
               <ReactCrop
                 crop={crop}
                 onChange={(_, percentCrop) => setCrop(percentCrop)}
-                onComplete={(c) => setCompletedCrop(c)}
+                onComplete={(_, percentCrop) => setCompletedPercentCrop(percentCrop)}
                 aspect={4 / 5}
                 minHeight={20}
               >
@@ -305,11 +334,11 @@ export function Step6Media({
               </ReactCrop>
             </div>
 
-            {cropError && <p className="text-red-500 text-sm mb-2">{cropError}</p>}
+            {cropError && <p className="text-red-500 text-sm mt-2 mb-1">{cropError}</p>}
             <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
               <button onClick={() => setCropModalOpen(false)} className="px-4 py-2 border rounded">Отмена</button>
               <button onClick={handleSaveCrop} disabled={uploading} className="px-4 py-2 bg-black text-white rounded disabled:opacity-50">
-                {uploading ? 'Сохранение...' : 'ГОТОВО 4:5'}
+                {uploading ? 'Сохранение...' : 'Готово 4:5'}
               </button>
             </div>
           </div>

@@ -21,21 +21,16 @@ type CropImageRequest struct {
 	CropHeight float64 `json:"cropHeight"`
 }
 
-var ErrInvalidCropParameters = fmt.Errorf("invalid crop parameters")
-
 func (req CropImageRequest) Validate() error {
 	epsilon := 0.01
 	if req.CropX < 0 || req.CropY < 0 || req.CropWidth <= 0 || req.CropHeight <= 0 {
 		return ErrInvalidCropParameters
 	}
-	if req.CropX+req.CropWidth > 1+epsilon || req.CropY+req.CropHeight > 1+epsilon {
+	if req.CropX >= 1 || req.CropY >= 1 || req.CropWidth > 1+epsilon || req.CropHeight > 1+epsilon {
 		return ErrInvalidCropParameters
 	}
-
-	aspect := req.CropWidth / req.CropHeight
-	expectedAspect := 4.0 / 5.0
-	if aspect < expectedAspect-epsilon || aspect > expectedAspect+epsilon {
-		return fmt.Errorf("crop aspect ratio must be 4:5")
+	if req.CropX+req.CropWidth > 1+epsilon || req.CropY+req.CropHeight > 1+epsilon {
+		return ErrInvalidCropParameters
 	}
 	return nil
 }
@@ -85,6 +80,19 @@ func (s *Service) CropSellerProductImage(ctx context.Context, userID, productID,
 	bounds := origImg.Bounds()
 	origW := bounds.Dx()
 	origH := bounds.Dy()
+
+	cropPixelW := req.CropWidth * float64(origW)
+	cropPixelH := req.CropHeight * float64(origH)
+	if cropPixelW <= 0 || cropPixelH <= 0 {
+		return nil, ErrInvalidCropParameters
+	}
+
+	actualAspect := cropPixelW / cropPixelH
+	expectedAspect := 4.0 / 5.0
+	epsilon := 0.03
+	if actualAspect < expectedAspect-epsilon || actualAspect > expectedAspect+epsilon {
+		return nil, ErrInvalidCropAspect
+	}
 
 	// 2. Calculate crop rect
 	x0 := int(req.CropX * float64(origW))

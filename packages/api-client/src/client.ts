@@ -158,6 +158,20 @@ export const request = async <T>(
 
 const getSafeErrorMessage = (code?: string, fallback?: string): string => {
   switch (code) {
+    case 'product_media_portrait_required':
+    case 'PRODUCT_MEDIA_PORTRAIT_REQUIRED':
+      return 'Для товара нужны вертикальные фотографии.\nЗагрузите изображение в вертикальном формате.';
+    case 'product_media_too_small':
+    case 'PRODUCT_MEDIA_TOO_SMALL':
+      return 'Изображение слишком маленькое.\nМинимальный размер — 800×1000 пикселей.';
+    case 'product_media_invalid_crop':
+    case 'PRODUCT_MEDIA_INVALID_CROP':
+    case 'product_media_invalid_aspect':
+    case 'PRODUCT_MEDIA_INVALID_ASPECT':
+      return 'Не удалось сохранить кадр 4:5.\nПопробуйте выбрать область фотографии ещё раз.';
+    case 'product_media_not_ready':
+    case 'PRODUCT_MEDIA_NOT_READY':
+      return 'Сначала настройте кадр 4:5 для фотографии.';
     case 'insufficient_permissions':
       return 'Недостаточно прав для выполнения действия.';
     case 'invalid_request':

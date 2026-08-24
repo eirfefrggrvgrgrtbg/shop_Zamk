@@ -75,3 +75,65 @@ func TestMediaMainImageConstraint(t *testing.T) {
 	assert.False(t, i1.IsMain)
 	assert.True(t, i2.IsMain)
 }
+
+func TestModerationSubmission_MediaValidation(t *testing.T) {
+	db, svc, sellerUserID := setupBlockATestDB(t)
+	defer db.Close()
+	ctx := context.Background()
+
+	// 1. Create a category
+	catID := uuid.New()
+	_, err := db.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug, size_chart_required) VALUES ($1, 'Test Cat', $2, false)", catID, "test-cat-"+uuid.New().String())
+	require.NoError(t, err)
+
+	// 2. Create a draft product
+	slug := "draft-" + uuid.New().String()
+	p, err := svc.CreateProductForSeller(ctx, sellerUserID, products.CreateProductRequest{
+		Title:      "Draft Product",
+		Slug:       &slug,
+		CategoryID: &catID,
+	})
+	require.NoError(t, err)
+
+	// 3. Attempt submit without images -> fails
+	err = svc.SubmitProductToModeration(ctx, sellerUserID, p.ID, products.SubmitProductModerationRequest{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at least one image is required")
+
+	// 4. Add an image without crop/rendition
+	repo := products.NewRepository(db.Pool)
+	img1 := &products.ProductImage{
+		ID:        uuid.New(),
+		ProductID: p.ID,
+		ImageURL:  "https://storage.zamk.test/orig1.jpg",
+		IsMain:    false,
+	}
+	err = repo.AddProductImage(ctx, img1)
+	require.NoError(t, err)
+
+	// Attempt submit -> fails because image lacks rendition
+	err = svc.SubmitProductToModeration(ctx, sellerUserID, p.ID, products.SubmitProductModerationRequest{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "all images must have explicit 4:5 renditions")
+
+	// 5. Update image with crop & rendition, but is_main is false
+	err = repo.UpdateProductImageCrop(ctx, img1.ID, 0, 0, 1.0, 1.0, "https://storage.zamk.test/rend1.jpg", "rend1.jpg")
+	require.NoError(t, err)
+
+	// Attempt submit -> fails because no main image
+	err = svc.SubmitProductToModeration(ctx, sellerUserID, p.ID, products.SubmitProductModerationRequest{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "a main image is required")
+
+	// 6. Set as main
+	_, err = db.Pool.Exec(ctx, "UPDATE product_images SET is_main = true WHERE id = $1", img1.ID)
+	require.NoError(t, err)
+
+	// Attempt submit -> passes media validation (may fail on missing required attributes/variants if strict, or succeed)
+	err = svc.SubmitProductToModeration(ctx, sellerUserID, p.ID, products.SubmitProductModerationRequest{})
+	// The error should NOT be media-related anymore
+	if err != nil {
+		assert.NotContains(t, err.Error(), "image")
+		assert.NotContains(t, err.Error(), "rendition")
+	}
+}

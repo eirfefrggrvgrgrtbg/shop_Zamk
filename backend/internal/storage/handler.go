@@ -25,10 +25,15 @@ func NewHandler(service *Service, cfg *config.S3Config) *Handler {
 	}
 }
 
-func (h *Handler) writeJSONError(w http.ResponseWriter, status int, msg string) {
+func (h *Handler) writeError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"error": map[string]interface{}{
+			"code":    code,
+			"message": message,
+		},
+	})
 }
 
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, data interface{}) {
@@ -66,20 +71,20 @@ func (h *Handler) UploadSellerProductImage(w http.ResponseWriter, r *http.Reques
 	productIDStr := chi.URLParam(r, "id")
 	productID, err := uuid.Parse(productIDStr)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid product id")
+		h.writeError(w, http.StatusBadRequest, "invalid_product_id", "invalid product id")
 		return
 	}
 
 	sellerIDRaw := r.Context().Value("userID")
 	userID, ok := sellerIDRaw.(uuid.UUID)
 	if !ok {
-		h.writeJSONError(w, http.StatusUnauthorized, "user id not found in context")
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "user id not found in context")
 		return
 	}
 
 	file, header, opts, err := h.parseUploadRequest(r)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid request: "+err.Error())
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "invalid request: "+err.Error())
 		return
 	}
 	defer file.Close()
@@ -89,14 +94,26 @@ func (h *Handler) UploadSellerProductImage(w http.ResponseWriter, r *http.Reques
 	resp, err := h.service.UploadSellerProductImage(r.Context(), userID, productID, file, header.Filename, header.Size, contentType, int64(h.cfg.UploadMaxSizeMB), opts)
 	if err != nil {
 		if err == ErrProductNotOwned || err == ErrProductNotDraft || err == products.ErrProductNotEditable {
-			h.writeJSONError(w, http.StatusForbidden, err.Error())
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
 			return
 		}
-		if err == ErrInvalidMimeType || err == ErrInvalidExtension || err == ErrFileTooLarge || err == ErrProductMediaPortraitRequired || err == ErrProductMediaTooSmall {
-			h.writeJSONError(w, http.StatusBadRequest, err.Error())
+		if err == ErrProductMediaPortraitRequired {
+			h.writeError(w, http.StatusBadRequest, "product_media_portrait_required", err.Error())
 			return
 		}
-		h.writeJSONError(w, http.StatusInternalServerError, "upload failed")
+		if err == ErrProductMediaTooSmall {
+			h.writeError(w, http.StatusBadRequest, "product_media_too_small", err.Error())
+			return
+		}
+		if err == ErrInvalidMimeType || err == ErrInvalidExtension {
+			h.writeError(w, http.StatusBadRequest, "invalid_file_type", err.Error())
+			return
+		}
+		if err == ErrFileTooLarge {
+			h.writeError(w, http.StatusBadRequest, "file_too_large", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "upload failed")
 		return
 	}
 
@@ -107,13 +124,13 @@ func (h *Handler) UploadAdminProductImage(w http.ResponseWriter, r *http.Request
 	productIDStr := chi.URLParam(r, "id")
 	productID, err := uuid.Parse(productIDStr)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid product id")
+		h.writeError(w, http.StatusBadRequest, "invalid_product_id", "invalid product id")
 		return
 	}
 
 	file, header, opts, err := h.parseUploadRequest(r)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid request: "+err.Error())
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "invalid request: "+err.Error())
 		return
 	}
 	defer file.Close()
@@ -122,11 +139,15 @@ func (h *Handler) UploadAdminProductImage(w http.ResponseWriter, r *http.Request
 
 	resp, err := h.service.UploadAdminProductImage(r.Context(), productID, file, header.Filename, header.Size, contentType, int64(h.cfg.UploadMaxSizeMB), opts)
 	if err != nil {
-		if err == ErrInvalidMimeType || err == ErrInvalidExtension || err == ErrFileTooLarge {
-			h.writeJSONError(w, http.StatusBadRequest, err.Error())
+		if err == ErrInvalidMimeType || err == ErrInvalidExtension {
+			h.writeError(w, http.StatusBadRequest, "invalid_file_type", err.Error())
 			return
 		}
-		h.writeJSONError(w, http.StatusInternalServerError, "upload failed")
+		if err == ErrFileTooLarge {
+			h.writeError(w, http.StatusBadRequest, "file_too_large", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "upload failed")
 		return
 	}
 
@@ -137,13 +158,13 @@ func (h *Handler) UploadAdminBrandLogo(w http.ResponseWriter, r *http.Request) {
 	brandIDStr := chi.URLParam(r, "id")
 	brandID, err := uuid.Parse(brandIDStr)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid brand id")
+		h.writeError(w, http.StatusBadRequest, "invalid_brand_id", "invalid brand id")
 		return
 	}
 
 	file, header, _, err := h.parseUploadRequest(r)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid request: "+err.Error())
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "invalid request: "+err.Error())
 		return
 	}
 	defer file.Close()
@@ -152,11 +173,15 @@ func (h *Handler) UploadAdminBrandLogo(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.service.UploadAdminBrandLogo(r.Context(), brandID, file, header.Filename, header.Size, contentType, int64(h.cfg.UploadMaxSizeMB))
 	if err != nil {
-		if err == ErrInvalidMimeType || err == ErrInvalidExtension || err == ErrFileTooLarge {
-			h.writeJSONError(w, http.StatusBadRequest, err.Error())
+		if err == ErrInvalidMimeType || err == ErrInvalidExtension {
+			h.writeError(w, http.StatusBadRequest, "invalid_file_type", err.Error())
 			return
 		}
-		h.writeJSONError(w, http.StatusInternalServerError, "upload failed")
+		if err == ErrFileTooLarge {
+			h.writeError(w, http.StatusBadRequest, "file_too_large", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "upload failed")
 		return
 	}
 
@@ -167,13 +192,13 @@ func (h *Handler) UploadSellerProfileImage(w http.ResponseWriter, r *http.Reques
 	sellerIDRaw := r.Context().Value("userID")
 	userID, ok := sellerIDRaw.(uuid.UUID)
 	if !ok {
-		h.writeJSONError(w, http.StatusUnauthorized, "user id not found in context")
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "user id not found in context")
 		return
 	}
 
 	file, header, _, err := h.parseUploadRequest(r)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid request: "+err.Error())
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "invalid request: "+err.Error())
 		return
 	}
 	defer file.Close()
@@ -182,11 +207,15 @@ func (h *Handler) UploadSellerProfileImage(w http.ResponseWriter, r *http.Reques
 
 	resp, err := h.service.UploadSellerProfileImage(r.Context(), userID, file, header.Filename, header.Size, contentType, int64(h.cfg.UploadMaxSizeMB))
 	if err != nil {
-		if err == ErrInvalidMimeType || err == ErrInvalidExtension || err == ErrFileTooLarge {
-			h.writeJSONError(w, http.StatusBadRequest, err.Error())
+		if err == ErrInvalidMimeType || err == ErrInvalidExtension {
+			h.writeError(w, http.StatusBadRequest, "invalid_file_type", err.Error())
 			return
 		}
-		h.writeJSONError(w, http.StatusInternalServerError, "upload failed")
+		if err == ErrFileTooLarge {
+			h.writeError(w, http.StatusBadRequest, "file_too_large", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "upload failed")
 		return
 	}
 
@@ -197,35 +226,35 @@ func (h *Handler) DeleteSellerProductImage(w http.ResponseWriter, r *http.Reques
 	productIDStr := chi.URLParam(r, "id")
 	productID, err := uuid.Parse(productIDStr)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid product id")
+		h.writeError(w, http.StatusBadRequest, "invalid_product_id", "invalid product id")
 		return
 	}
 
 	imageIDStr := chi.URLParam(r, "imageId")
 	imageID, err := uuid.Parse(imageIDStr)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid image id")
+		h.writeError(w, http.StatusBadRequest, "invalid_image_id", "invalid image id")
 		return
 	}
 
 	sellerIDRaw := r.Context().Value("userID")
 	userID, ok := sellerIDRaw.(uuid.UUID)
 	if !ok {
-		h.writeJSONError(w, http.StatusUnauthorized, "user id not found in context")
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "user id not found in context")
 		return
 	}
 
 	err = h.service.DeleteSellerProductImage(r.Context(), userID, productID, imageID)
 	if err != nil {
 		if err == ErrProductNotOwned || err == ErrProductNotDraft || err == products.ErrProductNotEditable {
-			h.writeJSONError(w, http.StatusForbidden, err.Error())
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
 			return
 		}
 		if err.Error() == "image does not belong to product" || err == products.ErrProductNotFound {
-			h.writeJSONError(w, http.StatusNotFound, "image not found")
+			h.writeError(w, http.StatusNotFound, "not_found", "image not found")
 			return
 		}
-		h.writeJSONError(w, http.StatusInternalServerError, "failed to delete image: "+err.Error())
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "failed to delete image: "+err.Error())
 		return
 	}
 
@@ -240,34 +269,34 @@ func (h *Handler) ReorderSellerProductImages(w http.ResponseWriter, r *http.Requ
 	productIDStr := chi.URLParam(r, "id")
 	productID, err := uuid.Parse(productIDStr)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid product id")
+		h.writeError(w, http.StatusBadRequest, "invalid_product_id", "invalid product id")
 		return
 	}
 
 	sellerIDRaw := r.Context().Value("userID")
 	userID, ok := sellerIDRaw.(uuid.UUID)
 	if !ok {
-		h.writeJSONError(w, http.StatusUnauthorized, "user id not found in context")
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "user id not found in context")
 		return
 	}
 
 	var req ReorderImagesRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "invalid request body")
 		return
 	}
 
 	err = h.service.ReorderSellerProductImages(r.Context(), userID, productID, req.ImageIDs)
 	if err != nil {
 		if err == ErrProductNotOwned || err == ErrProductNotDraft || err == products.ErrProductNotEditable {
-			h.writeJSONError(w, http.StatusForbidden, err.Error())
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
 			return
 		}
 		if strings.Contains(err.Error(), "duplicate image ID") || strings.Contains(err.Error(), "does not belong") || strings.Contains(err.Error(), "missing images") {
-			h.writeJSONError(w, http.StatusBadRequest, err.Error())
+			h.writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}
-		h.writeJSONError(w, http.StatusInternalServerError, "failed to reorder images")
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "failed to reorder images")
 		return
 	}
 
@@ -278,46 +307,50 @@ func (h *Handler) CropSellerProductImage(w http.ResponseWriter, r *http.Request)
 	productIDStr := chi.URLParam(r, "id")
 	productID, err := uuid.Parse(productIDStr)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid product id")
+		h.writeError(w, http.StatusBadRequest, "invalid_product_id", "invalid product id")
 		return
 	}
 
 	imageIDStr := chi.URLParam(r, "imageId")
 	imageID, err := uuid.Parse(imageIDStr)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid image id")
+		h.writeError(w, http.StatusBadRequest, "invalid_image_id", "invalid image id")
 		return
 	}
 
 	sellerIDRaw := r.Context().Value("userID")
 	userID, ok := sellerIDRaw.(uuid.UUID)
 	if !ok {
-		h.writeJSONError(w, http.StatusUnauthorized, "user id not found in context")
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "user id not found in context")
 		return
 	}
 
 	var req CropImageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		h.writeError(w, http.StatusBadRequest, "product_media_invalid_crop", "invalid request body")
 		return
 	}
 
 	if err := req.Validate(); err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, err.Error())
+		h.writeError(w, http.StatusBadRequest, "product_media_invalid_crop", "Не удалось сохранить кадр 4:5. Попробуйте выбрать область фотографии ещё раз.")
 		return
 	}
 
 	resp, err := h.service.CropSellerProductImage(r.Context(), userID, productID, imageID, req)
 	if err != nil {
+		if err == ErrInvalidCropParameters || err == ErrInvalidCropAspect {
+			h.writeError(w, http.StatusBadRequest, "product_media_invalid_crop", "Не удалось сохранить кадр 4:5. Попробуйте выбрать область фотографии ещё раз.")
+			return
+		}
 		if err == ErrProductNotOwned || err == products.ErrProductNotEditable {
-			h.writeJSONError(w, http.StatusForbidden, err.Error())
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
 			return
 		}
 		if err.Error() == "image does not belong to product" {
-			h.writeJSONError(w, http.StatusNotFound, "image not found")
+			h.writeError(w, http.StatusNotFound, "not_found", "image not found")
 			return
 		}
-		h.writeJSONError(w, http.StatusInternalServerError, "failed to crop image: "+err.Error())
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "failed to crop image: "+err.Error())
 		return
 	}
 
@@ -328,35 +361,39 @@ func (h *Handler) SetMainProductImage(w http.ResponseWriter, r *http.Request) {
 	productIDStr := chi.URLParam(r, "id")
 	productID, err := uuid.Parse(productIDStr)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid product id")
+		h.writeError(w, http.StatusBadRequest, "invalid_product_id", "invalid product id")
 		return
 	}
 
 	imageIDStr := chi.URLParam(r, "imageId")
 	imageID, err := uuid.Parse(imageIDStr)
 	if err != nil {
-		h.writeJSONError(w, http.StatusBadRequest, "invalid image id")
+		h.writeError(w, http.StatusBadRequest, "invalid_image_id", "invalid image id")
 		return
 	}
 
 	sellerIDRaw := r.Context().Value("userID")
 	userID, ok := sellerIDRaw.(uuid.UUID)
 	if !ok {
-		h.writeJSONError(w, http.StatusUnauthorized, "user id not found in context")
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "user id not found in context")
 		return
 	}
 
 	err = h.service.SetMainProductImage(r.Context(), userID, productID, imageID)
 	if err != nil {
 		if err == ErrProductNotOwned || err == products.ErrProductNotEditable {
-			h.writeJSONError(w, http.StatusForbidden, err.Error())
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
 			return
 		}
-		if err.Error() == "image does not belong to product" || err.Error() == "image must be cropped to 4:5 before it can be made main" {
-			h.writeJSONError(w, http.StatusBadRequest, err.Error())
+		if err.Error() == "image does not belong to product" {
+			h.writeError(w, http.StatusNotFound, "not_found", "image not found")
 			return
 		}
-		h.writeJSONError(w, http.StatusInternalServerError, "failed to set main image: "+err.Error())
+		if err.Error() == "image must be cropped to 4:5 before it can be made main" || err.Error() == "selected image is not ready (missing rendition)" {
+			h.writeError(w, http.StatusBadRequest, "product_media_not_ready", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "failed to set main image: "+err.Error())
 		return
 	}
 
