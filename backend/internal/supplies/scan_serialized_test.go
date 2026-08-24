@@ -154,6 +154,25 @@ func TestSerializedReceivingScanAndUndoLifecycle(t *testing.T) {
 		t.Fatalf("expected total=2, active=1, voided=1 for unit1; got total=%d, active=%d, voided=%d", totalUnit1Scans, activeUnit1Scans, voidedUnit1Scans)
 	}
 
+	// Recent scans endpoint returns history including voided scans
+	recentScans, err := tc.Service.ListRecentSerializedScans(tc.Ctx, tc.AdminID, session.ID, 10)
+	if err != nil {
+		t.Fatalf("failed to list recent scans: %v", err)
+	}
+	var unit1RecentVoided, unit1RecentActive int
+	for _, sc := range recentScans {
+		if sc.UnitCode == unit1.UnitCode {
+			if sc.VoidedAt != nil {
+				unit1RecentVoided++
+			} else {
+				unit1RecentActive++
+			}
+		}
+	}
+	if unit1RecentActive != 1 || unit1RecentVoided != 1 {
+		t.Fatalf("expected 1 active and 1 voided in recent scans for unit1, got active=%d voided=%d", unit1RecentActive, unit1RecentVoided)
+	}
+
 	// F. Undo damaged decrements damaged counter
 	undoResp2, err := tc.Service.UndoSerializedScan(tc.Ctx, tc.AdminID, session.ID, resp2.ScanID)
 	if err != nil {
@@ -175,10 +194,18 @@ func TestSerializedReceivingScanAndUndoLifecycle(t *testing.T) {
 		t.Fatalf("expected ErrScanNotFound for random scanId, got %v", err)
 	}
 
-	// L. Undo finalized session rejected
-	// Simulate completing session in DB for testing
-	testDB.Exec(tc.Ctx, "UPDATE supply_receiving_sessions SET status = 'completed' WHERE id = $1", session.ID)
-	_, err = tc.Service.UndoSerializedScan(tc.Ctx, tc.AdminID, session.ID, resp1Rescan.ScanID)
+	// L. Undo finalized session rejected (tested canonically on a finalized legacy session)
+	legacyFinalizedSupply := createLegacyShippedSupply(t, tc, 5)
+	legacyFinalizedSession, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *legacyFinalizedSupply.QRToken)
+	if err != nil {
+		t.Fatalf("failed to start legacy session: %v", err)
+	}
+	err = tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, legacyFinalizedSession.ID, supplies.FinalizeReceivingRequest{})
+	if err != nil {
+		t.Fatalf("failed to finalize legacy session: %v", err)
+	}
+
+	_, err = tc.Service.UndoSerializedScan(tc.Ctx, tc.AdminID, legacyFinalizedSession.ID, resp1Rescan.ScanID)
 	if !errors.Is(err, supplies.ErrReceivingSessionFinalized) {
 		t.Fatalf("expected ErrReceivingSessionFinalized for completed session, got %v", err)
 	}

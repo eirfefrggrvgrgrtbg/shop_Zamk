@@ -521,7 +521,7 @@ func TestAdminDossierCanonicalFieldsAndPreview(t *testing.T) {
 
 	// 1. Fetch category, color, size, material
 	var catID uuid.UUID
-	err := pool.QueryRow(ctx, "SELECT c.id FROM categories c WHERE c.slug = 'hoodies'").Scan(&catID)
+	err := pool.QueryRow(ctx, "SELECT c.id FROM categories c WHERE c.is_active = true AND NOT EXISTS (SELECT 1 FROM categories sub WHERE sub.parent_id = c.id) LIMIT 1").Scan(&catID)
 	require.NoError(t, err)
 
 	var colorID uuid.UUID

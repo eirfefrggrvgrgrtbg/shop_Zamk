@@ -328,12 +328,38 @@ func TestSuppliesAuth(t *testing.T) {
 	// ====================================================================
 	var sessionIDForI uuid.UUID
 	t.Run("H. admin with receipt perm POST receiving/sessions valid QR -> 200", func(t *testing.T) {
-		_, _, qrToken, _ := setupShippedSupplyFixture(t)
-			pgClient.Pool.Exec(context.Background(), "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE qr_token = $1", qrToken)
+		sellerUserA := insertUser(t, "seller")
+		sellerA := insertSeller(t, sellerUserA)
+		_, variantA := insertProductAndVariant(t, sellerA)
+
+		repo := supplies.NewRepository(pgClient.Pool)
+		svc := supplies.NewService(pgClient.Pool, repo)
+		carrier := "СДЭК"
+		tracking := "121212123241"
+		reqCreate := supplies.CreateSupplyRequest{
+			HandoffMethod:  "carrier_delivery",
+			CarrierName:    &carrier,
+			TrackingNumber: &tracking,
+			Items:          []supplies.CreateSupplyItemRequest{{VariantID: variantA, ExpectedQuantity: 5}},
+		}
+		supply, err := svc.CreateSupply(ctx, sellerA, reqCreate)
+		if err != nil {
+			t.Fatalf("CreateSupply: %v", err)
+		}
+		if _, err = svc.MarkShipped(ctx, sellerA, supply.ID); err != nil {
+			t.Fatalf("MarkShipped: %v", err)
+		}
 
 		uid := insertUser(t, "admin")
 		insertAdminWithPerms(t, uid, []string{"inventory.receipt"})
 		tok := makeToken(t, uid, "admin")
+
+		if err = svc.MarkSupplyArrived(ctx, uid, supply.ID); err != nil {
+			t.Fatalf("MarkSupplyArrived: %v", err)
+		}
+
+		supply, _ = repo.GetSupplyByID(ctx, supply.ID)
+		qrToken := *supply.QRToken
 
 		req := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token="+qrToken, nil)
 		req.Header.Set("Authorization", "Bearer "+tok)
