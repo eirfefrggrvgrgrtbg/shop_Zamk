@@ -3,6 +3,9 @@ package supplies_test
 import (
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/supplies"
 )
@@ -37,9 +40,64 @@ func createShippedSupply(t *testing.T, tc *TestContext) *supplies.Supply {
 	return supply
 }
 
+func createLegacyShippedSupply(t *testing.T, tc *TestContext, qty int) *supplies.Supply {
+	supplyID := uuid.New()
+	supplyNumber := "SUP-LEGACY-" + supplyID.String()[:8]
+	qrToken := "qr-legacy-" + supplyID.String()[:8]
+	now := time.Now().UTC()
+
+	_, err := testDB.Exec(tc.Ctx, `
+		INSERT INTO seller_supplies (id, supply_number, seller_id, status, handoff_method, qr_token, created_at, updated_at)
+		VALUES ($1, $2, $3, 'ready_to_ship', 'carrier_delivery', $4, $5, $5)
+	`, supplyID, supplyNumber, tc.SellerID, qrToken, now)
+	if err != nil {
+		t.Fatalf("failed to insert legacy supply: %v", err)
+	}
+
+	itemID := uuid.New()
+	_, err = testDB.Exec(tc.Ctx, `
+		INSERT INTO seller_supply_items (id, supply_id, variant_id, expected_quantity, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $5)
+	`, itemID, supplyID, tc.Variant1, qty, now)
+	if err != nil {
+		t.Fatalf("failed to insert legacy supply item: %v", err)
+	}
+
+	boxID := uuid.New()
+	_, err = testDB.Exec(tc.Ctx, `
+		INSERT INTO seller_supply_boxes (id, supply_id, box_number, qr_token, created_at)
+		VALUES ($1, $2, 'BOX-01', $3, $4)
+	`, boxID, supplyID, "box-"+qrToken, now)
+	if err != nil {
+		t.Fatalf("failed to insert legacy supply box: %v", err)
+	}
+
+	_, err = testDB.Exec(tc.Ctx, `
+		INSERT INTO seller_supply_box_items (box_id, supply_item_id, quantity)
+		VALUES ($1, $2, $3)
+	`, boxID, itemID, qty)
+	if err != nil {
+		t.Fatalf("failed to insert legacy supply box item: %v", err)
+	}
+
+	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supplyID)
+	if err != nil {
+		t.Fatalf("failed to mark legacy shipped: %v", err)
+	}
+	err = tc.Service.MarkSupplyArrived(tc.Ctx, tc.AdminID, supplyID)
+	if err != nil {
+		t.Fatalf("failed to mark legacy arrived: %v", err)
+	}
+	supply, err := tc.Repo.GetSupplyByID(tc.Ctx, supplyID)
+	if err != nil {
+		t.Fatalf("failed to get legacy supply: %v", err)
+	}
+	return supply
+}
+
 func TestReceivingClean(t *testing.T) {
 	tc := setupTestContext(t)
-	supply := createShippedSupply(t, tc)
+	supply := createLegacyShippedSupply(t, tc, 10)
 
 	// Admin starts session
 	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
@@ -72,7 +130,7 @@ func TestReceivingClean(t *testing.T) {
 
 func TestReceivingWithDiscrepancy(t *testing.T) {
 	tc := setupTestContext(t)
-	supply := createShippedSupply(t, tc)
+	supply := createLegacyShippedSupply(t, tc, 10)
 
 	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
 	if err != nil {
@@ -101,7 +159,7 @@ func TestReceivingWithDiscrepancy(t *testing.T) {
 
 func TestReceivingInventoryIncrement(t *testing.T) {
 	tc := setupTestContext(t)
-	supply := createShippedSupply(t, tc)
+	supply := createLegacyShippedSupply(t, tc, 10)
 
 	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
 	if err != nil {
@@ -124,7 +182,7 @@ func TestReceivingInventoryIncrement(t *testing.T) {
 
 func TestReceivingDoubleFinalize(t *testing.T) {
 	tc := setupTestContext(t)
-	supply := createShippedSupply(t, tc)
+	supply := createLegacyShippedSupply(t, tc, 10)
 
 	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
 	if err != nil {
@@ -156,7 +214,7 @@ func TestReceivingDoubleFinalize(t *testing.T) {
 
 func TestReceivingConcurrentFinalize(t *testing.T) {
 	tc := setupTestContext(t)
-	supply := createShippedSupply(t, tc)
+	supply := createLegacyShippedSupply(t, tc, 10)
 
 	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
 	if err != nil {
@@ -210,36 +268,12 @@ func TestReceivingConcurrentFinalize(t *testing.T) {
 
 func TestReceivingDamagePersistsCorrectly(t *testing.T) {
 	tc := setupTestContext(t)
-
-	// Create supply with expected = 20
-	carrier := "СДЭК"
-	tracking := "121212123241"
-	req := supplies.CreateSupplyRequest{
-		HandoffMethod:  "carrier_delivery",
-		CarrierName:    &carrier,
-		TrackingNumber: &tracking,
-		Items: []supplies.CreateSupplyItemRequest{
-			{VariantID: tc.Variant1, ExpectedQuantity: 20},
-		},
-	}
-	supply, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, req)
-	if err != nil {
-		t.Fatalf("failed to create supply: %v", err)
-	}
-	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
-	if err != nil {
-		t.Fatalf("failed to mark shipped: %v", err)
-	}
+	supply := createLegacyShippedSupply(t, tc, 20)
 
 	// Capture stock before
 	var stockBefore int
 	testDB.QueryRow(tc.Ctx, "SELECT total_stock FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stockBefore)
 
-	// Admin marks arrived canonically
-	err = tc.Service.MarkSupplyArrived(tc.Ctx, tc.AdminID, supply.ID)
-	if err != nil {
-		t.Fatalf("failed to mark arrived: %v", err)
-	}
 	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
 	if err != nil {
 		t.Fatalf("failed to start session: %v", err)

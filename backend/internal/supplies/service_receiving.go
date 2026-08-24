@@ -46,6 +46,11 @@ func (s *Service) StartReceivingSession(ctx context.Context, staffID uuid.UUID, 
 
 	// Start new session
 	now := time.Now().UTC()
+	mode, err := s.repo.GetSupplyReceivingMode(ctx, supply.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	session := &ReceivingSession{
 		ID:               uuid.New(),
 		SupplyID:         supply.ID,
@@ -55,6 +60,7 @@ func (s *Service) StartReceivingSession(ctx context.Context, staffID uuid.UUID, 
 		StartedByStaffID: &staffID,
 		CreatedAt:        now,
 		UpdatedAt:        now,
+		ReceivingMode:    mode,
 	}
 
 	// We need to fetch items to populate the session items
@@ -155,6 +161,14 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 		return err
 	}
 
+	mode, err := repoTx.GetSupplyReceivingMode(ctx, session.SupplyID)
+	if err != nil {
+		return err
+	}
+	if mode == "serialized" {
+		return ErrSerializedFinalizeNotSupported
+	}
+
 	supply, err := repoTx.GetSupplyByID(ctx, session.SupplyID)
 	if err != nil {
 		return err
@@ -217,6 +231,84 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 	}
 
 	return nil
+}
+
+func (s *Service) ListRecentSerializedScans(ctx context.Context, staffID uuid.UUID, sessionID uuid.UUID, limit int) ([]SerializedRecentScanDTO, error) {
+	_, err := s.repo.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.ListRecentSerializedScans(ctx, sessionID, limit)
+}
+
+func (s *Service) UndoSerializedScan(ctx context.Context, staffID uuid.UUID, sessionID uuid.UUID, scanID uuid.UUID) (*UndoSerializedScanResponse, error) {
+	pool, ok := s.db.(*pgxpool.Pool)
+	if !ok {
+		return nil, errors.New("expected *pgxpool.Pool")
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	repoTx := s.repo.WithTx(tx)
+
+	err = repoTx.LockSessionForUpdate(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	session, err := repoTx.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	if session.Status != "active" {
+		return nil, ErrReceivingSessionFinalized
+	}
+
+	scan, err := repoTx.LockScanForUpdate(ctx, scanID)
+	if err != nil {
+		return nil, err
+	}
+
+	if scan.SessionID != sessionID {
+		return nil, ErrScanNotInSession
+	}
+
+	if scan.InventoryUnitID == nil {
+		return nil, ErrScanNotFound
+	}
+
+	if scan.VoidedAt != nil {
+		return nil, ErrScanAlreadyVoided
+	}
+
+	err = repoTx.VoidSerializedScan(ctx, scanID, staffID, scan.SupplyReceivingItemID, scan.IsDamage)
+	if err != nil {
+		return nil, err
+	}
+
+	exp, scn, okCount, dmgCount, err := repoTx.GetReceivingSessionTotals(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &UndoSerializedScanResponse{
+		ScanID:           scanID,
+		VoidedAt:         time.Now().UTC(),
+		SessionExpected:  exp,
+		SessionScanned:   scn,
+		SessionOk:        okCount,
+		SessionDamaged:   dmgCount,
+		SessionRemaining: exp - scn,
+	}, nil
 }
 
 func (s *Service) RecordSerializedScan(ctx context.Context, staffID uuid.UUID, sessionID uuid.UUID, req RecordSerializedScanRequest) (*SerializedScanResponse, error) {

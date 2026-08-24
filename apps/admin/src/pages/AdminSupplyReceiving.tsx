@@ -1,7 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Truck, Box, CheckCircle2, AlertTriangle, ArrowRight, RefreshCw, AlertCircle } from 'lucide-react';
-import { startSupplyReceivingSession, recordSupplyReceivingScan, finalizeSupplyReceivingSession } from '@zamk/api-client/src/admin';
-import type { SupplyReceivingSession } from '@zamk/api-client/src/types';
+import { Truck, Box, CheckCircle2, AlertTriangle, ArrowRight, RefreshCw, AlertCircle, RotateCcw, Tag, ShieldCheck } from 'lucide-react';
+import {
+  startSupplyReceivingSession,
+  recordSupplyReceivingScan,
+  recordSerializedReceivingScan,
+  getSerializedReceivingScans,
+  undoSerializedReceivingScan,
+  finalizeSupplyReceivingSession,
+} from '@zamk/api-client/src/admin';
+import type { SupplyReceivingSession, SerializedRecentScan, SerializedScanResponse } from '@zamk/api-client/src/types';
 
 function playBeepSound(type: 'success' | 'error' = 'success') {
   try {
@@ -25,19 +32,57 @@ function playBeepSound(type: 'success' | 'error' = 'success') {
   } catch (_) {}
 }
 
+function mapReceivingError(err: any): string {
+  const code = err?.error?.code || err?.code || err?.message || '';
+  switch (code) {
+    case 'unit_already_scanned':
+      return 'Эта единица уже отсканирована.';
+    case 'unit_not_found':
+      return 'Этикетка ZAMK не найдена.';
+    case 'unit_not_in_supply':
+      return 'Эта единица относится к другой поставке.';
+    case 'serialized_unit_code_required':
+      return 'Для этой поставки сканируйте уникальную этикетку ZMU.';
+    case 'supply_unit_identity_mismatch':
+      return 'Идентификаторы товарных единиц не совпадают с составом поставки.';
+    case 'scan_not_found':
+      return 'Скан не найден.';
+    case 'scan_already_voided':
+      return 'Этот скан уже был отменён.';
+    case 'scan_not_in_session':
+      return 'Скан не принадлежит этой сессии.';
+    case 'receiving_session_finalized':
+      return 'Сессия приёмки уже завершена.';
+    case 'invalid_receiving_condition':
+      return 'Недопустимое состояние товара (допустимо: ok или damaged).';
+    case 'supply_not_serialized':
+      return 'Эта поставка использует старую схему приёмки по ZMK.';
+    case 'serialized_finalize_not_supported':
+      return 'Завершение приёмки будет доступно после проверки всех единиц.';
+    default:
+      return err?.error?.message || err?.message || 'Произошла ошибка при сканировании.';
+  }
+}
+
 export function AdminSupplyReceiving() {
   const [session, setSession] = useState<SupplyReceivingSession | null>(null);
   const [qrInput, setQrInput] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [isDamagedScan, setIsDamagedScan] = useState(false);
-  
+
+  const [recentScans, setRecentScans] = useState<SerializedRecentScan[]>([]);
+  const [lastScannedItem, setLastScannedItem] = useState<SerializedScanResponse | null>(null);
+
   const [loading, setLoading] = useState(false);
+  const [undoLoading, setUndoLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [isFinalized, setIsFinalized] = useState(false);
 
   const qrRef = useRef<HTMLInputElement>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
+
+  const isSerialized = session?.receivingMode === 'serialized';
 
   useEffect(() => {
     if (!session && !isFinalized) {
@@ -47,6 +92,15 @@ export function AdminSupplyReceiving() {
     }
   }, [session, isFinalized]);
 
+  const loadRecentScans = async (sessionId: string) => {
+    try {
+      const scans = await getSerializedReceivingScans(sessionId, 10);
+      setRecentScans(scans || []);
+    } catch (_) {
+      // Ignored
+    }
+  };
+
   const handleStartSession = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!qrInput.trim()) return;
@@ -55,11 +109,15 @@ export function AdminSupplyReceiving() {
       setLoading(true);
       setError(null);
       setIsFinalized(false);
+      setLastScannedItem(null);
       const data = await startSupplyReceivingSession(qrInput.trim());
       setSession(data);
+      if (data.receivingMode === 'serialized') {
+        await loadRecentScans(data.id);
+      }
       playBeepSound('success');
     } catch (err: any) {
-      setError(err.message || 'Ошибка старта сессии приемки');
+      setError(mapReceivingError(err));
       playBeepSound('error');
     } finally {
       setLoading(false);
@@ -69,45 +127,81 @@ export function AdminSupplyReceiving() {
 
   const handleScanItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!barcodeInput.trim() || !session || !session.items) return;
+    const rawInput = barcodeInput.trim();
+    if (!rawInput || !session || !session.items) return;
 
     try {
       setLoading(true);
       setError(null);
-      
-      const matchedItem = session.items.find(i => 
-        (i.barcode && i.barcode === barcodeInput.trim()) || 
-        i.sku === barcodeInput.trim()
-      );
-      if (!matchedItem || !matchedItem.variantId) {
-        throw new Error('Штрихкод не найден в данной поставке');
-      }
 
-      await recordSupplyReceivingScan(session.id, {
-        variantId: matchedItem.variantId,
-        quantity: 1, 
-        isDamage: isDamagedScan
-      });
-      
-      // Update local state to reflect the scan
-      setSession(prev => {
-        if (!prev || !prev.items) return prev;
-        const newItems = prev.items.map(i => {
-          if (i.id === matchedItem.id) {
-            return {
-              ...i,
-              scannedQuantity: isDamagedScan ? i.scannedQuantity : i.scannedQuantity + 1,
-              damagedQuantity: isDamagedScan ? i.damagedQuantity + 1 : i.damagedQuantity,
-            };
-          }
-          return i;
+      if (isSerialized) {
+        const resp = await recordSerializedReceivingScan(session.id, {
+          unitCode: rawInput,
+          condition: isDamagedScan ? 'damaged' : 'ok',
         });
-        return { ...prev, items: newItems };
-      });
+        setLastScannedItem(resp);
 
-      playBeepSound('success');
+        // Reset damage flag only after successful scan
+        if (isDamagedScan) {
+          setIsDamagedScan(false);
+        }
+
+        // Update items locally
+        setSession((prev) => {
+          if (!prev || !prev.items) return prev;
+          const newItems = prev.items.map((i) => {
+            if (i.variantId === resp.productVariantId || (resp.variantBarcode && i.barcode === resp.variantBarcode)) {
+              return {
+                ...i,
+                scannedQuantity: resp.condition === 'ok' ? i.scannedQuantity + 1 : i.scannedQuantity,
+                damagedQuantity: resp.condition === 'damaged' ? i.damagedQuantity + 1 : i.damagedQuantity,
+              };
+            }
+            return i;
+          });
+          return { ...prev, items: newItems };
+        });
+
+        await loadRecentScans(session.id);
+        playBeepSound('success');
+      } else {
+        // Legacy aggregate scan
+        const matchedItem = session.items.find(
+          (i) => (i.barcode && i.barcode === rawInput) || i.sku === rawInput
+        );
+        if (!matchedItem || !matchedItem.variantId) {
+          throw new Error('Штрихкод не найден в данной поставке');
+        }
+
+        await recordSupplyReceivingScan(session.id, {
+          variantId: matchedItem.variantId,
+          quantity: 1,
+          isDamage: isDamagedScan,
+        });
+
+        if (isDamagedScan) {
+          setIsDamagedScan(false);
+        }
+
+        setSession((prev) => {
+          if (!prev || !prev.items) return prev;
+          const newItems = prev.items.map((i) => {
+            if (i.id === matchedItem.id) {
+              return {
+                ...i,
+                scannedQuantity: isDamagedScan ? i.scannedQuantity : i.scannedQuantity + 1,
+                damagedQuantity: isDamagedScan ? i.damagedQuantity + 1 : i.damagedQuantity,
+              };
+            }
+            return i;
+          });
+          return { ...prev, items: newItems };
+        });
+
+        playBeepSound('success');
+      }
     } catch (err: any) {
-      setError(err.message || 'Ошибка сканирования товара');
+      setError(mapReceivingError(err));
       playBeepSound('error');
     } finally {
       setLoading(false);
@@ -116,18 +210,63 @@ export function AdminSupplyReceiving() {
     }
   };
 
+  const handleUndoLastScan = async () => {
+    if (!session || !isSerialized) return;
+    const latestNonVoided = recentScans.find((s) => !s.voidedAt);
+    if (!latestNonVoided) return;
+
+    try {
+      setUndoLoading(true);
+      setError(null);
+
+      await undoSerializedReceivingScan(session.id, latestNonVoided.scanId);
+
+      const isDmg = latestNonVoided.condition === 'damaged';
+      setSession((prev) => {
+        if (!prev || !prev.items) return prev;
+        const newItems = prev.items.map((i) => {
+          if (
+            (latestNonVoided.variantBarcode && i.barcode === latestNonVoided.variantBarcode) ||
+            (latestNonVoided.sellerSku && (i.sku === latestNonVoided.sellerSku || i.barcode === latestNonVoided.sellerSku))
+          ) {
+            return {
+              ...i,
+              scannedQuantity: isDmg ? i.scannedQuantity : Math.max(0, i.scannedQuantity - 1),
+              damagedQuantity: isDmg ? Math.max(0, i.damagedQuantity - 1) : i.damagedQuantity,
+            };
+          }
+          return i;
+        });
+        return { ...prev, items: newItems };
+      });
+
+      if (lastScannedItem && lastScannedItem.scanId === latestNonVoided.scanId) {
+        setLastScannedItem(null);
+      }
+
+      await loadRecentScans(session.id);
+      playBeepSound('success');
+    } catch (err: any) {
+      setError(mapReceivingError(err));
+      playBeepSound('error');
+    } finally {
+      setUndoLoading(false);
+      setTimeout(() => barcodeRef.current?.focus(), 50);
+    }
+  };
+
   const handleFinalize = async () => {
-    if (!session) return;
+    if (!session || isSerialized) return;
     try {
       setLoading(true);
       setError(null);
-      
+
       await finalizeSupplyReceivingSession(session.id, {});
-      
+
       setIsFinalized(true);
       playBeepSound('success');
     } catch (err: any) {
-      setError(err.message || 'Ошибка завершения приемки');
+      setError(mapReceivingError(err));
       playBeepSound('error');
     } finally {
       setLoading(false);
@@ -136,25 +275,51 @@ export function AdminSupplyReceiving() {
 
   const resetFlow = () => {
     setSession(null);
+    setRecentScans([]);
+    setLastScannedItem(null);
     setIsFinalized(false);
   };
 
-  const totalScanned = session?.items?.reduce((acc, i) => acc + i.scannedQuantity + i.damagedQuantity, 0) || 0;
-  const hasDiscrepancy = session?.items?.some(i => i.expectedQuantity !== i.scannedQuantity + i.damagedQuantity);
+  const totalExpected = session?.items?.reduce((acc, i) => acc + i.expectedQuantity, 0) || 0;
+  const totalOk = session?.items?.reduce((acc, i) => acc + i.scannedQuantity, 0) || 0;
+  const totalDamaged = session?.items?.reduce((acc, i) => acc + i.damagedQuantity, 0) || 0;
+  const totalScanned = totalOk + totalDamaged;
+  const totalRemaining = Math.max(0, totalExpected - totalScanned);
+  const hasDiscrepancy = session?.items?.some((i) => i.expectedQuantity !== i.scannedQuantity + i.damagedQuantity);
+  const latestNonVoidedScan = recentScans.find((s) => !s.voidedAt);
 
   return (
     <div className="space-y-6 pb-20">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Приемка поставок (Supplies)</h1>
-          <p className="text-sm text-slate-400 mt-1">Сканирование QR поставок и штрихкодов товаров</p>
+          <p className="text-sm text-slate-400 mt-1">
+            {isSerialized
+              ? 'Сериализованная приёмка физических единиц по ZMU'
+              : 'Сканирование QR поставок и штрихкодов товаров'}
+          </p>
         </div>
+        {session && (
+          <div className="mt-3 sm:mt-0 flex items-center space-x-2">
+            {isSerialized ? (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <ShieldCheck className="w-3.5 h-3.5 mr-1" />
+                Сериализованная · ZMU
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <Tag className="w-3.5 h-3.5 mr-1" />
+                Старая поставка · приёмка по ZMK
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (
         <div className="mx-4 sm:mx-6 bg-rose-500/10 border border-rose-500/20 rounded-lg p-4 flex items-center">
           <AlertTriangle className="h-5 w-5 text-rose-500 mr-3 flex-shrink-0" />
-          <span className="text-rose-200 text-sm">{error}</span>
+          <span className="text-rose-200 text-sm font-medium">{error}</span>
         </div>
       )}
 
@@ -166,7 +331,9 @@ export function AdminSupplyReceiving() {
                 <CheckCircle2 className="h-10 w-10 text-emerald-500" />
               </div>
               <h2 className="text-3xl font-bold text-white mb-2">Приёмка завершена</h2>
-              <p className="text-slate-400">Сессия <span className="font-mono text-emerald-400">{session.id}</span> успешно закрыта.</p>
+              <p className="text-slate-400">
+                Сессия <span className="font-mono text-emerald-400">{session.id}</span> успешно закрыта.
+              </p>
             </div>
 
             <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden mb-8">
@@ -190,9 +357,7 @@ export function AdminSupplyReceiving() {
                       const hasRowDiscrepancy = missing > 0 || item.damagedQuantity > 0;
                       return (
                         <tr key={item.id} className={`hover:bg-slate-800/30 transition-colors ${hasRowDiscrepancy ? 'bg-rose-500/5' : ''}`}>
-                          <td className="py-4 px-6 font-mono text-white text-sm">
-                            {item.barcode || item.sku}
-                          </td>
+                          <td className="py-4 px-6 font-mono text-white text-sm">{item.barcode || item.sku}</td>
                           <td className="py-4 px-6 text-right font-medium text-slate-300">{item.expectedQuantity}</td>
                           <td className="py-4 px-6 text-right font-bold text-emerald-400">{item.scannedQuantity}</td>
                           <td className="py-4 px-6 text-right font-bold text-rose-400">{item.damagedQuantity}</td>
@@ -219,7 +384,7 @@ export function AdminSupplyReceiving() {
           <Truck className="mx-auto h-16 w-16 text-slate-500 mb-4" />
           <h2 className="text-xl font-medium text-white mb-2">Начать приемку</h2>
           <p className="text-slate-400 mb-6 text-sm">Отсканируйте QR-код поставки (SUP-XXXXX) или штрихкод коробки для старта сессии.</p>
-          
+
           <form onSubmit={handleStartSession} className="max-w-md mx-auto relative">
             <input
               ref={qrRef}
@@ -246,8 +411,12 @@ export function AdminSupplyReceiving() {
             <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg">
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h2 className="text-xl font-medium text-white">Сканирование товаров</h2>
-                  <p className="text-slate-400 text-sm mt-1">Поставка: <span className="font-mono font-bold text-blue-400 px-2 py-0.5 bg-blue-500/10 rounded">{session.supplyId}</span></p>
+                  <h2 className="text-xl font-medium text-white">
+                    {isSerialized ? 'Сканирование единиц товара (ZMU)' : 'Сканирование товаров'}
+                  </h2>
+                  <p className="text-slate-400 text-sm mt-1">
+                    Поставка: <span className="font-mono font-bold text-blue-400 px-2 py-0.5 bg-blue-500/10 rounded">{session.supplyId}</span>
+                  </p>
                 </div>
                 <button
                   onClick={resetFlow}
@@ -258,26 +427,47 @@ export function AdminSupplyReceiving() {
                 </button>
               </div>
 
-              <form onSubmit={handleScanItem} className="relative mb-8">
+              {/* Scanner Form */}
+              <form onSubmit={handleScanItem} className="relative mb-3">
                 <input
                   ref={barcodeRef}
                   type="text"
                   value={barcodeInput}
                   onChange={(e) => setBarcodeInput(e.target.value)}
-                  placeholder="Скан штрихкода товара..."
-                  className={`w-full bg-slate-900 border ${isDamagedScan ? 'border-rose-500/50 focus:ring-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.1)]' : 'border-blue-500/50 focus:ring-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.1)]'} rounded-lg pl-4 pr-16 py-4 text-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2`}
+                  placeholder={isSerialized ? 'Сканируйте ZMU товара...' : 'Скан штрихкода товара...'}
+                  className={`w-full bg-slate-900 border ${
+                    isDamagedScan
+                      ? 'border-rose-500/50 focus:ring-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.1)]'
+                      : 'border-blue-500/50 focus:ring-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.1)]'
+                  } rounded-lg pl-4 pr-16 py-4 text-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2`}
                   disabled={loading}
+                  autoFocus
                 />
                 <button
                   type="submit"
                   disabled={loading || !barcodeInput.trim()}
-                  className={`absolute right-2 top-2 bottom-2 ${isDamagedScan ? 'bg-rose-600 hover:bg-rose-500' : 'bg-blue-600 hover:bg-blue-500'} text-white rounded-md px-4 transition-colors disabled:opacity-50`}
+                  className={`absolute right-2 top-2 bottom-2 ${
+                    isDamagedScan ? 'bg-rose-600 hover:bg-rose-500' : 'bg-blue-600 hover:bg-blue-500'
+                  } text-white rounded-md px-4 transition-colors disabled:opacity-50`}
                 >
                   <ArrowRight className="h-6 w-6" />
                 </button>
               </form>
 
-              <div className="flex items-center mb-8 bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+              {/* Helper text */}
+              <div className="mb-6 space-y-1">
+                <p className="text-xs text-slate-400">
+                  {isSerialized
+                    ? 'Сканируйте уникальную этикетку ZAMK на каждой единице товара.'
+                    : 'Сканируйте штрихкод товара для добавления в счетчик.'}
+                </p>
+                {isSerialized && (
+                  <p className="text-xs text-slate-500">Нет сканера? Введите ZMU вручную и нажмите Enter.</p>
+                )}
+              </div>
+
+              {/* Damage Flag Toggle */}
+              <div className="flex items-center mb-6 bg-slate-900/50 p-3 rounded-lg border border-slate-700">
                 <label className="flex items-center space-x-3 cursor-pointer text-slate-300 hover:text-white transition-colors">
                   <input
                     type="checkbox"
@@ -288,14 +478,117 @@ export function AdminSupplyReceiving() {
                       barcodeRef.current?.focus();
                     }}
                   />
-                  <span className="font-medium">Отметить следующий скан как БРАК</span>
+                  <span className="font-medium text-sm">Следующий товар — брак</span>
                 </label>
               </div>
 
+              {/* Last Scanned Unit Feedback */}
+              {isSerialized && lastScannedItem && (
+                <div className="mb-6 bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3.5 flex items-center justify-between shadow-sm">
+                  <div className="flex items-center space-x-3">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0" />
+                    <div>
+                      <div className="text-sm font-semibold text-emerald-300">
+                        {lastScannedItem.condition === 'damaged' ? 'Зафиксирован брак' : 'Принято'}
+                      </div>
+                      <div className="text-xs text-slate-300 mt-0.5">
+                        <span className="font-medium text-white">{lastScannedItem.productTitle}</span>
+                        {(lastScannedItem.colorName || lastScannedItem.sizeName) && (
+                          <span className="text-slate-400"> · {[lastScannedItem.colorName, lastScannedItem.sizeName].filter(Boolean).join(' ')}</span>
+                        )}
+                        {lastScannedItem.sellerSku && (
+                          <span className="text-slate-400"> · Арт: {lastScannedItem.sellerSku}</span>
+                        )}
+                        <span className="font-mono text-emerald-300 ml-2 font-bold">{lastScannedItem.unitCode}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Recent Scans Panel (Serialized mode only) */}
+              {isSerialized && (
+                <div className="mb-8 bg-slate-900/60 rounded-xl p-4 border border-slate-700">
+                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-800">
+                    <h3 className="text-sm font-semibold text-slate-200 flex items-center">
+                      <RotateCcw className="w-4 h-4 mr-2 text-slate-400" />
+                      Последние сканы
+                    </h3>
+                    <button
+                      onClick={handleUndoLastScan}
+                      disabled={undoLoading || !latestNonVoidedScan}
+                      className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <RotateCcw className={`w-3.5 h-3.5 mr-1.5 ${undoLoading ? 'animate-spin' : ''}`} />
+                      Отменить последний скан
+                    </button>
+                  </div>
+
+                  {recentScans.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-slate-500">
+                      Сканов в этой сессии пока нет
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {recentScans.map((s) => {
+                        const isVoided = Boolean(s.voidedAt);
+                        const isDamaged = s.condition === 'damaged';
+                        const timeStr = new Date(s.scannedAt).toLocaleTimeString('ru-RU', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                        });
+
+                        return (
+                          <div
+                            key={s.scanId}
+                            className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs border ${
+                              isVoided
+                                ? 'bg-slate-950/40 border-slate-800 text-slate-500 line-through'
+                                : isDamaged
+                                ? 'bg-rose-500/5 border-rose-500/20 text-slate-200'
+                                : 'bg-slate-800/40 border-slate-700/50 text-slate-200'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-3 overflow-hidden">
+                              <span className="font-mono text-slate-400 text-[11px]">{timeStr}</span>
+                              <div className="truncate">
+                                <span className="font-medium text-white">{s.productTitle}</span>
+                                {(s.colorName || s.sizeName) && (
+                                  <span className="text-slate-400"> · {[s.colorName, s.sizeName].filter(Boolean).join(' ')}</span>
+                                )}
+                                {s.sellerSku && <span className="text-slate-400"> · {s.sellerSku}</span>}
+                                <span className="font-mono font-semibold text-blue-400 ml-2">{s.unitCode}</span>
+                              </div>
+                            </div>
+                            <div className="flex-shrink-0 ml-3">
+                              {isVoided ? (
+                                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                                  Отменён
+                                </span>
+                              ) : isDamaged ? (
+                                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                  Брак
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                  Принято
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Items Table */}
               <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center">
-                <Box className="w-4 h-4 mr-2" /> Ожидаемые товары
+                <Box className="w-4 h-4 mr-2" /> {isSerialized ? 'Сводка по товарным позициям' : 'Ожидаемые товары'}
               </h3>
-              
+
               {!session.items || session.items.length === 0 ? (
                 <div className="text-center py-12 text-slate-500 border-2 border-dashed border-slate-700 rounded-xl bg-slate-900/30">
                   <AlertCircle className="mx-auto h-8 w-8 mb-3 opacity-50" />
@@ -306,21 +599,29 @@ export function AdminSupplyReceiving() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-slate-700 bg-slate-800/50">
-                        <th className="py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Штрихкод</th>
+                        <th className="py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Товар / Штрихкод</th>
                         <th className="py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">План</th>
                         <th className="py-3 px-4 text-xs font-semibold text-emerald-400 uppercase tracking-wider text-right">Ок</th>
                         <th className="py-3 px-4 text-xs font-semibold text-rose-400 uppercase tracking-wider text-right">Брак</th>
+                        <th className="py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Осталось</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800">
-                      {session.items.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-slate-800/50 transition-colors">
-                          <td className="py-4 px-4 text-sm font-mono text-white font-medium">{item.barcode || item.sku}</td>
-                          <td className="py-4 px-4 text-sm font-medium text-slate-300 text-right">{item.expectedQuantity}</td>
-                          <td className="py-4 px-4 text-lg font-bold text-emerald-400 text-right">{item.scannedQuantity}</td>
-                          <td className="py-4 px-4 text-lg font-bold text-rose-400 text-right">{item.damagedQuantity}</td>
-                        </tr>
-                      ))}
+                      {session.items.map((item, idx) => {
+                        const remaining = Math.max(0, item.expectedQuantity - item.scannedQuantity - item.damagedQuantity);
+                        return (
+                          <tr key={idx} className="hover:bg-slate-800/50 transition-colors">
+                            <td className="py-4 px-4 text-sm font-mono text-white font-medium">
+                              <div>{item.productTitle || item.sku}</div>
+                              <div className="text-xs text-slate-400 font-mono mt-0.5">{item.barcode || item.sku}</div>
+                            </td>
+                            <td className="py-4 px-4 text-sm font-medium text-slate-300 text-right">{item.expectedQuantity}</td>
+                            <td className="py-4 px-4 text-lg font-bold text-emerald-400 text-right">{item.scannedQuantity}</td>
+                            <td className="py-4 px-4 text-lg font-bold text-rose-400 text-right">{item.damagedQuantity}</td>
+                            <td className="py-4 px-4 text-sm font-medium text-slate-400 text-right">{remaining}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -328,34 +629,57 @@ export function AdminSupplyReceiving() {
             </div>
           </div>
 
+          {/* Right Summary Sidebar */}
           <div className="lg:col-span-1 space-y-6">
             <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg sticky top-6">
-              <h3 className="text-lg font-medium text-white mb-2">Завершение приемки</h3>
+              <h3 className="text-lg font-medium text-white mb-2">Сводка приёмки</h3>
               <p className="text-sm text-slate-400 mb-6">
-                После того как все товары из поставки отсканированы, нажмите завершить.
+                {isSerialized
+                  ? 'Контроль сканирования уникальных единиц ZMU.'
+                  : 'После того как все товары из поставки отсканированы, нажмите завершить.'}
               </p>
 
-              <div className="mb-6 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm text-slate-400">Всего отсканировано:</span>
-                  <span className="text-xl font-bold text-white">
-                    {totalScanned}
-                  </span>
+              <div className="mb-6 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50 space-y-3">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-400">Заявлено:</span>
+                  <span className="font-bold text-white text-base">{totalExpected}</span>
                 </div>
-                <div className="flex justify-between items-center text-xs text-slate-500 mt-2 border-t border-slate-800 pt-2">
-                  <span>Ожидалось всего:</span>
-                  <span>{session.items?.reduce((acc, i) => acc + i.expectedQuantity, 0) || 0}</span>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-400">Отсканировано:</span>
+                  <span className="font-bold text-blue-400 text-base">{totalScanned}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-400">Принято (OK):</span>
+                  <span className="font-bold text-emerald-400 text-base">{totalOk}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-400">Брак:</span>
+                  <span className="font-bold text-rose-400 text-base">{totalDamaged}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm border-t border-slate-800 pt-2">
+                  <span className="text-slate-400">Осталось:</span>
+                  <span className="font-bold text-orange-400 text-base">{totalRemaining}</span>
                 </div>
               </div>
 
-              <button
-                onClick={handleFinalize}
-                disabled={loading || totalScanned === 0}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-4 rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <CheckCircle2 className="w-5 h-5 mr-2" />
-                Завершить приёмку
-              </button>
+              {isSerialized ? (
+                <div className="p-4 bg-slate-900/60 border border-slate-700/60 rounded-xl text-center">
+                  <AlertCircle className="w-6 h-6 text-blue-400 mx-auto mb-2" />
+                  <div className="text-sm font-semibold text-slate-200">Сериализованная приёмка</div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Завершение приёмки будет доступно после проверки всех единиц.
+                  </p>
+                </div>
+              ) : (
+                <button
+                  onClick={handleFinalize}
+                  disabled={loading || totalScanned === 0}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-4 rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <CheckCircle2 className="w-5 h-5 mr-2" />
+                  Завершить приёмку
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -363,4 +687,3 @@ export function AdminSupplyReceiving() {
     </div>
   );
 }
-

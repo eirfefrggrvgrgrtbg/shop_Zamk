@@ -66,6 +66,26 @@ func (r *Repository) StartReceivingSession(ctx context.Context, session *Receivi
 	return nil
 }
 
+func (r *Repository) GetSupplyReceivingMode(ctx context.Context, supplyID uuid.UUID) (string, error) {
+	query := `
+		SELECT
+			COALESCE((SELECT SUM(expected_quantity) FROM seller_supply_items WHERE supply_id = $1), 0) AS expected,
+			(SELECT COUNT(*) FROM inventory_units WHERE origin_supply_id = $1) AS actual
+	`
+	var expected, actual int
+	err := r.db.QueryRow(ctx, query, supplyID).Scan(&expected, &actual)
+	if err != nil {
+		return "", fmt.Errorf("failed to get supply receiving mode: %w", err)
+	}
+	if actual == 0 {
+		return "legacy", nil
+	}
+	if actual != expected {
+		return "", ErrSupplyUnitIdentityMismatch
+	}
+	return "serialized", nil
+}
+
 func (r *Repository) GetActiveSession(ctx context.Context, supplyID uuid.UUID) (*ReceivingSession, error) {
 	query := `
 		SELECT id, supply_id, status, version, started_at, started_by_staff_id, completed_at, created_at, updated_at
@@ -82,6 +102,12 @@ func (r *Repository) GetActiveSession(ctx context.Context, supplyID uuid.UUID) (
 		}
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
+
+	mode, err := r.GetSupplyReceivingMode(ctx, s.SupplyID)
+	if err != nil {
+		return nil, err
+	}
+	s.ReceivingMode = mode
 
 	itemsQuery := `
 		SELECT id, session_id, supply_item_id, variant_id, sku, barcode, product_title,
@@ -126,6 +152,12 @@ func (r *Repository) GetSessionByID(ctx context.Context, sessionID uuid.UUID) (*
 		}
 		return nil, fmt.Errorf("failed to get session by id: %w", err)
 	}
+
+	mode, err := r.GetSupplyReceivingMode(ctx, s.SupplyID)
+	if err != nil {
+		return nil, err
+	}
+	s.ReceivingMode = mode
 
 	itemsQuery := `
 		SELECT id, session_id, supply_item_id, variant_id, sku, barcode, product_title,
@@ -390,4 +422,139 @@ func (r *Repository) GetReceivingSessionTotals(ctx context.Context, sessionID uu
 	}
 	scanned = ok + damaged
 	return expected, scanned, ok, damaged, nil
+}
+
+func (r *Repository) ListRecentSerializedScans(ctx context.Context, sessionID uuid.UUID, limit int) ([]SerializedRecentScanDTO, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	query := `
+		SELECT
+			s.id AS scan_id,
+			u.unit_code,
+			COALESCE(s.condition, CASE WHEN s.is_damage THEN 'damaged' ELSE 'ok' END) AS condition,
+			s.created_at AS scanned_at,
+			s.voided_at,
+			p.title AS product_title,
+			COALESCE(c.name_ru, v.color) AS color_name,
+			COALESCE(sv.value, v.size) AS size_name,
+			COALESCE(v.seller_sku, v.sku) AS seller_sku,
+			v.barcode AS variant_barcode
+		FROM supply_receiving_scans s
+		JOIN inventory_units u ON u.id = s.inventory_unit_id
+		JOIN product_variants v ON v.id = u.product_variant_id
+		JOIN products p ON p.id = v.product_id
+		LEFT JOIN colors c ON c.id = v.color_id
+		LEFT JOIN size_values sv ON sv.id = v.size_value_id
+		WHERE s.session_id = $1 AND s.inventory_unit_id IS NOT NULL
+		ORDER BY s.created_at DESC
+		LIMIT $2
+	`
+	rows, err := r.db.Query(ctx, query, sessionID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent scans: %w", err)
+	}
+	defer rows.Close()
+
+	var scans []SerializedRecentScanDTO
+	for rows.Next() {
+		var item SerializedRecentScanDTO
+		err := rows.Scan(
+			&item.ScanID,
+			&item.UnitCode,
+			&item.Condition,
+			&item.ScannedAt,
+			&item.VoidedAt,
+			&item.ProductTitle,
+			&item.ColorName,
+			&item.SizeName,
+			&item.SellerSKU,
+			&item.VariantBarcode,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan recent scan: %w", err)
+		}
+		scans = append(scans, item)
+	}
+	if scans == nil {
+		scans = []SerializedRecentScanDTO{}
+	}
+	return scans, nil
+}
+
+type ReceivingScanRecord struct {
+	ID                    uuid.UUID
+	SessionID             uuid.UUID
+	SupplyReceivingItemID uuid.UUID
+	StaffID               *uuid.UUID
+	Quantity              int
+	IsDamage              bool
+	CreatedAt             time.Time
+	InventoryUnitID       *uuid.UUID
+	Condition             *string
+	VoidedAt              *time.Time
+	VoidedBy              *uuid.UUID
+}
+
+func (r *Repository) LockScanForUpdate(ctx context.Context, scanID uuid.UUID) (*ReceivingScanRecord, error) {
+	query := `
+		SELECT id, session_id, supply_receiving_item_id, staff_id, quantity, is_damage, created_at, inventory_unit_id, condition, voided_at, voided_by
+		FROM supply_receiving_scans
+		WHERE id = $1
+		FOR UPDATE
+	`
+	var rec ReceivingScanRecord
+	err := r.db.QueryRow(ctx, query, scanID).Scan(
+		&rec.ID,
+		&rec.SessionID,
+		&rec.SupplyReceivingItemID,
+		&rec.StaffID,
+		&rec.Quantity,
+		&rec.IsDamage,
+		&rec.CreatedAt,
+		&rec.InventoryUnitID,
+		&rec.Condition,
+		&rec.VoidedAt,
+		&rec.VoidedBy,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrScanNotFound
+		}
+		return nil, fmt.Errorf("failed to lock scan: %w", err)
+	}
+	return &rec, nil
+}
+
+func (r *Repository) VoidSerializedScan(ctx context.Context, scanID uuid.UUID, staffID uuid.UUID, itemID uuid.UUID, isDamage bool) error {
+	now := time.Now().UTC()
+	query := `
+		UPDATE supply_receiving_scans
+		SET voided_at = $1, voided_by = $2
+		WHERE id = $3 AND voided_at IS NULL
+	`
+	res, err := r.db.Exec(ctx, query, now, staffID, scanID)
+	if err != nil {
+		return fmt.Errorf("failed to void scan: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrScanAlreadyVoided
+	}
+
+	var updateItemQuery string
+	if isDamage {
+		updateItemQuery = `UPDATE supply_receiving_items SET damaged_quantity = GREATEST(0, damaged_quantity - 1), updated_at = $1 WHERE id = $2`
+	} else {
+		updateItemQuery = `UPDATE supply_receiving_items SET scanned_quantity = GREATEST(0, scanned_quantity - 1), updated_at = $1 WHERE id = $2`
+	}
+
+	_, err = r.db.Exec(ctx, updateItemQuery, now, itemID)
+	if err != nil {
+		return fmt.Errorf("failed to update receiving item after void: %w", err)
+	}
+
+	return nil
 }

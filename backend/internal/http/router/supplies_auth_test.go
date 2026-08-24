@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -354,25 +355,79 @@ func TestSuppliesAuth(t *testing.T) {
 	})
 
 	// ====================================================================
-	// I. Admin with inventory.receipt + valid sessionId → finalize → 204
+	// I. Admin with inventory.receipt + valid sessionId → finalize
 	// ====================================================================
 	t.Run("I. admin with receipt perm POST finalize valid session -> 204", func(t *testing.T) {
-		if sessionIDForI == uuid.Nil {
-			t.Skip("sessionIDForI not set (case H may have failed)")
+		// 1. Serialized supply finalize is blocked with 422 (Requirement 14)
+		if sessionIDForI != uuid.Nil {
+			uid := insertUser(t, "admin")
+			insertAdminWithPerms(t, uid, []string{"inventory.receipt"})
+			tok := makeToken(t, uid, "admin")
+
+			body, _ := json.Marshal(map[string]interface{}{})
+			req := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sessionIDForI.String()+"/finalize", bytes.NewReader(body))
+			req.Header.Set("Authorization", "Bearer "+tok)
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusUnprocessableEntity {
+				t.Errorf("expected 422 for serialized finalize, got %d body=%s", rr.Code, rr.Body.String())
+			}
 		}
-		uid := insertUser(t, "admin")
-		insertAdminWithPerms(t, uid, []string{"inventory.receipt"})
-		tok := makeToken(t, uid, "admin")
+
+		// 2. Legacy supply finalize succeeds with 204
+		sellerUID := insertUser(t, "seller")
+		sellerID := insertSeller(t, sellerUID)
+		_, variantID := insertProductAndVariant(t, sellerID)
+		legacySupplyID := uuid.New()
+		legacyQRToken := "qr-auth-test-legacy-fin-" + legacySupplyID.String()[:8]
+		supplyNumber := "SUP-LEGACY-" + legacySupplyID.String()[:8]
+		now := time.Now().UTC()
+		_, err := pgClient.Pool.Exec(ctx, `INSERT INTO seller_supplies (id, supply_number, seller_id, status, handoff_method, qr_token, created_at, updated_at) VALUES ($1, $2, $3, 'arrived_at_zamk', 'carrier_delivery', $4, $5, $5)`, legacySupplyID, supplyNumber, sellerID, legacyQRToken, now)
+		if err != nil {
+			t.Fatalf("insert legacy supply failed: %v", err)
+		}
+		itemID := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO seller_supply_items (id, supply_id, variant_id, expected_quantity, created_at, updated_at) VALUES ($1, $2, $3, 5, $4, $4)`, itemID, legacySupplyID, variantID, now)
+		if err != nil {
+			t.Fatalf("insert legacy item failed: %v", err)
+		}
+		boxID := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO seller_supply_boxes (id, supply_id, box_number, qr_token, created_at) VALUES ($1, $2, 'BOX-01', $3, $4)`, boxID, legacySupplyID, "box-"+legacyQRToken, now)
+		if err != nil {
+			t.Fatalf("insert legacy box failed: %v", err)
+		}
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO seller_supply_box_items (box_id, supply_item_id, quantity) VALUES ($1, $2, 5)`, boxID, itemID)
+		if err != nil {
+			t.Fatalf("insert legacy box item failed: %v", err)
+		}
+
+		adminUID := insertUser(t, "admin")
+		insertAdminWithPerms(t, adminUID, []string{"inventory.receipt"})
+		adminTok := makeToken(t, adminUID, "admin")
+
+		startReq := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token="+legacyQRToken, nil)
+		startReq.Header.Set("Authorization", "Bearer "+adminTok)
+		startRR := httptest.NewRecorder()
+		r.ServeHTTP(startRR, startReq)
+		if startRR.Code != http.StatusOK {
+			t.Fatalf("start legacy session failed: %d body=%s", startRR.Code, startRR.Body.String())
+		}
+		var legacySess struct {
+			ID string `json:"id"`
+		}
+		json.NewDecoder(startRR.Body).Decode(&legacySess)
 
 		body, _ := json.Marshal(map[string]interface{}{})
-		req := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sessionIDForI.String()+"/finalize", bytes.NewReader(body))
-		req.Header.Set("Authorization", "Bearer "+tok)
+		req := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+legacySess.ID+"/finalize", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+adminTok)
 		req.Header.Set("Content-Type", "application/json")
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 
 		if rr.Code != http.StatusNoContent && rr.Code != http.StatusOK {
-			t.Errorf("expected 204 or 200, got %d body=%s", rr.Code, rr.Body.String())
+			t.Errorf("expected 204 or 200 for legacy finalize, got %d body=%s", rr.Code, rr.Body.String())
 		}
 	})
 
@@ -570,6 +625,151 @@ func TestSuppliesAuth(t *testing.T) {
 		json.NewDecoder(invRR.Body).Decode(&errBodyInv)
 		if errBodyInv.Error.Code != "invalid_receiving_condition" {
 			t.Errorf("expected error code 'invalid_receiving_condition', got '%s'", errBodyInv.Error.Code)
+		}
+	})
+
+	t.Run("N: GET /api/admin/receiving/sessions/{sessionId}/scans - recent scans listing", func(t *testing.T) {
+		_, _, qrToken, _ := setupShippedSupplyFixture(t)
+		pgClient.Pool.Exec(context.Background(), "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE qr_token = $1", qrToken)
+
+		adminUID := insertUser(t, "admin")
+		insertAdminWithPerms(t, adminUID, []string{"inventory.receipt"})
+		adminTok := makeToken(t, adminUID, "admin")
+
+		// Start session
+		startReq := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token="+qrToken, nil)
+		startReq.Header.Set("Authorization", "Bearer "+adminTok)
+		startRR := httptest.NewRecorder()
+		r.ServeHTTP(startRR, startReq)
+		if startRR.Code != http.StatusOK {
+			t.Fatalf("start session failed: %d body=%s", startRR.Code, startRR.Body.String())
+		}
+		var sess struct {
+			ID       string    `json:"id"`
+			SupplyID uuid.UUID `json:"supplyId"`
+		}
+		json.NewDecoder(startRR.Body).Decode(&sess)
+		sessionID, _ := uuid.Parse(sess.ID)
+
+		repo := supplies.NewRepository(pgClient.Pool)
+		units, _ := repo.ListUnitsBySupplyID(ctx, sess.SupplyID)
+
+		// Record 1 scan
+		scanBody, _ := json.Marshal(supplies.RecordSerializedScanRequest{
+			UnitCode:  units[0].UnitCode,
+			Condition: "ok",
+		})
+		scanReq := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sessionID.String()+"/scan-unit", bytes.NewReader(scanBody))
+		scanReq.Header.Set("Authorization", "Bearer "+adminTok)
+		scanReq.Header.Set("Content-Type", "application/json")
+		scanRR := httptest.NewRecorder()
+		r.ServeHTTP(scanRR, scanReq)
+		if scanRR.Code != http.StatusOK {
+			t.Fatalf("expected 200 scan, got %d", scanRR.Code)
+		}
+		var scanResp supplies.SerializedScanResponse
+		json.NewDecoder(scanRR.Body).Decode(&scanResp)
+
+		// 1. Unauthenticated -> 401
+		unauthReq := httptest.NewRequest("GET", "/api/admin/receiving/sessions/"+sessionID.String()+"/scans?limit=10", nil)
+		unauthRR := httptest.NewRecorder()
+		r.ServeHTTP(unauthRR, unauthReq)
+		if unauthRR.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401, got %d", unauthRR.Code)
+		}
+
+		// 2. Admin with inventory.receipt -> 200 with scans
+		req := httptest.NewRequest("GET", "/api/admin/receiving/sessions/"+sessionID.String()+"/scans?limit=10", nil)
+		req.Header.Set("Authorization", "Bearer "+adminTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+		}
+
+		var scans []supplies.SerializedRecentScanDTO
+		if err := json.NewDecoder(rr.Body).Decode(&scans); err != nil {
+			t.Fatalf("failed decoding scans: %v", err)
+		}
+		if len(scans) != 1 || scans[0].ScanID != scanResp.ScanID {
+			t.Errorf("unexpected scans result: %+v", scans)
+		}
+	})
+
+	t.Run("O: POST /api/admin/receiving/sessions/{sessionId}/scans/{scanId}/undo - undo scan", func(t *testing.T) {
+		_, _, qrToken, _ := setupShippedSupplyFixture(t)
+		pgClient.Pool.Exec(context.Background(), "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE qr_token = $1", qrToken)
+
+		adminUID := insertUser(t, "admin")
+		insertAdminWithPerms(t, adminUID, []string{"inventory.receipt"})
+		adminTok := makeToken(t, adminUID, "admin")
+
+		// Start session
+		startReq := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token="+qrToken, nil)
+		startReq.Header.Set("Authorization", "Bearer "+adminTok)
+		startRR := httptest.NewRecorder()
+		r.ServeHTTP(startRR, startReq)
+		if startRR.Code != http.StatusOK {
+			t.Fatalf("start session failed: %d body=%s", startRR.Code, startRR.Body.String())
+		}
+		var sess struct {
+			ID       string    `json:"id"`
+			SupplyID uuid.UUID `json:"supplyId"`
+		}
+		json.NewDecoder(startRR.Body).Decode(&sess)
+		sessionID, _ := uuid.Parse(sess.ID)
+
+		repo := supplies.NewRepository(pgClient.Pool)
+		units, _ := repo.ListUnitsBySupplyID(ctx, sess.SupplyID)
+
+		// Record 1 scan
+		scanBody, _ := json.Marshal(supplies.RecordSerializedScanRequest{
+			UnitCode:  units[0].UnitCode,
+			Condition: "ok",
+		})
+		scanReq := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sessionID.String()+"/scan-unit", bytes.NewReader(scanBody))
+		scanReq.Header.Set("Authorization", "Bearer "+adminTok)
+		scanReq.Header.Set("Content-Type", "application/json")
+		scanRR := httptest.NewRecorder()
+		r.ServeHTTP(scanRR, scanReq)
+		if scanRR.Code != http.StatusOK {
+			t.Fatalf("expected 200 scan, got %d", scanRR.Code)
+		}
+		var scanResp supplies.SerializedScanResponse
+		json.NewDecoder(scanRR.Body).Decode(&scanResp)
+
+		// 1. Unauthenticated -> 401
+		unauthReq := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sessionID.String()+"/scans/"+scanResp.ScanID.String()+"/undo", nil)
+		unauthRR := httptest.NewRecorder()
+		r.ServeHTTP(unauthRR, unauthReq)
+		if unauthRR.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401, got %d", unauthRR.Code)
+		}
+
+		// 2. Undo as admin -> 200
+		req := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sessionID.String()+"/scans/"+scanResp.ScanID.String()+"/undo", nil)
+		req.Header.Set("Authorization", "Bearer "+adminTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+		}
+
+		var undoResp supplies.UndoSerializedScanResponse
+		if err := json.NewDecoder(rr.Body).Decode(&undoResp); err != nil {
+			t.Fatalf("failed decoding undo response: %v", err)
+		}
+		if undoResp.ScanID != scanResp.ScanID || undoResp.SessionOk != 0 || undoResp.SessionScanned != 0 {
+			t.Errorf("unexpected undo response: %+v", undoResp)
+		}
+
+		// 3. Second undo -> 409 scan_already_voided
+		req2 := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sessionID.String()+"/scans/"+scanResp.ScanID.String()+"/undo", nil)
+		req2.Header.Set("Authorization", "Bearer "+adminTok)
+		rr2 := httptest.NewRecorder()
+		r.ServeHTTP(rr2, req2)
+		if rr2.Code != http.StatusConflict {
+			t.Errorf("expected 409 on second undo, got %d body=%s", rr2.Code, rr2.Body.String())
 		}
 	})
 }

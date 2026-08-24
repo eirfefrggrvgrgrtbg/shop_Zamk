@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest } from './types';
+import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse } from './types';
 
 export const getAdminSellers = async (params?: {
   search?: string;
@@ -116,6 +116,27 @@ export const startSupplyReceivingSession = async (qrToken: string): Promise<Supp
 
 export const recordSupplyReceivingScan = async (sessionId: string, input: RecordReceivingScanRequest): Promise<void> => {
   return request<void>('POST', `/admin/receiving/sessions/${sessionId}/scan`, { body: input });
+};
+
+export const recordSerializedReceivingScan = async (
+  sessionId: string,
+  input: RecordSerializedScanRequest
+): Promise<SerializedScanResponse> => {
+  return request<SerializedScanResponse>('POST', `/admin/receiving/sessions/${sessionId}/scan-unit`, { body: input });
+};
+
+export const getSerializedReceivingScans = async (
+  sessionId: string,
+  limit: number = 10
+): Promise<SerializedRecentScan[]> => {
+  return request<SerializedRecentScan[]>('GET', `/admin/receiving/sessions/${sessionId}/scans?limit=${limit}`);
+};
+
+export const undoSerializedReceivingScan = async (
+  sessionId: string,
+  scanId: string
+): Promise<UndoSerializedScanResponse> => {
+  return request<UndoSerializedScanResponse>('POST', `/admin/receiving/sessions/${sessionId}/scans/${scanId}/undo`);
 };
 
 export const finalizeSupplyReceivingSession = async (sessionId: string, input: FinalizeReceivingRequest): Promise<void> => {

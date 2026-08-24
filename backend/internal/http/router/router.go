@@ -437,6 +437,8 @@ func New(
 			r.Post("/sessions", suppliesHandler.StartSession)
 			r.Post("/sessions/{sessionId}/scan", suppliesHandler.RecordScan)
 			r.Post("/sessions/{sessionId}/scan-unit", suppliesHandler.RecordSerializedScan)
+			r.Get("/sessions/{sessionId}/scans", suppliesHandler.GetRecentSerializedScans)
+			r.Post("/sessions/{sessionId}/scans/{scanId}/undo", suppliesHandler.UndoSerializedScan)
 			r.Post("/sessions/{sessionId}/finalize", suppliesHandler.FinalizeSession)
 		})
 

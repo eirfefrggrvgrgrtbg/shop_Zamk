@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -206,6 +207,10 @@ func (h *Handler) FinalizeSession(w http.ResponseWriter, r *http.Request) {
 
 	err = h.svc.FinalizeReceiving(r.Context(), userID, sessionID, req)
 	if err != nil {
+		if errors.Is(err, ErrSerializedFinalizeNotSupported) {
+			h.writeError(w, http.StatusUnprocessableEntity, "serialized_finalize_not_supported", "serialized unit finalization is not enabled yet")
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -296,6 +301,104 @@ func (h *Handler) RecordSerializedScan(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, ErrItemNotFound) {
 			h.writeError(w, http.StatusNotFound, "item_not_found", err.Error())
+			return
+		}
+
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
+}
+
+func (h *Handler) GetRecentSerializedScans(w http.ResponseWriter, r *http.Request) {
+	role, okRole := r.Context().Value("role").(string)
+	if !okRole || (role != "admin" && role != "super_admin") {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+	userID, okUser := r.Context().Value("userID").(uuid.UUID)
+	if !okUser {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+
+	sessionIDStr := chi.URLParam(r, "sessionId")
+	sessionID, err := uuid.Parse(sessionIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid session ID")
+		return
+	}
+
+	limit := 10
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr != "" {
+		if parsedLimit, parseErr := strconv.Atoi(limitStr); parseErr == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	scans, err := h.svc.ListRecentSerializedScans(r.Context(), userID, sessionID, limit)
+	if err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			h.writeError(w, http.StatusNotFound, "session_not_found", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(scans)
+}
+
+func (h *Handler) UndoSerializedScan(w http.ResponseWriter, r *http.Request) {
+	role, okRole := r.Context().Value("role").(string)
+	if !okRole || (role != "admin" && role != "super_admin") {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+	userID, okUser := r.Context().Value("userID").(uuid.UUID)
+	if !okUser {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+
+	sessionIDStr := chi.URLParam(r, "sessionId")
+	sessionID, err := uuid.Parse(sessionIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid session ID")
+		return
+	}
+
+	scanIDStr := chi.URLParam(r, "scanId")
+	scanID, err := uuid.Parse(scanIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid scan ID")
+		return
+	}
+
+	res, err := h.svc.UndoSerializedScan(r.Context(), userID, sessionID, scanID)
+	if err != nil {
+		if errors.Is(err, ErrScanNotFound) {
+			h.writeError(w, http.StatusNotFound, "scan_not_found", err.Error())
+			return
+		}
+		if errors.Is(err, ErrScanAlreadyVoided) {
+			h.writeError(w, http.StatusConflict, "scan_already_voided", err.Error())
+			return
+		}
+		if errors.Is(err, ErrScanNotInSession) {
+			h.writeError(w, http.StatusNotFound, "scan_not_in_session", err.Error())
+			return
+		}
+		if errors.Is(err, ErrReceivingSessionFinalized) {
+			h.writeError(w, http.StatusConflict, "receiving_session_finalized", err.Error())
+			return
+		}
+		if errors.Is(err, ErrSessionNotFound) {
+			h.writeError(w, http.StatusNotFound, "session_not_found", err.Error())
 			return
 		}
 

@@ -989,14 +989,14 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 	
 	// Check variant prices and SKUs explicitly for moderation
 	if len(p.Variants) == 0 {
-		return ErrProductVariantsRequired
+		return fmt.Errorf("moderation validation failed: %w", ErrProductVariantsRequired)
 	}
 	for _, v := range p.Variants {
 		if v.PriceCents == nil || *v.PriceCents <= 0 {
-			return ErrProductPriceInvalid
+			return fmt.Errorf("moderation validation failed: %w", ErrProductPriceInvalid)
 		}
 		if v.SellerSKU == nil || *v.SellerSKU == "" {
-			return ErrProductSKURequired
+			return fmt.Errorf("moderation validation failed: %w", ErrProductSKURequired)
 		}
 	}
 

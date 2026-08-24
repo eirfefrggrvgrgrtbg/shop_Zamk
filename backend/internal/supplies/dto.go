@@ -69,6 +69,29 @@ type SerializedScanResponse struct {
 	SessionRemaining int `json:"remaining"`
 }
 
+type SerializedRecentScanDTO struct {
+	ScanID         uuid.UUID  `json:"scanId"`
+	UnitCode       string     `json:"unitCode"`
+	Condition      string     `json:"condition"`
+	ScannedAt      time.Time  `json:"scannedAt"`
+	VoidedAt       *time.Time `json:"voidedAt,omitempty"`
+	ProductTitle   string     `json:"productTitle"`
+	ColorName      *string    `json:"colorName,omitempty"`
+	SizeName       *string    `json:"sizeName,omitempty"`
+	SellerSKU      *string    `json:"sellerSku,omitempty"`
+	VariantBarcode *string    `json:"variantBarcode,omitempty"`
+}
+
+type UndoSerializedScanResponse struct {
+	ScanID           uuid.UUID `json:"scanId"`
+	VoidedAt         time.Time `json:"voidedAt"`
+	SessionExpected  int       `json:"expected"`
+	SessionScanned   int       `json:"scanned"`
+	SessionOk        int       `json:"ok"`
+	SessionDamaged   int       `json:"damaged"`
+	SessionRemaining int       `json:"remaining"`
+}
+
 type FinalizeReceivingRequest struct {
 	// Any extra finalization notes
 }

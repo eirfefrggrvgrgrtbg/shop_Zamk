@@ -1675,6 +1675,7 @@ export interface SupplyReceivingSession {
   status: string;
   startedAt: string;
   endedAt?: string;
+  receivingMode?: 'serialized' | 'legacy';
   items?: ReceivingItem[];
 }
 
@@ -1696,6 +1697,51 @@ export interface RecordReceivingScanRequest {
   variantId: string;
   quantity: number;
   isDamage?: boolean;
+}
+
+export interface RecordSerializedScanRequest {
+  unitCode: string;
+  condition: 'ok' | 'damaged';
+}
+
+export interface SerializedScanResponse {
+  scanId: string;
+  unitCode: string;
+  condition: string;
+  productVariantId: string;
+  productTitle: string;
+  colorName?: string;
+  sizeName?: string;
+  sellerSku?: string;
+  variantBarcode?: string;
+  expected: number;
+  scanned: number;
+  ok: number;
+  damaged: number;
+  remaining: number;
+}
+
+export interface SerializedRecentScan {
+  scanId: string;
+  unitCode: string;
+  condition: string;
+  scannedAt: string;
+  voidedAt?: string;
+  productTitle: string;
+  colorName?: string;
+  sizeName?: string;
+  sellerSku?: string;
+  variantBarcode?: string;
+}
+
+export interface UndoSerializedScanResponse {
+  scanId: string;
+  voidedAt: string;
+  expected: number;
+  scanned: number;
+  ok: number;
+  damaged: number;
+  remaining: number;
 }
 
 export interface FinalizeReceivingRequest {

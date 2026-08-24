@@ -81,6 +81,7 @@ type ReceivingSession struct {
 	CreatedAt        time.Time        `json:"createdAt"`
 	UpdatedAt        time.Time        `json:"updatedAt"`
 	Items            []ReceivingItem  `json:"items,omitempty"`
+	ReceivingMode    string           `json:"receivingMode"` // "serialized" | "legacy"
 }
 
 type ReceivingItem struct {
