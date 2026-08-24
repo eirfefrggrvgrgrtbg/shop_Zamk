@@ -6,6 +6,7 @@ type UploadImageResponse struct {
 	ID        *uuid.UUID `json:"id,omitempty"`
 	ImageURL  string     `json:"imageUrl"`
 	ObjectKey string     `json:"objectKey,omitempty"` // For internal/admin use
+	RenditionURL string     `json:"renditionUrl,omitempty"`
 	AltText   string     `json:"altText,omitempty"`
 	SortOrder int        `json:"sortOrder,omitempty"`
 	IsMain    bool       `json:"isMain,omitempty"`

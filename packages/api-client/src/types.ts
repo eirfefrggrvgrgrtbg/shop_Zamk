@@ -714,6 +714,8 @@ export interface AdminProductImage {
   productId: string;
   imageUrl: string;
   objectKey?: string;
+  renditionUrl?: string;
+  renditionObjectKey?: string;
   altText?: string;
   sortOrder: number;
   colorId?: string;

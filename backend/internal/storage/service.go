@@ -108,12 +108,25 @@ func (s *Service) UploadSellerProductImage(ctx context.Context, userID, productI
 	// Decode dimensions
 	var width, height *int
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(fileBytes))
-	if err == nil {
-		w := cfg.Width
-		h := cfg.Height
-		width = &w
-		height = &h
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image dimensions: %w", err)
 	}
+
+	w := cfg.Width
+	h := cfg.Height
+
+	if w >= h {
+		return nil, ErrProductMediaPortraitRequired
+	}
+
+	const minWidth = 800
+	const minHeight = 1000
+	if w < minWidth || h < minHeight {
+		return nil, ErrProductMediaTooSmall
+	}
+
+	width = &w
+	height = &h
 
 	stored, err := s.provider.UploadImage(ctx, bytes.NewReader(fileBytes), size, objectKey, contentType)
 
@@ -462,4 +475,65 @@ func (s *Service) ReorderSellerProductImages(ctx context.Context, userID, produc
 	}
 
 	return nil
+}
+
+func (s *Service) SetMainProductImage(ctx context.Context, userID, productID, imageID uuid.UUID) error {
+	seller, _, err := s.sellersRepo.GetSellerByUserID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get seller profile: %w", err)
+	}
+
+	prod, err := s.productsRepo.GetProductByID(ctx, productID)
+	if err != nil {
+		return fmt.Errorf("failed to get product: %w", err)
+	}
+
+	if prod.SellerID != seller.ID {
+		return ErrProductNotOwned
+	}
+
+	if !products.CanEditProduct(seller.Status, prod.Status) {
+		return products.ErrProductNotEditable
+	}
+
+	imgRow, err := s.productsRepo.GetProductImageByID(ctx, imageID)
+	if err != nil {
+		return fmt.Errorf("failed to get image: %w", err)
+	}
+	if imgRow.ProductID != productID {
+		return fmt.Errorf("image does not belong to product")
+	}
+
+	if imgRow.CropWidth == nil || imgRow.CropHeight == nil {
+		return fmt.Errorf("image must be cropped to 4:5 before it can be made main")
+	}
+
+	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
+		repoTx := s.productsRepo.WithTx(tx)
+		if err := repoTx.ClearOtherMainImages(ctx, productID, imageID); err != nil {
+			return err
+		}
+
+		query := `UPDATE product_images SET is_main = true WHERE id = $1`
+		if _, err := tx.Exec(ctx, query, imageID); err != nil {
+			return err
+		}
+
+		imgRow, err := repoTx.GetProductImageByID(ctx, imageID)
+		if err != nil {
+			return err
+		}
+		if imgRow.RenditionURL == nil || imgRow.RenditionObjectKey == nil {
+			return fmt.Errorf("selected image is not ready (missing rendition)")
+		}
+		
+
+		if err := repoTx.SetMainImage(ctx, productID, *imgRow.RenditionURL, *imgRow.RenditionObjectKey); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	return err
 }

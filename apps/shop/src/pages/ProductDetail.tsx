@@ -320,22 +320,6 @@ export function ProductDetail() {
   const [showSizeChart, setShowSizeChart] = useState(false);
   const [sizeError, setSizeError] = useState('');
   const [activeTab, setActiveTab] = useState<'description' | 'specs' | 'reviews'>('description');
-  const [mediaOrientations, setMediaOrientations] = useState<Record<string, 'portrait' | 'landscape' | 'square'>>({});
-
-  const handleImageLoad = (url: string, e: React.SyntheticEvent<HTMLImageElement>) => {
-    const img = e.currentTarget;
-    if (!img.naturalWidth || !img.naturalHeight) return;
-    const ratio = img.naturalWidth / img.naturalHeight;
-    let orientation: 'portrait' | 'landscape' | 'square' = 'portrait';
-    if (ratio > 1.15) {
-      orientation = 'landscape';
-    } else if (ratio >= 0.85) {
-      orientation = 'square';
-    } else {
-      orientation = 'portrait';
-    }
-    setMediaOrientations(prev => (prev[url] === orientation ? prev : { ...prev, [url]: orientation }));
-  };
 
   useEffect(() => {
     async function loadProduct() {
@@ -410,8 +394,10 @@ export function ProductDetail() {
   }
 
   const defaultImage = { url: 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image' };
+
+
   const allImages = (product.images && product.images.length > 0)
-    ? product.images
+    ? product.images.map(img => ({ ...img, url: img.url }))
     : (product.image ? [{ url: product.image }] : [defaultImage]);
 
   const liked = isFavorite(product.id);
@@ -493,7 +479,6 @@ export function ProductDetail() {
   if (visibleImages.length === 0 && allImages.length > 0) visibleImages.push(allImages[0]);
   const currentActiveImage = activeImage < visibleImages.length ? activeImage : 0;
   const currentImageUrl = visibleImages[currentActiveImage]?.url || defaultImage.url;
-  const currentOrientation = mediaOrientations[currentImageUrl] || 'portrait';
 
   const activeFields: string[] = product.sizeChart?.rows?.[0]?.measurements
     ? Object.keys(product.sizeChart.rows[0].measurements)
@@ -558,19 +543,14 @@ export function ProductDetail() {
             <div
               className={cn(
                 "relative bg-[#f5f5f7] dark:bg-[#1a1a1c] border border-black/5 dark:border-white/5 rounded-2xl overflow-hidden w-full flex items-center justify-center transition-all duration-300",
-                currentOrientation === 'landscape'
-                  ? "aspect-[16/10] max-h-[58vh]"
-                  : currentOrientation === 'square'
-                  ? "aspect-square max-h-[70vh]"
-                  : "aspect-[4/5] max-h-[78vh]"
+                "aspect-[4/5] max-h-[78vh]"
               )}
             >
               <img
                 key={currentImageUrl}
                 src={currentImageUrl}
                 alt={product.name}
-                onLoad={(e) => handleImageLoad(currentImageUrl, e)}
-                className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal transition-opacity duration-200"
+                className="w-full h-full object-cover mix-blend-multiply dark:mix-blend-normal transition-opacity duration-200"
               />
               {product.isNew && (
                 <span className="absolute top-4 left-4 px-3 py-1 rounded-md bg-graphite text-white dark:bg-white dark:text-black text-xs font-semibold uppercase tracking-wider shadow-sm">

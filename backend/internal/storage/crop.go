@@ -21,7 +21,26 @@ type CropImageRequest struct {
 	CropHeight float64 `json:"cropHeight"`
 }
 
-func (s *Service) CropAndSetMainImage(ctx context.Context, userID, productID, imageID uuid.UUID, req CropImageRequest) (*UploadImageResponse, error) {
+var ErrInvalidCropParameters = fmt.Errorf("invalid crop parameters")
+
+func (req CropImageRequest) Validate() error {
+	epsilon := 0.01
+	if req.CropX < 0 || req.CropY < 0 || req.CropWidth <= 0 || req.CropHeight <= 0 {
+		return ErrInvalidCropParameters
+	}
+	if req.CropX+req.CropWidth > 1+epsilon || req.CropY+req.CropHeight > 1+epsilon {
+		return ErrInvalidCropParameters
+	}
+
+	aspect := req.CropWidth / req.CropHeight
+	expectedAspect := 4.0 / 5.0
+	if aspect < expectedAspect-epsilon || aspect > expectedAspect+epsilon {
+		return fmt.Errorf("crop aspect ratio must be 4:5")
+	}
+	return nil
+}
+
+func (s *Service) CropSellerProductImage(ctx context.Context, userID, productID, imageID uuid.UUID, req CropImageRequest) (*UploadImageResponse, error) {
 	seller, _, err := s.sellersRepo.GetSellerByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get seller profile: %w", err)
@@ -119,25 +138,16 @@ func (s *Service) CropAndSetMainImage(ctx context.Context, userID, productID, im
 
 	// 5. Upload rendition
 	ext := ".jpg"
-	renditionKey := fmt.Sprintf("products/%s/%s/%s_main%s", seller.ID.String(), productID.String(), imageID.String(), ext)
+	renditionKey := fmt.Sprintf("products/%s/%s/%s_rendition%s", seller.ID.String(), productID.String(), imageID.String(), ext)
 
-	stored, err := s.provider.UploadImage(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()), renditionKey, "image/jpeg")
+	_, err = s.provider.UploadImage(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()), renditionKey, "image/jpeg")
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload rendition: %w", err)
 	}
 
 	// 6. Update DB
-	err = s.productsRepo.UpdateProductImageCrop(ctx, imageID, req.CropX, req.CropY, req.CropWidth, req.CropHeight, true)
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.productsRepo.ClearOtherMainImages(ctx, productID, imageID)
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.productsRepo.SetMainImage(ctx, productID, stored.ObjectURL, stored.ObjectKey)
+	renditionURL := s.provider.BuildPublicURL(renditionKey)
+	err = s.productsRepo.UpdateProductImageCrop(ctx, imageID, req.CropX, req.CropY, req.CropWidth, req.CropHeight, renditionURL, renditionKey)
 	if err != nil {
 		return nil, err
 	}
@@ -146,6 +156,7 @@ func (s *Service) CropAndSetMainImage(ctx context.Context, userID, productID, im
 		ID:        &imageID,
 		ImageURL:  imgRow.ImageURL, // original
 		ObjectKey: *imgRow.ObjectKey,
-		IsMain:    true,
+		RenditionURL: renditionURL,
+		IsMain:    imgRow.IsMain,
 	}, nil
 }

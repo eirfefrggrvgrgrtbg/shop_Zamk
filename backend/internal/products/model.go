@@ -121,6 +121,8 @@ type ProductImage struct {
 	ProductID uuid.UUID `json:"productId"`
 	ImageURL  string    `json:"imageUrl"`
 	ObjectKey *string   `json:"objectKey,omitempty"`
+	RenditionURL       *string   `json:"renditionUrl,omitempty"`
+	RenditionObjectKey *string   `json:"renditionObjectKey,omitempty"`
 	AltText   *string   `json:"altText,omitempty"`
 	SortOrder int       `json:"sortOrder"`
 	ColorID   *uuid.UUID `json:"colorId,omitempty"`

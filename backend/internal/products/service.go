@@ -872,6 +872,23 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 		return fmt.Errorf("category is required for moderation")
 	}
 
+	if len(p.Images) == 0 {
+		return fmt.Errorf("moderation validation failed: at least one image is required")
+	}
+
+	hasMain := false
+	for _, img := range p.Images {
+		if (img.CropWidth == nil || img.CropHeight == nil) || (img.RenditionURL == nil || img.RenditionObjectKey == nil) {
+			return fmt.Errorf("moderation validation failed: all images must have explicit 4:5 renditions before submission")
+		}
+		if img.IsMain {
+			hasMain = true
+		}
+	}
+	if !hasMain {
+		return fmt.Errorf("moderation validation failed: a main image is required")
+	}
+
 	var pAttrs []ProductAttributeValueRequest
 	for _, a := range p.Attributes {
 		pAttrs = append(pAttrs, ProductAttributeValueRequest{

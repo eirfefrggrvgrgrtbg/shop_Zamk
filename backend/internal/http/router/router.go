@@ -334,6 +334,7 @@ func New(
 		r.Delete("/{id}/images/{imageId}", storageHandler.DeleteSellerProductImage)
 		r.Put("/{id}/images/reorder", storageHandler.ReorderSellerProductImages)
 		r.Post("/{id}/images/{imageId}/crop", storageHandler.CropSellerProductImage)
+		r.Post("/{id}/images/{imageId}/main", storageHandler.SetMainProductImage)
 	})
 
 	r.Route("/api/seller/inventory", func(r chi.Router) {

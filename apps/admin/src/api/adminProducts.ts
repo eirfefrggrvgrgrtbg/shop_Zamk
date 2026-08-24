@@ -154,10 +154,11 @@ const centsToPrice = (value?: number | null): number | undefined => {
   return value / 100;
 };
 
+
 const mapGallery = (product: AdminProduct | ModerationProduct): AdminProductGalleryImage[] => {
   const images = (product.images ?? []).map((image: AdminProductImage) => ({
     id: image.id,
-    url: image.imageUrl,
+    url: image.renditionUrl || image.imageUrl,
     altText: image.altText,
     sortOrder: image.sortOrder,
     colorId: (image as any).colorId,

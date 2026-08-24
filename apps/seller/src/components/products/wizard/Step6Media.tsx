@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import type { WizardState } from './WizardState';
-import { getSellerColors, uploadSellerProductImage, cropSellerProductImage, type SellerCategorySchema, type SellerColor } from '@zamk/api-client/src/seller';
+import { getSellerColors, uploadSellerProductImage, cropSellerProductImage, setMainSellerProductImage, type SellerCategorySchema, type SellerColor } from '@zamk/api-client/src/seller';
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
@@ -36,6 +36,7 @@ export function Step6Media({
   const [cropTarget, setCropTarget] = useState<{ id: string, url: string, colorId?: string } | null>(null);
 
   const [crop, setCrop] = useState<Crop>();
+  const [cropError, setCropError] = useState<string | null>(null);
   const [completedCrop, setCompletedCrop] = useState<Crop>();
   const [imageRef, setImageRef] = useState<HTMLImageElement | null>(null);
 
@@ -101,6 +102,7 @@ export function Step6Media({
     setCropTarget({ ...img, colorId });
     setCrop(undefined);
     setCompletedCrop(undefined);
+    setCropError(null);
     setCropModalOpen(true);
   };
 
@@ -112,18 +114,15 @@ export function Step6Media({
 
   const handleSaveCrop = async () => {
     if (!completedCrop || !cropTarget || !imageRef || !state.id) return;
-
-    // Validate target is large enough for 4:5
-    const originalW = imageRef.naturalWidth;
-    const originalH = imageRef.naturalHeight;
+    setCropError(null);
 
     // We check if the original image is reasonably large enough
+    const originalW = imageRef.naturalWidth;
+    const originalH = imageRef.naturalHeight;
     if (originalW < 800 || originalH < 1000) {
-      alert('Изображение слишком маленькое для главного фото. Минимум 800x1000.');
-      // Warn but don't strictly block here, or do block? Prompt says:
-      // "Изображение слишком маленькое для главного фото. ... Use a sane minimum ... ~1000px on short dimension"
+      setCropError('Изображение слишком маленькое. Минимум 800x1000.');
+      return;
     }
-
 
     try {
       setUploading(true);
@@ -134,20 +133,18 @@ export function Step6Media({
         cropHeight: completedCrop.height / 100
       };
 
-      await cropSellerProductImage(state.id, cropTarget.id, payload);
+      const res = await cropSellerProductImage(state.id, cropTarget.id, payload);
 
-      // Unset all other isMain and set this one
-      const newCommon = state.commonImages.map(img => ({
-        ...img,
-        isMain: img.id === cropTarget.id
-      }));
+      // Just update isReady for this image
+      const newCommon = state.commonImages.map(img =>
+        img.id === cropTarget.id ? { ...img, isReady: res.renditionUrl != null } : img
+      );
 
       const newColorImages = { ...state.colorImages };
       Object.keys(newColorImages).forEach(cId => {
-        newColorImages[cId] = newColorImages[cId].map(img => ({
-          ...img,
-          isMain: img.id === cropTarget.id
-        }));
+        newColorImages[cId] = newColorImages[cId].map(img =>
+          img.id === cropTarget.id ? { ...img, isReady: res.renditionUrl != null } : img
+        );
       });
 
       updateState({ commonImages: newCommon, colorImages: newColorImages });
@@ -159,13 +156,39 @@ export function Step6Media({
     }
   };
 
+  const handleSetMainImage = async (imgId: string) => {
+    if (!state.id) return;
+    try {
+      setUploading(true);
+      await setMainSellerProductImage(state.id, imgId);
+
+      const newCommon = state.commonImages.map(img => ({
+        ...img,
+        isMain: img.id === imgId
+      }));
+
+      const newColorImages = { ...state.colorImages };
+      Object.keys(newColorImages).forEach(cId => {
+        newColorImages[cId] = newColorImages[cId].map(img => ({
+          ...img,
+          isMain: img.id === imgId
+        }));
+      });
+
+      updateState({ commonImages: newCommon, colorImages: newColorImages });
+    } catch(err: any) {
+      onError?.(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-medium">Фото</h2>
+        <h2 className="text-xl font-medium">Фотографии товара</h2>
         <div className="text-sm text-gray-500">
-          <p>MAIN CATALOG: 4:5 (1200×1500)</p>
-          <p>GALLERY: Any ratio</p>
+          <p>Загружайте вертикальные фотографии. Все изображения товара показываются в формате 4:5.</p>
         </div>
       </div>
 
@@ -180,11 +203,19 @@ export function Step6Media({
                     ГЛАВНОЕ
                   </div>
                 )}
+                {!img.isMain && img.isReady && (
+                  <div className="absolute top-0 left-0 right-0 bg-green-600/80 text-white text-xs text-center py-1 z-10">
+                    ГОТОВО 4:5
+                  </div>
+                )}
                 <img src={img.url} alt={`Фото ${i+1}`} className="w-full h-full object-cover" />
                 <button onClick={() => removeCommon(i)} className="absolute top-1 right-1 bg-white rounded-full p-1 shadow text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 z-10 transition-opacity">✕</button>
               </div>
-              {!img.isMain && (
-                 <button onClick={() => openCropModal(img)} className="text-xs text-blue-600 hover:underline text-center w-full">Сделать главным</button>
+              {!img.isReady && (
+                 <button onClick={() => openCropModal(img)} className="text-xs text-blue-600 hover:underline text-center w-full">НАСТРОИТЬ КАДР</button>
+              )}
+              {img.isReady && !img.isMain && (
+                 <button onClick={() => handleSetMainImage(img.id)} className="text-xs text-blue-600 hover:underline text-center w-full">Сделать главным</button>
               )}
             </div>
           ))}
@@ -220,11 +251,19 @@ export function Step6Media({
                             ГЛАВНОЕ
                           </div>
                         )}
+                        {!img.isMain && img.isReady && (
+                          <div className="absolute top-0 left-0 right-0 bg-green-600/80 text-white text-xs text-center py-1 z-10">
+                            ГОТОВО 4:5
+                          </div>
+                        )}
                         <img src={img.url} alt={`Фото ${c?.nameRu} ${i+1}`} className="w-full h-full object-cover" />
                         <button onClick={() => removeColorImg(cId, i)} className="absolute top-1 right-1 bg-white rounded-full p-1 shadow text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 z-10 transition-opacity">✕</button>
                       </div>
-                      {!img.isMain && (
-                        <button onClick={() => openCropModal(img, cId)} className="text-xs text-blue-600 hover:underline text-center w-full">Сделать главным</button>
+                      {!img.isReady && (
+                        <button onClick={() => openCropModal(img, cId)} className="text-xs text-blue-600 hover:underline text-center w-full">НАСТРОИТЬ КАДР</button>
+                      )}
+                      {img.isReady && !img.isMain && (
+                        <button onClick={() => handleSetMainImage(img.id)} className="text-xs text-blue-600 hover:underline text-center w-full">Сделать главным</button>
                       )}
                     </div>
                   ))}
@@ -266,10 +305,11 @@ export function Step6Media({
               </ReactCrop>
             </div>
 
+            {cropError && <p className="text-red-500 text-sm mb-2">{cropError}</p>}
             <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
               <button onClick={() => setCropModalOpen(false)} className="px-4 py-2 border rounded">Отмена</button>
               <button onClick={handleSaveCrop} disabled={uploading} className="px-4 py-2 bg-black text-white rounded disabled:opacity-50">
-                {uploading ? 'Сохранение...' : 'Сохранить и сделать главным'}
+                {uploading ? 'Сохранение...' : 'ГОТОВО 4:5'}
               </button>
             </div>
           </div>

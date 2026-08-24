@@ -23,8 +23,8 @@ export type WizardState = {
   selectedSizeValueIds: string[];
   variants: VariantDraft[];
   sizeChartRows: Record<string, Record<string, number>>;
-  commonImages: { id: string; url: string; sortOrder: number; isMain?: boolean }[];
-  colorImages: Record<string, { id: string; url: string; sortOrder: number; isMain?: boolean }[]>;
+  commonImages: { id: string; url: string; sortOrder: number; isMain?: boolean; isReady?: boolean }[];
+  colorImages: Record<string, { id: string; url: string; sortOrder: number; isMain?: boolean; isReady?: boolean }[]>;
 };
 
 export const initialWizardState: WizardState = {

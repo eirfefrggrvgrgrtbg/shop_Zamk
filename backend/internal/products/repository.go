@@ -474,8 +474,8 @@ func (r *Repository) ReplaceProductImages(ctx context.Context, productID uuid.UU
 
 	for _, img := range images {
 		query := `
-			INSERT INTO product_images (id, product_id, image_url, object_key, alt_text, sort_order, color_id, width, height, crop_x, crop_y, crop_width, crop_height, is_main, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			INSERT INTO product_images (id, product_id, image_url, object_key, alt_text, sort_order, color_id, width, height, crop_x, crop_y, crop_width, crop_height, rendition_url, rendition_object_key, is_main, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		`
 		_, err := r.db.Exec(ctx, query,
 			img.ID,
@@ -485,7 +485,7 @@ func (r *Repository) ReplaceProductImages(ctx context.Context, productID uuid.UU
 			img.AltText,
 			img.SortOrder,
 			img.ColorID,
-			img.Width, img.Height, img.CropX, img.CropY, img.CropWidth, img.CropHeight, img.IsMain,
+			img.Width, img.Height, img.CropX, img.CropY, img.CropWidth, img.CropHeight, img.RenditionURL, img.RenditionObjectKey, img.IsMain,
 			img.CreatedAt,
 		)
 		if err != nil {
@@ -497,7 +497,7 @@ func (r *Repository) ReplaceProductImages(ctx context.Context, productID uuid.UU
 
 func (r *Repository) GetProductImages(ctx context.Context, productID uuid.UUID) ([]ProductImage, error) {
 	query := `
-		SELECT id, product_id, image_url, object_key, alt_text, sort_order, color_id, width, height, crop_x, crop_y, crop_width, crop_height, is_main, created_at
+		SELECT id, product_id, image_url, object_key, alt_text, sort_order, color_id, width, height, crop_x, crop_y, crop_width, crop_height, rendition_url, rendition_object_key, is_main, created_at
 		FROM product_images
 		WHERE product_id = $1
 		ORDER BY sort_order ASC
@@ -511,7 +511,7 @@ func (r *Repository) GetProductImages(ctx context.Context, productID uuid.UUID) 
 	var images []ProductImage
 	for rows.Next() {
 		var i ProductImage
-		if err := rows.Scan(&i.ID, &i.ProductID, &i.ImageURL, &i.ObjectKey, &i.AltText, &i.SortOrder, &i.ColorID, &i.Width, &i.Height, &i.CropX, &i.CropY, &i.CropWidth, &i.CropHeight, &i.IsMain, &i.CreatedAt); err != nil {
+		if err := rows.Scan(&i.ID, &i.ProductID, &i.ImageURL, &i.ObjectKey, &i.AltText, &i.SortOrder, &i.ColorID, &i.Width, &i.Height, &i.CropX, &i.CropY, &i.CropWidth, &i.CropHeight, &i.RenditionURL, &i.RenditionObjectKey, &i.IsMain, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		images = append(images, i)
@@ -524,8 +524,8 @@ func (r *Repository) GetProductImages(ctx context.Context, productID uuid.UUID) 
 
 func (r *Repository) AddProductImage(ctx context.Context, img *ProductImage) error {
 	query := `
-		INSERT INTO product_images (id, product_id, image_url, object_key, alt_text, sort_order, color_id, width, height, crop_x, crop_y, crop_width, crop_height, is_main, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		INSERT INTO product_images (id, product_id, image_url, object_key, alt_text, sort_order, color_id, width, height, crop_x, crop_y, crop_width, crop_height, rendition_url, rendition_object_key, is_main, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 	`
 	_, err := r.db.Exec(ctx, query,
 		img.ID,
@@ -535,7 +535,7 @@ func (r *Repository) AddProductImage(ctx context.Context, img *ProductImage) err
 		img.AltText,
 		img.SortOrder,
 		img.ColorID,
-		img.Width, img.Height, img.CropX, img.CropY, img.CropWidth, img.CropHeight, img.IsMain,
+		img.Width, img.Height, img.CropX, img.CropY, img.CropWidth, img.CropHeight, img.RenditionURL, img.RenditionObjectKey, img.IsMain,
 		img.CreatedAt,
 	)
 	if err != nil {
@@ -1115,14 +1115,14 @@ func (r *Repository) listProductsQuery(ctx context.Context, query string, args .
 
 func (r *Repository) GetProductImageByID(ctx context.Context, imageID uuid.UUID) (ProductImage, error) {
 	query := `
-		SELECT id, product_id, image_url, object_key, alt_text, sort_order, color_id, width, height, crop_x, crop_y, crop_width, crop_height, is_main, created_at
+		SELECT id, product_id, image_url, object_key, alt_text, sort_order, color_id, width, height, crop_x, crop_y, crop_width, crop_height, rendition_url, rendition_object_key, is_main, created_at
 		FROM product_images
 		WHERE id = $1
 	`
 	var img ProductImage
 	err := r.db.QueryRow(ctx, query, imageID).Scan(
 		&img.ID, &img.ProductID, &img.ImageURL, &img.ObjectKey,
-		&img.AltText, &img.SortOrder, &img.ColorID, &img.Width, &img.Height, &img.CropX, &img.CropY, &img.CropWidth, &img.CropHeight, &img.IsMain, &img.CreatedAt,
+		&img.AltText, &img.SortOrder, &img.ColorID, &img.Width, &img.Height, &img.CropX, &img.CropY, &img.CropWidth, &img.CropHeight, &img.RenditionURL, &img.RenditionObjectKey, &img.IsMain, &img.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1396,13 +1396,13 @@ func (r *Repository) CheckSellerSKUExists(ctx context.Context, sellerID uuid.UUI
 	return exists, err
 }
 
-func (r *Repository) UpdateProductImageCrop(ctx context.Context, imageID uuid.UUID, cropX, cropY, cropWidth, cropHeight float64, isMain bool) error {
+func (r *Repository) UpdateProductImageCrop(ctx context.Context, imageID uuid.UUID, cropX, cropY, cropWidth, cropHeight float64, renditionURL, renditionObjectKey string) error {
 	query := `
 		UPDATE product_images
-		SET crop_x = $1, crop_y = $2, crop_width = $3, crop_height = $4, is_main = $5
-		WHERE id = $6
+		SET crop_x = $1, crop_y = $2, crop_width = $3, crop_height = $4, rendition_url = $5, rendition_object_key = $6
+		WHERE id = $7
 	`
-	_, err := r.db.Exec(ctx, query, cropX, cropY, cropWidth, cropHeight, isMain, imageID)
+	_, err := r.db.Exec(ctx, query, cropX, cropY, cropWidth, cropHeight, renditionURL, renditionObjectKey, imageID)
 	return err
 }
 

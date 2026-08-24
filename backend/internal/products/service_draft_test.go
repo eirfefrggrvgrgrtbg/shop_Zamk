@@ -41,6 +41,8 @@ func TestDraftAndModeration(t *testing.T) {
 
 		// Submit should fail strict validation
 		submitReq := products.SubmitProductModerationRequest{}
+	injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p.ID)
+
 		err = svc.SubmitProductToModeration(ctx, sellerUserID, p.ID, submitReq)
 		require.Error(t, err)
 		require.Contains(t, fmt.Sprintf("%v", err), "moderation validation failed")
@@ -291,6 +293,8 @@ func TestSubmitModeration_DuplicateAndLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// 2. Moderation validation failure
+	injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p.ID)
+
 	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "moderation validation failed")
@@ -304,6 +308,8 @@ func TestSubmitModeration_DuplicateAndLifecycle(t *testing.T) {
 	// Set status to pending_moderation manually to test double submission rejection
 	_, err = pool.Exec(ctx, "UPDATE products SET status = 'pending_moderation' WHERE id = $1", p.ID)
 	require.NoError(t, err)
+
+	injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p.ID)
 
 	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
 	require.Error(t, err)
@@ -407,6 +413,8 @@ func TestDraftSave_CategoryWithoutOrWithIncompleteSizeChart(t *testing.T) {
 	require.Equal(t, p.ID, pUpdated.ID)
 
 	// 3. Moderation should reject when required size chart / attributes are missing
+	injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p.ID)
+
 	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "moderation validation failed")
@@ -459,6 +467,8 @@ func TestProductRejectionAndResubmissionFlow(t *testing.T) {
 	require.NoError(t, err)
 
 	// Submit to moderation
+	injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p.ID)
+
 	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
 	require.NoError(t, err)
 
@@ -494,6 +504,8 @@ func TestProductRejectionAndResubmissionFlow(t *testing.T) {
 	require.Equal(t, newTitle, pUpdated.Title)
 
 	// Resubmit to moderation
+	injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p.ID)
+
 	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
 	require.NoError(t, err)
 
@@ -615,6 +627,8 @@ func TestAdminDossierCanonicalFieldsAndPreview(t *testing.T) {
 	}
 
 	// E. Zero-stock approved Product remains excluded from public catalog
+	injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p.ID)
+
 	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
 	require.NoError(t, err)
 

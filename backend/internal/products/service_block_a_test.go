@@ -400,6 +400,7 @@ func TestBlockASizeChartValidation(t *testing.T) {
     p, err := svc.CreateProductForSeller(ctx, userID, req)
     require.NoError(t, err)
     
+	injectValidMainImage(t, ctx, products.NewRepository(db.Pool), p.ID)
     err = svc.SubmitProductToModeration(ctx, userID, p.ID, products.SubmitProductModerationRequest{})
     require.Error(t, err)
     require.Contains(t, err.Error(), "category requires a size chart")

@@ -166,7 +166,7 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
     price: p.priceCents / 100,
     oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
     image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
-    images: (p.images && p.images.length > 0) ? p.images.map((img: any) => ({ url: img.imageUrl || img.imageURL || img.url, colorId: img.colorId })) : (p.mainImageUrl ? [{ url: p.mainImageUrl }] : []),
+    images: (p.images && p.images.length > 0) ? p.images.map((img: any) => ({ url: img.renditionUrl || img.renditionURL || img.imageUrl || img.imageURL || img.url, colorId: img.colorId })) : (p.mainImageUrl ? [{ url: p.mainImageUrl }] : []),
     category: p.categoryId || 'Категория не указана',
     sellerId: p.sellerId,
     sellerSlug: p.sellerSlug,
@@ -208,7 +208,7 @@ export async function fetchProductReviews(productId: string): Promise<UIReview[]
 export async function fetchProductPreviewByToken(token: string): Promise<UIProduct> {
   const p = await getProductPreviewByToken(token);
 
-  const images = (p.images && p.images.length > 0) ? p.images.map((img: any) => ({ url: img.imageUrl || img.imageURL || img.url, colorId: img.colorId })) : (p.mainImageUrl ? [{ url: p.mainImageUrl }] : [{ url: PRODUCT_PLACEHOLDER_IMAGE }]);
+  const images = (p.images && p.images.length > 0) ? p.images.map((img: any) => ({ url: img.renditionUrl || img.renditionURL || img.imageUrl || img.imageURL || img.url, colorId: img.colorId })) : (p.mainImageUrl ? [{ url: p.mainImageUrl }] : [{ url: PRODUCT_PLACEHOLDER_IMAGE }]);
 
   return {
     id: p.id,

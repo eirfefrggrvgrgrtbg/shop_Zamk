@@ -551,7 +551,7 @@ export function AdminModerationProductDetail() {
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {product.gallery.map((img, idx) => (
-                  <div key={img.id || idx} className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 aspect-square flex items-center justify-center">
+                  <div key={img.id || idx} className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 aspect-[4/5] flex items-center justify-center">
                     <img
                       src={img.url}
                       alt={img.altText || product.title}

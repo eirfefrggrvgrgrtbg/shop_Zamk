@@ -623,13 +623,13 @@ export function AdminProductDetail() {
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Главное изображение и галерея</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
               {product.image && (
-                <div className="relative rounded-xl overflow-hidden border-2 border-indigo-600 bg-slate-100 aspect-square">
+                <div className="relative rounded-xl overflow-hidden border-2 border-indigo-600 bg-slate-100 aspect-[4/5]">
                   <img src={product.image} alt="Главное" className="w-full h-full object-cover" />
                   <span className="absolute bottom-1 left-1 bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded font-bold">Главное</span>
                 </div>
               )}
               {product.gallery?.map((img: any, idx: number) => (
-                <div key={idx} className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 aspect-square">
+                <div key={idx} className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 aspect-[4/5]">
                   <img src={typeof img === 'string' ? img : img.url} alt={`Галерея ${idx}`} className="w-full h-full object-cover" />
                 </div>
               ))}

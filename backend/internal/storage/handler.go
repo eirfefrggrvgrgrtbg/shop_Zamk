@@ -92,7 +92,7 @@ func (h *Handler) UploadSellerProductImage(w http.ResponseWriter, r *http.Reques
 			h.writeJSONError(w, http.StatusForbidden, err.Error())
 			return
 		}
-		if err == ErrInvalidMimeType || err == ErrInvalidExtension || err == ErrFileTooLarge {
+		if err == ErrInvalidMimeType || err == ErrInvalidExtension || err == ErrFileTooLarge || err == ErrProductMediaPortraitRequired || err == ErrProductMediaTooSmall {
 			h.writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -302,7 +302,12 @@ func (h *Handler) CropSellerProductImage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	resp, err := h.service.CropAndSetMainImage(r.Context(), userID, productID, imageID, req)
+	if err := req.Validate(); err != nil {
+		h.writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	resp, err := h.service.CropSellerProductImage(r.Context(), userID, productID, imageID, req)
 	if err != nil {
 		if err == ErrProductNotOwned || err == products.ErrProductNotEditable {
 			h.writeJSONError(w, http.StatusForbidden, err.Error())
@@ -317,4 +322,43 @@ func (h *Handler) CropSellerProductImage(w http.ResponseWriter, r *http.Request)
 	}
 
 	h.writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) SetMainProductImage(w http.ResponseWriter, r *http.Request) {
+	productIDStr := chi.URLParam(r, "id")
+	productID, err := uuid.Parse(productIDStr)
+	if err != nil {
+		h.writeJSONError(w, http.StatusBadRequest, "invalid product id")
+		return
+	}
+
+	imageIDStr := chi.URLParam(r, "imageId")
+	imageID, err := uuid.Parse(imageIDStr)
+	if err != nil {
+		h.writeJSONError(w, http.StatusBadRequest, "invalid image id")
+		return
+	}
+
+	sellerIDRaw := r.Context().Value("userID")
+	userID, ok := sellerIDRaw.(uuid.UUID)
+	if !ok {
+		h.writeJSONError(w, http.StatusUnauthorized, "user id not found in context")
+		return
+	}
+
+	err = h.service.SetMainProductImage(r.Context(), userID, productID, imageID)
+	if err != nil {
+		if err == ErrProductNotOwned || err == products.ErrProductNotEditable {
+			h.writeJSONError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		if err.Error() == "image does not belong to product" || err.Error() == "image must be cropped to 4:5 before it can be made main" {
+			h.writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		h.writeJSONError(w, http.StatusInternalServerError, "failed to set main image: "+err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

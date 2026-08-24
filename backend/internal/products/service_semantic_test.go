@@ -224,6 +224,7 @@ func TestSemanticFinalization(t *testing.T) {
 		}
 		p, err := svc.CreateProductForSeller(ctx, sellerUserID, req)
 		require.NoError(t, err)
+		injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p.ID)
 		err = svc.SubmitProductToModeration(ctx, sellerUserID, p.ID, products.SubmitProductModerationRequest{})
 		require.Error(t, err)
 		require.Contains(t, fmt.Sprintf("%v", err), "required variant attribute missing: COLOR")
@@ -235,6 +236,7 @@ func TestSemanticFinalization(t *testing.T) {
 		req.Variants[0].SellerSKU = func(s string) *string { return &s }("SEM-2-2")
 		p2, err := svc.CreateProductForSeller(ctx, sellerUserID, req)
 		require.NoError(t, err)
+		injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p2.ID)
 		err = svc.SubmitProductToModeration(ctx, sellerUserID, p2.ID, products.SubmitProductModerationRequest{})
 		require.Error(t, err)
 		require.Contains(t, fmt.Sprintf("%v", err), "required variant attribute missing: SIZE")
@@ -246,6 +248,7 @@ func TestSemanticFinalization(t *testing.T) {
 		req.Variants[0].SellerSKU = func(s string) *string { return &s }("SEM-2-3")
 		p3, err := svc.CreateProductForSeller(ctx, sellerUserID, req)
 		require.NoError(t, err)
+		injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p3.ID)
 		err = svc.SubmitProductToModeration(ctx, sellerUserID, p3.ID, products.SubmitProductModerationRequest{})
 		require.Error(t, err)
 		require.Contains(t, fmt.Sprintf("%v", err), "required product attribute missing: MATERIAL_COMPOSITION")
@@ -277,6 +280,7 @@ func TestSemanticFinalization(t *testing.T) {
 		// 1. Fail closed (schema has SIZE, but no size systems mapped)
 		p, err := svc.CreateProductForSeller(ctx, sellerUserID, req)
 		require.NoError(t, err)
+		injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p.ID)
 		err = svc.SubmitProductToModeration(ctx, sellerUserID, p.ID, products.SubmitProductModerationRequest{})
 		require.Error(t, err)
 		require.Contains(t, fmt.Sprintf("%v", err), "category requires size but has no allowed size systems configured")
@@ -291,6 +295,7 @@ func TestSemanticFinalization(t *testing.T) {
 		req.Slug = func(s string) *string { return &s }(uuid.New().String())
 		p2, err := svc.CreateProductForSeller(ctx, sellerUserID, req)
 		require.NoError(t, err)
+		injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p2.ID)
 		err = svc.SubmitProductToModeration(ctx, sellerUserID, p2.ID, products.SubmitProductModerationRequest{})
 		require.NoError(t, err) // wait, does it pass now? Yes, because INT M is valid!
         // wait, I also need to provide MATERIAL_COMPOSITION!

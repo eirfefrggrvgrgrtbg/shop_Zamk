@@ -291,6 +291,10 @@ export const generateSellerSKUs = async (count: number): Promise<{ skus: string[
   return request<{ skus: string[] }>('POST', '/seller/products/generate-skus', { body: { count } });
 };
 
-export const cropSellerProductImage = async (productId: string, imageId: string, crop: { cropX: number; cropY: number; cropWidth: number; cropHeight: number }): Promise<{ id: string, imageUrl: string, isMain: boolean }> => {
+export const cropSellerProductImage = async (productId: string, imageId: string, crop: { cropX: number; cropY: number; cropWidth: number; cropHeight: number }): Promise<{ id: string, imageUrl: string, isMain: boolean, renditionUrl?: string }> => {
   return request<{ id: string, imageUrl: string, isMain: boolean }>('POST', `/seller/products/${productId}/images/${imageId}/crop`, { body: crop });
+};
+
+export const setMainSellerProductImage = async (productId: string, imageId: string): Promise<void> => {
+  return request<void>('POST', `/seller/products/${productId}/images/${imageId}/main`);
 };
