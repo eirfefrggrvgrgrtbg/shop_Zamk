@@ -217,3 +217,125 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 
 	return nil
 }
+
+func (s *Service) RecordSerializedScan(ctx context.Context, staffID uuid.UUID, sessionID uuid.UUID, req RecordSerializedScanRequest) (*SerializedScanResponse, error) {
+	if len(req.UnitCode) >= 4 && (req.UnitCode[:4] == "ZMK-" || req.UnitCode[:4] == "SKU-") {
+		return nil, ErrSerializedUnitCodeRequired
+	}
+
+	if req.Condition != "ok" && req.Condition != "damaged" {
+		return nil, errors.New("invalid condition")
+	}
+
+	// We lock session using a tx
+	pool, ok := s.db.(*pgxpool.Pool)
+	if !ok {
+		return nil, errors.New("expected *pgxpool.Pool")
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	repoTx := s.repo.WithTx(tx)
+
+	err = repoTx.LockSessionForUpdate(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	session, err := repoTx.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	if session.Status == "completed" || session.Status == "completed_with_discrepancies" {
+		return nil, ErrReceivingSessionFinalized
+	}
+
+	if session.Status != "active" {
+		return nil, errors.New("session is not active")
+	}
+
+	// Verify Serialization Health
+	supply, err := repoTx.GetSupplyByID(ctx, session.SupplyID)
+	if err != nil {
+		return nil, err
+	}
+
+	var expected int
+	for _, item := range supply.Items {
+		expected += item.ExpectedQuantity
+	}
+
+	units, err := repoTx.ListUnitsBySupplyID(ctx, session.SupplyID)
+	if err != nil {
+		return nil, err
+	}
+	actual := len(units)
+
+	if actual == 0 {
+		// Legacy supply should not use this endpoint
+		return nil, errors.New("legacy supply, use aggregate scan endpoint")
+	}
+	if actual != expected {
+		return nil, ErrSupplyUnitIdentityMismatch
+	}
+
+	// Find the unit
+	unit, err := repoTx.GetInventoryUnitByCode(ctx, req.UnitCode)
+	if err != nil {
+		return nil, err
+	}
+
+	if unit.OriginSupplyID != session.SupplyID {
+		return nil, ErrUnitNotInSupply
+	}
+	if unit.Status != "expected" {
+		return nil, ErrUnitAlreadyReceived
+	}
+
+	// Find session item
+	var matchedItem *ReceivingItem
+	for i := range session.Items {
+		if session.Items[i].SupplyItemID != nil && *session.Items[i].SupplyItemID == unit.OriginSupplyItemID {
+			matchedItem = &session.Items[i]
+			break
+		}
+	}
+	if matchedItem == nil {
+		return nil, errors.New("session item not found for unit")
+	}
+
+	isDamage := req.Condition == "damaged"
+	scanID, err := repoTx.AddSerializedReceivingScan(ctx, sessionID, matchedItem.ID, unit.ID, &staffID, isDamage, req.Condition)
+	if err != nil {
+		return nil, err
+	}
+
+	exp, scn, okCount, dmgCount, err := repoTx.GetReceivingSessionTotals(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &SerializedScanResponse{
+		ScanID:           scanID,
+		UnitCode:         req.UnitCode,
+		Condition:        req.Condition,
+		ProductVariantID: unit.ProductVariantID,
+		ProductTitle:     matchedItem.ProductTitle,
+		SellerSKU:        nil, // We could fetch this if needed, but not critical to block
+		VariantBarcode:   matchedItem.Barcode,
+		SessionExpected:  exp,
+		SessionScanned:   scn,
+		SessionOk:        okCount,
+		SessionDamaged:   dmgCount,
+		SessionRemaining: exp - scn,
+	}, nil
+}

@@ -2,6 +2,7 @@ package supplies
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -215,4 +216,73 @@ func (h *Handler) FinalizeSession(w http.ResponseWriter, r *http.Request) {
 	)
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) RecordSerializedScan(w http.ResponseWriter, r *http.Request) {
+	role, okRole := r.Context().Value("role").(string)
+	if !okRole || (role != "admin" && role != "super_admin") {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	userID, okUser := r.Context().Value("userID").(uuid.UUID)
+	if !okUser {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	sessionIDStr := chi.URLParam(r, "sessionId")
+	sessionID, err := uuid.Parse(sessionIDStr)
+	if err != nil {
+		http.Error(w, "Invalid session ID", http.StatusBadRequest)
+		return
+	}
+
+	var req RecordSerializedScanRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.UnitCode == "" {
+		http.Error(w, "unitCode is required", http.StatusBadRequest)
+		return
+	}
+
+	res, err := h.svc.RecordSerializedScan(r.Context(), userID, sessionID, req)
+	if err != nil {
+		if errors.Is(err, ErrSerializedUnitCodeRequired) {
+			h.writeError(w, http.StatusBadRequest, "serialized_unit_code_required", err.Error())
+			return
+		}
+		if errors.Is(err, ErrUnitNotFound) {
+			h.writeError(w, http.StatusNotFound, "unit_not_found", err.Error())
+			return
+		}
+		if errors.Is(err, ErrUnitNotInSupply) {
+			h.writeError(w, http.StatusConflict, "unit_not_in_supply", err.Error())
+			return
+		}
+		if errors.Is(err, ErrUnitAlreadyScanned) {
+			h.writeError(w, http.StatusConflict, "unit_already_scanned", err.Error())
+			return
+		}
+		if errors.Is(err, ErrUnitAlreadyReceived) {
+			h.writeError(w, http.StatusConflict, "unit_already_received", err.Error())
+			return
+		}
+		if errors.Is(err, ErrReceivingSessionFinalized) {
+			h.writeError(w, http.StatusConflict, "receiving_session_finalized", err.Error())
+			return
+		}
+		if errors.Is(err, ErrSupplyUnitIdentityMismatch) {
+			h.writeError(w, http.StatusUnprocessableEntity, "supply_unit_identity_mismatch", err.Error())
+			return
+		}
+
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
 }

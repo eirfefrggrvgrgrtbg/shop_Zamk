@@ -46,6 +46,29 @@ type RecordReceivingScanRequest struct {
 	IsDamage  bool      `json:"isDamage"`
 }
 
+type RecordSerializedScanRequest struct {
+	UnitCode  string `json:"unitCode"`
+	Condition string `json:"condition"`
+}
+
+type SerializedScanResponse struct {
+	ScanID           uuid.UUID `json:"scanId"`
+	UnitCode         string    `json:"unitCode"`
+	Condition        string    `json:"condition"`
+	ProductVariantID uuid.UUID `json:"productVariantId"`
+	ProductTitle     string    `json:"productTitle"`
+	ColorName        *string   `json:"colorName,omitempty"`
+	SizeName         *string   `json:"sizeName,omitempty"`
+	SellerSKU        *string   `json:"sellerSku,omitempty"`
+	VariantBarcode   *string   `json:"variantBarcode,omitempty"`
+
+	SessionExpected  int `json:"expected"`
+	SessionScanned   int `json:"scanned"`
+	SessionOk        int `json:"ok"`
+	SessionDamaged   int `json:"damaged"`
+	SessionRemaining int `json:"remaining"`
+}
+
 type FinalizeReceivingRequest struct {
 	// Any extra finalization notes
 }

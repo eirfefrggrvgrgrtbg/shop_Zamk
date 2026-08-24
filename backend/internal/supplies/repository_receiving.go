@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (r *Repository) GetSupplyByQRToken(ctx context.Context, token string) (*Supply, error) {
@@ -256,7 +257,7 @@ func (r *Repository) UpdateInventoryStock(ctx context.Context, variantID uuid.UU
 	}
 
 	queryUpdate := `
-		UPDATE inventory_items 
+		UPDATE inventory_items
 		SET total_stock = total_stock + $1, updated_at = now()
 		WHERE id = $2
 	`
@@ -273,4 +274,72 @@ func (r *Repository) UpdateInventoryStock(ctx context.Context, variantID uuid.UU
 	}
 
 	return nil
+}
+
+func (r *Repository) GetInventoryUnitByCode(ctx context.Context, unitCode string) (*InventoryUnit, error) {
+	query := `
+		SELECT id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, origin_box_id, unit_index, status
+		FROM inventory_units
+		WHERE unit_code = $1
+	`
+	var u InventoryUnit
+	err := r.db.QueryRow(ctx, query, unitCode).Scan(
+		&u.ID, &u.UnitCode, &u.ProductVariantID, &u.OriginSupplyID, &u.OriginSupplyItemID, &u.OriginBoxID, &u.UnitIndex, &u.Status,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUnitNotFound
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (r *Repository) AddSerializedReceivingScan(ctx context.Context, sessionID uuid.UUID, itemID uuid.UUID, unitID uuid.UUID, staffID *uuid.UUID, isDamage bool, condition string) (uuid.UUID, error) {
+	now := time.Now().UTC()
+	scanID := uuid.New()
+
+	scanQuery := `
+		INSERT INTO supply_receiving_scans (id, session_id, supply_receiving_item_id, staff_id, quantity, is_damage, created_at, inventory_unit_id, condition)
+		VALUES ($1, $2, $3, $4, 1, $5, $6, $7, $8)
+	`
+	_, err := r.db.Exec(ctx, scanQuery, scanID, sessionID, itemID, staffID, isDamage, now, unitID, condition)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.ConstraintName == "idx_receiving_scans_unit_active" {
+			return uuid.Nil, ErrUnitAlreadyScanned
+		}
+		return uuid.Nil, fmt.Errorf("failed to insert serialized scan: %w", err)
+	}
+
+	var updateQuery string
+	if isDamage {
+		updateQuery = `UPDATE supply_receiving_items SET damaged_quantity = damaged_quantity + 1, updated_at = $1 WHERE id = $2`
+	} else {
+		updateQuery = `UPDATE supply_receiving_items SET scanned_quantity = scanned_quantity + 1, updated_at = $1 WHERE id = $2`
+	}
+
+	_, err = r.db.Exec(ctx, updateQuery, now, itemID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to update item: %w", err)
+	}
+
+	return scanID, nil
+}
+
+func (r *Repository) GetReceivingSessionTotals(ctx context.Context, sessionID uuid.UUID) (expected, scanned, ok, damaged int, err error) {
+	query := `
+		SELECT
+			COALESCE(SUM(expected_quantity), 0),
+			COALESCE(SUM(scanned_quantity), 0),
+			COALESCE(SUM(damaged_quantity), 0)
+		FROM supply_receiving_items
+		WHERE session_id = $1
+	`
+	err = r.db.QueryRow(ctx, query, sessionID).Scan(&expected, &ok, &damaged)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	scanned = ok + damaged
+	return expected, scanned, ok, damaged, nil
 }
