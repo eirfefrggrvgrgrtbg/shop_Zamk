@@ -26,8 +26,14 @@ func createShippedSupply(t *testing.T, tc *TestContext) *supplies.Supply {
 	if err != nil {
 		t.Fatalf("failed to mark shipped: %v", err)
 	}
-	testDB.Exec(tc.Ctx, "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE id = $1", supply.ID)
-	supply.Status = "arrived_at_zamk"
+	err = tc.Service.MarkSupplyArrived(tc.Ctx, tc.AdminID, supply.ID)
+	if err != nil {
+		t.Fatalf("failed to mark arrived: %v", err)
+	}
+	supply, err = tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
+	if err != nil {
+		t.Fatalf("failed to get supply: %v", err)
+	}
 	return supply
 }
 
@@ -68,8 +74,10 @@ func TestReceivingWithDiscrepancy(t *testing.T) {
 	tc := setupTestContext(t)
 	supply := createShippedSupply(t, tc)
 
-	testDB.Exec(tc.Ctx, "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE id = $1", supply.ID)
-	session, _ := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	if err != nil {
+		t.Fatalf("failed to start session: %v", err)
+	}
 	
 	// Admin records scan (8 ok, 1 damaged)
 	tc.Service.RecordScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordReceivingScanRequest{
@@ -95,8 +103,10 @@ func TestReceivingInventoryIncrement(t *testing.T) {
 	tc := setupTestContext(t)
 	supply := createShippedSupply(t, tc)
 
-	testDB.Exec(tc.Ctx, "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE id = $1", supply.ID)
-	session, _ := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	if err != nil {
+		t.Fatalf("failed to start session: %v", err)
+	}
 	tc.Service.RecordScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordReceivingScanRequest{
 		VariantID: *session.Items[0].VariantID,
 		Quantity:  10,
@@ -116,8 +126,10 @@ func TestReceivingDoubleFinalize(t *testing.T) {
 	tc := setupTestContext(t)
 	supply := createShippedSupply(t, tc)
 
-	testDB.Exec(tc.Ctx, "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE id = $1", supply.ID)
-	session, _ := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	if err != nil {
+		t.Fatalf("failed to start session: %v", err)
+	}
 	tc.Service.RecordScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordReceivingScanRequest{
 		VariantID: *session.Items[0].VariantID,
 		Quantity:  10,
@@ -146,8 +158,10 @@ func TestReceivingConcurrentFinalize(t *testing.T) {
 	tc := setupTestContext(t)
 	supply := createShippedSupply(t, tc)
 
-	testDB.Exec(tc.Ctx, "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE id = $1", supply.ID)
-	session, _ := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	if err != nil {
+		t.Fatalf("failed to start session: %v", err)
+	}
 	tc.Service.RecordScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordReceivingScanRequest{
 		VariantID: *session.Items[0].VariantID,
 		Quantity:     10,
@@ -221,9 +235,15 @@ func TestReceivingDamagePersistsCorrectly(t *testing.T) {
 	var stockBefore int
 	testDB.QueryRow(tc.Ctx, "SELECT total_stock FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stockBefore)
 
-	// Admin starts session
-	testDB.Exec(tc.Ctx, "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE id = $1", supply.ID)
-	session, _ := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	// Admin marks arrived canonically
+	err = tc.Service.MarkSupplyArrived(tc.Ctx, tc.AdminID, supply.ID)
+	if err != nil {
+		t.Fatalf("failed to mark arrived: %v", err)
+	}
+	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	if err != nil {
+		t.Fatalf("failed to start session: %v", err)
+	}
 
 	// Accepted = 17
 	tc.Service.RecordScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordReceivingScanRequest{

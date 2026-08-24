@@ -33,13 +33,16 @@ func TestMain(m *testing.M) {
 }
 
 type TestContext struct {
-	Ctx      context.Context
-	Repo     *supplies.Repository
-	Service  *supplies.Service
-	SellerID uuid.UUID
-	AdminID  uuid.UUID
-	Variant1 uuid.UUID
-	Variant2 uuid.UUID
+	Ctx          context.Context
+	Repo         *supplies.Repository
+	Service      *supplies.Service
+	SellerID     uuid.UUID
+	AdminID      uuid.UUID
+	ProductID    uuid.UUID
+	Variant1     uuid.UUID
+	Variant2     uuid.UUID
+	Variant3     uuid.UUID
+	Variant4     uuid.UUID
 	VariantOther uuid.UUID
 }
 
@@ -83,14 +86,18 @@ func setupTestContext(t *testing.T) *TestContext {
 	otherProductID := uuid.New()
 	testDB.Exec(ctx, "INSERT INTO products (id, seller_id, title, slug, price_cents, status, created_at, updated_at) VALUES ($1, $2, 'Other Product', 'other-slug', 200, 'published', now(), now())", otherProductID, otherSellerID)
 
-	v1, v2, vOther := uuid.New(), uuid.New(), uuid.New()
+	v1, v2, v3, v4, vOther := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU1', 100, now(), now())", v1, productID)
 	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU2', 200, now(), now())", v2, productID)
-	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU3', 300, now(), now())", vOther, otherProductID)
+	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU3', 300, now(), now())", v3, productID)
+	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU4', 400, now(), now())", v4, productID)
+	testDB.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents, created_at, updated_at) VALUES ($1, $2, 'SKU-OTHER', 300, now(), now())", vOther, otherProductID)
 
 	// Create inventory records to avoid foreign key issues during finalization
 	testDB.Exec(ctx, "INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock) VALUES ($1, $2, $3, $4, 0)", uuid.New(), productID, v1, sellerID)
 	testDB.Exec(ctx, "INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock) VALUES ($1, $2, $3, $4, 0)", uuid.New(), productID, v2, sellerID)
+	testDB.Exec(ctx, "INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock) VALUES ($1, $2, $3, $4, 0)", uuid.New(), productID, v3, sellerID)
+	testDB.Exec(ctx, "INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock) VALUES ($1, $2, $3, $4, 0)", uuid.New(), productID, v4, sellerID)
 
 	return &TestContext{
 		Ctx:          ctx,
@@ -98,8 +105,11 @@ func setupTestContext(t *testing.T) *TestContext {
 		Service:      service,
 		SellerID:     sellerID,
 		AdminID:      adminID,
+		ProductID:    productID,
 		Variant1:     v1,
 		Variant2:     v2,
+		Variant3:     v3,
+		Variant4:     v4,
 		VariantOther: vOther,
 	}
 }

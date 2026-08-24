@@ -15,15 +15,31 @@ import (
 )
 
 type Service struct {
-	repo *Repository
-	db   postgres.DBTX
+	repo              *Repository
+	db                postgres.DBTX
+	unitCodeGenerator func() (string, error)
 }
 
 func NewService(db postgres.DBTX, repo *Repository) *Service {
 	return &Service{
-		repo: repo,
-		db:   db,
+		repo:              repo,
+		db:                db,
+		unitCodeGenerator: GenerateUnitCode,
 	}
+}
+
+func (s *Service) SetUnitCodeGeneratorForTest(fn func() (string, error)) {
+	s.unitCodeGenerator = fn
+	if s.repo != nil {
+		s.repo.SetUnitCodeGeneratorForTest(fn)
+	}
+}
+
+func (s *Service) generateUnitCode() (string, error) {
+	if s.unitCodeGenerator != nil {
+		return s.unitCodeGenerator()
+	}
+	return GenerateUnitCode()
 }
 
 func (s *Service) CreateSupply(ctx context.Context, sellerID uuid.UUID, req CreateSupplyRequest) (*Supply, error) {
@@ -148,7 +164,7 @@ func (s *Service) CreateSupply(ctx context.Context, sellerID uuid.UUID, req Crea
 		defaultBox.Items = append(defaultBox.Items, bi)
 			// Generate inventory units
 			for i := 1; i <= reqItem.ExpectedQuantity; i++ {
-				unitCode, err := GenerateUnitCode()
+				unitCode, err := s.generateUnitCode()
 				if err != nil {
 					return nil, err
 				}

@@ -4,24 +4,34 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
-
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type Repository struct {
-	db postgres.DBTX
+	db                postgres.DBTX
+	unitCodeGenerator func() (string, error)
 }
 
 func NewRepository(db postgres.DBTX) *Repository {
-	return &Repository{db: db}
+	return &Repository{
+		db:                db,
+		unitCodeGenerator: GenerateUnitCode,
+	}
 }
 
 func (r *Repository) WithTx(tx pgx.Tx) *Repository {
-	return &Repository{db: tx}
+	return &Repository{
+		db:                tx,
+		unitCodeGenerator: r.unitCodeGenerator,
+	}
+}
+
+func (r *Repository) SetUnitCodeGeneratorForTest(fn func() (string, error)) {
+	r.unitCodeGenerator = fn
 }
 
 func (r *Repository) GenerateSupplyNumber(ctx context.Context) (string, error) {
@@ -99,17 +109,33 @@ func (r *Repository) CreateSupply(ctx context.Context, supply *Supply) error {
 		const maxRetries = 3
 		var insertErr error
 		for retry := 0; retry < maxRetries; retry++ {
+			spName := fmt.Sprintf("sp_unit_%d_%d", unit.UnitIndex, retry)
+			_, _ = r.db.Exec(ctx, "SAVEPOINT "+spName)
+
 			_, insertErr = r.db.Exec(ctx, queryUnit,
 				unit.ID, unit.UnitCode, unit.ProductVariantID, unit.OriginSupplyID, unit.OriginSupplyItemID,
 				unit.OriginBoxID, unit.UnitIndex, unit.Status, unit.CreatedAt, unit.UpdatedAt,
 			)
 			if insertErr == nil {
+				_, _ = r.db.Exec(ctx, "RELEASE SAVEPOINT "+spName)
 				break
 			}
-			if strings.Contains(insertErr.Error(), "idx_inventory_units_unit_code") || strings.Contains(insertErr.Error(), "inventory_units_unit_code_key") {
-				unit.UnitCode, _ = GenerateUnitCode()
+
+			var pgErr *pgconn.PgError
+			if errors.As(insertErr, &pgErr) && pgErr.Code == "23505" && (pgErr.ConstraintName == "idx_inventory_units_unit_code" || pgErr.ConstraintName == "inventory_units_unit_code_key") {
+				_, _ = r.db.Exec(ctx, "ROLLBACK TO SAVEPOINT "+spName)
+				genFn := r.unitCodeGenerator
+				if genFn == nil {
+					genFn = GenerateUnitCode
+				}
+				newCode, genErr := genFn()
+				if genErr != nil {
+					return fmt.Errorf("failed to generate unit code on collision retry: %w", genErr)
+				}
+				unit.UnitCode = newCode
 				continue
 			}
+			_, _ = r.db.Exec(ctx, "ROLLBACK TO SAVEPOINT "+spName)
 			break
 		}
 		if insertErr != nil {
@@ -118,6 +144,35 @@ func (r *Repository) CreateSupply(ctx context.Context, supply *Supply) error {
 	}
 
 	return nil
+}
+
+func (r *Repository) ListUnitsBySupplyID(ctx context.Context, supplyID uuid.UUID) ([]InventoryUnit, error) {
+	query := `
+		SELECT id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, origin_box_id, unit_index, external_marking_code, status, receiving_session_id, created_at, updated_at
+		FROM inventory_units
+		WHERE origin_supply_id = $1
+		ORDER BY origin_supply_item_id, unit_index ASC
+	`
+	rows, err := r.db.Query(ctx, query, supplyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list inventory units: %w", err)
+	}
+	defer rows.Close()
+
+	var units []InventoryUnit
+	for rows.Next() {
+		var u InventoryUnit
+		err := rows.Scan(
+			&u.ID, &u.UnitCode, &u.ProductVariantID, &u.OriginSupplyID, &u.OriginSupplyItemID,
+			&u.OriginBoxID, &u.UnitIndex, &u.ExternalMarkingCode, &u.Status, &u.ReceivingSessionID,
+			&u.CreatedAt, &u.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan inventory unit: %w", err)
+		}
+		units = append(units, u)
+	}
+	return units, nil
 }
 
 func (r *Repository) UpdateSupplyStatus(ctx context.Context, supplyID uuid.UUID, status string) error {
