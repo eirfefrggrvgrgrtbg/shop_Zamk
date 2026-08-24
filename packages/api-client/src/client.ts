@@ -171,15 +171,54 @@ const getSafeErrorMessage = (code?: string, fallback?: string): string => {
       return 'Не удалось сохранить кадр 4:5.\nПопробуйте выбрать область фотографии ещё раз.';
     case 'product_media_not_ready':
     case 'PRODUCT_MEDIA_NOT_READY':
-      return 'Сначала настройте кадр 4:5 для фотографии.';
+      return 'Все фотографии товара должны быть настроены в формате 4:5 в разделе «Фото».';
+    case 'product_main_image_missing':
+    case 'PRODUCT_MAIN_IMAGE_MISSING':
+      return 'Выберите главное фото товара в разделе «Фото».';
+    case 'product_media_required':
+    case 'PRODUCT_MEDIA_REQUIRED':
+      return 'Загрузите хотя бы одну фотографию товара в разделе «Фото».';
+    case 'product_category_required':
+    case 'PRODUCT_CATEGORY_REQUIRED':
+      return 'Выберите категорию товара в разделе «Категория».';
+    case 'product_variants_required':
+    case 'PRODUCT_VARIANTS_REQUIRED':
+      return 'Добавьте хотя бы один вариант товара в разделе «Варианты».';
+    case 'product_price_invalid':
+    case 'PRODUCT_PRICE_INVALID':
+      return 'Укажите цену для всех вариантов товара в разделе «Цена».';
+    case 'product_sku_required':
+    case 'PRODUCT_SKU_REQUIRED':
+      return 'Заполните артикул продавца (SKU) для всех вариантов товара в разделе «Цена».';
+    case 'product_size_chart_required':
+    case 'PRODUCT_SIZE_CHART_REQUIRED':
+      return 'Заполните таблицу размеров в разделе «Таблица размеров».';
+    case 'product_size_chart_incomplete':
+    case 'PRODUCT_SIZE_CHART_INCOMPLETE':
+      return 'Заполните все обязательные параметры в разделе «Таблица размеров».';
+    case 'product_composition_invalid':
+    case 'PRODUCT_COMPOSITION_INVALID':
+      return 'Проверьте состав материалов в разделе «Характеристики» (сумма должна составлять ровно 100%).';
+    case 'product_required_attribute_missing':
+    case 'PRODUCT_REQUIRED_ATTRIBUTE_MISSING':
+      return fallback || 'Заполните обязательные характеристики товара в разделе «Характеристики».';
     case 'insufficient_permissions':
       return 'Недостаточно прав для выполнения действия.';
     case 'invalid_request':
       return 'Проверьте правильность заполнения формы';
     case 'validation_error':
-      return fallback?.toLowerCase().includes('password')
-        ? 'Проверьте пароль (минимум 8 символов)'
-        : 'Проверьте правильность заполнения формы';
+      if (fallback) {
+        if (fallback.toLowerCase().includes('password')) return 'Проверьте пароль (минимум 8 символов)';
+        if (fallback.includes('4:5 renditions')) return 'Все фотографии товара должны быть настроены в формате 4:5 в разделе «Фото».';
+        if (fallback.includes('main image is required')) return 'Выберите главное фото товара в разделе «Фото».';
+        if (fallback.includes('at least one image is required')) return 'Загрузите хотя бы одну фотографию товара в разделе «Фото».';
+        if (fallback.includes('variant price')) return 'Укажите цену для всех вариантов товара в разделе «Цена».';
+        if (fallback.includes('variant seller SKU')) return 'Заполните артикул продавца (SKU) для всех вариантов товара в разделе «Цена».';
+        if (fallback.includes('size chart')) return 'Заполните таблицу размеров в разделе «Таблица размеров».';
+        if (fallback.includes('material composition')) return 'Проверьте состав материалов в разделе «Характеристики» (сумма должна составлять ровно 100%).';
+        if (!fallback.startsWith('http') && !fallback.includes('{')) return fallback;
+      }
+      return 'Проверьте правильность заполнения формы';
     case 'duplicate_email':
       return 'Пользователь с таким email уже существует';
     case 'invalid_credentials':

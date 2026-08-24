@@ -323,9 +323,9 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
     });
 
     const mappedImages = [
-      ...state.commonImages.map(ci => ({ imageUrl: ci.url, sortOrder: ci.sortOrder, colorId: undefined })),
+      ...state.commonImages.map(ci => ({ id: ci.id, imageUrl: ci.url, sortOrder: ci.sortOrder, colorId: undefined, isMain: ci.isMain })),
       ...Object.entries(state.colorImages).flatMap(([colorId, imgs]) => 
-        imgs.map(ci => ({ imageUrl: ci.url, sortOrder: ci.sortOrder, colorId }))
+        imgs.map(ci => ({ id: ci.id, imageUrl: ci.url, sortOrder: ci.sortOrder, colorId, isMain: ci.isMain }))
       )
     ];
 
@@ -371,11 +371,37 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
       });
     }
 
+    let nextCommon = state.commonImages;
+    let nextColorImages = state.colorImages;
+    if (p.images && Array.isArray(p.images) && p.images.length > 0) {
+      const commonImgs: any[] = [];
+      const colorImgs: Record<string, any[]> = {};
+      p.images.forEach((img: any) => {
+        const mapped = {
+          id: img.id,
+          url: img.imageUrl,
+          sortOrder: img.sortOrder || 0,
+          isMain: !!img.isMain,
+          isReady: img.renditionUrl != null || (img.cropWidth != null && img.cropHeight != null)
+        };
+        if (img.colorId) {
+          if (!colorImgs[img.colorId]) colorImgs[img.colorId] = [];
+          colorImgs[img.colorId].push(mapped);
+        } else {
+          commonImgs.push(mapped);
+        }
+      });
+      nextCommon = commonImgs;
+      nextColorImages = colorImgs;
+    }
+
     const nextState: WizardState = {
       ...state,
       ...partialUpdate,
       id: p.id || state.id,
-      variants: updatedVariants
+      variants: updatedVariants,
+      commonImages: nextCommon,
+      colorImages: nextColorImages
     };
     setState(nextState);
     setLastSavedStateStr(normalizeState(nextState));

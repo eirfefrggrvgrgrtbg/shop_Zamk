@@ -459,13 +459,24 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 
 	var images []ProductImage
 	if req.Images != nil {
+		existingImages, err := s.repo.GetProductImages(ctx, p.ID)
+		if err != nil {
+			return Product{}, err
+		}
+		existingImageByUrl := make(map[string]ProductImage)
+		existingImageById := make(map[uuid.UUID]ProductImage)
+		for _, ei := range existingImages {
+			existingImageByUrl[ei.ImageURL] = ei
+			existingImageById[ei.ID] = ei
+		}
+
 		now := time.Now()
 		for i, ir := range req.Images {
 			sortOrder := i
 			if ir.SortOrder != nil {
 				sortOrder = *ir.SortOrder
 			}
-			images = append(images, ProductImage{
+			img := ProductImage{
 				ID:        uuid.New(),
 				ProductID: p.ID,
 				ImageURL:  ir.ImageURL,
@@ -473,7 +484,42 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				SortOrder: sortOrder,
 				ColorID:   ir.ColorID,
 				CreatedAt: now,
-			})
+			}
+
+			// Match existing image by ID or ImageURL to preserve crop, rendition, object_key, and is_main
+			if ir.ID != nil && *ir.ID != uuid.Nil {
+				if existing, ok := existingImageById[*ir.ID]; ok {
+					img.ID = existing.ID
+					img.ObjectKey = existing.ObjectKey
+					img.Width = existing.Width
+					img.Height = existing.Height
+					img.CropX = existing.CropX
+					img.CropY = existing.CropY
+					img.CropWidth = existing.CropWidth
+					img.CropHeight = existing.CropHeight
+					img.RenditionURL = existing.RenditionURL
+					img.RenditionObjectKey = existing.RenditionObjectKey
+					img.IsMain = existing.IsMain
+				}
+			} else if existing, ok := existingImageByUrl[ir.ImageURL]; ok {
+				img.ID = existing.ID
+				img.ObjectKey = existing.ObjectKey
+				img.Width = existing.Width
+				img.Height = existing.Height
+				img.CropX = existing.CropX
+				img.CropY = existing.CropY
+				img.CropWidth = existing.CropWidth
+				img.CropHeight = existing.CropHeight
+				img.RenditionURL = existing.RenditionURL
+				img.RenditionObjectKey = existing.RenditionObjectKey
+				img.IsMain = existing.IsMain
+			}
+
+			if ir.IsMain != nil {
+				img.IsMain = *ir.IsMain
+			}
+
+			images = append(images, img)
 		}
 	}
 
@@ -869,24 +915,24 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 	}
 
 	if p.CategoryID == nil {
-		return fmt.Errorf("category is required for moderation")
+		return ErrProductCategoryRequired
 	}
 
 	if len(p.Images) == 0 {
-		return fmt.Errorf("moderation validation failed: at least one image is required")
+		return ErrProductMediaRequired
 	}
 
 	hasMain := false
 	for _, img := range p.Images {
 		if (img.CropWidth == nil || img.CropHeight == nil) || (img.RenditionURL == nil || img.RenditionObjectKey == nil) {
-			return fmt.Errorf("moderation validation failed: all images must have explicit 4:5 renditions before submission")
+			return ErrProductMediaNotReady
 		}
 		if img.IsMain {
 			hasMain = true
 		}
 	}
 	if !hasMain {
-		return fmt.Errorf("moderation validation failed: a main image is required")
+		return ErrProductMainImageMissing
 	}
 
 	var pAttrs []ProductAttributeValueRequest
@@ -943,14 +989,14 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 	
 	// Check variant prices and SKUs explicitly for moderation
 	if len(p.Variants) == 0 {
-		return fmt.Errorf("moderation validation failed: at least one active variant is required")
+		return ErrProductVariantsRequired
 	}
 	for _, v := range p.Variants {
 		if v.PriceCents == nil || *v.PriceCents <= 0 {
-			return fmt.Errorf("moderation validation failed: variant price must be greater than 0")
+			return ErrProductPriceInvalid
 		}
 		if v.SellerSKU == nil || *v.SellerSKU == "" {
-			return fmt.Errorf("moderation validation failed: variant seller SKU is required")
+			return ErrProductSKURequired
 		}
 	}
 

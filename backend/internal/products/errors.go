@@ -20,6 +20,17 @@ var (
 	ErrPreviewProductUnavailable = errors.New("product is not available for preview")
 	ErrRedisUnavailable        = errors.New("redis service unavailable")
 	ErrValidation              = errors.New("validation failed")
+
+	ErrProductCategoryRequired     = errors.New("category is required for moderation")
+	ErrProductMediaRequired        = errors.New("at least one image is required")
+	ErrProductMediaNotReady        = errors.New("all images must have explicit 4:5 renditions before submission")
+	ErrProductMainImageMissing     = errors.New("a main image is required")
+	ErrProductVariantsRequired     = errors.New("at least one active variant is required")
+	ErrProductPriceInvalid         = errors.New("variant price must be greater than 0")
+	ErrProductSKURequired          = errors.New("variant seller SKU is required")
+	ErrProductCompositionInvalid   = errors.New("material composition must total exactly 100%")
+	ErrProductSizeChartRequired    = errors.New("category requires a size chart")
+	ErrProductSizeChartIncomplete  = errors.New("missing required measurement in size chart row")
 )
 
 type ValidationError struct {

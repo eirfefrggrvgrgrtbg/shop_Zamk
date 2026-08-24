@@ -106,10 +106,12 @@ type ProductVariantRequest struct {
 }
 
 type ProductImageRequest struct {
-	ImageURL  string  `json:"imageUrl" validate:"required"`
-	AltText   *string `json:"altText,omitempty"`
-	SortOrder *int    `json:"sortOrder,omitempty"`
+	ID        *uuid.UUID `json:"id,omitempty"`
+	ImageURL  string     `json:"imageUrl" validate:"required"`
+	AltText   *string    `json:"altText,omitempty"`
+	SortOrder *int       `json:"sortOrder,omitempty"`
 	ColorID   *uuid.UUID `json:"colorId,omitempty"`
+	IsMain    *bool      `json:"isMain,omitempty"`
 }
 
 type SubmitProductModerationRequest struct {

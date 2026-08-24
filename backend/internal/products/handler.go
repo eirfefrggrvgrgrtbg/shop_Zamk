@@ -385,6 +385,46 @@ func (h *Handler) SubmitForModeration(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusForbidden, "seller_not_active", "Магазин ещё не активирован. Отправка товаров на модерацию будет доступна после проверки.")
 			return
 		}
+		if errors.Is(err, ErrProductCategoryRequired) {
+			h.writeError(w, http.StatusUnprocessableEntity, "product_category_required", "Выберите категорию товара в разделе «Категория».")
+			return
+		}
+		if errors.Is(err, ErrProductMediaRequired) {
+			h.writeError(w, http.StatusUnprocessableEntity, "product_media_required", "Загрузите хотя бы одну фотографию товара в разделе «Фото».")
+			return
+		}
+		if errors.Is(err, ErrProductMediaNotReady) {
+			h.writeError(w, http.StatusUnprocessableEntity, "product_media_not_ready", "Все фотографии товара должны быть настроены в формате 4:5 в разделе «Фото».")
+			return
+		}
+		if errors.Is(err, ErrProductMainImageMissing) {
+			h.writeError(w, http.StatusUnprocessableEntity, "product_main_image_missing", "Выберите главное фото товара в разделе «Фото».")
+			return
+		}
+		if errors.Is(err, ErrProductVariantsRequired) {
+			h.writeError(w, http.StatusUnprocessableEntity, "product_variants_required", "Добавьте хотя бы один вариант товара в разделе «Варианты».")
+			return
+		}
+		if errors.Is(err, ErrProductPriceInvalid) {
+			h.writeError(w, http.StatusUnprocessableEntity, "product_price_invalid", "Укажите цену для всех вариантов товара в разделе «Цена».")
+			return
+		}
+		if errors.Is(err, ErrProductSKURequired) {
+			h.writeError(w, http.StatusUnprocessableEntity, "product_sku_required", "Заполните артикул продавца (SKU) для всех вариантов товара в разделе «Цена».")
+			return
+		}
+		if errors.Is(err, ErrProductSizeChartRequired) {
+			h.writeError(w, http.StatusUnprocessableEntity, "product_size_chart_required", "Заполните таблицу размеров в разделе «Таблица размеров».")
+			return
+		}
+		if errors.Is(err, ErrProductSizeChartIncomplete) {
+			h.writeError(w, http.StatusUnprocessableEntity, "product_size_chart_incomplete", "Заполните все обязательные параметры в разделе «Таблица размеров».")
+			return
+		}
+		if errors.Is(err, ErrProductCompositionInvalid) {
+			h.writeError(w, http.StatusUnprocessableEntity, "product_composition_invalid", "Проверьте состав материалов в разделе «Характеристики» (сумма должна составлять ровно 100%).")
+			return
+		}
 		if isDomainValidationError(err) {
 			h.writeError(w, http.StatusUnprocessableEntity, "validation_error", err.Error())
 			return
