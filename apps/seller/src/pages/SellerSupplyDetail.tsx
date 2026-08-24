@@ -315,50 +315,68 @@ export function SellerSupplyDetail() {
       {/* Confirmation Modal */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 transition-opacity" aria-hidden="true" onClick={() => setShowConfirmModal(false)}>
-              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
-            </div>
-            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div className="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+            aria-hidden="true"
+            onClick={() => {
+              if (!submitting) {
+                setActionError(null);
+                setShowConfirmModal(false);
+              }
+            }}
+          />
+
+          {/* Centering wrapper */}
+          <div className="min-h-full flex items-center justify-center p-4 text-center">
+            {/* Modal Card */}
+            <div
+              className="relative bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:max-w-lg sm:w-full z-10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 sm:p-8">
                 <div className="sm:flex sm:items-start">
-                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-2xl bg-blue-50 sm:mx-0 sm:h-12 sm:w-12">
                     <Truck className="h-6 w-6 text-blue-600" />
                   </div>
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
-                    <h3 className="text-lg leading-6 font-bold text-gray-900">Подтвердить отправку?</h3>
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-5 sm:text-left flex-1">
+                    <h3 className="text-xl font-bold text-gray-900">Подтвердить отправку?</h3>
                     <div className="mt-2">
                       <p className="text-sm text-gray-500">
-                        После подтверждения поставка будет отмечена как отправленная в ZAMK.
+                        После подтверждения поставка перейдёт в статус «В пути» и будет ожидать приёмки на складе ZAMK.
                       </p>
                     </div>
                     {actionError && (
-                      <div className="mt-3 bg-red-50 p-3 rounded-xl flex items-center border border-red-100 text-left">
-                        <AlertCircle className="h-4 w-4 text-red-500 mr-2 flex-shrink-0" />
+                      <div className="mt-4 bg-red-50 p-3.5 rounded-xl flex items-center border border-red-100 text-left">
+                        <AlertCircle className="h-5 w-5 text-red-500 mr-2.5 flex-shrink-0" />
                         <span className="text-red-700 text-xs font-medium">{actionError}</span>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+
+              <div className="bg-gray-50/80 px-6 py-4 border-t border-gray-100 sm:flex sm:flex-row-reverse gap-3">
                 <button
                   type="button"
                   disabled={submitting}
-                  onClick={handleMarkShipped}
-                  className="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2 bg-black text-base font-bold text-white hover:bg-gray-800 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleMarkShipped();
+                  }}
+                  className="w-full sm:w-auto inline-flex justify-center items-center px-6 py-2.5 bg-black text-white font-bold rounded-xl text-sm hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
                   {submitting ? 'Отправляем...' : 'Передал перевозчику'}
                 </button>
                 <button
                   type="button"
                   disabled={submitting}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setActionError(null);
                     setShowConfirmModal(false);
                   }}
-                  className="mt-3 w-full inline-flex justify-center rounded-xl border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-bold text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="mt-3 sm:mt-0 w-full sm:w-auto inline-flex justify-center items-center px-5 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-xl text-sm hover:bg-gray-50 disabled:opacity-50 transition-colors"
                 >
                   Отмена
                 </button>
