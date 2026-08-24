@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Truck, ArrowLeft, AlertCircle, Printer, PackageCheck, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, Truck, PackageCheck, FileWarning, HelpCircle } from 'lucide-react';
 import { getSellerSupply, shipSellerSupply } from '@zamk/api-client/src/seller';
 import type { SellerSupply } from '@zamk/api-client/src/types';
 import { QRCodeSVG } from 'qrcode.react';
@@ -10,12 +10,10 @@ export function SellerSupplyDetail() {
   const [supply, setSupply] = useState<SellerSupply | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [shipping, setShipping] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      fetchSupply();
-    }
+    fetchSupply();
   }, [id]);
 
   const fetchSupply = async () => {
@@ -30,274 +28,302 @@ export function SellerSupplyDetail() {
     }
   };
 
-  const handleShip = async () => {
-    if (!confirm('Вы уверены, что хотите отметить поставку как отправленную? После этого редактирование будет недоступно.')) {
-      return;
-    }
-    
+  const handleMarkShipped = async () => {
     try {
-      setShipping(true);
       await shipSellerSupply(id!);
-      await fetchSupply();
+      setShowConfirmModal(false);
+      fetchSupply();
     } catch (err: any) {
-      setError(err.message || 'Ошибка при отправке');
-    } finally {
-      setShipping(false);
+      alert(err.message || 'Ошибка');
     }
   };
 
-  const getHumanStatus = (status: string) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'draft': return 'Черновик';
-      case 'ready_to_ship':
-      case 'pending_shipment': return 'Готовится к отправке';
-      case 'shipped':
-      case 'shipped_by_seller': return 'Отправлена';
-      case 'receiving': return 'На приёмке';
-      case 'completed': return 'Принята';
-      case 'completed_with_discrepancies': return 'Принята с расхождениями';
-      default: return status;
+      case 'draft': return <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-bold uppercase tracking-wide">Черновик</span>;
+      case 'ready_to_ship': return <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-bold uppercase tracking-wide">Готова к отправке</span>;
+      case 'shipped_by_seller': return <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold uppercase tracking-wide">В пути</span>;
+      case 'arrived_at_zamk': return <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold uppercase tracking-wide">Прибыла в ZAMK</span>;
+      case 'receiving': return <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-bold uppercase tracking-wide">Приёмка</span>;
+      case 'completed': return <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-bold uppercase tracking-wide">Принята</span>;
+      case 'completed_with_discrepancies': return <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-bold uppercase tracking-wide">Принята с расхождениями</span>;
+      case 'cancelled': return <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-bold uppercase tracking-wide">Отменена</span>;
+      default: return <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-bold uppercase tracking-wide">{status}</span>;
     }
-  };
-
-  const renderProgressBar = (status: string) => {
-    const steps = [
-      { id: 'draft', label: 'Создана' },
-      { id: 'prep', label: 'Подготовка' },
-      { id: 'shipped', label: 'В пути' },
-      { id: 'receiving', label: 'Приёмка' },
-      { id: 'completed', label: 'Завершена' }
-    ];
-
-    let currentIndex = 0;
-    if (status === 'draft') currentIndex = 1;
-    if (status === 'shipped') currentIndex = 2;
-    if (status === 'receiving') currentIndex = 3;
-    if (status === 'completed' || status === 'completed_with_discrepancies') currentIndex = 4;
-
-    return (
-      <div className="flex items-center justify-between relative mt-8 mb-12">
-        <div className="absolute left-0 top-1/2 -mt-px w-full h-1 bg-gray-200 -z-10"></div>
-        <div className="absolute left-0 top-1/2 -mt-px h-1 bg-black -z-10 transition-all duration-500" style={{ width: `${(currentIndex / 4) * 100}%` }}></div>
-        {steps.map((step, idx) => (
-          <div key={step.id} className="flex flex-col items-center relative z-10">
-            <div className={`w-6 h-6 rounded-full border-4 ${idx <= currentIndex ? 'bg-black border-black' : 'bg-white border-gray-300'}`}></div>
-            <span className={`absolute top-8 text-xs font-bold whitespace-nowrap ${idx <= currentIndex ? 'text-black' : 'text-gray-400'}`}>{step.label}</span>
-          </div>
-        ))}
-      </div>
-    );
   };
 
   if (loading) {
     return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div></div>;
   }
 
-  if (!supply) {
-    return <div className="p-8 text-center text-red-500">Поставка не найдена</div>;
+  if (error || !supply) {
+    return <div className="p-8 text-red-500 font-medium">Ошибка: {error}</div>;
   }
 
   const isCompleted = supply.status === 'completed' || supply.status === 'completed_with_discrepancies';
 
-  return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-32">
-      <div className="mb-6">
-        <Link to="/supplies" className="flex items-center text-sm text-gray-500 hover:text-black transition-colors">
-          <ArrowLeft className="w-4 h-4 mr-1" />
-          Назад к поставкам
-        </Link>
-      </div>
+  // Find timeline progression
+  const states = ['ready_to_ship', 'shipped_by_seller', 'arrived_at_zamk', 'receiving', 'completed'];
+  let currentStateIndex = states.indexOf(supply.status);
+  if (supply.status === 'completed_with_discrepancies') currentStateIndex = states.indexOf('completed');
 
-      <div className="flex justify-between items-start mb-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
-            Поставка {supply.supplyNumber}
-          </h1>
-          <p className="mt-2 text-sm text-gray-500">
-            Создана {new Date(supply.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
-          </p>
-        </div>
-        
-        <div className="flex items-center space-x-4">
-          <span className={`px-4 py-2 rounded-full text-sm font-bold uppercase tracking-wider
-            ${supply.status === 'draft' ? 'bg-gray-100 text-gray-800' : ''}
-            ${supply.status === 'shipped' || supply.status === 'shipped_by_seller' ? 'bg-blue-100 text-blue-800' : ''}
-            ${supply.status === 'receiving' ? 'bg-yellow-100 text-yellow-800' : ''}
-            ${supply.status === 'completed' ? 'bg-green-100 text-green-800' : ''}
-            ${supply.status === 'completed_with_discrepancies' ? 'bg-orange-100 text-orange-800' : ''}
-          `}>
-            {getHumanStatus(supply.status)}
-          </span>
-          
-          {supply.status === 'draft' && (
-            <button
-              onClick={handleShip}
-              disabled={shipping}
-              className="inline-flex items-center px-6 py-2 border border-transparent rounded-full shadow-sm text-sm font-bold text-white bg-black hover:bg-gray-800 focus:outline-none disabled:opacity-50 transition-colors"
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mb-8">
+        <Link to="/supplies" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-black mb-4">
+          <ArrowLeft className="w-4 h-4 mr-1" /> К списку поставок
+        </Link>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-4">
+              {supply.supplyNumber || 'SUP-...'}
+              {getStatusBadge(supply.status)}
+            </h1>
+            <p className="mt-2 text-sm text-gray-500 font-medium">
+              Создана {new Date(supply.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+          {supply.status === 'ready_to_ship' && (
+            <button 
+              onClick={() => setShowConfirmModal(true)}
+              className="px-6 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-sm"
             >
-              <Truck className="-ml-1 mr-2 h-4 w-4" />
-              {shipping ? 'Отправка...' : 'Отправить поставку'}
+              Передал перевозчику
             </button>
           )}
         </div>
       </div>
-
-      {renderProgressBar(supply.status)}
-
-      {error && (
-        <div className="mb-8 bg-red-50 p-4 rounded-lg flex items-center border border-red-100">
-          <AlertCircle className="h-5 w-5 text-red-500 mr-3" />
-          <span className="text-red-700 font-medium">{error}</span>
+      
+      {/* Newly Created Hero Message */}
+      {supply.status === 'ready_to_ship' && (
+        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 mb-8 flex items-start">
+          <CheckCircle className="w-6 h-6 text-blue-600 mr-4 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-lg font-bold text-blue-900">Поставка создана</h3>
+            <p className="text-blue-800 mt-1">Подготовьте грузоместо, распечатайте этикетку и передайте заказ транспортной компании.</p>
+          </div>
         </div>
       )}
 
-      {/* Discrepancy Results block */}
+      {/* Completed Summary Block */}
       {isCompleted && (
-        <div className={`mb-8 p-6 rounded-2xl border ${supply.status === 'completed' ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+        <div className={`rounded-2xl p-6 mb-8 border ${supply.status === 'completed' ? 'bg-green-50 border-green-100' : 'bg-orange-50 border-orange-100'}`}>
           <div className="flex items-start">
             {supply.status === 'completed' ? (
-              <PackageCheck className="w-8 h-8 text-green-600 mr-4 mt-1" />
+              <PackageCheck className="w-8 h-8 text-green-600 mr-4 flex-shrink-0" />
             ) : (
-              <AlertTriangle className="w-8 h-8 text-orange-600 mr-4 mt-1" />
+              <FileWarning className="w-8 h-8 text-orange-600 mr-4 flex-shrink-0" />
             )}
-            <div className="flex-1">
+            <div className="w-full">
               <h3 className={`text-xl font-bold ${supply.status === 'completed' ? 'text-green-900' : 'text-orange-900'}`}>
-                {supply.status === 'completed' ? 'Поставка принята полностью.' : 'Итоги приёмки (есть расхождения)'}
+                {supply.status === 'completed' ? 'Поставка принята' : 'Поставка принята с расхождениями'}
               </h3>
               
-              {supply.status === 'completed' && (
-                <p className="mt-2 text-green-800">Все заявленные позиции были успешно приняты. {supply.totalAcceptedItems} единиц добавлено на склад ZAMK.</p>
-              )}
-
-              {supply.status === 'completed_with_discrepancies' && (
-                <div className="mt-6 bg-white rounded-xl shadow-sm border border-orange-100 overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-orange-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-bold text-orange-800 uppercase tracking-wider">SKU (Variant)</th>
-                        <th className="px-6 py-3 text-right text-xs font-bold text-orange-800 uppercase tracking-wider">Expected</th>
-                        <th className="px-6 py-3 text-right text-xs font-bold text-orange-800 uppercase tracking-wider">Accepted</th>
-                        <th className="px-6 py-3 text-right text-xs font-bold text-orange-800 uppercase tracking-wider">Damaged</th>
-                        <th className="px-6 py-3 text-right text-xs font-bold text-orange-800 uppercase tracking-wider">Missing</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {/* Aggregate discrepancy from items */}
-                      {supply.items?.map((item) => (
-                          <tr key={item.sku} className={item.expectedQuantity !== item.acceptedQuantity ? 'bg-orange-50/30' : ''}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{item.sku}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">{item.expectedQuantity}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600 text-right">{item.acceptedQuantity}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-red-600 text-right">{item.damagedQuantity}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-500 text-right">{item.missingQuantity}</td>
-                          </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {supply.receivingComment && (
-                    <div className="p-4 bg-orange-50 border-t border-orange-100">
-                      <p className="text-sm font-bold text-orange-900 mb-1">Комментарий склада ZAMK:</p>
-                      <p className="text-sm text-orange-800">{supply.receivingComment}</p>
-                    </div>
-                  )}
+              <div className="mt-6 flex flex-wrap gap-8">
+                <div>
+                  <p className={`text-sm font-bold uppercase tracking-widest ${supply.status === 'completed' ? 'text-green-700' : 'text-orange-700'}`}>Заявлено</p>
+                  <p className={`mt-1 text-3xl font-black ${supply.status === 'completed' ? 'text-green-900' : 'text-orange-900'}`}>{supply.totalExpectedItems}</p>
                 </div>
-              )}
+                <div>
+                  <p className={`text-sm font-bold uppercase tracking-widest ${supply.status === 'completed' ? 'text-green-700' : 'text-orange-700'}`}>Принято</p>
+                  <p className={`mt-1 text-3xl font-black ${supply.status === 'completed' ? 'text-green-900' : 'text-orange-900'}`}>{supply.totalAcceptedItems}</p>
+                </div>
+                {supply.status === 'completed_with_discrepancies' && (
+                  <div>
+                    <p className="text-sm font-bold uppercase tracking-widest text-red-700">Расхождение</p>
+                    <p className="mt-1 text-3xl font-black text-red-700">{supply.totalAcceptedItems - supply.totalExpectedItems}</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-        {/* QR Codes and Labels */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <div className="flex justify-between items-start mb-6">
-              <h3 className="text-lg font-bold text-gray-900">QR-коды и этикетки</h3>
-              <button className="p-2 text-gray-400 hover:text-black hover:bg-gray-100 rounded-full transition-colors">
-                <Printer className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="flex flex-col items-center mb-8 p-4 bg-gray-50 rounded-xl">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Главный QR поставки</span>
-              <div className="bg-white p-3 rounded-lg shadow-sm">
-                <QRCodeSVG value={supply.qrToken || supply.supplyNumber || ''} size={140} level="H" />
-              </div>
-              <span className="mt-3 font-mono font-bold text-lg">{supply.supplyNumber || ''}</span>
-            </div>
+      {/* Status Timeline */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-8 mb-8 overflow-hidden">
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center" aria-hidden="true">
+            <div className="h-1 w-full bg-gray-100 rounded"></div>
+          </div>
+          <div className="relative flex justify-between">
+            {['Создана', 'Передана перевозчику', 'Прибыла в ZAMK', 'Приёмка', 'Завершена'].map((label, idx) => {
+              const isActive = currentStateIndex >= idx;
+              const isCurrent = currentStateIndex === idx;
+              return (
+                <div key={label} className="flex flex-col items-center">
+                  <div className={`h-6 w-6 rounded-full flex items-center justify-center ring-4 ring-white z-10 transition-colors ${isActive ? 'bg-black' : 'bg-gray-200'} ${isCurrent ? 'ring-gray-100 ring-8' : ''}`}>
+                    {isActive && <div className="h-2 w-2 bg-white rounded-full"></div>}
+                  </div>
+                  <p className={`mt-3 text-xs sm:text-sm font-bold ${isActive ? 'text-black' : 'text-gray-400'} max-w-[80px] sm:max-w-none text-center leading-tight`}>{label}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold text-gray-900">Короба ({supply.totalExpectedBoxes})</h4>
-              {supply.boxes?.map((box, idx) => (
-                <div key={box.id} className="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
-                  <div className="bg-white p-1.5 rounded shadow-sm mr-4">
-                    <QRCodeSVG value={box.qrToken || box.boxNumber || box.id} size={48} level="M" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        {/* Left Column */}
+        <div className="lg:col-span-1 space-y-8">
+          {/* Delivery Card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-6">Доставка</h3>
+            <div className="flex items-start">
+              <Truck className="w-5 h-5 text-gray-400 mr-3 mt-0.5" />
+              <div>
+                <p className="font-bold text-gray-900">Транспортная компания</p>
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <p className="text-xs text-gray-500">Перевозчик</p>
+                    <p className="text-sm font-medium text-gray-900">СДЭК / ТК</p>
                   </div>
                   <div>
-                    <p className="font-bold text-sm text-gray-900">Короб {idx + 1}</p>
-                    <p className="font-mono text-xs text-gray-500">{box.boxNumber || box.id}</p>
+                    <p className="text-xs text-gray-500">Трек-номер</p>
+                    <p className="text-sm font-mono text-gray-900 font-medium">Не указан</p>
                   </div>
                 </div>
-              ))}
+              </div>
             </div>
+          </div>
 
-            <button className="w-full mt-6 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-colors">
-              Распечатать этикетки
+          {/* Gruzomesto Card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-6">Грузоместо 1</h3>
+            
+            <div className="flex flex-col items-center p-6 bg-gray-50 rounded-xl border border-gray-100 mb-6">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">QR грузоместа</span>
+              <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
+                {/* Fallback to supply QR if boxes missing or token missing, as instructed: do not pretend box QR exists if system has supply level only */}
+                <QRCodeSVG value={supply.boxes?.[0]?.qrToken || supply.qrToken || supply.supplyNumber || ''} size={160} level="H" />
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-500 mb-1">Код</p>
+                <p className="font-mono font-bold text-lg tracking-wider text-gray-900">{supply.boxes?.[0]?.boxNumber || supply.supplyNumber}</p>
+              </div>
+            </div>
+            
+            <p className="text-xs text-center text-gray-500 mb-6 flex items-center justify-center">
+              <HelpCircle className="w-4 h-4 mr-1.5" />
+              Сотрудник ZAMK отсканирует код при приёмке.
+            </p>
+
+            <button className="w-full flex items-center justify-center py-3 border border-gray-300 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors">
+              <Printer className="w-4 h-4 mr-2" />
+              Открыть этикетку
             </button>
           </div>
         </div>
 
-        {/* Content */}
+        {/* Right Column: Specification */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-200 bg-gray-50/50">
-              <h3 className="text-lg font-bold text-gray-900">Спецификация</h3>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
+            <div className="px-6 py-5 border-b border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900">Состав поставки</h3>
             </div>
-            <div className="p-6">
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 mb-8">
-                <div>
-                  <dt className="text-xs font-bold text-gray-500 uppercase tracking-wider">Товаров заявлено</dt>
-                  <dd className="mt-1 text-2xl font-light text-gray-900">{supply.totalExpectedItems} шт</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-bold text-gray-500 uppercase tracking-wider">Коробов</dt>
-                  <dd className="mt-1 text-2xl font-light text-gray-900">{supply.totalExpectedBoxes}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-bold text-gray-500 uppercase tracking-wider">Способ передачи</dt>
-                  <dd className="mt-1 text-lg font-medium text-gray-900 mt-2">
-                    {supply.handoffMethod === 'courier' ? 'Курьером' : 'Привоз на ПВЗ'}
-                  </dd>
-                </div>
-              </dl>
-
-              <div className="mt-8 space-y-6">
-                {supply.boxes?.map((box, idx) => (
-                  <div key={box.id} className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-                      <h4 className="font-bold text-gray-900">Короб {idx + 1}</h4>
-                      <span className="text-xs font-mono text-gray-500">{box.id}</span>
-                    </div>
-                    <ul className="divide-y divide-gray-100">
-                      {box.items.map(item => (
-                        <li key={item.id} className="p-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                          <div>
-                            <p className="text-sm font-bold text-gray-900">{item.sku}</p>
-                            <p className="text-xs text-gray-500 mt-1">Ожидалось: {item.quantity} шт</p>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-lg font-bold text-gray-900">{item.quantity} шт</span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
+            <div className="flex-1 overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Товар / Вариант</th>
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Артикул / Штрихкод</th>
+                    <th scope="col" className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Заявлено</th>
+                    <th scope="col" className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Принято</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {supply.items?.map(item => {
+                    const hasDiscrepancy = isCompleted && item.expectedQuantity !== item.acceptedQuantity;
+                    return (
+                      <tr key={item.id} className={hasDiscrepancy ? 'bg-orange-50/20' : 'hover:bg-gray-50/50'}>
+                        <td className="px-6 py-5 whitespace-nowrap">
+                          <div className="text-sm font-bold text-gray-900">{'Товар'}</div>
+                          <div className="text-sm text-gray-500">{'Неизвестно'}</div>
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap">
+                          <div className="text-sm font-mono font-medium text-gray-900">{item.sku}</div>
+                          <div className="text-xs font-mono text-gray-500">{'-'}</div>
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap text-right">
+                          <div className="text-lg font-medium text-gray-900">{item.expectedQuantity}</div>
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap text-right">
+                          {!isCompleted ? (
+                            <span className="text-gray-300 font-bold">—</span>
+                          ) : (
+                            <div className="flex flex-col items-end">
+                              <span className={`text-lg font-bold ${hasDiscrepancy ? (item.acceptedQuantity > item.expectedQuantity ? 'text-green-600' : 'text-orange-600') : 'text-gray-900'}`}>
+                                {item.acceptedQuantity}
+                              </span>
+                              {hasDiscrepancy && (
+                                <span className={`text-xs font-bold ${item.acceptedQuantity > item.expectedQuantity ? 'text-green-600' : 'text-orange-600'}`}>
+                                  {item.acceptedQuantity > item.expectedQuantity ? '+' : ''}{item.acceptedQuantity - item.expectedQuantity}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="bg-gray-50 border-t border-gray-200">
+                  <tr>
+                    <td colSpan={2} className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Итого:</td>
+                    <td className="px-6 py-4 text-right text-lg font-black text-gray-900">{supply.totalExpectedItems}</td>
+                    <td className="px-6 py-4 text-right text-lg font-black text-gray-900">{isCompleted ? supply.totalAcceptedItems : '—'}</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true" onClick={() => setShowConfirmModal(false)}>
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div className="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                    <Truck className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                    <h3 className="text-lg leading-6 font-bold text-gray-900">Подтвердить отправку?</h3>
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-500">
+                        После подтверждения поставка будет отмечена как отправленная в ZAMK.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  onClick={handleMarkShipped}
+                  className="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2 bg-black text-base font-bold text-white hover:bg-gray-800 sm:ml-3 sm:w-auto sm:text-sm"
+                >
+                  Передал перевозчику
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(false)}
+                  className="mt-3 w-full inline-flex justify-center rounded-xl border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-bold text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
