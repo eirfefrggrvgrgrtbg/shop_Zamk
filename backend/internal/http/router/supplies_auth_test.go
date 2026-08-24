@@ -160,9 +160,13 @@ func TestSuppliesAuth(t *testing.T) {
 		// Create supply via service
 		repo := supplies.NewRepository(pgClient.Pool)
 		svc := supplies.NewService(pgClient.Pool, repo)
+		carrier := "СДЭК"
+		tracking := "121212123241"
 		req := supplies.CreateSupplyRequest{
-			HandoffMethod: "pvz",
-			Items:         []supplies.CreateSupplyItemRequest{{VariantID: variantID, ExpectedQuantity: 5}},
+			HandoffMethod:  "carrier_delivery",
+			CarrierName:    &carrier,
+			TrackingNumber: &tracking,
+			Items:          []supplies.CreateSupplyItemRequest{{VariantID: variantID, ExpectedQuantity: 5}},
 		}
 		supply, err := svc.CreateSupply(ctx, sellerID, req)
 		if err != nil {

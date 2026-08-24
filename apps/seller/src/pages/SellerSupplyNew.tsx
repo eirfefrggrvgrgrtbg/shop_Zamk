@@ -29,8 +29,29 @@ export function SellerSupplyNew() {
   // Step 2: Handoff
   const [carrierCompany, setCarrierCompany] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
+  const [carrierError, setCarrierError] = useState<string | null>(null);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
+
+  const handleStep2Continue = () => {
+    let hasErr = false;
+    if (!carrierCompany.trim()) {
+      setCarrierError('Укажите транспортную компанию.');
+      hasErr = true;
+    } else {
+      setCarrierError(null);
+    }
+    if (!trackingNumber.trim()) {
+      setTrackingError('Укажите трек-номер отправления.');
+      hasErr = true;
+    } else {
+      setTrackingError(null);
+    }
+    if (!hasErr) {
+      setStep(3);
+    }
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -297,23 +318,36 @@ export function SellerSupplyNew() {
 
               <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1.5">Транспортная компания</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">
+                    Транспортная компания <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     value={carrierCompany}
-                    onChange={e => setCarrierCompany(e.target.value)}
+                    onChange={e => {
+                      setCarrierCompany(e.target.value);
+                      if (e.target.value.trim()) setCarrierError(null);
+                    }}
                     placeholder="Например: СДЭК, Деловые Линии"
-                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-black focus:ring-black sm:text-base py-2.5"
+                    className={`block w-full rounded-lg shadow-sm focus:border-black focus:ring-black sm:text-base py-2.5 ${carrierError ? 'border-red-500 bg-red-50/20' : 'border-gray-300'}`}
                   />
+                  {carrierError && <p className="mt-1 text-xs font-bold text-red-600">{carrierError}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1.5">Трек-номер отправления (если есть)</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">
+                    Трек-номер отправления <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     value={trackingNumber}
-                    onChange={e => setTrackingNumber(e.target.value)}
-                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-black focus:ring-black sm:text-base py-2.5 font-mono"
+                    onChange={e => {
+                      setTrackingNumber(e.target.value);
+                      if (e.target.value.trim()) setTrackingError(null);
+                    }}
+                    placeholder="Например: 121212123241"
+                    className={`block w-full rounded-lg shadow-sm focus:border-black focus:ring-black sm:text-base py-2.5 font-mono ${trackingError ? 'border-red-500 bg-red-50/20' : 'border-gray-300'}`}
                   />
+                  {trackingError && <p className="mt-1 text-xs font-bold text-red-600">{trackingError}</p>}
                 </div>
               </div>
 
@@ -332,7 +366,7 @@ export function SellerSupplyNew() {
               Назад
             </button>
             <button
-              onClick={() => setStep(3)}
+              onClick={handleStep2Continue}
               className="px-8 py-3 bg-black text-white font-bold rounded-xl hover:bg-gray-800 transition-colors"
             >
               Продолжить

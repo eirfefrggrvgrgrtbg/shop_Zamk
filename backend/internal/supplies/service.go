@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
@@ -26,13 +27,39 @@ func NewService(db postgres.DBTX, repo *Repository) *Service {
 }
 
 func (s *Service) CreateSupply(ctx context.Context, sellerID uuid.UUID, req CreateSupplyRequest) (*Supply, error) {
+	if req.HandoffMethod == "" {
+		req.HandoffMethod = "carrier_delivery"
+	}
+
 	if len(req.Items) == 0 {
 		return nil, ErrInvalidQuantities
 	}
 
+	hasPositiveQuantity := false
+	for _, item := range req.Items {
+		if item.ExpectedQuantity > 0 {
+			hasPositiveQuantity = true
+			break
+		}
+	}
+	if !hasPositiveQuantity {
+		return nil, ErrInvalidQuantities
+	}
+
+	if req.HandoffMethod == "carrier_delivery" {
+		if req.CarrierName == nil || strings.TrimSpace(*req.CarrierName) == "" {
+			return nil, ErrCarrierRequired
+		}
+		if req.TrackingNumber == nil || strings.TrimSpace(*req.TrackingNumber) == "" {
+			return nil, ErrTrackingNumberRequired
+		}
+	}
+
 	var variantIDs []uuid.UUID
 	for _, item := range req.Items {
-		variantIDs = append(variantIDs, item.VariantID)
+		if item.ExpectedQuantity > 0 {
+			variantIDs = append(variantIDs, item.VariantID)
+		}
 	}
 
 	err := s.repo.VerifyVariantsOwnership(ctx, sellerID, variantIDs)

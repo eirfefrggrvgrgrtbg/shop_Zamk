@@ -8,8 +8,12 @@ import (
 )
 
 func createShippedSupply(t *testing.T, tc *TestContext) *supplies.Supply {
+	carrier := "СДЭК"
+	tracking := "121212123241"
 	req := supplies.CreateSupplyRequest{
-		HandoffMethod: "pvz",
+		HandoffMethod:  "carrier_delivery",
+		CarrierName:    &carrier,
+		TrackingNumber: &tracking,
 		Items: []supplies.CreateSupplyItemRequest{
 			{VariantID: tc.Variant1, ExpectedQuantity: 10},
 		},
@@ -188,8 +192,12 @@ func TestReceivingDamagePersistsCorrectly(t *testing.T) {
 	tc := setupTestContext(t)
 
 	// Create supply with expected = 20
+	carrier := "СДЭК"
+	tracking := "121212123241"
 	req := supplies.CreateSupplyRequest{
-		HandoffMethod: "pvz",
+		HandoffMethod:  "carrier_delivery",
+		CarrierName:    &carrier,
+		TrackingNumber: &tracking,
 		Items: []supplies.CreateSupplyItemRequest{
 			{VariantID: tc.Variant1, ExpectedQuantity: 20},
 		},

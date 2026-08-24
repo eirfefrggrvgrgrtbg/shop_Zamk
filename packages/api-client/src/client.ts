@@ -158,6 +158,15 @@ export const request = async <T>(
 
 const getSafeErrorMessage = (code?: string, fallback?: string): string => {
   switch (code) {
+    case 'supply_carrier_required':
+    case 'SUPPLY_CARRIER_REQUIRED':
+      return 'Укажите транспортную компанию.';
+    case 'supply_tracking_number_required':
+    case 'SUPPLY_TRACKING_NUMBER_REQUIRED':
+      return 'Укажите трек-номер отправления.';
+    case 'supply_items_required':
+    case 'SUPPLY_ITEMS_REQUIRED':
+      return 'Укажите количество хотя бы для одного товара.';
     case 'product_media_portrait_required':
     case 'PRODUCT_MEDIA_PORTRAIT_REQUIRED':
       return 'Для товара нужны вертикальные фотографии.\nЗагрузите изображение в вертикальном формате.';

@@ -116,7 +116,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 
 	suppliesRepo := supplies.NewRepository(pgClient.Pool)
 	suppliesService := supplies.NewService(pgClient.Pool, suppliesRepo)
-	suppliesHandler := supplies.NewHandler(suppliesService)
+	suppliesHandler := supplies.NewHandler(suppliesService, logger)
 
 	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, paymentsService, cfg.Worker.ReturnWindowDays, notificationsService)
 	returnsHandler := returns.NewHandler(returnsService)
