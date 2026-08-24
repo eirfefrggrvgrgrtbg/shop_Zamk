@@ -163,7 +163,6 @@ func TestSuppliesAuth(t *testing.T) {
 		req := supplies.CreateSupplyRequest{
 			HandoffMethod: "pvz",
 			Items:         []supplies.CreateSupplyItemRequest{{VariantID: variantID, ExpectedQuantity: 5}},
-			Boxes:         []supplies.CreateSupplyBoxRequest{{BoxNumber: "1", Items: []supplies.CreateSupplyBoxItemRequest{{VariantID: variantID, Quantity: 5}}}},
 		}
 		supply, err := svc.CreateSupply(ctx, sellerID, req)
 		if err != nil {

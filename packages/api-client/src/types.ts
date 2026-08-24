@@ -145,7 +145,9 @@ export interface ProductVariant {
   productId: string;
   sku?: string;
   size?: string;
+  sizeName?: string;
   color?: string;
+  colorName?: string;
   sellerSku?: string;
   colorId?: string;
   sizeValueId?: string;
@@ -322,11 +324,12 @@ export interface SellerSupplyBoxItem {
 
 export interface SellerSupplyBox {
   id: string;
-  supplyId: string;
+  supplyId?: string;
   boxNumber: string;
-  barcode: string;
+  barcode?: string;
   qrToken?: string;
-  items: SellerSupplyBoxItem[];
+  createdAt?: string;
+  items?: SellerSupplyBoxItem[];
 }
 
 export interface SellerSupplyItem {
@@ -334,26 +337,42 @@ export interface SellerSupplyItem {
   supplyId: string;
   variantId: string;
   sku: string;
+  sellerSku?: string;
+  barcode?: string;
+  productTitle?: string;
+  colorName?: string;
+  sizeName?: string;
   expectedQuantity: number;
   acceptedQuantity: number;
   damagedQuantity: number;
   missingQuantity: number;
   extraQuantity: number;
+  receivingComment?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SellerSupply {
   id: string;
   sellerId: string;
-  humanId: string;
+  humanId?: string;
   supplyNumber?: string;
   qrToken?: string;
   status: string;
   handoffMethod: string;
+  carrierName?: string;
+  trackingNumber?: string;
+  expectedArrivalDate?: string;
   totalExpectedBoxes: number;
   totalExpectedItems: number;
   totalAcceptedItems: number;
+  skuCount?: number;
   receivingComment?: string;
   createdAt: string;
+  shippedAt?: string;
+  arrivedAt?: string;
+  receivingStartedAt?: string;
+  completedAt?: string;
   updatedAt: string;
   items?: SellerSupplyItem[];
   boxes?: SellerSupplyBox[];

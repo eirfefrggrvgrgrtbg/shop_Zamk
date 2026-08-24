@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Printer, CheckCircle, Truck, PackageCheck, FileWarning, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, Truck, PackageCheck, FileWarning, HelpCircle, AlertCircle } from 'lucide-react';
 import { getSellerSupply, shipSellerSupply } from '@zamk/api-client/src/seller';
 import type { SellerSupply } from '@zamk/api-client/src/types';
 import { QRCodeSVG } from 'qrcode.react';
@@ -10,7 +10,9 @@ export function SellerSupplyDetail() {
   const [supply, setSupply] = useState<SellerSupply | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     fetchSupply();
@@ -30,11 +32,15 @@ export function SellerSupplyDetail() {
 
   const handleMarkShipped = async () => {
     try {
+      setSubmitting(true);
+      setActionError(null);
       await shipSellerSupply(id!);
       setShowConfirmModal(false);
-      fetchSupply();
+      await fetchSupply();
     } catch (err: any) {
-      alert(err.message || 'Ошибка');
+      setActionError(err.message || 'Не удалось подтвердить отправку');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -67,6 +73,12 @@ export function SellerSupplyDetail() {
   let currentStateIndex = states.indexOf(supply.status);
   if (supply.status === 'completed_with_discrepancies') currentStateIndex = states.indexOf('completed');
 
+  const box = supply.boxes?.[0];
+  const hasBoxQR = Boolean(box?.qrToken);
+  const qrValue = (hasBoxQR ? box?.qrToken : (supply.qrToken || supply.supplyNumber)) || '';
+  const qrLabel = hasBoxQR ? 'QR грузоместа' : 'QR поставки';
+  const boxCode = box?.boxNumber || supply.supplyNumber;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
@@ -84,7 +96,7 @@ export function SellerSupplyDetail() {
             </p>
           </div>
           {supply.status === 'ready_to_ship' && (
-            <button 
+            <button
               onClick={() => setShowConfirmModal(true)}
               className="px-6 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-sm"
             >
@@ -93,7 +105,7 @@ export function SellerSupplyDetail() {
           )}
         </div>
       </div>
-      
+
       {/* Newly Created Hero Message */}
       {supply.status === 'ready_to_ship' && (
         <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 mb-8 flex items-start">
@@ -102,6 +114,14 @@ export function SellerSupplyDetail() {
             <h3 className="text-lg font-bold text-blue-900">Поставка создана</h3>
             <p className="text-blue-800 mt-1">Подготовьте грузоместо, распечатайте этикетку и передайте заказ транспортной компании.</p>
           </div>
+        </div>
+      )}
+
+      {/* Action Error State */}
+      {actionError && (
+        <div className="mb-8 bg-red-50 p-4 rounded-xl flex items-center border border-red-100">
+          <AlertCircle className="h-5 w-5 text-red-500 mr-3 flex-shrink-0" />
+          <span className="text-red-700 font-medium">{actionError}</span>
         </div>
       )}
 
@@ -118,7 +138,7 @@ export function SellerSupplyDetail() {
               <h3 className={`text-xl font-bold ${supply.status === 'completed' ? 'text-green-900' : 'text-orange-900'}`}>
                 {supply.status === 'completed' ? 'Поставка принята' : 'Поставка принята с расхождениями'}
               </h3>
-              
+
               <div className="mt-6 flex flex-wrap gap-8">
                 <div>
                   <p className={`text-sm font-bold uppercase tracking-widest ${supply.status === 'completed' ? 'text-green-700' : 'text-orange-700'}`}>Заявлено</p>
@@ -176,11 +196,11 @@ export function SellerSupplyDetail() {
                 <div className="mt-4 space-y-3">
                   <div>
                     <p className="text-xs text-gray-500">Перевозчик</p>
-                    <p className="text-sm font-medium text-gray-900">СДЭК / ТК</p>
+                    <p className="text-sm font-medium text-gray-900">{supply.carrierName || 'Не указан'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">Трек-номер</p>
-                    <p className="text-sm font-mono text-gray-900 font-medium">Не указан</p>
+                    <p className="text-sm font-mono text-gray-900 font-medium">{supply.trackingNumber || 'Не указан'}</p>
                   </div>
                 </div>
               </div>
@@ -190,25 +210,27 @@ export function SellerSupplyDetail() {
           {/* Gruzomesto Card */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-6">Грузоместо 1</h3>
-            
+
             <div className="flex flex-col items-center p-6 bg-gray-50 rounded-xl border border-gray-100 mb-6">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">QR грузоместа</span>
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">{qrLabel}</span>
               <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
-                {/* Fallback to supply QR if boxes missing or token missing, as instructed: do not pretend box QR exists if system has supply level only */}
-                <QRCodeSVG value={supply.boxes?.[0]?.qrToken || supply.qrToken || supply.supplyNumber || ''} size={160} level="H" />
+                <QRCodeSVG value={qrValue} size={160} level="H" />
               </div>
               <div className="text-center">
                 <p className="text-xs text-gray-500 mb-1">Код</p>
-                <p className="font-mono font-bold text-lg tracking-wider text-gray-900">{supply.boxes?.[0]?.boxNumber || supply.supplyNumber}</p>
+                <p className="font-mono font-bold text-lg tracking-wider text-gray-900">{boxCode}</p>
               </div>
             </div>
-            
+
             <p className="text-xs text-center text-gray-500 mb-6 flex items-center justify-center">
               <HelpCircle className="w-4 h-4 mr-1.5" />
               Сотрудник ZAMK отсканирует код при приёмке.
             </p>
 
-            <button className="w-full flex items-center justify-center py-3 border border-gray-300 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors">
+            <button
+              onClick={() => window.print()}
+              className="w-full flex items-center justify-center py-3 border border-gray-300 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+            >
               <Printer className="w-4 h-4 mr-2" />
               Открыть этикетку
             </button>
@@ -234,15 +256,21 @@ export function SellerSupplyDetail() {
                 <tbody className="bg-white divide-y divide-gray-100">
                   {supply.items?.map(item => {
                     const hasDiscrepancy = isCompleted && item.expectedQuantity !== item.acceptedQuantity;
+                    const variantOptions = (item.colorName || item.sizeName)
+                      ? [item.colorName, item.sizeName].filter(Boolean).join(' · ')
+                      : 'Стандарт';
+                    const displaySku = item.sellerSku || item.sku || '—';
+                    const displayBarcode = item.barcode || '—';
+
                     return (
                       <tr key={item.id} className={hasDiscrepancy ? 'bg-orange-50/20' : 'hover:bg-gray-50/50'}>
                         <td className="px-6 py-5 whitespace-nowrap">
-                          <div className="text-sm font-bold text-gray-900">{'Товар'}</div>
-                          <div className="text-sm text-gray-500">{'Неизвестно'}</div>
+                          <div className="text-sm font-bold text-gray-900">{item.productTitle || 'Товар'}</div>
+                          <div className="text-sm text-gray-500">{variantOptions}</div>
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap">
-                          <div className="text-sm font-mono font-medium text-gray-900">{item.sku}</div>
-                          <div className="text-xs font-mono text-gray-500">{'-'}</div>
+                          <div className="text-sm font-mono font-medium text-gray-900">{displaySku}</div>
+                          <div className="text-xs font-mono text-gray-500">{displayBarcode}</div>
                         </td>
                         <td className="px-6 py-5 whitespace-nowrap text-right">
                           <div className="text-lg font-medium text-gray-900">{item.expectedQuantity}</div>
@@ -307,13 +335,15 @@ export function SellerSupplyDetail() {
               <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                 <button
                   type="button"
+                  disabled={submitting}
                   onClick={handleMarkShipped}
-                  className="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2 bg-black text-base font-bold text-white hover:bg-gray-800 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2 bg-black text-base font-bold text-white hover:bg-gray-800 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
                 >
-                  Передал перевозчику
+                  {submitting ? 'Отправка...' : 'Передал перевозчику'}
                 </button>
                 <button
                   type="button"
+                  disabled={submitting}
                   onClick={() => setShowConfirmModal(false)}
                   className="mt-3 w-full inline-flex justify-center rounded-xl border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-bold text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                 >

@@ -23,6 +23,11 @@ type Supply struct {
 	CompletedAt         *time.Time   `json:"completedAt,omitempty"`
 	UpdatedAt           time.Time    `json:"updatedAt"`
 
+	TotalExpectedItems int `json:"totalExpectedItems"`
+	TotalAcceptedItems int `json:"totalAcceptedItems"`
+	TotalExpectedBoxes int `json:"totalExpectedBoxes"`
+	SKUCount           int `json:"skuCount"`
+
 	Items []SupplyItem `json:"items,omitempty"`
 	Boxes []SupplyBox  `json:"boxes,omitempty"`
 }
@@ -42,7 +47,10 @@ type SupplyItem struct {
 
 	// Joins
 	SKU          string  `json:"sku,omitempty"`
+	SellerSKU    *string `json:"sellerSku,omitempty"`
 	ProductTitle string  `json:"productTitle,omitempty"`
+	ColorName    *string `json:"colorName,omitempty"`
+	SizeName     *string `json:"sizeName,omitempty"`
 	Barcode      *string `json:"barcode,omitempty"`
 }
 

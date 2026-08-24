@@ -134,11 +134,19 @@ func (r *Repository) GetSupplyByID(ctx context.Context, id uuid.UUID) (*Supply, 
 	// Fetch items
 	itemsQuery := `
 		SELECT i.id, i.supply_id, i.variant_id, i.expected_quantity, i.accepted_quantity, i.damaged_quantity, i.missing_quantity, i.extra_quantity, i.receiving_comment, i.created_at, i.updated_at,
-		v.sku, p.title as product_title, v.barcode
+		COALESCE(v.seller_sku, v.sku, '') as sku,
+		v.seller_sku,
+		p.title as product_title,
+		v.barcode,
+		COALESCE(c.name_ru, v.color) as color_name,
+		COALESCE(sv.value, v.size) as size_name
 		FROM seller_supply_items i
 		JOIN product_variants v ON v.id = i.variant_id
 		JOIN products p ON p.id = v.product_id
+		LEFT JOIN colors c ON c.id = v.color_id
+		LEFT JOIN size_values sv ON sv.id = v.size_value_id
 		WHERE i.supply_id = $1
+		ORDER BY i.created_at ASC
 	`
 	rows, err := r.db.Query(ctx, itemsQuery, id)
 	if err != nil {
@@ -150,19 +158,23 @@ func (r *Repository) GetSupplyByID(ctx context.Context, id uuid.UUID) (*Supply, 
 		var i SupplyItem
 		err := rows.Scan(
 			&i.ID, &i.SupplyID, &i.VariantID, &i.ExpectedQuantity, &i.AcceptedQuantity, &i.DamagedQuantity, &i.MissingQuantity, &i.ExtraQuantity, &i.ReceivingComment, &i.CreatedAt, &i.UpdatedAt,
-			&i.SKU, &i.ProductTitle, &i.Barcode,
+			&i.SKU, &i.SellerSKU, &i.ProductTitle, &i.Barcode, &i.ColorName, &i.SizeName,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan item: %w", err)
 		}
+		s.TotalExpectedItems += i.ExpectedQuantity
+		s.TotalAcceptedItems += i.AcceptedQuantity
 		s.Items = append(s.Items, i)
 	}
+	s.SKUCount = len(s.Items)
 
 	// Fetch boxes
 	boxesQuery := `
 		SELECT id, supply_id, box_number, qr_token, created_at
 		FROM seller_supply_boxes
 		WHERE supply_id = $1
+		ORDER BY created_at ASC
 	`
 	boxRows, err := r.db.Query(ctx, boxesQuery, id)
 	if err != nil {
@@ -202,17 +214,24 @@ func (r *Repository) GetSupplyByID(ctx context.Context, id uuid.UUID) (*Supply, 
 		}
 	}
 	s.Boxes = boxes
+	s.TotalExpectedBoxes = len(boxes)
 
 	return &s, nil
 }
 
 func (r *Repository) GetSuppliesBySeller(ctx context.Context, sellerID uuid.UUID) ([]Supply, error) {
 	query := `
-		SELECT id, supply_number, seller_id, status, handoff_method, carrier_name, tracking_number, expected_arrival_date,
-			qr_token, created_at, shipped_at, arrived_at, receiving_started_at, completed_at, updated_at
-		FROM seller_supplies
-		WHERE seller_id = $1
-		ORDER BY created_at DESC
+		SELECT s.id, s.supply_number, s.seller_id, s.status, s.handoff_method, s.carrier_name, s.tracking_number, s.expected_arrival_date,
+			s.qr_token, s.created_at, s.shipped_at, s.arrived_at, s.receiving_started_at, s.completed_at, s.updated_at,
+			COALESCE(SUM(i.expected_quantity), 0)::int AS total_expected_items,
+			COALESCE(SUM(i.accepted_quantity), 0)::int AS total_accepted_items,
+			COUNT(DISTINCT i.variant_id)::int AS total_sku_count,
+			COALESCE((SELECT COUNT(*) FROM seller_supply_boxes b WHERE b.supply_id = s.id), 0)::int AS total_expected_boxes
+		FROM seller_supplies s
+		LEFT JOIN seller_supply_items i ON i.supply_id = s.id
+		WHERE s.seller_id = $1
+		GROUP BY s.id
+		ORDER BY s.created_at DESC
 	`
 	rows, err := r.db.Query(ctx, query, sellerID)
 	if err != nil {
@@ -226,6 +245,7 @@ func (r *Repository) GetSuppliesBySeller(ctx context.Context, sellerID uuid.UUID
 		err := rows.Scan(
 			&s.ID, &s.SupplyNumber, &s.SellerID, &s.Status, &s.HandoffMethod, &s.CarrierName, &s.TrackingNumber, &s.ExpectedArrivalDate,
 			&s.QRToken, &s.CreatedAt, &s.ShippedAt, &s.ArrivedAt, &s.ReceivingStartedAt, &s.CompletedAt, &s.UpdatedAt,
+			&s.TotalExpectedItems, &s.TotalAcceptedItems, &s.SKUCount, &s.TotalExpectedBoxes,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan supply: %w", err)
@@ -233,9 +253,6 @@ func (r *Repository) GetSuppliesBySeller(ctx context.Context, sellerID uuid.UUID
 		supplies = append(supplies, s)
 	}
 
-	// In a real optimized scenario we'd do a batch fetch of items, 
-	// but for now we can either return just headers for list view, 
-	// or fetch items individually. Let's return just headers for list view.
 	return supplies, nil
 }
 

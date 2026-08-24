@@ -22,14 +22,14 @@ export function SellerSupplyNew() {
 
   const [step, setStep] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Step 1: Products
   const [selectedItems, setSelectedItems] = useState<BoxItem[]>([]);
-  
+
   // Step 2: Handoff
   const [carrierCompany, setCarrierCompany] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
-  
+
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -52,9 +52,13 @@ export function SellerSupplyNew() {
     let filtered = products;
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = products.filter(p => 
-        p.title.toLowerCase().includes(query) || 
-        p.variants?.some(v => v.sku?.toLowerCase().includes(query) || v.barcode?.toLowerCase().includes(query))
+      filtered = products.filter(p =>
+        p.title.toLowerCase().includes(query) ||
+        p.variants?.some(v =>
+          (v.sku && v.sku.toLowerCase().includes(query)) ||
+          (v.sellerSku && v.sellerSku.toLowerCase().includes(query)) ||
+          (v.barcode && v.barcode.toLowerCase().includes(query))
+        )
       );
     }
 
@@ -63,13 +67,21 @@ export function SellerSupplyNew() {
       return {
         ...p,
         mainImage,
-        variants: (p.variants || []).map(v => ({
-          ...v,
-          optionsStr: Object.entries(v.optionValues || {})
-            .map(([_, val]) => `${val}`)
-            .join(' / ') || 'Стандарт',
-          productTitle: p.title
-        }))
+        variants: (p.variants || []).map(v => {
+          const color = v.colorName || v.color;
+          const size = v.sizeName || v.size;
+          const optionsStr = (color || size)
+            ? [color, size].filter(Boolean).join(' · ')
+            : (v.optionValues && Object.keys(v.optionValues).length > 0
+                ? Object.entries(v.optionValues).map(([_, val]) => `${val}`).join(' · ')
+                : 'Стандарт');
+
+          return {
+            ...v,
+            optionsStr,
+            productTitle: p.title
+          };
+        })
       };
     });
   }, [products, searchQuery]);
@@ -87,7 +99,7 @@ export function SellerSupplyNew() {
       }
       return [...prev, {
         variantId: variant.id,
-        sku: variant.sku || '',
+        sku: variant.sellerSku || variant.sku || '',
         title: variant.productTitle,
         options: variant.optionsStr,
         barcode: variant.barcode || '',
@@ -177,7 +189,7 @@ export function SellerSupplyNew() {
                 </div>
               </div>
             </div>
-            
+
             <div className="mb-6">
               <div className="relative rounded-md shadow-sm max-w-md">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -256,8 +268,8 @@ export function SellerSupplyNew() {
               {declaredTotal === 0 && selectedItems.length === 0 && (
                 <span className="text-orange-600 text-sm font-medium mr-4 hidden sm:inline-flex items-center">Укажите количество хотя бы для одного товара</span>
               )}
-              <button 
-                onClick={() => setStep(2)} 
+              <button
+                onClick={() => setStep(2)}
                 disabled={declaredTotal <= 0}
                 className="w-full sm:w-auto px-8 py-3 bg-black text-white font-bold rounded-xl disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-800 transition-colors"
               >
@@ -273,7 +285,7 @@ export function SellerSupplyNew() {
         <div className="space-y-6 max-w-3xl mx-auto">
           <div className="bg-white shadow-sm border border-gray-200 sm:rounded-2xl p-6 sm:p-10">
             <h3 className="text-2xl font-bold text-gray-900 mb-8">Доставка на склад ZAMK</h3>
-            
+
             <div className="space-y-8">
               <div className={`p-5 border-2 rounded-xl border-black bg-gray-50/50 flex items-start`}>
                 <Truck className="w-6 h-6 text-black mt-0.5 mr-4 flex-shrink-0" />
@@ -282,7 +294,7 @@ export function SellerSupplyNew() {
                   <span className="block text-sm text-gray-600 mt-1">Передайте поставку перевозчику для доставки на склад ZAMK.</span>
                 </div>
               </div>
-              
+
               <div className="space-y-5">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1.5">Транспортная компания</label>
@@ -319,8 +331,8 @@ export function SellerSupplyNew() {
             <button onClick={() => setStep(1)} className="px-6 py-3 border border-gray-300 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition-colors">
               Назад
             </button>
-            <button 
-              onClick={() => setStep(3)} 
+            <button
+              onClick={() => setStep(3)}
               className="px-8 py-3 bg-black text-white font-bold rounded-xl hover:bg-gray-800 transition-colors"
             >
               Продолжить
@@ -334,18 +346,18 @@ export function SellerSupplyNew() {
         <div className="space-y-6 max-w-4xl mx-auto">
           <div className="bg-white shadow-sm border border-gray-200 sm:rounded-2xl p-6 sm:p-10">
             <h3 className="text-2xl font-bold text-gray-900 mb-8">Проверьте поставку</h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
               <div className="bg-gray-50 p-5 rounded-xl border border-gray-100">
                 <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Товары</h4>
                 <p className="text-lg font-medium text-gray-900">{selectedItems.length} SKU · <span className="font-bold">{declaredTotal} единиц</span></p>
               </div>
-              
+
               <div className="bg-gray-50 p-5 rounded-xl border border-gray-100">
                 <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Упаковка</h4>
                 <p className="text-lg font-bold text-gray-900">1 грузоместо</p>
               </div>
-              
+
               <div className="bg-gray-50 p-5 rounded-xl border border-gray-100">
                 <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Доставка</h4>
                 <p className="text-base font-bold text-gray-900">
@@ -408,8 +420,8 @@ export function SellerSupplyNew() {
             <button onClick={() => setStep(2)} className="px-6 py-3 border border-gray-300 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition-colors">
               Назад
             </button>
-            <button 
-              onClick={handleSubmit} 
+            <button
+              onClick={handleSubmit}
               disabled={submitting}
               className="px-8 py-3 bg-black text-white text-lg font-bold rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-colors"
             >

@@ -95,13 +95,8 @@ export function SellerSupplies() {
         {filteredSupplies.length > 0 ? (
           <ul className="divide-y divide-gray-100">
             {filteredSupplies.map((supply) => {
-              const uniqueSkus = new Set();
-              let skuCount = 0;
-              if (supply.items) {
-                supply.items.forEach(item => uniqueSkus.add(item.sku));
-                skuCount = uniqueSkus.size;
-              }
-              
+              const skuCount = supply.skuCount ?? (supply.items ? new Set(supply.items.map(i => i.sku || i.variantId)).size : 0);
+
               return (
                 <li key={supply.id}>
                   <Link to={`/supplies/${supply.id}`} className="block hover:bg-gray-50 transition-colors p-6">
@@ -116,14 +111,17 @@ export function SellerSupplies() {
                             <Calendar className="w-4 h-4 mr-1" />
                             {new Date(supply.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
                           </span>
-                          {supply.handoffMethod && (
-                            <span className="flex items-center">
-                              <Truck className="w-4 h-4 mr-1" />
-                              Транспортная компания
+                          <span className="flex items-center">
+                            <Truck className="w-4 h-4 mr-1" />
+                            {supply.carrierName ? `Транспортная компания (${supply.carrierName})` : 'Транспортная компания'}
+                          </span>
+                          {supply.trackingNumber && (
+                            <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600">
+                              {supply.trackingNumber}
                             </span>
                           )}
                         </div>
-                        
+
                         <div className="flex items-center space-x-6">
                           <div>
                             <p className="text-xs text-gray-500 uppercase tracking-wide font-bold">SKU</p>
@@ -131,17 +129,17 @@ export function SellerSupplies() {
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 uppercase tracking-wide font-bold">Заявлено (шт)</p>
-                            <p className="mt-1 font-medium text-gray-900">{supply.totalExpectedItems}</p>
+                            <p className="mt-1 font-medium text-gray-900">{supply.totalExpectedItems ?? 0}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 uppercase tracking-wide font-bold">Грузомест</p>
-                            <p className="mt-1 font-medium text-gray-900">{supply.totalExpectedBoxes}</p>
+                            <p className="mt-1 font-medium text-gray-900">{supply.totalExpectedBoxes ?? 1}</p>
                           </div>
                           {(supply.status === 'completed' || supply.status === 'completed_with_discrepancies') && (
                             <div className="pl-6 border-l border-gray-200">
                               <p className="text-xs text-gray-500 uppercase tracking-wide font-bold">Итог приёмки</p>
                               <p className={`mt-1 font-bold ${supply.totalExpectedItems === supply.totalAcceptedItems ? 'text-green-600' : 'text-orange-600'}`}>
-                                {supply.totalAcceptedItems} принято
+                                {supply.totalAcceptedItems ?? 0} принято
                               </p>
                             </div>
                           )}
