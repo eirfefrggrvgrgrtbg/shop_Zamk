@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/google/uuid"
@@ -82,6 +84,36 @@ func (r *Repository) CreateSupply(ctx context.Context, supply *Supply) error {
 			if err != nil {
 				return fmt.Errorf("failed to insert box item: %w", err)
 			}
+		}
+	}
+
+	for _, unit := range supply.InventoryUnits {
+		queryUnit := `
+			INSERT INTO inventory_units (
+				id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, 
+				origin_box_id, unit_index, status, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		`
+		
+		// Retry loop for extremely unlikely collision
+		const maxRetries = 3
+		var insertErr error
+		for retry := 0; retry < maxRetries; retry++ {
+			_, insertErr = r.db.Exec(ctx, queryUnit,
+				unit.ID, unit.UnitCode, unit.ProductVariantID, unit.OriginSupplyID, unit.OriginSupplyItemID,
+				unit.OriginBoxID, unit.UnitIndex, unit.Status, unit.CreatedAt, unit.UpdatedAt,
+			)
+			if insertErr == nil {
+				break
+			}
+			if strings.Contains(insertErr.Error(), "idx_inventory_units_unit_code") || strings.Contains(insertErr.Error(), "inventory_units_unit_code_key") {
+				unit.UnitCode, _ = GenerateUnitCode()
+				continue
+			}
+			break
+		}
+		if insertErr != nil {
+			return fmt.Errorf("failed to insert inventory unit: %w", insertErr)
 		}
 	}
 

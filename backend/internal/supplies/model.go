@@ -30,6 +30,7 @@ type Supply struct {
 
 	Items []SupplyItem `json:"items,omitempty"`
 	Boxes []SupplyBox  `json:"boxes,omitempty"`
+	InventoryUnits []InventoryUnit `json:"inventoryUnits,omitempty"`
 }
 
 type SupplyItem struct {
@@ -106,4 +107,19 @@ type ReceivingScan struct {
 	Quantity             int        `json:"quantity"`
 	IsDamage             bool       `json:"isDamage"`
 	CreatedAt            time.Time  `json:"createdAt"`
+}
+
+type InventoryUnit struct {
+	ID                  uuid.UUID  `json:"id"`
+	UnitCode            string     `json:"unitCode"`
+	ProductVariantID    uuid.UUID  `json:"productVariantId"`
+	OriginSupplyID      uuid.UUID  `json:"originSupplyId"`
+	OriginSupplyItemID  uuid.UUID  `json:"originSupplyItemId"`
+	OriginBoxID         *uuid.UUID `json:"originBoxId,omitempty"`
+	UnitIndex           int        `json:"unitIndex"`
+	ExternalMarkingCode *string    `json:"externalMarkingCode,omitempty"`
+	Status              string     `json:"status"`
+	ReceivingSessionID  *uuid.UUID `json:"receivingSessionId,omitempty"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
 }

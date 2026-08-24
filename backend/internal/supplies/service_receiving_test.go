@@ -26,6 +26,8 @@ func createShippedSupply(t *testing.T, tc *TestContext) *supplies.Supply {
 	if err != nil {
 		t.Fatalf("failed to mark shipped: %v", err)
 	}
+	testDB.Exec(tc.Ctx, "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE id = $1", supply.ID)
+	supply.Status = "arrived_at_zamk"
 	return supply
 }
 
@@ -66,6 +68,7 @@ func TestReceivingWithDiscrepancy(t *testing.T) {
 	tc := setupTestContext(t)
 	supply := createShippedSupply(t, tc)
 
+	testDB.Exec(tc.Ctx, "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE id = $1", supply.ID)
 	session, _ := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
 	
 	// Admin records scan (8 ok, 1 damaged)
@@ -92,6 +95,7 @@ func TestReceivingInventoryIncrement(t *testing.T) {
 	tc := setupTestContext(t)
 	supply := createShippedSupply(t, tc)
 
+	testDB.Exec(tc.Ctx, "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE id = $1", supply.ID)
 	session, _ := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
 	tc.Service.RecordScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordReceivingScanRequest{
 		VariantID: *session.Items[0].VariantID,
@@ -112,6 +116,7 @@ func TestReceivingDoubleFinalize(t *testing.T) {
 	tc := setupTestContext(t)
 	supply := createShippedSupply(t, tc)
 
+	testDB.Exec(tc.Ctx, "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE id = $1", supply.ID)
 	session, _ := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
 	tc.Service.RecordScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordReceivingScanRequest{
 		VariantID: *session.Items[0].VariantID,
@@ -141,6 +146,7 @@ func TestReceivingConcurrentFinalize(t *testing.T) {
 	tc := setupTestContext(t)
 	supply := createShippedSupply(t, tc)
 
+	testDB.Exec(tc.Ctx, "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE id = $1", supply.ID)
 	session, _ := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
 	tc.Service.RecordScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordReceivingScanRequest{
 		VariantID: *session.Items[0].VariantID,
@@ -216,6 +222,7 @@ func TestReceivingDamagePersistsCorrectly(t *testing.T) {
 	testDB.QueryRow(tc.Ctx, "SELECT total_stock FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stockBefore)
 
 	// Admin starts session
+	testDB.Exec(tc.Ctx, "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE id = $1", supply.ID)
 	session, _ := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
 
 	// Accepted = 17

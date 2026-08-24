@@ -146,6 +146,26 @@ func (s *Service) CreateSupply(ctx context.Context, sellerID uuid.UUID, req Crea
 			Quantity:     item.ExpectedQuantity,
 		}
 		defaultBox.Items = append(defaultBox.Items, bi)
+			// Generate inventory units
+			for i := 1; i <= reqItem.ExpectedQuantity; i++ {
+				unitCode, err := GenerateUnitCode()
+				if err != nil {
+					return nil, err
+				}
+				unit := InventoryUnit{
+					ID:                 uuid.New(),
+					UnitCode:           unitCode,
+					ProductVariantID:   reqItem.VariantID,
+					OriginSupplyID:     supply.ID,
+					OriginSupplyItemID: item.ID,
+					OriginBoxID:        &defaultBox.ID,
+					UnitIndex:          i,
+					Status:             "expected",
+					CreatedAt:          now,
+					UpdatedAt:          now,
+				}
+				supply.InventoryUnits = append(supply.InventoryUnits, unit)
+			}
 	}
 
 	supply.Boxes = append(supply.Boxes, defaultBox)
