@@ -173,7 +173,7 @@ func TestSuppliesAuth(t *testing.T) {
 			t.Fatalf("CreateSupply: %v", err)
 		}
 
-		if err = svc.MarkShipped(ctx, sellerID, supply.ID); err != nil {
+		if _, err = svc.MarkShipped(ctx, sellerID, supply.ID); err != nil {
 			t.Fatalf("MarkShipped: %v", err)
 		}
 

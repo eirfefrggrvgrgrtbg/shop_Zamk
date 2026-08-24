@@ -34,9 +34,13 @@ export function SellerSupplyDetail() {
     try {
       setSubmitting(true);
       setActionError(null);
-      await shipSellerSupply(id!);
+      const updated = await shipSellerSupply(id!);
+      if (updated && updated.status) {
+        setSupply(updated);
+      } else {
+        await fetchSupply();
+      }
       setShowConfirmModal(false);
-      await fetchSupply();
     } catch (err: any) {
       setActionError(err.message || 'Не удалось подтвердить отправку');
     } finally {
@@ -322,13 +326,19 @@ export function SellerSupplyDetail() {
                   <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
                     <Truck className="h-6 w-6 text-blue-600" />
                   </div>
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
                     <h3 className="text-lg leading-6 font-bold text-gray-900">Подтвердить отправку?</h3>
                     <div className="mt-2">
                       <p className="text-sm text-gray-500">
                         После подтверждения поставка будет отмечена как отправленная в ZAMK.
                       </p>
                     </div>
+                    {actionError && (
+                      <div className="mt-3 bg-red-50 p-3 rounded-xl flex items-center border border-red-100 text-left">
+                        <AlertCircle className="h-4 w-4 text-red-500 mr-2 flex-shrink-0" />
+                        <span className="text-red-700 text-xs font-medium">{actionError}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -339,12 +349,15 @@ export function SellerSupplyDetail() {
                   onClick={handleMarkShipped}
                   className="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2 bg-black text-base font-bold text-white hover:bg-gray-800 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
                 >
-                  {submitting ? 'Отправка...' : 'Передал перевозчику'}
+                  {submitting ? 'Отправляем...' : 'Передал перевозчику'}
                 </button>
                 <button
                   type="button"
                   disabled={submitting}
-                  onClick={() => setShowConfirmModal(false)}
+                  onClick={() => {
+                    setActionError(null);
+                    setShowConfirmModal(false);
+                  }}
                   className="mt-3 w-full inline-flex justify-center rounded-xl border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-bold text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                 >
                   Отмена

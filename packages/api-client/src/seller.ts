@@ -152,8 +152,8 @@ export const getSellerSupply = async (id: string): Promise<SellerSupply> => {
   return request<SellerSupply>('GET', `/seller/supplies/${id}`);
 };
 
-export const shipSellerSupply = async (id: string): Promise<void> => {
-  return request<void>('POST', `/seller/supplies/${id}/ship`);
+export const shipSellerSupply = async (id: string): Promise<SellerSupply> => {
+  return request<SellerSupply>('POST', `/seller/supplies/${id}/ship`);
 };
 
 export const getModerationHistory = async (productId: string): Promise<{ items: any[] }> => {

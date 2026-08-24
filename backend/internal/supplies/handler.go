@@ -201,6 +201,7 @@ func (h *Handler) CreateSupply(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) MarkShipped(w http.ResponseWriter, r *http.Request) {
+	reqID := middleware.GetReqID(r.Context())
 	role, okRole := r.Context().Value("role").(string)
 	if !okRole || role != "seller" {
 		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
@@ -225,19 +226,50 @@ func (h *Handler) MarkShipped(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.svc.MarkShipped(r.Context(), sellerID, id)
+	updatedSupply, err := h.svc.MarkShipped(r.Context(), sellerID, id)
 	if err != nil {
+		statusCode := http.StatusInternalServerError
+		errorCode := "internal_error"
+		errorMsg := err.Error()
+
 		if errors.Is(err, ErrUnauthorized) {
-			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
-			return
+			statusCode = http.StatusForbidden
+			errorCode = "forbidden"
+			errorMsg = "access denied"
+		} else if errors.Is(err, ErrInvalidStatus) {
+			statusCode = http.StatusBadRequest
+			errorCode = "supply_invalid_status"
+			errorMsg = "supply must be in ready_to_ship status to mark shipped"
+		} else if errors.Is(err, ErrSupplyNotFound) {
+			statusCode = http.StatusNotFound
+			errorCode = "not_found"
+			errorMsg = "supply not found"
 		}
-		if errors.Is(err, ErrInvalidStatus) {
-			h.writeError(w, http.StatusBadRequest, "invalid_status", err.Error())
-			return
-		}
-		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+
+		h.logger.Warn("mark supply shipped failed",
+			"event", "supply_mark_shipped_failed",
+			"request_id", reqID,
+			"seller_id", sellerID.String(),
+			"supply_id", id.String(),
+			"http_status", statusCode,
+			"error_code", errorCode,
+			"error", errorMsg,
+		)
+
+		h.writeError(w, statusCode, errorCode, errorMsg)
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	h.logger.Info("mark supply shipped success",
+		"event", "supply_mark_shipped_success",
+		"request_id", reqID,
+		"seller_id", sellerID.String(),
+		"supply_id", updatedSupply.ID.String(),
+		"supply_number", updatedSupply.SupplyNumber,
+		"old_status", "ready_to_ship",
+		"new_status", "shipped_by_seller",
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updatedSupply)
 }

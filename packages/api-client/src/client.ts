@@ -170,6 +170,9 @@ const getSafeErrorMessage = (code?: string, fallback?: string): string => {
     case 'supply_items_required':
     case 'SUPPLY_ITEMS_REQUIRED':
       return 'Укажите количество хотя бы для одного товара.';
+    case 'supply_invalid_status':
+    case 'SUPPLY_INVALID_STATUS':
+      return 'Недопустимый статус поставки для выполнения действия.';
     case 'product_media_portrait_required':
     case 'PRODUCT_MEDIA_PORTRAIT_REQUIRED':
       return 'Для товара нужны вертикальные фотографии.\nЗагрузите изображение в вертикальном формате.';

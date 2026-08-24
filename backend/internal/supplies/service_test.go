@@ -181,23 +181,62 @@ func TestSupplyTransitionValidation(t *testing.T) {
 		t.Fatalf("expected ready_to_ship, got %s", supply.Status)
 	}
 
-	err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
-	if err != nil {
-		t.Fatalf("expected nil err on MarkShipped, got %v", err)
+	// 1. Foreign seller cannot mark shipped
+	otherSellerID := uuid.New()
+	_, err = tc.Service.MarkShipped(tc.Ctx, otherSellerID, supply.ID)
+	if err != supplies.ErrUnauthorized {
+		t.Fatalf("expected ErrUnauthorized for foreign seller, got %v", err)
 	}
 
-	shippedSupply, err := tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
+	// 2. Successful transition: ready_to_ship -> shipped_by_seller
+	shippedSupply, err := tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
 	if err != nil {
-		t.Fatalf("failed to get supply: %v", err)
+		t.Fatalf("expected nil err on MarkShipped, got %v", err)
 	}
 	if shippedSupply.Status != "shipped_by_seller" {
 		t.Fatalf("expected shipped_by_seller, got %s", shippedSupply.Status)
 	}
+	if shippedSupply.ShippedAt == nil {
+		t.Fatalf("expected non-nil ShippedAt after MarkShipped")
+	}
 
-	// Double mark shipped should fail (invalid status transition)
-	err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
+	// 3. Double mark shipped should fail (invalid status transition)
+	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
 	if err != supplies.ErrInvalidStatus {
 		t.Fatalf("expected ErrInvalidStatus on double mark shipped, got %v", err)
+	}
+
+	// 4. Draft status cannot be marked shipped via V2 MarkShipped
+	draftSupplyID := uuid.New()
+	_, err = testDB.Exec(tc.Ctx, "INSERT INTO seller_supplies (id, supply_number, seller_id, status, handoff_method, created_at, updated_at) VALUES ($1, 'SUP-DRAFT', $2, 'draft', 'carrier_delivery', now(), now())", draftSupplyID, tc.SellerID)
+	if err != nil {
+		t.Fatalf("failed to insert draft supply: %v", err)
+	}
+	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, draftSupplyID)
+	if err != supplies.ErrInvalidStatus {
+		t.Fatalf("expected ErrInvalidStatus for draft supply, got %v", err)
+	}
+
+	// 5. Arrived status cannot be transitioned backwards to shipped_by_seller
+	arrivedSupplyID := uuid.New()
+	_, err = testDB.Exec(tc.Ctx, "INSERT INTO seller_supplies (id, supply_number, seller_id, status, handoff_method, created_at, updated_at) VALUES ($1, 'SUP-ARRIVED', $2, 'arrived_at_zamk', 'carrier_delivery', now(), now())", arrivedSupplyID, tc.SellerID)
+	if err != nil {
+		t.Fatalf("failed to insert arrived supply: %v", err)
+	}
+	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, arrivedSupplyID)
+	if err != supplies.ErrInvalidStatus {
+		t.Fatalf("expected ErrInvalidStatus for arrived supply, got %v", err)
+	}
+
+	// 6. Completed status cannot be transitioned backwards to shipped_by_seller
+	completedSupplyID := uuid.New()
+	_, err = testDB.Exec(tc.Ctx, "INSERT INTO seller_supplies (id, supply_number, seller_id, status, handoff_method, created_at, updated_at) VALUES ($1, 'SUP-COMPLETED', $2, 'completed', 'carrier_delivery', now(), now())", completedSupplyID, tc.SellerID)
+	if err != nil {
+		t.Fatalf("failed to insert completed supply: %v", err)
+	}
+	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, completedSupplyID)
+	if err != supplies.ErrInvalidStatus {
+		t.Fatalf("expected ErrInvalidStatus for completed supply, got %v", err)
 	}
 }
 
@@ -328,7 +367,7 @@ func TestSupplyCarrierDeliveryValidation(t *testing.T) {
 	}
 
 	// 7. Verify inventory stock was NOT mutated after mark shipped
-	err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
+	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
 	if err != nil {
 		t.Fatalf("failed to mark shipped: %v", err)
 	}

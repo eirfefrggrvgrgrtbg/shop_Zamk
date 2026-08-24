@@ -22,7 +22,7 @@ func createShippedSupply(t *testing.T, tc *TestContext) *supplies.Supply {
 	if err != nil {
 		t.Fatalf("failed to create supply: %v", err)
 	}
-	err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
+	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
 	if err != nil {
 		t.Fatalf("failed to mark shipped: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestReceivingDamagePersistsCorrectly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create supply: %v", err)
 	}
-	err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
+	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
 	if err != nil {
 		t.Fatalf("failed to mark shipped: %v", err)
 	}

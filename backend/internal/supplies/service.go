@@ -163,19 +163,24 @@ func (s *Service) CreateSupply(ctx context.Context, sellerID uuid.UUID, req Crea
 	return s.repo.GetSupplyByID(ctx, supply.ID)
 }
 
-func (s *Service) MarkShipped(ctx context.Context, sellerID uuid.UUID, supplyID uuid.UUID) error {
+func (s *Service) MarkShipped(ctx context.Context, sellerID uuid.UUID, supplyID uuid.UUID) (*Supply, error) {
 	supply, err := s.repo.GetSupplyByID(ctx, supplyID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if supply.SellerID != sellerID {
-		return ErrUnauthorized
+		return nil, ErrUnauthorized
 	}
-	if supply.Status != "draft" && supply.Status != "ready_to_ship" {
-		return ErrInvalidStatus
+	if supply.Status != "ready_to_ship" {
+		return nil, ErrInvalidStatus
 	}
 
-	return s.repo.MarkShipped(ctx, supplyID)
+	err = s.repo.MarkShipped(ctx, supplyID)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.repo.GetSupplyByID(ctx, supplyID)
 }
 
 func generateRandomToken() (string, error) {

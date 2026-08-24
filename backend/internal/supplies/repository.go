@@ -101,7 +101,7 @@ func (r *Repository) UpdateSupplyStatus(ctx context.Context, supplyID uuid.UUID,
 }
 
 func (r *Repository) MarkShipped(ctx context.Context, supplyID uuid.UUID) error {
-	query := `UPDATE seller_supplies SET status = 'shipped_by_seller', shipped_at = now(), updated_at = now() WHERE id = $1 AND (status = 'ready_to_ship' OR status = 'draft')`
+	query := `UPDATE seller_supplies SET status = 'shipped_by_seller', shipped_at = now(), updated_at = now() WHERE id = $1 AND status = 'ready_to_ship'`
 	res, err := r.db.Exec(ctx, query, supplyID)
 	if err != nil {
 		return fmt.Errorf("failed to mark shipped: %w", err)
