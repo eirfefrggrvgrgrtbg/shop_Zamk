@@ -161,6 +161,9 @@ const getSafeErrorMessage = (code?: string, fallback?: string): string => {
     case 'supply_carrier_required':
     case 'SUPPLY_CARRIER_REQUIRED':
       return 'Укажите транспортную компанию.';
+    case 'supply_carrier_unsupported':
+    case 'SUPPLY_CARRIER_UNSUPPORTED':
+      return 'Выберите поддерживаемую транспортную компанию.';
     case 'supply_tracking_number_required':
     case 'SUPPLY_TRACKING_NUMBER_REQUIRED':
       return 'Укажите трек-номер отправления.';

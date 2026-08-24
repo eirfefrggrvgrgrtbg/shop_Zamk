@@ -227,13 +227,13 @@ export function SellerSupplyDetail() {
               Сотрудник ZAMK отсканирует код при приёмке.
             </p>
 
-            <button
-              onClick={() => window.print()}
+            <Link
+              to={`/supplies/${supply.id}/boxes/${box?.id || 'default'}/label`}
               className="w-full flex items-center justify-center py-3 border border-gray-300 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
             >
               <Printer className="w-4 h-4 mr-2" />
               Открыть этикетку
-            </button>
+            </Link>
           </div>
         </div>
 

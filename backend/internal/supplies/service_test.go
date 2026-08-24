@@ -120,8 +120,8 @@ func TestSupplyCreateOwnVariants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create supply: %v", err)
 	}
-	if supply.Status != "draft" {
-		t.Fatalf("expected draft, got %s", supply.Status)
+	if supply.Status != "ready_to_ship" {
+		t.Fatalf("expected ready_to_ship, got %s", supply.Status)
 	}
 }
 
@@ -145,8 +145,8 @@ func TestSupplyRejectCrossSellerVariant(t *testing.T) {
 
 func TestSupplyBoxQuantities(t *testing.T) {
 	tc := setupTestContext(t)
-	carrier := "Деловые Линии"
-	tracking := "DL-998877"
+	carrier := "СДЭК"
+	tracking := "121212123241"
 	req := supplies.CreateSupplyRequest{
 		HandoffMethod:  "carrier_delivery",
 		CarrierName:    &carrier,
@@ -177,15 +177,45 @@ func TestSupplyTransitionValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected success: %v", err)
 	}
+	if supply.Status != "ready_to_ship" {
+		t.Fatalf("expected ready_to_ship, got %s", supply.Status)
+	}
+
 	err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
 	if err != nil {
 		t.Fatalf("expected nil err on MarkShipped, got %v", err)
+	}
+
+	shippedSupply, err := tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
+	if err != nil {
+		t.Fatalf("failed to get supply: %v", err)
+	}
+	if shippedSupply.Status != "shipped_by_seller" {
+		t.Fatalf("expected shipped_by_seller, got %s", shippedSupply.Status)
 	}
 
 	// Double mark shipped should fail (invalid status transition)
 	err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
 	if err != supplies.ErrInvalidStatus {
 		t.Fatalf("expected ErrInvalidStatus on double mark shipped, got %v", err)
+	}
+}
+
+func TestSupplyUnsupportedCarrierRejected(t *testing.T) {
+	tc := setupTestContext(t)
+	unsupportedCarrier := "Деловые Линии"
+	tracking := "121212123241"
+	req := supplies.CreateSupplyRequest{
+		HandoffMethod:  "carrier_delivery",
+		CarrierName:    &unsupportedCarrier,
+		TrackingNumber: &tracking,
+		Items: []supplies.CreateSupplyItemRequest{
+			{VariantID: tc.Variant1, ExpectedQuantity: 10},
+		},
+	}
+	_, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, req)
+	if err != supplies.ErrCarrierUnsupported {
+		t.Fatalf("expected ErrCarrierUnsupported for unsupported carrier, got %v", err)
 	}
 }
 
@@ -264,6 +294,9 @@ func TestSupplyCarrierDeliveryValidation(t *testing.T) {
 		t.Fatalf("expected create success, got %v", err)
 	}
 
+	if supply.Status != "ready_to_ship" {
+		t.Fatalf("expected status ready_to_ship, got %s", supply.Status)
+	}
 	if supply.CarrierName == nil || *supply.CarrierName != "СДЭК" {
 		t.Fatalf("expected carrier СДЭК, got %v", supply.CarrierName)
 	}
@@ -282,12 +315,26 @@ func TestSupplyCarrierDeliveryValidation(t *testing.T) {
 	if len(supply.Boxes[0].Items) != 2 {
 		t.Fatalf("expected 2 box items in default box, got %d", len(supply.Boxes[0].Items))
 	}
+	if supply.Boxes[0].QRToken == nil || *supply.Boxes[0].QRToken == "" {
+		t.Fatalf("expected non-empty box QRToken")
+	}
 
-	// 6. Verify inventory stock was NOT mutated
+	// 6. Verify inventory stock was NOT mutated after create
 	var stock1, stock2 int
 	testDB.QueryRow(tc.Ctx, "SELECT total_stock FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stock1)
 	testDB.QueryRow(tc.Ctx, "SELECT total_stock FROM inventory_items WHERE product_variant_id = $1", tc.Variant2).Scan(&stock2)
 	if stock1 != 0 || stock2 != 0 {
 		t.Fatalf("inventory stock mutated during supply creation: stock1=%d, stock2=%d", stock1, stock2)
+	}
+
+	// 7. Verify inventory stock was NOT mutated after mark shipped
+	err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
+	if err != nil {
+		t.Fatalf("failed to mark shipped: %v", err)
+	}
+	testDB.QueryRow(tc.Ctx, "SELECT total_stock FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stock1)
+	testDB.QueryRow(tc.Ctx, "SELECT total_stock FROM inventory_items WHERE product_variant_id = $1", tc.Variant2).Scan(&stock2)
+	if stock1 != 0 || stock2 != 0 {
+		t.Fatalf("inventory stock mutated after mark shipped: stock1=%d, stock2=%d", stock1, stock2)
 	}
 }

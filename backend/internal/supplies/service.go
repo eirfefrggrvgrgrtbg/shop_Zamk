@@ -50,6 +50,13 @@ func (s *Service) CreateSupply(ctx context.Context, sellerID uuid.UUID, req Crea
 		if req.CarrierName == nil || strings.TrimSpace(*req.CarrierName) == "" {
 			return nil, ErrCarrierRequired
 		}
+		carrierUpper := strings.ToUpper(strings.TrimSpace(*req.CarrierName))
+		if carrierUpper != "СДЭК" && carrierUpper != "CDEK" {
+			return nil, ErrCarrierUnsupported
+		}
+		canonicalCarrier := "СДЭК"
+		req.CarrierName = &canonicalCarrier
+
 		if req.TrackingNumber == nil || strings.TrimSpace(*req.TrackingNumber) == "" {
 			return nil, ErrTrackingNumberRequired
 		}
@@ -96,7 +103,7 @@ func (s *Service) CreateSupply(ctx context.Context, sellerID uuid.UUID, req Crea
 		ID:                  uuid.New(),
 		SupplyNumber:        supplyNumber,
 		SellerID:            sellerID,
-		Status:              "draft", // Initially draft
+		Status:              "ready_to_ship",
 		HandoffMethod:       req.HandoffMethod,
 		CarrierName:         req.CarrierName,
 		TrackingNumber:      req.TrackingNumber,

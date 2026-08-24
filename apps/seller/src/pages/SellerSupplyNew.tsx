@@ -27,30 +27,19 @@ export function SellerSupplyNew() {
   const [selectedItems, setSelectedItems] = useState<BoxItem[]>([]);
 
   // Step 2: Handoff
-  const [carrierCompany, setCarrierCompany] = useState('');
+  const carrierCompany = 'СДЭК';
   const [trackingNumber, setTrackingNumber] = useState('');
-  const [carrierError, setCarrierError] = useState<string | null>(null);
   const [trackingError, setTrackingError] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
 
   const handleStep2Continue = () => {
-    let hasErr = false;
-    if (!carrierCompany.trim()) {
-      setCarrierError('Укажите транспортную компанию.');
-      hasErr = true;
-    } else {
-      setCarrierError(null);
-    }
     if (!trackingNumber.trim()) {
       setTrackingError('Укажите трек-номер отправления.');
-      hasErr = true;
-    } else {
-      setTrackingError(null);
+      return;
     }
-    if (!hasErr) {
-      setStep(3);
-    }
+    setTrackingError(null);
+    setStep(3);
   };
 
   useEffect(() => {
@@ -318,20 +307,23 @@ export function SellerSupplyNew() {
 
               <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1.5">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
                     Транспортная компания <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={carrierCompany}
-                    onChange={e => {
-                      setCarrierCompany(e.target.value);
-                      if (e.target.value.trim()) setCarrierError(null);
-                    }}
-                    placeholder="Например: СДЭК, Деловые Линии"
-                    className={`block w-full rounded-lg shadow-sm focus:border-black focus:ring-black sm:text-base py-2.5 ${carrierError ? 'border-red-500 bg-red-50/20' : 'border-gray-300'}`}
-                  />
-                  {carrierError && <p className="mt-1 text-xs font-bold text-red-600">{carrierError}</p>}
+                  <div className="border-2 border-black bg-white rounded-xl p-4 flex items-center justify-between shadow-sm">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 rounded-lg bg-green-600 flex items-center justify-center text-white font-black text-xs tracking-wider mr-3 flex-shrink-0">
+                        СДЭК
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900 text-base">СДЭК</p>
+                        <p className="text-xs text-gray-500">Доставка до склада ZAMK</p>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1 bg-black text-white text-xs font-bold rounded-full">
+                      Выбрано
+                    </span>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1.5">

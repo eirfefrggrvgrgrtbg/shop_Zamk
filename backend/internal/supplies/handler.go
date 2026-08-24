@@ -149,6 +149,10 @@ func (h *Handler) CreateSupply(w http.ResponseWriter, r *http.Request) {
 			statusCode = http.StatusBadRequest
 			errorCode = "supply_carrier_required"
 			errorMsg = "carrier is required for carrier delivery"
+		} else if errors.Is(err, ErrCarrierUnsupported) {
+			statusCode = http.StatusBadRequest
+			errorCode = "supply_carrier_unsupported"
+			errorMsg = "unsupported carrier, currently only CDEK is supported"
 		} else if errors.Is(err, ErrTrackingNumberRequired) {
 			statusCode = http.StatusBadRequest
 			errorCode = "supply_tracking_number_required"
