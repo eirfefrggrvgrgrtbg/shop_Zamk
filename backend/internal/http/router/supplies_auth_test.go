@@ -450,4 +450,126 @@ func TestSuppliesAuth(t *testing.T) {
 			t.Errorf("expected 401 Unauthorized, got %d body=%s", getRRAnon.Code, getRRAnon.Body.String())
 		}
 	})
+
+	// ====================================================================
+	// M. Admin POST /api/admin/receiving/sessions/{sessionId}/scan-unit
+	// ====================================================================
+	t.Run("M. admin POST scan-unit route auth and validation", func(t *testing.T) {
+		sellerUser, _, qrToken, _ := setupShippedSupplyFixture(t)
+		_ = sellerUser
+		pgClient.Pool.Exec(context.Background(), "UPDATE seller_supplies SET status = 'arrived_at_zamk' WHERE qr_token = $1", qrToken)
+
+		adminUID := insertUser(t, "admin")
+		insertAdminWithPerms(t, adminUID, []string{"inventory.receipt"})
+		adminTok := makeToken(t, adminUID, "admin")
+
+		// Start session
+		startReq := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token="+qrToken, nil)
+		startReq.Header.Set("Authorization", "Bearer "+adminTok)
+		startRR := httptest.NewRecorder()
+		r.ServeHTTP(startRR, startReq)
+		if startRR.Code != http.StatusOK {
+			t.Fatalf("start session failed: %d body=%s", startRR.Code, startRR.Body.String())
+		}
+		var sess struct {
+			ID       string    `json:"id"`
+			SupplyID uuid.UUID `json:"supplyId"`
+		}
+		json.NewDecoder(startRR.Body).Decode(&sess)
+		sessionID, _ := uuid.Parse(sess.ID)
+
+		// Get units of supply
+		repo := supplies.NewRepository(pgClient.Pool)
+		units, err := repo.ListUnitsBySupplyID(ctx, sess.SupplyID)
+		if err != nil || len(units) == 0 {
+			t.Fatalf("failed to list units: %v", err)
+		}
+
+		// 1. Unauthenticated -> 401
+		scanBody, _ := json.Marshal(supplies.RecordSerializedScanRequest{
+			UnitCode:  units[0].UnitCode,
+			Condition: "ok",
+		})
+		anonReq := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sessionID.String()+"/scan-unit", bytes.NewReader(scanBody))
+		anonReq.Header.Set("Content-Type", "application/json")
+		anonRR := httptest.NewRecorder()
+		r.ServeHTTP(anonRR, anonReq)
+		if anonRR.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401, got %d body=%s", anonRR.Code, anonRR.Body.String())
+		}
+
+		// 2. Customer -> 403
+		custUID := insertUser(t, "customer")
+		custTok := makeToken(t, custUID, "customer")
+		custReq := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sessionID.String()+"/scan-unit", bytes.NewReader(scanBody))
+		custReq.Header.Set("Authorization", "Bearer "+custTok)
+		custReq.Header.Set("Content-Type", "application/json")
+		custRR := httptest.NewRecorder()
+		r.ServeHTTP(custRR, custReq)
+		if custRR.Code != http.StatusForbidden {
+			t.Errorf("expected 403, got %d body=%s", custRR.Code, custRR.Body.String())
+		}
+
+		// 3. Admin with inventory.receipt -> 200
+		adminReq := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sessionID.String()+"/scan-unit", bytes.NewReader(scanBody))
+		adminReq.Header.Set("Authorization", "Bearer "+adminTok)
+		adminReq.Header.Set("Content-Type", "application/json")
+		adminRR := httptest.NewRecorder()
+		r.ServeHTTP(adminRR, adminReq)
+		if adminRR.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", adminRR.Code, adminRR.Body.String())
+		}
+
+		var scanResp supplies.SerializedScanResponse
+		if err := json.NewDecoder(adminRR.Body).Decode(&scanResp); err != nil {
+			t.Fatalf("failed decoding scan response: %v", err)
+		}
+		if scanResp.UnitCode != units[0].UnitCode || scanResp.Condition != "ok" {
+			t.Errorf("unexpected scan response content: %+v", scanResp)
+		}
+
+		// 4. Duplicate scan -> 409 unit_already_scanned
+		dupReq := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sessionID.String()+"/scan-unit", bytes.NewReader(scanBody))
+		dupReq.Header.Set("Authorization", "Bearer "+adminTok)
+		dupReq.Header.Set("Content-Type", "application/json")
+		dupRR := httptest.NewRecorder()
+		r.ServeHTTP(dupRR, dupReq)
+		if dupRR.Code != http.StatusConflict {
+			t.Errorf("expected 409, got %d body=%s", dupRR.Code, dupRR.Body.String())
+		}
+		var errBody struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		json.NewDecoder(dupRR.Body).Decode(&errBody)
+		if errBody.Error.Code != "unit_already_scanned" {
+			t.Errorf("expected error code 'unit_already_scanned', got '%s'", errBody.Error.Code)
+		}
+
+		// 5. Invalid condition -> 400 invalid_receiving_condition
+		invalidCondBody, _ := json.Marshal(supplies.RecordSerializedScanRequest{
+			UnitCode:  units[1].UnitCode,
+			Condition: "invalid",
+		})
+		invReq := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sessionID.String()+"/scan-unit", bytes.NewReader(invalidCondBody))
+		invReq.Header.Set("Authorization", "Bearer "+adminTok)
+		invReq.Header.Set("Content-Type", "application/json")
+		invRR := httptest.NewRecorder()
+		r.ServeHTTP(invRR, invReq)
+		if invRR.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d body=%s", invRR.Code, invRR.Body.String())
+		}
+		var errBodyInv struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		json.NewDecoder(invRR.Body).Decode(&errBodyInv)
+		if errBodyInv.Error.Code != "invalid_receiving_condition" {
+			t.Errorf("expected error code 'invalid_receiving_condition', got '%s'", errBodyInv.Error.Code)
+		}
+	})
 }

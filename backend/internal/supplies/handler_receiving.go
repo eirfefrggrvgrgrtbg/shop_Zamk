@@ -221,30 +221,30 @@ func (h *Handler) FinalizeSession(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) RecordSerializedScan(w http.ResponseWriter, r *http.Request) {
 	role, okRole := r.Context().Value("role").(string)
 	if !okRole || (role != "admin" && role != "super_admin") {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 	userID, okUser := r.Context().Value("userID").(uuid.UUID)
 	if !okUser {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 
 	sessionIDStr := chi.URLParam(r, "sessionId")
 	sessionID, err := uuid.Parse(sessionIDStr)
 	if err != nil {
-		http.Error(w, "Invalid session ID", http.StatusBadRequest)
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid session ID")
 		return
 	}
 
 	var req RecordSerializedScanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
 		return
 	}
 
 	if req.UnitCode == "" {
-		http.Error(w, "unitCode is required", http.StatusBadRequest)
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "unitCode is required")
 		return
 	}
 
@@ -252,6 +252,10 @@ func (h *Handler) RecordSerializedScan(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrSerializedUnitCodeRequired) {
 			h.writeError(w, http.StatusBadRequest, "serialized_unit_code_required", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidReceivingCondition) {
+			h.writeError(w, http.StatusBadRequest, "invalid_receiving_condition", err.Error())
 			return
 		}
 		if errors.Is(err, ErrUnitNotFound) {
@@ -278,8 +282,24 @@ func (h *Handler) RecordSerializedScan(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusUnprocessableEntity, "supply_unit_identity_mismatch", err.Error())
 			return
 		}
+		if errors.Is(err, ErrSupplyNotSerialized) {
+			h.writeError(w, http.StatusUnprocessableEntity, "supply_not_serialized", err.Error())
+			return
+		}
+		if errors.Is(err, ErrSessionNotFound) {
+			h.writeError(w, http.StatusNotFound, "session_not_found", err.Error())
+			return
+		}
+		if errors.Is(err, ErrSupplyNotFound) {
+			h.writeError(w, http.StatusNotFound, "supply_not_found", err.Error())
+			return
+		}
+		if errors.Is(err, ErrItemNotFound) {
+			h.writeError(w, http.StatusNotFound, "item_not_found", err.Error())
+			return
+		}
 
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
 

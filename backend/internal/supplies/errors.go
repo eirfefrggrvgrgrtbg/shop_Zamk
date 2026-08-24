@@ -14,6 +14,7 @@ var (
 	ErrSessionAlreadyActive       = errors.New("receiving session already active")
 	ErrItemNotFound               = errors.New("item not found in supply")
 	ErrSupplyUnitIdentityMismatch = errors.New("supply_unit_identity_mismatch")
+	ErrSupplyNotSerialized        = errors.New("supply_not_serialized")
 
 	// Receiving domain errors
 	ErrUnitNotFound               = errors.New("unit_not_found")
@@ -22,6 +23,7 @@ var (
 	ErrUnitAlreadyReceived        = errors.New("unit_already_received")
 	ErrReceivingSessionFinalized  = errors.New("receiving_session_finalized")
 	ErrSerializedUnitCodeRequired = errors.New("serialized_unit_code_required")
+	ErrInvalidReceivingCondition  = errors.New("invalid_receiving_condition")
 )
 
 var ErrSupplyNotArrived = errors.New("supply is not arrived yet")

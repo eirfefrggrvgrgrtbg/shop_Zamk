@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -219,12 +220,12 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 }
 
 func (s *Service) RecordSerializedScan(ctx context.Context, staffID uuid.UUID, sessionID uuid.UUID, req RecordSerializedScanRequest) (*SerializedScanResponse, error) {
-	if len(req.UnitCode) >= 4 && (req.UnitCode[:4] == "ZMK-" || req.UnitCode[:4] == "SKU-") {
+	if strings.HasPrefix(req.UnitCode, "ZMK-") || strings.HasPrefix(req.UnitCode, "SKU-") || strings.HasPrefix(req.UnitCode, "ZMK") {
 		return nil, ErrSerializedUnitCodeRequired
 	}
 
 	if req.Condition != "ok" && req.Condition != "damaged" {
-		return nil, errors.New("invalid condition")
+		return nil, ErrInvalidReceivingCondition
 	}
 
 	// We lock session using a tx
@@ -250,12 +251,8 @@ func (s *Service) RecordSerializedScan(ctx context.Context, staffID uuid.UUID, s
 		return nil, err
 	}
 
-	if session.Status == "completed" || session.Status == "completed_with_discrepancies" {
-		return nil, ErrReceivingSessionFinalized
-	}
-
 	if session.Status != "active" {
-		return nil, errors.New("session is not active")
+		return nil, ErrReceivingSessionFinalized
 	}
 
 	// Verify Serialization Health
@@ -276,15 +273,14 @@ func (s *Service) RecordSerializedScan(ctx context.Context, staffID uuid.UUID, s
 	actual := len(units)
 
 	if actual == 0 {
-		// Legacy supply should not use this endpoint
-		return nil, errors.New("legacy supply, use aggregate scan endpoint")
+		return nil, ErrSupplyNotSerialized
 	}
 	if actual != expected {
 		return nil, ErrSupplyUnitIdentityMismatch
 	}
 
-	// Find the unit
-	unit, err := repoTx.GetInventoryUnitByCode(ctx, req.UnitCode)
+	// Find the enriched unit
+	unit, err := repoTx.GetEnrichedInventoryUnitByCode(ctx, req.UnitCode)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +301,7 @@ func (s *Service) RecordSerializedScan(ctx context.Context, staffID uuid.UUID, s
 		}
 	}
 	if matchedItem == nil {
-		return nil, errors.New("session item not found for unit")
+		return nil, ErrItemNotFound
 	}
 
 	isDamage := req.Condition == "damaged"
@@ -329,9 +325,11 @@ func (s *Service) RecordSerializedScan(ctx context.Context, staffID uuid.UUID, s
 		UnitCode:         req.UnitCode,
 		Condition:        req.Condition,
 		ProductVariantID: unit.ProductVariantID,
-		ProductTitle:     matchedItem.ProductTitle,
-		SellerSKU:        nil, // We could fetch this if needed, but not critical to block
-		VariantBarcode:   matchedItem.Barcode,
+		ProductTitle:     unit.ProductTitle,
+		ColorName:        unit.ColorName,
+		SizeName:         unit.SizeName,
+		SellerSKU:        unit.SellerSKU,
+		VariantBarcode:   unit.VariantBarcode,
 		SessionExpected:  exp,
 		SessionScanned:   scn,
 		SessionOk:        okCount,

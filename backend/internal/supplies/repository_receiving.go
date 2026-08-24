@@ -295,6 +295,54 @@ func (r *Repository) GetInventoryUnitByCode(ctx context.Context, unitCode string
 	return &u, nil
 }
 
+func (r *Repository) GetEnrichedInventoryUnitByCode(ctx context.Context, unitCode string) (*EnrichedInventoryUnit, error) {
+	query := `
+		SELECT
+			u.id,
+			u.unit_code,
+			u.product_variant_id,
+			u.origin_supply_id,
+			u.origin_supply_item_id,
+			u.origin_box_id,
+			u.unit_index,
+			u.status,
+			p.title AS product_title,
+			COALESCE(c.name_ru, v.color) AS color_name,
+			COALESCE(sv.value, v.size) AS size_name,
+			COALESCE(v.seller_sku, v.sku) AS seller_sku,
+			v.barcode AS variant_barcode
+		FROM inventory_units u
+		JOIN product_variants v ON v.id = u.product_variant_id
+		JOIN products p ON p.id = v.product_id
+		LEFT JOIN colors c ON c.id = v.color_id
+		LEFT JOIN size_values sv ON sv.id = v.size_value_id
+		WHERE u.unit_code = $1
+	`
+	var u EnrichedInventoryUnit
+	err := r.db.QueryRow(ctx, query, unitCode).Scan(
+		&u.ID,
+		&u.UnitCode,
+		&u.ProductVariantID,
+		&u.OriginSupplyID,
+		&u.OriginSupplyItemID,
+		&u.OriginBoxID,
+		&u.UnitIndex,
+		&u.Status,
+		&u.ProductTitle,
+		&u.ColorName,
+		&u.SizeName,
+		&u.SellerSKU,
+		&u.VariantBarcode,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUnitNotFound
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
 func (r *Repository) AddSerializedReceivingScan(ctx context.Context, sessionID uuid.UUID, itemID uuid.UUID, unitID uuid.UUID, staffID *uuid.UUID, isDamage bool, condition string) (uuid.UUID, error) {
 	now := time.Now().UTC()
 	scanID := uuid.New()

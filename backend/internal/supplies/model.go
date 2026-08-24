@@ -123,3 +123,19 @@ type InventoryUnit struct {
 	CreatedAt           time.Time  `json:"createdAt"`
 	UpdatedAt           time.Time  `json:"updatedAt"`
 }
+
+type EnrichedInventoryUnit struct {
+	ID                 uuid.UUID
+	UnitCode           string
+	ProductVariantID   uuid.UUID
+	OriginSupplyID     uuid.UUID
+	OriginSupplyItemID uuid.UUID
+	OriginBoxID        *uuid.UUID
+	UnitIndex          int
+	Status             string
+	ProductTitle       string
+	ColorName          *string
+	SizeName           *string
+	SellerSKU          *string
+	VariantBarcode     *string
+}
