@@ -33,7 +33,7 @@ import type {
   SerializedScanResponse,
 } from '@zamk/api-client/src/types';
 
-import { playBeepSound, unlockScannerAudio } from '../utils/audio';
+import { playBeepSound, playTestSound, primeScannerAudio } from '../utils/audio';
 
 function mapReceivingError(err: any): string {
   const code = err?.error?.code || err?.code || '';
@@ -162,10 +162,10 @@ export function AdminSupplyReceiving() {
 
   const isSerialized = session?.receivingMode === 'serialized';
 
-  // Synchronously unlock Safari audio on first user gesture while component is mounted
+  // Optional prime on first user gesture while component is mounted
   useEffect(() => {
     const handleUserGesture = () => {
-      unlockScannerAudio();
+      primeScannerAudio();
     };
     window.addEventListener('keydown', handleUserGesture, { capture: true, passive: true });
     window.addEventListener('pointerdown', handleUserGesture, { capture: true, passive: true });
@@ -176,13 +176,13 @@ export function AdminSupplyReceiving() {
   }, []);
 
   const handleTestSound = () => {
-    const ok = unlockScannerAudio();
-    if (!ok) {
-      setAudioTestError('Браузер не разрешил воспроизведение звука.');
-      return;
-    }
-    setAudioTestError(null);
-    playBeepSound('success');
+    playTestSound().then((res) => {
+      if (!res.ok) {
+        setAudioTestError(res.error || 'Не удалось воспроизвести звук');
+      } else {
+        setAudioTestError(null);
+      }
+    });
   };
 
   useEffect(() => {
@@ -204,7 +204,6 @@ export function AdminSupplyReceiving() {
 
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
-    unlockScannerAudio();
     const input = qrInput.trim();
     if (!input) return;
 
@@ -225,7 +224,6 @@ export function AdminSupplyReceiving() {
   };
 
   const handleMarkArrived = async () => {
-    unlockScannerAudio();
     if (!dossier) return;
     try {
       setArrivalLoading(true);
@@ -244,7 +242,6 @@ export function AdminSupplyReceiving() {
   };
 
   const handleStartOrResumeSession = async () => {
-    unlockScannerAudio();
     if (!dossier) return;
     const lookupCode = dossier.qrToken || dossier.supplyNumber || dossier.id;
     if (!lookupCode) return;
@@ -283,7 +280,6 @@ export function AdminSupplyReceiving() {
 
   const handleScanItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    unlockScannerAudio();
     const rawInput = barcodeInput.trim();
     if (!rawInput || !session || !session.items) return;
 
@@ -368,7 +364,6 @@ export function AdminSupplyReceiving() {
   };
 
   const handleUndoLastScan = async () => {
-    unlockScannerAudio();
     if (!session || !isSerialized) return;
     const latestNonVoided = recentScans.find((s) => !s.voidedAt);
     if (!latestNonVoided) return;
@@ -414,7 +409,6 @@ export function AdminSupplyReceiving() {
   };
 
   const handleFinalize = async () => {
-    unlockScannerAudio();
     if (!session || isSerialized) return;
     try {
       setLoading(true);
@@ -852,7 +846,6 @@ export function AdminSupplyReceiving() {
                   type="text"
                   value={barcodeInput}
                   onChange={(e) => setBarcodeInput(e.target.value)}
-                  onKeyDown={() => unlockScannerAudio()}
                   placeholder={isSerialized ? 'Сканируйте ZMU товара...' : 'Скан штрихкода товара...'}
                   className={`w-full bg-slate-900 border ${
                     isDamagedScan
