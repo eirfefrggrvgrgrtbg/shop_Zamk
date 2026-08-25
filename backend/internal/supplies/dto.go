@@ -123,3 +123,30 @@ type SupplyUnitLabelDTO struct {
 	VariantBarcode   *string   `json:"variantBarcode,omitempty"`
 	BoxNumber        *string   `json:"boxNumber,omitempty"`
 }
+
+type ResolvedPhysicalUnit struct {
+	InventoryUnitID   uuid.UUID  `json:"inventoryUnitId"`
+	UnitCode          string     `json:"unitCode"`
+	UnitStatus        string     `json:"unitStatus"`
+	RecommendedAction string     `json:"recommendedAction"`
+	Product           struct {
+		Title string `json:"title"`
+	} `json:"product"`
+	Variant struct {
+		Color     *string `json:"color,omitempty"`
+		Size      *string `json:"size,omitempty"`
+		SellerSKU *string `json:"sellerSku,omitempty"`
+		Barcode   *string `json:"barcode,omitempty"`
+	} `json:"variant"`
+	Origin struct {
+		SupplyID     uuid.UUID  `json:"supplyId"`
+		SupplyNumber string     `json:"supplyNumber"`
+		SupplyStatus string     `json:"supplyStatus"`
+		SupplyItemID uuid.UUID  `json:"supplyItemId"`
+		BoxNumber    *string    `json:"boxNumber,omitempty"`
+		SellerName   *string    `json:"sellerName,omitempty"`
+	} `json:"origin"`
+	ReceivingState struct {
+		ActiveReceivingSessionID *uuid.UUID `json:"activeReceivingSessionId,omitempty"`
+	} `json:"receivingState"`
+}

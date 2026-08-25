@@ -532,3 +532,31 @@ func (h *Handler) UndoSerializedScan(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(res)
 }
+
+func (h *Handler) ResolvePhysicalUnit(w http.ResponseWriter, r *http.Request) {
+	role, okRole := r.Context().Value("role").(string)
+	if !okRole || (role != "admin" && role != "super_admin") {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+
+	unitCode := strings.TrimSpace(r.URL.Query().Get("unitCode"))
+	if unitCode == "" {
+		h.writeError(w, http.StatusBadRequest, "invalid_unit_code", "Введите штрихкод ZMU.")
+		return
+	}
+
+	resolved, err := h.svc.ResolvePhysicalUnit(r.Context(), unitCode)
+	if err != nil {
+		if errors.Is(err, ErrUnitNotFound) {
+			h.writeError(w, http.StatusNotFound, "unit_not_found", "Физическая единица с таким кодом не найдена.")
+			return
+		}
+		h.logger.Error("failed to resolve physical unit", "error", err.Error(), "unitCode", unitCode)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resolved)
+}

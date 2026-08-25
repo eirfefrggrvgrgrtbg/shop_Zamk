@@ -471,3 +471,36 @@ func (s *Service) RecordSerializedScan(ctx context.Context, staffID uuid.UUID, s
 		SessionRemaining: exp - scn,
 	}, nil
 }
+
+func (s *Service) ResolvePhysicalUnit(ctx context.Context, unitCode string) (*ResolvedPhysicalUnit, error) {
+	unit, err := s.repo.ResolvePhysicalUnitByCode(ctx, unitCode)
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine RecommendedAction based on unit state
+	switch unit.UnitStatus {
+	case "warehouse":
+		unit.RecommendedAction = "already_in_warehouse"
+	case "damaged":
+		unit.RecommendedAction = "already_damaged"
+	case "shipped":
+		unit.RecommendedAction = "already_shipped"
+	case "written_off":
+		unit.RecommendedAction = "written_off"
+	case "expected":
+		if unit.ReceivingState.ActiveReceivingSessionID != nil {
+			unit.RecommendedAction = "continue_receiving"
+		} else if unit.Origin.SupplyStatus == "completed_with_discrepancies" {
+			unit.RecommendedAction = "additional_receiving"
+		} else {
+			// e.g. Supply is in status 'shipped_by_seller', 'arrived_at_zamk' or 'receiving' but no active session yet
+			// Wait, if no active session, it could just be 'start_receiving'. Let's default to 'start_receiving' or 'unknown'
+			unit.RecommendedAction = "start_receiving"
+		}
+	default:
+		unit.RecommendedAction = "unknown"
+	}
+
+	return unit, nil
+}

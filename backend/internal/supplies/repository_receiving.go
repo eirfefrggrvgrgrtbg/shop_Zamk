@@ -633,3 +633,54 @@ func (r *Repository) CountRemainingExpectedUnitsForItem(ctx context.Context, ite
 	err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM inventory_units WHERE origin_supply_item_id = $1 AND status = 'expected'", itemID).Scan(&count)
 	return count, err
 }
+
+func (r *Repository) ResolvePhysicalUnitByCode(ctx context.Context, unitCode string) (*ResolvedPhysicalUnit, error) {
+	query := `
+		SELECT
+			u.id, u.unit_code, u.status,
+			p.title,
+			v.color, v.size, v.sku, v.barcode,
+			s.id, s.supply_number, s.status,
+			u.origin_supply_item_id,
+			b.box_number,
+			sel.brand_name,
+			(SELECT id FROM supply_receiving_sessions WHERE supply_id = s.id AND status = 'active' LIMIT 1) as active_session_id
+		FROM inventory_units u
+		JOIN product_variants v ON u.product_variant_id = v.id
+		JOIN products p ON v.product_id = p.id
+		JOIN seller_supplies s ON u.origin_supply_id = s.id
+		JOIN sellers sel ON s.seller_id = sel.id
+		LEFT JOIN seller_supply_boxes b ON u.origin_box_id = b.id
+		WHERE u.unit_code = $1
+	`
+	var res ResolvedPhysicalUnit
+	var color, size, sellerSKU, barcode, boxNum, brandName *string
+	var activeSessionID *uuid.UUID
+
+	err := r.db.QueryRow(ctx, query, unitCode).Scan(
+		&res.InventoryUnitID, &res.UnitCode, &res.UnitStatus,
+		&res.Product.Title,
+		&color, &size, &sellerSKU, &barcode,
+		&res.Origin.SupplyID, &res.Origin.SupplyNumber, &res.Origin.SupplyStatus,
+		&res.Origin.SupplyItemID,
+		&boxNum,
+		&brandName,
+		&activeSessionID,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUnitNotFound
+		}
+		return nil, fmt.Errorf("failed to resolve physical unit: %w", err)
+	}
+
+	res.Variant.Color = color
+	res.Variant.Size = size
+	res.Variant.SellerSKU = sellerSKU
+	res.Variant.Barcode = barcode
+	res.Origin.BoxNumber = boxNum
+	res.Origin.SellerName = brandName
+	res.ReceivingState.ActiveReceivingSessionID = activeSessionID
+
+	return &res, nil
+}

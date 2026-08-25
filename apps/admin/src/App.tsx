@@ -17,6 +17,7 @@ import { AdminOrderDetail } from './pages/AdminOrderDetail';
 import { AdminFulfillmentsList } from './pages/AdminFulfillmentsList';
 import { AdminReceivingScanner } from './pages/AdminReceivingScanner';
 import { AdminSupplyReceiving } from './pages/AdminSupplyReceiving';
+import { AdminFreeScanner } from './pages/AdminFreeScanner';
 import { AdminOrderProblems } from './pages/AdminOrderProblems';
 import { AdminPayments } from './pages/AdminPayments';
 import { AdminPaymentDetail } from './pages/AdminPaymentDetail';
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="/orders/fulfillments" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminFulfillmentsList /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/orders/receiving" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminReceivingScanner /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/supplies/receiving" element={<AdminProtectedRoute permission="inventory.read"><AdminLayout><AdminSupplyReceiving /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/warehouse/free-scan" element={<AdminProtectedRoute permission="inventory.read"><AdminLayout><AdminFreeScanner /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/orders/problems" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminOrderProblems /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/orders/:orderId" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminOrderDetail /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/payments" element={<AdminProtectedRoute permission="payments.read"><AdminLayout><AdminPayments /></AdminLayout></AdminProtectedRoute>} />

@@ -757,3 +757,34 @@ export const getAdminSellerCommissionHistory = (id: string) =>
 
 export const setAdminSellerCommission = (id: string, data: { rateBps: number; reason: string }) =>
   request<void>('POST', `/admin/sellers/${id}/commission`, { body: data });
+
+export interface ResolvedPhysicalUnit {
+  inventoryUnitId: string;
+  unitCode: string;
+  unitStatus: string;
+  recommendedAction: string;
+  product: {
+    title: string;
+  };
+  variant: {
+    color?: string;
+    size?: string;
+    sellerSku?: string;
+    barcode?: string;
+  };
+  origin: {
+    supplyId: string;
+    supplyNumber: string;
+    supplyStatus: string;
+    supplyItemId: string;
+    boxNumber?: string;
+    sellerName?: string;
+  };
+  receivingState: {
+    activeReceivingSessionId?: string;
+  };
+}
+
+export const resolvePhysicalUnit = (unitCode: string): Promise<ResolvedPhysicalUnit> => {
+  return request<ResolvedPhysicalUnit>('GET', `/admin/receiving/free-scan?unitCode=${encodeURIComponent(unitCode)}`);
+};
