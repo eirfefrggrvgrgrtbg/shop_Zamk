@@ -284,7 +284,7 @@ func (r *Repository) CheckSupplyDiscrepancies(ctx context.Context, supplyID uuid
 
 
 
-func (r *Repository) UpdateInventoryStock(ctx context.Context, variantID uuid.UUID, quantityDelta int, refID uuid.UUID) error {
+func (r *Repository) UpdateInventoryStock(ctx context.Context, variantID uuid.UUID, quantityDelta int, refType string, refID uuid.UUID) error {
 	// First get the inventory item ID, product_id, and seller_id
 	queryGet := `SELECT id, product_id, seller_id FROM inventory_items WHERE product_variant_id = $1`
 	var invID, prodID, sellerID uuid.UUID
@@ -318,8 +318,8 @@ func (r *Repository) UpdateInventoryStock(ctx context.Context, variantID uuid.UU
 	}
 
 	movID := uuid.New()
-	movQuery := `INSERT INTO stock_movements (id, inventory_item_id, product_id, product_variant_id, seller_id, type, quantity, reference_type, reference_id, created_at) VALUES ($1, $2, $3, $4, $5, 'receipt', $6, 'supply', $7, now())`
-	_, err = r.db.Exec(ctx, movQuery, movID, invID, prodID, variantID, sellerID, quantityDelta, refID)
+	movQuery := `INSERT INTO stock_movements (id, inventory_item_id, product_id, product_variant_id, seller_id, type, quantity, reference_type, reference_id, created_at) VALUES ($1, $2, $3, $4, $5, 'receipt', $6, $7, $8, now())`
+	_, err = r.db.Exec(ctx, movQuery, movID, invID, prodID, variantID, sellerID, quantityDelta, refType, refID)
 	if err != nil {
 		return fmt.Errorf("failed to insert stock movement: %w", err)
 	}

@@ -335,9 +335,9 @@ func TestSerializedFinalize_WithDiscrepancies(t *testing.T) {
 		t.Fatalf("expected item counters accepted=3, damaged=1, missing=1; got accepted=%d, damaged=%d, missing=%d", acceptedQty, damagedQty, missingQty)
 	}
 
-	// Stock movements: exactly 1 receipt movement of +3 for this supply
+	// Stock movements: exactly 1 receipt movement of +3 for this session
 	var movCount, movQty int
-	err = testDB.QueryRow(tc.Ctx, "SELECT COUNT(*), COALESCE(SUM(quantity), 0) FROM stock_movements WHERE reference_type = 'supply' AND reference_id = $1", supply.ID).Scan(&movCount, &movQty)
+	err = testDB.QueryRow(tc.Ctx, "SELECT COUNT(*), COALESCE(SUM(quantity), 0) FROM stock_movements WHERE reference_type = 'receiving_session' AND reference_id = $1", session.ID).Scan(&movCount, &movQty)
 	if err != nil || movCount != 1 || movQty != 3 {
 		t.Fatalf("expected 1 stock movement with qty=3, got count=%d, qty=%d", movCount, movQty)
 	}
@@ -361,7 +361,7 @@ func TestSerializedFinalize_WithDiscrepancies(t *testing.T) {
 	}
 
 	var movCountAfterSecond int
-	testDB.QueryRow(tc.Ctx, "SELECT COUNT(*) FROM stock_movements WHERE reference_type = 'supply' AND reference_id = $1", supply.ID).Scan(&movCountAfterSecond)
+	testDB.QueryRow(tc.Ctx, "SELECT COUNT(*) FROM stock_movements WHERE reference_type = 'receiving_session' AND reference_id = $1", session.ID).Scan(&movCountAfterSecond)
 	if movCountAfterSecond != 1 {
 		t.Fatalf("after second finalize: expected exactly 1 stock movement, got %d", movCountAfterSecond)
 	}
@@ -443,7 +443,7 @@ func TestSerializedFinalize_AllOK_Completed(t *testing.T) {
 
 	// Stock movement: 1 receipt movement of +5
 	var movCount, movQty int
-	err = testDB.QueryRow(tc.Ctx, "SELECT COUNT(*), COALESCE(SUM(quantity), 0) FROM stock_movements WHERE reference_type = 'supply' AND reference_id = $1", supply.ID).Scan(&movCount, &movQty)
+	err = testDB.QueryRow(tc.Ctx, "SELECT COUNT(*), COALESCE(SUM(quantity), 0) FROM stock_movements WHERE reference_type = 'receiving_session' AND reference_id = $1", session.ID).Scan(&movCount, &movQty)
 	if err != nil || movCount != 1 || movQty != 5 {
 		t.Fatalf("expected 1 stock movement with qty=5, got count=%d, qty=%d", movCount, movQty)
 	}
@@ -1321,9 +1321,11 @@ func TestAdditionalSerializedReceiving_FullResolutionToCompleted_5Units(t *testi
 
 	var firstMovID uuid.UUID
 	var firstMovQty int
-	err = testDB.QueryRow(tc.Ctx, "SELECT id, quantity FROM stock_movements WHERE reference_type = 'supply' AND reference_id = $1", supply.ID).Scan(&firstMovID, &firstMovQty)
-	if err != nil || firstMovQty != 4 {
-		t.Fatalf("expected 1 stock movement with qty=4, got err=%v, qty=%d", err, firstMovQty)
+	var firstRefType string
+	var firstRefID uuid.UUID
+	err = testDB.QueryRow(tc.Ctx, "SELECT id, quantity, reference_type, reference_id FROM stock_movements WHERE reference_type = 'receiving_session' AND reference_id = $1", oldSessionID).Scan(&firstMovID, &firstMovQty, &firstRefType, &firstRefID)
+	if err != nil || firstMovQty != 4 || firstRefType != "receiving_session" || firstRefID != oldSessionID {
+		t.Fatalf("expected 1 stock movement for oldSession with qty=4, got err=%v, qty=%d, refType=%s, refID=%v", err, firstMovQty, firstRefType, firstRefID)
 	}
 
 	// Step 2: Start additional session
@@ -1382,11 +1384,33 @@ func TestAdditionalSerializedReceiving_FullResolutionToCompleted_5Units(t *testi
 		t.Fatalf("expected supply status completed, got %s", s2.Status)
 	}
 
-	// Stock movements: exactly 2 distinct rows
-	var movCount, totalMovQty int
-	testDB.QueryRow(tc.Ctx, "SELECT COUNT(*), COALESCE(SUM(quantity), 0) FROM stock_movements WHERE reference_type = 'supply' AND reference_id = $1", supply.ID).Scan(&movCount, &totalMovQty)
-	if movCount != 2 || totalMovQty != 5 {
-		t.Fatalf("expected 2 stock movements with sum=5, got count=%d, sum=%d", movCount, totalMovQty)
+	// Stock movements: exactly 2 distinct rows with exact session lineage
+	var secondMovID uuid.UUID
+	var secondMovQty int
+	var secondRefType string
+	var secondRefID uuid.UUID
+	err = testDB.QueryRow(tc.Ctx, "SELECT id, quantity, reference_type, reference_id FROM stock_movements WHERE reference_type = 'receiving_session' AND reference_id = $1", addSession.ID).Scan(&secondMovID, &secondMovQty, &secondRefType, &secondRefID)
+	if err != nil || secondMovQty != 1 || secondRefType != "receiving_session" || secondRefID != addSession.ID {
+		t.Fatalf("expected stock movement for addSession with qty=1, got err=%v, qty=%d, refType=%s, refID=%v", err, secondMovQty, secondRefType, secondRefID)
+	}
+
+	// Assert movement IDs and reference IDs are distinct
+	if firstMovID == secondMovID {
+		t.Fatalf("expected distinct movement IDs, got same %v", firstMovID)
+	}
+	if firstRefID == secondRefID {
+		t.Fatalf("expected distinct reference IDs, got same %v", firstRefID)
+	}
+
+	// Assert each reference resolves to the correct receiving session belonging to this supply
+	var resSupplyID1, resSupplyID2 uuid.UUID
+	err = testDB.QueryRow(tc.Ctx, "SELECT supply_id FROM supply_receiving_sessions WHERE id = $1", firstRefID).Scan(&resSupplyID1)
+	if err != nil || resSupplyID1 != supply.ID {
+		t.Fatalf("first movement reference %v failed to resolve to supply %v, got %v (err=%v)", firstRefID, supply.ID, resSupplyID1, err)
+	}
+	err = testDB.QueryRow(tc.Ctx, "SELECT supply_id FROM supply_receiving_sessions WHERE id = $1", secondRefID).Scan(&resSupplyID2)
+	if err != nil || resSupplyID2 != supply.ID {
+		t.Fatalf("second movement reference %v failed to resolve to supply %v, got %v (err=%v)", secondRefID, supply.ID, resSupplyID2, err)
 	}
 
 	// First movement unchanged
@@ -1420,12 +1444,12 @@ func TestAdditionalSerializedReceiving_FullResolutionToCompleted_5Units(t *testi
 	}
 
 	// Stock and item state unchanged after double finalize
-	var stockAfterDouble, accAfterDouble, movCountAfterDouble int
+	var stockAfterDouble, accAfterDouble, addMovCountAfterDouble int
 	testDB.QueryRow(tc.Ctx, "SELECT COALESCE(total_stock, 0) FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stockAfterDouble)
 	testDB.QueryRow(tc.Ctx, "SELECT accepted_quantity FROM seller_supply_items WHERE supply_id = $1", supply.ID).Scan(&accAfterDouble)
-	testDB.QueryRow(tc.Ctx, "SELECT COUNT(*) FROM stock_movements WHERE reference_type = 'supply' AND reference_id = $1", supply.ID).Scan(&movCountAfterDouble)
-	if stockAfterDouble != initialStock+5 || accAfterDouble != 5 || movCountAfterDouble != 2 {
-		t.Fatalf("state mutated after double finalize: stock=%d, acc=%d, movs=%d", stockAfterDouble, accAfterDouble, movCountAfterDouble)
+	testDB.QueryRow(tc.Ctx, "SELECT COUNT(*) FROM stock_movements WHERE reference_type = 'receiving_session' AND reference_id = $1", addSession.ID).Scan(&addMovCountAfterDouble)
+	if stockAfterDouble != initialStock+5 || accAfterDouble != 5 || addMovCountAfterDouble != 1 {
+		t.Fatalf("state mutated after double finalize: stock=%d, acc=%d, addMovs=%d", stockAfterDouble, accAfterDouble, addMovCountAfterDouble)
 	}
 }
 
@@ -1475,6 +1499,14 @@ func TestAdditionalSerializedReceiving_DamageScenario_5Units(t *testing.T) {
 	s1, _ := tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
 	if s1.Status != "completed_with_discrepancies" {
 		t.Fatalf("expected completed_with_discrepancies, got %s", s1.Status)
+	}
+
+	// First stock movement references first session ID
+	var movA_ID uuid.UUID
+	var movA_Qty int
+	err = testDB.QueryRow(tc.Ctx, "SELECT id, quantity FROM stock_movements WHERE reference_type = 'receiving_session' AND reference_id = $1", session.ID).Scan(&movA_ID, &movA_Qty)
+	if err != nil || movA_Qty != 3 {
+		t.Fatalf("expected stock movement for first session with qty=3, got err=%v, qty=%d", err, movA_Qty)
 	}
 
 	// Step 2: Start additional session
@@ -1529,11 +1561,16 @@ func TestAdditionalSerializedReceiving_DamageScenario_5Units(t *testing.T) {
 		t.Fatalf("expected supply status completed_with_discrepancies, got %s", s2.Status)
 	}
 
-	// Two distinct movements: +3 and +1
-	var movCount, movSum int
-	testDB.QueryRow(tc.Ctx, "SELECT COUNT(*), COALESCE(SUM(quantity), 0) FROM stock_movements WHERE reference_type = 'supply' AND reference_id = $1", supply.ID).Scan(&movCount, &movSum)
-	if movCount != 2 || movSum != 4 {
-		t.Fatalf("expected 2 stock movements summing to 4, got count=%d, sum=%d", movCount, movSum)
+	// Second stock movement references additional session ID
+	var movB_ID uuid.UUID
+	var movB_Qty int
+	err = testDB.QueryRow(tc.Ctx, "SELECT id, quantity FROM stock_movements WHERE reference_type = 'receiving_session' AND reference_id = $1", addSession.ID).Scan(&movB_ID, &movB_Qty)
+	if err != nil || movB_Qty != 1 {
+		t.Fatalf("expected stock movement for additional session with qty=1, got err=%v, qty=%d", err, movB_Qty)
+	}
+
+	if movA_ID == movB_ID {
+		t.Fatalf("expected distinct movements, got same %v", movA_ID)
 	}
 }
 

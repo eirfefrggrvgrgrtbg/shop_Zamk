@@ -239,7 +239,7 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 
 		// Update inventory (will insert stock movement internally)
 		if accepted > 0 && item.VariantID != nil {
-			err = repoTx.UpdateInventoryStock(ctx, *item.VariantID, accepted, supply.ID)
+			err = repoTx.UpdateInventoryStock(ctx, *item.VariantID, accepted, "receiving_session", session.ID)
 			if err != nil {
 				return fmt.Errorf("failed to update inventory: %w", err)
 			}
