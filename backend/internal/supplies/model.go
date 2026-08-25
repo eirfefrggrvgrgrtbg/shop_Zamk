@@ -10,6 +10,7 @@ type Supply struct {
 	ID                  uuid.UUID    `json:"id"`
 	SupplyNumber        string       `json:"supplyNumber"`
 	SellerID            uuid.UUID    `json:"sellerId"`
+	SellerName          string       `json:"sellerName,omitempty"`
 	Status              string       `json:"status"`
 	HandoffMethod       string       `json:"handoffMethod"`
 	CarrierName         *string      `json:"carrierName,omitempty"`

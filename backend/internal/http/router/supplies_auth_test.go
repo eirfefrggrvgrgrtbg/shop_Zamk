@@ -915,4 +915,101 @@ func TestSuppliesAuth(t *testing.T) {
 			t.Fatalf("expected code invalid_receiving_code, got %s", rrBlank.Body.String())
 		}
 	})
+
+	// ====================================================================
+	// M. Lookup and Mark Arrived Workflow
+	// ====================================================================
+	t.Run("M. lookup and mark supply arrived before receiving session", func(t *testing.T) {
+		adminID := insertUser(t, "admin")
+		insertAdminWithPerms(t, adminID, []string{"inventory.receipt"})
+		adminTok := makeToken(t, adminID, "admin")
+
+		sellerUserID := insertUser(t, "seller")
+		sellerID := insertSeller(t, sellerUserID)
+		_, variantID := insertProductAndVariant(t, sellerID)
+
+		repo := supplies.NewRepository(pgClient.Pool)
+		svc := supplies.NewService(pgClient.Pool, repo)
+		carrier := "СДЭК"
+		tracking := "888777666"
+		supply, err := svc.CreateSupply(ctx, sellerID, supplies.CreateSupplyRequest{
+			HandoffMethod:  "carrier_delivery",
+			CarrierName:    &carrier,
+			TrackingNumber: &tracking,
+			Items:          []supplies.CreateSupplyItemRequest{{VariantID: variantID, ExpectedQuantity: 2}},
+		})
+		if err != nil {
+			t.Fatalf("CreateSupply: %v", err)
+		}
+
+		// 1. Mark Arrived before shipped -> 400 invalid_status
+		reqArriveBeforeShip := httptest.NewRequest("POST", "/api/admin/receiving/"+supply.ID.String()+"/arrive", nil)
+		reqArriveBeforeShip.Header.Set("Authorization", "Bearer "+adminTok)
+		rrArriveBeforeShip := httptest.NewRecorder()
+		r.ServeHTTP(rrArriveBeforeShip, reqArriveBeforeShip)
+		if rrArriveBeforeShip.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 when marking ready_to_ship arrived, got %d body=%s", rrArriveBeforeShip.Code, rrArriveBeforeShip.Body.String())
+		}
+
+		// Mark shipped by seller
+		if _, err = svc.MarkShipped(ctx, sellerID, supply.ID); err != nil {
+			t.Fatalf("MarkShipped: %v", err)
+		}
+
+		// 2. Lookup shipped_by_seller supply -> 200 with full supply details
+		reqLookup := httptest.NewRequest("GET", "/api/admin/receiving/lookup?qr_token="+supply.SupplyNumber, nil)
+		reqLookup.Header.Set("Authorization", "Bearer "+adminTok)
+		rrLookup := httptest.NewRecorder()
+		r.ServeHTTP(rrLookup, reqLookup)
+		if rrLookup.Code != http.StatusOK {
+			t.Fatalf("expected 200 lookup, got %d body=%s", rrLookup.Code, rrLookup.Body.String())
+		}
+		var lookupSupply supplies.Supply
+		if err := json.NewDecoder(rrLookup.Body).Decode(&lookupSupply); err != nil {
+			t.Fatalf("failed to decode lookup supply: %v", err)
+		}
+		if lookupSupply.Status != "shipped_by_seller" {
+			t.Fatalf("expected status 'shipped_by_seller', got '%s'", lookupSupply.Status)
+		}
+		if len(lookupSupply.Items) != 1 {
+			t.Fatalf("expected 1 item in lookup supply, got %d", len(lookupSupply.Items))
+		}
+
+		// 3. Mark arrived -> 204 No Content
+		reqArrive := httptest.NewRequest("POST", "/api/admin/receiving/"+supply.ID.String()+"/arrive", nil)
+		reqArrive.Header.Set("Authorization", "Bearer "+adminTok)
+		rrArrive := httptest.NewRecorder()
+		r.ServeHTTP(rrArrive, reqArrive)
+		if rrArrive.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 No Content for arrival, got %d body=%s", rrArrive.Code, rrArrive.Body.String())
+		}
+
+		// 4. Re-lookup -> status is now arrived_at_zamk
+		reqLookup2 := httptest.NewRequest("GET", "/api/admin/receiving/lookup?qr_token="+supply.SupplyNumber, nil)
+		reqLookup2.Header.Set("Authorization", "Bearer "+adminTok)
+		rrLookup2 := httptest.NewRecorder()
+		r.ServeHTTP(rrLookup2, reqLookup2)
+		if rrLookup2.Code != http.StatusOK {
+			t.Fatalf("expected 200 lookup, got %d body=%s", rrLookup2.Code, rrLookup2.Body.String())
+		}
+		var lookupSupply2 supplies.Supply
+		json.NewDecoder(rrLookup2.Body).Decode(&lookupSupply2)
+		if lookupSupply2.Status != "arrived_at_zamk" {
+			t.Fatalf("expected status 'arrived_at_zamk', got '%s'", lookupSupply2.Status)
+		}
+
+		// 5. Start receiving session -> 200 OK
+		reqStart := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token="+supply.SupplyNumber, nil)
+		reqStart.Header.Set("Authorization", "Bearer "+adminTok)
+		rrStart := httptest.NewRecorder()
+		r.ServeHTTP(rrStart, reqStart)
+		if rrStart.Code != http.StatusOK {
+			t.Fatalf("expected 200 start session after arrival, got %d body=%s", rrStart.Code, rrStart.Body.String())
+		}
+		var sess supplies.ReceivingSession
+		json.NewDecoder(rrStart.Body).Decode(&sess)
+		if sess.ReceivingMode != "serialized" {
+			t.Fatalf("expected receivingMode serialized, got %s", sess.ReceivingMode)
+		}
+	})
 }

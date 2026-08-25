@@ -58,10 +58,19 @@ func (h *Handler) LookupSupply(w http.ResponseWriter, r *http.Request) {
 	}
 	qrToken := strings.TrimSpace(r.URL.Query().Get("qr_token"))
 	if qrToken == "" {
-		h.writeError(w, http.StatusBadRequest, "invalid_receiving_code", "qr_token is required")
+		h.writeError(w, http.StatusBadRequest, "invalid_receiving_code", "Введите номер поставки, грузоместа или отсканируйте QR-код.")
 		return
 	}
-	supply, err := h.svc.repo.GetSupplyByQRToken(r.Context(), qrToken)
+	header, err := h.svc.repo.GetSupplyByQRToken(r.Context(), qrToken)
+	if err != nil {
+		if errors.Is(err, ErrSupplyNotFound) {
+			h.writeError(w, http.StatusNotFound, "supply_not_found", "Поставка или грузоместо не найдено.")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	supply, err := h.svc.repo.GetSupplyByID(r.Context(), header.ID)
 	if err != nil {
 		if errors.Is(err, ErrSupplyNotFound) {
 			h.writeError(w, http.StatusNotFound, "supply_not_found", "Поставка или грузоместо не найдено.")

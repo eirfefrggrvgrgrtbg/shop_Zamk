@@ -19,8 +19,10 @@ func (r *Repository) GetSupplyByQRToken(ctx context.Context, token string) (*Sup
 	}
 	query := `
 		SELECT s.id, s.supply_number, s.seller_id, s.status, s.handoff_method, s.carrier_name, s.tracking_number, s.expected_arrival_date,
-			s.qr_token, s.created_at, s.shipped_at, s.arrived_at, s.receiving_started_at, s.completed_at, s.updated_at
+			s.qr_token, s.created_at, s.shipped_at, s.arrived_at, s.receiving_started_at, s.completed_at, s.updated_at,
+			COALESCE(sel.brand_name, '') as seller_name
 		FROM seller_supplies s
+		LEFT JOIN sellers sel ON sel.id = s.seller_id
 		LEFT JOIN seller_supply_boxes b ON b.supply_id = s.id
 		WHERE s.qr_token = $1 OR UPPER(s.supply_number) = UPPER($1) OR b.qr_token = $1 OR UPPER(b.box_number) = UPPER($1)
 		LIMIT 1
@@ -29,6 +31,7 @@ func (r *Repository) GetSupplyByQRToken(ctx context.Context, token string) (*Sup
 	err := r.db.QueryRow(ctx, query, token).Scan(
 		&s.ID, &s.SupplyNumber, &s.SellerID, &s.Status, &s.HandoffMethod, &s.CarrierName, &s.TrackingNumber, &s.ExpectedArrivalDate,
 		&s.QRToken, &s.CreatedAt, &s.ShippedAt, &s.ArrivedAt, &s.ReceivingStartedAt, &s.CompletedAt, &s.UpdatedAt,
+		&s.SellerName,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

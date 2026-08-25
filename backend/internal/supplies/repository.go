@@ -233,7 +233,13 @@ func (r *Repository) GetEnrichedUnitLabelsBySupplyID(ctx context.Context, supply
 }
 
 func (r *Repository) UpdateSupplyStatus(ctx context.Context, supplyID uuid.UUID, status string) error {
-	query := `UPDATE seller_supplies SET status = $1, updated_at = now() WHERE id = $2`
+	query := `
+		UPDATE seller_supplies
+		SET status = $1::varchar,
+			arrived_at = CASE WHEN $1::varchar = 'arrived_at_zamk' AND arrived_at IS NULL THEN now() ELSE arrived_at END,
+			updated_at = now()
+		WHERE id = $2
+	`
 	res, err := r.db.Exec(ctx, query, status, supplyID)
 	if err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
@@ -258,15 +264,18 @@ func (r *Repository) MarkShipped(ctx context.Context, supplyID uuid.UUID) error 
 
 func (r *Repository) GetSupplyByID(ctx context.Context, id uuid.UUID) (*Supply, error) {
 	query := `
-		SELECT id, supply_number, seller_id, status, handoff_method, carrier_name, tracking_number, expected_arrival_date,
-			qr_token, created_at, shipped_at, arrived_at, receiving_started_at, completed_at, updated_at
-		FROM seller_supplies
-		WHERE id = $1
+		SELECT s.id, s.supply_number, s.seller_id, s.status, s.handoff_method, s.carrier_name, s.tracking_number, s.expected_arrival_date,
+			s.qr_token, s.created_at, s.shipped_at, s.arrived_at, s.receiving_started_at, s.completed_at, s.updated_at,
+			COALESCE(sel.brand_name, '') as seller_name
+		FROM seller_supplies s
+		LEFT JOIN sellers sel ON sel.id = s.seller_id
+		WHERE s.id = $1
 	`
 	var s Supply
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&s.ID, &s.SupplyNumber, &s.SellerID, &s.Status, &s.HandoffMethod, &s.CarrierName, &s.TrackingNumber, &s.ExpectedArrivalDate,
 		&s.QRToken, &s.CreatedAt, &s.ShippedAt, &s.ArrivedAt, &s.ReceivingStartedAt, &s.CompletedAt, &s.UpdatedAt,
+		&s.SellerName,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

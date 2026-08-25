@@ -355,6 +355,7 @@ export interface SellerSupplyItem {
 export interface SellerSupply {
   id: string;
   sellerId: string;
+  sellerName?: string;
   humanId?: string;
   supplyNumber?: string;
   qrToken?: string;

@@ -712,3 +712,100 @@ func TestStartReceivingSessionLookupIdentifiersAndErrors(t *testing.T) {
 		t.Fatalf("expected ErrSupplyUnitIdentityMismatch for corrupted unit count, got %v", err)
 	}
 }
+
+func TestSupplyArrivalLifecycle(t *testing.T) {
+	tc := setupTestContext(t)
+
+	carrier := "СДЭК"
+	tracking := "TRACK-ARRIVAL-123"
+	req := supplies.CreateSupplyRequest{
+		HandoffMethod:  "carrier_delivery",
+		CarrierName:    &carrier,
+		TrackingNumber: &tracking,
+		Items: []supplies.CreateSupplyItemRequest{
+			{VariantID: tc.Variant1, ExpectedQuantity: 4},
+		},
+	}
+
+	// 1. Create supply -> status is ready_to_ship
+	supply, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, req)
+	if err != nil {
+		t.Fatalf("CreateSupply failed: %v", err)
+	}
+
+	// F. ready_to_ship supply cannot be marked arrived
+	err = tc.Service.MarkSupplyArrived(tc.Ctx, tc.AdminID, supply.ID)
+	if !errors.Is(err, supplies.ErrInvalidStatus) {
+		t.Fatalf("expected ErrInvalidStatus when marking ready_to_ship arrived, got %v", err)
+	}
+
+	// 2. Mark shipped -> status is shipped_by_seller
+	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
+	if err != nil {
+		t.Fatalf("MarkShipped failed: %v", err)
+	}
+
+	// A. Lookup shipped_by_seller supply -> resolves dossier, no receiving session created
+	dossier, err := tc.Repo.GetSupplyByQRToken(tc.Ctx, supply.SupplyNumber)
+	if err != nil {
+		t.Fatalf("lookup supply by number failed: %v", err)
+	}
+	if dossier.Status != "shipped_by_seller" {
+		t.Fatalf("expected status 'shipped_by_seller', got '%s'", dossier.Status)
+	}
+	if dossier.SellerName == "" {
+		t.Fatalf("expected seller name to be populated")
+	}
+
+	// Verify full supply dossier loaded by ID
+	fullSupply, err := tc.Repo.GetSupplyByID(tc.Ctx, dossier.ID)
+	if err != nil {
+		t.Fatalf("GetSupplyByID failed: %v", err)
+	}
+	if len(fullSupply.Items) != 1 || fullSupply.Items[0].ExpectedQuantity != 4 {
+		t.Fatalf("expected 1 item with quantity 4, got %+v", fullSupply.Items)
+	}
+	if len(fullSupply.Boxes) != 1 {
+		t.Fatalf("expected 1 box, got %d", len(fullSupply.Boxes))
+	}
+
+	// Verify no receiving session exists yet
+	_, err = tc.Repo.GetActiveSession(tc.Ctx, supply.ID)
+	if !errors.Is(err, supplies.ErrSessionNotFound) {
+		t.Fatalf("expected ErrSessionNotFound before receiving starts, got %v", err)
+	}
+
+	// B. MarkSupplyArrived -> status arrived_at_zamk and arrived_at is set
+	err = tc.Service.MarkSupplyArrived(tc.Ctx, tc.AdminID, supply.ID)
+	if err != nil {
+		t.Fatalf("MarkSupplyArrived failed: %v", err)
+	}
+	arrivedSupply, err := tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
+	if err != nil {
+		t.Fatalf("GetSupplyByID after arrival failed: %v", err)
+	}
+	if arrivedSupply.Status != "arrived_at_zamk" {
+		t.Fatalf("expected status 'arrived_at_zamk', got '%s'", arrivedSupply.Status)
+	}
+	if arrivedSupply.ArrivedAt == nil {
+		t.Fatalf("expected arrived_at timestamp to be set")
+	}
+
+	// C, D. Start session after arrival -> PASS, receivingMode = serialized
+	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, supply.SupplyNumber)
+	if err != nil {
+		t.Fatalf("StartReceivingSession after arrival failed: %v", err)
+	}
+	if session.ReceivingMode != "serialized" {
+		t.Fatalf("expected receivingMode 'serialized', got '%s'", session.ReceivingMode)
+	}
+
+	// E. Existing active session -> continue/resume same session
+	resumedSession, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, supply.SupplyNumber)
+	if err != nil {
+		t.Fatalf("resuming active session failed: %v", err)
+	}
+	if resumedSession.ID != session.ID {
+		t.Fatalf("expected resumed session ID %s, got %s", session.ID, resumedSession.ID)
+	}
+}
