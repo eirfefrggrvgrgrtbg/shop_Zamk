@@ -7,27 +7,29 @@ import (
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func setupTestDB(t *testing.T) (*pgxpool.Pool, *postgres.Client) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("Skipping DB test: TEST_DATABASE_URL not set")
-	}
+	dsn := testutil.GetTestDatabaseURL()
 
 	ctx := context.Background()
 	db, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		t.Fatalf("failed to connect to db: %v", err)
 	}
+
+	testutil.AssertTestDatabase(t, db)
 	
 	return db, &postgres.Client{Pool: db}
 }
 
 func cleanTestDB(t *testing.T, db *pgxpool.Pool) {
+	testutil.AssertTestDatabase(t, db)
+
 	ctx := context.Background()
 	db.Exec(ctx, "DELETE FROM seller_brands")
 	db.Exec(ctx, "DELETE FROM seller_onboarding_applications")

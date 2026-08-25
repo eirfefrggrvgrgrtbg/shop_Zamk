@@ -9,6 +9,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -16,11 +17,7 @@ import (
 var testDB *pgxpool.Pool
 
 func TestMain(m *testing.M) {
-	dbURL := os.Getenv("TEST_DATABASE_URL")
-	if dbURL == "" {
-		fmt.Println("TEST_DATABASE_URL not set, skipping integration tests")
-		os.Exit(0)
-	}
+	dbURL := testutil.GetTestDatabaseURL()
 
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dbURL)
@@ -42,10 +39,12 @@ type TestContext struct {
 }
 
 func setupTestContext(t *testing.T) *TestContext {
+	testutil.AssertTestDatabase(t, testDB)
+
 	ctx := context.Background()
 	repo := inventory.NewRepository(testDB)
 	sellersRepo := sellers.NewRepository(testDB)
-	pgClient, err := postgres.NewClient(ctx, os.Getenv("TEST_DATABASE_URL"))
+	pgClient, err := postgres.NewClient(ctx, testutil.GetTestDatabaseURL())
 	if err != nil {
 		t.Fatalf("failed to create pgClient: %v", err)
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -47,18 +48,12 @@ type SetupData struct {
 }
 
 func SetupRealRouterAuthFixture(t *testing.T) *SetupData {
-	dbURL := os.Getenv("TEST_DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	dbURL := testutil.GetTestDatabaseURL()
 
 	pool, err := pgxpool.New(context.Background(), dbURL)
 	require.NoError(t, err)
 
-	var dbName string
-	err = pool.QueryRow(context.Background(), "SELECT current_database()").Scan(&dbName)
-	require.NoError(t, err)
-	require.Contains(t, dbName, "_test", "Must use a _test database")
+	testutil.AssertTestDatabase(t, pool)
 
 	cfg := &config.Config{}
 	cfg.JWT.AccessTokenSecret = "test-secret"

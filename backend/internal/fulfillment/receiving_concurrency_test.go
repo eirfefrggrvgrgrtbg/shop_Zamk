@@ -14,6 +14,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/fulfillment"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 type receivingTestMockPayoutsService struct{}
@@ -58,15 +59,17 @@ func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, u
 	// Product & Variant
 	_, err = db.Pool.Exec(ctx, `
 		INSERT INTO products (id, seller_id, title, slug, price_cents, currency, status)
-		VALUES ($1, $2, 'Parallel Test Product', $3, 10000, 'RUB', 'published')
-	`, productID, sellerID, "parallel-test-"+productID.String())
+		VALUES ($1, $2, 'Parallel Test Product', 'parallel-test', 10000, 'RUB', 'published')
+		ON CONFLICT (id) DO NOTHING
+	`, productID, sellerID)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, "", err
 	}
 
 	_, err = db.Pool.Exec(ctx, `
-		INSERT INTO product_variants (id, product_id, sku, barcode, price_cents, is_active)
-		VALUES ($1, $2, 'PARALLEL-SKU-01', $3, 10000, true)
+		INSERT INTO product_variants (id, product_id, sku, barcode, price_cents)
+		VALUES ($1, $2, 'PARALLEL-SKU-01', $3, 10000)
+		ON CONFLICT (id) DO NOTHING
 	`, variantID, productID, variantID.String()[:13])
 	if err != nil {
 		return uuid.Nil, uuid.Nil, "", err
@@ -101,10 +104,7 @@ func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, u
 }
 
 func TestParallelConfirmReceiving_CreatesExactlyOneShipment(t *testing.T) {
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://zamk:zamk_password@127.0.0.1:5433/zamk?sslmode=disable"
-	}
+	dbURL := testutil.GetTestDatabaseURL()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -112,6 +112,8 @@ func TestParallelConfirmReceiving_CreatesExactlyOneShipment(t *testing.T) {
 	db, err := postgres.NewClient(ctx, dbURL)
 	require.NoError(t, err, "Failed to connect to postgres test db")
 	defer db.Close()
+
+	testutil.AssertTestDatabase(t, db.Pool)
 
 	fulfillmentID, staffID, barcode, err := seedTestFulfillment(ctx, db)
 	require.NoError(t, err)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/dashboard"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 func TestDashboardRepository_GetSummary(t *testing.T) {
@@ -17,12 +18,14 @@ func TestDashboardRepository_GetSummary(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	dbURL := "postgres://postgres:postgres@localhost:5432/zamk?sslmode=disable"
+	dbURL := testutil.GetTestDatabaseURL()
 	pgClient, err := postgres.NewClient(ctx, dbURL)
 	if err != nil {
 		t.Fatalf("Failed to connect to DB: %v", err)
 	}
 	defer pgClient.Pool.Close()
+
+	testutil.AssertTestDatabase(t, pgClient.Pool)
 
 	// Clean up related tables before testing
 	_, err = pgClient.Pool.Exec(ctx, `TRUNCATE TABLE payouts, auction_lots, inventory_items, products, sellers, orders, users CASCADE`)

@@ -9,6 +9,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/ratelimit"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
@@ -19,12 +20,14 @@ func TestWinnerFlow(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	dbURL := "postgres://postgres:postgres@localhost:5432/zamk?sslmode=disable"
+	dbURL := testutil.GetTestDatabaseURL()
 	pgClient, err := postgres.NewClient(ctx, dbURL)
 	if err != nil {
 		t.Fatalf("Failed to connect to DB: %v", err)
 	}
 	defer pgClient.Pool.Close()
+
+	testutil.AssertTestDatabase(t, pgClient.Pool)
 
 	redisClient := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	limiter := ratelimit.New(redisClient)

@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/supplies"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -14,11 +16,7 @@ import (
 var testDB *pgxpool.Pool
 
 func TestMain(m *testing.M) {
-	dbURL := os.Getenv("TEST_DATABASE_URL")
-	if dbURL == "" {
-		fmt.Println("TEST_DATABASE_URL not set, skipping integration tests")
-		os.Exit(0)
-	}
+	dbURL := testutil.GetTestDatabaseURL()
 
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dbURL)
@@ -47,6 +45,8 @@ type TestContext struct {
 }
 
 func setupTestContext(t *testing.T) *TestContext {
+	testutil.AssertTestDatabase(t, testDB)
+
 	ctx := context.Background()
 	repo := supplies.NewRepository(testDB)
 	service := supplies.NewService(testDB, repo)
@@ -385,5 +385,23 @@ func TestSupplyCarrierDeliveryValidation(t *testing.T) {
 	testDB.QueryRow(tc.Ctx, "SELECT total_stock FROM inventory_items WHERE product_variant_id = $1", tc.Variant2).Scan(&stock2)
 	if stock1 != 0 || stock2 != 0 {
 		t.Fatalf("inventory stock mutated after mark shipped: stock1=%d, stock2=%d", stock1, stock2)
+	}
+}
+
+func TestSafetyGuard_RejectsDevDatabase(t *testing.T) {
+	ctx := context.Background()
+	devDB, err := pgxpool.New(ctx, "postgres://zamk:zamk_password@localhost:5433/zamk?sslmode=disable")
+	if err != nil {
+		t.Skip("skipping dev db guard test: cannot connect to dev db")
+	}
+	defer devDB.Close()
+
+	err = testutil.VerifyTestDatabase(ctx, devDB)
+	if err == nil {
+		t.Fatalf("expected VerifyTestDatabase to reject 'zamk' database, got nil error")
+	}
+	expected := `REFUSING DESTRUCTIVE TEST SETUP: expected database "zamk_test", connected to "zamk"`
+	if !strings.Contains(err.Error(), expected) {
+		t.Fatalf("unexpected error message: %v", err)
 	}
 }

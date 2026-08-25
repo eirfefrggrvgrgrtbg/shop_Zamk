@@ -2,8 +2,6 @@ package payments
 
 import (
 	"context"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +10,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -19,15 +18,7 @@ import (
 
 func requireIsolatedTestDatabase(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	var dbName string
-	err := pool.QueryRow(context.Background(), "SELECT current_database()").Scan(&dbName)
-	if err != nil {
-		t.Fatalf("failed to determine current database: %v", err)
-	}
-
-	if !strings.Contains(dbName, "_test") {
-		t.Fatalf("refusing to run destructive integration test against non-test database: %s", dbName)
-	}
+	testutil.AssertTestDatabase(t, pool)
 }
 
 type PaymentTestFixture struct {
@@ -42,10 +33,7 @@ type PaymentTestFixture struct {
 
 func setupTestService(t *testing.T) (*postgres.Client, *Service) {
 	t.Helper()
-	dbURL := os.Getenv("TEST_DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("TEST_DATABASE_URL not set, skipping DB integration test")
-	}
+	dbURL := testutil.GetTestDatabaseURL()
 
 	ctx := context.Background()
 	client, err := postgres.NewClient(ctx, dbURL)
@@ -55,7 +43,7 @@ func setupTestService(t *testing.T) (*postgres.Client, *Service) {
 		client.Close()
 	})
 
-	requireIsolatedTestDatabase(t, client.Pool)
+	testutil.AssertTestDatabase(t, client.Pool)
 
 	repo := NewRepository(client.Pool)
 	cfg := &config.Config{App: config.AppConfig{PaymentStuckPendingMinutes: 30}}

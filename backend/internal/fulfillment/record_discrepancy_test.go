@@ -14,14 +14,12 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
 
 func discTestDBURL() string {
-	if v := os.Getenv("DATABASE_URL"); v != "" {
-		return v
-	}
-	return "postgres://zamk:zamk_password@127.0.0.1:5433/zamk?sslmode=disable"
+	return testutil.GetTestDatabaseURL()
 }
 
 // seedDiscFulfillment создаёт изолированный набор данных для тестов расхождения.
@@ -110,6 +108,8 @@ func TestRecordDiscrepancy_PersistsResultWithoutShipment(t *testing.T) {
 	db, err := postgres.NewClient(ctx, discTestDBURL())
 	require.NoError(t, err, "connect to test db")
 	defer db.Close()
+
+	testutil.AssertTestDatabase(t, db.Pool)
 
 	fulfillmentID, sellerID, staffID, barcode, err := seedDiscFulfillment(ctx, db)
 	require.NoError(t, err, "seed test data")

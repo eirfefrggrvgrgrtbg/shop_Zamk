@@ -13,22 +13,16 @@ import (
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 func setupTestDB(t *testing.T) *postgres.Client {
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_URL not set")
-	}
+	dsn := testutil.GetTestDatabaseURL()
 	ctx := context.Background()
 	client, err := postgres.NewClient(ctx, dsn)
 	require.NoError(t, err)
 
-	var currentDB string
-	err = client.Pool.QueryRow(ctx, "SELECT current_database()").Scan(&currentDB)
-	require.NoError(t, err)
-	require.Equal(t, "zamk_test", currentDB)
-	fmt.Println("CURRENT DATABASE = zamk_test")
+	testutil.AssertTestDatabase(t, client.Pool)
 
 	_, err = client.Pool.Exec(ctx, "TRUNCATE seller_ledger_entries CASCADE")
 	require.NoError(t, err)

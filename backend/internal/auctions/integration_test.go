@@ -13,6 +13,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/ratelimit"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 func TestAuctionIntegration(t *testing.T) {
@@ -21,12 +22,14 @@ func TestAuctionIntegration(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	dbURL := "postgres://postgres:postgres@localhost:5432/zamk?sslmode=disable"
+	dbURL := testutil.GetTestDatabaseURL()
 	pgClient, err := postgres.NewClient(ctx, dbURL)
 	if err != nil {
 		t.Fatalf("Failed to connect to DB: %v", err)
 	}
 	defer pgClient.Pool.Close()
+
+	testutil.AssertTestDatabase(t, pgClient.Pool)
 
 	// Initialize dependencies
 	redisClient, err := redis.NewClient(ctx, "localhost:6379", "", 0)
