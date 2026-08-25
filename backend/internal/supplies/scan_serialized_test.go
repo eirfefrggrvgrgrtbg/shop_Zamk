@@ -1692,3 +1692,95 @@ func TestAdditionalSerializedReceiving_InvalidCases(t *testing.T) {
 		t.Fatalf("expected ErrUnitNotInSupply for other supply unit, got %v", err)
 	}
 }
+
+func TestAdditionalReceivingSessionLookupVariantsAndFreshState(t *testing.T) {
+	tc := setupTestContext(t)
+	supply := createShippedSupplyWithUnits(t, tc, 5)
+
+	// Session A: 4 OK, 1 un-scanned
+	sessionA, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	if err != nil {
+		t.Fatalf("failed to start session A: %v", err)
+	}
+	units, err := tc.Repo.ListUnitsBySupplyID(tc.Ctx, supply.ID)
+	if err != nil || len(units) != 5 {
+		t.Fatalf("failed to get 5 units: %v", err)
+	}
+
+	for i := 0; i < 4; i++ {
+		_, err = tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, sessionA.ID, supplies.RecordSerializedScanRequest{
+			UnitCode:  units[i].UnitCode,
+			Condition: "ok",
+		})
+		if err != nil {
+			t.Fatalf("scan failed: %v", err)
+		}
+	}
+
+	err = tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, sessionA.ID, supplies.FinalizeReceivingRequest{})
+	if err != nil {
+		t.Fatalf("finalize session A failed: %v", err)
+	}
+
+	// Verify starting additional session by supply.SupplyNumber
+	sessionB, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, supply.SupplyNumber)
+	if err != nil {
+		t.Fatalf("failed to start additional session by supply number: %v", err)
+	}
+
+	if sessionB.ID == sessionA.ID {
+		t.Fatalf("expected distinct session ID for additional receiving, got same %v", sessionB.ID)
+	}
+	if sessionB.Status != "active" {
+		t.Fatalf("expected active status for additional session, got %s", sessionB.Status)
+	}
+
+	totalExpectedB := 0
+	totalScannedB := 0
+	for _, item := range sessionB.Items {
+		totalExpectedB += item.ExpectedQuantity
+		totalScannedB += item.ScannedQuantity
+	}
+	if totalExpectedB != 1 || totalScannedB != 0 {
+		t.Fatalf("expected plan 1 and scanned 0 for session B, got expected=%d, scanned=%d", totalExpectedB, totalScannedB)
+	}
+
+	// Verify recent scans for session B is empty
+	recentB, err := tc.Service.ListRecentSerializedScans(tc.Ctx, tc.AdminID, sessionB.ID, 10)
+	if err != nil {
+		t.Fatalf("failed to list recent scans for session B: %v", err)
+	}
+	if len(recentB) != 0 {
+		t.Fatalf("expected 0 recent scans for fresh session B, got %d", len(recentB))
+	}
+
+	// Verify resuming active additional session by UUID
+	sessionB_Resume, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, supply.ID.String())
+	if err != nil {
+		t.Fatalf("failed to resume additional session by supply UUID: %v", err)
+	}
+	if sessionB_Resume.ID != sessionB.ID {
+		t.Fatalf("expected resume to return same session B (%v), got %v", sessionB.ID, sessionB_Resume.ID)
+	}
+
+	// Scan 5th unit in Session B
+	_, err = tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, sessionB.ID, supplies.RecordSerializedScanRequest{
+		UnitCode:  units[4].UnitCode,
+		Condition: "ok",
+	})
+	if err != nil {
+		t.Fatalf("failed to scan 5th unit in session B: %v", err)
+	}
+
+	// Finalize Session B
+	err = tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, sessionB.ID, supplies.FinalizeReceivingRequest{})
+	if err != nil {
+		t.Fatalf("failed to finalize session B: %v", err)
+	}
+
+	// Verify supply is completed
+	finalSupply, err := tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
+	if err != nil || finalSupply.Status != "completed" {
+		t.Fatalf("expected completed supply after session B finalize, got status=%s, err=%v", finalSupply.Status, err)
+	}
+}

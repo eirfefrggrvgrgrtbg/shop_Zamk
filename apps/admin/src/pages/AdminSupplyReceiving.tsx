@@ -241,10 +241,15 @@ export function AdminSupplyReceiving() {
       setLoading(true);
       setError(null);
       setSuccessMessage(null);
+
+      const data = await startSupplyReceivingSession(lookupCode);
+
+      // Successfully obtained canonical session from backend
+      setSession(data);
       setIsFinalized(false);
       setLastScannedItem(null);
-      const data = await startSupplyReceivingSession(lookupCode);
-      setSession(data);
+      setRecentScans([]);
+
       if (data.receivingMode === 'serialized') {
         await loadRecentScans(data.id);
       }

@@ -24,7 +24,7 @@ func (r *Repository) GetSupplyByQRToken(ctx context.Context, token string) (*Sup
 		FROM seller_supplies s
 		LEFT JOIN sellers sel ON sel.id = s.seller_id
 		LEFT JOIN seller_supply_boxes b ON b.supply_id = s.id
-		WHERE s.qr_token = $1 OR UPPER(s.supply_number) = UPPER($1) OR b.qr_token = $1 OR UPPER(b.box_number) = UPPER($1)
+		WHERE s.qr_token = $1 OR UPPER(s.supply_number) = UPPER($1) OR b.qr_token = $1 OR UPPER(b.box_number) = UPPER($1) OR s.id::text = $1
 		LIMIT 1
 	`
 	var s Supply
