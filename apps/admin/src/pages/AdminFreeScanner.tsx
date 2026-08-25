@@ -60,6 +60,14 @@ export function AdminFreeScanner() {
       await finalizeSupplyReceivingSession(lastResult.receivingSessionId, {});
       setIsFinalized(true);
       playBeepSound('success');
+
+      // Refetch physical unit to display updated warehouse state
+      if (lastResult.unitCode) {
+        try {
+          const updated = await processFoundUnit({ unitCode: lastResult.unitCode });
+          setLastResult(updated);
+        } catch (_) {}
+      }
     } catch (err: any) {
       setError(err?.message || 'Не удалось завершить доприёмку');
       playBeepSound('error');
@@ -195,6 +203,13 @@ export function AdminFreeScanner() {
               </div>
             </div>
 
+            {isFinalized && (
+              <div className="mb-6 p-4 bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-lg flex items-center gap-2 font-medium">
+                <Check className="w-5 h-5 flex-shrink-0" />
+                Доприёмка завершена. Товар оприходован на склад.
+              </div>
+            )}
+
             {lastResult.unitStatus === 'expected' ? (
               <div className="space-y-4">
                 <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-5">
@@ -230,28 +245,21 @@ export function AdminFreeScanner() {
                   </div>
                 </div>
 
-                {isFinalized ? (
-                  <div className="p-4 bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-lg flex items-center gap-2 font-medium">
-                    <Check className="w-5 h-5" />
-                    Доприёмка завершена. Товар оприходован на склад.
-                  </div>
-                ) : (
-                  lastResult.sessionRemaining === 0 && (
-                    <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                        <span className="font-medium text-sm">Все найденные единицы этой доприёмки отсканированы.</span>
-                      </div>
-                      <button
-                        onClick={handleFinalize}
-                        disabled={finalizing}
-                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-medium text-sm rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                      >
-                        {finalizing && <RefreshCw className="w-4 h-4 animate-spin" />}
-                        Завершить доприёмку
-                      </button>
+                {!isFinalized && lastResult.sessionRemaining === 0 && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                      <span className="font-medium text-sm">Все найденные единицы этой доприёмки отсканированы.</span>
                     </div>
-                  )
+                    <button
+                      onClick={handleFinalize}
+                      disabled={finalizing}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-medium text-sm rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {finalizing && <RefreshCw className="w-4 h-4 animate-spin" />}
+                      Завершить доприёмку
+                    </button>
+                  </div>
                 )}
               </div>
             ) : (

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Truck,
   Box,
@@ -143,6 +144,7 @@ function getStatusBadge(status: string) {
 }
 
 export function AdminSupplyReceiving() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [dossier, setDossier] = useState<SellerSupply | null>(null);
   const [session, setSession] = useState<SupplyReceivingSession | null>(null);
   const [qrInput, setQrInput] = useState('');
@@ -175,6 +177,25 @@ export function AdminSupplyReceiving() {
     )
   );
   const isAdditionalSession = Boolean(session && isAdditionalDossier);
+
+  useEffect(() => {
+    const qrParam = searchParams.get('qr');
+    if (qrParam && !dossier && !session && !isFinalized) {
+      setLookupLoading(true);
+      lookupSupplyByCode(qrParam.trim())
+        .then((data) => {
+          setDossier(data);
+          playBeepSound('success');
+        })
+        .catch((err) => {
+          setError(mapReceivingError(err));
+          playBeepSound('error');
+        })
+        .finally(() => {
+          setLookupLoading(false);
+        });
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!session && !dossier && !isFinalized) {
@@ -271,6 +292,10 @@ export function AdminSupplyReceiving() {
     setError(null);
     setSuccessMessage(null);
     setQrInput('');
+    setBarcodeInput('');
+    setIsDamagedScan(false);
+    setSearchParams({});
+    setTimeout(() => qrRef.current?.focus(), 50);
   };
 
   const handleScanItem = async (e: React.FormEvent) => {
@@ -479,14 +504,14 @@ export function AdminSupplyReceiving() {
         )}
       </div>
 
-      {error && (
+      {error && !isFinalized && (
         <div className="mx-4 sm:mx-6 bg-rose-500/10 border border-rose-500/20 rounded-lg p-4 flex items-center">
           <AlertTriangle className="h-5 w-5 text-rose-500 mr-3 flex-shrink-0" />
           <span className="text-rose-200 text-sm font-medium">{error}</span>
         </div>
       )}
 
-      {successMessage && (
+      {successMessage && !isFinalized && (
         <div className="mx-4 sm:mx-6 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 flex items-center">
           <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
           <span className="text-emerald-200 text-sm font-medium">{successMessage}</span>
@@ -518,7 +543,7 @@ export function AdminSupplyReceiving() {
               </p>
               {dossier?.status === 'completed_with_discrepancies' && remainingExpected > 0 && (
                 <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg max-w-md mx-auto text-amber-300 text-sm font-medium">
-                  Осталось принять по поставке: <span className="font-bold text-white">{remainingExpected} шт.</span>
+                  Осталось принять: <span className="font-bold text-white">{remainingExpected} шт.</span>
                 </div>
               )}
             </div>
@@ -573,7 +598,7 @@ export function AdminSupplyReceiving() {
                 className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
               >
                 <RefreshCw className="w-5 h-5 mr-2" />
-                Вернуться к приёмке поставок
+                Назад к приёмке поставок
               </button>
             </div>
           </div>
