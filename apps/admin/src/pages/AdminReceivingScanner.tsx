@@ -24,27 +24,7 @@ interface ReceivingSessionState {
   }>;
 }
 
-function playBeepSound(type: 'success' | 'error' | 'click' = 'success') {
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    if (type === 'success') {
-      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.12);
-    } else if (type === 'error') {
-      osc.frequency.setValueAtTime(220, ctx.currentTime); // A3
-      gain.gain.setValueAtTime(0.25, ctx.currentTime);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.3);
-    }
-  } catch (_) {}
-}
+import { playBeepSound } from '../utils/audio';
 
 export function AdminReceivingScanner() {
   const navigate = useNavigate();

@@ -32,27 +32,7 @@ import type {
   SerializedScanResponse,
 } from '@zamk/api-client/src/types';
 
-function playBeepSound(type: 'success' | 'error' = 'success') {
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    if (type === 'success') {
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.12);
-    } else {
-      osc.frequency.setValueAtTime(220, ctx.currentTime);
-      gain.gain.setValueAtTime(0.25, ctx.currentTime);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.3);
-    }
-  } catch (_) {}
-}
+import { playBeepSound } from '../utils/audio';
 
 function mapReceivingError(err: any): string {
   const code = err?.error?.code || err?.code || '';
