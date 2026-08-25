@@ -370,7 +370,7 @@ func TestSerializedFinalize_WithDiscrepancies(t *testing.T) {
 func TestSerializedFinalize_AllOK_Completed(t *testing.T) {
 	tc := setupTestContext(t)
 
-	// Create supply with 3 units
+	// Create supply with 5 units
 	carrier := "СДЭК"
 	tracking := "121212123241"
 	req := supplies.CreateSupplyRequest{
@@ -378,7 +378,7 @@ func TestSerializedFinalize_AllOK_Completed(t *testing.T) {
 		CarrierName:    &carrier,
 		TrackingNumber: &tracking,
 		Items: []supplies.CreateSupplyItemRequest{
-			{VariantID: tc.Variant1, ExpectedQuantity: 3},
+			{VariantID: tc.Variant1, ExpectedQuantity: 5},
 		},
 	}
 	supply, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, req)
@@ -393,7 +393,14 @@ func TestSerializedFinalize_AllOK_Completed(t *testing.T) {
 		t.Fatalf("failed to start session: %v", err)
 	}
 
+	// Capture initial stock
+	var initialStock int
+	testDB.QueryRow(tc.Ctx, "SELECT COALESCE(total_stock, 0) FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&initialStock)
+
 	units, _ := tc.Repo.ListUnitsBySupplyID(tc.Ctx, supply.ID)
+	if len(units) != 5 {
+		t.Fatalf("expected 5 units, got %d", len(units))
+	}
 	for _, u := range units {
 		_, err = tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{
 			UnitCode:  u.UnitCode,
@@ -410,19 +417,59 @@ func TestSerializedFinalize_AllOK_Completed(t *testing.T) {
 		t.Fatalf("finalize failed: %v", err)
 	}
 
-	// All units -> warehouse
+	// All 5 units -> warehouse with receiving_session_id
 	for _, u := range units {
 		var status string
-		testDB.QueryRow(tc.Ctx, "SELECT status FROM inventory_units WHERE id = $1", u.ID).Scan(&status)
-		if status != "warehouse" {
-			t.Fatalf("expected unit %s status 'warehouse', got '%s'", u.UnitCode, status)
+		var recSessionID *uuid.UUID
+		testDB.QueryRow(tc.Ctx, "SELECT status, receiving_session_id FROM inventory_units WHERE id = $1", u.ID).Scan(&status, &recSessionID)
+		if status != "warehouse" || recSessionID == nil || *recSessionID != session.ID {
+			t.Fatalf("expected unit %s status 'warehouse' and session %s, got status='%s', session=%v", u.UnitCode, session.ID, status, recSessionID)
 		}
+	}
+
+	// Stock onHand: +5 exactly
+	var stockAfter int
+	testDB.QueryRow(tc.Ctx, "SELECT COALESCE(total_stock, 0) FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stockAfter)
+	if stockAfter != initialStock+5 {
+		t.Fatalf("expected stock +5 (%d), got %d", initialStock+5, stockAfter)
+	}
+
+	// Accepted quantity: 5 exactly, damaged: 0, missing: 0
+	var acceptedQty, damagedQty, missingQty int
+	err = testDB.QueryRow(tc.Ctx, "SELECT accepted_quantity, damaged_quantity, missing_quantity FROM seller_supply_items WHERE supply_id = $1", supply.ID).Scan(&acceptedQty, &damagedQty, &missingQty)
+	if err != nil || acceptedQty != 5 || damagedQty != 0 || missingQty != 0 {
+		t.Fatalf("expected accepted=5, damaged=0, missing=0; got accepted=%d, damaged=%d, missing=%d", acceptedQty, damagedQty, missingQty)
+	}
+
+	// Stock movement: 1 receipt movement of +5
+	var movCount, movQty int
+	err = testDB.QueryRow(tc.Ctx, "SELECT COUNT(*), COALESCE(SUM(quantity), 0) FROM stock_movements WHERE reference_type = 'supply' AND reference_id = $1", supply.ID).Scan(&movCount, &movQty)
+	if err != nil || movCount != 1 || movQty != 5 {
+		t.Fatalf("expected 1 stock movement with qty=5, got count=%d, qty=%d", movCount, movQty)
 	}
 
 	// Supply status -> completed (no discrepancies)
 	finalSupply, _ := tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
 	if finalSupply.Status != "completed" {
 		t.Fatalf("expected supply status 'completed', got '%s'", finalSupply.Status)
+	}
+
+	// Session status -> completed
+	finalSession, _ := tc.Repo.GetSessionByID(tc.Ctx, session.ID)
+	if finalSession.Status != "completed" {
+		t.Fatalf("expected session status 'completed', got '%s'", finalSession.Status)
+	}
+
+	// Double finalize: must fail idempotently without duplicate stock/movement mutations
+	err2 := tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, session.ID, supplies.FinalizeReceivingRequest{})
+	if err2 == nil || err2.Error() != "session is not active" {
+		t.Fatalf("second finalize should fail with 'session is not active', got: %v", err2)
+	}
+
+	var stockAfterSecondFinalize int
+	testDB.QueryRow(tc.Ctx, "SELECT COALESCE(total_stock, 0) FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stockAfterSecondFinalize)
+	if stockAfterSecondFinalize != initialStock+5 {
+		t.Fatalf("after second finalize: expected stock unchanged (%d), got %d", initialStock+5, stockAfterSecondFinalize)
 	}
 }
 

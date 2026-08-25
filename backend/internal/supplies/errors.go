@@ -27,7 +27,6 @@ var (
 	ErrScanNotFound                   = errors.New("scan_not_found")
 	ErrScanAlreadyVoided              = errors.New("scan_already_voided")
 	ErrScanNotInSession               = errors.New("scan_not_in_session")
-	ErrSerializedFinalizeNotSupported = errors.New("serialized_finalize_not_supported")
 	ErrSupplyNotReadyForReceiving     = errors.New("supply_not_ready_for_receiving")
 	ErrSupplyAlreadyCompleted         = errors.New("supply_already_completed")
 	ErrSupplyCancelled                = errors.New("supply_cancelled")

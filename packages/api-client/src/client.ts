@@ -227,9 +227,6 @@ const getSafeErrorMessage = (code?: string, fallback?: string): string => {
     case 'supply_not_serialized':
     case 'SUPPLY_NOT_SERIALIZED':
       return 'Эта поставка использует старую схему приёмки по ZMK.';
-    case 'serialized_finalize_not_supported':
-    case 'SERIALIZED_FINALIZE_NOT_SUPPORTED':
-      return 'Завершение приёмки будет доступно после проверки всех единиц.';
     case 'supply_not_shipped':
     case 'SUPPLY_NOT_SHIPPED':
       return 'Поставка еще не отправлена продавцом.';

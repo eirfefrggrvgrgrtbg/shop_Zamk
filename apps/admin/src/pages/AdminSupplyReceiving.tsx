@@ -78,8 +78,6 @@ function mapReceivingError(err: any): string {
       return 'Недопустимое состояние товара (допустимо: ok или damaged).';
     case 'supply_not_serialized':
       return 'Эта поставка использует старую схему приёмки по ZMK.';
-    case 'serialized_finalize_not_supported':
-      return 'Завершение приёмки будет доступно после проверки всех единиц.';
     default:
       if (message && !message.startsWith('HTTP Error')) {
         return message;
