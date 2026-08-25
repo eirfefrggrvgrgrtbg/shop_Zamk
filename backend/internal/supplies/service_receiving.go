@@ -120,7 +120,7 @@ func (s *Service) StartReceivingSession(ctx context.Context, staffID uuid.UUID, 
 	}
 
 	if isAdditional && len(session.Items) == 0 {
-		return nil, errors.New("no expected units remain")
+		return nil, ErrNoExpectedUnitsRemain
 	}
 
 	err = s.repo.StartReceivingSession(ctx, session, fullSupply.Items)

@@ -176,6 +176,17 @@ func (h *Handler) StartSession(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusBadRequest, "supply_cancelled", "Поставка отменена.")
 			return
 		}
+		if errors.Is(err, ErrNoExpectedUnitsRemain) {
+			h.logger.Warn("supply receiving lookup failed no expected units remain",
+				"event", "supply_receiving_lookup_failed",
+				"request_id", reqID,
+				"admin_id", userID.String(),
+				"error_code", "no_expected_units_remain",
+				"status", http.StatusBadRequest,
+			)
+			h.writeError(w, http.StatusBadRequest, "no_expected_units_remain", "Все ожидаемые товарные единицы по этой поставке уже приняты.")
+			return
+		}
 		if errors.Is(err, ErrSupplyUnitIdentityMismatch) {
 			h.logger.Error("supply receiving lookup failed identity mismatch",
 				"event", "supply_receiving_lookup_failed",

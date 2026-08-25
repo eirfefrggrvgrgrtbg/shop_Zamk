@@ -31,6 +31,7 @@ var (
 	ErrSupplyAlreadyCompleted         = errors.New("supply_already_completed")
 	ErrSupplyCancelled                = errors.New("supply_cancelled")
 	ErrInvalidReceivingCode           = errors.New("invalid_receiving_code")
+	ErrNoExpectedUnitsRemain          = errors.New("no_expected_units_remain")
 )
 
 var ErrSupplyNotArrived = errors.New("supply_not_arrived")

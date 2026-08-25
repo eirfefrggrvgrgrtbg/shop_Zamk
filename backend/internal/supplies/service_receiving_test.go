@@ -11,6 +11,10 @@ import (
 )
 
 func createShippedSupply(t *testing.T, tc *TestContext) *supplies.Supply {
+	return createShippedSupplyWithUnits(t, tc, 10)
+}
+
+func createShippedSupplyWithUnits(t *testing.T, tc *TestContext, qty int) *supplies.Supply {
 	carrier := "СДЭК"
 	tracking := "121212123241"
 	req := supplies.CreateSupplyRequest{
@@ -18,7 +22,7 @@ func createShippedSupply(t *testing.T, tc *TestContext) *supplies.Supply {
 		CarrierName:    &carrier,
 		TrackingNumber: &tracking,
 		Items: []supplies.CreateSupplyItemRequest{
-			{VariantID: tc.Variant1, ExpectedQuantity: 10},
+			{VariantID: tc.Variant1, ExpectedQuantity: qty},
 		},
 	}
 	supply, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, req)
