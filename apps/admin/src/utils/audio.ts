@@ -69,26 +69,3 @@ export function playBeepSound(type: 'success' | 'error' | 'click' = 'success'): 
 
 // Canonical alias
 export const playScannerSound = playBeepSound;
-
-/**
- * Directly plays test sound from user gesture and returns status / safe diagnostic reason.
- */
-export async function playTestSound(): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const audio = getSuccessAudio();
-    if (!audio) {
-      return { ok: false, error: 'HTMLAudioElement недоступен в этом браузере' };
-    }
-
-    audio.currentTime = 0;
-    const playPromise = audio.play();
-    if (playPromise !== undefined) {
-      await playPromise;
-    }
-    return { ok: true };
-  } catch (err: any) {
-    const safeReason = err?.name || err?.message || 'Неизвестная ошибка воспроизведения';
-    console.error('[ScannerAudio] Test sound playback failed:', err);
-    return { ok: false, error: `Не удалось воспроизвести звук: ${safeReason}` };
-  }
-}
