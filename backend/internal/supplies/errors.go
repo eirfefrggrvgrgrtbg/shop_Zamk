@@ -32,6 +32,8 @@ var (
 	ErrSupplyCancelled                = errors.New("supply_cancelled")
 	ErrInvalidReceivingCode           = errors.New("invalid_receiving_code")
 	ErrNoExpectedUnitsRemain          = errors.New("no_expected_units_remain")
+	ErrInvalidUnitCode                = errors.New("invalid_unit_code")
+	ErrReceivingSessionAlreadyActive  = errors.New("receiving_session_already_active")
 )
 
 var ErrSupplyNotArrived = errors.New("supply_not_arrived")

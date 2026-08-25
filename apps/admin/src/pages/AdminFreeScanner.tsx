@@ -1,16 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { PackageSearch, ArrowRight, XCircle, CheckCircle2, Box, Store, RefreshCw } from 'lucide-react';
-import { resolvePhysicalUnit, ResolvedPhysicalUnit } from '@zamk/api-client/src/admin';
-import { useNavigate } from 'react-router-dom';
+import { PackageSearch, ArrowRight, XCircle, CheckCircle2, Box, Store, RefreshCw, Check, AlertTriangle } from 'lucide-react';
+import { processFoundUnit, ProcessFoundUnitResponse, finalizeSupplyReceivingSession } from '@zamk/api-client/src/admin';
 import { playBeepSound } from '../utils/audio';
 
 export function AdminFreeScanner() {
   const [unitCode, setUnitCode] = useState('');
+  const [isDamaged, setIsDamaged] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const [isFinalized, setIsFinalized] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resolvedUnit, setResolvedUnit] = useState<ResolvedPhysicalUnit | null>(null);
+  const [lastResult, setLastResult] = useState<ProcessFoundUnitResponse | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -23,39 +24,62 @@ export function AdminFreeScanner() {
 
     setLoading(true);
     setError(null);
-    setResolvedUnit(null);
+    setIsFinalized(false);
 
     try {
-      const data = await resolvePhysicalUnit(code);
-      setResolvedUnit(data);
+      const data = await processFoundUnit({
+        unitCode: code,
+        condition: isDamaged ? 'damaged' : 'ok',
+      });
+      setLastResult(data);
+      setIsDamaged(false);
       playBeepSound('success');
     } catch (err: any) {
       if (err?.code === 'unit_not_found' || err?.code === 'UNIT_NOT_FOUND' || err?.status === 404) {
         setError('Физическая единица с таким кодом не найдена.');
+      } else if (err?.code === 'unit_already_scanned' || err?.code === 'UNIT_ALREADY_SCANNED') {
+        setError('Эта единица уже отсканирована в текущей сессии.');
       } else {
-        setError(err?.message || 'Ошибка при поиске');
+        setError(err?.message || 'Ошибка при обработке');
       }
       playBeepSound('error');
     } finally {
       setLoading(false);
       setUnitCode('');
-      inputRef.current?.focus();
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  };
+
+  const handleFinalize = async () => {
+    if (!lastResult?.receivingSessionId || finalizing) return;
+
+    setFinalizing(true);
+    setError(null);
+
+    try {
+      await finalizeSupplyReceivingSession(lastResult.receivingSessionId, {});
+      setIsFinalized(true);
+      playBeepSound('success');
+    } catch (err: any) {
+      setError(err?.message || 'Не удалось завершить доприёмку');
+      playBeepSound('error');
+    } finally {
+      setFinalizing(false);
+      setTimeout(() => inputRef.current?.focus(), 50);
     }
   };
 
   const handleReset = () => {
-    setResolvedUnit(null);
+    setLastResult(null);
     setError(null);
+    setIsFinalized(false);
     setUnitCode('');
+    setIsDamaged(false);
     inputRef.current?.focus();
   };
 
   const getStatusDisplay = (action: string, status: string) => {
     switch (action) {
-      case 'additional_receiving':
-        return { label: 'Найдена недостающая единица', desc: 'Можно принять через доприёмку.', type: 'info', icon: <PackageSearch className="w-5 h-5" /> };
-      case 'continue_receiving':
-        return { label: 'Товар в процессе приёмки', desc: 'Приёмка поставки еще не завершена.', type: 'info', icon: <PackageSearch className="w-5 h-5" /> };
       case 'already_in_warehouse':
         return { label: 'Товар на складе', desc: 'Этот товар уже находится на складе.', type: 'success', icon: <CheckCircle2 className="w-5 h-5" /> };
       case 'already_damaged':
@@ -83,60 +107,78 @@ export function AdminFreeScanner() {
         </div>
         
         <div className="p-6">
-          <form onSubmit={handleScan} className="flex gap-3">
-            <div className="relative flex-1">
-              <input
-                ref={inputRef}
-                type="text"
-                value={unitCode}
-                onChange={(e) => setUnitCode(e.target.value.toUpperCase())}
-                placeholder="Отсканируйте ZMU физической единицы"
-                className="w-full pl-4 pr-12 py-4 text-xl font-mono uppercase bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
-                disabled={loading}
-                autoFocus
-              />
-              {loading && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                  <RefreshCw className="w-6 h-6 text-slate-400 animate-spin" />
-                </div>
-              )}
+          <form onSubmit={handleScan} className="space-y-4">
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={unitCode}
+                  onChange={(e) => setUnitCode(e.target.value.toUpperCase())}
+                  placeholder="Отсканируйте ZMU физической единицы"
+                  className="w-full pl-4 pr-12 py-4 text-xl font-mono uppercase bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
+                  disabled={loading || finalizing}
+                  autoFocus
+                />
+                {loading && (
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    <RefreshCw className="w-6 h-6 text-slate-400 animate-spin" />
+                  </div>
+                )}
+              </div>
+              <button
+                type="submit"
+                disabled={!unitCode.trim() || loading || finalizing}
+                className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg disabled:opacity-50 transition-colors"
+              >
+                Принять
+              </button>
             </div>
-            <button
-              type="submit"
-              disabled={!unitCode.trim() || loading}
-              className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg disabled:opacity-50 transition-colors"
-            >
-              Найти
-            </button>
+
+            <div className="flex items-center gap-2">
+              <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isDamaged}
+                  onChange={(e) => setIsDamaged(e.target.checked)}
+                  className="w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500"
+                  disabled={loading || finalizing}
+                />
+                <span className={isDamaged ? 'text-red-700 font-semibold' : 'text-slate-600'}>
+                  Найденный товар — брак
+                </span>
+              </label>
+            </div>
           </form>
+
           {error && (
             <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-lg flex items-center gap-2">
-              <XCircle className="w-5 h-5" />
-              {error}
+              <XCircle className="w-5 h-5 flex-shrink-0" />
+              <span>{error}</span>
             </div>
           )}
         </div>
       </div>
 
-      {resolvedUnit && (
+      {lastResult && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="p-6">
             <div className="flex justify-between items-start mb-6">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900 mb-1">{resolvedUnit.unitCode}</h2>
-                <div className="text-slate-600 font-medium">{resolvedUnit.product.title}</div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-1">{lastResult.unitCode}</h2>
+                <div className="text-slate-600 font-medium">{lastResult.productTitle || 'Товарная единица'}</div>
               </div>
               <button onClick={handleReset} className="text-sm text-slate-500 hover:text-slate-700">Очистить</button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Детали товара</h3>
                 <dl className="space-y-2 text-sm">
-                  <div className="flex justify-between"><dt className="text-slate-500">SKU продавца</dt><dd className="font-mono text-slate-900">{resolvedUnit.variant.sellerSku || '—'}</dd></div>
-                  <div className="flex justify-between"><dt className="text-slate-500">Штрихкод</dt><dd className="font-mono text-slate-900">{resolvedUnit.variant.barcode || '—'}</dd></div>
-                  {(resolvedUnit.variant.color || resolvedUnit.variant.size) && (
-                    <div className="flex justify-between"><dt className="text-slate-500">Вариант</dt><dd className="text-slate-900">{[resolvedUnit.variant.color, resolvedUnit.variant.size].filter(Boolean).join(' / ')}</dd></div>
+                  <div className="flex justify-between"><dt className="text-slate-500">SKU продавца</dt><dd className="font-mono text-slate-900">{lastResult.sellerSku || '—'}</dd></div>
+                  <div className="flex justify-between"><dt className="text-slate-500">Штрихкод</dt><dd className="font-mono text-slate-900">{lastResult.variantBarcode || '—'}</dd></div>
+                  {(lastResult.colorName || lastResult.sizeName) && (
+                    <div className="flex justify-between"><dt className="text-slate-500">Вариант</dt><dd className="text-slate-900">{[lastResult.colorName, lastResult.sizeName].filter(Boolean).join(' / ')}</dd></div>
                   )}
                 </dl>
               </div>
@@ -144,48 +186,96 @@ export function AdminFreeScanner() {
               <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Происхождение</h3>
                 <dl className="space-y-2 text-sm">
-                  <div className="flex justify-between items-center"><dt className="text-slate-500">Поставка</dt><dd className="font-medium text-slate-900 flex items-center gap-1.5"><Box className="w-4 h-4 text-slate-400" /> {resolvedUnit.origin.supplyNumber}</dd></div>
-                  <div className="flex justify-between items-center"><dt className="text-slate-500">Продавец</dt><dd className="font-medium text-slate-900 flex items-center gap-1.5"><Store className="w-4 h-4 text-slate-400" /> {resolvedUnit.origin.sellerName || '—'}</dd></div>
-                  {resolvedUnit.origin.boxNumber && (
-                    <div className="flex justify-between"><dt className="text-slate-500">Коробка</dt><dd className="text-slate-900">{resolvedUnit.origin.boxNumber}</dd></div>
+                  <div className="flex justify-between items-center"><dt className="text-slate-500">Поставка</dt><dd className="font-medium text-slate-900 flex items-center gap-1.5"><Box className="w-4 h-4 text-slate-400" /> {lastResult.supplyNumber}</dd></div>
+                  <div className="flex justify-between items-center"><dt className="text-slate-500">Продавец</dt><dd className="font-medium text-slate-900 flex items-center gap-1.5"><Store className="w-4 h-4 text-slate-400" /> {lastResult.sellerName || '—'}</dd></div>
+                  {lastResult.boxNumber && (
+                    <div className="flex justify-between"><dt className="text-slate-500">Коробка</dt><dd className="text-slate-900">{lastResult.boxNumber}</dd></div>
                   )}
                 </dl>
               </div>
             </div>
 
-            {(() => {
-              const display = getStatusDisplay(resolvedUnit.recommendedAction, resolvedUnit.unitStatus);
-              const isActionable = resolvedUnit.recommendedAction === 'additional_receiving' || resolvedUnit.recommendedAction === 'continue_receiving';
-              
-              let colors = 'bg-slate-100 text-slate-800 border-slate-200';
-              if (display.type === 'success') colors = 'bg-emerald-50 text-emerald-800 border-emerald-200';
-              if (display.type === 'error') colors = 'bg-red-50 text-red-800 border-red-200';
-              if (display.type === 'info') colors = 'bg-amber-50 text-amber-800 border-amber-200';
-
-              return (
-                <div className={`rounded-xl border p-5 ${colors}`}>
+            {lastResult.unitStatus === 'expected' ? (
+              <div className="space-y-4">
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-5">
                   <div className="flex items-start gap-4">
-                    <div className={`mt-0.5 ${display.type === 'info' ? 'text-amber-600' : ''}`}>{display.icon}</div>
+                    <div className="mt-0.5 text-emerald-600"><CheckCircle2 className="w-6 h-6" /></div>
                     <div className="flex-1">
-                      <h4 className="font-bold text-lg mb-1">{display.label}</h4>
-                      {display.desc && <p className="opacity-90">{display.desc}</p>}
-                      <p className="opacity-75 text-sm mt-1 font-medium">Поставка: {resolvedUnit.origin.supplyNumber}</p>
-                      
-                      {isActionable && (
-                        <div className="mt-4 pt-4 border-t border-black/10">
-                          <button
-                            onClick={() => navigate(`/supplies/receiving?qr=${encodeURIComponent(resolvedUnit.origin.supplyNumber)}`)}
-                            className="bg-white/90 hover:bg-white text-slate-900 font-semibold py-2 px-4 rounded-lg shadow-sm transition-colors text-sm"
-                          >
-                            Перейти к приёмке {resolvedUnit.origin.supplyNumber}
-                          </button>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-lg">Единица добавлена в доприёмку</h4>
+                        {lastResult.condition === 'damaged' && (
+                          <span className="px-2 py-0.5 text-xs font-semibold bg-red-100 text-red-800 rounded">Брак</span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-3 border-t border-emerald-200/60 text-sm">
+                        <div>
+                          <div className="text-emerald-700 text-xs uppercase font-semibold">Поставка</div>
+                          <div className="font-mono font-medium text-emerald-950 mt-0.5">{lastResult.supplyNumber}</div>
                         </div>
-                      )}
+                        <div>
+                          <div className="text-emerald-700 text-xs uppercase font-semibold">Принято в доприёмке</div>
+                          <div className="font-semibold text-emerald-950 mt-0.5">{lastResult.sessionScanned} / {lastResult.sessionExpected}</div>
+                        </div>
+                        <div>
+                          <div className="text-emerald-700 text-xs uppercase font-semibold">Осталось</div>
+                          <div className="font-semibold text-emerald-950 mt-0.5">{lastResult.sessionRemaining}</div>
+                        </div>
+                        <div>
+                          <div className="text-emerald-700 text-xs uppercase font-semibold">Состояние</div>
+                          <div className="font-medium text-emerald-950 mt-0.5">{lastResult.condition === 'damaged' ? 'Брак' : 'Годен'}</div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              );
-            })()}
+
+                {isFinalized ? (
+                  <div className="p-4 bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-lg flex items-center gap-2 font-medium">
+                    <Check className="w-5 h-5" />
+                    Доприёмка завершена. Товар оприходован на склад.
+                  </div>
+                ) : (
+                  lastResult.sessionRemaining === 0 && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                        <span className="font-medium text-sm">Все найденные единицы этой доприёмки отсканированы.</span>
+                      </div>
+                      <button
+                        onClick={handleFinalize}
+                        disabled={finalizing}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-medium text-sm rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {finalizing && <RefreshCw className="w-4 h-4 animate-spin" />}
+                        Завершить доприёмку
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
+            ) : (
+              (() => {
+                const display = getStatusDisplay(lastResult.recommendedNextAction, lastResult.unitStatus);
+                let colors = 'bg-slate-100 text-slate-800 border-slate-200';
+                if (display.type === 'success') colors = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                if (display.type === 'error') colors = 'bg-red-50 text-red-800 border-red-200';
+                if (display.type === 'info') colors = 'bg-amber-50 text-amber-800 border-amber-200';
+
+                return (
+                  <div className={`rounded-xl border p-5 ${colors}`}>
+                    <div className="flex items-start gap-4">
+                      <div className="mt-0.5">{display.icon}</div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-lg mb-1">{display.label}</h4>
+                        {display.desc && <p className="opacity-90 text-sm">{display.desc}</p>}
+                        <p className="opacity-75 text-xs mt-2 font-medium">Поставка: {lastResult.supplyNumber}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
+            )}
           </div>
         </div>
       )}

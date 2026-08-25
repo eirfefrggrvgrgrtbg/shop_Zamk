@@ -560,3 +560,59 @@ func (h *Handler) ResolvePhysicalUnit(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resolved)
 }
+
+func (h *Handler) ProcessFoundUnit(w http.ResponseWriter, r *http.Request) {
+	role, okRole := r.Context().Value("role").(string)
+	if !okRole || (role != "admin" && role != "super_admin") {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+
+	adminID, okUser := r.Context().Value("userID").(uuid.UUID)
+	if !okUser {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+
+	var req ProcessFoundUnitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	req.UnitCode = strings.TrimSpace(req.UnitCode)
+	if req.UnitCode == "" {
+		h.writeError(w, http.StatusBadRequest, "invalid_unit_code", "Введите штрихкод ZMU.")
+		return
+	}
+
+	resp, err := h.svc.ProcessFoundUnit(r.Context(), adminID, req)
+	if err != nil {
+		if errors.Is(err, ErrUnitNotFound) {
+			h.writeError(w, http.StatusNotFound, "unit_not_found", "Физическая единица с таким кодом не найдена.")
+			return
+		}
+		if errors.Is(err, ErrUnitAlreadyScanned) {
+			h.writeError(w, http.StatusBadRequest, "unit_already_scanned", "Эта единица уже отсканирована.")
+			return
+		}
+		if errors.Is(err, ErrUnitAlreadyReceived) {
+			h.writeError(w, http.StatusBadRequest, "unit_already_received", "Эта единица уже была принята.")
+			return
+		}
+		if errors.Is(err, ErrInvalidReceivingCondition) {
+			h.writeError(w, http.StatusBadRequest, "invalid_receiving_condition", "Недопустимое состояние товара.")
+			return
+		}
+		if errors.Is(err, ErrReceivingSessionFinalized) {
+			h.writeError(w, http.StatusBadRequest, "receiving_session_finalized", "Сессия приёмки уже завершена.")
+			return
+		}
+		h.logger.Error("failed to process found unit", "error", err.Error(), "unitCode", req.UnitCode)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}

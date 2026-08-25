@@ -435,6 +435,7 @@ func New(
 			r.Post("/{supplyId}/arrive", suppliesHandler.MarkArrived)
 			r.Get("/lookup", suppliesHandler.LookupSupply)
 			r.Get("/free-scan", suppliesHandler.ResolvePhysicalUnit)
+			r.Post("/free-scan/process", suppliesHandler.ProcessFoundUnit)
 			r.Post("/sessions", suppliesHandler.StartSession)
 			r.Post("/sessions/{sessionId}/scan", suppliesHandler.RecordScan)
 			r.Post("/sessions/{sessionId}/scan-unit", suppliesHandler.RecordSerializedScan)

@@ -52,6 +52,10 @@ func (r *Repository) StartReceivingSession(ctx context.Context, session *Receivi
 		session.ID, session.SupplyID, session.Status, session.Version, session.StartedAt, session.StartedByStaffID, session.CreatedAt, session.UpdatedAt,
 	)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.ConstraintName == "idx_active_supply_receiving_session" {
+			return ErrReceivingSessionAlreadyActive
+		}
 		return fmt.Errorf("failed to insert session: %w", err)
 	}
 

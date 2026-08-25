@@ -125,6 +125,12 @@ func (s *Service) StartReceivingSession(ctx context.Context, staffID uuid.UUID, 
 
 	err = s.repo.StartReceivingSession(ctx, session, fullSupply.Items)
 	if err != nil {
+		if errors.Is(err, ErrReceivingSessionAlreadyActive) {
+			activeSess, getErr := s.repo.GetActiveSession(ctx, supply.ID)
+			if getErr == nil {
+				return activeSess, nil
+			}
+		}
 		return nil, err
 	}
 
@@ -503,4 +509,103 @@ func (s *Service) ResolvePhysicalUnit(ctx context.Context, unitCode string) (*Re
 	}
 
 	return unit, nil
+}
+
+func (s *Service) ProcessFoundUnit(ctx context.Context, staffID uuid.UUID, req ProcessFoundUnitRequest) (*ProcessFoundUnitResponse, error) {
+	req.UnitCode = strings.TrimSpace(req.UnitCode)
+	if req.UnitCode == "" {
+		return nil, ErrInvalidUnitCode
+	}
+
+	if req.Condition == "" {
+		req.Condition = "ok"
+	}
+	if req.Condition != "ok" && req.Condition != "damaged" {
+		return nil, ErrInvalidReceivingCondition
+	}
+
+	// 1. Resolve unit
+	unit, err := s.ResolvePhysicalUnit(ctx, req.UnitCode)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Handle non-expected units without mutating or starting a session
+	if unit.UnitStatus != "expected" {
+		return &ProcessFoundUnitResponse{
+			UnitCode:              unit.UnitCode,
+			InventoryUnitID:       unit.InventoryUnitID,
+			SupplyID:              unit.Origin.SupplyID,
+			SupplyNumber:          unit.Origin.SupplyNumber,
+			UnitStatus:            unit.UnitStatus,
+			RecommendedNextAction: unit.RecommendedAction,
+			ProductTitle:          unit.Product.Title,
+			ColorName:             unit.Variant.Color,
+			SizeName:              unit.Variant.Size,
+			SellerSKU:             unit.Variant.SellerSKU,
+			VariantBarcode:        unit.Variant.Barcode,
+			SellerName:            unit.Origin.SellerName,
+			BoxNumber:             unit.Origin.BoxNumber,
+		}, nil
+	}
+
+	// 3. Expected unit: start or resume receiving session for the origin supply
+	var sessionID uuid.UUID
+	if unit.ReceivingState.ActiveReceivingSessionID != nil {
+		sessionID = *unit.ReceivingState.ActiveReceivingSessionID
+	} else {
+		// Start session using supply number or QR token
+		sess, err := s.StartReceivingSession(ctx, staffID, unit.Origin.SupplyNumber)
+		if err != nil {
+			if errors.Is(err, ErrReceivingSessionAlreadyActive) {
+				activeSess, getErr := s.repo.GetActiveSession(ctx, unit.Origin.SupplyID)
+				if getErr != nil {
+					return nil, err
+				}
+				sessionID = activeSess.ID
+			} else {
+				return nil, err
+			}
+		} else {
+			sessionID = sess.ID
+		}
+	}
+
+	// 4. Record serialized scan for THIS SAME ZMU into the active session
+	scanResp, err := s.RecordSerializedScan(ctx, staffID, sessionID, RecordSerializedScanRequest{
+		UnitCode:  req.UnitCode,
+		Condition: req.Condition,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 5. Determine recommendedNextAction
+	nextAction := "continue_scanning"
+	if scanResp.SessionRemaining == 0 {
+		nextAction = "can_finalize"
+	}
+
+	return &ProcessFoundUnitResponse{
+		UnitCode:              unit.UnitCode,
+		InventoryUnitID:       unit.InventoryUnitID,
+		SupplyID:              unit.Origin.SupplyID,
+		SupplyNumber:          unit.Origin.SupplyNumber,
+		ReceivingSessionID:    &sessionID,
+		Condition:             req.Condition,
+		SessionExpected:       scanResp.SessionExpected,
+		SessionScanned:        scanResp.SessionScanned,
+		SessionOk:             scanResp.SessionOk,
+		SessionDamaged:        scanResp.SessionDamaged,
+		SessionRemaining:      scanResp.SessionRemaining,
+		UnitStatus:            "expected",
+		RecommendedNextAction: nextAction,
+		ProductTitle:          scanResp.ProductTitle,
+		ColorName:             scanResp.ColorName,
+		SizeName:              scanResp.SizeName,
+		SellerSKU:             scanResp.SellerSKU,
+		VariantBarcode:        scanResp.VariantBarcode,
+		SellerName:            unit.Origin.SellerName,
+		BoxNumber:             unit.Origin.BoxNumber,
+	}, nil
 }

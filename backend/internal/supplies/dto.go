@@ -150,3 +150,31 @@ type ResolvedPhysicalUnit struct {
 		ActiveReceivingSessionID *uuid.UUID `json:"activeReceivingSessionId,omitempty"`
 	} `json:"receivingState"`
 }
+
+type ProcessFoundUnitRequest struct {
+	UnitCode  string `json:"unitCode"`
+	Condition string `json:"condition"` // "ok" | "damaged"
+}
+
+type ProcessFoundUnitResponse struct {
+	UnitCode              string     `json:"unitCode"`
+	InventoryUnitID       uuid.UUID  `json:"inventoryUnitId"`
+	SupplyID              uuid.UUID  `json:"supplyId"`
+	SupplyNumber          string     `json:"supplyNumber"`
+	ReceivingSessionID    *uuid.UUID `json:"receivingSessionId,omitempty"`
+	Condition             string     `json:"condition,omitempty"`
+	SessionExpected       int        `json:"sessionExpected"`
+	SessionScanned        int        `json:"sessionScanned"`
+	SessionOk             int        `json:"sessionOk"`
+	SessionDamaged        int        `json:"sessionDamaged"`
+	SessionRemaining      int        `json:"sessionRemaining"`
+	UnitStatus            string     `json:"unitStatus"`
+	RecommendedNextAction string     `json:"recommendedNextAction"`
+	ProductTitle          string     `json:"productTitle,omitempty"`
+	ColorName             *string    `json:"colorName,omitempty"`
+	SizeName              *string    `json:"sizeName,omitempty"`
+	SellerSKU             *string    `json:"sellerSku,omitempty"`
+	VariantBarcode        *string    `json:"variantBarcode,omitempty"`
+	SellerName            *string    `json:"sellerName,omitempty"`
+	BoxNumber             *string    `json:"boxNumber,omitempty"`
+}

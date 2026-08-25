@@ -788,3 +788,35 @@ export interface ResolvedPhysicalUnit {
 export const resolvePhysicalUnit = (unitCode: string): Promise<ResolvedPhysicalUnit> => {
   return request<ResolvedPhysicalUnit>('GET', `/admin/receiving/free-scan?unitCode=${encodeURIComponent(unitCode)}`);
 };
+
+export interface ProcessFoundUnitRequest {
+  unitCode: string;
+  condition?: 'ok' | 'damaged';
+}
+
+export interface ProcessFoundUnitResponse {
+  unitCode: string;
+  inventoryUnitId: string;
+  supplyId: string;
+  supplyNumber: string;
+  receivingSessionId?: string;
+  condition?: string;
+  sessionExpected: number;
+  sessionScanned: number;
+  sessionOk: number;
+  sessionDamaged: number;
+  sessionRemaining: number;
+  unitStatus: string;
+  recommendedNextAction: string;
+  productTitle?: string;
+  colorName?: string;
+  sizeName?: string;
+  sellerSku?: string;
+  variantBarcode?: string;
+  sellerName?: string;
+  boxNumber?: string;
+}
+
+export const processFoundUnit = (data: ProcessFoundUnitRequest): Promise<ProcessFoundUnitResponse> => {
+  return request<ProcessFoundUnitResponse>('POST', '/admin/receiving/free-scan/process', { body: data });
+};
