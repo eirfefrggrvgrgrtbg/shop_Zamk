@@ -205,7 +205,13 @@ export const mapAdminProduct = (product: AdminProduct | ModerationProduct): Admi
   const flexibleProduct = product as unknown as Record<string, unknown>;
   const gallery = mapGallery(product);
 
-  const priceCents = typeof flexibleProduct.priceCents === 'number' ? flexibleProduct.priceCents : product.priceCents;
+  let priceCents = typeof flexibleProduct.priceCents === 'number' ? flexibleProduct.priceCents : product.priceCents;
+  if ((!priceCents || priceCents <= 0) && product.variants && Array.isArray(product.variants)) {
+    const varPrices = product.variants.map((v: any) => v.priceCents || 0).filter((c: number) => c > 0);
+    if (varPrices.length > 0) {
+      priceCents = Math.min(...varPrices);
+    }
+  }
   const oldPriceCents = typeof flexibleProduct.oldPriceCents === 'number' ? flexibleProduct.oldPriceCents : product.oldPriceCents;
   const mainImageUrl = typeof flexibleProduct.mainImageUrl === 'string' ? flexibleProduct.mainImageUrl : product.mainImageUrl;
 

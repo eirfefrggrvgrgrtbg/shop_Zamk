@@ -182,6 +182,20 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 		variants = append(variants, v)
 	}
 
+	if p.PriceCents <= 0 && len(variants) > 0 {
+		minPrice := int64(0)
+		for _, v := range variants {
+			if v.PriceCents != nil && *v.PriceCents > 0 {
+				if minPrice == 0 || *v.PriceCents < minPrice {
+					minPrice = *v.PriceCents
+				}
+			}
+		}
+		if minPrice > 0 {
+			p.PriceCents = minPrice
+		}
+	}
+
 	var images []ProductImage
 	for i, ir := range req.Images {
 		sortOrder := i
@@ -453,6 +467,20 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				skusToCheck = append(skusToCheck, strings.ToLower(strings.TrimSpace(*v.SellerSKU)))
 			}
 			variants = append(variants, v)
+		}
+
+		if (req.PriceCents == nil || *req.PriceCents <= 0) && len(variants) > 0 {
+			minPrice := int64(0)
+			for _, v := range variants {
+				if v.PriceCents != nil && *v.PriceCents > 0 {
+					if minPrice == 0 || *v.PriceCents < minPrice {
+						minPrice = *v.PriceCents
+					}
+				}
+			}
+			if minPrice > 0 {
+				p.PriceCents = minPrice
+			}
 		}
 	}
 
@@ -2073,6 +2101,22 @@ func (s *Service) UpdateProductPrices(ctx context.Context, currentUserID, produc
 		err := s.repo.UpdateVariantPrice(ctx, vUpdate.ID, vUpdate.PriceCents)
 		if err != nil {
 			return err
+		}
+	}
+
+	// Sync product-level price_cents to minimum active variant price
+	updatedVariants, err := s.repo.GetProductVariants(ctx, productID)
+	if err == nil && len(updatedVariants) > 0 {
+		minPrice := int64(0)
+		for _, v := range updatedVariants {
+			if v.PriceCents != nil && *v.PriceCents > 0 {
+				if minPrice == 0 || *v.PriceCents < minPrice {
+					minPrice = *v.PriceCents
+				}
+			}
+		}
+		if minPrice > 0 {
+			_ = s.repo.UpdateProductPriceCents(ctx, productID, minPrice)
 		}
 	}
 

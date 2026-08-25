@@ -186,6 +186,19 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 	if err != nil {
 		return nil, err
 	}
+	if p.PriceCents <= 0 && len(p.Variants) > 0 {
+		minPrice := int64(0)
+		for _, v := range p.Variants {
+			if v.PriceCents != nil && *v.PriceCents > 0 {
+				if minPrice == 0 || *v.PriceCents < minPrice {
+					minPrice = *v.PriceCents
+				}
+			}
+		}
+		if minPrice > 0 {
+			p.PriceCents = minPrice
+		}
+	}
 
 	p.Attributes, err = r.GetProductAttributes(ctx, p.ID)
 	if err != nil {
@@ -1094,23 +1107,21 @@ func (r *Repository) listProductsQuery(ctx context.Context, query string, args .
 		variants, _ := r.GetProductVariants(ctx, products[i].ID)
 		if variants != nil {
 			products[i].Variants = variants
-
-			inStock := false
-			for _, v := range variants {
-				if v.InStock != nil && *v.InStock {
-					inStock = true
-					break
-				}
-			}
-			products[i].InStock = &inStock
 		}
 		images, _ := r.GetProductImages(ctx, products[i].ID)
 		if images != nil {
 			products[i].Images = images
 		}
+		PopulateProductAggregates(&products[i])
 	}
 
 	return products, nil
+}
+
+func (r *Repository) UpdateProductPriceCents(ctx context.Context, productID uuid.UUID, priceCents int64) error {
+	query := `UPDATE products SET price_cents = $1, updated_at = now() WHERE id = $2`
+	_, err := r.db.Exec(ctx, query, priceCents, productID)
+	return err
 }
 
 func (r *Repository) GetProductImageByID(ctx context.Context, imageID uuid.UUID) (ProductImage, error) {

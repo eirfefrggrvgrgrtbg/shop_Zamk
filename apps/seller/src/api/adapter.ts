@@ -22,7 +22,13 @@ export function adaptProductList(apiProducts: any[]): SellerProduct[] {
       sizes = [{ size: 'Единый', stock: p.inStock ? 10 : 0 }];
     }
 
-    const price = (p.priceCents || 0) / 100;
+    let price = (p.priceCents || 0) / 100;
+    if (price === 0 && p.variants && Array.isArray(p.variants)) {
+      const varPrices = p.variants.map((v: any) => v.priceCents || 0).filter((c: number) => c > 0);
+      if (varPrices.length > 0) {
+        price = Math.min(...varPrices) / 100;
+      }
+    }
     const oldPrice = p.oldPriceCents ? p.oldPriceCents / 100 : undefined;
 
     return {

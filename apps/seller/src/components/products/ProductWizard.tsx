@@ -336,10 +336,15 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({ initialData, isEdi
         measurements: measures
       }));
 
+    const activeVariantsWithPrice = mappedVariants.filter(v => v.priceCents && v.priceCents > 0);
+    const minPriceCents = activeVariantsWithPrice.length > 0
+      ? Math.min(...activeVariantsWithPrice.map(v => v.priceCents!))
+      : 0;
+
     return {
       title: state.title || 'Новый товар',
       currency: 'RUB',
-      priceCents: 0,
+      priceCents: minPriceCents,
       description: state.description,
       categoryId: state.categoryId || undefined,
       materialComposition: state.materialComposition.length > 0 ? state.materialComposition : undefined,

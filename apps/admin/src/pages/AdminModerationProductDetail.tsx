@@ -296,27 +296,28 @@ export function AdminModerationProductDetail() {
             <span>{isGeneratingPreview ? 'Создание...' : 'Shop Preview'}</span>
           </button>
 
-          {/* Action buttons strictly depending on current status */}
-          {product.status === 'pending_moderation' && (
-            <button
-              data-testid="btn-start-review"
-              onClick={handleStartReview}
-              disabled={isSubmitting}
-              className="px-3.5 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-xl shadow transition-colors flex items-center gap-1.5"
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>Начать проверку</span>
-            </button>
-          )}
-
-          {product.status === 'in_review' && (
+          {/* Action buttons for pending_moderation and in_review */}
+          {(product.status === 'pending_moderation' || product.status === 'in_review') && (
             <>
+              {product.status === 'pending_moderation' && (
+                <button
+                  data-testid="btn-start-review"
+                  onClick={handleStartReview}
+                  disabled={isSubmitting}
+                  className="px-3.5 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-xl shadow transition-colors flex items-center gap-1.5"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Начать проверку</span>
+                </button>
+              )}
+
               <button
+                data-testid="btn-approve"
                 onClick={() => {
                   setModalAction('approve');
                   setActionComment('');
                 }}
-                disabled={!allChecksPassed}
+                disabled={!allChecksPassed || isSubmitting}
                 title={!allChecksPassed ? `Одобрение недоступно: есть ошибки (${failedChecks.map(c => c.label).join(', ')})` : ''}
                 className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed rounded-xl shadow transition-colors flex items-center gap-1.5"
               >
@@ -327,6 +328,7 @@ export function AdminModerationProductDetail() {
               <button
                 data-testid="btn-revise"
                 onClick={() => openReviseModal(failedChecks.map(c => c.label))}
+                disabled={isSubmitting}
                 className="px-3.5 py-1.5 text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl transition-colors flex items-center gap-1.5"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -336,6 +338,7 @@ export function AdminModerationProductDetail() {
               <button
                 data-testid="btn-reject"
                 onClick={openRejectModal}
+                disabled={isSubmitting}
                 className="px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl shadow transition-colors flex items-center gap-1.5"
               >
                 <X className="w-3.5 h-3.5" />
