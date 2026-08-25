@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import {
   ArrowLeft,
   AlertCircle,
@@ -165,11 +166,13 @@ export function AdminProductDetail() {
   };
 
   // Fetch product detail & history logs
-  const loadProductData = async () => {
+  const loadProductData = useCallback(async (silent = false) => {
     if (!productId) return;
     try {
-      setIsLoading(true);
-      setLoadError(null);
+      if (!silent) {
+        setIsLoading(true);
+        setLoadError(null);
+      }
 
       const [pData, logsData] = await Promise.all([
         getAdminProduct(productId),
@@ -179,23 +182,39 @@ export function AdminProductDetail() {
       setProduct(pData);
       setLogs((logsData.items || []) as unknown as ModerationLogItem[]);
 
-      // Populate edit fields (editPrice in Rubles)
-      setEditTitle(pData.title);
-      setEditDescription(pData.description || '');
-      setEditPrice(pData.price);
-      setEditCategory(pData.categoryId || '');
-      setEditBrand(pData.brandId || '');
+      // Populate edit fields only on explicit / initial loads to avoid overwriting typed input
+      if (!silent) {
+        setEditTitle(pData.title);
+        setEditDescription(pData.description || '');
+        setEditPrice(pData.price);
+        setEditCategory(pData.categoryId || '');
+        setEditBrand(pData.brandId || '');
+      }
     } catch (err: unknown) {
-      console.error('[AdminProductDetail] Failed to load product:', { productId, error: err });
-      setLoadError(getAdminProductErrorMessage(err, 'Не удалось загрузить карточку товара.'));
+      if (!silent) {
+        console.error('[AdminProductDetail] Failed to load product:', { productId, error: err });
+        setLoadError(getAdminProductErrorMessage(err, 'Не удалось загрузить карточку товара.'));
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
-  };
+  }, [productId]);
 
   useEffect(() => {
-    loadProductData();
-  }, [productId]);
+    loadProductData(false);
+  }, [loadProductData]);
+
+  useVisibilityPolling(
+    useCallback(() => {
+      if (productId && !isSubmitting && !isEditSubmitting && !reasonModal) {
+        loadProductData(true);
+      }
+    }, [productId, isSubmitting, isEditSubmitting, reasonModal, loadProductData]),
+    4000,
+    Boolean(productId)
+  );
 
   if (isLoading) {
     return (

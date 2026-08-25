@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -214,24 +215,36 @@ export function SellerProducts() {
   const [selectedId, setSelectedId] = useState('');
   const [sellerStatus, setSellerStatus] = useState<string>('active');
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [me, rawProducts] = await Promise.all([getSellerMe(), getSellerProducts()]);
-        setSellerStatus(me.seller.status);
-        const adapted = adaptProductList(rawProducts);
-        setProducts(adapted);
-        if (adapted.length > 0) {
-          setSelectedId(adapted[0].id);
-        }
-      } catch (err: any) {
+  const loadData = useCallback(async (silent = false) => {
+    try {
+      if (!silent) {
+        setIsLoading(true);
+        setError('');
+      }
+      const [me, rawProducts] = await Promise.all([getSellerMe(), getSellerProducts()]);
+      setSellerStatus(me.seller.status);
+      const adapted = adaptProductList(rawProducts);
+      setProducts(adapted);
+      setSelectedId((prev) => {
+        if (prev && adapted.some((p) => p.id === prev)) return prev;
+        return adapted.length > 0 ? adapted[0].id : '';
+      });
+    } catch (err: any) {
+      if (!silent) {
         setError(err.message || 'Ошибка загрузки товаров');
-      } finally {
+      }
+    } finally {
+      if (!silent) {
         setIsLoading(false);
       }
     }
-    load();
   }, []);
+
+  useEffect(() => {
+    loadData(false);
+  }, [loadData]);
+
+  useVisibilityPolling(useCallback(() => loadData(true), [loadData]), 4000);
 
   const filteredProducts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();

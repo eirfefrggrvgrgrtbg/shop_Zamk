@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import {
   ArrowLeft,
   ShieldAlert,
@@ -87,15 +88,12 @@ export function AdminModerationProductDetail() {
   const [previewLink, setPreviewLink] = useState<{ pageUrl: string; catalogCardUrl: string; expiresAt: string } | null>(null);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
 
-  useEffect(() => {
-    if (!productId) return;
-    loadProductData(productId);
-  }, [productId]);
-
-  const loadProductData = async (id: string) => {
+  const loadProductData = useCallback(async (id: string, silent = false) => {
     try {
-      setIsLoading(true);
-      setError(null);
+      if (!silent) {
+        setIsLoading(true);
+        setError(null);
+      }
       const [prodData, histData, pendingQueue] = await Promise.all([
         getAdminProduct(id),
         getAdminProductModerationHistory(id).catch(() => ({ items: [] })),
@@ -113,12 +111,31 @@ export function AdminModerationProductDetail() {
         setNextProductId(null);
       }
     } catch (err: any) {
-      console.error('Failed to load moderation product:', err);
-      setError(getAdminProductErrorMessage(err, 'Ошибка загрузки данных товара для модерации'));
+      if (!silent) {
+        console.error('Failed to load moderation product:', err);
+        setError(getAdminProductErrorMessage(err, 'Ошибка загрузки данных товара для модерации'));
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!productId) return;
+    loadProductData(productId, false);
+  }, [productId, loadProductData]);
+
+  useVisibilityPolling(
+    useCallback(() => {
+      if (productId && !isSubmitting) {
+        loadProductData(productId, true);
+      }
+    }, [productId, isSubmitting, loadProductData]),
+    4000,
+    Boolean(productId)
+  );
 
   // Start Review action
   const handleStartReview = async () => {

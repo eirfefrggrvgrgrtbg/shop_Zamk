@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import {
   AlertCircle,
   RefreshCw,
@@ -208,7 +209,9 @@ export function AdminModeration() {
       setTotalCount(res.totalCount);
     } catch (err: unknown) {
       if (signal.aborted || currentRequestId !== requestIdRef.current) return;
-      setError(getAdminProductErrorMessage(err, 'Не удалось загрузить очередь модерации.'));
+      if (!quiet) {
+        setError(getAdminProductErrorMessage(err, 'Не удалось загрузить очередь модерации.'));
+      }
     } finally {
       if (!signal.aborted && currentRequestId === requestIdRef.current) {
         setIsLoading(false);
@@ -233,6 +236,8 @@ export function AdminModeration() {
     querySortOrder,
     searchParams.toString(),
   ]);
+
+  useVisibilityPolling(useCallback(() => fetchProducts(true), []), 4000);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();

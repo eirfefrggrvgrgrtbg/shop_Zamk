@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import { SellerContextBanner } from '../components/SellerContextBanner';
 import { FilterPopover } from '../components/FilterPopover';
 import {
@@ -230,7 +231,7 @@ export function AdminProducts() {
     return () => clearTimeout(timer);
   }, [searchInput, queryQ]);
 
-  const fetchProducts = useCallback(async () => {
+  const fetchProducts = useCallback(async (silent = false) => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -239,8 +240,10 @@ export function AdminProducts() {
     const signal = controller.signal;
     const requestId = ++requestIdRef.current;
 
-    setIsLoading(true);
-    setError(null);
+    if (!silent) {
+      setIsLoading(true);
+      setError(null);
+    }
 
     try {
       const offset = (queryPage - 1) * queryLimit;
@@ -275,11 +278,13 @@ export function AdminProducts() {
       setError(null);
     } catch (err: any) {
       if (err?.name === 'AbortError' || signal.aborted || requestId !== requestIdRef.current) return;
-      setProducts([]);
-      setTotalCount(0);
-      setError(getAdminProductErrorMessage(err, 'Не удалось загрузить товары'));
+      if (!silent) {
+        setProducts([]);
+        setTotalCount(0);
+        setError(getAdminProductErrorMessage(err, 'Не удалось загрузить товары'));
+      }
     } finally {
-      if (requestId === requestIdRef.current && !signal.aborted) {
+      if (!silent && requestId === requestIdRef.current && !signal.aborted) {
         setIsLoading(false);
       }
     }
@@ -291,8 +296,17 @@ export function AdminProducts() {
   ]);
 
   useEffect(() => {
-    fetchProducts();
+    fetchProducts(false);
   }, [fetchProducts]);
+
+  useVisibilityPolling(
+    useCallback(() => {
+      if (!bulkActionModal) {
+        fetchProducts(true);
+      }
+    }, [bulkActionModal, fetchProducts]),
+    4000
+  );
 
   const handleSort = (columnKey: string) => {
     if (querySortBy === columnKey) {
