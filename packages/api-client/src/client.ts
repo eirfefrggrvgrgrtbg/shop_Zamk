@@ -202,7 +202,7 @@ const getSafeErrorMessage = (code?: string, fallback?: string): string => {
       return 'Эта единица уже отсканирована.';
     case 'unit_not_found':
     case 'UNIT_NOT_FOUND':
-      return 'Этикетка ZAMK не найдена.';
+      return fallback || 'Физическая единица с таким кодом не найдена.';
     case 'unit_not_in_supply':
     case 'UNIT_NOT_IN_SUPPLY':
       return 'Эта единица относится к другой поставке.';

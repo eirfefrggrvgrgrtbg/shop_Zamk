@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { AlertCircle, Boxes, Search } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { AlertCircle, Boxes, PackageSearch, Search } from 'lucide-react';
 import { HelpTooltip } from '../components/HelpTooltip';
 import { SellerContextBanner } from '../components/SellerContextBanner';
 import {
@@ -89,6 +89,24 @@ export function AdminInventory() {
       <SellerContextBanner />
       <div className="sm:flex sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Остатки / Склад</h1>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm hover:border-indigo-200 transition-colors">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
+            <PackageSearch className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Свободный сканер ZMU</h2>
+            <p className="text-sm text-slate-500">Нашли товар без коробки или номера поставки? Просто отсканируйте ZMU.</p>
+          </div>
+        </div>
+        <Link
+          to="/warehouse/free-scan"
+          className="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors whitespace-nowrap"
+        >
+          Открыть сканер
+        </Link>
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow space-y-4 sm:space-y-0 sm:flex sm:items-center sm:space-x-4">

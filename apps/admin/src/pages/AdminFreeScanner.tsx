@@ -30,10 +30,10 @@ export function AdminFreeScanner() {
       setResolvedUnit(data);
       playBeepSound('success');
     } catch (err: any) {
-      if (err.response?.data?.error === 'unit_not_found') {
+      if (err?.code === 'unit_not_found' || err?.code === 'UNIT_NOT_FOUND' || err?.status === 404) {
         setError('Физическая единица с таким кодом не найдена.');
       } else {
-        setError(err.response?.data?.message || err.message || 'Ошибка при поиске');
+        setError(err?.message || 'Ошибка при поиске');
       }
       playBeepSound('error');
     } finally {
@@ -78,7 +78,7 @@ export function AdminFreeScanner() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900">Свободный сканер ZMU</h1>
-            <p className="text-sm text-slate-500">Узнайте информацию о товаре, отсканировав маркер ZMU</p>
+            <p className="text-sm text-slate-500">Не нужно искать поставку или коробку — система определит их автоматически.</p>
           </div>
         </div>
         
@@ -90,7 +90,7 @@ export function AdminFreeScanner() {
                 type="text"
                 value={unitCode}
                 onChange={(e) => setUnitCode(e.target.value.toUpperCase())}
-                placeholder="Сканируйте ZMU..."
+                placeholder="Отсканируйте ZMU физической единицы"
                 className="w-full pl-4 pr-12 py-4 text-xl font-mono uppercase bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
                 disabled={loading}
                 autoFocus
