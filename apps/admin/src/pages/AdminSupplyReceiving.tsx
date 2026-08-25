@@ -162,6 +162,7 @@ export function AdminSupplyReceiving() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [isFinalized, setIsFinalized] = useState(false);
+  const [showFinalizeModal, setShowFinalizeModal] = useState(false);
 
   const qrRef = useRef<HTMLInputElement>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
@@ -268,6 +269,7 @@ export function AdminSupplyReceiving() {
       // Successfully obtained canonical session from backend
       setSession(data);
       setIsFinalized(false);
+      setShowFinalizeModal(false);
       setLastScannedItem(null);
       setRecentScans([]);
 
@@ -289,6 +291,7 @@ export function AdminSupplyReceiving() {
     setRecentScans([]);
     setLastScannedItem(null);
     setIsFinalized(false);
+    setShowFinalizeModal(false);
     setError(null);
     setSuccessMessage(null);
     setQrInput('');
@@ -428,7 +431,7 @@ export function AdminSupplyReceiving() {
     }
   };
 
-  const handleFinalize = async () => {
+  const handleFinalizeConfirm = async () => {
     if (!session) return;
     try {
       setLoading(true);
@@ -437,6 +440,7 @@ export function AdminSupplyReceiving() {
       await finalizeSupplyReceivingSession(session.id, {});
 
       setIsFinalized(true);
+      setShowFinalizeModal(false);
 
       // Refetch canonical Supply state immediately without hard reload
       if (dossier) {
@@ -1213,8 +1217,9 @@ export function AdminSupplyReceiving() {
               </div>
 
               <button
-                onClick={handleFinalize}
-                disabled={loading || (totalScanned === 0 && totalExpected > 0)}
+                type="button"
+                onClick={() => setShowFinalizeModal(true)}
+                disabled={loading}
                 className={`w-full ${
                   isAdditionalSession
                     ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-900/20'
@@ -1227,6 +1232,116 @@ export function AdminSupplyReceiving() {
                   <CheckCircle2 className="w-5 h-5 mr-2" />
                 )}
                 {isAdditionalSession ? 'Завершить доприёмку' : 'Завершить приёмку'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Finalize Confirmation Modal */}
+      {showFinalizeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-6">
+            <div className="flex items-start gap-4">
+              <div
+                className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  totalRemaining > 0
+                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                    : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                }`}
+              >
+                {totalRemaining > 0 ? (
+                  <AlertTriangle className="w-6 h-6" />
+                ) : (
+                  <CheckCircle2 className="w-6 h-6" />
+                )}
+              </div>
+              <div className="flex-1">
+                <h3 className="text-xl font-bold text-white">
+                  {totalRemaining > 0
+                    ? isAdditionalSession
+                      ? 'Завершить доприёмку с расхождениями?'
+                      : 'Завершить приёмку с расхождениями?'
+                    : isAdditionalSession
+                    ? 'Завершить доприёмку?'
+                    : 'Завершить приёмку?'}
+                </h3>
+                <p className="text-sm text-slate-400 mt-1">
+                  {totalRemaining > 0
+                    ? 'В текущей сессии отсканированы не все ожидаемые единицы товара.'
+                    : 'Все единицы товара успешно отсканированы.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-900/70 border border-slate-700/60 rounded-xl p-4 space-y-2.5 text-sm">
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400">
+                  {isAdditionalSession ? 'План доприёмки:' : 'Заявлено:'}
+                </span>
+                <span className="font-bold text-white font-mono">{totalExpected} шт.</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400">Принято:</span>
+                <span className="font-bold text-emerald-400 font-mono">{totalOk} шт.</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-400">Брак:</span>
+                <span className="font-bold text-rose-400 font-mono">{totalDamaged} шт.</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300 border-t border-slate-800 pt-2">
+                <span className="text-slate-400">Не принято:</span>
+                <span
+                  className={`font-bold font-mono ${
+                    totalRemaining > 0 ? 'text-amber-400' : 'text-slate-400'
+                  }`}
+                >
+                  {totalRemaining} шт.
+                </span>
+              </div>
+            </div>
+
+            {totalRemaining > 0 && (
+              <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-3 text-amber-300 text-xs leading-relaxed">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>
+                  Неотсканированные единицы будут отмечены как недостающие. Их можно будет принять
+                  позже через доприёмку.
+                </span>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowFinalizeModal(false)}
+                disabled={loading}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 text-sm"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleFinalizeConfirm}
+                disabled={loading}
+                className={`flex-1 ${
+                  totalRemaining > 0
+                    ? 'bg-amber-600 hover:bg-amber-500'
+                    : isAdditionalSession
+                    ? 'bg-amber-600 hover:bg-amber-500'
+                    : 'bg-emerald-600 hover:bg-emerald-500'
+                } text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 text-sm`}
+              >
+                {loading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                {totalRemaining > 0
+                  ? 'Завершить с расхождениями'
+                  : isAdditionalSession
+                  ? 'Завершить доприёмку'
+                  : 'Завершить приёмку'}
               </button>
             </div>
           </div>
