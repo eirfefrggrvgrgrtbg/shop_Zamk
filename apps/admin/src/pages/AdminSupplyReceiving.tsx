@@ -50,14 +50,16 @@ function mapReceivingError(err: any): string {
       return 'Приёмка по этой поставке уже завершена.';
     case 'supply_cancelled':
       return 'Поставка отменена.';
+    case 'no_expected_units_remain':
+      return 'Все ожидаемые товарные единицы по этой поставке уже приняты.';
     case 'receiving_session_already_active':
       return 'Для этой поставки уже открыта приёмка.';
     case 'invalid_receiving_code':
       return 'Введите номер поставки, грузоместа или отсканируйте QR-код.';
     case 'unit_already_scanned':
-      return 'Эта единица уже отсканирована.';
+      return 'Эта единица уже отсканирована в текущей сессии.';
     case 'unit_already_received':
-      return 'Эта единица уже принята.';
+      return 'Эта единица уже принята или забракована.';
     case 'unit_not_found':
       return 'Этикетка ZAMK не найдена.';
     case 'unit_not_in_supply':
@@ -109,8 +111,14 @@ function getStatusBadge(status: string) {
           В процессе приёмки
         </span>
       );
-    case 'completed':
     case 'completed_with_discrepancies':
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          <AlertTriangle className="w-3.5 h-3.5 mr-1" />
+          Приёмка завершена с расхождениями
+        </span>
+      );
+    case 'completed':
       return (
         <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
           <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
@@ -157,6 +165,16 @@ export function AdminSupplyReceiving() {
   const barcodeRef = useRef<HTMLInputElement>(null);
 
   const isSerialized = session?.receivingMode === 'serialized';
+
+  // Derivations from dossier
+  const remainingExpected = dossier?.items?.reduce((acc, i) => acc + (i.missingQuantity ?? 0), 0) ?? 0;
+  const isAdditionalDossier = Boolean(
+    dossier && (
+      dossier.status === 'completed_with_discrepancies' ||
+      (dossier.items && dossier.items.some((i) => (i.acceptedQuantity || 0) > 0 || (i.damagedQuantity || 0) > 0))
+    )
+  );
+  const isAdditionalSession = Boolean(session && isAdditionalDossier);
 
   useEffect(() => {
     if (!session && !dossier && !isFinalized) {
@@ -389,6 +407,17 @@ export function AdminSupplyReceiving() {
       await finalizeSupplyReceivingSession(session.id, {});
 
       setIsFinalized(true);
+
+      // Refetch canonical Supply state immediately without hard reload
+      if (dossier) {
+        const lookupCode = dossier.qrToken || dossier.supplyNumber || dossier.id;
+        try {
+          const updatedSupply = await lookupSupplyByCode(lookupCode);
+          setDossier(updatedSupply);
+        } catch (_) {
+          // Ignore lookup failure
+        }
+      }
       playBeepSound('success');
     } catch (err: any) {
       setError(mapReceivingError(err));
@@ -410,16 +439,27 @@ export function AdminSupplyReceiving() {
     <div className="space-y-6 pb-20">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Приемка поставок (Supplies)</h1>
+          <h1 className="text-2xl font-bold text-white">
+            {isAdditionalSession
+              ? 'Доприёмка поставок (Additional Receiving)'
+              : 'Приемка поставок (Supplies)'}
+          </h1>
           <p className="text-sm text-slate-400 mt-1">
-            {isSerialized
+            {isAdditionalSession
+              ? 'Доприёмка оставшихся физических единиц по ZMU'
+              : isSerialized
               ? 'Сериализованная приёмка физических единиц по ZMU'
               : 'Сканирование QR поставок и штрихкодов товаров'}
           </p>
         </div>
         {session && (
-          <div className="mt-3 sm:mt-0">
-            {isSerialized ? (
+          <div className="mt-3 sm:mt-0 flex items-center space-x-2">
+            {isAdditionalSession ? (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                Доприёмка · ZMU
+              </span>
+            ) : isSerialized ? (
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 <ShieldCheck className="w-3.5 h-3.5 mr-1" />
                 Сериализованная · ZMU
@@ -452,18 +492,35 @@ export function AdminSupplyReceiving() {
         <div className="mx-4 sm:mx-6">
           <div className="bg-slate-800 border border-slate-700 rounded-xl p-8 max-w-4xl mx-auto shadow-2xl">
             <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/10 mb-4">
-                <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+              <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full ${
+                dossier?.status === 'completed'
+                  ? 'bg-emerald-500/10 text-emerald-500'
+                  : 'bg-amber-500/10 text-amber-500'
+              } mb-4`}>
+                {dossier?.status === 'completed' ? (
+                  <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+                ) : (
+                  <AlertTriangle className="h-10 w-10 text-amber-500" />
+                )}
               </div>
-              <h2 className="text-3xl font-bold text-white mb-2">Приёмка завершена</h2>
+              <h2 className="text-3xl font-bold text-white mb-2">
+                {dossier?.status === 'completed'
+                  ? 'Приёмка завершена'
+                  : 'Приёмка завершена с расхождениями'}
+              </h2>
               <p className="text-slate-400">
                 Сессия <span className="font-mono text-emerald-400">{session.id}</span> успешно закрыта.
               </p>
+              {dossier?.status === 'completed_with_discrepancies' && remainingExpected > 0 && (
+                <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg max-w-md mx-auto text-amber-300 text-sm font-medium">
+                  Осталось принять по поставке: <span className="font-bold text-white">{remainingExpected} шт.</span>
+                </div>
+              )}
             </div>
 
             <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden mb-8">
               <div className="px-6 py-4 border-b border-slate-700 bg-slate-800/50">
-                <h3 className="font-medium text-white">Итоги приёмки {hasDiscrepancy && '(есть расхождения)'}</h3>
+                <h3 className="font-medium text-white">Итоги сессии {hasDiscrepancy && '(в текущей сессии есть расхождения)'}</h3>
               </div>
               <div className="p-0 overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -495,13 +552,25 @@ export function AdminSupplyReceiving() {
               </div>
             </div>
 
-            <button
-              onClick={resetFlow}
-              className="w-full bg-slate-700 hover:bg-slate-600 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
-            >
-              <RefreshCw className="w-5 h-5 mr-2" />
-              Вернуться к приёмке поставок
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              {dossier?.status === 'completed_with_discrepancies' && remainingExpected > 0 && (
+                <button
+                  onClick={handleStartOrResumeSession}
+                  disabled={loading}
+                  className="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center transition-colors shadow-lg"
+                >
+                  {loading ? <RefreshCw className="w-5 h-5 animate-spin mr-2" /> : <ArrowRight className="w-5 h-5 mr-2" />}
+                  Доприёмка · осталось {remainingExpected}
+                </button>
+              )}
+              <button
+                onClick={resetFlow}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
+              >
+                <RefreshCw className="w-5 h-5 mr-2" />
+                Вернуться к приёмке поставок
+              </button>
+            </div>
           </div>
         </div>
       ) : !session ? (
@@ -615,16 +684,28 @@ export function AdminSupplyReceiving() {
             {/* Items preview */}
             {dossier.items && dossier.items.length > 0 && (
               <div className="bg-slate-900/80 border border-slate-700/60 rounded-lg overflow-hidden">
-                <div className="px-4 py-3 bg-slate-800/60 border-b border-slate-700 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Состав поставки
+                <div className="px-4 py-3 bg-slate-800/60 border-b border-slate-700 text-xs font-semibold uppercase tracking-wider text-slate-400 flex justify-between items-center">
+                  <span>Состав поставки</span>
+                  {isAdditionalDossier && (
+                    <span className="text-amber-400 font-mono font-normal normal-case">
+                      Осталось принять: {remainingExpected} шт.
+                    </span>
+                  )}
                 </div>
-                <div className="max-h-48 overflow-y-auto">
+                <div className="max-h-56 overflow-y-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="text-xs text-slate-400 bg-slate-900/50 border-b border-slate-800">
                       <tr>
                         <th className="py-2.5 px-4">Товар</th>
                         <th className="py-2.5 px-4 font-mono">Артикул / Штрихкод</th>
-                        <th className="py-2.5 px-4 text-right">Ожидается</th>
+                        <th className="py-2.5 px-4 text-right">Заявлено</th>
+                        {isAdditionalDossier && (
+                          <>
+                            <th className="py-2.5 px-4 text-right text-emerald-400">Принято</th>
+                            <th className="py-2.5 px-4 text-right text-rose-400">Брак</th>
+                            <th className="py-2.5 px-4 text-right text-amber-400">Осталось</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800">
@@ -645,6 +726,19 @@ export function AdminSupplyReceiving() {
                           <td className="py-2.5 px-4 text-right font-semibold text-slate-200">
                             {item.expectedQuantity} шт.
                           </td>
+                          {isAdditionalDossier && (
+                            <>
+                              <td className="py-2.5 px-4 text-right font-bold text-emerald-400">
+                                {item.acceptedQuantity || 0} шт.
+                              </td>
+                              <td className="py-2.5 px-4 text-right font-bold text-rose-400">
+                                {item.damagedQuantity || 0} шт.
+                              </td>
+                              <td className="py-2.5 px-4 text-right font-bold text-amber-400">
+                                {item.missingQuantity || 0} шт.
+                              </td>
+                            </>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -708,10 +802,12 @@ export function AdminSupplyReceiving() {
               <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-5 text-left flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                   <h4 className="text-indigo-300 font-semibold text-base flex items-center">
-                    <ShieldCheck className="w-5 h-5 mr-2" /> Открыта активная сессия приёмки
+                    <ShieldCheck className="w-5 h-5 mr-2" /> {isAdditionalDossier ? 'Открыта активная сессия доприёмки' : 'Открыта активная сессия приёмки'}
                   </h4>
                   <p className="text-slate-300 text-sm mt-1">
-                    Для этой поставки уже начата приёмка. Вы можете продолжить сканирование товаров.
+                    {isAdditionalDossier
+                      ? 'Для этой поставки открыта сессия доприёмки. Вы можете продолжить сканирование товаров.'
+                      : 'Для этой поставки уже начата приёмка. Вы можете продолжить сканирование товаров.'}
                   </p>
                 </div>
                 <button
@@ -724,8 +820,54 @@ export function AdminSupplyReceiving() {
                   ) : (
                     <ArrowRight className="w-5 h-5 mr-2" />
                   )}
-                  Продолжить приёмку
+                  {isAdditionalDossier ? 'Продолжить доприёмку' : 'Продолжить приёмку'}
                 </button>
+              </div>
+            )}
+
+            {dossier.status === 'completed_with_discrepancies' && (
+              remainingExpected > 0 ? (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-5 text-left flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <h4 className="text-amber-300 font-semibold text-base flex items-center">
+                      <AlertTriangle className="w-5 h-5 mr-2" /> Приёмка завершена с расхождениями
+                    </h4>
+                    <p className="text-slate-300 text-sm mt-1">
+                      Осталось принять: <span className="font-bold text-amber-400">{remainingExpected} шт.</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleStartOrResumeSession}
+                    disabled={loading}
+                    className="bg-amber-600 hover:bg-amber-500 text-white font-medium px-6 py-3 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-50 shadow-lg"
+                  >
+                    {loading ? (
+                      <RefreshCw className="w-5 h-5 animate-spin mr-2" />
+                    ) : (
+                      <ArrowRight className="w-5 h-5 mr-2" />
+                    )}
+                    Доприёмка · осталось {remainingExpected}
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-slate-900 border border-slate-700 rounded-xl p-5 text-left">
+                  <h4 className="text-amber-400 font-medium text-sm flex items-center">
+                    <AlertTriangle className="w-4 h-4 mr-2" />
+                    Приёмка завершена с расхождениями (зафиксирован брак).
+                  </h4>
+                  <p className="text-slate-400 text-xs mt-1">
+                    Все ожидаемые товарные единицы обработаны. Доприёмка не требуется.
+                  </p>
+                </div>
+              )
+            )}
+
+            {dossier.status === 'completed' && (
+              <div className="bg-slate-900 border border-slate-700 rounded-xl p-5 text-left">
+                <h4 className="text-emerald-400 font-medium text-sm flex items-center">
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Приёмка по этой поставке уже завершена без расхождений.
+                </h4>
               </div>
             )}
 
@@ -738,15 +880,6 @@ export function AdminSupplyReceiving() {
                 <p className="text-slate-400 text-xs mt-1">
                   Продавец ещё не отправил поставку на склад ZAMK. Приёмка станет доступна после отправки и прибытия.
                 </p>
-              </div>
-            )}
-
-            {(dossier.status === 'completed' || dossier.status === 'completed_with_discrepancies') && (
-              <div className="bg-slate-900 border border-slate-700 rounded-xl p-5 text-left">
-                <h4 className="text-emerald-400 font-medium text-sm flex items-center">
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  Приёмка по этой поставке уже завершена.
-                </h4>
               </div>
             )}
 
@@ -767,10 +900,22 @@ export function AdminSupplyReceiving() {
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h2 className="text-xl font-medium text-white">
-                    {isSerialized ? 'Сканирование единиц товара (ZMU)' : 'Сканирование товаров'}
+                    {isAdditionalSession
+                      ? 'Доприёмка единиц товара (ZMU)'
+                      : isSerialized
+                      ? 'Сканирование единиц товара (ZMU)'
+                      : 'Сканирование товаров'}
                   </h2>
                   <p className="text-slate-400 text-sm mt-1">
-                    Поставка: <span className="font-mono font-bold text-blue-400 px-2 py-0.5 bg-blue-500/10 rounded">{dossier?.supplyNumber || session.supplyId}</span>
+                    Поставка:{' '}
+                    <span className="font-mono font-bold text-blue-400 px-2 py-0.5 bg-blue-500/10 rounded">
+                      {dossier?.supplyNumber || session.supplyId}
+                    </span>
+                    {isAdditionalSession && (
+                      <span className="ml-2 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                        План доприёмки: {totalExpected} шт.
+                      </span>
+                    )}
                   </p>
                 </div>
                 <button
@@ -987,16 +1132,22 @@ export function AdminSupplyReceiving() {
           {/* Right Summary Sidebar */}
           <div className="lg:col-span-1 space-y-6">
             <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg sticky top-6">
-              <h3 className="text-lg font-medium text-white mb-2">Сводка приёмки</h3>
+              <h3 className="text-lg font-medium text-white mb-2">
+                {isAdditionalSession ? 'Сводка доприёмки' : 'Сводка приёмки'}
+              </h3>
               <p className="text-sm text-slate-400 mb-6">
-                {isSerialized
+                {isAdditionalSession
+                  ? 'Контроль сканирования оставшихся единиц ZMU в текущей сессии доприёмки.'
+                  : isSerialized
                   ? 'Контроль сканирования уникальных единиц ZMU.'
                   : 'После того как все товары из поставки отсканированы, нажмите завершить.'}
               </p>
 
               <div className="mb-6 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50 space-y-3">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-400">Заявлено:</span>
+                  <span className="text-slate-400">
+                    {isAdditionalSession ? 'План доприёмки:' : 'Заявлено:'}
+                  </span>
                   <span className="font-bold text-white text-base">{totalExpected}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
@@ -1034,14 +1185,18 @@ export function AdminSupplyReceiving() {
               <button
                 onClick={handleFinalize}
                 disabled={loading || (totalScanned === 0 && totalExpected > 0)}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-4 rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`w-full ${
+                  isAdditionalSession
+                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-900/20'
+                    : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/20'
+                } text-white font-bold py-4 px-4 rounded-xl flex items-center justify-center transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {loading ? (
                   <RefreshCw className="w-5 h-5 animate-spin mr-2" />
                 ) : (
                   <CheckCircle2 className="w-5 h-5 mr-2" />
                 )}
-                Завершить приёмку
+                {isAdditionalSession ? 'Завершить доприёмку' : 'Завершить приёмку'}
               </button>
             </div>
           </div>
