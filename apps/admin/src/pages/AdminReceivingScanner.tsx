@@ -24,7 +24,7 @@ interface ReceivingSessionState {
   }>;
 }
 
-import { playBeepSound } from '../utils/audio';
+import { playBeepSound, unlockScannerAudio } from '../utils/audio';
 
 export function AdminReceivingScanner() {
   const navigate = useNavigate();
@@ -60,6 +60,7 @@ export function AdminReceivingScanner() {
 
   const handleCodeSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    unlockScannerAudio();
     const code = scannedCodeInput.trim();
     if (!code) return;
 
@@ -92,6 +93,7 @@ export function AdminReceivingScanner() {
 
   const handleItemScan = async (e: React.FormEvent) => {
     e.preventDefault();
+    unlockScannerAudio();
     const barcode = itemBarcodeInput.trim();
     if (!barcode || !activeFulfillment || !session) return;
 

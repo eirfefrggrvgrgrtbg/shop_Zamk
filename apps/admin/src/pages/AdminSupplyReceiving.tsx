@@ -14,6 +14,7 @@ import {
   Calendar,
   Layers,
   Search,
+  Volume2,
 } from 'lucide-react';
 import {
   lookupSupplyByCode,
@@ -32,7 +33,7 @@ import type {
   SerializedScanResponse,
 } from '@zamk/api-client/src/types';
 
-import { playBeepSound } from '../utils/audio';
+import { playBeepSound, unlockScannerAudio } from '../utils/audio';
 
 function mapReceivingError(err: any): string {
   const code = err?.error?.code || err?.code || '';
@@ -154,11 +155,35 @@ export function AdminSupplyReceiving() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [isFinalized, setIsFinalized] = useState(false);
+  const [audioTestError, setAudioTestError] = useState<string | null>(null);
 
   const qrRef = useRef<HTMLInputElement>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
 
   const isSerialized = session?.receivingMode === 'serialized';
+
+  // Synchronously unlock Safari audio on first user gesture while component is mounted
+  useEffect(() => {
+    const handleUserGesture = () => {
+      unlockScannerAudio();
+    };
+    window.addEventListener('keydown', handleUserGesture, { capture: true, passive: true });
+    window.addEventListener('pointerdown', handleUserGesture, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener('keydown', handleUserGesture, { capture: true });
+      window.removeEventListener('pointerdown', handleUserGesture, { capture: true });
+    };
+  }, []);
+
+  const handleTestSound = () => {
+    const ok = unlockScannerAudio();
+    if (!ok) {
+      setAudioTestError('Браузер не разрешил воспроизведение звука.');
+      return;
+    }
+    setAudioTestError(null);
+    playBeepSound('success');
+  };
 
   useEffect(() => {
     if (!session && !dossier && !isFinalized) {
@@ -179,6 +204,7 @@ export function AdminSupplyReceiving() {
 
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
+    unlockScannerAudio();
     const input = qrInput.trim();
     if (!input) return;
 
@@ -199,6 +225,7 @@ export function AdminSupplyReceiving() {
   };
 
   const handleMarkArrived = async () => {
+    unlockScannerAudio();
     if (!dossier) return;
     try {
       setArrivalLoading(true);
@@ -217,6 +244,7 @@ export function AdminSupplyReceiving() {
   };
 
   const handleStartOrResumeSession = async () => {
+    unlockScannerAudio();
     if (!dossier) return;
     const lookupCode = dossier.qrToken || dossier.supplyNumber || dossier.id;
     if (!lookupCode) return;
@@ -249,11 +277,13 @@ export function AdminSupplyReceiving() {
     setIsFinalized(false);
     setError(null);
     setSuccessMessage(null);
+    setAudioTestError(null);
     setQrInput('');
   };
 
   const handleScanItem = async (e: React.FormEvent) => {
     e.preventDefault();
+    unlockScannerAudio();
     const rawInput = barcodeInput.trim();
     if (!rawInput || !session || !session.items) return;
 
@@ -338,6 +368,7 @@ export function AdminSupplyReceiving() {
   };
 
   const handleUndoLastScan = async () => {
+    unlockScannerAudio();
     if (!session || !isSerialized) return;
     const latestNonVoided = recentScans.find((s) => !s.voidedAt);
     if (!latestNonVoided) return;
@@ -383,6 +414,7 @@ export function AdminSupplyReceiving() {
   };
 
   const handleFinalize = async () => {
+    unlockScannerAudio();
     if (!session || isSerialized) return;
     try {
       setLoading(true);
@@ -419,22 +451,40 @@ export function AdminSupplyReceiving() {
               : 'Сканирование QR поставок и штрихкодов товаров'}
           </p>
         </div>
-        {session && (
-          <div className="mt-3 sm:mt-0 flex items-center space-x-2">
-            {isSerialized ? (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <ShieldCheck className="w-3.5 h-3.5 mr-1" />
-                Сериализованная · ZMU
-              </span>
-            ) : (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                <Tag className="w-3.5 h-3.5 mr-1" />
-                Старая поставка · приёмка по ZMK
-              </span>
-            )}
-          </div>
-        )}
+        <div className="mt-3 sm:mt-0 flex items-center space-x-3">
+          <button
+            type="button"
+            onClick={handleTestSound}
+            className="text-slate-400 hover:text-white flex items-center text-xs px-2.5 py-1.5 border border-slate-700 rounded-md hover:bg-slate-700 transition-colors"
+            title="Проверить звуковой сигнал сканера"
+          >
+            <Volume2 className="h-3.5 w-3.5 mr-1.5 text-blue-400" />
+            Проверить звук
+          </button>
+          {session && (
+            <div>
+              {isSerialized ? (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <ShieldCheck className="w-3.5 h-3.5 mr-1" />
+                  Сериализованная · ZMU
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <Tag className="w-3.5 h-3.5 mr-1" />
+                  Старая поставка · приёмка по ZMK
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {audioTestError && (
+        <div className="mx-4 sm:mx-6 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 flex items-center">
+          <AlertCircle className="h-4 w-4 text-amber-400 mr-2 flex-shrink-0" />
+          <span className="text-amber-200 text-xs font-medium">{audioTestError}</span>
+        </div>
+      )}
 
       {error && (
         <div className="mx-4 sm:mx-6 bg-rose-500/10 border border-rose-500/20 rounded-lg p-4 flex items-center">
@@ -775,13 +825,24 @@ export function AdminSupplyReceiving() {
                     Поставка: <span className="font-mono font-bold text-blue-400 px-2 py-0.5 bg-blue-500/10 rounded">{dossier?.supplyNumber || session.supplyId}</span>
                   </p>
                 </div>
-                <button
-                  onClick={resetFlow}
-                  className="text-slate-400 hover:text-white flex items-center text-sm px-3 py-1.5 border border-slate-700 rounded-md hover:bg-slate-700 transition-colors"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Сбросить
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={handleTestSound}
+                    className="text-slate-400 hover:text-white flex items-center text-xs px-2.5 py-1.5 border border-slate-700 rounded-md hover:bg-slate-700 transition-colors"
+                    title="Проверить звуковой сигнал"
+                  >
+                    <Volume2 className="h-3.5 w-3.5 mr-1.5 text-blue-400" />
+                    Проверить звук
+                  </button>
+                  <button
+                    onClick={resetFlow}
+                    className="text-slate-400 hover:text-white flex items-center text-sm px-3 py-1.5 border border-slate-700 rounded-md hover:bg-slate-700 transition-colors"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Сбросить
+                  </button>
+                </div>
               </div>
 
               {/* Scanner Form */}
@@ -791,6 +852,7 @@ export function AdminSupplyReceiving() {
                   type="text"
                   value={barcodeInput}
                   onChange={(e) => setBarcodeInput(e.target.value)}
+                  onKeyDown={() => unlockScannerAudio()}
                   placeholder={isSerialized ? 'Сканируйте ZMU товара...' : 'Скан штрихкода товара...'}
                   className={`w-full bg-slate-900 border ${
                     isDamagedScan
