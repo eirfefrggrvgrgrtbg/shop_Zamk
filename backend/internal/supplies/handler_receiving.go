@@ -299,16 +299,12 @@ func (h *Handler) FinalizeSession(w http.ResponseWriter, r *http.Request) {
 
 	err = h.svc.FinalizeReceiving(r.Context(), userID, sessionID, req)
 	if err != nil {
-		if errors.Is(err, ErrSerializedFinalizeNotSupported) {
-			h.writeError(w, http.StatusUnprocessableEntity, "serialized_finalize_not_supported", "serialized unit finalization is not enabled yet")
-			return
-		}
 		if errors.Is(err, ErrSessionNotFound) {
 			h.writeError(w, http.StatusNotFound, "session_not_found", err.Error())
 			return
 		}
-		if errors.Is(err, ErrReceivingSessionFinalized) {
-			h.writeError(w, http.StatusConflict, "receiving_session_finalized", err.Error())
+		if errors.Is(err, ErrReceivingSessionFinalized) || err.Error() == "session is not active" {
+			h.writeError(w, http.StatusConflict, "receiving_session_finalized", "session is not active")
 			return
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())

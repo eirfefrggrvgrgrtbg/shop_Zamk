@@ -211,55 +211,314 @@ func TestSerializedReceivingScanAndUndoLifecycle(t *testing.T) {
 	}
 }
 
-func TestSerializedFinalizeBlockedAndLegacyFinalizeAllowed(t *testing.T) {
+func TestSerializedFinalize_WithDiscrepancies(t *testing.T) {
 	tc := setupTestContext(t)
 
-	// N. Serialized old finalize is BLOCKED with zero stock/status mutation
-	serializedSupply := createShippedSupply(t, tc)
-	serializedSession, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *serializedSupply.QRToken)
+	// 1. Create serialized supply with 5 units
+	carrier := "СДЭК"
+	tracking := "121212123241"
+	req := supplies.CreateSupplyRequest{
+		HandoffMethod:  "carrier_delivery",
+		CarrierName:    &carrier,
+		TrackingNumber: &tracking,
+		Items: []supplies.CreateSupplyItemRequest{
+			{VariantID: tc.Variant1, ExpectedQuantity: 5},
+		},
+	}
+	supply, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, req)
+	if err != nil {
+		t.Fatalf("failed to create supply: %v", err)
+	}
+	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
+	if err != nil {
+		t.Fatalf("failed to mark shipped: %v", err)
+	}
+	err = tc.Service.MarkSupplyArrived(tc.Ctx, tc.AdminID, supply.ID)
+	if err != nil {
+		t.Fatalf("failed to mark arrived: %v", err)
+	}
+
+	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
 	if err != nil {
 		t.Fatalf("failed to start serialized session: %v", err)
+	}
+
+	units, err := tc.Repo.ListUnitsBySupplyID(tc.Ctx, supply.ID)
+	if err != nil || len(units) != 5 {
+		t.Fatalf("expected 5 units, got %d (err: %v)", len(units), err)
 	}
 
 	// Capture initial stock
 	var initialStock int
 	testDB.QueryRow(tc.Ctx, "SELECT COALESCE(total_stock, 0) FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&initialStock)
 
-	units, _ := tc.Repo.ListUnitsBySupplyID(tc.Ctx, serializedSupply.ID)
-	_, err = tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, serializedSession.ID, supplies.RecordSerializedScanRequest{
+	// Scan: 3 units OK, 1 unit Damaged, leave 1 unscanned
+	for i := 0; i < 3; i++ {
+		_, err = tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{
+			UnitCode:  units[i].UnitCode,
+			Condition: "ok",
+		})
+		if err != nil {
+			t.Fatalf("failed to scan unit %d as ok: %v", i, err)
+		}
+	}
+
+	_, err = tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{
+		UnitCode:  units[3].UnitCode,
+		Condition: "damaged",
+	})
+	if err != nil {
+		t.Fatalf("failed to scan unit 3 as damaged: %v", err)
+	}
+	// units[4] is left unscanned
+
+	// Before finalize: all 5 units must still be expected, stock unchanged
+	for _, u := range units {
+		var status string
+		var recSessionID *uuid.UUID
+		err = testDB.QueryRow(tc.Ctx, "SELECT status, receiving_session_id FROM inventory_units WHERE id = $1", u.ID).Scan(&status, &recSessionID)
+		if err != nil || status != "expected" || recSessionID != nil {
+			t.Fatalf("before finalize: expected unit %s status 'expected' and nil session, got status='%s', session=%v", u.UnitCode, status, recSessionID)
+		}
+	}
+
+	var stockBeforeFinalize int
+	testDB.QueryRow(tc.Ctx, "SELECT COALESCE(total_stock, 0) FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stockBeforeFinalize)
+	if stockBeforeFinalize != initialStock {
+		t.Fatalf("before finalize: expected stock unchanged (%d), got %d", initialStock, stockBeforeFinalize)
+	}
+
+	// Finalize receiving session
+	err = tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, session.ID, supplies.FinalizeReceivingRequest{})
+	if err != nil {
+		t.Fatalf("finalize receiving failed: %v", err)
+	}
+
+	// After finalize:
+	// 3 OK units -> warehouse
+	for i := 0; i < 3; i++ {
+		var status string
+		var recSessionID *uuid.UUID
+		err = testDB.QueryRow(tc.Ctx, "SELECT status, receiving_session_id FROM inventory_units WHERE id = $1", units[i].ID).Scan(&status, &recSessionID)
+		if err != nil || status != "warehouse" || recSessionID == nil || *recSessionID != session.ID {
+			t.Fatalf("unit %d: expected status 'warehouse' and session %s, got status='%s', session=%v", i, session.ID, status, recSessionID)
+		}
+	}
+
+	// 1 Damaged unit -> damaged
+	var damagedStatus string
+	var damagedSessionID *uuid.UUID
+	err = testDB.QueryRow(tc.Ctx, "SELECT status, receiving_session_id FROM inventory_units WHERE id = $1", units[3].ID).Scan(&damagedStatus, &damagedSessionID)
+	if err != nil || damagedStatus != "damaged" || damagedSessionID == nil || *damagedSessionID != session.ID {
+		t.Fatalf("unit 3: expected status 'damaged' and session %s, got status='%s', session=%v", session.ID, damagedStatus, damagedSessionID)
+	}
+
+	// 1 Unscanned unit -> expected
+	var unscannedStatus string
+	var unscannedSessionID *uuid.UUID
+	err = testDB.QueryRow(tc.Ctx, "SELECT status, receiving_session_id FROM inventory_units WHERE id = $1", units[4].ID).Scan(&unscannedStatus, &unscannedSessionID)
+	if err != nil || unscannedStatus != "expected" || unscannedSessionID != nil {
+		t.Fatalf("unit 4: expected status 'expected' and nil session, got status='%s', session=%v", unscannedStatus, unscannedSessionID)
+	}
+
+	// Stock onHand: +3 exactly
+	var stockAfterFinalize int
+	testDB.QueryRow(tc.Ctx, "SELECT COALESCE(total_stock, 0) FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stockAfterFinalize)
+	if stockAfterFinalize != initialStock+3 {
+		t.Fatalf("expected stock +3 (%d), got %d", initialStock+3, stockAfterFinalize)
+	}
+
+	// Supply item counters: accepted=3, damaged=1, missing=1
+	var acceptedQty, damagedQty, missingQty int
+	err = testDB.QueryRow(tc.Ctx, "SELECT accepted_quantity, damaged_quantity, missing_quantity FROM seller_supply_items WHERE supply_id = $1", supply.ID).Scan(&acceptedQty, &damagedQty, &missingQty)
+	if err != nil || acceptedQty != 3 || damagedQty != 1 || missingQty != 1 {
+		t.Fatalf("expected item counters accepted=3, damaged=1, missing=1; got accepted=%d, damaged=%d, missing=%d", acceptedQty, damagedQty, missingQty)
+	}
+
+	// Stock movements: exactly 1 receipt movement of +3 for this supply
+	var movCount, movQty int
+	err = testDB.QueryRow(tc.Ctx, "SELECT COUNT(*), COALESCE(SUM(quantity), 0) FROM stock_movements WHERE reference_type = 'supply' AND reference_id = $1", supply.ID).Scan(&movCount, &movQty)
+	if err != nil || movCount != 1 || movQty != 3 {
+		t.Fatalf("expected 1 stock movement with qty=3, got count=%d, qty=%d", movCount, movQty)
+	}
+
+	// Supply terminal status: completed_with_discrepancies
+	finalSupply, err := tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
+	if err != nil || finalSupply.Status != "completed_with_discrepancies" {
+		t.Fatalf("expected supply status 'completed_with_discrepancies', got '%s'", finalSupply.Status)
+	}
+
+	// Double finalize: must fail idempotently without duplicate stock/movement mutations
+	err2 := tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, session.ID, supplies.FinalizeReceivingRequest{})
+	if err2 == nil || err2.Error() != "session is not active" {
+		t.Fatalf("second finalize should fail with 'session is not active', got: %v", err2)
+	}
+
+	var stockAfterSecondFinalize int
+	testDB.QueryRow(tc.Ctx, "SELECT COALESCE(total_stock, 0) FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stockAfterSecondFinalize)
+	if stockAfterSecondFinalize != initialStock+3 {
+		t.Fatalf("after second finalize: expected stock unchanged (%d), got %d", initialStock+3, stockAfterSecondFinalize)
+	}
+
+	var movCountAfterSecond int
+	testDB.QueryRow(tc.Ctx, "SELECT COUNT(*) FROM stock_movements WHERE reference_type = 'supply' AND reference_id = $1", supply.ID).Scan(&movCountAfterSecond)
+	if movCountAfterSecond != 1 {
+		t.Fatalf("after second finalize: expected exactly 1 stock movement, got %d", movCountAfterSecond)
+	}
+}
+
+func TestSerializedFinalize_AllOK_Completed(t *testing.T) {
+	tc := setupTestContext(t)
+
+	// Create supply with 3 units
+	carrier := "СДЭК"
+	tracking := "121212123241"
+	req := supplies.CreateSupplyRequest{
+		HandoffMethod:  "carrier_delivery",
+		CarrierName:    &carrier,
+		TrackingNumber: &tracking,
+		Items: []supplies.CreateSupplyItemRequest{
+			{VariantID: tc.Variant1, ExpectedQuantity: 3},
+		},
+	}
+	supply, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, req)
+	if err != nil {
+		t.Fatalf("failed to create supply: %v", err)
+	}
+	_, _ = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
+	_ = tc.Service.MarkSupplyArrived(tc.Ctx, tc.AdminID, supply.ID)
+
+	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	if err != nil {
+		t.Fatalf("failed to start session: %v", err)
+	}
+
+	units, _ := tc.Repo.ListUnitsBySupplyID(tc.Ctx, supply.ID)
+	for _, u := range units {
+		_, err = tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{
+			UnitCode:  u.UnitCode,
+			Condition: "ok",
+		})
+		if err != nil {
+			t.Fatalf("failed to scan unit %s as ok: %v", u.UnitCode, err)
+		}
+	}
+
+	// Finalize session
+	err = tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, session.ID, supplies.FinalizeReceivingRequest{})
+	if err != nil {
+		t.Fatalf("finalize failed: %v", err)
+	}
+
+	// All units -> warehouse
+	for _, u := range units {
+		var status string
+		testDB.QueryRow(tc.Ctx, "SELECT status FROM inventory_units WHERE id = $1", u.ID).Scan(&status)
+		if status != "warehouse" {
+			t.Fatalf("expected unit %s status 'warehouse', got '%s'", u.UnitCode, status)
+		}
+	}
+
+	// Supply status -> completed (no discrepancies)
+	finalSupply, _ := tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
+	if finalSupply.Status != "completed" {
+		t.Fatalf("expected supply status 'completed', got '%s'", finalSupply.Status)
+	}
+}
+
+func TestSerializedFinalize_RollbackAtomicity(t *testing.T) {
+	tc := setupTestContext(t)
+
+	// Create supply with 4 units
+	carrier := "СДЭК"
+	tracking := "121212123241"
+	req := supplies.CreateSupplyRequest{
+		HandoffMethod:  "carrier_delivery",
+		CarrierName:    &carrier,
+		TrackingNumber: &tracking,
+		Items: []supplies.CreateSupplyItemRequest{
+			{VariantID: tc.Variant1, ExpectedQuantity: 4},
+		},
+	}
+	supply, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, req)
+	if err != nil {
+		t.Fatalf("failed to create supply: %v", err)
+	}
+	_, _ = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
+	_ = tc.Service.MarkSupplyArrived(tc.Ctx, tc.AdminID, supply.ID)
+
+	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	if err != nil {
+		t.Fatalf("failed to start session: %v", err)
+	}
+
+	units, _ := tc.Repo.ListUnitsBySupplyID(tc.Ctx, supply.ID)
+	_, _ = tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{
 		UnitCode:  units[0].UnitCode,
 		Condition: "ok",
 	})
+	_, _ = tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{
+		UnitCode:  units[1].UnitCode,
+		Condition: "damaged",
+	})
+
+	// Add temporary test constraint to force a DB failure at the very end of the transaction (when updating supply status)
+	_, err = testDB.Exec(tc.Ctx, "ALTER TABLE seller_supplies ADD CONSTRAINT test_prevent_complete CHECK (status != 'completed_with_discrepancies')")
 	if err != nil {
-		t.Fatalf("failed to record serialized scan: %v", err)
+		t.Fatalf("failed to add test constraint: %v", err)
+	}
+	defer testDB.Exec(tc.Ctx, "ALTER TABLE seller_supplies DROP CONSTRAINT IF EXISTS test_prevent_complete")
+
+	// Attempt finalize -> must fail on CHECK constraint and rollback entire transaction
+	err = tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, session.ID, supplies.FinalizeReceivingRequest{})
+	if err == nil {
+		t.Fatalf("expected finalize to fail on test constraint violation, got nil")
 	}
 
-	// Attempt finalize on serialized supply
-	err = tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, serializedSession.ID, supplies.FinalizeReceivingRequest{})
-	if !errors.Is(err, supplies.ErrSerializedFinalizeNotSupported) {
-		t.Fatalf("expected ErrSerializedFinalizeNotSupported, got %v", err)
+	// Verify rollback integrity:
+	// 1. All units must remain 'expected' with nil receiving_session_id
+	for _, u := range units {
+		var status string
+		var recSessionID *uuid.UUID
+		err = testDB.QueryRow(tc.Ctx, "SELECT status, receiving_session_id FROM inventory_units WHERE id = $1", u.ID).Scan(&status, &recSessionID)
+		if err != nil || status != "expected" || recSessionID != nil {
+			t.Fatalf("rollback: unit %s should remain 'expected' with nil session, got status='%s', session=%v", u.UnitCode, status, recSessionID)
+		}
 	}
 
-	// Verify stock delta == 0
-	var stockAfterFinalize int
-	testDB.QueryRow(tc.Ctx, "SELECT COALESCE(total_stock, 0) FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stockAfterFinalize)
-	if stockAfterFinalize != initialStock {
-		t.Fatalf("expected stock unchanged (%d), got %d", initialStock, stockAfterFinalize)
+	// 2. Stock must not be incremented
+	var stock int
+	testDB.QueryRow(tc.Ctx, "SELECT COALESCE(total_stock, 0) FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&stock)
+	if stock != 0 {
+		t.Fatalf("rollback: stock should be 0, got %d", stock)
 	}
 
-	// Verify supply status remains 'receiving'
-	currentSupply, _ := tc.Repo.GetSupplyByID(tc.Ctx, serializedSupply.ID)
-	if currentSupply.Status != "receiving" {
-		t.Fatalf("expected supply status 'receiving', got '%s'", currentSupply.Status)
+	// 3. No stock movements created
+	var movCount int
+	testDB.QueryRow(tc.Ctx, "SELECT COUNT(*) FROM stock_movements WHERE reference_id = $1", supply.ID).Scan(&movCount)
+	if movCount != 0 {
+		t.Fatalf("rollback: stock movements should be 0, got %d", movCount)
 	}
 
-	// Verify session status remains 'active'
-	currentSession, _ := tc.Repo.GetSessionByID(tc.Ctx, serializedSession.ID)
+	// 4. Session status must still be 'active'
+	currentSession, _ := tc.Repo.GetSessionByID(tc.Ctx, session.ID)
 	if currentSession.Status != "active" {
-		t.Fatalf("expected session status 'active', got '%s'", currentSession.Status)
+		t.Fatalf("rollback: session should still be 'active', got '%s'", currentSession.Status)
 	}
 
-	// O. Legacy finalize still works
+	// 5. Supply status must still be 'receiving'
+	currentSupply, _ := tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
+	if currentSupply.Status != "receiving" {
+		t.Fatalf("rollback: supply should still be 'receiving', got '%s'", currentSupply.Status)
+	}
+}
+
+func TestLegacyFinalizeAllowed(t *testing.T) {
+	tc := setupTestContext(t)
+
+	var initialStock int
+	testDB.QueryRow(tc.Ctx, "SELECT COALESCE(total_stock, 0) FROM inventory_items WHERE product_variant_id = $1", tc.Variant1).Scan(&initialStock)
+
 	legacySupplyID := uuid.New()
 	legacySupplyNumber := "SUP-LEGACY-003"
 	legacyQRToken := "qr-legacy-finalize-test"

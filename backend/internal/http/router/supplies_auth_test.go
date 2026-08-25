@@ -385,7 +385,7 @@ func TestSuppliesAuth(t *testing.T) {
 	// I. Admin with inventory.receipt + valid sessionId → finalize
 	// ====================================================================
 	t.Run("I. admin with receipt perm POST finalize valid session -> 204", func(t *testing.T) {
-		// 1. Serialized supply finalize is blocked with 422 (Requirement 14)
+		// 1. Serialized supply finalize succeeds with 204 (M3.3)
 		if sessionIDForI != uuid.Nil {
 			uid := insertUser(t, "admin")
 			insertAdminWithPerms(t, uid, []string{"inventory.receipt"})
@@ -398,8 +398,8 @@ func TestSuppliesAuth(t *testing.T) {
 			rr := httptest.NewRecorder()
 			r.ServeHTTP(rr, req)
 
-			if rr.Code != http.StatusUnprocessableEntity {
-				t.Errorf("expected 422 for serialized finalize, got %d body=%s", rr.Code, rr.Body.String())
+			if rr.Code != http.StatusNoContent {
+				t.Errorf("expected 204 for serialized finalize, got %d body=%s", rr.Code, rr.Body.String())
 			}
 		}
 

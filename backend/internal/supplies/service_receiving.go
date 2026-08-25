@@ -179,13 +179,22 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 	if err != nil {
 		return err
 	}
-	if mode == "serialized" {
-		return ErrSerializedFinalizeNotSupported
-	}
 
 	supply, err := repoTx.GetSupplyByID(ctx, session.SupplyID)
 	if err != nil {
 		return err
+	}
+
+	if mode == "serialized" {
+		// Lock all physical units of this supply
+		if err := repoTx.LockUnitsForSupply(ctx, session.SupplyID); err != nil {
+			return err
+		}
+
+		// Finalize unit states: OK -> warehouse, Damaged -> damaged, set receiving_session_id
+		if err := repoTx.FinalizeSerializedUnits(ctx, sessionID); err != nil {
+			return err
+		}
 	}
 
 	hasDiscrepancies := false

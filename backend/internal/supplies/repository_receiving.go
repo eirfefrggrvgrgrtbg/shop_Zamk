@@ -566,3 +566,53 @@ func (r *Repository) VoidSerializedScan(ctx context.Context, scanID uuid.UUID, s
 
 	return nil
 }
+
+func (r *Repository) LockUnitsForSupply(ctx context.Context, supplyID uuid.UUID) error {
+	query := `SELECT id FROM inventory_units WHERE origin_supply_id = $1 FOR UPDATE`
+	rows, err := r.db.Query(ctx, query, supplyID)
+	if err != nil {
+		return fmt.Errorf("failed to lock inventory units: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+	}
+	return rows.Err()
+}
+
+func (r *Repository) FinalizeSerializedUnits(ctx context.Context, sessionID uuid.UUID) error {
+	queryOK := `
+		UPDATE inventory_units
+		SET status = 'warehouse', receiving_session_id = $1, updated_at = now()
+		WHERE id IN (
+			SELECT inventory_unit_id
+			FROM supply_receiving_scans
+			WHERE session_id = $1
+			  AND voided_at IS NULL
+			  AND inventory_unit_id IS NOT NULL
+			  AND (condition = 'ok' OR (condition IS NULL AND is_damage = false))
+		)
+	`
+	_, err := r.db.Exec(ctx, queryOK, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to finalize warehouse units: %w", err)
+	}
+
+	queryDamaged := `
+		UPDATE inventory_units
+		SET status = 'damaged', receiving_session_id = $1, updated_at = now()
+		WHERE id IN (
+			SELECT inventory_unit_id
+			FROM supply_receiving_scans
+			WHERE session_id = $1
+			  AND voided_at IS NULL
+			  AND inventory_unit_id IS NOT NULL
+			  AND (condition = 'damaged' OR (condition IS NULL AND is_damage = true))
+		)
+	`
+	_, err = r.db.Exec(ctx, queryDamaged, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to finalize damaged units: %w", err)
+	}
+
+	return nil
+}

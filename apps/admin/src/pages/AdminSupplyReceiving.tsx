@@ -383,7 +383,7 @@ export function AdminSupplyReceiving() {
   };
 
   const handleFinalize = async () => {
-    if (!session || isSerialized) return;
+    if (!session) return;
     try {
       setLoading(true);
       setError(null);
@@ -1019,24 +1019,32 @@ export function AdminSupplyReceiving() {
                 </div>
               </div>
 
-              {isSerialized ? (
-                <div className="p-4 bg-slate-900/60 border border-slate-700/60 rounded-xl text-center">
-                  <AlertCircle className="w-6 h-6 text-blue-400 mx-auto mb-2" />
-                  <div className="text-sm font-semibold text-slate-200">Сериализованная приёмка</div>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Завершение приёмки будет доступно после проверки всех единиц.
-                  </p>
+              {/* Clear confirmation summary before finalize */}
+              <div className="mb-6 space-y-2 text-xs bg-slate-900/60 p-3.5 rounded-xl border border-slate-700/70">
+                <div className="flex items-center text-emerald-400 font-medium">
+                  <CheckCircle2 className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span>На склад будет принято: {totalOk} шт.</span>
                 </div>
-              ) : (
-                <button
-                  onClick={handleFinalize}
-                  disabled={loading || totalScanned === 0}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-4 rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                {hasDiscrepancy && (
+                  <div className="flex items-center text-amber-400 font-medium">
+                    <AlertTriangle className="w-4 h-4 mr-2 flex-shrink-0" />
+                    <span>С расхождениями: {totalDamaged + totalRemaining} шт.</span>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={handleFinalize}
+                disabled={loading || (totalScanned === 0 && totalExpected > 0)}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-4 rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <RefreshCw className="w-5 h-5 animate-spin mr-2" />
+                ) : (
                   <CheckCircle2 className="w-5 h-5 mr-2" />
-                  Завершить приёмку
-                </button>
-              )}
+                )}
+                Завершить приёмку
+              </button>
             </div>
           </div>
         </div>
