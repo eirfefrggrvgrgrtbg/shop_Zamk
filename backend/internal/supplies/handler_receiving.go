@@ -404,6 +404,11 @@ func (h *Handler) RecordSerializedScan(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		h.logger.Error("supply receiving unit scan failed",
+			"event", "supply_receiving_unit_scan_failed",
+			"session_id", sessionID.String(),
+			"error", err.Error(),
+		)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
@@ -445,6 +450,11 @@ func (h *Handler) GetRecentSerializedScans(w http.ResponseWriter, r *http.Reques
 			h.writeError(w, http.StatusNotFound, "session_not_found", err.Error())
 			return
 		}
+		h.logger.Error("failed to list recent serialized scans",
+			"event", "supply_receiving_list_scans_failed",
+			"session_id", sessionID.String(),
+			"error", err.Error(),
+		)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
@@ -502,6 +512,12 @@ func (h *Handler) UndoSerializedScan(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		h.logger.Error("failed to undo serialized scan",
+			"event", "supply_receiving_undo_scan_failed",
+			"session_id", sessionID.String(),
+			"scan_id", scanID.String(),
+			"error", err.Error(),
+		)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}

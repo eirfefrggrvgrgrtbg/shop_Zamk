@@ -809,3 +809,132 @@ func TestSupplyArrivalLifecycle(t *testing.T) {
 		t.Fatalf("expected resumed session ID %s, got %s", session.ID, resumedSession.ID)
 	}
 }
+
+func TestMultiVariantSerializedScanLifecycle(t *testing.T) {
+	tc := setupTestContext(t)
+
+	carrier := "СДЭК"
+	tracking := "TRACK-36-UNITS"
+	req := supplies.CreateSupplyRequest{
+		HandoffMethod:  "carrier_delivery",
+		CarrierName:    &carrier,
+		TrackingNumber: &tracking,
+		Items: []supplies.CreateSupplyItemRequest{
+			{VariantID: tc.Variant1, ExpectedQuantity: 12},
+			{VariantID: tc.Variant2, ExpectedQuantity: 12},
+			{VariantID: tc.Variant3, ExpectedQuantity: 12},
+		},
+	}
+
+	supply, err := tc.Service.CreateSupply(tc.Ctx, tc.SellerID, req)
+	if err != nil {
+		t.Fatalf("CreateSupply 36 units failed: %v", err)
+	}
+
+	_, err = tc.Service.MarkShipped(tc.Ctx, tc.SellerID, supply.ID)
+	if err != nil {
+		t.Fatalf("MarkShipped failed: %v", err)
+	}
+
+	err = tc.Service.MarkSupplyArrived(tc.Ctx, tc.AdminID, supply.ID)
+	if err != nil {
+		t.Fatalf("MarkSupplyArrived failed: %v", err)
+	}
+
+	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, supply.SupplyNumber)
+	if err != nil {
+		t.Fatalf("StartReceivingSession failed: %v", err)
+	}
+	if session.ReceivingMode != "serialized" {
+		t.Fatalf("expected serialized receivingMode, got %s", session.ReceivingMode)
+	}
+
+	// 1. Initial list of recent scans should be empty (not error 500)
+	recentScans, err := tc.Service.ListRecentSerializedScans(tc.Ctx, tc.AdminID, session.ID, 10)
+	if err != nil {
+		t.Fatalf("ListRecentSerializedScans on empty session failed: %v", err)
+	}
+	if len(recentScans) != 0 {
+		t.Fatalf("expected 0 initial recent scans, got %d", len(recentScans))
+	}
+
+	// Load all units of supply
+	units, err := tc.Repo.ListUnitsBySupplyID(tc.Ctx, supply.ID)
+	if err != nil {
+		t.Fatalf("ListUnitsBySupplyID failed: %v", err)
+	}
+	if len(units) != 36 {
+		t.Fatalf("expected 36 units, got %d", len(units))
+	}
+
+	// Group units by variant
+	unitsByVariant := make(map[uuid.UUID][]supplies.InventoryUnit)
+	for _, u := range units {
+		unitsByVariant[u.ProductVariantID] = append(unitsByVariant[u.ProductVariantID], u)
+	}
+
+	if len(unitsByVariant[tc.Variant1]) != 12 || len(unitsByVariant[tc.Variant2]) != 12 || len(unitsByVariant[tc.Variant3]) != 12 {
+		t.Fatalf("expected 12 units per variant, got v1=%d, v2=%d, v3=%d",
+			len(unitsByVariant[tc.Variant1]), len(unitsByVariant[tc.Variant2]), len(unitsByVariant[tc.Variant3]))
+	}
+
+	// 2. Scan 1 unit from Variant 1 as OK
+	v1Unit := unitsByVariant[tc.Variant1][0]
+	resp1, err := tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{
+		UnitCode:  v1Unit.UnitCode,
+		Condition: "ok",
+	})
+	if err != nil {
+		t.Fatalf("RecordSerializedScan variant 1 failed: %v", err)
+	}
+	if resp1.SessionOk != 1 || resp1.SessionDamaged != 0 || resp1.SessionScanned != 1 || resp1.SessionRemaining != 35 {
+		t.Fatalf("unexpected totals after scan 1: %+v", resp1)
+	}
+	if resp1.ProductTitle == "" || resp1.ProductVariantID != tc.Variant1 {
+		t.Fatalf("unexpected enrichment on resp1: %+v", resp1)
+	}
+
+	// 3. Scan 1 unit from Variant 2 as OK
+	v2Unit := unitsByVariant[tc.Variant2][0]
+	resp2, err := tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{
+		UnitCode:  v2Unit.UnitCode,
+		Condition: "ok",
+	})
+	if err != nil {
+		t.Fatalf("RecordSerializedScan variant 2 failed: %v", err)
+	}
+	if resp2.SessionOk != 2 || resp2.SessionDamaged != 0 || resp2.SessionScanned != 2 || resp2.SessionRemaining != 34 {
+		t.Fatalf("unexpected totals after scan 2: %+v", resp2)
+	}
+
+	// 4. Scan 1 unit from Variant 3 as DAMAGED
+	v3Unit := unitsByVariant[tc.Variant3][0]
+	resp3, err := tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{
+		UnitCode:  v3Unit.UnitCode,
+		Condition: "damaged",
+	})
+	if err != nil {
+		t.Fatalf("RecordSerializedScan variant 3 damaged failed: %v", err)
+	}
+	if resp3.SessionOk != 2 || resp3.SessionDamaged != 1 || resp3.SessionScanned != 3 || resp3.SessionRemaining != 33 {
+		t.Fatalf("unexpected totals after scan 3: %+v", resp3)
+	}
+
+	// 5. Duplicate scan on already scanned unit -> ErrUnitAlreadyScanned
+	_, err = tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{
+		UnitCode:  v1Unit.UnitCode,
+		Condition: "ok",
+	})
+	if !errors.Is(err, supplies.ErrUnitAlreadyScanned) {
+		t.Fatalf("expected ErrUnitAlreadyScanned, got %v", err)
+	}
+
+	// 6. Verify recent scans list contains 3 entries
+	recent, err := tc.Service.ListRecentSerializedScans(tc.Ctx, tc.AdminID, session.ID, 10)
+	if err != nil {
+		t.Fatalf("ListRecentSerializedScans failed: %v", err)
+	}
+	if len(recent) != 3 {
+		t.Fatalf("expected 3 recent scans, got %d", len(recent))
+	}
+}

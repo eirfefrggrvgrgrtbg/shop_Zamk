@@ -1012,4 +1012,168 @@ func TestSuppliesAuth(t *testing.T) {
 			t.Fatalf("expected receivingMode serialized, got %s", sess.ReceivingMode)
 		}
 	})
+
+	// ====================================================================
+	// N. Serialized Scanning HTTP API Flow
+	// ====================================================================
+	t.Run("N. serialized unit scan HTTP endpoints lifecycle", func(t *testing.T) {
+		adminID := insertUser(t, "admin")
+		insertAdminWithPerms(t, adminID, []string{"inventory.receipt"})
+		adminTok := makeToken(t, adminID, "admin")
+
+		sellerUserID := insertUser(t, "seller")
+		sellerID := insertSeller(t, sellerUserID)
+		_, variant1 := insertProductAndVariant(t, sellerID)
+		_, variant2 := insertProductAndVariant(t, sellerID)
+		_, variant3 := insertProductAndVariant(t, sellerID)
+
+		repo := supplies.NewRepository(pgClient.Pool)
+		svc := supplies.NewService(pgClient.Pool, repo)
+		carrier := "СДЭК"
+		tracking := "TRACK-SER-HTTP"
+		supply, err := svc.CreateSupply(ctx, sellerID, supplies.CreateSupplyRequest{
+			HandoffMethod:  "carrier_delivery",
+			CarrierName:    &carrier,
+			TrackingNumber: &tracking,
+			Items: []supplies.CreateSupplyItemRequest{
+				{VariantID: variant1, ExpectedQuantity: 3},
+				{VariantID: variant2, ExpectedQuantity: 3},
+				{VariantID: variant3, ExpectedQuantity: 3},
+			},
+		})
+		if err != nil {
+			t.Fatalf("CreateSupply: %v", err)
+		}
+
+		if _, err = svc.MarkShipped(ctx, sellerID, supply.ID); err != nil {
+			t.Fatalf("MarkShipped: %v", err)
+		}
+		if err = svc.MarkSupplyArrived(ctx, adminID, supply.ID); err != nil {
+			t.Fatalf("MarkSupplyArrived: %v", err)
+		}
+
+		// 1. Start Session
+		reqStart := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token="+supply.SupplyNumber, nil)
+		reqStart.Header.Set("Authorization", "Bearer "+adminTok)
+		rrStart := httptest.NewRecorder()
+		r.ServeHTTP(rrStart, reqStart)
+		if rrStart.Code != http.StatusOK {
+			t.Fatalf("Start session: %d body=%s", rrStart.Code, rrStart.Body.String())
+		}
+		var sess supplies.ReceivingSession
+		json.NewDecoder(rrStart.Body).Decode(&sess)
+
+		// 2. Initial List Recent Scans -> 200 OK with []
+		reqList0 := httptest.NewRequest("GET", "/api/admin/receiving/sessions/"+sess.ID.String()+"/scans?limit=10", nil)
+		reqList0.Header.Set("Authorization", "Bearer "+adminTok)
+		rrList0 := httptest.NewRecorder()
+		r.ServeHTTP(rrList0, reqList0)
+		if rrList0.Code != http.StatusOK {
+			t.Fatalf("initial GET /scans: %d body=%s", rrList0.Code, rrList0.Body.String())
+		}
+		var scans0 []supplies.SerializedRecentScanDTO
+		json.NewDecoder(rrList0.Body).Decode(&scans0)
+		if len(scans0) != 0 {
+			t.Fatalf("expected 0 scans initially, got %d", len(scans0))
+		}
+
+		// Get units
+		units, err := repo.ListUnitsBySupplyID(ctx, supply.ID)
+		if err != nil || len(units) != 9 {
+			t.Fatalf("ListUnitsBySupplyID: %v, count=%d", err, len(units))
+		}
+
+		// 3. Scan Unit 1 OK -> 200 OK with enriched response
+		scanBody1, _ := json.Marshal(map[string]string{
+			"unitCode":  units[0].UnitCode,
+			"condition": "ok",
+		})
+		reqScan1 := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sess.ID.String()+"/scan-unit", bytes.NewReader(scanBody1))
+		reqScan1.Header.Set("Authorization", "Bearer "+adminTok)
+		reqScan1.Header.Set("Content-Type", "application/json")
+		rrScan1 := httptest.NewRecorder()
+		r.ServeHTTP(rrScan1, reqScan1)
+		if rrScan1.Code != http.StatusOK {
+			t.Fatalf("POST /scan-unit 1: %d body=%s", rrScan1.Code, rrScan1.Body.String())
+		}
+		var resp1 supplies.SerializedScanResponse
+		json.NewDecoder(rrScan1.Body).Decode(&resp1)
+		if resp1.SessionOk != 1 || resp1.SessionScanned != 1 || resp1.SessionRemaining != 8 {
+			t.Fatalf("unexpected resp1 totals: %+v", resp1)
+		}
+
+		// 4. Scan Unit 2 Damaged -> 200 OK
+		scanBody2, _ := json.Marshal(map[string]string{
+			"unitCode":  units[1].UnitCode,
+			"condition": "damaged",
+		})
+		reqScan2 := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sess.ID.String()+"/scan-unit", bytes.NewReader(scanBody2))
+		reqScan2.Header.Set("Authorization", "Bearer "+adminTok)
+		reqScan2.Header.Set("Content-Type", "application/json")
+		rrScan2 := httptest.NewRecorder()
+		r.ServeHTTP(rrScan2, reqScan2)
+		if rrScan2.Code != http.StatusOK {
+			t.Fatalf("POST /scan-unit 2 damaged: %d body=%s", rrScan2.Code, rrScan2.Body.String())
+		}
+		var resp2 supplies.SerializedScanResponse
+		json.NewDecoder(rrScan2.Body).Decode(&resp2)
+		if resp2.SessionOk != 1 || resp2.SessionDamaged != 1 || resp2.SessionScanned != 2 {
+			t.Fatalf("unexpected resp2 totals: %+v", resp2)
+		}
+
+		// 5. Duplicate Scan on Unit 1 -> 409 Conflict unit_already_scanned
+		reqScanDup := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sess.ID.String()+"/scan-unit", bytes.NewReader(scanBody1))
+		reqScanDup.Header.Set("Authorization", "Bearer "+adminTok)
+		reqScanDup.Header.Set("Content-Type", "application/json")
+		rrScanDup := httptest.NewRecorder()
+		r.ServeHTTP(rrScanDup, reqScanDup)
+		if rrScanDup.Code != http.StatusConflict {
+			t.Fatalf("expected 409 duplicate scan, got %d body=%s", rrScanDup.Code, rrScanDup.Body.String())
+		}
+		if !strings.Contains(rrScanDup.Body.String(), "unit_already_scanned") {
+			t.Fatalf("expected unit_already_scanned error code, got %s", rrScanDup.Body.String())
+		}
+
+		// 6. Non-ZMU code -> 400 Bad Request serialized_unit_code_required
+		scanBodyZMK, _ := json.Marshal(map[string]string{
+			"unitCode":  "ZMK-123456",
+			"condition": "ok",
+		})
+		reqScanZMK := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sess.ID.String()+"/scan-unit", bytes.NewReader(scanBodyZMK))
+		reqScanZMK.Header.Set("Authorization", "Bearer "+adminTok)
+		reqScanZMK.Header.Set("Content-Type", "application/json")
+		rrScanZMK := httptest.NewRecorder()
+		r.ServeHTTP(rrScanZMK, reqScanZMK)
+		if rrScanZMK.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for ZMK code scan, got %d body=%s", rrScanZMK.Code, rrScanZMK.Body.String())
+		}
+
+		// 7. GET /scans -> returns 2 scans
+		reqList := httptest.NewRequest("GET", "/api/admin/receiving/sessions/"+sess.ID.String()+"/scans?limit=10", nil)
+		reqList.Header.Set("Authorization", "Bearer "+adminTok)
+		rrList := httptest.NewRecorder()
+		r.ServeHTTP(rrList, reqList)
+		if rrList.Code != http.StatusOK {
+			t.Fatalf("GET /scans: %d body=%s", rrList.Code, rrList.Body.String())
+		}
+		var recentScans []supplies.SerializedRecentScanDTO
+		json.NewDecoder(rrList.Body).Decode(&recentScans)
+		if len(recentScans) != 2 {
+			t.Fatalf("expected 2 recent scans, got %d", len(recentScans))
+		}
+
+		// 8. Undo scan 1 -> 200 OK
+		reqUndo := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+sess.ID.String()+"/scans/"+resp1.ScanID.String()+"/undo", nil)
+		reqUndo.Header.Set("Authorization", "Bearer "+adminTok)
+		rrUndo := httptest.NewRecorder()
+		r.ServeHTTP(rrUndo, reqUndo)
+		if rrUndo.Code != http.StatusOK {
+			t.Fatalf("POST undo scan: %d body=%s", rrUndo.Code, rrUndo.Body.String())
+		}
+		var undoResp supplies.UndoSerializedScanResponse
+		json.NewDecoder(rrUndo.Body).Decode(&undoResp)
+		if undoResp.SessionOk != 0 || undoResp.SessionScanned != 1 {
+			t.Fatalf("unexpected undo totals: %+v", undoResp)
+		}
+	})
 }

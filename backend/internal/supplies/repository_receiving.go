@@ -356,7 +356,7 @@ func (r *Repository) GetEnrichedInventoryUnitByCode(ctx context.Context, unitCod
 		JOIN products p ON p.id = v.product_id
 		LEFT JOIN colors c ON c.id = v.color_id
 		LEFT JOIN size_values sv ON sv.id = v.size_value_id
-		WHERE u.unit_code = $1
+		WHERE u.unit_code = $1 OR UPPER(u.unit_code) = UPPER($1)
 	`
 	var u EnrichedInventoryUnit
 	err := r.db.QueryRow(ctx, query, unitCode).Scan(

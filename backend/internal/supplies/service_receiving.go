@@ -326,7 +326,8 @@ func (s *Service) UndoSerializedScan(ctx context.Context, staffID uuid.UUID, ses
 }
 
 func (s *Service) RecordSerializedScan(ctx context.Context, staffID uuid.UUID, sessionID uuid.UUID, req RecordSerializedScanRequest) (*SerializedScanResponse, error) {
-	if strings.HasPrefix(req.UnitCode, "ZMK-") || strings.HasPrefix(req.UnitCode, "SKU-") || strings.HasPrefix(req.UnitCode, "ZMK") {
+	req.UnitCode = strings.TrimSpace(req.UnitCode)
+	if req.UnitCode == "" || strings.HasPrefix(req.UnitCode, "ZMK-") || strings.HasPrefix(req.UnitCode, "SKU-") || strings.HasPrefix(req.UnitCode, "ZMK") {
 		return nil, ErrSerializedUnitCodeRequired
 	}
 
