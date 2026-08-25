@@ -1244,3 +1244,102 @@ func TestMultiVariantSerializedScanLifecycle(t *testing.T) {
 		t.Fatalf("expected 3 recent scans, got %d", len(recent))
 	}
 }
+
+func TestAdditionalSerializedReceiving_FullResolution(t *testing.T) {
+	tc := setupTestContext(t)
+	supply := createShippedSupply(t, tc)
+
+	// Step 1: Start and finalize first session with discrepancies
+	session, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	if err != nil {
+		t.Fatalf("failed to start first session: %v", err)
+	}
+
+	units, _ := tc.Repo.ListUnitsBySupplyID(tc.Ctx, supply.ID)
+	
+	// Scan 9 out of 10 units (8 OK, 1 Damaged), leaving 1 Expected
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[0].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[1].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[2].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[3].UnitCode, Condition: "damaged"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[4].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[5].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[6].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[7].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[8].UnitCode, Condition: "ok"})
+
+	err = tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, session.ID, supplies.FinalizeReceivingRequest{})
+	if err != nil {
+		t.Fatalf("failed to finalize first session: %v", err)
+	}
+
+	finalSupply, _ := tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
+	if finalSupply.Status != "completed_with_discrepancies" {
+		t.Fatalf("expected completed_with_discrepancies, got %s", finalSupply.Status)
+	}
+
+	// Step 2: Start ADDITIONAL session (Test A)
+	addSession, err := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	if err != nil {
+		t.Fatalf("failed to start additional session: %v", err)
+	}
+	if len(addSession.Items) == 0 || addSession.Items[0].ExpectedQuantity != 1 {
+		t.Fatalf("expected 1 remaining expected unit, got %d", addSession.Items[0].ExpectedQuantity)
+	}
+
+	// Scan the last unit as OK
+	_, err = tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, addSession.ID, supplies.RecordSerializedScanRequest{UnitCode: units[9].UnitCode, Condition: "ok"})
+	if err != nil {
+		t.Fatalf("failed to scan remaining unit: %v", err)
+	}
+
+	err = tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, addSession.ID, supplies.FinalizeReceivingRequest{})
+	if err != nil {
+		t.Fatalf("failed to finalize additional session: %v", err)
+	}
+
+	// Because missing=0, damaged=1 -> STILL completed_with_discrepancies
+	finalSupply2, _ := tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
+	if finalSupply2.Status != "completed_with_discrepancies" {
+		t.Fatalf("expected completed_with_discrepancies, got %s", finalSupply2.Status)
+	}
+}
+
+func TestAdditionalSerializedReceiving_PartialResolution(t *testing.T) {
+	tc := setupTestContext(t)
+	supply := createShippedSupply(t, tc)
+
+	// Step 1: Start and finalize first session missing 2 units (scan 8)
+	session, _ := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	units, _ := tc.Repo.ListUnitsBySupplyID(tc.Ctx, supply.ID)
+	
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[0].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[1].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[2].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[3].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[4].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[5].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[6].UnitCode, Condition: "ok"})
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, session.ID, supplies.RecordSerializedScanRequest{UnitCode: units[7].UnitCode, Condition: "ok"})
+	
+	tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, session.ID, supplies.FinalizeReceivingRequest{})
+
+	// Step 2: Start ADDITIONAL session
+	addSession, _ := tc.Service.StartReceivingSession(tc.Ctx, tc.AdminID, *supply.QRToken)
+	
+	// Scan only 1 out of the 2 remaining units
+	tc.Service.RecordSerializedScan(tc.Ctx, tc.AdminID, addSession.ID, supplies.RecordSerializedScanRequest{UnitCode: units[8].UnitCode, Condition: "ok"})
+	
+	tc.Service.FinalizeReceiving(tc.Ctx, tc.AdminID, addSession.ID, supplies.FinalizeReceivingRequest{})
+
+	finalSupply, _ := tc.Repo.GetSupplyByID(tc.Ctx, supply.ID)
+	if finalSupply.Status != "completed_with_discrepancies" {
+		t.Fatalf("expected completed_with_discrepancies, got %s", finalSupply.Status)
+	}
+
+	var missing int
+	testDB.QueryRow(tc.Ctx, "SELECT missing_quantity FROM seller_supply_items WHERE supply_id = $1", supply.ID).Scan(&missing)
+	if missing != 1 {
+		t.Fatalf("expected 1 missing unit, got %d", missing)
+	}
+}

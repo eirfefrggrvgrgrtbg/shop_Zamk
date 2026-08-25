@@ -33,20 +33,33 @@ func (s *Service) StartReceivingSession(ctx context.Context, staffID uuid.UUID, 
 		return nil, err
 	}
 
-	if supply.Status == "draft" || supply.Status == "ready_to_ship" {
-		return nil, ErrSupplyNotReadyForReceiving
+	mode, err := s.repo.GetSupplyReceivingMode(ctx, supply.ID)
+	if err != nil {
+		return nil, err
 	}
-	if supply.Status == "shipped_by_seller" {
-		return nil, ErrSupplyNotArrived
-	}
-	if supply.Status == "completed" {
-		return nil, ErrSupplyAlreadyCompleted
-	}
-	if supply.Status == "cancelled" {
-		return nil, ErrSupplyCancelled
-	}
-	if supply.Status != "arrived_at_zamk" && supply.Status != "receiving" {
-		return nil, ErrInvalidStatus
+
+	isAdditional := false
+	if supply.Status == "completed_with_discrepancies" {
+		if mode != "serialized" {
+			return nil, ErrInvalidStatus
+		}
+		isAdditional = true
+	} else {
+		if supply.Status == "draft" || supply.Status == "ready_to_ship" {
+			return nil, ErrSupplyNotReadyForReceiving
+		}
+		if supply.Status == "shipped_by_seller" {
+			return nil, ErrSupplyNotArrived
+		}
+		if supply.Status == "completed" {
+			return nil, ErrSupplyAlreadyCompleted
+		}
+		if supply.Status == "cancelled" {
+			return nil, ErrSupplyCancelled
+		}
+		if supply.Status != "arrived_at_zamk" && supply.Status != "receiving" {
+			return nil, ErrInvalidStatus
+		}
 	}
 
 	// Check for active session
@@ -60,10 +73,6 @@ func (s *Service) StartReceivingSession(ctx context.Context, staffID uuid.UUID, 
 
 	// Start new session
 	now := time.Now().UTC()
-	mode, err := s.repo.GetSupplyReceivingMode(ctx, supply.ID)
-	if err != nil {
-		return nil, err
-	}
 
 	session := &ReceivingSession{
 		ID:               uuid.New(),
@@ -84,6 +93,18 @@ func (s *Service) StartReceivingSession(ctx context.Context, staffID uuid.UUID, 
 	}
 
 	for _, item := range fullSupply.Items {
+		expectedQty := item.ExpectedQuantity
+		if isAdditional {
+			remaining, err := s.repo.CountRemainingExpectedUnitsForItem(ctx, item.ID)
+			if err != nil {
+				return nil, err
+			}
+			if remaining == 0 {
+				continue
+			}
+			expectedQty = remaining
+		}
+
 		session.Items = append(session.Items, ReceivingItem{
 			ID:               uuid.New(),
 			SessionID:        session.ID,
@@ -92,10 +113,14 @@ func (s *Service) StartReceivingSession(ctx context.Context, staffID uuid.UUID, 
 			SKU:              item.SKU,
 			Barcode:          item.Barcode,
 			ProductTitle:     item.ProductTitle,
-			ExpectedQuantity: item.ExpectedQuantity,
+			ExpectedQuantity: expectedQty,
 			CreatedAt:        now,
 			UpdatedAt:        now,
 		})
+	}
+
+	if isAdditional && len(session.Items) == 0 {
+		return nil, errors.New("no expected units remain")
 	}
 
 	err = s.repo.StartReceivingSession(ctx, session, fullSupply.Items)
@@ -197,8 +222,6 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 		}
 	}
 
-	hasDiscrepancies := false
-
 	// Update items and inventory
 	for _, item := range session.Items {
 		if item.SupplyItemID == nil {
@@ -207,19 +230,9 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 
 		accepted := item.ScannedQuantity
 		damaged := item.DamagedQuantity
-		missing := item.ExpectedQuantity - accepted - damaged
-		extra := 0
-		if missing < 0 {
-			extra = -missing
-			missing = 0
-		}
 
-		if missing > 0 || damaged > 0 || extra > 0 {
-			hasDiscrepancies = true
-		}
-
-		// Finalize item in supply
-		err = repoTx.FinalizeSupplyItem(ctx, *item.SupplyItemID, accepted, damaged, missing, extra)
+		// Finalize item in supply (accumulates quantities)
+		err = repoTx.FinalizeSupplyItem(ctx, *item.SupplyItemID, accepted, damaged)
 		if err != nil {
 			return err
 		}
@@ -234,6 +247,11 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 	}
 
 	err = repoTx.CompleteReceivingSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+
+	hasDiscrepancies, err := repoTx.CheckSupplyDiscrepancies(ctx, supply.ID)
 	if err != nil {
 		return err
 	}

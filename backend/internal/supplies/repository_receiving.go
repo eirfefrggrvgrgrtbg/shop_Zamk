@@ -258,17 +258,28 @@ func (r *Repository) CompleteReceivingSession(ctx context.Context, sessionID uui
 	return nil
 }
 
-func (r *Repository) FinalizeSupplyItem(ctx context.Context, itemID uuid.UUID, accepted, damaged, missing, extra int) error {
+func (r *Repository) FinalizeSupplyItem(ctx context.Context, itemID uuid.UUID, acceptedDelta, damagedDelta int) error {
 	query := `
 		UPDATE seller_supply_items
-		SET accepted_quantity = $1, damaged_quantity = $2, missing_quantity = $3, extra_quantity = $4, updated_at = now()
-		WHERE id = $5
+		SET 
+			accepted_quantity = COALESCE(accepted_quantity, 0) + $1, 
+			damaged_quantity = COALESCE(damaged_quantity, 0) + $2, 
+			missing_quantity = GREATEST(0, expected_quantity - (COALESCE(accepted_quantity, 0) + $1) - (COALESCE(damaged_quantity, 0) + $2)), 
+			extra_quantity = GREATEST(0, (COALESCE(accepted_quantity, 0) + $1) + (COALESCE(damaged_quantity, 0) + $2) - expected_quantity),
+			updated_at = now()
+		WHERE id = $3
 	`
-	_, err := r.db.Exec(ctx, query, accepted, damaged, missing, extra, itemID)
+	_, err := r.db.Exec(ctx, query, acceptedDelta, damagedDelta, itemID)
 	if err != nil {
 		return fmt.Errorf("failed to finalize supply item: %w", err)
 	}
 	return nil
+}
+
+func (r *Repository) CheckSupplyDiscrepancies(ctx context.Context, supplyID uuid.UUID) (bool, error) {
+	var count int
+	err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM seller_supply_items WHERE supply_id = $1 AND (missing_quantity > 0 OR damaged_quantity > 0 OR extra_quantity > 0)", supplyID).Scan(&count)
+	return count > 0, err
 }
 
 
@@ -615,4 +626,10 @@ func (r *Repository) FinalizeSerializedUnits(ctx context.Context, sessionID uuid
 	}
 
 	return nil
+}
+
+func (r *Repository) CountRemainingExpectedUnitsForItem(ctx context.Context, itemID uuid.UUID) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM inventory_units WHERE origin_supply_item_id = $1 AND status = 'expected'", itemID).Scan(&count)
+	return count, err
 }
