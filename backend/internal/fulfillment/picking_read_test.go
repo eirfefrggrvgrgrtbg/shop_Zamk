@@ -37,7 +37,7 @@ func setupPickingFixture(t *testing.T, ctx context.Context) *pickingFixture {
 
 	repo := fulfillment.NewRepository(db)
 	ordersRepo := orders.NewRepository(db)
-	svc := fulfillment.NewService(repo, ordersRepo, postgresClient, nil, nil) // Dependencies mocked/nil as this is a read model test
+	svc := fulfillment.NewService(repo, ordersRepo, postgresClient, nil, nil) // Dependencies mocked/nil as this is a read model tes
 
 	sellerID := uuid.New()
 	_, err = db.Exec(ctx, `
@@ -112,6 +112,60 @@ func (f *pickingFixture) createOrderItem(t *testing.T, ctx context.Context, orde
 	return itemID
 }
 
+func (f *pickingFixture) createInventoryItem(t *testing.T, ctx context.Context, prodID, variantID uuid.UUID, totalStock, reservedStock int) uuid.UUID {
+	t.Helper()
+	invID := uuid.New()
+	_, err := f.db.Exec(ctx, `
+		INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, now(), now())
+		ON CONFLICT (product_variant_id) DO UPDATE SET total_stock = $5, reserved_stock = $6
+	`, invID, prodID, variantID, f.sellerID, totalStock, reservedStock)
+	require.NoError(t, err)
+	return invID
+}
+
+func (f *pickingFixture) createUnitWithStatus(t *testing.T, ctx context.Context, orderItemID uuid.UUID, unitStatus string) (uuid.UUID, string) {
+	t.Helper()
+	var variantID uuid.UUID
+	err := f.db.QueryRow(ctx, `SELECT product_variant_id FROM order_items WHERE id = $1`, orderItemID).Scan(&variantID)
+	require.NoError(t, err)
+
+	supplyID := uuid.New()
+	supplyItemID := uuid.New()
+	_, err = f.db.Exec(ctx, `INSERT INTO seller_supplies (id, seller_id, status, supply_number, handoff_method, created_at, updated_at) VALUES ($1, $2, 'completed', $3, 'pickup', now(), now())`, supplyID, f.sellerID, uuid.New().String()[:8])
+	require.NoError(t, err)
+	_, err = f.db.Exec(ctx, `INSERT INTO seller_supply_items (id, supply_id, variant_id, expected_quantity, created_at, updated_at) VALUES ($1, $2, $3, 1, now(), now())`, supplyItemID, supplyID, variantID)
+	require.NoError(t, err)
+
+	unitID := uuid.New()
+	unitCode := "ZMU-" + uuid.New().String()[:8]
+	_, err = f.db.Exec(ctx, `INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status) VALUES ($1, $2, $3, $4, $5, 1, $6)`, unitID, unitCode, variantID, supplyID, supplyItemID, unitStatus)
+	require.NoError(t, err)
+
+	allocID := uuid.New()
+	_, err = f.db.Exec(ctx, `INSERT INTO order_item_allocations (id, order_item_id, inventory_unit_id, picked_at) VALUES ($1, $2, $3, NULL)`, allocID, orderItemID, unitID)
+	require.NoError(t, err)
+
+	return unitID, unitCode
+}
+
+func (f *pickingFixture) createUnallocatedUnit(t *testing.T, ctx context.Context, variantID uuid.UUID) (uuid.UUID, string) {
+	t.Helper()
+	supplyID := uuid.New()
+	supplyItemID := uuid.New()
+	_, err := f.db.Exec(ctx, `INSERT INTO seller_supplies (id, seller_id, status, supply_number, handoff_method, created_at, updated_at) VALUES ($1, $2, 'completed', $3, 'pickup', now(), now())`, supplyID, f.sellerID, uuid.New().String()[:8])
+	require.NoError(t, err)
+	_, err = f.db.Exec(ctx, `INSERT INTO seller_supply_items (id, supply_id, variant_id, expected_quantity, created_at, updated_at) VALUES ($1, $2, $3, 1, now(), now())`, supplyItemID, supplyID, variantID)
+	require.NoError(t, err)
+
+	unitID := uuid.New()
+	unitCode := "ZMU-" + uuid.New().String()[:8]
+	_, err = f.db.Exec(ctx, `INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status) VALUES ($1, $2, $3, $4, $5, 1, 'warehouse')`, unitID, unitCode, variantID, supplyID, supplyItemID)
+	require.NoError(t, err)
+
+	return unitID, unitCode
+}
+
 func (f *pickingFixture) createAllocation(t *testing.T, ctx context.Context, orderItemID uuid.UUID, picked bool) {
 	t.Helper()
 	var variantID uuid.UUID
@@ -144,7 +198,18 @@ func TestPickingRead_AwaitingPayment_Rejected(t *testing.T) {
 	defer f.db.Close()
 
 	_, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "awaiting_payment", "awaiting_payment")
-	
+
+	_, err := f.svc.GetPickingOrder(ctx, fulfillmentID)
+	require.ErrorIs(t, err, fulfillment.ErrPickingNotAllowed)
+}
+
+func TestPickingRead_CancelledOrderPaidFulfillment_Rejected(t *testing.T) {
+	ctx := context.Background()
+	f := setupPickingFixture(t, ctx)
+	defer f.db.Close()
+
+	_, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "cancelled", "paid")
+
 	_, err := f.svc.GetPickingOrder(ctx, fulfillmentID)
 	require.ErrorIs(t, err, fulfillment.ErrPickingNotAllowed)
 }
@@ -155,7 +220,7 @@ func TestPickingRead_Paid_Allowed(t *testing.T) {
 	defer f.db.Close()
 
 	_, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "paid", "paid")
-	
+
 	po, err := f.svc.GetPickingOrder(ctx, fulfillmentID)
 	require.NoError(t, err)
 	assert.Equal(t, "paid", po.FulfillmentStatus)
@@ -167,7 +232,7 @@ func TestPickingRead_Assembling_Allowed(t *testing.T) {
 	defer f.db.Close()
 
 	_, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "assembling", "assembling")
-	
+
 	po, err := f.svc.GetPickingOrder(ctx, fulfillmentID)
 	require.NoError(t, err)
 	assert.Equal(t, "assembling", po.FulfillmentStatus)
@@ -180,7 +245,7 @@ func TestPickingRead_Classification_Serialized(t *testing.T) {
 
 	orderID, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "paid", "paid")
 	itemID := f.createOrderItem(t, ctx, orderID, fulfillmentID, 2, 0)
-	
+
 	// 2 active allocations => serialized
 	f.createAllocation(t, ctx, itemID, false)
 	f.createAllocation(t, ctx, itemID, true) // one picked
@@ -225,7 +290,7 @@ func TestPickingRead_Classification_InvalidPartial(t *testing.T) {
 
 	orderID, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "paid", "paid")
 	itemID := f.createOrderItem(t, ctx, orderID, fulfillmentID, 3, 0)
-	
+
 	// quantity = 3, but 1 active allocation => INVALID
 	f.createAllocation(t, ctx, itemID, false)
 
@@ -240,7 +305,7 @@ func TestPickingRead_Classification_InvalidOverallocation(t *testing.T) {
 
 	orderID, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "paid", "paid")
 	itemID := f.createOrderItem(t, ctx, orderID, fulfillmentID, 2, 0)
-	
+
 	// quantity = 2, but 3 active allocations => INVALID
 	f.createAllocation(t, ctx, itemID, false)
 	f.createAllocation(t, ctx, itemID, false)

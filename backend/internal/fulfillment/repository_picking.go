@@ -1,4 +1,4 @@
-package fulfillmen
+package fulfillment
 
 import (
 	"context"
@@ -33,11 +33,8 @@ func (r *Repository) GetPickingOrderTx(ctx context.Context, tx pgx.Tx, fulfillme
 	po.OrderNumber = orderNumber // Not stored in legacy orders table without snapshots; leave nil or add later
 
 	// 2. Validate business rules for eligibility
-	if po.OrderStatus == "awaiting_payment" {
-		return nil, ErrPickingNotAllowed
-	}
-	if po.FulfillmentStatus != "paid" && po.FulfillmentStatus != "assembling" {
-		// Could be packed, shipped, etc. We just strictly allow paid and assembling.
+	if (po.OrderStatus != "paid" && po.OrderStatus != "assembling") ||
+		(po.FulfillmentStatus != "paid" && po.FulfillmentStatus != "assembling") {
 		return nil, ErrPickingNotAllowed
 	}
 
@@ -58,16 +55,16 @@ func (r *Repository) GetPickingOrderTx(ctx context.Context, tx pgx.Tx, fulfillme
 		id           uuid.UUID
 		variantID    uuid.UUID
 		title        string
-		quantity     in
-		legacyPicked in
+		quantity     int
+		legacyPicked int
 	}
 	for rows.Next() {
 		var item struct {
 			id           uuid.UUID
 			variantID    uuid.UUID
 			title        string
-			quantity     in
-			legacyPicked in
+			quantity     int
+			legacyPicked int
 		}
 		if err := rows.Scan(&item.id, &item.variantID, &item.title, &item.quantity, &item.legacyPicked); err != nil {
 			return nil, err
@@ -80,7 +77,7 @@ func (r *Repository) GetPickingOrderTx(ctx context.Context, tx pgx.Tx, fulfillme
 
 	for _, item := range orderItems {
 		queryAllocs := `
-			SELECT a.inventory_unit_id, u.unit_code, a.picked_a
+			SELECT a.inventory_unit_id, u.unit_code, a.picked_at
 			FROM order_item_allocations a
 			JOIN inventory_units u ON u.id = a.inventory_unit_id
 			WHERE a.order_item_id = $1 AND a.released_at IS NULL
@@ -90,10 +87,10 @@ func (r *Repository) GetPickingOrderTx(ctx context.Context, tx pgx.Tx, fulfillme
 			return nil, fmt.Errorf("failed to fetch allocations: %w", err)
 		}
 
-		var allocs []PickingAllocatedUni
-		var serializedPicked in
+		var allocs []PickingAllocatedUnit
+		var serializedPicked int
 		for arows.Next() {
-			var a PickingAllocatedUni
+			var a PickingAllocatedUnit
 			if err := arows.Scan(&a.InventoryUnitID, &a.UnitCode, &a.PickedAt); err != nil {
 				arows.Close()
 				return nil, err
@@ -153,10 +150,8 @@ func (r *Repository) ScanPickingCodeTx(ctx context.Context, tx pgx.Tx, fulfillme
 		return nil, fmt.Errorf("failed to lock fulfillment: %w", err)
 	}
 
-	if po.FulfillmentStatus == "awaiting_payment" || po.OrderStatus == "awaiting_payment" {
-		return nil, ErrPickingNotAllowed
-	}
-	if po.FulfillmentStatus != "paid" && po.FulfillmentStatus != "assembling" {
+	if (po.OrderStatus != "paid" && po.OrderStatus != "assembling") ||
+		(po.FulfillmentStatus != "paid" && po.FulfillmentStatus != "assembling") {
 		return nil, ErrPickingNotAllowed
 	}
 
@@ -193,7 +188,7 @@ func (r *Repository) ScanPickingCodeTx(ctx context.Context, tx pgx.Tx, fulfillme
 
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, ErrUnitNotAllocatedToFulfillmen
+				return nil, ErrUnitNotAllocatedToFulfillment
 			}
 			return nil, fmt.Errorf("failed to check unit allocation: %w", err)
 		}
@@ -219,7 +214,7 @@ func (r *Repository) ScanPickingCodeTx(ctx context.Context, tx pgx.Tx, fulfillme
 		// Find order items in this fulfillment matching the barcode
 		queryLegacy := `
 			SELECT oi.id, oi.quantity, oi.picked_quantity,
-			       (SELECT count(*) FROM order_item_allocations a WHERE a.order_item_id = oi.id AND a.released_at IS NULL) as alloc_coun
+			       (SELECT count(*) FROM order_item_allocations a WHERE a.order_item_id = oi.id AND a.released_at IS NULL) as alloc_count
 			FROM order_items oi
 			JOIN product_variants pv ON pv.id = oi.product_variant_id
 			WHERE oi.order_fulfillment_id = $1
@@ -233,9 +228,9 @@ func (r *Repository) ScanPickingCodeTx(ctx context.Context, tx pgx.Tx, fulfillme
 
 		type match struct {
 			id       uuid.UUID
-			quantity in
-			picked   in
-			allocs   in
+			quantity int
+			picked   int
+			allocs   int
 		}
 		var matches []match
 		for rows.Next() {
@@ -279,7 +274,7 @@ func (r *Repository) ScanPickingCodeTx(ctx context.Context, tx pgx.Tx, fulfillme
 			if cmdTag.RowsAffected() == 1 {
 				res.ScanResult.NewlyPicked = true
 			} else {
-				// E.g. concurrent update finished i
+				// E.g. concurrent update finished it
 				res.ScanResult.AlreadyComplete = true
 			}
 		}
@@ -290,6 +285,12 @@ func (r *Repository) ScanPickingCodeTx(ctx context.Context, tx pgx.Tx, fulfillme
 	// 4. Calculate progress
 	po2, err := r.GetPickingOrderTx(ctx, tx, fulfillmentID)
 	if err != nil {
+		if errors.Is(err, ErrInvariantViolation) {
+			return nil, ErrInvariantViolation
+		}
+		if errors.Is(err, ErrPickingNotAllowed) {
+			return nil, ErrPickingNotAllowed
+		}
 		return nil, fmt.Errorf("failed to get picking order progress: %w", err)
 	}
 
