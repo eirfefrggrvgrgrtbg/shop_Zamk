@@ -305,7 +305,119 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		assert.Equal(t, "unit_allocated_to_other_order", res.Error.Code)
 	})
 
-	// 9. Valid admin request -> 200 with PickingScanResul
+	// 9. Domain error: unit_not_in_warehouse -> 409
+	t.Run("non-warehouse unit -> 409 unit_not_in_warehouse", func(t *testing.T) {
+		damOrderID := uuid.New()
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO orders (id, user_id, status, total_price_cents, customer_name, customer_phone, customer_email, delivery_address)
+			VALUES ($1, $2, 'paid', 1000, 'Buyer', 'Phone', 'Email', 'Addr')
+		`, damOrderID, buyerID)
+		require.NoError(t, err)
+
+		damFulfID := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents)
+			VALUES ($1, $2, $3, 'paid', 1000, 900, 900)
+		`, damFulfID, damOrderID, sellerID)
+		require.NoError(t, err)
+
+		damItemID := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents, order_fulfillment_id, picked_quantity)
+			VALUES ($1, $2, $3, $4, $5, 'Dam Item', 'prod-slug', 100, 1, 100, $6, 0)
+		`, damItemID, damOrderID, prodID, variantID, sellerID, damFulfID)
+		require.NoError(t, err)
+
+		damagedUnitID := uuid.New()
+		damagedCode := "ZMU-DAMAGED-" + damagedUnitID.String()[:8]
+		damagedSupplyID := uuid.New()
+		damagedSupplyItemID := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO seller_supplies (id, seller_id, status, supply_number, handoff_method, created_at, updated_at) VALUES ($1, $2, 'completed', $3, 'pickup', now(), now())`, damagedSupplyID, sellerID, uuid.New().String()[:8])
+		require.NoError(t, err)
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO seller_supply_items (id, supply_id, variant_id, expected_quantity, created_at, updated_at) VALUES ($1, $2, $3, 1, now(), now())`, damagedSupplyItemID, damagedSupplyID, variantID)
+		require.NoError(t, err)
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status) VALUES ($1, $2, $3, $4, $5, 1, 'damaged')`, damagedUnitID, damagedCode, variantID, damagedSupplyID, damagedSupplyItemID)
+		require.NoError(t, err)
+
+		damagedAllocID := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO order_item_allocations (id, order_item_id, inventory_unit_id, picked_at) VALUES ($1, $2, $3, NULL)`, damagedAllocID, damItemID, damagedUnitID)
+		require.NoError(t, err)
+
+		body, _ := json.Marshal(map[string]string{"code": damagedCode})
+		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+damFulfID.String()+"/picking/scan", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+adminTok)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusConflict, rr.Code)
+
+		var res errResponse
+		require.NoError(t, json.NewDecoder(rr.Body).Decode(&res))
+		assert.Equal(t, "unit_not_in_warehouse", res.Error.Code)
+	})
+
+	// 10. Domain error: ambiguous_picking_code -> 409
+	t.Run("ambiguous legacy code -> 409 ambiguous_picking_code and keeps paid state", func(t *testing.T) {
+		ambigOrderID := uuid.New()
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO orders (id, user_id, status, total_price_cents, customer_name, customer_phone, customer_email, delivery_address)
+			VALUES ($1, $2, 'paid', 1000, 'Buyer', 'Phone', 'Email', 'Addr')
+		`, ambigOrderID, buyerID)
+		require.NoError(t, err)
+
+		ambigFulfID := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents)
+			VALUES ($1, $2, $3, 'paid', 1000, 900, 900)
+		`, ambigFulfID, ambigOrderID, sellerID)
+		require.NoError(t, err)
+
+		ambigVariantID := uuid.New()
+		ambigBarcode := "BARCODE-AMBIG-" + ambigVariantID.String()[:8]
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, 1000, true, now(), now())`, ambigVariantID, prodID, "SKU-AMBIG-"+ambigVariantID.String()[:8], "SSKU-AMBIG-"+ambigVariantID.String()[:8], ambigBarcode)
+		require.NoError(t, err)
+
+		ambigItemID1 := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents, order_fulfillment_id, picked_quantity)
+			VALUES ($1, $2, $3, $4, $5, 'Prod Item 1', 'prod-slug', 100, 1, 100, $6, 0)
+		`, ambigItemID1, ambigOrderID, prodID, ambigVariantID, sellerID, ambigFulfID)
+		require.NoError(t, err)
+
+		ambigItemID2 := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents, order_fulfillment_id, picked_quantity)
+			VALUES ($1, $2, $3, $4, $5, 'Prod Item 2', 'prod-slug', 100, 1, 100, $6, 0)
+		`, ambigItemID2, ambigOrderID, prodID, ambigVariantID, sellerID, ambigFulfID)
+		require.NoError(t, err)
+
+		body, _ := json.Marshal(map[string]string{"code": ambigBarcode})
+		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+ambigFulfID.String()+"/picking/scan", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+adminTok)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusConflict, rr.Code)
+
+		var res errResponse
+		require.NoError(t, json.NewDecoder(rr.Body).Decode(&res))
+		assert.Equal(t, "ambiguous_picking_code", res.Error.Code)
+
+		// Assert paid state and quantities unchanged
+		var oStatus, fStatus string
+		_ = pgClient.Pool.QueryRow(ctx, `SELECT status FROM orders WHERE id = $1`, ambigOrderID).Scan(&oStatus)
+		_ = pgClient.Pool.QueryRow(ctx, `SELECT status FROM order_fulfillments WHERE id = $1`, ambigFulfID).Scan(&fStatus)
+		assert.Equal(t, "paid", oStatus, "order status must remain paid")
+		assert.Equal(t, "paid", fStatus, "fulfillment status must remain paid")
+
+		var p1, p2 int
+		_ = pgClient.Pool.QueryRow(ctx, `SELECT picked_quantity FROM order_items WHERE id = $1`, ambigItemID1).Scan(&p1)
+		_ = pgClient.Pool.QueryRow(ctx, `SELECT picked_quantity FROM order_items WHERE id = $1`, ambigItemID2).Scan(&p2)
+		assert.Equal(t, 0, p1, "item 1 picked quantity unchanged")
+		assert.Equal(t, 0, p2, "item 2 picked quantity unchanged")
+	})
+
+	// 11. Valid admin request -> 200 with PickingScanResult
 	t.Run("valid admin scan -> 200", func(t *testing.T) {
 		body, _ := json.Marshal(map[string]string{"code": unitCode})
 		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking/scan", bytes.NewReader(body))

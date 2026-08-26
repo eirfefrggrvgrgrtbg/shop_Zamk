@@ -361,6 +361,13 @@ func TestPickingScan_AmbiguousLegacyCode(t *testing.T) {
 	_ = f.db.QueryRow(ctx, `SELECT picked_quantity FROM order_items WHERE id = $1`, itemID2).Scan(&p2)
 	assert.Equal(t, 0, p1)
 	assert.Equal(t, 0, p2)
+
+	// Order and fulfillment remain paid
+	var oStatus, fStatus string
+	_ = f.db.QueryRow(ctx, `SELECT status FROM orders WHERE id = $1`, orderID).Scan(&oStatus)
+	_ = f.db.QueryRow(ctx, `SELECT status FROM order_fulfillments WHERE id = $1`, fulfillmentID).Scan(&fStatus)
+	assert.Equal(t, "paid", oStatus, "order status must remain paid")
+	assert.Equal(t, "paid", fStatus, "fulfillment status must remain paid")
 }
 
 func TestPickingScan_ForeignZMU_NoMutation(t *testing.T) {
