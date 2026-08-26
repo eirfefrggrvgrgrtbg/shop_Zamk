@@ -2,7 +2,6 @@ package fulfillment_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 

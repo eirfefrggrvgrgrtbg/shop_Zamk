@@ -26,11 +26,14 @@ type OrderItemAllocation struct {
 	ReleaseReason   *string    `json:"release_reason,omitempty"`
 }
 
-// AllocateUnitsForOrderItem looks up the authoritative product_variant_id from order_items
-// and allocates exactly quantity physical ZMU warehouse units in an atomic transaction.
-func (r *Repository) AllocateUnitsForOrderItem(ctx context.Context, tx pgx.Tx, orderItemID uuid.UUID, quantity int, reservationID *uuid.UUID) ([]uuid.UUID, error) {
+// TryAllocateUnitsForOrderItem attempts to allocate exactly quantity physical ZMU warehouse units
+// for the given order item.
+// If exactly quantity eligible units are available, it allocates them and returns (true, unitIDs, nil).
+// If fewer than quantity units are available, it does NOT allocate partial units and returns (false, nil, nil),
+// allowing the order item to proceed under canonical aggregate legacy reservation without manufacturing fake ZMUs.
+func (r *Repository) TryAllocateUnitsForOrderItem(ctx context.Context, tx pgx.Tx, orderItemID uuid.UUID, quantity int, reservationID *uuid.UUID) (bool, []uuid.UUID, error) {
 	if quantity <= 0 {
-		return nil, ErrInvalidAllocationQuantity
+		return false, nil, ErrInvalidAllocationQuantity
 	}
 
 	// 1. Authoritative lookup and row lock on order_item
@@ -43,12 +46,12 @@ func (r *Repository) AllocateUnitsForOrderItem(ctx context.Context, tx pgx.Tx, o
 	`, orderItemID).Scan(&variantID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrOrderItemNotFound
+			return false, nil, ErrOrderItemNotFound
 		}
-		return nil, fmt.Errorf("failed to fetch order item: %w", err)
+		return false, nil, fmt.Errorf("failed to fetch order item: %w", err)
 	}
 
-	// 2. Select and lock exactly N eligible units for this variant
+	// 2. Select and lock up to N eligible units for this variant
 	// Eligibility:
 	// - product_variant_id matches order_item.product_variant_id
 	// - status = 'warehouse'
@@ -70,7 +73,7 @@ func (r *Repository) AllocateUnitsForOrderItem(ctx context.Context, tx pgx.Tx, o
 
 	rows, err := tx.Query(ctx, queryEligible, variantID, quantity)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query eligible warehouse units: %w", err)
+		return false, nil, fmt.Errorf("failed to query eligible warehouse units: %w", err)
 	}
 	defer rows.Close()
 
@@ -78,20 +81,20 @@ func (r *Repository) AllocateUnitsForOrderItem(ctx context.Context, tx pgx.Tx, o
 	for rows.Next() {
 		var id uuid.UUID
 		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("failed to scan unit id: %w", err)
+			return false, nil, fmt.Errorf("failed to scan unit id: %w", err)
 		}
 		unitIDs = append(unitIDs, id)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating units: %w", err)
+		return false, nil, fmt.Errorf("error iterating units: %w", err)
 	}
 
-	// 3. Exact quantity all-or-nothing check
+	// If fewer than quantity eligible units exist, do not partially allocate; fallback to aggregate legacy
 	if len(unitIDs) < quantity {
-		return nil, ErrInsufficientWarehouseUnits
+		return false, nil, nil
 	}
 
-	// 4. Insert allocation records
+	// 3. Insert allocation records
 	now := time.Now()
 	for _, unitID := range unitIDs {
 		allocID := uuid.New()
@@ -100,10 +103,23 @@ func (r *Repository) AllocateUnitsForOrderItem(ctx context.Context, tx pgx.Tx, o
 			VALUES ($1, $2, $3, $4, $5)
 		`, allocID, orderItemID, unitID, reservationID, now)
 		if err != nil {
-			return nil, fmt.Errorf("failed to insert order item allocation: %w", err)
+			return false, nil, fmt.Errorf("failed to insert order item allocation: %w", err)
 		}
 	}
 
+	return true, unitIDs, nil
+}
+
+// AllocateUnitsForOrderItem looks up the authoritative product_variant_id from order_items
+// and allocates exactly quantity physical ZMU warehouse units in an atomic transaction.
+func (r *Repository) AllocateUnitsForOrderItem(ctx context.Context, tx pgx.Tx, orderItemID uuid.UUID, quantity int, reservationID *uuid.UUID) ([]uuid.UUID, error) {
+	allocated, unitIDs, err := r.TryAllocateUnitsForOrderItem(ctx, tx, orderItemID, quantity, reservationID)
+	if err != nil {
+		return nil, err
+	}
+	if !allocated {
+		return nil, ErrInsufficientWarehouseUnits
+	}
 	return unitIDs, nil
 }
 

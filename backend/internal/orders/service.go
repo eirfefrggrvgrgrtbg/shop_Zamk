@@ -226,16 +226,10 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 				return err
 			}
 
-			// Synchronize physical ZMU allocations if this variant is serialized
-			hasSerialized, err := s.repo.HasSerializedUnitsTx(ctx, tx, orderItems[i].ProductVariantID)
-			if err != nil {
+			// Synchronize physical ZMU allocations if eligible units are available
+			resID := reservations[i].ReservationID
+			if _, _, err := s.repo.TryAllocateUnitsForOrderItem(ctx, tx, orderItems[i].ID, orderItems[i].Quantity, &resID); err != nil {
 				return err
-			}
-			if hasSerialized {
-				resID := reservations[i].ReservationID
-				if _, err := s.repo.AllocateUnitsForOrderItem(ctx, tx, orderItems[i].ID, orderItems[i].Quantity, &resID); err != nil {
-					return err
-				}
 			}
 		}
 
@@ -334,10 +328,6 @@ func (s *Service) CancelCustomerOrder(ctx context.Context, userID, orderID uuid.
 		if _, err := s.repo.MarkOrderFulfillmentsStatusTx(ctx, tx, orderID, order.Status, "cancelled"); err != nil {
 			return err
 		}
-
-		if err := s.repo.ReleaseAllocationsForOrder(ctx, tx, orderID, "order_cancelled"); err != nil {
-			return err
-		}
 		
 		return nil
 	})
@@ -394,9 +384,6 @@ func (s *Service) UpdateOrderStatus(ctx context.Context, adminID, orderID uuid.U
 						return err
 					}
 				}
-			}
-			if err := s.repo.ReleaseAllocationsForOrder(ctx, tx, orderID, "order_cancelled"); err != nil {
-				return err
 			}
 		}
 
@@ -544,10 +531,6 @@ func (s *Service) ExpireAwaitingPaymentOrders(ctx context.Context, now time.Time
 				} else {
 					result.ReleasedReservations++
 				}
-			}
-
-			if err := s.repo.ReleaseAllocationsForOrder(ctx, tx, orderID, "expired_awaiting_payment"); err != nil {
-				return err
 			}
 		}
 

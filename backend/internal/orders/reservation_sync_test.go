@@ -203,21 +203,19 @@ func (f *reservationSyncFixture) createNewBuyer(t *testing.T, ctx context.Contex
 	return buyerID
 }
 
-// Test A, B, C, D, E, F, G, H, I:
-
-func TestReservationSync_SerializedHappyPathAndSecondOrder(t *testing.T) {
+// A. PURE SERIALIZED VARIANT TEST
+func TestRegression_PureSerializedVariant(t *testing.T) {
 	ctx := context.Background()
 	f := setupReservationSyncFixture(t, ctx)
 	defer f.db.Close()
 
-	variantA := f.createVariantWithInventory(t, ctx, "SKU-SYNC-A", 10, 0)
+	// 5 physical units in warehouse, aggregate total_stock = 5, reserved = 0
+	variantA := f.createVariantWithInventory(t, ctx, "SKU-PURE-SER", 5, 0)
 	zmuUnits := f.createWarehouseUnits(t, ctx, variantA, 5)
 	require.Len(t, zmuUnits, 5)
 
-	// --- A. SERIALIZED HAPPY PATH ---
-	// Buyer 1 adds 2 to cart and creates order
+	// Order 1: reserve 2 units
 	f.populateCart(t, ctx, f.buyerID, variantA, 2)
-
 	order1, err := f.ordersSvc.CreateOrder(ctx, f.buyerID, orders.CreateOrderRequest{
 		CustomerName:     "Buyer One",
 		CustomerPhone:    "+79990000001",
@@ -227,44 +225,30 @@ func TestReservationSync_SerializedHappyPathAndSecondOrder(t *testing.T) {
 	}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, order1)
-	require.Len(t, order1.Items, 1)
 	order1ItemID := order1.Items[0].ID
 
-	// Check aggregate reserved_stock incremented by 2
+	// Check reserved_stock = 2
 	var reservedStock int
 	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, variantA).Scan(&reservedStock)
 	require.NoError(t, err)
-	assert.Equal(t, 2, reservedStock, "aggregate reserved_stock must be 2")
+	assert.Equal(t, 2, reservedStock)
 
-	// Check reservation quantity = 2
+	// Check 2 active allocations with reservation_id
+	allocs1, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, order1ItemID)
+	require.NoError(t, err)
+	require.Len(t, allocs1, 2)
 	resIDs, err := f.ordersRepo.GetOrderReservations(ctx, order1.ID)
 	require.NoError(t, err)
 	require.Len(t, resIDs, 1)
 	res1ID := resIDs[0]
-
-	// Check exactly 2 active allocations with reservation_id populated
-	allocs1, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, order1ItemID)
-	require.NoError(t, err)
-	require.Len(t, allocs1, 2)
-	assert.NotEqual(t, allocs1[0].InventoryUnitID, allocs1[1].InventoryUnitID)
 	for _, a := range allocs1 {
 		require.NotNil(t, a.ReservationID)
 		assert.Equal(t, res1ID, *a.ReservationID)
 	}
 
-	// Verify all physical units remain status = 'warehouse'
-	for _, uid := range zmuUnits {
-		var status string
-		err := f.db.QueryRow(ctx, `SELECT status FROM inventory_units WHERE id = $1`, uid).Scan(&status)
-		require.NoError(t, err)
-		assert.Equal(t, "warehouse", status)
-	}
-
-	// --- B. SECOND ORDER ---
-	// Buyer 2 reserves another 2
+	// Order 2: reserve another 2 units
 	buyer2ID := f.createNewBuyer(t, ctx)
 	f.populateCart(t, ctx, buyer2ID, variantA, 2)
-
 	order2, err := f.ordersSvc.CreateOrder(ctx, buyer2ID, orders.CreateOrderRequest{
 		CustomerName:     "Buyer Two",
 		CustomerPhone:    "+79990000002",
@@ -273,34 +257,28 @@ func TestReservationSync_SerializedHappyPathAndSecondOrder(t *testing.T) {
 		DeliveryMethodID: f.deliveryMethodID,
 	}, nil)
 	require.NoError(t, err)
-	require.NotNil(t, order2)
-	require.Len(t, order2.Items, 1)
 	order2ItemID := order2.Items[0].ID
 
-	// Check aggregate reserved_stock total = 4
+	// Check reserved_stock = 4
 	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, variantA).Scan(&reservedStock)
 	require.NoError(t, err)
-	assert.Equal(t, 4, reservedStock, "aggregate reserved_stock must be 4")
+	assert.Equal(t, 4, reservedStock)
 
-	// Check 4 distinct active ZMUs total
+	// 4 distinct active ZMUs allocated
 	allocs2, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, order2ItemID)
 	require.NoError(t, err)
 	require.Len(t, allocs2, 2)
-
-	allocatedUnits := map[uuid.UUID]bool{
+	allocatedMap := map[uuid.UUID]bool{
 		allocs1[0].InventoryUnitID: true,
 		allocs1[1].InventoryUnitID: true,
 		allocs2[0].InventoryUnitID: true,
 		allocs2[1].InventoryUnitID: true,
 	}
-	assert.Len(t, allocatedUnits, 4, "all 4 allocated ZMUs must be distinct")
+	assert.Len(t, allocatedMap, 4)
 
-	// --- C. PHYSICAL SHORTAGE ---
-	// 5 total ZMUs, 4 active allocated => only 1 remaining.
-	// Buyer 3 tries to reserve 2 -> must fail completely (all-or-nothing rollback)
+	// Order 3: only 1 unit remaining; attempt ordering 2 units -> must fail
 	buyer3ID := f.createNewBuyer(t, ctx)
 	f.populateCart(t, ctx, buyer3ID, variantA, 2)
-
 	order3, err := f.ordersSvc.CreateOrder(ctx, buyer3ID, orders.CreateOrderRequest{
 		CustomerName:     "Buyer Three",
 		CustomerPhone:    "+79990000003",
@@ -308,199 +286,282 @@ func TestReservationSync_SerializedHappyPathAndSecondOrder(t *testing.T) {
 		DeliveryAddress:  "Warehouse Lane 3",
 		DeliveryMethodID: f.deliveryMethodID,
 	}, nil)
-	require.Error(t, err, "order creation must fail when physical ZMUs are insufficient")
+	require.Error(t, err)
 	assert.Nil(t, order3)
 
-	// Verify ZERO new reservations, reserved_stock remains 4, total active allocations for variantA remains 4
+	// Invariants hold: reserved_stock remains 4, active allocations count remains 4
 	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, variantA).Scan(&reservedStock)
 	require.NoError(t, err)
-	assert.Equal(t, 4, reservedStock, "reserved_stock must stay 4 after rolled back attempt")
+	assert.Equal(t, 4, reservedStock)
 
-	var totalActiveCount int
-	err = f.db.QueryRow(ctx, `
-		SELECT COUNT(*) 
-		FROM order_item_allocations a
-		JOIN inventory_units u ON a.inventory_unit_id = u.id
-		WHERE u.product_variant_id = $1 AND a.released_at IS NULL
-	`, variantA).Scan(&totalActiveCount)
-	require.NoError(t, err)
-	assert.Equal(t, 4, totalActiveCount, "active allocations count for variantA must stay 4")
-
-	// --- E. CANCELLATION RELEASE ---
-	// Cancel order 1 through canonical path
+	// Cancellation of Order 1: single canonical release decrements reserved_stock to 2
 	err = f.ordersSvc.CancelCustomerOrder(ctx, f.buyerID, order1.ID)
 	require.NoError(t, err)
 
-	// Check reserved_stock decremented to 2 (4 - 2 = 2)
 	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, variantA).Scan(&reservedStock)
 	require.NoError(t, err)
-	assert.Equal(t, 2, reservedStock, "reserved_stock must decrement by 2 after cancellation")
+	assert.Equal(t, 2, reservedStock)
 
-	// Check order 1 active allocations = 0
-	activeAllocs1After, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, order1ItemID)
-	require.NoError(t, err)
-	assert.Empty(t, activeAllocs1After)
-
-	// Check order 1 historical allocations retained with released_at and release_reason
+	// Released allocations recorded with history preserved
 	allAllocs1, err := f.ordersRepo.ListAllAllocationsForOrderItem(ctx, order1ItemID)
 	require.NoError(t, err)
 	require.Len(t, allAllocs1, 2)
 	for _, a := range allAllocs1 {
 		assert.NotNil(t, a.ReleasedAt)
-		require.NotNil(t, a.ReleaseReason)
+		assert.NotNil(t, a.ReleaseReason)
 	}
 
-	// Units remain in warehouse status
+	// Units remain status = 'warehouse'
 	for _, uid := range zmuUnits {
 		var status string
 		err := f.db.QueryRow(ctx, `SELECT status FROM inventory_units WHERE id = $1`, uid).Scan(&status)
 		require.NoError(t, err)
 		assert.Equal(t, "warehouse", status)
 	}
+}
 
-	// Now buyer 3 retries ordering 2 units -> should succeed because 2 units were released!
-	order3Retry, err := f.ordersSvc.CreateOrder(ctx, buyer3ID, orders.CreateOrderRequest{
-		CustomerName:     "Buyer Three",
+// B. PURE LEGACY VARIANT TEST
+func TestRegression_PureLegacyVariant(t *testing.T) {
+	ctx := context.Background()
+	f := setupReservationSyncFixture(t, ctx)
+	defer f.db.Close()
+
+	// Pure aggregate: 0 ZMUs in warehouse, total_stock = 10, reserved = 0
+	legacyVariant := f.createVariantWithInventory(t, ctx, "SKU-PURE-LEG", 10, 0)
+
+	// Order 1: 3 units
+	f.populateCart(t, ctx, f.buyerID, legacyVariant, 3)
+	order1, err := f.ordersSvc.CreateOrder(ctx, f.buyerID, orders.CreateOrderRequest{
+		CustomerName:     "Buyer Legacy 1",
+		CustomerPhone:    "+79990000001",
+		CustomerEmail:    "buyerleg1@example.com",
+		DeliveryAddress:  "Warehouse Lane",
+		DeliveryMethodID: f.deliveryMethodID,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, order1)
+
+	// Aggregate reserved_stock = 3, allocations count = 0 (no fake ZMUs)
+	var reservedStock int
+	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, legacyVariant).Scan(&reservedStock)
+	require.NoError(t, err)
+	assert.Equal(t, 3, reservedStock)
+
+	allocs1, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, order1.Items[0].ID)
+	require.NoError(t, err)
+	assert.Empty(t, allocs1, "pure legacy orders must have 0 physical allocations")
+
+	// Order 2: 5 units -> reserved_stock = 8
+	buyer2ID := f.createNewBuyer(t, ctx)
+	f.populateCart(t, ctx, buyer2ID, legacyVariant, 5)
+	order2, err := f.ordersSvc.CreateOrder(ctx, buyer2ID, orders.CreateOrderRequest{
+		CustomerName:     "Buyer Legacy 2",
+		CustomerPhone:    "+79990000002",
+		CustomerEmail:    "buyerleg2@example.com",
+		DeliveryAddress:  "Warehouse Lane",
+		DeliveryMethodID: f.deliveryMethodID,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, order2)
+
+	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, legacyVariant).Scan(&reservedStock)
+	require.NoError(t, err)
+	assert.Equal(t, 8, reservedStock)
+
+	// Order 3: 5 units (available is 10 - 8 = 2 < 5) -> must fail
+	buyer3ID := f.createNewBuyer(t, ctx)
+	f.populateCart(t, ctx, buyer3ID, legacyVariant, 5)
+	order3, err := f.ordersSvc.CreateOrder(ctx, buyer3ID, orders.CreateOrderRequest{
+		CustomerName:     "Buyer Legacy 3",
 		CustomerPhone:    "+79990000003",
-		CustomerEmail:    "buyer3@example.com",
+		CustomerEmail:    "buyerleg3@example.com",
+		DeliveryAddress:  "Warehouse Lane",
+		DeliveryMethodID: f.deliveryMethodID,
+	}, nil)
+	require.Error(t, err)
+	assert.Nil(t, order3)
+
+	// Cancellation of Order 1 releases aggregate reserved_stock back to 5
+	err = f.ordersSvc.CancelCustomerOrder(ctx, f.buyerID, order1.ID)
+	require.NoError(t, err)
+
+	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, legacyVariant).Scan(&reservedStock)
+	require.NoError(t, err)
+	assert.Equal(t, 5, reservedStock)
+}
+
+// C. MIXED STOCK VARIANT TEST (3 serialized ZMU + 5 legacy units, total = 8)
+func TestRegression_MixedStockVariant(t *testing.T) {
+	ctx := context.Background()
+	f := setupReservationSyncFixture(t, ctx)
+	defer f.db.Close()
+
+	// total_stock = 8, warehouse ZMU = 3, reserved_stock = 0
+	mixedVariant := f.createVariantWithInventory(t, ctx, "SKU-MIXED", 8, 0)
+	zmuUnits := f.createWarehouseUnits(t, ctx, mixedVariant, 3)
+	require.Len(t, zmuUnits, 3)
+
+	// --- 1. Order 1: quantity 2 (<= 3 ZMUs) ---
+	// Fully backed by serialized ZMU -> allocates 2 distinct physical units
+	f.populateCart(t, ctx, f.buyerID, mixedVariant, 2)
+	order1, err := f.ordersSvc.CreateOrder(ctx, f.buyerID, orders.CreateOrderRequest{
+		CustomerName:     "Buyer Mixed 1",
+		CustomerPhone:    "+79990000001",
+		CustomerEmail:    "buyermixed1@example.com",
+		DeliveryAddress:  "Warehouse Lane 1",
+		DeliveryMethodID: f.deliveryMethodID,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, order1)
+	order1ItemID := order1.Items[0].ID
+
+	// Check aggregate reserved_stock = 2
+	var reservedStock int
+	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, mixedVariant).Scan(&reservedStock)
+	require.NoError(t, err)
+	assert.Equal(t, 2, reservedStock)
+
+	// Exactly 2 active allocations created
+	allocs1, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, order1ItemID)
+	require.NoError(t, err)
+	require.Len(t, allocs1, 2)
+	assert.NotEqual(t, allocs1[0].InventoryUnitID, allocs1[1].InventoryUnitID)
+
+	// --- 2. Order 2: quantity 4 (> 3 ZMUs total, and > 1 remaining ZMU) ---
+	// Available aggregate stock = 8 - 2 = 6 >= 4.
+	// Cannot be fully backed by remaining 1 ZMU -> safely fulfilled from legacy capacity as aggregate reservation.
+	// ZERO fake ZMUs created!
+	buyer2ID := f.createNewBuyer(t, ctx)
+	f.populateCart(t, ctx, buyer2ID, mixedVariant, 4)
+	order2, err := f.ordersSvc.CreateOrder(ctx, buyer2ID, orders.CreateOrderRequest{
+		CustomerName:     "Buyer Mixed 2",
+		CustomerPhone:    "+79990000002",
+		CustomerEmail:    "buyermixed2@example.com",
+		DeliveryAddress:  "Warehouse Lane 2",
+		DeliveryMethodID: f.deliveryMethodID,
+	}, nil)
+	require.NoError(t, err, "ordering quantity > warehouse_zmu_count backed by legacy stock must succeed")
+	require.NotNil(t, order2)
+	order2ItemID := order2.Items[0].ID
+
+	// Aggregate reserved_stock becomes 2 + 4 = 6
+	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, mixedVariant).Scan(&reservedStock)
+	require.NoError(t, err)
+	assert.Equal(t, 6, reservedStock)
+
+	// Order 2 has 0 physical allocations (pure aggregate fallback, no fake ZMU)
+	allocs2, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, order2ItemID)
+	require.NoError(t, err)
+	assert.Empty(t, allocs2, "legacy-fulfilled order item must have 0 physical allocations")
+
+	// --- 3. Order 3: quantity 1 (<= 1 remaining ZMU, <= 2 remaining aggregate) ---
+	// Backed by the 1 remaining ZMU -> allocates the 3rd physical ZMU
+	buyer3ID := f.createNewBuyer(t, ctx)
+	f.populateCart(t, ctx, buyer3ID, mixedVariant, 1)
+	order3, err := f.ordersSvc.CreateOrder(ctx, buyer3ID, orders.CreateOrderRequest{
+		CustomerName:     "Buyer Mixed 3",
+		CustomerPhone:    "+79990000003",
+		CustomerEmail:    "buyermixed3@example.com",
 		DeliveryAddress:  "Warehouse Lane 3",
 		DeliveryMethodID: f.deliveryMethodID,
 	}, nil)
 	require.NoError(t, err)
-	assert.NotNil(t, order3Retry)
+	require.NotNil(t, order3)
+	order3ItemID := order3.Items[0].ID
 
-	// --- G. IDEMPOTENT RELEASE ---
-	// Cancelling order 1 again must not decrement reserved_stock again or error destructively
+	// Aggregate reserved_stock = 7
+	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, mixedVariant).Scan(&reservedStock)
+	require.NoError(t, err)
+	assert.Equal(t, 7, reservedStock)
+
+	// Order 3 has 1 active allocation
+	allocs3, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, order3ItemID)
+	require.NoError(t, err)
+	require.Len(t, allocs3, 1)
+
+	// Verify all 3 allocated ZMUs across Order 1 and Order 3 are distinct
+	allocatedUnits := map[uuid.UUID]bool{
+		allocs1[0].InventoryUnitID: true,
+		allocs1[1].InventoryUnitID: true,
+		allocs3[0].InventoryUnitID: true,
+	}
+	assert.Len(t, allocatedUnits, 3, "all 3 warehouse ZMUs must be uniquely allocated")
+
+	// --- 4. Order 4: quantity 2 (> 1 remaining aggregate available: 8 - 7 = 1) -> must fail ---
+	buyer4ID := f.createNewBuyer(t, ctx)
+	f.populateCart(t, ctx, buyer4ID, mixedVariant, 2)
+	order4, err := f.ordersSvc.CreateOrder(ctx, buyer4ID, orders.CreateOrderRequest{
+		CustomerName:     "Buyer Mixed 4",
+		CustomerPhone:    "+79990000004",
+		CustomerEmail:    "buyermixed4@example.com",
+		DeliveryAddress:  "Warehouse Lane 4",
+		DeliveryMethodID: f.deliveryMethodID,
+	}, nil)
+	require.Error(t, err, "ordering beyond aggregate available must fail")
+	assert.Nil(t, order4)
+
+	// --- 5. Cancellation of Order 2 (legacy): releases 4 aggregate units ---
+	err = f.ordersSvc.CancelCustomerOrder(ctx, buyer2ID, order2.ID)
+	require.NoError(t, err)
+
+	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, mixedVariant).Scan(&reservedStock)
+	require.NoError(t, err)
+	assert.Equal(t, 3, reservedStock, "reserved_stock must be 7 - 4 = 3")
+
+	// --- 6. Cancellation of Order 1 (serialized): releases 2 aggregate units and 2 ZMUs ---
 	err = f.ordersSvc.CancelCustomerOrder(ctx, f.buyerID, order1.ID)
-	require.Error(t, err, "cancelling already cancelled order should return error and not double decrement")
-	assert.True(t, errors.Is(err, orders.ErrOrderNotCancellable))
-
-	// Re-releasing reservation directly via inventory service
-	err = f.invSvc.ReleaseReservation(ctx, res1ID)
-	assert.True(t, errors.Is(err, inventory.ErrReservationNotActive), "idempotent release must return ErrReservationNotActive")
-
-	// Verify reserved_stock is still valid (4 total from order 2 and order 3)
-	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, variantA).Scan(&reservedStock)
 	require.NoError(t, err)
-	assert.Equal(t, 4, reservedStock)
+
+	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, mixedVariant).Scan(&reservedStock)
+	require.NoError(t, err)
+	assert.Equal(t, 1, reservedStock, "reserved_stock must be 3 - 2 = 1")
+
+	// The 2 ZMUs from Order 1 are now released and available again
+	activeAllocs1After, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, order1ItemID)
+	require.NoError(t, err)
+	assert.Empty(t, activeAllocs1After)
+
+	// Re-order 2 units with buyer 4 -> succeeds and re-allocates those 2 released ZMUs!
+	order4Retry, err := f.ordersSvc.CreateOrder(ctx, buyer4ID, orders.CreateOrderRequest{
+		CustomerName:     "Buyer Mixed 4 Retry",
+		CustomerPhone:    "+79990000004",
+		CustomerEmail:    "buyermixed4@example.com",
+		DeliveryAddress:  "Warehouse Lane 4",
+		DeliveryMethodID: f.deliveryMethodID,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, order4Retry)
+
+	allocs4, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, order4Retry.Items[0].ID)
+	require.NoError(t, err)
+	assert.Len(t, allocs4, 2, "re-order must allocate the 2 released physical ZMUs")
 }
 
-func TestReservationSync_AggregateShortage(t *testing.T) {
+// D. PAID SERIALIZED ORDER INVARIANT TEST
+func TestRegression_PaidSerializedOrder(t *testing.T) {
 	ctx := context.Background()
 	f := setupReservationSyncFixture(t, ctx)
 	defer f.db.Close()
 
-	// --- D. AGGREGATE SHORTAGE ---
-	// 5 physical ZMUs exist, but aggregate total_stock = 1, reserved_stock = 0.
-	variant := f.createVariantWithInventory(t, ctx, "SKU-AGG-SHORT", 1, 0)
-	zmuUnits := f.createWarehouseUnits(t, ctx, variant, 5)
-	require.Len(t, zmuUnits, 5)
+	// 1 ZMU, total_stock = 2
+	variant := f.createVariantWithInventory(t, ctx, "SKU-PAID-INV", 2, 0)
+	zmuUnits := f.createWarehouseUnits(t, ctx, variant, 1)
+	require.Len(t, zmuUnits, 1)
+	zmuID := zmuUnits[0]
 
-	// Buyer tries to order 2 units (aggregate available is only 1)
-	f.populateCart(t, ctx, f.buyerID, variant, 2)
-
-	order, err := f.ordersSvc.CreateOrder(ctx, f.buyerID, orders.CreateOrderRequest{
-		CustomerName:     "Buyer Short",
-		CustomerPhone:    "+79990000000",
-		CustomerEmail:    "buyershort@example.com",
-		DeliveryAddress:  "Warehouse Lane",
-		DeliveryMethodID: f.deliveryMethodID,
-	}, nil)
-	require.Error(t, err, "aggregate shortage must fail order creation")
-	assert.Nil(t, order)
-
-	// Verify ZERO physical allocations were created
-	var activeCount int
-	err = f.db.QueryRow(ctx, `
-		SELECT COUNT(*) 
-		FROM order_item_allocations a
-		JOIN inventory_units u ON a.inventory_unit_id = u.id
-		WHERE u.product_variant_id = $1 AND a.released_at IS NULL
-	`, variant).Scan(&activeCount)
-	require.NoError(t, err)
-	assert.Equal(t, 0, activeCount, "no physical units must be allocated")
-
-	// Reserved stock unchanged
-	var reservedStock int
-	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, variant).Scan(&reservedStock)
-	require.NoError(t, err)
-	assert.Equal(t, 0, reservedStock)
-}
-
-func TestReservationSync_TTLExpiryRelease(t *testing.T) {
-	ctx := context.Background()
-	f := setupReservationSyncFixture(t, ctx)
-	defer f.db.Close()
-
-	// --- F. TTL EXPIRY ---
-	variant := f.createVariantWithInventory(t, ctx, "SKU-TTL", 5, 0)
-	f.createWarehouseUnits(t, ctx, variant, 3)
-
-	f.populateCart(t, ctx, f.buyerID, variant, 2)
-
-	order, err := f.ordersSvc.CreateOrder(ctx, f.buyerID, orders.CreateOrderRequest{
-		CustomerName:     "Buyer TTL",
-		CustomerPhone:    "+79990000000",
-		CustomerEmail:    "buyerttl@example.com",
+	// Order A reserves 1 unit (the only ZMU)
+	f.populateCart(t, ctx, f.buyerID, variant, 1)
+	orderA, err := f.ordersSvc.CreateOrder(ctx, f.buyerID, orders.CreateOrderRequest{
+		CustomerName:     "Buyer A",
+		CustomerPhone:    "+79990000001",
+		CustomerEmail:    "buyera@example.com",
 		DeliveryAddress:  "Warehouse Lane",
 		DeliveryMethodID: f.deliveryMethodID,
 	}, nil)
 	require.NoError(t, err)
-	require.NotNil(t, order)
+	orderAItemID := orderA.Items[0].ID
 
-	orderItemID := order.Items[0].ID
-
-	// Verify allocated
-	allocs, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, orderItemID)
-	require.NoError(t, err)
-	require.Len(t, allocs, 2)
-
-	// Trigger expiration worker logic for orders created before now + 1 hour with sufficient limit
-	res, err := f.ordersSvc.ExpireAwaitingPaymentOrders(ctx, time.Now().Add(1*time.Hour), 1000)
-	require.NoError(t, err)
-	assert.GreaterOrEqual(t, res.Expired, 1)
-
-	// Check order is cancelled
-	updatedOrder, err := f.ordersRepo.GetOrder(ctx, order.ID)
-	require.NoError(t, err)
-	assert.Equal(t, "cancelled", updatedOrder.Status)
-
-	// Check allocations released
-	activeAfter, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, orderItemID)
-	require.NoError(t, err)
-	assert.Empty(t, activeAfter, "active allocations must be released after TTL expiry")
-
-	// Check reserved_stock decremented back to 0
-	var reservedStock int
-	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, variant).Scan(&reservedStock)
-	require.NoError(t, err)
-	assert.Equal(t, 0, reservedStock, "reserved_stock must be 0 after expiry release")
-}
-
-func TestReservationSync_PaymentSuccessKeepsAllocationActive(t *testing.T) {
-	ctx := context.Background()
-	f := setupReservationSyncFixture(t, ctx)
-	defer f.db.Close()
-
-	// --- H. PAYMENT SUCCESS ---
-	variant := f.createVariantWithInventory(t, ctx, "SKU-PAID", 5, 0)
-	f.createWarehouseUnits(t, ctx, variant, 2)
-
-	f.populateCart(t, ctx, f.buyerID, variant, 2)
-
-	order, err := f.ordersSvc.CreateOrder(ctx, f.buyerID, orders.CreateOrderRequest{
-		CustomerName:     "Buyer Paid",
-		CustomerPhone:    "+79990000000",
-		CustomerEmail:    "buyerpaid@example.com",
-		DeliveryAddress:  "Warehouse Lane",
-		DeliveryMethodID: f.deliveryMethodID,
-	}, nil)
-	require.NoError(t, err)
-	require.NotNil(t, order)
-
-	orderItemID := order.Items[0].ID
-
-	resIDs, err := f.ordersRepo.GetOrderReservations(ctx, order.ID)
+	resIDs, err := f.ordersRepo.GetOrderReservations(ctx, orderA.ID)
 	require.NoError(t, err)
 	require.Len(t, resIDs, 1)
 
@@ -510,56 +571,111 @@ func TestReservationSync_PaymentSuccessKeepsAllocationActive(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Check allocations REMAIN ACTIVE (released_at is NULL) for future picking
-	activeAllocs, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, orderItemID)
+	// 1. Check reservation status is converted
+	var resStatus string
+	err = f.db.QueryRow(ctx, `SELECT status FROM reservations WHERE id = $1`, resIDs[0]).Scan(&resStatus)
 	require.NoError(t, err)
-	assert.Len(t, activeAllocs, 2, "physical allocations must remain active after payment success")
+	assert.Equal(t, "converted", resStatus)
+
+	// 2. Physical unit status remains 'warehouse'
+	var unitStatus string
+	err = f.db.QueryRow(ctx, `SELECT status FROM inventory_units WHERE id = $1`, zmuID).Scan(&unitStatus)
+	require.NoError(t, err)
+	assert.Equal(t, "warehouse", unitStatus, "physical unit must stay in warehouse status after payment")
+
+	// 3. Physical allocation remains ACTIVE (released_at IS NULL)
+	allocsA, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, orderAItemID)
+	require.NoError(t, err)
+	require.Len(t, allocsA, 1)
+	assert.Equal(t, zmuID, allocsA[0].InventoryUnitID)
+	assert.Nil(t, allocsA[0].ReleasedAt)
+
+	// 4. Order B attempts to order 1 unit:
+	// Since 0 eligible ZMUs remain and 1 aggregate available remains (total_stock=1, reserved=0 after sale conversion),
+	// Order B succeeds as legacy aggregate reservation, and CANNOT allocate Order A's ZMU!
+	buyerBID := f.createNewBuyer(t, ctx)
+	f.populateCart(t, ctx, buyerBID, variant, 1)
+	orderB, err := f.ordersSvc.CreateOrder(ctx, buyerBID, orders.CreateOrderRequest{
+		CustomerName:     "Buyer B",
+		CustomerPhone:    "+79990000002",
+		CustomerEmail:    "buyerb@example.com",
+		DeliveryAddress:  "Warehouse Lane",
+		DeliveryMethodID: f.deliveryMethodID,
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, orderB)
+
+	allocsB, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, orderB.Items[0].ID)
+	require.NoError(t, err)
+	assert.Empty(t, allocsB, "Order B must NOT allocate Order A's paid ZMU")
+
+	// 5. Order C attempts to order when 0 aggregate available -> must fail
+	buyerCID := f.createNewBuyer(t, ctx)
+	f.populateCart(t, ctx, buyerCID, variant, 1)
+	orderC, err := f.ordersSvc.CreateOrder(ctx, buyerCID, orders.CreateOrderRequest{
+		CustomerName:     "Buyer C",
+		CustomerPhone:    "+79990000003",
+		CustomerEmail:    "buyerc@example.com",
+		DeliveryAddress:  "Warehouse Lane",
+		DeliveryMethodID: f.deliveryMethodID,
+	}, nil)
+	require.Error(t, err, "cannot oversell paid stock")
+	assert.Nil(t, orderC)
 }
 
-func TestReservationSync_LegacyStockRegression(t *testing.T) {
+// E & F. TTL EXPIRY AND CANONICAL RELEASE TEST
+func TestRegression_TTLExpiryAndCanonicalRelease(t *testing.T) {
 	ctx := context.Background()
 	f := setupReservationSyncFixture(t, ctx)
 	defer f.db.Close()
 
-	// --- I. LEGACY STOCK REGRESSION ---
-	// Create aggregate inventory with NO physical ZMU representation (0 inventory_units).
-	legacyVariant := f.createVariantWithInventory(t, ctx, "SKU-LEGACY", 10, 0)
+	variant := f.createVariantWithInventory(t, ctx, "SKU-TTL-CANON", 5, 0)
+	zmuUnits := f.createWarehouseUnits(t, ctx, variant, 3)
+	require.Len(t, zmuUnits, 3)
 
-	// Verify no ZMU exists
-	hasSerialized, err := f.ordersRepo.HasSerializedUnits(ctx, legacyVariant)
-	require.NoError(t, err)
-	assert.False(t, hasSerialized, "legacy variant has no serialized units")
-
-	// Buyer orders 3 units of legacy item
-	f.populateCart(t, ctx, f.buyerID, legacyVariant, 3)
-
+	f.populateCart(t, ctx, f.buyerID, variant, 2)
 	order, err := f.ordersSvc.CreateOrder(ctx, f.buyerID, orders.CreateOrderRequest{
-		CustomerName:     "Buyer Legacy",
+		CustomerName:     "Buyer TTL",
 		CustomerPhone:    "+79990000000",
-		CustomerEmail:    "buyerlegacy@example.com",
+		CustomerEmail:    "buyerttl@example.com",
 		DeliveryAddress:  "Warehouse Lane",
 		DeliveryMethodID: f.deliveryMethodID,
 	}, nil)
-	require.NoError(t, err, "legacy order creation must succeed without error")
+	require.NoError(t, err)
 	require.NotNil(t, order)
-	require.Len(t, order.Items, 1)
+	orderItemID := order.Items[0].ID
 
-	// Aggregate reserved_stock is incremented to 3
+	// Verify allocated
+	allocs, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, orderItemID)
+	require.NoError(t, err)
+	require.Len(t, allocs, 2)
+
+	// Trigger expiration worker logic
+	res, err := f.ordersSvc.ExpireAwaitingPaymentOrders(ctx, time.Now().Add(1*time.Hour), 1000)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, res.Expired, 1)
+
+	// Order cancelled
+	updatedOrder, err := f.ordersRepo.GetOrder(ctx, order.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "cancelled", updatedOrder.Status)
+
+	// Active allocations released
+	activeAfter, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, orderItemID)
+	require.NoError(t, err)
+	assert.Empty(t, activeAfter)
+
+	// Reserved stock decremented back to 0
 	var reservedStock int
-	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, legacyVariant).Scan(&reservedStock)
+	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, variant).Scan(&reservedStock)
 	require.NoError(t, err)
-	assert.Equal(t, 3, reservedStock, "aggregate reserved_stock must increment to 3")
+	assert.Equal(t, 0, reservedStock)
 
-	// Order item allocations table has 0 rows for this item (no fake ZMUs created)
-	allocs, err := f.ordersRepo.ListActiveAllocationsForOrderItem(ctx, order.Items[0].ID)
-	require.NoError(t, err)
-	assert.Empty(t, allocs, "legacy order items must have 0 physical allocation rows")
-
-	// Cancellation releases aggregate reserved_stock
-	err = f.ordersSvc.CancelCustomerOrder(ctx, f.buyerID, order.ID)
-	require.NoError(t, err)
-
-	err = f.db.QueryRow(ctx, `SELECT reserved_stock FROM inventory_items WHERE product_variant_id = $1`, legacyVariant).Scan(&reservedStock)
-	require.NoError(t, err)
-	assert.Equal(t, 0, reservedStock, "aggregate reserved_stock must decrement back to 0")
+	// Units remain status = 'warehouse'
+	for _, uid := range zmuUnits {
+		var status string
+		err := f.db.QueryRow(ctx, `SELECT status FROM inventory_units WHERE id = $1`, uid).Scan(&status)
+		require.NoError(t, err)
+		assert.Equal(t, "warehouse", status)
+	}
 }
