@@ -106,10 +106,10 @@ export const scanPickingCode = async (fulfillmentId: string, code: string): Prom
 };
 
 export const getAdminPickingQueue = async (): Promise<PickingQueueItem[]> => {
-  // Fetch eligible fulfillments: paid and assembling
+  // Fetch eligible fulfillments: paid and assembling (do not swallow failures)
   const [paidFulfillments, assemblingFulfillments] = await Promise.all([
-    getAdminFulfillments({ status: 'paid' }).catch(() => []),
-    getAdminFulfillments({ status: 'assembling' }).catch(() => []),
+    getAdminFulfillments({ status: 'paid' }),
+    getAdminFulfillments({ status: 'assembling' }),
   ]);
 
   const combined = [...paidFulfillments, ...assemblingFulfillments];
@@ -120,50 +120,30 @@ export const getAdminPickingQueue = async (): Promise<PickingQueueItem[]> => {
   }
   const uniqueFulfillments = Array.from(uniqueMap.values());
 
-  // Fetch detailed picking progress for each eligible fulfillment
+  // Fetch canonical picking progress for each eligible fulfillment
   const queueItems: PickingQueueItem[] = await Promise.all(
     uniqueFulfillments.map(async (f) => {
-      try {
-        const po = await getAdminPickingOrder(f.id);
-        const totalQty = po.items.reduce((sum, it) => sum + it.quantity, 0);
-        const pickedQty = po.items.reduce((sum, it) => sum + it.pickedQuantity, 0);
-        const remQty = Math.max(0, totalQty - pickedQty);
-        const percent = totalQty > 0 ? Math.round((pickedQty / totalQty) * 100) : 0;
+      const po = await getAdminPickingOrder(f.id);
+      const totalQty = po.items.reduce((sum, it) => sum + it.quantity, 0);
+      const pickedQty = po.items.reduce((sum, it) => sum + it.pickedQuantity, 0);
+      const remQty = Math.max(0, totalQty - pickedQty);
+      const percent = totalQty > 0 ? Math.round((pickedQty / totalQty) * 100) : 0;
 
-        return {
-          fulfillmentId: f.id,
-          orderId: f.orderId,
-          orderNumber: f.orderNumber || po.orderNumber,
-          status: f.status,
-          sellerName: f.sellerName,
-          customerName: f.customerName,
-          createdAt: f.createdAt,
-          itemPositionsCount: po.items.length,
-          totalQuantity: totalQty,
-          pickedQuantity: pickedQty,
-          remainingQuantity: remQty,
-          progressPercent: percent,
-          isComplete: totalQty > 0 && pickedQty === totalQty,
-        };
-      } catch (err: any) {
-        // Fallback to basic fulfillment items summary if picking order fails
-        const totalQty = f.items ? f.items.reduce((sum, it) => sum + it.quantity, 0) : 0;
-        return {
-          fulfillmentId: f.id,
-          orderId: f.orderId,
-          orderNumber: f.orderNumber,
-          status: f.status,
-          sellerName: f.sellerName,
-          customerName: f.customerName,
-          createdAt: f.createdAt,
-          itemPositionsCount: f.items ? f.items.length : 0,
-          totalQuantity: totalQty,
-          pickedQuantity: 0,
-          remainingQuantity: totalQty,
-          progressPercent: 0,
-          isComplete: false,
-        };
-      }
+      return {
+        fulfillmentId: f.id,
+        orderId: f.orderId,
+        orderNumber: f.orderNumber || po.orderNumber,
+        status: f.status,
+        sellerName: f.sellerName,
+        customerName: f.customerName,
+        createdAt: f.createdAt,
+        itemPositionsCount: po.items.length,
+        totalQuantity: totalQty,
+        pickedQuantity: pickedQty,
+        remainingQuantity: remQty,
+        progressPercent: percent,
+        isComplete: totalQty > 0 && pickedQty === totalQty,
+      };
     })
   );
 

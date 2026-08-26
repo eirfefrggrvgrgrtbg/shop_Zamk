@@ -4,6 +4,7 @@ import {
   getPickingErrorMessage,
   getAdminPickingOrder,
   scanPickingCode,
+  getAdminPickingQueue,
   PickingOrder,
   PickingScanResult,
 } from './adminPicking';
@@ -179,6 +180,148 @@ async function runTests() {
     assert.strictEqual(getPickingErrorMessage(caughtError), 'Эта единица сейчас не находится на складе');
 
     console.log('✓ All API mock tests passed.');
+
+    // 3. Queue data integrity tests
+    console.log('3. Testing getAdminPickingQueue data integrity...');
+
+    // Scenario A: fulfillment list failure -> getAdminPickingQueue() must reject (not swallow/return empty)
+    (global as any).fetch = async (url: string) => {
+      if (url.includes('/admin/order-fulfillments')) {
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ error: { message: 'Database failure' } }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+
+    let queueListError: any = null;
+    try {
+      await getAdminPickingQueue();
+    } catch (err: any) {
+      queueListError = err;
+    }
+    assert(queueListError !== null, 'getAdminPickingQueue must reject when fulfillment list API fails');
+    console.log('✓ Fulfillment list API failure properly rejects and is not swallowed to [].');
+
+    // Scenario B: picking read failure for one fulfillment -> getAdminPickingQueue() must reject (not fabricate 0/N)
+    (global as any).fetch = async (url: string) => {
+      if (url.includes('/admin/order-fulfillments?status=paid')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            items: [
+              {
+                id: 'fulf-error-1',
+                orderId: 'order-err',
+                status: 'paid',
+                createdAt: '2026-08-26T12:00:00Z',
+                items: [{ quantity: 5 }],
+              },
+            ],
+          }),
+        };
+      }
+      if (url.includes('/admin/order-fulfillments?status=assembling')) {
+        return { ok: true, status: 200, json: async () => ({ items: [] }) };
+      }
+      if (url.includes('/admin/fulfillments/fulf-error-1/picking')) {
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ error: { code: 'internal_error', message: 'Picking read failed' } }),
+        };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    };
+
+    let pickingReadError: any = null;
+    try {
+      await getAdminPickingQueue();
+    } catch (err: any) {
+      pickingReadError = err;
+    }
+    assert(pickingReadError !== null, 'getAdminPickingQueue must reject when picking read fails (no fabrication)');
+    console.log('✓ Picking read failure rejects without fabricating 0 / N progress.');
+
+    // Scenario C: successful queue -> canonical picking progress is accurately calculated
+    (global as any).fetch = async (url: string) => {
+      if (url.includes('/admin/order-fulfillments?status=paid')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            items: [
+              {
+                id: 'fulf-real-1',
+                orderId: 'order-real-1',
+                orderNumber: '10482',
+                status: 'assembling',
+                sellerName: 'Nike Official',
+                customerName: 'Иван Иванов',
+                createdAt: '2026-08-26T11:00:00Z',
+              },
+            ],
+          }),
+        };
+      }
+      if (url.includes('/admin/order-fulfillments?status=assembling')) {
+        return { ok: true, status: 200, json: async () => ({ items: [] }) };
+      }
+      if (url.includes('/admin/fulfillments/fulf-real-1/picking')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            orderId: 'order-real-1',
+            orderNumber: '10482',
+            orderStatus: 'assembling',
+            fulfillmentId: 'fulf-real-1',
+            fulfillmentStatus: 'assembling',
+            items: [
+              {
+                orderItemId: 'item-1',
+                title: 'Худи',
+                productVariantId: 'var-1',
+                quantity: 4,
+                pickedQuantity: 3,
+                remainingQuantity: 1,
+                allocationMode: 'serialized',
+                allocatedUnits: [],
+              },
+              {
+                orderItemId: 'item-2',
+                title: 'Носки',
+                productVariantId: 'var-2',
+                quantity: 3,
+                pickedQuantity: 1,
+                remainingQuantity: 2,
+                allocationMode: 'legacy',
+                allocatedUnits: [],
+              },
+            ],
+          }),
+        };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    };
+
+    const queue = await getAdminPickingQueue();
+    assert.strictEqual(queue.length, 1);
+    const row = queue[0];
+    assert.strictEqual(row.fulfillmentId, 'fulf-real-1');
+    assert.strictEqual(row.orderNumber, '10482');
+    assert.strictEqual(row.status, 'assembling');
+    assert.strictEqual(row.totalQuantity, 7, 'totalQuantity must be 7 (4 + 3)');
+    assert.strictEqual(row.pickedQuantity, 4, 'pickedQuantity must be 4 (3 + 1)');
+    assert.strictEqual(row.remainingQuantity, 3, 'remainingQuantity must be 3 (7 - 4)');
+    assert.strictEqual(row.progressPercent, 57, 'progressPercent must be 57 (round 4/7 * 100)');
+    assert.strictEqual(row.isComplete, false);
+    assert.strictEqual(row.itemPositionsCount, 2);
+
+    console.log('✓ Successful queue preserved canonical 4/7 picking progress.');
   } finally {
     global.fetch = originalFetch;
   }
