@@ -28,32 +28,32 @@ export function formatDateTime(dateStr?: string | null): string {
 }
 
 export const orderStatusMap: Record<string, { label: string; bg: string; text: string }> = {
-  created: { label: 'Создан', bg: 'bg-slate-700', text: 'text-slate-200' },
-  awaiting_payment: { label: 'Ожидает оплаты', bg: 'bg-amber-900/60', text: 'text-amber-300' },
-  paid: { label: 'Оплачен', bg: 'bg-emerald-950', text: 'text-emerald-300' },
-  assembling: { label: 'Собирается', bg: 'bg-blue-950', text: 'text-blue-300' },
-  packed: { label: 'Упакован', bg: 'bg-indigo-950', text: 'text-indigo-300' },
-  shipped: { label: 'В пути', bg: 'bg-purple-950', text: 'text-purple-300' },
-  delivered: { label: 'Доставлен', bg: 'bg-emerald-900', text: 'text-emerald-200' },
-  cancelled: { label: 'Отменён', bg: 'bg-rose-950', text: 'text-rose-300' },
+  created: { label: 'Создан', bg: 'bg-gray-100 border border-gray-200', text: 'text-gray-700' },
+  awaiting_payment: { label: 'Ожидает оплаты', bg: 'bg-amber-50 border border-amber-200', text: 'text-amber-700' },
+  paid: { label: 'Оплачен', bg: 'bg-emerald-50 border border-emerald-200', text: 'text-emerald-700' },
+  assembling: { label: 'Собирается', bg: 'bg-blue-50 border border-blue-200', text: 'text-blue-700' },
+  packed: { label: 'Упакован', bg: 'bg-indigo-50 border border-indigo-200', text: 'text-indigo-700' },
+  shipped: { label: 'В пути', bg: 'bg-purple-50 border border-purple-200', text: 'text-purple-700' },
+  delivered: { label: 'Доставлен', bg: 'bg-emerald-50 border border-emerald-300', text: 'text-emerald-800' },
+  cancelled: { label: 'Отменён', bg: 'bg-rose-50 border border-rose-200', text: 'text-rose-700' },
 };
 
 export const fulfillmentStatusMap: Record<string, { label: string; bg: string; text: string }> = {
-  awaiting_payment: { label: 'Ожидает оплаты', bg: 'bg-slate-800', text: 'text-slate-300' },
-  paid: { label: 'Оплачена', bg: 'bg-emerald-950', text: 'text-emerald-300' },
-  pending: { label: 'Ожидает сборки', bg: 'bg-amber-950', text: 'text-amber-300' },
-  assembling: { label: 'Собирается', bg: 'bg-blue-950', text: 'text-blue-300' },
-  packed: { label: 'Ожидает приёмки', bg: 'bg-indigo-950', text: 'text-indigo-300' },
-  accepted: { label: 'Принята на хабе', bg: 'bg-emerald-900', text: 'text-emerald-200' },
-  discrepancy: { label: 'Обнаружено расхождение', bg: 'bg-rose-950', text: 'text-rose-300' },
-  shipped: { label: 'Передана в доставку', bg: 'bg-purple-950', text: 'text-purple-300' },
-  delivered: { label: 'Доставлена', bg: 'bg-emerald-950', text: 'text-emerald-200' },
-  cancelled: { label: 'Отменена', bg: 'bg-rose-950', text: 'text-rose-400' },
+  awaiting_payment: { label: 'Ожидает оплаты', bg: 'bg-gray-100 border border-gray-200', text: 'text-gray-700' },
+  paid: { label: 'Оплачена', bg: 'bg-emerald-50 border border-emerald-200', text: 'text-emerald-700' },
+  pending: { label: 'Ожидает сборки', bg: 'bg-amber-50 border border-amber-200', text: 'text-amber-700' },
+  assembling: { label: 'Собирается', bg: 'bg-blue-50 border border-blue-200', text: 'text-blue-700' },
+  packed: { label: 'Упакована', bg: 'bg-indigo-50 border border-indigo-200', text: 'text-indigo-700' },
+  accepted: { label: 'Принята на хабе', bg: 'bg-emerald-50 border border-emerald-200', text: 'text-emerald-700' },
+  discrepancy: { label: 'Расхождение', bg: 'bg-rose-50 border border-rose-200', text: 'text-rose-700' },
+  shipped: { label: 'Передана в доставку', bg: 'bg-purple-50 border border-purple-200', text: 'text-purple-700' },
+  delivered: { label: 'Доставлена', bg: 'bg-emerald-50 border border-emerald-300', text: 'text-emerald-800' },
+  cancelled: { label: 'Отменена', bg: 'bg-rose-50 border border-rose-200', text: 'text-rose-700' },
 };
 
 export const paymentStatusMap: Record<string, { label: string; bg: string; text: string }> = {
-  pending: { label: 'Ожидает оплаты', bg: 'bg-amber-950', text: 'text-amber-300' },
-  succeeded: { label: 'Оплачен', bg: 'bg-emerald-950', text: 'text-emerald-300' },
-  failed: { label: 'Ошибка оплаты', bg: 'bg-rose-950', text: 'text-rose-300' },
-  refunded: { label: 'Возвращён', bg: 'bg-purple-950', text: 'text-purple-300' },
+  pending: { label: 'Ожидает оплаты', bg: 'bg-amber-50 border border-amber-200', text: 'text-amber-700' },
+  succeeded: { label: 'Оплачен', bg: 'bg-emerald-50 border border-emerald-200', text: 'text-emerald-700' },
+  failed: { label: 'Ошибка оплаты', bg: 'bg-rose-50 border border-rose-200', text: 'text-rose-700' },
+  refunded: { label: 'Возвращён', bg: 'bg-purple-50 border border-purple-200', text: 'text-purple-700' },
 };

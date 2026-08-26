@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   QrCode, CheckCircle2, AlertTriangle, ArrowRight, RefreshCw, Box, ShieldAlert, Truck, Printer
 } from 'lucide-react';
-import { AdminOrdersTabs } from '../components/orders/AdminOrdersTabs';
 import { formatOrderNumber } from '../utils/orderFormatters';
 import { resolveReceivingCode, startReceiving, scanItem, confirmReceiving, recordDiscrepancy } from '../api/adminOrders';
 import type { AdminFulfillment } from '@zamk/api-client/src/types';
@@ -175,12 +174,10 @@ export function AdminReceivingScanner() {
     <div data-testid="receiving-page" className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Приёмка сборок по QR/штрихкоду</h1>
-          <p className="text-sm text-slate-400 mt-1">Быстрый сканер кладовщика хаба ZAMK</p>
+          <h1 className="text-2xl font-bold text-gray-900">Приёмка сборок по QR/штрихкоду</h1>
+          <p className="text-sm text-gray-500 mt-1">Быстрый сканер кладовщика хаба ZAMK</p>
         </div>
       </div>
-
-      <AdminOrdersTabs />
 
       <div className="px-4 sm:px-6 space-y-6 max-w-5xl mx-auto">
         {/* SUCCESS SCREEN */}
