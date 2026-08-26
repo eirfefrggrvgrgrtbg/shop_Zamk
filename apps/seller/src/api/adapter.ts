@@ -14,12 +14,13 @@ export function adaptProductList(apiProducts: any[]): SellerProduct[] {
     if (p.variants && Array.isArray(p.variants)) {
       sizes = p.variants.map((v: any) => ({
         size: v.size || 'Единый',
-        stock: (v.inStock === true) ? 10 : 0 // UI expects a number, backend returns boolean `inStock` for variants? Wait, we'll see.
+        stock: v.availableStock ?? v.totalStock ?? ((v.inStock === true) ? 1 : 0)
       }));
     }
 
     if (sizes.length === 0) {
-      sizes = [{ size: 'Единый', stock: p.inStock ? 10 : 0 }];
+      const directStock = p.availableStock ?? p.totalStock ?? (p.inStock ? 1 : 0);
+      sizes = [{ size: 'Единый', stock: directStock }];
     }
 
     let price = (p.priceCents || 0) / 100;

@@ -461,6 +461,12 @@ export function ProductDetail() {
     });
   }
 
+  useEffect(() => {
+    if (selectableSizes.length === 1 && !activeSize) {
+      setActiveSize(selectableSizes[0].label);
+    }
+  }, [selectableSizes, activeSize]);
+
   const requiresSizeSelection = selectableSizes.length > 0 && !selectableSizes.some(s => s.label === 'Единый');
 
   let selectedVariant = product.variants?.[0];
@@ -774,12 +780,11 @@ export function ProductDetail() {
                 {product.isPreview
                   ? 'Покупка недоступна в режиме предпросмотра'
                   : (() => {
-                      let vStock = product.variants?.[0]?.inStock ?? true;
-                      if (product.variants && activeSize) {
-                        const match = product.variants.find(v => v.size === activeSize && (!product.colors || !activeColor || v.color === product.colors[activeColor]?.name));
-                        if (match) vStock = match.inStock ?? true;
+                      if (!selectedVariant) {
+                        const hasAnyInStock = product.variants?.some(v => v.inStock && v.isActive);
+                        return hasAnyInStock ? 'Выберите размер' : 'Нет в наличии';
                       }
-                      return (selectedVariant?.inStock ?? true) ? 'Добавить в корзину' : 'Нет в наличии';
+                      return (selectedVariant.inStock ?? true) ? 'Добавить в корзину' : 'Нет в наличии';
                     })()}
               </Button>
               <Button

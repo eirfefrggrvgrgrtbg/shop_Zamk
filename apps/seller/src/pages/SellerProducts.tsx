@@ -112,7 +112,8 @@ function ProductAvatar({ product }: { product: SellerProduct }) {
 }
 
 function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct; sellerStatus: string }) {
-  const isApprovedAndNoStock = product.status === 'approved' && (!product.sizes.length || product.sizes.every(s => s.stock === 0));
+  const totalStock = product.sizes.reduce((sum, item) => sum + (item.stock || 0), 0);
+  const isApprovedAndNoStock = product.status === 'approved' && totalStock === 0;
 
   return (
     <aside className="glass-panel-strong p-6 md:p-8">
@@ -126,8 +127,8 @@ function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct;
             {isApprovedAndNoStock && (
               <ProductBadge tone="warning">Требуется поставка</ProductBadge>
             )}
-            {(product.status === 'published' && (product.sizes?.reduce((sum, s) => sum + (s.stock || 0), 0) || 0) > 0) && (
-              <ProductBadge tone="good">В наличии</ProductBadge>
+            {totalStock > 0 && (
+              <ProductBadge tone="good">В наличии ({totalStock} шт.)</ProductBadge>
             )}
           </div>
           {product.status === 'rejected' && product.rejectionReason && (
@@ -147,7 +148,7 @@ function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct;
         <div className="rounded-2xl border border-border-lighter bg-white/70 p-4 dark:border-white/16 dark:bg-black/24">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ash dark:text-white/62">Склад ZAMK</p>
           <p className="mt-2 text-sm font-medium text-graphite dark:text-white">
-            Ожидается поставка
+            {totalStock > 0 ? `${totalStock} шт. на складе` : 'Ожидается поставка'}
           </p>
         </div>
       </div>
@@ -158,7 +159,7 @@ function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct;
           {product.sizes.map((item) => (
             <div key={item.size} className="flex justify-between items-center rounded-xl border border-border-lighter px-3 py-2 text-sm text-graphite dark:border-white/16 dark:text-white/78">
               <span>{item.size}</span>
-              <span className="text-graphite-light">ZAMK: 0 шт.</span>
+              <span className="text-graphite-light font-medium">ZAMK: {item.stock} шт.</span>
             </div>
           ))}
         </div>
@@ -381,16 +382,25 @@ export function SellerProducts() {
                             <td className="py-4 pr-4 text-graphite dark:text-white">{formatCurrency(product.price)}</td>
                             <td className="py-4 pr-4">
                               <div className="flex flex-col gap-1 items-start">
-                                  <ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge>
-                                  {(product.status === 'published' && (!product.sizes?.length || product.sizes.every(s => s.stock === 0))) && (
-                                    <ProductBadge tone="warning">Требуется поставка</ProductBadge>
-                                  )}
-                                  {(product.status === 'published' && (product.sizes?.reduce((sum, s) => sum + (s.stock || 0), 0) || 0) > 0) && (
-                                    <ProductBadge tone="good">В наличии</ProductBadge>
-                                  )}
-                                </div>
+                                <ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge>
+                                {(product.status === 'published' || product.status === 'approved') && (!product.sizes?.length || product.sizes.every(s => (s.stock || 0) === 0)) && (
+                                  <ProductBadge tone="warning">Требуется поставка</ProductBadge>
+                                )}
+                                {(product.sizes?.reduce((sum, s) => sum + (s.stock || 0), 0) || 0) > 0 && (
+                                  <ProductBadge tone="good">В наличии ({product.sizes.reduce((sum, s) => sum + (s.stock || 0), 0)} шт.)</ProductBadge>
+                                )}
+                              </div>
                             </td>
-                            <td className="py-4 pr-4 text-graphite-light dark:text-white/68">Нет товара</td>
+                            <td className="py-4 pr-4 text-graphite-light dark:text-white/68">
+                              {(() => {
+                                const total = product.sizes?.reduce((sum, s) => sum + (s.stock || 0), 0) || 0;
+                                return total > 0 ? (
+                                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">{total} шт.</span>
+                                ) : (
+                                  <span>Нет на складе</span>
+                                );
+                              })()}
+                            </td>
                             <td className="py-4 text-right">
                                 {product.status === 'published' ? (
                                     <span className="text-emerald-600 dark:text-emerald-400 font-medium">Доступен</span>

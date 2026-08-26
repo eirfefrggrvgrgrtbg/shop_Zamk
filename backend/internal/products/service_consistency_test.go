@@ -2,6 +2,7 @@ package products_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
@@ -103,6 +104,9 @@ func TestModerationFirstAttemptPersistsAndExposesStatus(t *testing.T) {
 	ctx := context.Background()
 
 	adminUserID := uuid.New()
+	_, err := db.Pool.Exec(ctx, "INSERT INTO users (id, email, password_hash, role, name) VALUES ($1, $2, 'hash', 'admin', 'Admin User')", adminUserID, fmt.Sprintf("admin-%s@test.com", adminUserID))
+	require.NoError(t, err)
+
 	priceCents := int64(250000)
 
 	// Create Product

@@ -70,7 +70,7 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
     }
 
     const variant = productVariants?.find(v => v.id === selectedVariant);
-    if (!variant || (!variant.inStock && !variant.isActive)) {
+    if (!variant || !variant.inStock || !variant.isActive) {
       showToast('Выбранный вариант недоступен', 'error');
       setIsQuickBuyOpen(false);
       return;
