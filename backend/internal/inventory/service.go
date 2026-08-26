@@ -510,24 +510,11 @@ func (s *Service) ConvertReservationToSaleTx(ctx context.Context, tx pgx.Tx, res
 		return err
 	}
 
-	// Decrease total and reserved stock
-	item.TotalStock -= res.Quantity
-	if item.TotalStock < 0 {
-		item.TotalStock = 0
-	}
-	item.ReservedStock -= res.Quantity
-	if item.ReservedStock < 0 {
-		item.ReservedStock = 0
-	}
-	item.UpdatedAt = time.Now()
-
-	if err := txRepo.UpdateItemStock(ctx, item); err != nil {
-		return err
-	}
-
+	// Physical onHand (total_stock) and committed stock (reserved_stock) remain unchanged
+	// at payment time because the physical units are still physically located at ZAMK warehouse.
+	// Physical stock will decrement upon physical shipment.
 	now := time.Now()
 	res.Status = ReservationStatusConverted
-	res.ReleasedAt = &now // Using released_at to mark when it was converted/closed
 
 	if err := txRepo.UpdateReservationStatus(ctx, res); err != nil {
 		return err
@@ -556,7 +543,7 @@ func (s *Service) ReleaseReservationTx(ctx context.Context, tx pgx.Tx, reservati
 		return err
 	}
 
-	if res.Status != ReservationStatusActive {
+	if res.Status != ReservationStatusActive && res.Status != ReservationStatusConverted {
 		return ErrReservationNotActive
 	}
 
