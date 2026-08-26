@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/fulfillment"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
@@ -18,6 +20,7 @@ type pickingFixture struct {
 	db       *pgxpool.Pool
 	svc      *fulfillment.Service
 	sellerID uuid.UUID
+	adminID  uuid.UUID
 }
 
 func setupPickingFixture(t *testing.T, ctx context.Context) *pickingFixture {
@@ -29,8 +32,12 @@ func setupPickingFixture(t *testing.T, ctx context.Context) *pickingFixture {
 	require.NoError(t, err)
 	testutil.AssertTestDatabase(t, db)
 
+	postgresClient, err := postgres.NewClient(ctx, dbURL)
+	require.NoError(t, err)
+
 	repo := fulfillment.NewRepository(db)
-	svc := fulfillment.NewService(repo, nil, nil, nil, nil) // Dependencies mocked/nil as this is a read model test
+	ordersRepo := orders.NewRepository(db)
+	svc := fulfillment.NewService(repo, ordersRepo, postgresClient, nil, nil) // Dependencies mocked/nil as this is a read model test
 
 	sellerID := uuid.New()
 	_, err = db.Exec(ctx, `
@@ -39,10 +46,18 @@ func setupPickingFixture(t *testing.T, ctx context.Context) *pickingFixture {
 	`, sellerID, uuid.New().String(), uuid.New().String()+"@ex.com")
 	require.NoError(t, err)
 
+	adminID := uuid.New()
+	_, err = db.Exec(ctx, `
+		INSERT INTO users (id, name, email, password_hash, role, status, created_at, updated_at)
+		VALUES ($1, 'Admin', $2, 'hash', 'admin', 'active', now(), now())
+	`, adminID, uuid.New().String()+"@ex.com")
+	require.NoError(t, err)
+
 	return &pickingFixture{
 		db:       db,
 		svc:      svc,
 		sellerID: sellerID,
+		adminID:  adminID,
 	}
 }
 

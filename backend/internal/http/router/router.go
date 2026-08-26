@@ -503,6 +503,8 @@ func New(
 		r.With(perm("shipments.create")).Post("/fulfillments/{id}/receiving/confirm", fulfillmentHandler.ConfirmReceiving)
 		r.With(perm("orders.read")).Post("/fulfillments/{id}/receiving/discrepancy", fulfillmentHandler.RecordDiscrepancy)
 
+		r.With(perm("orders.read")).Post("/fulfillments/{id}/picking/scan", fulfillmentHandler.ScanPickingCode)
+
 		// Returns
 		r.With(perm("returns.read")).Get("/returns", returnsHandler.ListAdminReturns)
 		r.With(perm("returns.read")).Get("/returns/{id}", returnsHandler.GetAdminReturn)
