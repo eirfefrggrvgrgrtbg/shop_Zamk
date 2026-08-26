@@ -56,11 +56,12 @@ func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, u
 	}
 
 	// Product & Variant
+	productSlug := "parallel-test-" + uuid.New().String()[:8]
 	_, err = db.Pool.Exec(ctx, `
 		INSERT INTO products (id, seller_id, title, slug, price_cents, currency, status)
-		VALUES ($1, $2, 'Parallel Test Product', 'parallel-test', 10000, 'RUB', 'published')
+		VALUES ($1, $2, 'Parallel Test Product', $3, 10000, 'RUB', 'published')
 		ON CONFLICT (id) DO NOTHING
-	`, productID, sellerID)
+	`, productID, sellerID, productSlug)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, "", err
 	}
