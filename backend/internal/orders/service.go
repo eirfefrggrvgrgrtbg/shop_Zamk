@@ -225,6 +225,18 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 			if err := s.repo.CreateOrderItemTx(ctx, tx, &orderItems[i]); err != nil {
 				return err
 			}
+
+			// Synchronize physical ZMU allocations if this variant is serialized
+			hasSerialized, err := s.repo.HasSerializedUnitsTx(ctx, tx, orderItems[i].ProductVariantID)
+			if err != nil {
+				return err
+			}
+			if hasSerialized {
+				resID := reservations[i].ReservationID
+				if _, err := s.repo.AllocateUnitsForOrderItem(ctx, tx, orderItems[i].ID, orderItems[i].Quantity, &resID); err != nil {
+					return err
+				}
+			}
 		}
 
 		for i := range reservations {
@@ -322,6 +334,10 @@ func (s *Service) CancelCustomerOrder(ctx context.Context, userID, orderID uuid.
 		if _, err := s.repo.MarkOrderFulfillmentsStatusTx(ctx, tx, orderID, order.Status, "cancelled"); err != nil {
 			return err
 		}
+
+		if err := s.repo.ReleaseAllocationsForOrder(ctx, tx, orderID, "order_cancelled"); err != nil {
+			return err
+		}
 		
 		return nil
 	})
@@ -366,6 +382,20 @@ func (s *Service) UpdateOrderStatus(ctx context.Context, adminID, orderID uuid.U
 
 		if req.Status == "cancelled" {
 			if _, err := s.repo.MarkOrderFulfillmentsStatusTx(ctx, tx, orderID, order.Status, "cancelled"); err != nil {
+				return err
+			}
+			resIDs, err := s.repo.GetOrderReservations(ctx, orderID)
+			if err != nil {
+				return err
+			}
+			for _, rid := range resIDs {
+				if err := s.inventorySvc.ReleaseReservationTx(ctx, tx, rid); err != nil {
+					if !errors.Is(err, inventory.ErrReservationNotActive) {
+						return err
+					}
+				}
+			}
+			if err := s.repo.ReleaseAllocationsForOrder(ctx, tx, orderID, "order_cancelled"); err != nil {
 				return err
 			}
 		}
@@ -514,6 +544,10 @@ func (s *Service) ExpireAwaitingPaymentOrders(ctx context.Context, now time.Time
 				} else {
 					result.ReleasedReservations++
 				}
+			}
+
+			if err := s.repo.ReleaseAllocationsForOrder(ctx, tx, orderID, "expired_awaiting_payment"); err != nil {
+				return err
 			}
 		}
 

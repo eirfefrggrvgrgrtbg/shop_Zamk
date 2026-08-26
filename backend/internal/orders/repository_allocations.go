@@ -192,3 +192,17 @@ func (r *Repository) ReleaseAllocationsForReservation(ctx context.Context, tx pg
 	`, now, reason, reservationID)
 	return err
 }
+
+// HasSerializedUnitsTx checks if the given variant has any serialized inventory_units recorded in the system.
+func (r *Repository) HasSerializedUnitsTx(ctx context.Context, tx pgx.Tx, variantID uuid.UUID) (bool, error) {
+	var exists bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM inventory_units WHERE product_variant_id = $1)`, variantID).Scan(&exists)
+	return exists, err
+}
+
+// HasSerializedUnits checks if the given variant has any serialized inventory_units recorded in the system.
+func (r *Repository) HasSerializedUnits(ctx context.Context, variantID uuid.UUID) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM inventory_units WHERE product_variant_id = $1)`, variantID).Scan(&exists)
+	return exists, err
+}

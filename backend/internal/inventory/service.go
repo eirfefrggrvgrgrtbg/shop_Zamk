@@ -489,53 +489,7 @@ func (s *Service) CreateReservationTx(ctx context.Context, tx pgx.Tx, userID uui
 
 func (s *Service) ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 	return s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
-		txRepo := s.repo.WithTx(tx)
-
-		res, err := txRepo.GetReservationByIDForUpdate(ctx, reservationID)
-		if err != nil {
-			return err
-		}
-
-		if res.Status != ReservationStatusActive {
-			return ErrReservationNotActive
-		}
-
-		item, err := txRepo.GetItemForUpdateByVariant(ctx, res.ProductVariantID)
-		if err != nil {
-			return err
-		}
-
-		item.ReservedStock -= res.Quantity
-		if item.ReservedStock < 0 {
-			item.ReservedStock = 0 // Safety bounds
-		}
-		item.UpdatedAt = time.Now()
-
-		if err := txRepo.UpdateItemStock(ctx, item); err != nil {
-			return err
-		}
-
-		now := time.Now()
-		res.Status = ReservationStatusReleased
-		res.ReleasedAt = &now
-
-		if err := txRepo.UpdateReservationStatus(ctx, res); err != nil {
-			return err
-		}
-
-		mov := &StockMovement{
-			ID:               uuid.New(),
-			InventoryItemID:  item.ID,
-			ProductID:        item.ProductID,
-			ProductVariantID: item.ProductVariantID,
-			SellerID:         item.SellerID,
-			Type:             MovementTypeReservationReleased,
-			Quantity:         res.Quantity,
-			ReferenceType:    func(s string) *string { return &s }("reservation"),
-			ReferenceID:      &res.ID,
-			CreatedAt:        now,
-		}
-		return txRepo.RecordMovement(ctx, mov)
+		return s.ReleaseReservationTx(ctx, tx, reservationID)
 	})
 }
 
@@ -627,6 +581,16 @@ func (s *Service) ReleaseReservationTx(ctx context.Context, tx pgx.Tx, reservati
 
 	if err := txRepo.UpdateReservationStatus(ctx, res); err != nil {
 		return err
+	}
+
+	// Symmetrically release physical ZMU allocations bound to this reservation
+	_, err = tx.Exec(ctx, `
+		UPDATE order_item_allocations
+		SET released_at = $1, release_reason = COALESCE(release_reason, 'reservation_released')
+		WHERE reservation_id = $2 AND released_at IS NULL
+	`, now, reservationID)
+	if err != nil {
+		return fmt.Errorf("failed to release order item allocations: %w", err)
 	}
 
 	mov := &StockMovement{
