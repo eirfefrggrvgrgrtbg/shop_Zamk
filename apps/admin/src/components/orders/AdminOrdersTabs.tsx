@@ -4,6 +4,7 @@ import { ShoppingBag, PackageCheck, QrCode, AlertTriangle } from 'lucide-react';
 export function AdminOrdersTabs() {
   const tabs = [
     { path: '/orders', label: 'Заказы', icon: ShoppingBag, exact: true },
+    { path: '/fulfillment/picking', label: 'Сборка заказов', icon: PackageCheck },
     { path: '/orders/fulfillments', label: 'Сборки продавцов', icon: PackageCheck },
     { path: '/orders/receiving', label: 'Приёмка', icon: QrCode },
     { path: '/orders/problems', label: 'Проблемы', icon: AlertTriangle },

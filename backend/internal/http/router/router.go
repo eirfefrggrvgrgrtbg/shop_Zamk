@@ -305,7 +305,6 @@ func New(
 		r.Post("/{id}/{action}", paymentsHandler.ProcessDevMockAction)
 	})
 
-
 	r.Route("/api/seller/reference", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
@@ -395,7 +394,7 @@ func New(
 	r.Route("/api/seller/analytics", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
-		
+
 		sellerAnalyticsHandler.RegisterRoutes(r)
 	})
 
@@ -503,6 +502,7 @@ func New(
 		r.With(perm("shipments.create")).Post("/fulfillments/{id}/receiving/confirm", fulfillmentHandler.ConfirmReceiving)
 		r.With(perm("orders.read")).Post("/fulfillments/{id}/receiving/discrepancy", fulfillmentHandler.RecordDiscrepancy)
 
+		r.With(perm("orders.read")).Get("/fulfillments/{id}/picking", fulfillmentHandler.GetPickingOrder)
 		r.With(perm("orders.read")).Post("/fulfillments/{id}/picking/scan", fulfillmentHandler.ScanPickingCode)
 
 		// Returns
@@ -522,8 +522,6 @@ func New(
 			r.With(adminDangerousLimit, perm("payouts.update")).Post("/{id}/process", payoutsHandler.ProcessPayoutBatch)
 			r.With(adminDangerousLimit, perm("payouts.update")).Post("/{id}/hold", payoutsHandler.HoldPayoutBatch)
 		})
-
-
 
 		// Auctions
 		r.With(perm("auctions.read")).Get("/auctions", auctionsAdminHandler.GetAuctions)

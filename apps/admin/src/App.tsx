@@ -15,6 +15,8 @@ import { AdminModerationProductDetail } from './pages/AdminModerationProductDeta
 import { AdminOrders } from './pages/AdminOrders';
 import { AdminOrderDetail } from './pages/AdminOrderDetail';
 import { AdminFulfillmentsList } from './pages/AdminFulfillmentsList';
+import { AdminPickingQueue } from './pages/AdminPickingQueue';
+import { AdminPickingDetail } from './pages/AdminPickingDetail';
 import { AdminReceivingScanner } from './pages/AdminReceivingScanner';
 import { AdminSupplyReceiving } from './pages/AdminSupplyReceiving';
 import { AdminFreeScanner } from './pages/AdminFreeScanner';
@@ -66,6 +68,8 @@ export default function App() {
           <Route path="/moderation/products/:productId" element={<AdminProtectedRoute permission="products.moderate"><AdminLayout><AdminModerationProductDetail /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/orders" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminOrders /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/orders/fulfillments" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminFulfillmentsList /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/fulfillment/picking" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminPickingQueue /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/fulfillment/picking/:id" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminPickingDetail /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/orders/receiving" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminReceivingScanner /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/supplies/receiving" element={<AdminProtectedRoute permission="inventory.read"><AdminLayout><AdminSupplyReceiving /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/warehouse/free-scan" element={<AdminProtectedRoute permission="inventory.read"><AdminLayout><AdminFreeScanner /></AdminLayout></AdminProtectedRoute>} />

@@ -84,3 +84,34 @@ func (h *Handler) ScanPickingCode(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(res)
 }
+
+func (h *Handler) GetPickingOrder(w http.ResponseWriter, r *http.Request) {
+	fIDStr := chi.URLParam(r, "id")
+	fulfillmentID, err := uuid.Parse(fIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid fulfillment ID")
+		return
+	}
+
+	po, err := h.svc.GetPickingOrder(r.Context(), fulfillmentID)
+	if err != nil {
+		if errors.Is(err, ErrFulfillmentNotFound) {
+			h.writeError(w, http.StatusNotFound, "fulfillment_not_found", "Fulfillment not found")
+			return
+		}
+		if errors.Is(err, ErrPickingNotAllowed) {
+			h.writeError(w, http.StatusConflict, "picking_not_allowed", "Picking is not allowed for this fulfillment state")
+			return
+		}
+		if errors.Is(err, ErrInvariantViolation) {
+			h.writeError(w, http.StatusInternalServerError, "invariant_violation", "Invariant violation in allocation data")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(po)
+}

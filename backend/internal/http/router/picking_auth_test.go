@@ -435,4 +435,22 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		assert.Equal(t, 1, res.Item.PickedQuantity)
 		assert.True(t, res.FulfillmentProgress.IsComplete)
 	})
+
+	// 12. Valid admin GET picking order -> 200 with PickingOrder
+	t.Run("valid admin get picking order -> 200", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking", nil)
+		req.Header.Set("Authorization", "Bearer "+adminTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var po fulfillment.PickingOrder
+		require.NoError(t, json.NewDecoder(rr.Body).Decode(&po))
+		assert.Equal(t, fulfillmentID, po.FulfillmentID)
+		assert.Equal(t, orderID, po.OrderID)
+		assert.Len(t, po.Items, 1)
+		assert.Equal(t, "serialized", po.Items[0].AllocationMode)
+		assert.Equal(t, 1, po.Items[0].Quantity)
+		assert.Equal(t, 1, po.Items[0].PickedQuantity) // picked in previous subtest
+	})
 }

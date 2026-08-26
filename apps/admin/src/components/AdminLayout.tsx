@@ -22,6 +22,7 @@ import {
   FileText,
   PanelLeftClose,
   PanelLeftOpen,
+  PackageCheck,
 } from 'lucide-react';
 
 import { useAdminAuth } from '../contexts/AdminAuthContext';
@@ -72,6 +73,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { name: 'Модерация', path: '/moderation', icon: ShieldAlert, permission: 'products.moderate' },
     { name: 'Категории и бренды', path: '/catalog', icon: BookOpen, permission: ['categories.read', 'brands.read'] },
     { name: 'Заказы', path: '/orders', icon: ShoppingCart, permission: 'orders.read' },
+    { name: 'Сборка заказов', path: '/fulfillment/picking', icon: PackageCheck, permission: 'orders.read' },
     { name: 'Доставка / Отгрузки', path: '/shipments', icon: Truck, permission: 'shipments.read' },
     { name: 'Остатки / Склад', path: '/inventory', icon: Boxes, permission: 'inventory.read' },
     { name: 'Приемка поставок', path: '/supplies/receiving', icon: Truck, permission: 'inventory.read' },

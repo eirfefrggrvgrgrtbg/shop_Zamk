@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 3002 --strictPort",
     "build": "tsc -b && vite build",
+    "test": "npx tsx src/api/adminPicking.test.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },
