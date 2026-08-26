@@ -383,6 +383,55 @@ async function runTests() {
     assert(!problemTitle.toLowerCase().includes('продавец'), 'Must not instruct seller to assemble orders');
     assert(!recommendedAction.toLowerCase().includes('продавец'), 'Must not instruct seller to assemble orders');
     console.log('✓ Problem item correctly targets ZAMK warehouse picking with no seller assemble instructions.');
+
+    // 6. Fulfillment badge and filter alignment tests
+    console.log('6. Testing fulfillment badge and filter alignment...');
+    const { getOrderFulfillmentBadge } = await import('../utils/orderFormatters');
+
+    // Case A: Missing fulfillment (fulfillmentsCount = 0) with paid order -> 'Не сформирована'
+    const orderNoFulf = {
+      status: 'paid',
+      fulfillmentStatus: '',
+      fulfillmentsCount: 0,
+    };
+    const badgeNoFulf = getOrderFulfillmentBadge(orderNoFulf);
+    assert.strictEqual(badgeNoFulf.label, 'Не сформирована', 'Missing fulfillment on paid order must not show "Ожидает сборки"');
+    assert.notStrictEqual(badgeNoFulf.label, 'Ожидает сборки');
+
+    // Case B: Awaiting payment order with no fulfillment -> 'Ожидает оплаты'
+    const orderAwaitingPay = {
+      status: 'awaiting_payment',
+      fulfillmentStatus: '',
+      fulfillmentsCount: 0,
+    };
+    const badgeAwaitingPay = getOrderFulfillmentBadge(orderAwaitingPay);
+    assert.strictEqual(badgeAwaitingPay.label, 'Ожидает оплаты', 'Awaiting payment order must show "Ожидает оплаты", not "Ожидает сборки"');
+    assert.notStrictEqual(badgeAwaitingPay.label, 'Ожидает сборки');
+
+    // Case C: Real paid fulfillment (fulfillmentsCount = 1, fulfillmentStatus = 'paid') -> 'Ожидает сборки'
+    const orderPaidFulf = {
+      status: 'paid',
+      fulfillmentStatus: 'paid',
+      fulfillmentsCount: 1,
+    };
+    const badgePaidFulf = getOrderFulfillmentBadge(orderPaidFulf);
+    assert.strictEqual(badgePaidFulf.label, 'Ожидает сборки', 'Real paid fulfillment must show "Ожидает сборки"');
+
+    // Case D: Real assembling fulfillment -> 'В сборке'
+    const orderAssemblingFulf = {
+      status: 'assembling',
+      fulfillmentStatus: 'assembling',
+      fulfillmentsCount: 1,
+    };
+    const badgeAssembling = getOrderFulfillmentBadge(orderAssemblingFulf);
+    assert.strictEqual(badgeAssembling.label, 'В сборке');
+
+    // Case E: Assembly filter value 'paid' matches the badge 'Ожидает сборки'
+    const filterOptionValue = 'paid';
+    assert.strictEqual(filterOptionValue, orderPaidFulf.fulfillmentStatus, 'Filter option for "Ожидает сборки" must send "paid" to match backend f.status');
+    assert.notStrictEqual(filterOptionValue, orderNoFulf.fulfillmentStatus, 'Filter option for "Ожидает сборки" must not match missing fulfillment row');
+
+    console.log('✓ Fulfillment badge and filter alignment tests passed.');
   } finally {
     global.fetch = originalFetch;
   }

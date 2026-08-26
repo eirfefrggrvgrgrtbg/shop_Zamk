@@ -61,13 +61,17 @@ const unwrapItems = <T>(response: ListResponse<T> | T[]): T[] => {
 };
 
 export const mapAdminOrder = (order: AdminOrderDetail | AdminOrder): AdminOrderView => {
+  const fulfillmentsCount = (order as any).fulfillmentsCount ?? 0;
+  const rawFulfillmentStatus = order.fulfillmentStatus || '';
+  const fulfillmentStatus = fulfillmentsCount > 0 ? (rawFulfillmentStatus || 'paid') : '';
+
   return {
     id: order.id,
     orderNumber: order.orderNumber,
     status: order.status,
     statusLabel: orderStatusLabels[order.status] ?? order.status,
-    fulfillmentStatus: order.fulfillmentStatus || 'pending',
-    fulfillmentsCount: (order as any).fulfillmentsCount || 0,
+    fulfillmentStatus: fulfillmentStatus,
+    fulfillmentsCount: fulfillmentsCount,
     itemPositionsCount: (order as any).itemPositionsCount || 0,
     unitsCount: (order as any).unitsCount || 0,
     sourceType: order.sourceType || 'normal',

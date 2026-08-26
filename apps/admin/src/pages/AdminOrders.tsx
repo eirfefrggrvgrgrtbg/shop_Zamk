@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Search, AlertCircle, ShoppingCart, Filter, ArrowRight, AlertTriangle, RefreshCw } from 'lucide-react';
-import { formatMoney, formatOrderNumber, formatDateTime, orderStatusMap, fulfillmentStatusMap } from '../utils/orderFormatters';
+import { formatMoney, formatOrderNumber, formatDateTime, orderStatusMap, getOrderFulfillmentBadge } from '../utils/orderFormatters';
 import { getAdminOrders } from '../api/adminOrders';
 import type { AdminOrderView } from '../api/adminOrders';
 
@@ -154,10 +154,12 @@ export function AdminOrders() {
             className="px-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-lg text-gray-700 focus:bg-white focus:outline-none focus:border-indigo-500"
           >
             <option value="">Все сборки</option>
-            <option value="pending">Ожидает сборки</option>
-            <option value="assembling">Собирается</option>
-            <option value="packed">Ожидает приёмки</option>
+            <option value="paid">Ожидает сборки</option>
+            <option value="assembling">В сборке</option>
+            <option value="packed">Упакована</option>
             <option value="accepted">Принята на хабе</option>
+            <option value="shipped">Отгружена</option>
+            <option value="delivered">Доставлена</option>
             <option value="discrepancy">Расхождение</option>
           </select>
 
@@ -211,7 +213,7 @@ export function AdminOrders() {
               <tbody className="divide-y divide-gray-100 text-gray-700">
                 {orders.map((order) => {
                   const st = orderStatusMap[order.status] || { label: order.statusLabel || order.status, bg: 'bg-gray-100 border border-gray-200', text: 'text-gray-700' };
-                  const fulSt = fulfillmentStatusMap[order.fulfillmentStatus] || { label: order.fulfillmentStatus, bg: 'bg-gray-100 border border-gray-200', text: 'text-gray-700' };
+                  const fulSt = getOrderFulfillmentBadge(order);
 
                   return (
                     <tr
