@@ -227,3 +227,57 @@ export const getPackingErrorMessage = (error: unknown, fallback = 'Произо�
   }
   return fallback;
 };
+
+export interface DispatchResult {
+  fulfillmentId: string;
+  orderId: string;
+  shipmentId: string;
+  fulfillmentStatus: string;
+  orderStatus: string;
+  shipmentStatus: string;
+  shippedAt: string;
+}
+
+export const dispatchFulfillment = async (fulfillmentId: string): Promise<DispatchResult> => {
+  const response = await fetch(`${API_URL}/admin/fulfillments/${fulfillmentId}/dispatch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getAccessToken() || ''}`,
+    },
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new ApiError(data.error?.message || 'Не удалось отгрузить заказ', data.error?.code, response.status);
+  }
+  return data;
+};
+
+export const getDispatchErrorMessage = (error: unknown, fallback = 'Произошла ошибка при отгрузке'): string => {
+  if (error instanceof ApiError) {
+    switch (error.code) {
+      case 'dispatch_not_allowed':
+        return 'Отгрузка недоступна для текущего статуса сборки или заказа (требуется статус «Упакован»)';
+      case 'fulfillment_not_fully_picked':
+        return 'Нельзя отгрузить: не все позиции сборки укомплектованы';
+      case 'inventory_unit_state_conflict':
+        return 'Конфликт состояния физических единиц (товар не находится на складе)';
+      case 'insufficient_total_stock':
+        return 'Недостаточно остатков на складе для списания';
+      case 'insufficient_reserved_stock':
+        return 'Недостаточно зарезервированного остатка для списания';
+      case 'shipment_contradictory_state':
+        return 'Отгрузка уже находится в противоречивом или завершенном статусе';
+      case 'fulfillment_not_found':
+        return 'Сборка не найдена';
+      default:
+        if (error.status === 403) return 'Недостаточно прав для выполнения отгрузки';
+        if (error.status === 404) return 'Сборка не найдена';
+        return error.message || fallback;
+    }
+  }
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+  return fallback;
+};

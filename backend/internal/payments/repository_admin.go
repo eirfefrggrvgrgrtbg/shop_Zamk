@@ -108,7 +108,7 @@ payment_events_summary AS (
 base_data AS (
 	SELECT 
 		p.id, p.order_id, p.provider, p.provider_payment_id, p.status, p.amount_cents, p.currency, p.payment_number, p.payment_method, p.integration_mode, p.created_at, p.updated_at, p.paid_at, p.failed_at, p.cancelled_at,
-		o.order_number, o.status as order_status, o.total_price_cents as order_total_cents,
+		COALESCE(o.order_number, '') as order_number, o.status as order_status, o.total_price_cents as order_total_cents,
 		u.id as customer_id, u.name as customer_name, u.email as customer_email, u.phone as customer_phone,
 		pa.attempt_number, pa.attempts_count, pa.succeeded_payments_count,
 		COALESCE(pr.succeeded_amount, 0) as succeeded_refunded,
@@ -339,7 +339,7 @@ payment_events_summary AS (
 base_data AS (
 	SELECT 
 		p.id, p.order_id, p.provider, p.provider_payment_id, p.status, p.amount_cents, p.currency, p.payment_number, p.payment_method, p.integration_mode, p.created_at, p.updated_at, p.paid_at, p.failed_at, p.cancelled_at,
-		o.order_number, o.status as order_status, o.total_price_cents as order_total_cents, o.created_at as order_created_at,
+		COALESCE(o.order_number, '') as order_number, o.status as order_status, o.total_price_cents as order_total_cents, o.created_at as order_created_at,
 		u.id as customer_id, u.name as customer_name, u.email as customer_email, u.phone as customer_phone,
 		pa.attempt_number, pa.attempts_count, pa.succeeded_payments_count,
 		COALESCE(pr.succeeded_amount, 0) as succeeded_refunded,

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Search, AlertCircle, ShoppingCart, Filter, ArrowRight, AlertTriangle, RefreshCw } from 'lucide-react';
-import { formatMoney, formatOrderNumber, formatDateTime, orderStatusMap, getOrderFulfillmentBadge } from '../utils/orderFormatters';
+import { formatMoney, formatOrderNumber, formatDateTime, orderStatusMap, getOrderFulfillmentBadge, getOrderPaymentBadge } from '../utils/orderFormatters';
 import { getAdminOrders } from '../api/adminOrders';
 import type { AdminOrderView } from '../api/adminOrders';
 
@@ -214,6 +214,7 @@ export function AdminOrders() {
                 {orders.map((order) => {
                   const st = orderStatusMap[order.status] || { label: order.statusLabel || order.status, bg: 'bg-gray-100 border border-gray-200', text: 'text-gray-700' };
                   const fulSt = getOrderFulfillmentBadge(order);
+                  const paySt = getOrderPaymentBadge(order);
 
                   return (
                     <tr
@@ -232,12 +233,8 @@ export function AdminOrders() {
                         {formatDateTime(order.createdAt)}
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                          order.status === 'paid' || order.status === 'delivered'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
-                        }`}>
-                          {order.status === 'paid' || order.status === 'delivered' ? 'Оплачен' : 'Ожидает'}
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${paySt.bg} ${paySt.text}`}>
+                          {paySt.label}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap">

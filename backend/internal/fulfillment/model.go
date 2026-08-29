@@ -59,19 +59,27 @@ type Fulfillment struct {
 	Items              []FulfillmentItem `json:"items"`
 }
 
+type FulfillmentAllocatedUnit struct {
+	InventoryUnitID uuid.UUID  `json:"inventoryUnitId"`
+	UnitCode        string     `json:"unitCode"`
+	PickedAt        *time.Time `json:"pickedAt,omitempty"`
+}
+
 type FulfillmentItem struct {
-	OrderItemID    uuid.UUID `json:"orderItemId"`
-	ProductID      uuid.UUID `json:"productId"`
-	ProductTitle   string    `json:"productTitle"`
-	VariantID      *uuid.UUID `json:"variantId,omitempty"`
-	VariantSize    *string   `json:"variantSize,omitempty"`
-	VariantColor   *string   `json:"variantColor,omitempty"`
-	SKU            *string   `json:"sku,omitempty"`
-	Barcode        *string   `json:"barcode,omitempty"`
-	Quantity       int       `json:"quantity"`
-	UnitPriceCents int64     `json:"unitPriceCents"`
-	LineTotalCents int64     `json:"lineTotalCents"`
-	ImageURL       *string   `json:"imageUrl,omitempty"`
+	OrderItemID    uuid.UUID                  `json:"orderItemId"`
+	ProductID      uuid.UUID                  `json:"productId"`
+	ProductTitle   string                     `json:"productTitle"`
+	VariantID      *uuid.UUID                 `json:"variantId,omitempty"`
+	VariantSize    *string                    `json:"variantSize,omitempty"`
+	VariantColor   *string                    `json:"variantColor,omitempty"`
+	SKU            *string                    `json:"sku,omitempty"`
+	Barcode        *string                    `json:"barcode,omitempty"`
+	Quantity       int                        `json:"quantity"`
+	UnitPriceCents int64                      `json:"unitPriceCents"`
+	LineTotalCents int64                      `json:"lineTotalCents"`
+	ImageURL       *string                    `json:"imageUrl,omitempty"`
+	AllocationMode string                     `json:"allocationMode,omitempty"`
+	AllocatedUnits []FulfillmentAllocatedUnit `json:"allocatedUnits,omitempty"`
 }
 
 type ReceivingSession struct {

@@ -104,3 +104,22 @@ export const paymentStatusMap: Record<string, { label: string; bg: string; text:
   failed: { label: 'Ошибка оплаты', bg: 'bg-rose-50 border border-rose-200', text: 'text-rose-700' },
   refunded: { label: 'Возвращён', bg: 'bg-purple-50 border border-purple-200', text: 'text-purple-700' },
 };
+
+export function getOrderPaymentBadge(order: { paymentStatus?: string | null }): { label: string; bg: string; text: string } {
+  const ps = order.paymentStatus || 'pending';
+
+  switch (ps) {
+    case 'paid':
+    case 'succeeded':
+      return { label: 'Оплачен', bg: 'bg-emerald-50 border border-emerald-200', text: 'text-emerald-700' };
+    case 'failed':
+      return { label: 'Ошибка', bg: 'bg-rose-50 border border-rose-200', text: 'text-rose-700' };
+    case 'cancelled':
+      return { label: 'Отменен', bg: 'bg-gray-100 border border-gray-200', text: 'text-gray-700' };
+    case 'pending':
+    case 'created':
+    case 'awaiting_payment':
+    default:
+      return { label: 'Ожидает', bg: 'bg-amber-50 border border-amber-200', text: 'text-amber-700' };
+  }
+}

@@ -48,9 +48,9 @@ func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, u
 
 	_, err = db.Pool.Exec(ctx, `
 		INSERT INTO sellers (id, brand_name, slug, contact_email, status)
-		VALUES ($1, 'Test Brand', 'test-brand', 'testbrand@zamk.local', 'active')
+		VALUES ($1, 'Test Brand', $2, 'testbrand@zamk.local', 'active')
 		ON CONFLICT (id) DO NOTHING
-	`, sellerID)
+	`, sellerID, "test-brand-"+uuid.New().String()[:8])
 	if err != nil {
 		return uuid.Nil, uuid.Nil, "", err
 	}

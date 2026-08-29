@@ -18,6 +18,7 @@ import { AdminFulfillmentsList } from './pages/AdminFulfillmentsList';
 import { AdminPickingQueue } from './pages/AdminPickingQueue';
 import { AdminPickingDetail } from './pages/AdminPickingDetail';
 import { AdminPackingDetail } from './pages/AdminPackingDetail';
+import { AdminDispatchDetail } from './pages/AdminDispatchDetail';
 import { AdminReceivingScanner } from './pages/AdminReceivingScanner';
 import { AdminSupplyReceiving } from './pages/AdminSupplyReceiving';
 import { AdminFreeScanner } from './pages/AdminFreeScanner';
@@ -49,9 +50,9 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<AdminLogin />} />
           <Route path="/change-password" element={<AdminChangePassword />} />
-          
+
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          
+
           <Route path="/dashboard" element={<AdminProtectedRoute><AdminLayout><AdminDashboard /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/users" element={<AdminProtectedRoute><AdminLayout><AdminUsers /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/sellers" element={<AdminProtectedRoute permission="sellers.read"><AdminLayout><AdminSellers /></AdminLayout></AdminProtectedRoute>} />
@@ -72,6 +73,7 @@ export default function App() {
           <Route path="/fulfillment/picking" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminPickingQueue /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/fulfillment/picking/:id" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminPickingDetail /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/fulfillment/packing/:id" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminPackingDetail /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/fulfillment/dispatch/:id" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminDispatchDetail /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/orders/receiving" element={<AdminProtectedRoute permission="orders.read"><AdminLayout><AdminReceivingScanner /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/supplies/receiving" element={<AdminProtectedRoute permission="inventory.read"><AdminLayout><AdminSupplyReceiving /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/warehouse/free-scan" element={<AdminProtectedRoute permission="inventory.read"><AdminLayout><AdminFreeScanner /></AdminLayout></AdminProtectedRoute>} />

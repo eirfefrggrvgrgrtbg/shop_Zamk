@@ -110,7 +110,7 @@ export function AdminOrderDetail() {
               </span>
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Создан: {formatDateTime(order.createdAt)} • Оплата: {order.status === 'paid' || order.status === 'delivered' ? 'Оплачен' : 'Ожидает оплаты'}
+              Создан: {formatDateTime(order.createdAt)} • Оплата: {order.paymentStatusLabel || (order.paymentStatus === 'paid' ? 'Оплачен' : 'Ожидает оплаты')}
             </p>
           </div>
 
@@ -337,7 +337,7 @@ export function AdminOrderDetail() {
             <div>
               <dt className="text-xs text-gray-500 font-medium">Статус оплаты</dt>
               <dd className="text-gray-900 font-semibold mt-0.5">
-                {order.status === 'paid' || order.status === 'delivered' ? 'Успешно оплачен' : 'Ожидает оплаты'}
+                {order.paymentStatus === 'paid' ? 'Успешно оплачен' : order.paymentStatus === 'failed' ? 'Ошибка оплаты' : order.paymentStatus === 'cancelled' ? 'Отменена' : 'Ожидает оплаты'}
               </dd>
             </div>
             <div>
@@ -384,25 +384,51 @@ export function AdminOrderDetail() {
 
       {activeTab === 'history' && (
         <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4 shadow-sm">
-          <h3 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-3">История изменений статусов</h3>
-          <ul className="space-y-3 text-sm">
-            <li className="flex items-start gap-3">
-              <div className="w-2 h-2 rounded-full bg-indigo-600 mt-1.5" />
-              <div>
-                <div className="font-semibold text-gray-900">Заказ создан</div>
-                <div className="text-xs text-gray-500">{formatDateTime(order.createdAt)}</div>
-              </div>
-            </li>
-            {order.status === 'paid' && (
+          <h3 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-3">История заказа</h3>
+          {order.timeline && order.timeline.length > 0 ? (
+            <ul className="space-y-4 text-sm relative before:absolute before:inset-0 before:left-3 before:w-0.5 before:bg-gray-100">
+              {order.timeline.map((event, idx) => {
+                let dotBg = 'bg-indigo-600';
+                if (event.type.includes('payment_succeeded') || event.title.includes('Оплата')) {
+                  dotBg = 'bg-emerald-600';
+                } else if (event.type.includes('failed') || event.type.includes('cancelled') || event.title.includes('отмен')) {
+                  dotBg = 'bg-rose-600';
+                } else if (event.title.includes('сборк') || event.title.includes('Упаковк')) {
+                  dotBg = 'bg-blue-600';
+                } else if (event.title.includes('Отгружен') || event.title.includes('Доставлен')) {
+                  dotBg = 'bg-indigo-600';
+                }
+
+                return (
+                  <li key={event.id || idx} className="flex items-start gap-4 relative">
+                    <div className={`w-2.5 h-2.5 rounded-full ${dotBg} mt-1.5 ring-4 ring-white shrink-0 z-10`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <span className="font-semibold text-gray-900">{event.title}</span>
+                        {event.context && (
+                          <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">{event.context}</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">{formatDateTime(event.timestamp)}</div>
+                      {event.comment && (
+                        <div className="text-xs text-gray-600 mt-1 italic">{event.comment}</div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <ul className="space-y-3 text-sm">
               <li className="flex items-start gap-3">
-                <div className="w-2 h-2 rounded-full bg-emerald-600 mt-1.5" />
+                <div className="w-2 h-2 rounded-full bg-indigo-600 mt-1.5" />
                 <div>
-                  <div className="font-semibold text-gray-900">Оплата успешно подтверждена</div>
-                  <div className="text-xs text-gray-500">{formatDateTime(order.updatedAt || order.createdAt)}</div>
+                  <div className="font-semibold text-gray-900">Заказ создан</div>
+                  <div className="text-xs text-gray-500">{formatDateTime(order.createdAt)}</div>
                 </div>
               </li>
-            )}
-          </ul>
+            </ul>
+          )}
         </div>
       )}
     </div>

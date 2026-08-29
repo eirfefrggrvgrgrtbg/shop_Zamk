@@ -860,6 +860,7 @@ export interface AdminOrder {
   userId?: string;
   orderNumber?: string;
   status: string;
+  paymentStatus?: string;
   fulfillmentStatus: string;
   sourceType: string;
   totalPriceCents: number;
@@ -869,6 +870,15 @@ export interface AdminOrder {
   createdAt: string;
   updatedAt?: string;
   cancelledAt?: string;
+}
+
+export interface OrderTimelineEvent {
+  id: string;
+  type: string;
+  title: string;
+  timestamp: string;
+  comment?: string;
+  context?: string;
 }
 
 export interface AdminOrderDetail extends AdminOrder {
@@ -882,6 +892,7 @@ export interface AdminOrderDetail extends AdminOrder {
   deliveryEstimatedDaysMax?: number;
   items?: OrderItem[];
   fulfillments?: AdminFulfillment[];
+  timeline?: OrderTimelineEvent[];
 }
 
 export interface PaymentProblem {
@@ -998,10 +1009,17 @@ export interface AdminShipment {
   updatedAt?: string;
 }
 
+export interface AdminAllocatedUnit {
+  inventoryUnitId: string;
+  unitCode: string;
+  pickedAt?: string | null;
+}
+
 export interface AdminFulfillmentItem {
   orderItemId: string;
   productId: string;
   productTitle: string;
+  title?: string;
   variantId?: string | null;
   variantSize?: string | null;
   variantColor?: string | null;
@@ -1010,6 +1028,8 @@ export interface AdminFulfillmentItem {
   unitPriceCents: number;
   lineTotalCents: number;
   imageUrl?: string | null;
+  allocationMode?: 'serialized' | 'legacy';
+  allocatedUnits?: AdminAllocatedUnit[];
 }
 
 export interface AdminFulfillment {

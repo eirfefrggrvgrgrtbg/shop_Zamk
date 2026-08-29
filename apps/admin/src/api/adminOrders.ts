@@ -6,7 +6,13 @@ import {
 } from '@zamk/api-client/src/admin';
 import { getAccessToken } from '@zamk/api-client/src/tokenStore';
 import { ApiError } from '@zamk/api-client/src/errors';
-import type { AdminOrder, AdminOrderDetail, OrderItem, AdminFulfillment } from '@zamk/api-client/src/types';
+import type {
+  AdminOrder,
+  AdminOrderDetail,
+  AdminFulfillment,
+  OrderItem,
+  OrderTimelineEvent,
+} from '@zamk/api-client';
 import { API_URL } from '../lib/api';
 
 export interface AdminOrderView {
@@ -14,7 +20,9 @@ export interface AdminOrderView {
   orderNumber?: string;
   status: string;
   statusLabel: string;
-  fulfillmentStatus: string;
+  paymentStatus: string;
+  paymentStatusLabel: string;
+  fulfillmentStatus?: string;
   fulfillmentsCount: number;
   itemPositionsCount: number;
   unitsCount: number;
@@ -32,6 +40,7 @@ export interface AdminOrderView {
   currency: string;
   items: OrderItem[];
   fulfillments?: AdminFulfillment[];
+  timeline?: OrderTimelineEvent[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -57,6 +66,23 @@ const orderStatusLabels: Record<string, string> = {
   cancelled: 'Отменён',
 };
 
+export const paymentStatusLabels: Record<string, string> = {
+  paid: 'Оплачен',
+  succeeded: 'Оплачен',
+  pending: 'Ожидает оплаты',
+  created: 'Ожидает оплаты',
+  awaiting_payment: 'Ожидает оплаты',
+  failed: 'Ошибка оплаты',
+  cancelled: 'Отменен',
+};
+
+export const getPaymentStatusLabel = (paymentStatus?: string): string => {
+  if (paymentStatus && paymentStatusLabels[paymentStatus]) {
+    return paymentStatusLabels[paymentStatus];
+  }
+  return 'Ожидает оплаты';
+};
+
 const unwrapItems = <T>(response: ListResponse<T> | T[]): T[] => {
   if (Array.isArray(response)) {
     return response;
@@ -69,11 +95,16 @@ export const mapAdminOrder = (order: AdminOrderDetail | AdminOrder): AdminOrderV
   const rawFulfillmentStatus = order.fulfillmentStatus || '';
   const fulfillmentStatus = fulfillmentsCount > 0 ? (rawFulfillmentStatus || 'paid') : '';
 
+  const rawPaymentStatus = (order as any).paymentStatus;
+  const paymentStatus = rawPaymentStatus || 'pending';
+
   return {
     id: order.id,
     orderNumber: order.orderNumber,
     status: order.status,
     statusLabel: orderStatusLabels[order.status] ?? order.status,
+    paymentStatus: paymentStatus,
+    paymentStatusLabel: getPaymentStatusLabel(paymentStatus),
     fulfillmentStatus: fulfillmentStatus,
     fulfillmentsCount: fulfillmentsCount,
     itemPositionsCount: (order as any).itemPositionsCount || 0,
@@ -92,6 +123,7 @@ export const mapAdminOrder = (order: AdminOrderDetail | AdminOrder): AdminOrderV
     currency: order.currency || 'RUB',
     items: (order as AdminOrderDetail).items ?? [],
     fulfillments: (order as AdminOrderDetail).fulfillments,
+    timeline: (order as AdminOrderDetail).timeline ?? [],
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };
@@ -158,7 +190,7 @@ export const getAdminFulfillments = async (params?: { status?: string }): Promis
 };
 
 export const getAdminFulfillment = async (id: string): Promise<AdminFulfillment> => {
-  const response = await fetch(`${API_URL}/admin/fulfillments/${id}`, {
+  const response = await fetch(`${API_URL}/admin/order-fulfillments/${id}`, {
     headers: {
       Authorization: `Bearer ${getAccessToken() || ''}`,
     },

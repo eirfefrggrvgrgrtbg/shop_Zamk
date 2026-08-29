@@ -217,13 +217,23 @@ export function AdminPackingDetail() {
                 </p>
               </div>
             </div>
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white text-emerald-800 border border-emerald-300 shadow-sm">
-              <Truck className="w-4 h-4 text-emerald-600" />
-              Следующий этап — отгрузка
-            </div>
+            <Link
+              to={`/fulfillment/dispatch/${id}`}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors shrink-0"
+            >
+              <Truck className="w-4 h-4" />
+              Перейти к отгрузке
+            </Link>
           </div>
 
           <div className="pt-3 border-t border-emerald-200/60 flex flex-wrap items-center gap-3 text-xs">
+            <Link
+              to={`/fulfillment/dispatch/${id}`}
+              className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <span>Отгрузка со склада</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
             <Link
               to={`/orders/${orderId}`}
               className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-lg transition-colors"

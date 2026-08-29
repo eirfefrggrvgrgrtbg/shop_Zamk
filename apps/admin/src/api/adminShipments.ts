@@ -40,18 +40,26 @@ export interface ShipmentStatusInput {
 }
 
 const shipmentStatusLabels: Record<string, string> = {
-  pending: 'Pending',
-  assembling: 'Assembling',
-  packed: 'Packed',
-  shipped: 'Shipped',
-  delivered: 'Delivered',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
+  pending: 'Ожидает',
+  assembling: 'В сборке',
+  packed: 'Упакован',
+  shipped: 'Отгружен',
+  delivered: 'Доставлен',
+  failed: 'Ошибка',
+  cancelled: 'Отменен',
 };
 
 const shipmentStatuses = ['pending', 'assembling', 'packed', 'shipped', 'delivered', 'failed', 'cancelled'];
+const genericEditableShipmentStatuses = ['pending', 'assembling', 'packed', 'failed', 'cancelled'];
 
 export const getShipmentStatuses = (): string[] => shipmentStatuses;
+
+export const getGenericEditableShipmentStatuses = (currentStatus?: string): string[] => {
+  if (currentStatus === 'shipped' || currentStatus === 'delivered') {
+    return [currentStatus];
+  }
+  return genericEditableShipmentStatuses;
+};
 
 export const getShipmentStatusLabel = (status: string): string => {
   return shipmentStatusLabels[status] ?? status;

@@ -62,6 +62,7 @@ type AdminOrder struct {
 	ID                 uuid.UUID  `json:"id"`
 	UserID             uuid.UUID  `json:"userId"`
 	Status             string     `json:"status"` // payment/overall status
+	PaymentStatus      string     `json:"paymentStatus"`
 	FulfillmentStatus  string     `json:"fulfillmentStatus"`
 	FulfillmentsCount  int        `json:"fulfillmentsCount"`
 	ItemPositionsCount int        `json:"itemPositionsCount"`
@@ -77,6 +78,15 @@ type AdminOrder struct {
 	CancelledAt        *time.Time `json:"cancelledAt,omitempty"`
 }
 
+type OrderTimelineEvent struct {
+	ID        string    `json:"id"`
+	Type      string    `json:"type"`
+	Title     string    `json:"title"`
+	Timestamp time.Time `json:"timestamp"`
+	Comment   *string   `json:"comment,omitempty"`
+	Context   *string   `json:"context,omitempty"`
+}
+
 type AdminOrderDetail struct {
 	AdminOrder
 	CustomerPhone              string               `json:"customerPhone"`
@@ -89,4 +99,5 @@ type AdminOrderDetail struct {
 	DeliveryEstimatedDaysMax   *int                 `json:"deliveryEstimatedDaysMax"`
 	Items                      []OrderItem          `json:"items"`
 	Fulfillments               []OrderFulfillment   `json:"fulfillments"`
+	Timeline                   []OrderTimelineEvent `json:"timeline"`
 }
