@@ -23,4 +23,6 @@ var (
 	ErrInvalidBarcode             = errors.New("invalid_barcode")
 	ErrItemNotInFulfillment       = errors.New("item_not_in_fulfillment")
 	ErrVersionConflict            = errors.New("version_conflict")
+	ErrPackingNotAllowed          = errors.New("packing_not_allowed")
+	ErrFulfillmentNotFullyPicked  = errors.New("fulfillment_not_fully_picked")
 )

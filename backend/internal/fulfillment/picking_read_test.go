@@ -28,13 +28,11 @@ func setupPickingFixture(t *testing.T, ctx context.Context) *pickingFixture {
 	dbURL := testutil.GetTestDatabaseURL()
 	require.NotEmpty(t, dbURL, "test database URL must not be empty")
 
-	db, err := pgxpool.New(ctx, dbURL)
-	require.NoError(t, err)
-	testutil.AssertTestDatabase(t, db)
-
 	postgresClient, err := postgres.NewClient(ctx, dbURL)
 	require.NoError(t, err)
+	testutil.AssertTestDatabase(t, postgresClient.Pool)
 
+	db := postgresClient.Pool
 	repo := fulfillment.NewRepository(db)
 	ordersRepo := orders.NewRepository(db)
 	svc := fulfillment.NewService(repo, ordersRepo, postgresClient, nil, nil) // Dependencies mocked/nil as this is a read model tes

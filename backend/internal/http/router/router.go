@@ -504,6 +504,7 @@ func New(
 
 		r.With(perm("orders.read")).Get("/fulfillments/{id}/picking", fulfillmentHandler.GetPickingOrder)
 		r.With(perm("orders.read")).Post("/fulfillments/{id}/picking/scan", fulfillmentHandler.ScanPickingCode)
+		r.With(perm("orders.update_status")).Post("/fulfillments/{id}/pack", fulfillmentHandler.PackFulfillment)
 
 		// Returns
 		r.With(perm("returns.read")).Get("/returns", returnsHandler.ListAdminReturns)
