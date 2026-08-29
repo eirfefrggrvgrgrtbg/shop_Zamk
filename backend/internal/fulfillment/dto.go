@@ -63,3 +63,7 @@ type RecordDiscrepancyRequest struct {
 	Comment   string             `json:"comment"`
 	Items     []ScannedItemState `json:"items,omitempty"`
 }
+
+type DeliverShipmentRequest struct {
+	Comment *string `json:"comment,omitempty"`
+}

@@ -491,6 +491,7 @@ func New(
 		r.With(perm("shipments.read")).Get("/shipments", fulfillmentHandler.ListAdminShipments)
 		r.With(perm("shipments.read")).Get("/shipments/{id}", fulfillmentHandler.GetAdminShipment)
 		r.With(perm("shipments.update_status")).Patch("/shipments/{id}/status", fulfillmentHandler.UpdateShipmentStatus)
+		r.With(perm("shipments.update_status")).Post("/shipments/{id}/deliver", fulfillmentHandler.DeliverShipment)
 
 		// Fulfillments & Receiving
 		r.With(perm("orders.read")).Get("/order-fulfillments", fulfillmentHandler.ListAdminFulfillments)
