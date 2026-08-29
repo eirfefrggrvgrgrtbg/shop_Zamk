@@ -370,6 +370,71 @@ export function ProductDetail() {
   const { toggleFavorite, isFavorite } = useFavorites();
   const { showToast } = useToast();
 
+  const colorMap = new Map<string, { id: string, name: string, hex: string, shadeName?: string }>();
+  product?.variants?.forEach(v => {
+    if (v.colorId && v.colorName) {
+      if (!colorMap.has(v.colorId)) {
+        colorMap.set(v.colorId, {
+          id: v.colorId,
+          name: v.colorName,
+          hex: v.colorHex || '#71717a',
+          shadeName: (v as any).colorShadeName || undefined
+        });
+      }
+    }
+  });
+  const colors = Array.from(colorMap.values());
+  const activeColorObj = colors[activeColor] || null;
+
+  const handleColorChange = (newIndex: number) => {
+    setActiveColor(newIndex);
+    setActiveImage(0);
+    const newColorObj = colors[newIndex];
+    if (activeSize && newColorObj) {
+      const sizeStillValid = product?.variants?.some(
+        v => v.isActive && v.colorId === newColorObj.id && v.size === activeSize
+      );
+      if (!sizeStillValid) {
+        setActiveSize(null);
+      }
+    }
+  };
+
+  const sizeMap = new Map<string, { id: string, label: string }>();
+  product?.variants?.forEach(v => {
+    if (!v.size || !v.isActive) return;
+    if (colors.length > 0) {
+      if (activeColorObj && v.colorId === activeColorObj.id) {
+        if (!sizeMap.has(v.size)) {
+           sizeMap.set(v.size, { id: v.sizeValueId || v.size, label: v.size });
+        }
+      }
+    } else {
+      if (!sizeMap.has(v.size)) {
+         sizeMap.set(v.size, { id: v.sizeValueId || v.size, label: v.size });
+      }
+    }
+  });
+
+  const selectableSizes = Array.from(sizeMap.values());
+  if (product?.sizeChart?.rows) {
+    const sortOrder = product.sizeChart.rows.map((r: any) => r.sizeValueName);
+    selectableSizes.sort((a, b) => {
+      const idxA = sortOrder.indexOf(a.label);
+      const idxB = sortOrder.indexOf(b.label);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return 0;
+    });
+  }
+
+  useEffect(() => {
+    if (selectableSizes.length === 1 && !activeSize) {
+      setActiveSize(selectableSizes[0].label);
+    }
+  }, [selectableSizes, activeSize]);
+
   if (isLoading) {
     return (
       <div className="relative z-10 min-h-screen pt-36 pb-20 flex justify-center">
@@ -395,77 +460,11 @@ export function ProductDetail() {
 
   const defaultImage = { url: 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image' };
 
-
   const allImages = (product.images && product.images.length > 0)
     ? product.images.map(img => ({ ...img, url: img.url }))
     : (product.image ? [{ url: product.image }] : [defaultImage]);
 
   const liked = isFavorite(product.id);
-
-  const colorMap = new Map<string, { id: string, name: string, hex: string, shadeName?: string }>();
-  product.variants?.forEach(v => {
-    if (v.colorId && v.colorName) {
-      if (!colorMap.has(v.colorId)) {
-        colorMap.set(v.colorId, {
-          id: v.colorId,
-          name: v.colorName,
-          hex: v.colorHex || '#71717a',
-          shadeName: (v as any).colorShadeName || undefined
-        });
-      }
-    }
-  });
-  const colors = Array.from(colorMap.values());
-  const activeColorObj = colors[activeColor] || null;
-
-  const handleColorChange = (newIndex: number) => {
-    setActiveColor(newIndex);
-    setActiveImage(0);
-    const newColorObj = colors[newIndex];
-    if (activeSize && newColorObj) {
-      const sizeStillValid = product.variants?.some(
-        v => v.isActive && v.colorId === newColorObj.id && v.size === activeSize
-      );
-      if (!sizeStillValid) {
-        setActiveSize(null);
-      }
-    }
-  };
-
-  const sizeMap = new Map<string, { id: string, label: string }>();
-  product.variants?.forEach(v => {
-    if (!v.size || !v.isActive) return;
-    if (colors.length > 0) {
-      if (activeColorObj && v.colorId === activeColorObj.id) {
-        if (!sizeMap.has(v.size)) {
-           sizeMap.set(v.size, { id: v.sizeValueId || v.size, label: v.size });
-        }
-      }
-    } else {
-      if (!sizeMap.has(v.size)) {
-         sizeMap.set(v.size, { id: v.sizeValueId || v.size, label: v.size });
-      }
-    }
-  });
-
-  const selectableSizes = Array.from(sizeMap.values());
-  if (product.sizeChart?.rows) {
-    const sortOrder = product.sizeChart.rows.map((r: any) => r.sizeValueName);
-    selectableSizes.sort((a, b) => {
-      const idxA = sortOrder.indexOf(a.label);
-      const idxB = sortOrder.indexOf(b.label);
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-      return 0;
-    });
-  }
-
-  useEffect(() => {
-    if (selectableSizes.length === 1 && !activeSize) {
-      setActiveSize(selectableSizes[0].label);
-    }
-  }, [selectableSizes, activeSize]);
 
   const requiresSizeSelection = selectableSizes.length > 0 && !selectableSizes.some(s => s.label === 'Единый');
 
