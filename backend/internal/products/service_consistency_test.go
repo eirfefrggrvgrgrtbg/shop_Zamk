@@ -64,7 +64,9 @@ func TestProductPricePersistenceAndReadback(t *testing.T) {
 	assert.Equal(t, priceRubles1222, pAdminGet.PriceCents, "GetAdminProductDetail must return 1222.00 RUB")
 
 	// 5. Read back via ListAdminProducts
-	pAdminList, err := svc.ListAdminProducts(ctx, products.AdminProductFilter{}, 50, 0)
+	pAdminList, err := svc.ListAdminProducts(ctx, products.AdminProductFilter{
+		SellerID: &pCreated.SellerID,
+	}, 50, 0)
 	require.NoError(t, err)
 	var foundAdminProd *products.Product
 	for i := range pAdminList.Items {
@@ -161,7 +163,10 @@ func TestModerationFirstAttemptPersistsAndExposesStatus(t *testing.T) {
 
 	// Verify ListAdminProducts with status=approved contains the product
 	approvedFilterStatus := "approved"
-	adminApprovedList, err := svc.ListAdminProducts(ctx, products.AdminProductFilter{Status: &approvedFilterStatus}, 50, 0)
+	adminApprovedList, err := svc.ListAdminProducts(ctx, products.AdminProductFilter{
+		Status:   &approvedFilterStatus,
+		SellerID: &p.SellerID,
+	}, 50, 0)
 	require.NoError(t, err)
 	foundApproved := false
 	for _, item := range adminApprovedList.Items {
