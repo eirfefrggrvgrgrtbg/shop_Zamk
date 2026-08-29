@@ -193,6 +193,9 @@ func (s *Service) UpdateShipmentStatus(ctx context.Context, adminID, shipmentID 
 		if oldStatus == "cancelled" {
 			return errors.New("cannot change status of cancelled shipment")
 		}
+		if req.Status != oldStatus && (req.Status == "shipped" || req.Status == "delivered") {
+			return ErrDispatchNotAllowed
+		}
 		if req.Status == "delivered" && oldStatus != "delivered" {
 			wasDelivered = true
 		}
