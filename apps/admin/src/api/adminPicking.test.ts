@@ -2,11 +2,14 @@ import assert from 'assert';
 import { ApiError } from '@zamk/api-client/src/errors';
 import {
   getPickingErrorMessage,
+  getPackingErrorMessage,
   getAdminPickingOrder,
   scanPickingCode,
+  packFulfillment,
   getAdminPickingQueue,
   PickingOrder,
   PickingScanResult,
+  PackResult,
 } from './adminPicking';
 
 async function runTests() {
@@ -66,6 +69,20 @@ async function runTests() {
   assert.strictEqual(getPickingErrorMessage(null), 'Произошла ошибка при сканировании');
 
   console.log('✓ All getPickingErrorMessage tests passed.');
+
+  console.log('1b. Testing getPackingErrorMessage...');
+  const packingTestCases = [
+    { code: 'packing_not_allowed', expected: 'Упаковка недоступна для текущего статуса заказа или сборки' },
+    { code: 'fulfillment_not_fully_picked', expected: 'Нельзя завершить упаковку: не все позиции сборки укомплектованы' },
+    { code: 'fulfillment_not_found', expected: 'Сборка не найдена' },
+  ];
+  for (const tc of packingTestCases) {
+    const err = new ApiError('Raw error message', tc.code, 409);
+    assert.strictEqual(getPackingErrorMessage(err), tc.expected);
+  }
+  const pack403 = new ApiError('Forbidden', 'forbidden', 403);
+  assert.strictEqual(getPackingErrorMessage(pack403), 'Недостаточно прав для выполнения упаковки');
+  console.log('✓ All getPackingErrorMessage tests passed.');
 
   // 2. Mock Fetch tests for getAdminPickingOrder and scanPickingCode
   console.log('2. Testing getAdminPickingOrder and scanPickingCode with mocked fetch...');
@@ -178,6 +195,53 @@ async function runTests() {
     assert.strictEqual(caughtError.code, 'unit_not_in_warehouse');
     assert.strictEqual(caughtError.status, 409);
     assert.strictEqual(getPickingErrorMessage(caughtError), 'Эта единица сейчас не находится на складе');
+
+    // D. Successful packFulfillment
+    (global as any).fetch = async (url: string, options: any) => {
+      assert(url.includes('/admin/fulfillments/fulf-123/pack'));
+      assert.strictEqual(options.method, 'POST');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          fulfillmentId: 'fulf-123',
+          orderId: 'order-123',
+          fulfillmentStatus: 'packed',
+          orderStatus: 'packed',
+          packedAt: '2026-08-29T19:30:00Z',
+        }),
+      };
+    };
+
+    const packRes: PackResult = await packFulfillment('fulf-123');
+    assert.strictEqual(packRes.fulfillmentId, 'fulf-123');
+    assert.strictEqual(packRes.fulfillmentStatus, 'packed');
+    assert.strictEqual(packRes.orderStatus, 'packed');
+    assert.strictEqual(packRes.packedAt, '2026-08-29T19:30:00Z');
+
+    // E. Error packFulfillment -> throws ApiError
+    (global as any).fetch = async (_url: string, _options: any) => {
+      return {
+        ok: false,
+        status: 409,
+        json: async () => ({
+          error: {
+            code: 'fulfillment_not_fully_picked',
+            message: 'Fulfillment is not fully picked',
+          },
+        }),
+      };
+    };
+
+    let caughtPackErr: any = null;
+    try {
+      await packFulfillment('fulf-123');
+    } catch (err: any) {
+      caughtPackErr = err;
+    }
+    assert(caughtPackErr instanceof ApiError);
+    assert.strictEqual(caughtPackErr.code, 'fulfillment_not_fully_picked');
+    assert.strictEqual(getPackingErrorMessage(caughtPackErr), 'Нельзя завершить упаковку: не все позиции сборки укомплектованы');
 
     console.log('✓ All API mock tests passed.');
 

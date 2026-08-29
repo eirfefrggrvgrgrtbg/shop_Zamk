@@ -157,6 +157,19 @@ export const getAdminFulfillments = async (params?: { status?: string }): Promis
   return data.items || data;
 };
 
+export const getAdminFulfillment = async (id: string): Promise<AdminFulfillment> => {
+  const response = await fetch(`${API_URL}/admin/fulfillments/${id}`, {
+    headers: {
+      Authorization: `Bearer ${getAccessToken() || ''}`,
+    },
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new ApiError(data.error?.message || 'Не удалось загрузить сборку', data.error?.code, response.status);
+  }
+  return response.json();
+};
+
 export const resolveReceivingCode = async (code: string): Promise<AdminFulfillment> => {
   const response = await fetch(`${API_URL}/admin/fulfillments/resolve-receiving-code`, {
     method: 'POST',

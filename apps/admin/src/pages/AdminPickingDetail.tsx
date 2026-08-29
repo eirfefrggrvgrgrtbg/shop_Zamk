@@ -7,6 +7,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Package,
+  PackageCheck,
   RefreshCw,
   Tag,
   Check,
@@ -19,6 +20,7 @@ import {
   PickingOrder,
   PickingScanResult,
 } from '../api/adminPicking';
+import { formatOrderNumber } from '../utils/orderFormatters';
 
 interface FeedbackMessage {
   type: 'success' | 'warning' | 'error';
@@ -167,7 +169,7 @@ export function AdminPickingDetail() {
           </Link>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-              Заказ #{pickingOrder.orderNumber || pickingOrder.orderId.slice(0, 8)}
+              Заказ #{formatOrderNumber({ id: pickingOrder.orderId, orderNumber: pickingOrder.orderNumber })}
             </h1>
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
               Сборка
@@ -202,8 +204,14 @@ export function AdminPickingDetail() {
               </p>
             </div>
           </div>
-          <div className="inline-flex items-center px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-            Следующий этап — упаковка
+          <div className="flex items-center gap-3">
+            <Link
+              to={`/fulfillment/packing/${pickingOrder.fulfillmentId}`}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-sm"
+            >
+              <PackageCheck className="w-4 h-4" />
+              Перейти к упаковке
+            </Link>
           </div>
         </div>
       )}

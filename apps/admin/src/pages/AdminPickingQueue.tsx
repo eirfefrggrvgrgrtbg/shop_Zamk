@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PackageCheck, ArrowRight, RefreshCw, AlertCircle, Clock, CheckCircle2, Box } from 'lucide-react';
 import { getAdminPickingQueue, PickingQueueItem } from '../api/adminPicking';
+import { formatOrderNumber } from '../utils/orderFormatters';
 
 export function AdminPickingQueue() {
   const navigate = useNavigate();
@@ -131,7 +132,7 @@ export function AdminPickingQueue() {
                 <div className="space-y-2 flex-1">
                   <div className="flex flex-wrap items-center gap-2.5">
                     <span className="text-base font-bold text-gray-900 tracking-tight">
-                      Заказ #{item.orderNumber || item.orderId.slice(0, 8)}
+                      Заказ #{formatOrderNumber({ id: item.orderId, orderNumber: item.orderNumber })}
                     </span>
                     {isAssembling ? (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
@@ -187,14 +188,28 @@ export function AdminPickingQueue() {
 
                 <div className="flex items-center justify-end">
                   <button
-                    onClick={() => navigate(`/fulfillment/picking/${item.fulfillmentId}`)}
+                    onClick={() =>
+                      navigate(
+                        item.isComplete
+                          ? `/fulfillment/packing/${item.fulfillmentId}`
+                          : `/fulfillment/picking/${item.fulfillmentId}`
+                      )
+                    }
                     className={`inline-flex items-center justify-center px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm ${
-                      isAssembling
+                      item.isComplete
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : isAssembling
                         ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                         : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300'
                     }`}
                   >
-                    <span>{isAssembling ? 'Продолжить сборку' : 'Начать сборку'}</span>
+                    <span>
+                      {item.isComplete
+                        ? 'Перейти к упаковке'
+                        : isAssembling
+                        ? 'Продолжить сборку'
+                        : 'Начать сборку'}
+                    </span>
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </button>
                 </div>

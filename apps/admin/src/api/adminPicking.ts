@@ -183,3 +183,47 @@ export const getPickingErrorMessage = (error: unknown, fallback = 'Произо�
   }
   return fallback;
 };
+
+export interface PackResult {
+  fulfillmentId: string;
+  orderId: string;
+  fulfillmentStatus: string;
+  orderStatus: string;
+  packedAt: string;
+}
+
+export const packFulfillment = async (fulfillmentId: string): Promise<PackResult> => {
+  const response = await fetch(`${API_URL}/admin/fulfillments/${fulfillmentId}/pack`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getAccessToken() || ''}`,
+    },
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new ApiError(data.error?.message || 'Не удалось упаковать заказ', data.error?.code, response.status);
+  }
+  return data;
+};
+
+export const getPackingErrorMessage = (error: unknown, fallback = 'Произошла ошибка при упаковке'): string => {
+  if (error instanceof ApiError) {
+    switch (error.code) {
+      case 'packing_not_allowed':
+        return 'Упаковка недоступна для текущего статуса заказа или сборки';
+      case 'fulfillment_not_fully_picked':
+        return 'Нельзя завершить упаковку: не все позиции сборки укомплектованы';
+      case 'fulfillment_not_found':
+        return 'Сборка не найдена';
+      default:
+        if (error.status === 403) return 'Недостаточно прав для выполнения упаковки';
+        if (error.status === 404) return 'Сборка не найдена';
+        return error.message || fallback;
+    }
+  }
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+  return fallback;
+};
