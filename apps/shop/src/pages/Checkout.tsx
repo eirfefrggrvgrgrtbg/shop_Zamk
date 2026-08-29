@@ -179,7 +179,7 @@ export function Checkout() {
   }
 
   const selectedMethod = deliveryMethods.find(m => m.id === selectedMethodId);
-  const delivery = selectedMethod ? selectedMethod.priceCents : 0;
+  const delivery = selectedMethod ? selectedMethod.priceCents / 100 : 0;
   const total = totalPrice + delivery;
 
   return (
@@ -262,11 +262,11 @@ export function Checkout() {
               <div className='flex flex-wrap gap-2'>
                 {deliveryMethods.length > 0 ? (
                   deliveryMethods.map((m) => (
-                    <PillFilter 
+                    <PillFilter
                       key={m.id}
-                      label={`${m.name} (${m.priceCents === 0 ? 'Бесплатно' : formatPrice(m.priceCents)})`} 
-                      active={selectedMethodId === m.id} 
-                      onClick={() => setSelectedMethodId(m.id)} 
+                      label={`${m.name} (${m.priceCents === 0 ? "Бесплатно" : formatPrice(m.priceCents / 100)})`}
+                      active={selectedMethodId === m.id}
+                      onClick={() => setSelectedMethodId(m.id)}
                     />
                   ))
                 ) : (
