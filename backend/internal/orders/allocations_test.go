@@ -452,3 +452,60 @@ func TestPhysicalUnitAllocation_TrueConcurrencyProtection(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "warehouse", status)
 }
+
+func TestCreateOrderGeneratesOrderNumber(t *testing.T) {
+	ctx := context.Background()
+	f := setupAllocFixture(t, ctx)
+
+	tx, err := f.db.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	orderID := uuid.New()
+	order := &orders.Order{
+		ID:              orderID,
+		UserID:          f.buyerID,
+		Status:          "awaiting_payment",
+		TotalPriceCents: 10000,
+		Currency:        "RUB",
+		CustomerName:    "Buyer User",
+		CustomerPhone:   "+79991234567",
+		CustomerEmail:   "buyer@example.com",
+		DeliveryAddress: "ул. Пушкина, д. 10",
+	}
+
+	err = f.repo.CreateOrderTx(ctx, tx, order)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	require.NotNil(t, order.OrderNumber)
+	assert.NotEmpty(t, *order.OrderNumber)
+	assert.Contains(t, *order.OrderNumber, "ORD-")
+
+	// Readback via GetOrder
+	fetched, err := f.repo.GetOrder(ctx, orderID)
+	require.NoError(t, err)
+	require.NotNil(t, fetched.OrderNumber)
+	assert.Equal(t, *order.OrderNumber, *fetched.OrderNumber)
+
+	// Readback via GetAdminOrderDetail
+	adminDetail, err := f.repo.GetAdminOrderDetail(ctx, orderID)
+	require.NoError(t, err)
+	require.NotNil(t, adminDetail.OrderNumber)
+	assert.Equal(t, *order.OrderNumber, *adminDetail.OrderNumber)
+
+	// Readback via ListCustomerOrders
+	customerOrders, err := f.repo.ListCustomerOrders(ctx, f.buyerID, 10, 0)
+	require.NoError(t, err)
+	require.NotEmpty(t, customerOrders)
+	var found *orders.Order
+	for i := range customerOrders {
+		if customerOrders[i].ID == orderID {
+			found = &customerOrders[i]
+			break
+		}
+	}
+	require.NotNil(t, found)
+	require.NotNil(t, found.OrderNumber)
+	assert.Equal(t, *order.OrderNumber, *found.OrderNumber)
+}

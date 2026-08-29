@@ -130,7 +130,7 @@ function OrdersContent() {
 
           // Map to match the expected format roughly
           setOrders(data.map((o: any) => ({
-            id: o.id.split('-')[0].toUpperCase() + '-' + o.id.split('-')[1].substring(0, 4),
+            id: o.orderNumber || (o.id.split('-')[0].toUpperCase() + '-' + o.id.split('-')[1].substring(0, 4)),
             rawId: o.id,
             date: new Date(o.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
             status: mapOrderStatus(o.status),
@@ -150,7 +150,7 @@ function OrdersContent() {
               image: i.imageUrl || PRODUCT_PLACEHOLDER_IMAGE,
             })) || []
           })));
-        
+
       } catch (err) {
         console.error('Failed to load orders', err);
       } finally {
@@ -175,8 +175,8 @@ function OrdersContent() {
         ) : orders.length > 0 ? (
           <div className="space-y-5">
           {orders.map((order) => (
-            <div 
-              key={order.id} 
+            <div
+              key={order.id}
               className="group bg-white/50 hover:bg-white/80 dark:bg-white/5 dark:hover:bg-white/10 backdrop-blur-xl border border-white/60 dark:border-white/10 shadow-[0_8px_30px_rgba(100,130,170,0.06)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] rounded-[1.5rem] p-6 md:p-8 transition-all duration-500"
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 sm:gap-0 border-b border-graphite/5 dark:border-white/10 pb-6 mb-6">
@@ -194,7 +194,7 @@ function OrdersContent() {
                   <p className="font-serif text-xl text-graphite dark:text-white">{order.total.toLocaleString('ru-RU')} ₽</p>
                 </div>
               </div>
-              
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                 <div className="flex-1">
                   <p className="text-[14px] text-graphite/70 dark:text-white/70 leading-relaxed font-medium">
@@ -207,7 +207,7 @@ function OrdersContent() {
                     }).join(' / ')}
                   </p>
                 </div>
-                <button 
+                <button
                   type="button"
                   onClick={() => setSelectedOrder(order)}
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent border border-graphite/20 dark:border-white/20 hover:border-graphite dark:hover:border-white text-[13px] font-medium text-graphite dark:text-white rounded-full transition-all group-hover:bg-white dark:group-hover:bg-white/5"
@@ -232,9 +232,9 @@ function OrdersContent() {
 
       </div>
 
-      <Drawer 
-        isOpen={!!selectedOrder} 
-        onClose={() => setSelectedOrder(null)} 
+      <Drawer
+        isOpen={!!selectedOrder}
+        onClose={() => setSelectedOrder(null)}
         position="right"
       >
         {selectedOrder && (
@@ -245,7 +245,7 @@ function OrdersContent() {
                 <h3 className="text-xl font-serif text-graphite dark:text-white">Заказ {selectedOrder.id}</h3>
                 <p className="text-sm text-ash dark:text-white/60 mt-0.5">{selectedOrder.date}</p>
               </div>
-              <button 
+              <button
                 type="button"
                 onClick={() => setSelectedOrder(null)}
                 className="w-10 h-10 rounded-full bg-graphite/5 dark:bg-white/10 flex items-center justify-center text-graphite dark:text-white hover:bg-graphite/10 dark:hover:bg-white/20 transition-colors"
@@ -257,7 +257,7 @@ function OrdersContent() {
 
             {/* Контент Drawer'а */}
             <div className="flex-1 p-6 space-y-8">
-              
+
               {/* Статус */}
               <div className="flex items-center gap-3">
                 <span className={`text-[12px] uppercase tracking-wider font-medium px-4 py-1.5 rounded-full ${selectedOrder.status === 'Отправлен' || selectedOrder.status === 'В пути' ? 'text-blue-600 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50' : 'text-graphite dark:text-white/70 bg-graphite/5 dark:bg-white/10 border border-graphite/10 dark:border-white/20'}`}>
@@ -268,7 +268,7 @@ function OrdersContent() {
               {/* Состав заказа по продавцам */}
               <div>
                 <h4 className="text-[13px] uppercase tracking-[0.05em] text-ash dark:text-white/60 font-medium mb-4">Состав заказа по продавцам</h4>
-                
+
                 {isFulfillmentsLoading ? (
                   <p className="text-[13px] text-ash dark:text-white/60">Загружаем состав заказа...</p>
                 ) : fulfillmentsError ? (
@@ -303,10 +303,10 @@ function OrdersContent() {
                             <div key={idx} className="flex flex-col gap-2 transition-colors">
                               <Link to={`/product/${item.productId}`} className="flex gap-4 group cursor-pointer">
                                 <div className="w-16 h-20 bg-graphite/5 dark:bg-white/10 rounded-lg overflow-hidden flex-shrink-0">
-                                  <img 
-                                    src={item.imageUrl || PRODUCT_PLACEHOLDER_IMAGE} 
-                                    alt={item.productTitle} 
-                                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700" 
+                                  <img
+                                    src={item.imageUrl || PRODUCT_PLACEHOLDER_IMAGE}
+                                    alt={item.productTitle}
+                                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700"
                                   />
                                 </div>
                                 <div className="flex-1 py-0.5 flex flex-col justify-between">
@@ -319,11 +319,11 @@ function OrdersContent() {
                                   <p className="font-serif text-[14px] text-graphite dark:text-white">{(item.unitPriceCents / 100).toLocaleString('ru-RU')} ₽</p>
                                 </div>
                               </Link>
-                              
+
                               {/* Кнопки возврата / отзыва */}
                               {selectedOrder.status === 'Доставлен' && (
                                 <div className="flex gap-2 mt-1 ml-20">
-                                  <button 
+                                  <button
                                     onClick={(e) => {
                                       e.preventDefault();
                                       setReturnModal({ isOpen: true, item: { orderItemId: item.orderItemId, maxQuantity: item.quantity, productName: item.productTitle } });
@@ -333,7 +333,7 @@ function OrdersContent() {
                                     Оформить возврат
                                   </button>
                                   <span className="text-ash/30">•</span>
-                                  <button 
+                                  <button
                                     onClick={(e) => {
                                       e.preventDefault();
                                       setReviewModal({ isOpen: true, item: { orderItemId: item.orderItemId, productName: item.productTitle } });
@@ -429,19 +429,19 @@ function OrdersContent() {
 
       {/* Modals */}
       {selectedOrder && returnModal.isOpen && returnModal.item && (
-        <ReturnModal 
-          isOpen={returnModal.isOpen} 
-          onClose={() => setReturnModal({ isOpen: false, item: null })} 
-          orderId={selectedOrder.rawId} 
+        <ReturnModal
+          isOpen={returnModal.isOpen}
+          onClose={() => setReturnModal({ isOpen: false, item: null })}
+          orderId={selectedOrder.rawId}
           item={returnModal.item}
           onSuccess={loadData}
         />
       )}
       {selectedOrder && reviewModal.isOpen && reviewModal.item && (
-        <ReviewModal 
-          isOpen={reviewModal.isOpen} 
-          onClose={() => setReviewModal({ isOpen: false, item: null })} 
-          orderId={selectedOrder.rawId} 
+        <ReviewModal
+          isOpen={reviewModal.isOpen}
+          onClose={() => setReviewModal({ isOpen: false, item: null })}
+          orderId={selectedOrder.rawId}
           orderItemId={reviewModal.item.orderItemId}
           productName={reviewModal.item.productName}
           onSuccess={loadData}

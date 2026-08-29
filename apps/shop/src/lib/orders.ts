@@ -127,7 +127,7 @@ export function formatOrderDate(date: Date = new Date()) {
 function buildOrderId() {
   const timestamp = Date.now().toString(36).toUpperCase();
   const randomPart = Math.random().toString(36).slice(2, 5).toUpperCase();
-  return `ZMK-${timestamp}-${randomPart}`;
+  return `ORD-${timestamp}-${randomPart}`;
 }
 
 function readStoredOrders(): OrderRecord[] {

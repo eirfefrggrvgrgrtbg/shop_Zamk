@@ -22,11 +22,11 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 
 func (r *Repository) CreateOrderTx(ctx context.Context, tx pgx.Tx, order *Order) error {
 	query := `
-		INSERT INTO orders (id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, delivery_method_id, delivery_method_code, delivery_method_name, delivery_price_cents, delivery_estimated_days_min, delivery_estimated_days_max, checkout_idempotency_key, checkout_request_hash)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-		RETURNING created_at, updated_at
+		INSERT INTO orders (id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, delivery_method_id, delivery_method_code, delivery_method_name, delivery_price_cents, delivery_estimated_days_min, delivery_estimated_days_max, checkout_idempotency_key, checkout_request_hash, order_number)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, COALESCE($18, 'ORD-' || lpad(nextval('order_number_seq')::text, 6, '0')))
+		RETURNING order_number, created_at, updated_at
 	`
-	return tx.QueryRow(ctx, query, order.ID, order.UserID, order.Status, order.TotalPriceCents, order.Currency, order.CustomerName, order.CustomerPhone, order.CustomerEmail, order.DeliveryAddress, order.DeliveryMethodID, order.DeliveryMethodCode, order.DeliveryMethodName, order.DeliveryPriceCents, order.DeliveryEstimatedDaysMin, order.DeliveryEstimatedDaysMax, order.CheckoutIdempotencyKey, order.CheckoutRequestHash).Scan(&order.CreatedAt, &order.UpdatedAt)
+	return tx.QueryRow(ctx, query, order.ID, order.UserID, order.Status, order.TotalPriceCents, order.Currency, order.CustomerName, order.CustomerPhone, order.CustomerEmail, order.DeliveryAddress, order.DeliveryMethodID, order.DeliveryMethodCode, order.DeliveryMethodName, order.DeliveryPriceCents, order.DeliveryEstimatedDaysMin, order.DeliveryEstimatedDaysMax, order.CheckoutIdempotencyKey, order.CheckoutRequestHash, order.OrderNumber).Scan(&order.OrderNumber, &order.CreatedAt, &order.UpdatedAt)
 }
 
 func (r *Repository) CreateOrderItemTx(ctx context.Context, tx pgx.Tx, item *OrderItem) error {
@@ -68,11 +68,11 @@ func (r *Repository) CreateOrderStatusHistoryTx(ctx context.Context, tx pgx.Tx, 
 
 func (r *Repository) GetOrder(ctx context.Context, id uuid.UUID) (*Order, error) {
 	query := `
-		SELECT id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, delivery_method_id, delivery_method_code, delivery_method_name, delivery_price_cents, delivery_estimated_days_min, delivery_estimated_days_max, checkout_idempotency_key, checkout_request_hash, created_at, updated_at, cancelled_at
+		SELECT id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, delivery_method_id, delivery_method_code, delivery_method_name, delivery_price_cents, delivery_estimated_days_min, delivery_estimated_days_max, checkout_idempotency_key, checkout_request_hash, order_number, created_at, updated_at, cancelled_at
 		FROM orders WHERE id = $1
 	`
 	var o Order
-	err := r.db.QueryRow(ctx, query, id).Scan(&o.ID, &o.UserID, &o.Status, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail, &o.DeliveryAddress, &o.DeliveryMethodID, &o.DeliveryMethodCode, &o.DeliveryMethodName, &o.DeliveryPriceCents, &o.DeliveryEstimatedDaysMin, &o.DeliveryEstimatedDaysMax, &o.CheckoutIdempotencyKey, &o.CheckoutRequestHash, &o.CreatedAt, &o.UpdatedAt, &o.CancelledAt)
+	err := r.db.QueryRow(ctx, query, id).Scan(&o.ID, &o.UserID, &o.Status, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail, &o.DeliveryAddress, &o.DeliveryMethodID, &o.DeliveryMethodCode, &o.DeliveryMethodName, &o.DeliveryPriceCents, &o.DeliveryEstimatedDaysMin, &o.DeliveryEstimatedDaysMax, &o.CheckoutIdempotencyKey, &o.CheckoutRequestHash, &o.OrderNumber, &o.CreatedAt, &o.UpdatedAt, &o.CancelledAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrOrderNotFound
@@ -90,11 +90,11 @@ func (r *Repository) GetOrder(ctx context.Context, id uuid.UUID) (*Order, error)
 
 func (r *Repository) GetOrderForUpdateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*Order, error) {
 	query := `
-		SELECT id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, delivery_method_id, delivery_method_code, delivery_method_name, delivery_price_cents, delivery_estimated_days_min, delivery_estimated_days_max, checkout_idempotency_key, checkout_request_hash, created_at, updated_at, cancelled_at
+		SELECT id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, delivery_method_id, delivery_method_code, delivery_method_name, delivery_price_cents, delivery_estimated_days_min, delivery_estimated_days_max, checkout_idempotency_key, checkout_request_hash, order_number, created_at, updated_at, cancelled_at
 		FROM orders WHERE id = $1 FOR UPDATE
 	`
 	var o Order
-	err := tx.QueryRow(ctx, query, id).Scan(&o.ID, &o.UserID, &o.Status, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail, &o.DeliveryAddress, &o.DeliveryMethodID, &o.DeliveryMethodCode, &o.DeliveryMethodName, &o.DeliveryPriceCents, &o.DeliveryEstimatedDaysMin, &o.DeliveryEstimatedDaysMax, &o.CheckoutIdempotencyKey, &o.CheckoutRequestHash, &o.CreatedAt, &o.UpdatedAt, &o.CancelledAt)
+	err := tx.QueryRow(ctx, query, id).Scan(&o.ID, &o.UserID, &o.Status, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail, &o.DeliveryAddress, &o.DeliveryMethodID, &o.DeliveryMethodCode, &o.DeliveryMethodName, &o.DeliveryPriceCents, &o.DeliveryEstimatedDaysMin, &o.DeliveryEstimatedDaysMax, &o.CheckoutIdempotencyKey, &o.CheckoutRequestHash, &o.OrderNumber, &o.CreatedAt, &o.UpdatedAt, &o.CancelledAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrOrderNotFound
@@ -131,7 +131,7 @@ func (r *Repository) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]Or
 
 func (r *Repository) ListCustomerOrders(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Order, error) {
 	query := `
-		SELECT id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, delivery_method_id, delivery_method_code, delivery_method_name, delivery_price_cents, delivery_estimated_days_min, delivery_estimated_days_max, checkout_idempotency_key, checkout_request_hash, created_at, updated_at, cancelled_at
+		SELECT id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, delivery_method_id, delivery_method_code, delivery_method_name, delivery_price_cents, delivery_estimated_days_min, delivery_estimated_days_max, checkout_idempotency_key, checkout_request_hash, order_number, created_at, updated_at, cancelled_at
 		FROM orders WHERE user_id = $1 ORDER BY created_at DESC
 		LIMIT $2 OFFSET $3
 	`
@@ -144,7 +144,7 @@ func (r *Repository) ListCustomerOrders(ctx context.Context, userID uuid.UUID, l
 	var orders []Order
 	for rows.Next() {
 		var o Order
-		if err := rows.Scan(&o.ID, &o.UserID, &o.Status, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail, &o.DeliveryAddress, &o.DeliveryMethodID, &o.DeliveryMethodCode, &o.DeliveryMethodName, &o.DeliveryPriceCents, &o.DeliveryEstimatedDaysMin, &o.DeliveryEstimatedDaysMax, &o.CheckoutIdempotencyKey, &o.CheckoutRequestHash, &o.CreatedAt, &o.UpdatedAt, &o.CancelledAt); err != nil {
+		if err := rows.Scan(&o.ID, &o.UserID, &o.Status, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail, &o.DeliveryAddress, &o.DeliveryMethodID, &o.DeliveryMethodCode, &o.DeliveryMethodName, &o.DeliveryPriceCents, &o.DeliveryEstimatedDaysMin, &o.DeliveryEstimatedDaysMax, &o.CheckoutIdempotencyKey, &o.CheckoutRequestHash, &o.OrderNumber, &o.CreatedAt, &o.UpdatedAt, &o.CancelledAt); err != nil {
 			return nil, err
 		}
 		orders = append(orders, o)
@@ -215,13 +215,13 @@ func (r *Repository) ListAdminOrders(ctx context.Context, q, status, paymentStat
 	}
 
 	selectQuery := `
-		SELECT 
-			o.id, o.user_id, o.status, 
+		SELECT
+			o.id, o.user_id, o.status,
 			MAX(COALESCE(f.status, 'pending')) as fulfillment_status,
 			COUNT(DISTINCT f.id)::int as fulfillments_count,
 			(SELECT COUNT(*) FROM order_items WHERE order_id = o.id)::int as item_positions_count,
 			(SELECT COALESCE(SUM(quantity), 0) FROM order_items WHERE order_id = o.id)::int as units_count,
-			CASE 
+			CASE
 				WHEN MAX(aol.id::text) IS NOT NULL THEN 'auction'
 				WHEN MAX(oi.seller_id::text) = '` + common.PlatformSellerIDStr + `' THEN 'direct_sale'
 				ELSE 'normal'
@@ -257,11 +257,11 @@ func (r *Repository) ListAdminOrders(ctx context.Context, q, status, paymentStat
 
 func (r *Repository) GetAdminOrderDetail(ctx context.Context, id uuid.UUID) (*AdminOrderDetail, error) {
 	query := `
-		SELECT 
-			o.id, o.user_id, o.status, 
+		SELECT
+			o.id, o.user_id, o.status,
 			(SELECT COALESCE(MAX(status), 'pending') FROM order_fulfillments WHERE order_id = o.id) as fulfillment_status,
 			(SELECT COUNT(*)::int FROM order_fulfillments WHERE order_id = o.id) as fulfillments_count,
-			CASE 
+			CASE
 				WHEN EXISTS(SELECT 1 FROM auction_order_links WHERE order_id = o.id) THEN 'auction'
 				WHEN EXISTS(SELECT 1 FROM order_items WHERE order_id = o.id AND seller_id = '` + common.PlatformSellerIDStr + `') THEN 'direct_sale'
 				ELSE 'normal'
@@ -317,10 +317,10 @@ func (r *Repository) GetAdminOrderDetail(ctx context.Context, id uuid.UUID) (*Ad
 
 func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerOrder, error) {
 	query := `
-		SELECT 
-			o.id, 
-			o.order_number, 
-			o.created_at, 
+		SELECT
+			o.id,
+			o.order_number,
+			o.created_at,
 			CASE
 				WHEN rs.refunded_units >= COALESCE(SUM(oi.quantity), 0) THEN 'fully_returned'
 				WHEN rs.refunded_units > 0 THEN 'has_return'
@@ -334,7 +334,7 @@ func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, l
 		JOIN order_items oi ON o.id = oi.order_id
 		LEFT JOIN shipments s ON o.id = s.order_id
 		LEFT JOIN (
-			SELECT 
+			SELECT
 				oi2.order_id,
 				SUM(ri.quantity) as refunded_units
 			FROM order_items oi2
@@ -360,7 +360,7 @@ func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, l
 		if err := rows.Scan(&o.ID, &o.OrderNumber, &o.CreatedAt, &o.CommercialStatus, &o.DeliveryStatus, &o.SellerItemCount, &o.SellerUnits, &o.SellerGrossAmount); err != nil {
 			return nil, err
 		}
-		// Hardcode payout and refund to 0/empty if not queried. 
+		// Hardcode payout and refund to 0/empty if not queried.
 		// For a full implementation, we would join ledger/refunds.
 		orders = append(orders, o)
 	}
@@ -399,7 +399,7 @@ func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, l
 
 func (r *Repository) GetSellerOrderSummary(ctx context.Context, sellerID uuid.UUID) (*SellerOrderSummary, error) {
 	query := `
-		SELECT 
+		SELECT
 			COALESCE(SUM(oi.quantity), 0) as today_units,
 			COUNT(DISTINCT o.id) as today_orders,
 			(
@@ -449,10 +449,10 @@ func (r *Repository) GetSellerOrderSummary(ctx context.Context, sellerID uuid.UU
 
 func (r *Repository) GetSellerOrder(ctx context.Context, sellerID, orderID uuid.UUID) (*SellerOrder, error) {
 	query := `
-		SELECT 
-			o.id, 
-			o.order_number, 
-			o.created_at, 
+		SELECT
+			o.id,
+			o.order_number,
+			o.created_at,
 			CASE
 				WHEN rs.refunded_units >= COALESCE(SUM(oi.quantity), 0) THEN 'fully_returned'
 				WHEN rs.refunded_units > 0 THEN 'has_return'
@@ -466,7 +466,7 @@ func (r *Repository) GetSellerOrder(ctx context.Context, sellerID, orderID uuid.
 		JOIN order_items oi ON o.id = oi.order_id
 		LEFT JOIN shipments s ON o.id = s.order_id
 		LEFT JOIN (
-			SELECT 
+			SELECT
 				oi2.order_id,
 				SUM(ri.quantity) as refunded_units
 			FROM order_items oi2
@@ -605,11 +605,11 @@ func (r *Repository) GetDeliveryMethod(ctx context.Context, id uuid.UUID) (*Deli
 
 func (r *Repository) GetOrderByIdempotencyKey(ctx context.Context, userID uuid.UUID, idempotencyKey uuid.UUID) (*Order, error) {
 	query := `
-		SELECT id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, delivery_method_id, delivery_method_code, delivery_method_name, delivery_price_cents, delivery_estimated_days_min, delivery_estimated_days_max, checkout_idempotency_key, checkout_request_hash, created_at, updated_at, cancelled_at
+		SELECT id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, delivery_method_id, delivery_method_code, delivery_method_name, delivery_price_cents, delivery_estimated_days_min, delivery_estimated_days_max, checkout_idempotency_key, checkout_request_hash, order_number, created_at, updated_at, cancelled_at
 		FROM orders WHERE user_id = $1 AND checkout_idempotency_key = $2
 	`
 	var o Order
-	err := r.db.QueryRow(ctx, query, userID, idempotencyKey).Scan(&o.ID, &o.UserID, &o.Status, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail, &o.DeliveryAddress, &o.DeliveryMethodID, &o.DeliveryMethodCode, &o.DeliveryMethodName, &o.DeliveryPriceCents, &o.DeliveryEstimatedDaysMin, &o.DeliveryEstimatedDaysMax, &o.CheckoutIdempotencyKey, &o.CheckoutRequestHash, &o.CreatedAt, &o.UpdatedAt, &o.CancelledAt)
+	err := r.db.QueryRow(ctx, query, userID, idempotencyKey).Scan(&o.ID, &o.UserID, &o.Status, &o.TotalPriceCents, &o.Currency, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail, &o.DeliveryAddress, &o.DeliveryMethodID, &o.DeliveryMethodCode, &o.DeliveryMethodName, &o.DeliveryPriceCents, &o.DeliveryEstimatedDaysMin, &o.DeliveryEstimatedDaysMax, &o.CheckoutIdempotencyKey, &o.CheckoutRequestHash, &o.OrderNumber, &o.CreatedAt, &o.UpdatedAt, &o.CancelledAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrOrderNotFound

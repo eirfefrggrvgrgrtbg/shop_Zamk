@@ -23,6 +23,10 @@ export interface AdminOrderView {
   customerPhone?: string;
   customerEmail?: string;
   deliveryAddress?: string;
+  deliveryMethodName?: string;
+  deliveryPriceCents?: number;
+  deliveryEstimatedDaysMin?: number;
+  deliveryEstimatedDaysMax?: number;
   totalAmount: number;
   totalPriceCents: number;
   currency: string;
@@ -79,6 +83,10 @@ export const mapAdminOrder = (order: AdminOrderDetail | AdminOrder): AdminOrderV
     customerPhone: (order as AdminOrderDetail).customerPhone,
     customerEmail: order.customerEmail,
     deliveryAddress: (order as AdminOrderDetail).deliveryAddress,
+    deliveryMethodName: (order as AdminOrderDetail).deliveryMethodName,
+    deliveryPriceCents: (order as AdminOrderDetail).deliveryPriceCents,
+    deliveryEstimatedDaysMin: (order as AdminOrderDetail).deliveryEstimatedDaysMin,
+    deliveryEstimatedDaysMax: (order as AdminOrderDetail).deliveryEstimatedDaysMax,
     totalAmount: order.totalPriceCents / 100,
     totalPriceCents: order.totalPriceCents,
     currency: order.currency || 'RUB',

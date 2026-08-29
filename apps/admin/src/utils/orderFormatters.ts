@@ -11,7 +11,7 @@ export function formatOrderNumber(order: { id: string; orderNumber?: string | nu
   if (order.orderNumber) {
     return order.orderNumber;
   }
-  return `[MISSING ORDER_NUMBER]`;
+  return order.id ? `ORD-${order.id.slice(0, 8).toUpperCase()}` : '—';
 }
 
 export function formatDateTime(dateStr?: string | null): string {

@@ -361,13 +361,23 @@ export function AdminOrderDetail() {
           <h3 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-3">Информация о доставке</h3>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
-              <dt className="text-xs text-gray-500 font-medium">Служба доставки</dt>
-              <dd className="text-gray-900 font-semibold mt-0.5">Курьерская служба ZAMK Express</dd>
+              <dt className="text-xs text-gray-500 font-medium">Способ доставки</dt>
+              <dd className="text-gray-900 font-semibold mt-0.5">{order.deliveryMethodName || 'Курьерская доставка'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-gray-500 font-medium">Стоимость доставки</dt>
+              <dd className="text-gray-900 font-semibold mt-0.5">{order.deliveryPriceCents !== undefined && order.deliveryPriceCents !== null ? formatMoney(order.deliveryPriceCents) : '—'}</dd>
             </div>
             <div>
               <dt className="text-xs text-gray-500 font-medium">Адрес получателя</dt>
               <dd className="text-gray-900 font-semibold mt-0.5">{order.deliveryAddress || 'Адрес не указан'}</dd>
             </div>
+            {order.customerPhone && (
+              <div>
+                <dt className="text-xs text-gray-500 font-medium">Телефон получателя</dt>
+                <dd className="text-gray-900 font-semibold mt-0.5">{order.customerPhone}</dd>
+              </div>
+            )}
           </dl>
         </div>
       )}

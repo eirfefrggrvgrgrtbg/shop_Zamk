@@ -69,7 +69,7 @@ export function DevMockPayment() {
 
   if (loading) {
     return (
-      <div className="min-h-screen pt-20 flex items-center justify-center">
+      <div className="min-h-screen pt-24 md:pt-32 flex items-center justify-center">
         <div className="text-center space-y-3">
           <RefreshCw className="w-8 h-8 animate-spin mx-auto text-yellow-500" />
           <p className="text-sm text-graphite-light dark:text-white/60">Загрузка тестового платежа T-Pay...</p>
@@ -79,10 +79,10 @@ export function DevMockPayment() {
   }
 
   return (
-    <div className="min-h-screen pt-16 md:pt-20 pb-20 z-10 relative">
+    <div className="min-h-screen pt-24 md:pt-32 pb-20 z-10 relative">
       <div className="container mx-auto px-4 max-w-2xl">
-        <Link to="/checkout" className="inline-flex items-center gap-2 text-sm text-ash hover:text-graphite dark:text-white/60 dark:hover:text-white mb-6">
-          <ArrowLeft className="w-4 h-4" /> Назад к оформлению
+        <Link to="/orders" className="inline-flex items-center gap-2 text-sm text-ash hover:text-graphite dark:text-white/60 dark:hover:text-white mb-6">
+          <ArrowLeft className="w-4 h-4" /> К моим заказам
         </Link>
 
         <CheckoutPanel>
@@ -129,7 +129,7 @@ export function DevMockPayment() {
                       payment.status === 'cancelled' ? 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300' :
                       'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300'
                     }`}>
-                      {payment.status === 'pending' ? 'Ожидает решения' : 
+                      {payment.status === 'pending' ? 'Ожидает решения' :
                        payment.status === 'succeeded' ? 'Тестовая оплата подтверждена' : payment.status}
                     </span>
                   </div>
@@ -139,7 +139,7 @@ export function DevMockPayment() {
               {payment.status === 'pending' ? (
                 <div className="space-y-3 pt-2">
                   <p className="text-xs font-medium text-graphite dark:text-white mb-2">Выберите результат эмуляции:</p>
-                  
+
                   <button
                     type="button"
                     onClick={() => handleAction('confirm')}
@@ -185,8 +185,8 @@ export function DevMockPayment() {
                     <Link to="/orders" className="px-4 py-2 bg-black text-white dark:bg-white dark:text-black text-sm rounded-lg font-medium">
                       Мои заказы
                     </Link>
-                    <Link to="/checkout" className="px-4 py-2 border border-border-lighter text-graphite dark:text-white text-sm rounded-lg">
-                      Вернуться в оформление
+                    <Link to="/catalog" className="px-4 py-2 border border-border-lighter text-graphite dark:text-white text-sm rounded-lg">
+                      В каталог
                     </Link>
                   </div>
                 </div>

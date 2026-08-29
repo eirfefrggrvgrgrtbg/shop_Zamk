@@ -67,7 +67,7 @@ export function Checkout() {
       openAuthModal('login');
       return;
     }
-    
+
     if (isSubmitting || done) {
       return;
     }
@@ -108,8 +108,7 @@ export function Checkout() {
     }
 
     try {
-      const selectedMethod = deliveryMethods.find(m => m.id === selectedMethodId);
-      const deliveryAddressText = selectedMethod ? `${selectedMethod.name}: ${finalAddress}` : finalAddress;
+      const deliveryAddressText = finalAddress;
 
       const order = await createOrder({
         customerName: finalName,
@@ -120,11 +119,11 @@ export function Checkout() {
       }, idempotencyKey);
 
       const payment = await createPayment(order.id, paymentMethod);
-      
+
       setValidationError('');
       setDone(true);
       await clearCart();
-      
+
       if (payment.integrationMode === 'mock') {
         setTimeout(() => {
           window.location.href = payment.paymentUrl;
@@ -147,7 +146,7 @@ export function Checkout() {
 
   if (done) {
     return (
-      <div className='relative z-10 min-h-screen pt-16 md:pt-20 pb-20'>
+      <div className='relative z-10 min-h-screen pt-24 md:pt-32 pb-20'>
         <div className='container mx-auto px-4 sm:px-6 max-w-4xl'>
           <CheckoutPanel>
             <div className='text-center'>
@@ -169,7 +168,7 @@ export function Checkout() {
 
   if (!items.length) {
     return (
-      <div className='relative z-10 min-h-screen pt-16 md:pt-20 pb-20'>
+      <div className='relative z-10 min-h-screen pt-24 md:pt-32 pb-20'>
         <div className='container mx-auto px-4 sm:px-6 max-w-4xl text-center'>
           <h1 className='text-4xl font-serif text-graphite dark:text-white'>Корзина пуста</h1>
           <Link to='/catalog' className='inline-block mt-6'><Button>Перейти в каталог</Button></Link>
@@ -183,7 +182,7 @@ export function Checkout() {
   const total = totalPrice + delivery;
 
   return (
-    <div className='relative z-10 min-h-screen pt-16 md:pt-20 pb-20'>
+    <div className='relative z-10 min-h-screen pt-24 md:pt-32 pb-20'>
       <div className='container mx-auto px-4 sm:px-6 max-w-[1400px]'>
         <Link to='/cart' className='inline-flex items-center gap-2 text-sm text-ash hover:text-graphite dark:text-white/55 dark:hover:text-white'>
           <ArrowLeft className='w-4 h-4' /> Вернуться в корзину
@@ -202,11 +201,11 @@ export function Checkout() {
           <div className='lg:col-span-8 space-y-5'>
             <CheckoutPanel>
               <SectionHeader label='Шаг 1' title='Контактные данные и адрес' />
-              
+
               {isAuthenticated && savedAddresses.length > 0 && (
                 <div className="mb-4">
                   <label className="text-sm font-medium text-graphite dark:text-white mb-2 block">Сохранённый адрес</label>
-                  <select 
+                  <select
                     className="w-full bg-white dark:bg-white/5 border border-border-lighter dark:border-white/10 rounded-lg p-3 text-sm text-graphite dark:text-white outline-none focus:ring-1 focus:ring-graphite/20 dark:focus:ring-white/30"
                     value={selectedAddressId}
                     onChange={(e) => setSelectedAddressId(e.target.value)}
@@ -249,7 +248,7 @@ export function Checkout() {
                   </div>
                 </div>
               )}
-              
+
               {validationError && (
                 <p className='mt-3 text-sm text-error' role='alert'>
                   {validationError}
@@ -283,7 +282,7 @@ export function Checkout() {
                   <>
                     <div className='flex flex-wrap gap-2 items-center'>
                       <PillFilter label='Карта онлайн' active={paymentMethod === 'card'} onClick={() => setPaymentMethod('card')} />
-                      
+
                       <button
                         type="button"
                         onClick={() => isTPayAvailable && setPaymentMethod('tpay')}

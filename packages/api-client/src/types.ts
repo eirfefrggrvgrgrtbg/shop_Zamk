@@ -874,6 +874,12 @@ export interface AdminOrder {
 export interface AdminOrderDetail extends AdminOrder {
   customerPhone?: string;
   deliveryAddress?: string;
+  deliveryMethodId?: string;
+  deliveryMethodCode?: string;
+  deliveryMethodName?: string;
+  deliveryPriceCents?: number;
+  deliveryEstimatedDaysMin?: number;
+  deliveryEstimatedDaysMax?: number;
   items?: OrderItem[];
   fulfillments?: AdminFulfillment[];
 }
