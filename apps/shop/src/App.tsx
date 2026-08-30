@@ -29,6 +29,7 @@ import { NewArrivals } from './pages/NewArrivals';
 import { About } from './pages/About';
 import { Collections } from './pages/Collections';
 import { Returns } from './pages/Returns';
+import { ReturnDetail } from './pages/ReturnDetail';
 import { Delivery } from './pages/Delivery';
 import { Help } from './pages/Help';
 import { Contacts } from './pages/Contacts';
@@ -82,6 +83,9 @@ function App() {
                     <Route path="/about" element={<About />} />
                     <Route path="/collections" element={<Collections />} />
                     <Route path="/returns" element={<Returns />} />
+                    <Route path="/returns/:returnId" element={<ReturnDetail />} />
+                    <Route path="/profile/returns" element={<Returns />} />
+                    <Route path="/profile/returns/:returnId" element={<ReturnDetail />} />
                     <Route path="/delivery" element={<Delivery />} />
                     <Route path="/help" element={<Help />} />
                     <Route path="/contacts" element={<Contacts />} />

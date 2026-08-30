@@ -5,9 +5,11 @@ import {
   rejectAdminReturn as apiRejectAdminReturn,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
-import type { AdminReturn, AdminReturnItem, AdminReturnEvidence } from '@zamk/api-client/src/types';
+import type { AdminReturn, AdminReturnItem, AdminReturnEvidence, ReturnShipment, ReturnShipmentStatus, ReturnShipmentMethod } from '@zamk/api-client/src/types';
+import { formatReturnShipmentStatus, formatReturnShipmentMethod } from '@zamk/api-client/src/types';
 
-export type { AdminReturn, AdminReturnItem, AdminReturnEvidence };
+export type { AdminReturn, AdminReturnItem, AdminReturnEvidence, ReturnShipment, ReturnShipmentStatus, ReturnShipmentMethod };
+export { formatReturnShipmentStatus, formatReturnShipmentMethod };
 
 export const RETURN_REASON_LABELS: Record<string, string> = {
   defective: 'Товар неисправен',

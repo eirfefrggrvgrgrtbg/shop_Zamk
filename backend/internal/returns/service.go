@@ -2,6 +2,7 @@ package returns
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -31,28 +32,30 @@ type paymentsService interface {
 }
 
 type Service struct {
-	storageProvider storage.Provider
-	repo            *Repository
-	ordersRepo      *orders.Repository
-	inventorySvc    *inventory.Service
-	db              *postgres.Client
-	payouts         payoutsService
-	payments        paymentsService
-	windowDays      int
-	notifs          *notifications.Service
+	storageProvider   storage.Provider
+	repo              *Repository
+	ordersRepo        *orders.Repository
+	inventorySvc      *inventory.Service
+	db                *postgres.Client
+	payouts           payoutsService
+	payments          paymentsService
+	windowDays        int
+	notifs            *notifications.Service
+	logisticsProvider ReturnLogisticsProvider
 }
 
-func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *inventory.Service, db *postgres.Client, payouts payoutsService, payments paymentsService, windowDays int, notifs *notifications.Service, storageProvider storage.Provider) *Service {
+func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *inventory.Service, db *postgres.Client, payouts payoutsService, payments paymentsService, windowDays int, notifs *notifications.Service, storageProvider storage.Provider, logisticsProvider ReturnLogisticsProvider) *Service {
 	return &Service{
-		storageProvider: storageProvider,
-		repo:            repo,
-		ordersRepo:      ordersRepo,
-		inventorySvc:    inventorySvc,
-		db:              db,
-		payouts:         payouts,
-		payments:        payments,
-		windowDays:      windowDays,
-		notifs:          notifs,
+		storageProvider:   storageProvider,
+		repo:              repo,
+		ordersRepo:        ordersRepo,
+		inventorySvc:      inventorySvc,
+		db:                db,
+		payouts:           payouts,
+		payments:          payments,
+		windowDays:        windowDays,
+		notifs:            notifs,
+		logisticsProvider: logisticsProvider,
 	}
 }
 
@@ -171,7 +174,7 @@ func (s *Service) CreateReturn(ctx context.Context, userID, orderID uuid.UUID, r
 		trimmedComment := strings.TrimSpace(*req.Comment)
 
 		// Lock order items
-		query := `SELECT id, order_id, order_fulfillment_id, quantity, seller_id FROM order_items WHERE id = ANY($1) AND order_id = $2 ORDER BY id FOR UPDATE`
+		query := `SELECT id, order_id, order_fulfillment_id, quantity, seller_id, title, image_url, variant_size, variant_color, sku, price_cents FROM order_items WHERE id = ANY($1) AND order_id = $2 ORDER BY id FOR UPDATE`
 		rows, err := tx.Query(ctx, query, requestedItemIDs, orderID)
 		if err != nil {
 			return err
@@ -183,13 +186,19 @@ func (s *Service) CreateReturn(ctx context.Context, userID, orderID uuid.UUID, r
 			FulfillmentID *uuid.UUID
 			Quantity      int
 			SellerID      uuid.UUID
+			Title         string
+			ImageURL      *string
+			VariantSize   *string
+			VariantColor  *string
+			SKU           *string
+			PriceCents    int64
 		}
 
 		var lockedItems []lockedItem
 		for rows.Next() {
 			var li lockedItem
 			var oid uuid.UUID
-			if err := rows.Scan(&li.ID, &oid, &li.FulfillmentID, &li.Quantity, &li.SellerID); err != nil {
+			if err := rows.Scan(&li.ID, &oid, &li.FulfillmentID, &li.Quantity, &li.SellerID, &li.Title, &li.ImageURL, &li.VariantSize, &li.VariantColor, &li.SKU, &li.PriceCents); err != nil {
 				return err
 			}
 			lockedItems = append(lockedItems, li)
@@ -316,8 +325,9 @@ func (s *Service) CreateReturn(ctx context.Context, userID, orderID uuid.UUID, r
 					itemCond = &defaultCond
 				}
 
+				retItemID := uuid.New()
 				retItems = append(retItems, ReturnItem{
-					ID:               uuid.New(),
+					ID:               retItemID,
 					ReturnID:         ret.ID,
 					OrderItemID:      li.ID,
 					Quantity:         itemReq.Quantity,
@@ -357,9 +367,29 @@ func (s *Service) CreateReturn(ctx context.Context, userID, orderID uuid.UUID, r
 				})
 			}
 
+			var customerItems []CustomerReturnItemDetail
+			for i, li := range itemsGroup {
+				customerItems = append(customerItems, CustomerReturnItemDetail{
+					ID:                 retItems[i].ID,
+					ReturnID:           ret.ID,
+					OrderItemID:        li.ID,
+					ProductTitle:       li.Title,
+					ProductImageURL:    li.ImageURL,
+					VariantSize:        li.VariantSize,
+					VariantColor:       li.VariantColor,
+					SKU:                li.SKU,
+					Quantity:           retItems[i].Quantity,
+					PriceCents:         li.PriceCents,
+					SubtotalPriceCents: li.PriceCents * int64(retItems[i].Quantity),
+					Reason:             retItems[i].Reason,
+					Condition:          retItems[i].Condition,
+				})
+			}
+
 			responses = append(responses, ReturnResponse{
-				Return: *ret,
-				Items:  retItems,
+				Return:      *ret,
+				OrderNumber: order.OrderNumber,
+				Items:       customerItems,
 			})
 		}
 
@@ -371,39 +401,28 @@ func (s *Service) CreateReturn(ctx context.Context, userID, orderID uuid.UUID, r
 	}
 	return responses, nil
 }
-func (s *Service) GetCustomerReturn(ctx context.Context, userID, returnID uuid.UUID) (*Return, []ReturnItem, error) {
-	ret, items, err := s.repo.GetReturn(ctx, returnID)
-	if err != nil {
-		return nil, nil, err
+
+func (s *Service) buildEvidenceURL(key string) string {
+	if s.storageProvider != nil {
+		return s.storageProvider.BuildPublicURL(key)
 	}
-	if ret.UserID != userID {
-		return nil, nil, ErrUnauthorized
-	}
-	return ret, items, nil
+	return "/media/" + key
 }
 
-func (s *Service) ListCustomerReturns(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Return, error) {
-	return s.repo.ListReturnsByCustomer(ctx, userID, limit, offset)
+func (s *Service) GetCustomerReturn(ctx context.Context, userID, returnID uuid.UUID) (*ReturnResponse, error) {
+	return s.repo.GetCustomerReturn(ctx, userID, returnID, s.buildEvidenceURL)
+}
+
+func (s *Service) ListCustomerReturns(ctx context.Context, userID uuid.UUID, limit, offset int) ([]ReturnResponse, int, error) {
+	return s.repo.ListReturnsByCustomer(ctx, userID, limit, offset, s.buildEvidenceURL)
 }
 
 func (s *Service) GetAdminReturn(ctx context.Context, returnID uuid.UUID) (*AdminReturnResponse, error) {
-	buildURL := func(key string) string {
-		if s.storageProvider != nil {
-			return s.storageProvider.BuildPublicURL(key)
-		}
-		return "/media/" + key
-	}
-	return s.repo.GetAdminReturn(ctx, returnID, buildURL)
+	return s.repo.GetAdminReturn(ctx, returnID, s.buildEvidenceURL)
 }
 
 func (s *Service) ListAdminReturns(ctx context.Context, limit, offset int) ([]AdminReturnResponse, int, error) {
-	buildURL := func(key string) string {
-		if s.storageProvider != nil {
-			return s.storageProvider.BuildPublicURL(key)
-		}
-		return "/media/" + key
-	}
-	return s.repo.ListAdminReturns(ctx, limit, offset, buildURL)
+	return s.repo.ListAdminReturns(ctx, limit, offset, s.buildEvidenceURL)
 }
 
 func (s *Service) UpdateReturnStatus(ctx context.Context, adminID, returnID uuid.UUID, req UpdateReturnStatusRequest) error {
@@ -652,6 +671,14 @@ func (s *Service) StartReceiving(ctx context.Context, returnID uuid.UUID) error 
 
 		if ret.Status != "approved" {
 			return ErrInvalidStatusTransition
+		}
+
+		shipment, err := s.repo.GetReturnShipmentByReturnIDTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+		if shipment == nil || shipment.Status != "arrived_at_zamk" {
+			return ErrReturnNotArrived
 		}
 
 		now := time.Now()
@@ -992,4 +1019,169 @@ func (s *Service) FinalizeReceiving(ctx context.Context, returnID uuid.UUID) err
 		ret.Status = "item_received"
 		return s.repo.UpdateReturnTx(ctx, tx, ret)
 	})
+}
+
+// GetCustomerReturnShipment returns the active shipment for a return owned by the customer.
+func (s *Service) GetCustomerReturnShipment(ctx context.Context, customerID, returnID uuid.UUID) (*ReturnShipment, error) {
+	ret, _, err := s.repo.GetReturn(ctx, returnID)
+	if err != nil {
+		return nil, err
+	}
+	if ret == nil {
+		return nil, ErrReturnNotFound
+	}
+	if ret.UserID != customerID {
+		return nil, ErrUnauthorized
+	}
+	return s.repo.GetReturnShipmentByReturnID(ctx, returnID)
+}
+
+// CreateCustomerReturnShipment creates a shipment for an approved return.
+func (s *Service) CreateCustomerReturnShipment(ctx context.Context, customerID, returnID uuid.UUID, req CreateReturnShipmentRequest) (*ReturnShipment, error) {
+	var result *ReturnShipment
+	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		ret, _, err := s.repo.GetReturn(ctx, returnID)
+		if err != nil {
+			return err
+		}
+		if ret == nil {
+			return ErrReturnNotFound
+		}
+		if ret.UserID != customerID {
+			return ErrUnauthorized
+		}
+		if ret.Status != "approved" {
+			return ErrReturnNotApproved
+		}
+		existing, err := s.repo.GetReturnShipmentByReturnIDTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			return ErrShipmentAlreadyExists
+		}
+
+		if s.logisticsProvider == nil {
+			return ErrCDEKNotConfigured
+		}
+
+		var selectedOffice *Office
+		if req.Method == "cdek_office" {
+			if req.CDEKOfficeCode == nil || strings.TrimSpace(*req.CDEKOfficeCode) == "" {
+				return ErrCDEKOfficeRequired
+			}
+			offices, err := s.logisticsProvider.ListOffices(ctx)
+			if err != nil {
+				return err
+			}
+			for _, o := range offices {
+				if o.Code == *req.CDEKOfficeCode {
+					match := o
+					selectedOffice = &match
+					break
+				}
+			}
+			if selectedOffice == nil {
+				return ErrInvalidCDEKOffice
+			}
+		} else if req.Method == "cdek_courier" {
+			if req.CustomerName == nil || strings.TrimSpace(*req.CustomerName) == "" ||
+				req.CustomerPhone == nil || strings.TrimSpace(*req.CustomerPhone) == "" ||
+				req.PickupAddress == nil || strings.TrimSpace(req.PickupAddress.City) == "" ||
+				strings.TrimSpace(req.PickupAddress.Street) == "" || strings.TrimSpace(req.PickupAddress.House) == "" {
+				return ErrCourierInfoRequired
+			}
+		}
+
+		provReq := ProviderShipmentRequest{
+			ReturnID: returnID,
+			Method:   req.Method,
+		}
+		if req.CDEKOfficeCode != nil {
+			provReq.CDEKOfficeCode = *req.CDEKOfficeCode
+		}
+		if req.CustomerName != nil {
+			provReq.CustomerName = *req.CustomerName
+		}
+		if req.CustomerPhone != nil {
+			provReq.CustomerPhone = *req.CustomerPhone
+		}
+		if req.PickupAddress != nil {
+			provReq.PickupAddress = req.PickupAddress
+		}
+
+		provResult, err := s.logisticsProvider.CreateShipment(ctx, provReq)
+		if err != nil {
+			return err
+		}
+
+		shipment := &ReturnShipment{
+			ID:       uuid.New(),
+			ReturnID: returnID,
+			Provider: "cdek",
+			Method:   req.Method,
+			Status:   provResult.Status,
+		}
+		if provResult.ProviderShipmentID != "" {
+			shipment.ProviderShipmentID = &provResult.ProviderShipmentID
+		}
+		if provResult.TrackingNumber != "" {
+			shipment.TrackingNumber = &provResult.TrackingNumber
+		}
+		if req.CDEKOfficeCode != nil {
+			shipment.SelectedCDEKOfficeCode = req.CDEKOfficeCode
+		}
+		if selectedOffice != nil {
+			shipment.CDEKOfficeAddress = &selectedOffice.Address
+		}
+		if req.CustomerName != nil {
+			shipment.CustomerName = req.CustomerName
+		}
+		if req.CustomerPhone != nil {
+			shipment.CustomerPhone = req.CustomerPhone
+		}
+		if req.PickupAddress != nil {
+			addrBytes, _ := json.Marshal(req.PickupAddress)
+			shipment.PickupAddress = addrBytes
+		}
+
+		if err := s.repo.CreateReturnShipmentTx(ctx, tx, shipment); err != nil {
+			return err
+		}
+		result = shipment
+		return nil
+	})
+	return result, err
+}
+
+// UpdateReturnShipmentStatus transitions a shipment to a new status obeying the canonical state machine.
+func (s *Service) UpdateReturnShipmentStatus(ctx context.Context, returnID uuid.UUID, newStatus string) (*ReturnShipment, error) {
+	var result *ReturnShipment
+	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		shipment, err := s.repo.GetReturnShipmentByReturnIDTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+		if shipment == nil {
+			return ErrReturnNotFound
+		}
+		if !IsValidShipmentTransition(shipment.Status, newStatus) {
+			return ErrInvalidShipmentTransition
+		}
+		shipment.Status = newStatus
+		if err := s.repo.UpdateReturnShipmentTx(ctx, tx, shipment); err != nil {
+			return err
+		}
+		result = shipment
+		return nil
+	})
+	return result, err
+}
+
+// ListCDEKOffices proxies office lookup to the logistics provider.
+func (s *Service) ListCDEKOffices(ctx context.Context) ([]Office, error) {
+	if s.logisticsProvider == nil {
+		return nil, ErrCDEKNotConfigured
+	}
+	return s.logisticsProvider.ListOffices(ctx)
 }

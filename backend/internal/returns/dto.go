@@ -36,6 +36,31 @@ type CreateRefundRequest struct {
 	Reason *string `json:"reason"`
 }
 
+type CustomerReturnEvidence struct {
+	ID          uuid.UUID `json:"id"`
+	URL         string    `json:"url"`
+	ContentType string    `json:"contentType"`
+	SortOrder   int       `json:"sortOrder"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+type CustomerReturnItemDetail struct {
+	ID                 uuid.UUID                `json:"id"`
+	ReturnID           uuid.UUID                `json:"returnId"`
+	OrderItemID        uuid.UUID                `json:"orderItemId"`
+	ProductTitle       string                   `json:"productTitle"`
+	ProductImageURL    *string                  `json:"productImageUrl"`
+	VariantSize        *string                  `json:"variantSize"`
+	VariantColor       *string                  `json:"variantColor"`
+	SKU                *string                  `json:"sku"`
+	Quantity           int                      `json:"quantity"`
+	PriceCents         int64                    `json:"priceCents"`
+	SubtotalPriceCents int64                    `json:"subtotalPriceCents"`
+	Reason             *string                  `json:"reason"`
+	Condition          *string                  `json:"condition"`
+	Evidence           []CustomerReturnEvidence `json:"evidence"`
+}
+
 type CreateReturnResponse struct {
 	ReturnResponse
 	Returns []ReturnResponse `json:"returns"`
@@ -43,13 +68,18 @@ type CreateReturnResponse struct {
 
 type ReturnResponse struct {
 	Return
-	Items []ReturnItem `json:"items"`
+	OrderNumber *string                    `json:"orderNumber,omitempty"`
+	Items       []CustomerReturnItemDetail `json:"items"`
+	Shipment    *ReturnShipmentResponse    `json:"shipment,omitempty"`
 }
 
 type ReturnListResponse struct {
 	Items      []ReturnResponse `json:"items"`
 	TotalCount int              `json:"totalCount"`
 }
+
+type CustomerReturnResponse = ReturnResponse
+type CustomerReturnListResponse = ReturnListResponse
 
 type RefundListResponse struct {
 	Items      []Refund `json:"items"`
@@ -105,6 +135,7 @@ type AdminReturnResponse struct {
 	DeliveredAt   *time.Time              `json:"deliveredAt"`
 	EvidenceCount int                     `json:"evidenceCount"`
 	Items         []AdminReturnItemDetail `json:"items"`
+	Shipment      *ReturnShipmentResponse `json:"shipment,omitempty"`
 }
 
 type AdminReturnListResponse struct {
@@ -215,4 +246,40 @@ type AdminReturnReceivingItem struct {
 type UploadEvidenceResponse struct {
 	ID  uuid.UUID `json:"id"`
 	URL string    `json:"url"`
+}
+
+type CreateReturnShipmentRequest struct {
+	Method         string            `json:"method" validate:"required,oneof=cdek_courier cdek_office"`
+	CDEKOfficeCode *string           `json:"cdekOfficeCode" validate:"required_if=Method cdek_office"`
+	CustomerName   *string           `json:"customerName" validate:"required_if=Method cdek_courier"`
+	CustomerPhone  *string           `json:"customerPhone" validate:"required_if=Method cdek_courier"`
+	PickupAddress  *PickupAddressDTO `json:"pickupAddress" validate:"required_if=Method cdek_courier"`
+}
+
+type PickupAddressDTO struct {
+	City   string  `json:"city" validate:"required"`
+	Street string  `json:"street" validate:"required"`
+	House  string  `json:"house" validate:"required"`
+	Flat   *string `json:"flat,omitempty"`
+}
+
+type CDEKOfficeDTO struct {
+	Code         string  `json:"code"`
+	Address      string  `json:"address"`
+	Name         string  `json:"name"`
+	WorkingHours *string `json:"workingHours,omitempty"`
+}
+
+type ReturnShipmentResponse struct {
+	ID                     uuid.UUID         `json:"id"`
+	Provider               string            `json:"provider"`
+	Method                 string            `json:"method"`
+	TrackingNumber         *string           `json:"trackingNumber,omitempty"`
+	ProviderShipmentID     *string           `json:"providerShipmentId,omitempty"`
+	Status                 string            `json:"status"`
+	SelectedCDEKOfficeCode *string           `json:"selectedCdekOfficeCode,omitempty"`
+	CustomerName           *string           `json:"customerName,omitempty"`
+	CustomerPhone          *string           `json:"customerPhone,omitempty"`
+	PickupAddress          *PickupAddressDTO `json:"pickupAddress,omitempty"`
+	CDEKOfficeAddress      *string           `json:"cdekOfficeAddress,omitempty"`
 }

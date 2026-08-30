@@ -129,7 +129,8 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 		logger.Warn("failed to create storage provider, continuing without storage handler", "error", err)
 	}
 
-	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, paymentsService, cfg.Worker.ReturnWindowDays, notificationsService, storageProvider)
+	cdekProvider := returns.NewCDEKProvider(cfg.CDEK)
+	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, paymentsService, cfg.Worker.ReturnWindowDays, notificationsService, storageProvider, cdekProvider)
 	returnsHandler := returns.NewHandler(returnsService)
 
 

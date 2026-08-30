@@ -75,6 +75,7 @@ func TestM522_SerializedInspection(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	scanResp, err := fix.svc.ScanReturnUnit(ctx, retID, returns.ScanReturnUnitRequest{Code: zmuCode})
@@ -207,6 +208,7 @@ func TestM522_SerializedRejectFinalize(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	scanA, err := fix.svc.ScanReturnUnit(ctx, retID, returns.ScanReturnUnitRequest{Code: zmuCode})
@@ -288,6 +290,7 @@ func TestM522_LegacyFinalize_FullBucket(t *testing.T) {
 	itemID := resp[0].Items[0].ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	// Inspect: accepted=2, damaged=1, rejected=1 (notReceived=1)
@@ -397,6 +400,7 @@ func TestM522_LegacyEndpoint_RejectsSerializedItem(t *testing.T) {
 	itemID := resp[0].Items[0].ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	// Call InspectLegacyItem on serialized return item -> ErrItemNotLegacy
@@ -477,6 +481,7 @@ func TestM522_InspectionAfterFinalize(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	scanA, err := fix.svc.ScanReturnUnit(ctx, retID, returns.ScanReturnUnitRequest{Code: zmuCode})
@@ -520,7 +525,10 @@ func TestM522_InspectionAfterFinalize(t *testing.T) {
 	legRetID := respLeg[0].Return.ID
 	legItemID := respLeg[0].Items[0].ID
 
+
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, legRetID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, legRetID)
+
 	require.NoError(t, fix.svc.StartReceiving(ctx, legRetID))
 
 	// Initial legacy inspection
@@ -635,6 +643,7 @@ func TestM522_InspectionVsFinalizeRace(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	scanA, err := fix.svc.ScanReturnUnit(ctx, retID, returns.ScanReturnUnitRequest{Code: zmuCode})
@@ -757,6 +766,7 @@ func TestM522_ConcurrentFinalize(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	scanA, err := fix.svc.ScanReturnUnit(ctx, retID, returns.ScanReturnUnitRequest{Code: zmuCode})
@@ -858,6 +868,7 @@ func TestM522_CanFinalize_ReadModel(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	// A. Scanned serialized unit without disposition -> canFinalize = false
@@ -891,6 +902,8 @@ func TestM522_CanFinalize_ReadModel(t *testing.T) {
 	legItemID := respLeg[0].Items[0].ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, legRetID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, legRetID)
+
 	require.NoError(t, fix.svc.StartReceiving(ctx, legRetID))
 
 	require.NoError(t, fix.svc.InspectLegacyItem(ctx, legRetID, legItemID, returns.UpdateLegacyItemInspectionRequest{
@@ -982,6 +995,7 @@ func TestM522_NoFinancialSideEffects(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	scanA, err := fix.svc.ScanReturnUnit(ctx, retID, returns.ScanReturnUnitRequest{Code: zmuCode})

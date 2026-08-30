@@ -275,6 +275,9 @@ func New(
 		r.Post("/orders/{id}/returns", returnsHandler.CreateCustomerReturn)
 		r.Get("/returns", returnsHandler.ListCustomerReturns)
 		r.Get("/returns/{id}", returnsHandler.GetCustomerReturn)
+		r.Get("/returns/{id}/shipment", returnsHandler.GetCustomerReturnShipment)
+		r.Post("/returns/{id}/shipment", returnsHandler.CreateCustomerReturnShipment)
+		r.Get("/returns/{id}/cdek/offices", returnsHandler.GetCDEKOffices)
 
 		r.Get("/favorites", favoritesHandler.ListFavorites)
 		r.Post("/favorites/{productId}", favoritesHandler.AddFavorite)

@@ -74,3 +74,54 @@ type ReturnItemEvidence struct {
 	SortOrder    int        `json:"sortOrder"`
 	CreatedAt    time.Time  `json:"createdAt"`
 }
+
+type ReturnShipment struct {
+	ID                     uuid.UUID `json:"id"`
+	ReturnID               uuid.UUID `json:"returnId"`
+	Provider               string    `json:"provider"`
+	Method                 string    `json:"method"`
+	TrackingNumber         *string   `json:"trackingNumber"`
+	ProviderShipmentID     *string   `json:"providerShipmentId"`
+	Status                 string    `json:"status"`
+	SelectedCDEKOfficeCode *string   `json:"selectedCdekOfficeCode"`
+	CustomerName           *string   `json:"customerName"`
+	CustomerPhone          *string   `json:"customerPhone"`
+	PickupAddress          []byte    `json:"pickupAddress"`
+	CDEKOfficeAddress      *string   `json:"cdekOfficeAddress"`
+	DestinationAddress     []byte    `json:"destinationAddress"`
+	Snapshots              []byte    `json:"snapshots"`
+	CreatedAt              time.Time `json:"createdAt"`
+	UpdatedAt              time.Time `json:"updatedAt"`
+}
+
+var AllowedShipmentTransitions = map[string]map[string]bool{
+	"draft": {
+		"awaiting_handover": true,
+		"cancelled":         true,
+	},
+	"awaiting_handover": {
+		"handed_over": true,
+		"cancelled":   true,
+	},
+	"handed_over": {
+		"in_transit": true,
+		"cancelled":  true,
+	},
+	"in_transit": {
+		"arrived_at_zamk": true,
+		"cancelled":       true,
+	},
+	"arrived_at_zamk": {},
+	"cancelled":       {},
+}
+
+func IsValidShipmentTransition(from, to string) bool {
+	if from == to {
+		return true
+	}
+	nextMap, exists := AllowedShipmentTransitions[from]
+	if !exists {
+		return false
+	}
+	return nextMap[to]
+}

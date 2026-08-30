@@ -37,11 +37,17 @@ func TestM521_StartReceiving_IdempotencyAndStateMatrix(t *testing.T) {
 	err = fix.svc.StartReceiving(ctx, retID)
 	assert.ErrorIs(t, err, returns.ErrInvalidStatusTransition, "Cannot start receiving from requested")
 
-	// B. Transition to 'approved' -> StartReceiving succeeds
+	// B. Transition to 'approved' -> StartReceiving is still rejected without arrived shipment
 	err = fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{
 		Status: "approved",
 	})
 	require.NoError(t, err)
+
+	err = fix.svc.StartReceiving(ctx, retID)
+	assert.ErrorIs(t, err, returns.ErrReturnNotArrived, "Cannot start receiving without arrived shipment")
+
+	// Create an arrived shipment — models parcel arriving at ZAMK warehouse
+	fix.createArrivedReturnShipment(t, retID)
 
 	err = fix.svc.StartReceiving(ctx, retID)
 	require.NoError(t, err)
@@ -223,6 +229,7 @@ func TestM521_ScanValidationMatrix(t *testing.T) {
 	// Transition to receiving
 	err = fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"})
 	require.NoError(t, err)
+	fix.createArrivedReturnShipment(t, retID)
 	err = fix.svc.StartReceiving(ctx, retID)
 	require.NoError(t, err)
 
@@ -340,9 +347,11 @@ func TestM521_AnotherReturnOwnsAllocation(t *testing.T) {
 
 	// Move both to receiving
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retIDA, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retIDA)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retIDA))
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retIDB, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retIDB)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retIDB))
 
 	// Bind allocation to Return A
@@ -423,6 +432,7 @@ func TestM521_DuplicateSameReturnScan(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	// First scan
@@ -522,6 +532,7 @@ func TestM521_QuantityRace_TwoDifferentZMUs(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	// Concurrent race between ZMU-A and ZMU-B
@@ -618,6 +629,7 @@ func TestM521_SameZMUConcurrency(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	var wg sync.WaitGroup
@@ -670,6 +682,7 @@ func TestM521_LegacyItem(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	// Attempt scanning arbitrary ZMU
@@ -793,6 +806,7 @@ func TestM521_MixedReturn(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 
 	// Initial Read Model
@@ -896,6 +910,7 @@ func TestM521_ReadModelCompleteness(t *testing.T) {
 	retID := resp[0].Return.ID
 
 	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 	_, err = fix.svc.ScanReturnUnit(ctx, retID, returns.ScanReturnUnitRequest{Code: zmuCode})
 	require.NoError(t, err)
@@ -1024,6 +1039,7 @@ func TestM521_FullNoSideEffectProof(t *testing.T) {
 	require.NoError(t, err)
 
 	// Execute StartReceiving + Scan
+	fix.createArrivedReturnShipment(t, retID)
 	require.NoError(t, fix.svc.StartReceiving(ctx, retID))
 	scanRes, err := fix.svc.ScanReturnUnit(ctx, retID, returns.ScanReturnUnitRequest{Code: zmuCode})
 	require.NoError(t, err)

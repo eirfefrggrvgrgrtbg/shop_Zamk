@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
@@ -24,6 +24,8 @@ import {
   getReturnStatusLabel,
   getStatusBadgeClass,
   rejectAdminReturn,
+  formatReturnShipmentStatus,
+  formatReturnShipmentMethod,
 } from '../api/adminReturns';
 import type { AdminReturn, AdminReturnItem } from '../api/adminReturns';
 import { PermissionGuard } from '../components/PermissionGuard';
@@ -411,16 +413,65 @@ export function AdminReturns() {
 
                   {/* Read-Only Status States */}
                   {selectedReturn.status === 'approved' && (
-                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 space-y-2">
-                      <div className="flex items-center space-x-2 font-semibold">
-                        <CheckCircle2 className="h-5 w-5 text-blue-600" />
-                        <span>Возврат одобрен</span>
+                    <div className="space-y-4">
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 space-y-2">
+                        <div className="flex items-center space-x-2 font-semibold">
+                          <CheckCircle2 className="h-5 w-5 text-blue-600" />
+                          <span>Возврат одобрен</span>
+                        </div>
+                        {selectedReturn.shipment ? (
+                          selectedReturn.shipment.status === 'arrived_at_zamk' ? (
+                            <p className="text-xs text-blue-700 font-medium">Возврат прибыл на склад</p>
+                          ) : (
+                            <p className="text-xs text-blue-700">Ожидает прибытия на склад (Статус: {formatReturnShipmentStatus(selectedReturn.shipment.status)})</p>
+                          )
+                        ) : (
+                          <p className="text-xs text-blue-700">Ожидает выбора способа отправки покупателем</p>
+                        )}
+                        {selectedReturn.approvedAt && (
+                          <p className="text-xs text-blue-500 pt-1">
+                            Одобрено: {formatDate(selectedReturn.approvedAt)}
+                          </p>
+                        )}
                       </div>
-                      <p className="text-xs text-blue-700">Ожидает приёмки на складе.</p>
-                      {selectedReturn.approvedAt && (
-                        <p className="text-xs text-blue-500 pt-1">
-                          Одобрено: {formatDate(selectedReturn.approvedAt)}
-                        </p>
+
+                      {selectedReturn.shipment && (
+                        <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm space-y-3">
+                          <div className="font-semibold text-gray-900">Возвратная логистика</div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <span className="text-gray-500">Служба:</span>
+                            <span className="font-medium">{selectedReturn.shipment.provider === 'cdek' ? 'СДЭК' : selectedReturn.shipment.provider}</span>
+                            <span className="text-gray-500">Способ:</span>
+                            <span className="font-medium">{formatReturnShipmentMethod(selectedReturn.shipment.method)}</span>
+                            <span className="text-gray-500">Трек-номер:</span>
+                            <span className="font-medium">{selectedReturn.shipment.trackingNumber || 'Ожидается'}</span>
+                            <span className="text-gray-500">Статус:</span>
+                            <span className="font-medium">{formatReturnShipmentStatus(selectedReturn.shipment.status)}</span>
+                            {selectedReturn.shipment.selectedCdekOfficeCode && (
+                              <>
+                                <span className="text-gray-500">Отделение:</span>
+                                <span className="font-medium">{selectedReturn.shipment.selectedCdekOfficeCode}</span>
+                              </>
+                            )}
+                            {selectedReturn.shipment.customerName && (
+                              <>
+                                <span className="text-gray-500">Отправитель:</span>
+                                <span className="font-medium">{selectedReturn.shipment.customerName}</span>
+                              </>
+                            )}
+                          </div>
+
+                          {selectedReturn.shipment.status === 'arrived_at_zamk' && (
+                            <div className="pt-2">
+                              <Link
+                                to={`/returns/${selectedReturn.id}/receiving`}
+                                className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                              >
+                                Начать приёмку на складе
+                              </Link>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}

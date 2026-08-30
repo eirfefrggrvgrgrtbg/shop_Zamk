@@ -139,6 +139,75 @@ async function runAdminReturnsTests() {
   const getDisplayOrderIdentity = (r: AdminReturn) => r.orderNumber || r.orderId;
   assert(getDisplayOrderIdentity(sampleReturnWithEvidence) === 'ORD-100193', 'Must prioritize canonical order number over UUID');
 
+  // 9. M5.3.3A Logistics Dossier Status & Method Mappings
+  const { formatReturnShipmentStatus, formatReturnShipmentMethod } = await import('../api/adminReturns');
+
+  assert(formatReturnShipmentStatus('draft') === 'Оформляем отправление', 'draft mapping must match');
+  assert(formatReturnShipmentStatus('awaiting_handover') === 'Ожидает передачи в СДЭК', 'awaiting_handover mapping must match');
+  assert(formatReturnShipmentStatus('handed_over') === 'Передано в СДЭК', 'handed_over mapping must match');
+  assert(formatReturnShipmentStatus('in_transit') === 'В пути', 'in_transit mapping must match');
+  assert(formatReturnShipmentStatus('arrived_at_zamk') === 'Прибыло на склад ZAMK', 'arrived_at_zamk mapping must match');
+  assert(formatReturnShipmentStatus('cancelled') === 'Отправление отменено', 'cancelled mapping must match');
+
+  assert(formatReturnShipmentMethod('cdek_courier') === 'Заберёт курьер СДЭК', 'cdek_courier mapping must match');
+  assert(formatReturnShipmentMethod('cdek_office') === 'Отнести в отделение СДЭК', 'cdek_office mapping must match');
+
+  // 10. Admin Logistics UI helper logic tests
+  const getAdminLogisticsText = (ret: AdminReturn) => {
+    if (!ret.shipment) {
+      return 'Ожидает выбора способа отправки покупателем';
+    }
+    if (ret.shipment.status === 'arrived_at_zamk') {
+      return 'Возврат прибыл на склад';
+    }
+    return `Ожидает прибытия на склад (Статус: ${formatReturnShipmentStatus(ret.shipment.status)})`;
+  };
+
+  const isWarehouseReceivingEligible = (ret: AdminReturn) => {
+    return ret.status === 'approved' && ret.shipment?.status === 'arrived_at_zamk';
+  };
+
+  // Approved + no shipment
+  const returnNoShipment: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipment: undefined };
+  assert(getAdminLogisticsText(returnNoShipment) === 'Ожидает выбора способа отправки покупателем', 'Must show waiting for customer choice');
+  assert(isWarehouseReceivingEligible(returnNoShipment) === false, 'No warehouse CTA before shipment');
+
+  // Approved + awaiting_handover
+  const returnAwaitingHandover: AdminReturn = {
+    ...sampleReturnWithEvidence,
+    status: 'approved',
+    shipment: { id: 's1', provider: 'cdek', method: 'cdek_office', status: 'awaiting_handover' },
+  };
+  assert(getAdminLogisticsText(returnAwaitingHandover).includes('Ожидает передачи в СДЭК'), 'Must show human status');
+  assert(isWarehouseReceivingEligible(returnAwaitingHandover) === false, 'NO warehouse CTA for awaiting_handover');
+
+  // Approved + handed_over
+  const returnHandedOver: AdminReturn = {
+    ...sampleReturnWithEvidence,
+    status: 'approved',
+    shipment: { id: 's2', provider: 'cdek', method: 'cdek_office', status: 'handed_over' },
+  };
+  assert(getAdminLogisticsText(returnHandedOver).includes('Передано в СДЭК'), 'Must show human status for handed_over');
+  assert(isWarehouseReceivingEligible(returnHandedOver) === false, 'NO warehouse CTA for handed_over');
+
+  // Approved + in_transit
+  const returnInTransit: AdminReturn = {
+    ...sampleReturnWithEvidence,
+    status: 'approved',
+    shipment: { id: 's3', provider: 'cdek', method: 'cdek_courier', status: 'in_transit' },
+  };
+  assert(getAdminLogisticsText(returnInTransit).includes('В пути'), 'Must show human status for in_transit');
+  assert(isWarehouseReceivingEligible(returnInTransit) === false, 'NO warehouse CTA for in_transit');
+
+  // Approved + arrived_at_zamk
+  const returnArrived: AdminReturn = {
+    ...sampleReturnWithEvidence,
+    status: 'approved',
+    shipment: { id: 's4', provider: 'cdek', method: 'cdek_office', status: 'arrived_at_zamk' },
+  };
+  assert(getAdminLogisticsText(returnArrived) === 'Возврат прибыл на склад', 'Must show arrived at warehouse');
+  assert(isWarehouseReceivingEligible(returnArrived) === true, 'Warehouse CTA allowed when arrived_at_zamk');
+
   console.log('ALL ADMIN RETURNS LOGIC & CONTRACT TESTS PASSED');
 }
 

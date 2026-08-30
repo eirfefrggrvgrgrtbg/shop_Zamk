@@ -299,37 +299,60 @@ export interface ReturnRequest {
   items: ReturnItemRequest[];
 }
 
+export interface CustomerReturnEvidence {
+  id: string;
+  url: string;
+  contentType: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
 export interface CustomerReturnItem {
   id: string;
   returnId: string;
   orderItemId: string;
+  productTitle?: string;
+  productImageUrl?: string | null;
+  variantSize?: string | null;
+  variantColor?: string | null;
+  sku?: string | null;
   quantity: number;
+  priceCents?: number;
+  subtotalPriceCents?: number;
   reason?: string;
   condition?: string;
+  evidence?: CustomerReturnEvidence[];
   evidenceIds?: string[];
-  restock: boolean;
-  acceptedQuantity: number;
-  damagedQuantity: number;
-  rejectedQuantity: number;
-  createdAt: string;
+  restock?: boolean;
+  acceptedQuantity?: number;
+  damagedQuantity?: number;
+  rejectedQuantity?: number;
+  createdAt?: string;
 }
 
 export interface CustomerReturnRecord {
   id: string;
   orderId: string;
+  orderNumber?: string | null;
   fulfillmentId: string;
   userId: string;
   status: string;
   reason: string;
-  comment?: string;
-  adminComment?: string;
+  comment?: string | null;
+  adminComment?: string | null;
   createdAt: string;
   updatedAt: string;
-  approvedAt?: string;
-  rejectedAt?: string;
-  completedAt?: string;
-  receivingStartedAt?: string;
+  approvedAt?: string | null;
+  rejectedAt?: string | null;
+  completedAt?: string | null;
+  receivingStartedAt?: string | null;
   items: CustomerReturnItem[];
+  shipment?: ReturnShipment | null;
+}
+
+export interface CustomerReturnListResponse {
+  items: CustomerReturnRecord[];
+  totalCount: number;
 }
 
 export interface ReturnResponse {
@@ -337,6 +360,7 @@ export interface ReturnResponse {
   status: string;
   createdAt: string;
   orderId?: string;
+  orderNumber?: string | null;
   fulfillmentId?: string;
   userId?: string;
   reason?: string;
@@ -349,6 +373,7 @@ export interface ReturnResponse {
   receivingStartedAt?: string;
   items?: CustomerReturnItem[];
   returns?: CustomerReturnRecord[];
+  shipment?: ReturnShipment | null;
 }
 
 export interface ReviewCreateRequest {
@@ -1187,6 +1212,7 @@ export interface AdminReturn {
   deliveredAt?: string;
   evidenceCount?: number;
   items?: AdminReturnItem[];
+  shipment?: ReturnShipment;
 }
 
 export interface AdminRefund {
@@ -1847,4 +1873,112 @@ export interface UndoSerializedScanResponse {
 export interface FinalizeReceivingRequest {
   notes?: string;
 }
+
+// ---------------------------------------------------------
+// RETURN SHIPMENT / LOGISTICS DTOs (M5.3.3A)
+// ---------------------------------------------------------
+
+export type ReturnShipmentStatus =
+  | 'draft'
+  | 'awaiting_handover'
+  | 'handed_over'
+  | 'in_transit'
+  | 'arrived_at_zamk'
+  | 'cancelled';
+
+export type ReturnShipmentMethod = 'cdek_courier' | 'cdek_office';
+
+export interface PickupAddress {
+  city: string;
+  street: string;
+  house: string;
+  flat?: string;
+}
+
+export interface CDEKOffice {
+  code: string;
+  name: string;
+  address: string;
+  workingHours?: string;
+}
+
+export interface CreateReturnShipmentRequest {
+  method: ReturnShipmentMethod;
+  cdekOfficeCode?: string;
+  customerName?: string;
+  customerPhone?: string;
+  pickupAddress?: PickupAddress;
+}
+
+export interface ReturnShipment {
+  id: string;
+  provider: 'cdek' | string;
+  method: ReturnShipmentMethod;
+  trackingNumber?: string;
+  providerShipmentId?: string;
+  status: ReturnShipmentStatus;
+  selectedCdekOfficeCode?: string;
+  customerName?: string;
+  customerPhone?: string;
+  pickupAddress?: PickupAddress;
+  cdekOfficeAddress?: string;
+}
+
+export const RETURN_SHIPMENT_STATUS_LABELS: Record<ReturnShipmentStatus, string> = {
+  draft: 'Оформляем отправление',
+  awaiting_handover: 'Ожидает передачи в СДЭК',
+  handed_over: 'Передано в СДЭК',
+  in_transit: 'В пути',
+  arrived_at_zamk: 'Прибыло на склад ZAMK',
+  cancelled: 'Отправление отменено',
+};
+
+export const formatReturnShipmentStatus = (status: string): string => {
+  return RETURN_SHIPMENT_STATUS_LABELS[status as ReturnShipmentStatus] || status;
+};
+
+export const RETURN_SHIPMENT_METHOD_LABELS: Record<ReturnShipmentMethod, string> = {
+  cdek_courier: 'Заберёт курьер СДЭК',
+  cdek_office: 'Отнести в отделение СДЭК',
+};
+
+export const formatReturnShipmentMethod = (method: string): string => {
+  return RETURN_SHIPMENT_METHOD_LABELS[method as ReturnShipmentMethod] || method;
+};
+
+// ---------------------------------------------------------
+// CUSTOMER RETURN STATUS & REASON LABELS
+// ---------------------------------------------------------
+
+export const CUSTOMER_RETURN_STATUS_LABELS: Record<string, string> = {
+  requested: 'Заявка на рассмотрении',
+  approved: 'Возврат одобрен',
+  rejected: 'Возврат отклонён',
+  receiving: 'Принимаем возврат',
+  item_received: 'Товар принят',
+  refunded: 'Деньги возвращены',
+  completed: 'Возврат завершён',
+  cancelled: 'Возврат отменён',
+};
+
+export const formatCustomerReturnStatus = (status?: string): string => {
+  if (!status) return '—';
+  return CUSTOMER_RETURN_STATUS_LABELS[status] || status;
+};
+
+export const RETURN_REASON_LABELS: Record<string, string> = {
+  defective: 'Товар неисправен',
+  damaged: 'Товар повреждён',
+  wrong_item: 'Получен не тот товар',
+  not_as_described: 'Не соответствует описанию',
+  incomplete: 'Не хватает части комплекта',
+  size_fit: 'Не подошёл размер / посадка',
+  changed_mind: 'Передумал',
+  other: 'Другое',
+};
+
+export const formatReturnReason = (reason?: string): string => {
+  if (!reason) return '—';
+  return RETURN_REASON_LABELS[reason] || reason;
+};
 

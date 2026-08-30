@@ -123,30 +123,307 @@ func (r *Repository) GetReturnTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (
 	return &ret, nil
 }
 
-func (r *Repository) ListReturnsByCustomer(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Return, error) {
+func (r *Repository) ListReturnsByCustomer(ctx context.Context, userID uuid.UUID, limit, offset int, buildURL func(key string) string) ([]ReturnResponse, int, error) {
+	var totalCount int
+	if err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM returns WHERE user_id = $1", userID).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
 	query := `
-		SELECT id, order_id, fulfillment_id, user_id, status, reason, comment, admin_comment, created_at, updated_at, approved_at, rejected_at, completed_at, receiving_started_at
-		FROM returns WHERE user_id = $1 ORDER BY created_at DESC
+		SELECT
+			r.id, r.order_id, o.order_number, r.fulfillment_id, r.user_id,
+			r.status, r.reason, r.comment, r.admin_comment,
+			r.created_at, r.updated_at, r.approved_at, r.rejected_at, r.completed_at, r.receiving_started_at
+		FROM returns r
+		JOIN orders o ON o.id = r.order_id
+		WHERE r.user_id = $1
+		ORDER BY r.created_at DESC
 		LIMIT $2 OFFSET $3
 	`
 	rows, err := r.db.Query(ctx, query, userID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var list []ReturnResponse
+	var returnIDs []uuid.UUID
+	for rows.Next() {
+		var ret Return
+		var orderNum *string
+		if err := rows.Scan(
+			&ret.ID, &ret.OrderID, &orderNum, &ret.FulfillmentID, &ret.UserID,
+			&ret.Status, &ret.Reason, &ret.Comment, &ret.AdminComment,
+			&ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt, &ret.ReceivingStartedAt,
+		); err != nil {
+			return nil, 0, err
+		}
+		list = append(list, ReturnResponse{
+			Return:      ret,
+			OrderNumber: orderNum,
+			Items:       make([]CustomerReturnItemDetail, 0),
+		})
+		returnIDs = append(returnIDs, ret.ID)
+	}
+	rows.Close()
+
+	if len(returnIDs) > 0 {
+		itemsQuery := `
+			SELECT
+				ri.id, ri.return_id, ri.order_item_id,
+				oi.title, oi.image_url, oi.variant_size, oi.variant_color, oi.sku,
+				ri.quantity, oi.price_cents, (oi.price_cents * ri.quantity),
+				ri.reason, ri.condition
+			FROM return_items ri
+			JOIN order_items oi ON oi.id = ri.order_item_id
+			WHERE ri.return_id = ANY($1)
+			ORDER BY ri.created_at ASC
+		`
+		iRows, err := r.db.Query(ctx, itemsQuery, returnIDs)
+		if err != nil {
+			return nil, 0, err
+		}
+		defer iRows.Close()
+
+		itemMap := make(map[uuid.UUID][]CustomerReturnItemDetail)
+		for iRows.Next() {
+			var it CustomerReturnItemDetail
+			if err := iRows.Scan(
+				&it.ID, &it.ReturnID, &it.OrderItemID,
+				&it.ProductTitle, &it.ProductImageURL, &it.VariantSize, &it.VariantColor, &it.SKU,
+				&it.Quantity, &it.PriceCents, &it.SubtotalPriceCents,
+				&it.Reason, &it.Condition,
+			); err != nil {
+				return nil, 0, err
+			}
+			itemMap[it.ReturnID] = append(itemMap[it.ReturnID], it)
+		}
+		iRows.Close()
+
+		// Load evidence if present
+		if len(itemMap) > 0 {
+			var allItemIDs []uuid.UUID
+			for _, itemList := range itemMap {
+				for _, it := range itemList {
+					allItemIDs = append(allItemIDs, it.ID)
+				}
+			}
+			if len(allItemIDs) > 0 {
+				evQuery := `
+					SELECT id, return_item_id, storage_key, content_type, sort_order, created_at
+					FROM return_item_evidences
+					WHERE return_item_id = ANY($1)
+					ORDER BY sort_order ASC, created_at ASC
+				`
+				evRows, err := r.db.Query(ctx, evQuery, allItemIDs)
+				if err == nil {
+					defer evRows.Close()
+					evMap := make(map[uuid.UUID][]CustomerReturnEvidence)
+					for evRows.Next() {
+						var evID, retItemID uuid.UUID
+						var storageKey, contentType string
+						var sortOrder int
+						var createdAt time.Time
+						if err := evRows.Scan(&evID, &retItemID, &storageKey, &contentType, &sortOrder, &createdAt); err == nil {
+							url := "/media/" + storageKey
+							if buildURL != nil {
+								url = buildURL(storageKey)
+							}
+							evMap[retItemID] = append(evMap[retItemID], CustomerReturnEvidence{
+								ID:          evID,
+								URL:         url,
+								ContentType: contentType,
+								SortOrder:   sortOrder,
+								CreatedAt:   createdAt,
+							})
+						}
+					}
+					evRows.Close()
+
+					for retID, itemList := range itemMap {
+						for idx := range itemList {
+							if evList, ok := evMap[itemList[idx].ID]; ok {
+								itemList[idx].Evidence = evList
+							} else {
+								itemList[idx].Evidence = make([]CustomerReturnEvidence, 0)
+							}
+						}
+						itemMap[retID] = itemList
+					}
+				}
+			}
+		}
+
+		for i := range list {
+			if items, ok := itemMap[list[i].ID]; ok {
+				list[i].Items = items
+			}
+		}
+
+		// Also load shipments if present
+		shipmentsQuery := `
+			SELECT
+				id, return_id, provider, method, tracking_number, provider_shipment_id, status, selected_cdek_office_code
+			FROM return_shipments
+			WHERE return_id = ANY($1)
+		`
+		sRows, err := r.db.Query(ctx, shipmentsQuery, returnIDs)
+		if err == nil {
+			defer sRows.Close()
+			shipmentMap := make(map[uuid.UUID]*ReturnShipmentResponse)
+			for sRows.Next() {
+				var s ReturnShipmentResponse
+				var retID uuid.UUID
+				if err := sRows.Scan(
+					&s.ID, &retID, &s.Provider, &s.Method,
+					&s.TrackingNumber, &s.ProviderShipmentID, &s.Status, &s.SelectedCDEKOfficeCode,
+				); err == nil {
+					shipmentMap[retID] = &s
+				}
+			}
+			sRows.Close()
+
+			for i := range list {
+				if sh, ok := shipmentMap[list[i].ID]; ok {
+					list[i].Shipment = sh
+				}
+			}
+		}
+	}
+
+	if list == nil {
+		list = make([]ReturnResponse, 0)
+	}
+	return list, totalCount, nil
+}
+
+func (r *Repository) GetCustomerReturn(ctx context.Context, userID, returnID uuid.UUID, buildURL func(key string) string) (*ReturnResponse, error) {
+	query := `
+		SELECT
+			r.id, r.order_id, o.order_number, r.fulfillment_id, r.user_id,
+			r.status, r.reason, r.comment, r.admin_comment,
+			r.created_at, r.updated_at, r.approved_at, r.rejected_at, r.completed_at, r.receiving_started_at
+		FROM returns r
+		JOIN orders o ON o.id = r.order_id
+		WHERE r.id = $1 AND r.user_id = $2
+	`
+	var ret Return
+	var orderNum *string
+	err := r.db.QueryRow(ctx, query, returnID, userID).Scan(
+		&ret.ID, &ret.OrderID, &orderNum, &ret.FulfillmentID, &ret.UserID,
+		&ret.Status, &ret.Reason, &ret.Comment, &ret.AdminComment,
+		&ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt, &ret.ReceivingStartedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrReturnNotFound
+		}
+		return nil, err
+	}
+
+	itemsQuery := `
+		SELECT
+			ri.id, ri.return_id, ri.order_item_id,
+			oi.title, oi.image_url, oi.variant_size, oi.variant_color, oi.sku,
+			ri.quantity, oi.price_cents, (oi.price_cents * ri.quantity),
+			ri.reason, ri.condition
+		FROM return_items ri
+		JOIN order_items oi ON oi.id = ri.order_item_id
+		WHERE ri.return_id = $1
+		ORDER BY ri.created_at ASC
+	`
+	rows, err := r.db.Query(ctx, itemsQuery, returnID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var list []Return
+	var items []CustomerReturnItemDetail
 	for rows.Next() {
-		var ret Return
-		if err := rows.Scan(&ret.ID, &ret.OrderID, &ret.FulfillmentID, &ret.UserID, &ret.Status, &ret.Reason, &ret.Comment, &ret.AdminComment, &ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt, &ret.ReceivingStartedAt); err != nil {
+		var it CustomerReturnItemDetail
+		if err := rows.Scan(
+			&it.ID, &it.ReturnID, &it.OrderItemID,
+			&it.ProductTitle, &it.ProductImageURL, &it.VariantSize, &it.VariantColor, &it.SKU,
+			&it.Quantity, &it.PriceCents, &it.SubtotalPriceCents,
+			&it.Reason, &it.Condition,
+		); err != nil {
 			return nil, err
 		}
-		list = append(list, ret)
+		it.Evidence = make([]CustomerReturnEvidence, 0)
+		items = append(items, it)
 	}
-	if list == nil {
-		list = make([]Return, 0)
+	rows.Close()
+
+	if len(items) > 0 {
+		itemIDs := make([]uuid.UUID, len(items))
+		for i, it := range items {
+			itemIDs[i] = it.ID
+		}
+		evQuery := `
+			SELECT id, return_item_id, storage_key, content_type, sort_order, created_at
+			FROM return_item_evidences
+			WHERE return_item_id = ANY($1)
+			ORDER BY sort_order ASC, created_at ASC
+		`
+		evRows, err := r.db.Query(ctx, evQuery, itemIDs)
+		if err == nil {
+			defer evRows.Close()
+			evMap := make(map[uuid.UUID][]CustomerReturnEvidence)
+			for evRows.Next() {
+				var evID, retItemID uuid.UUID
+				var storageKey, contentType string
+				var sortOrder int
+				var createdAt time.Time
+				if err := evRows.Scan(&evID, &retItemID, &storageKey, &contentType, &sortOrder, &createdAt); err == nil {
+					url := "/media/" + storageKey
+					if buildURL != nil {
+						url = buildURL(storageKey)
+					}
+					evMap[retItemID] = append(evMap[retItemID], CustomerReturnEvidence{
+						ID:          evID,
+						URL:         url,
+						ContentType: contentType,
+						SortOrder:   sortOrder,
+						CreatedAt:   createdAt,
+					})
+				}
+			}
+			evRows.Close()
+
+			for i := range items {
+				if evList, ok := evMap[items[i].ID]; ok {
+					items[i].Evidence = evList
+				} else {
+					items[i].Evidence = make([]CustomerReturnEvidence, 0)
+				}
+			}
+		}
 	}
-	return list, nil
+
+	if items == nil {
+		items = make([]CustomerReturnItemDetail, 0)
+	}
+
+	res := &ReturnResponse{
+		Return:      ret,
+		OrderNumber: orderNum,
+		Items:       items,
+	}
+
+	shipment, err := r.GetReturnShipmentByReturnID(ctx, returnID)
+	if err == nil && shipment != nil {
+		res.Shipment = &ReturnShipmentResponse{
+			ID:                     shipment.ID,
+			Provider:               shipment.Provider,
+			Method:                 shipment.Method,
+			TrackingNumber:         shipment.TrackingNumber,
+			ProviderShipmentID:     shipment.ProviderShipmentID,
+			Status:                 shipment.Status,
+			SelectedCDEKOfficeCode: shipment.SelectedCDEKOfficeCode,
+		}
+	}
+
+	return res, nil
 }
 
 func (r *Repository) ListAllReturns(ctx context.Context, limit, offset int) ([]Return, error) {
@@ -291,6 +568,21 @@ func (r *Repository) GetAdminReturn(ctx context.Context, returnID uuid.UUID, bui
 		items = make([]AdminReturnItemDetail, 0)
 	}
 	res.Items = items
+	shipment, err := r.GetReturnShipmentByReturnID(ctx, returnID)
+	if err != nil {
+		return nil, err
+	}
+	if shipment != nil {
+		res.Shipment = &ReturnShipmentResponse{
+			ID:                     shipment.ID,
+			Provider:               shipment.Provider,
+			Method:                 shipment.Method,
+			TrackingNumber:         shipment.TrackingNumber,
+			ProviderShipmentID:     shipment.ProviderShipmentID,
+			Status:                 shipment.Status,
+			SelectedCDEKOfficeCode: shipment.SelectedCDEKOfficeCode,
+		}
+	}
 	return &res, nil
 }
 
@@ -1051,4 +1343,62 @@ func (r *Repository) DeleteEvidence(ctx context.Context, evidenceID uuid.UUID) e
 		return ErrEvidenceNotFound
 	}
 	return nil
+}
+
+func (r *Repository) CreateReturnShipmentTx(ctx context.Context, tx pgx.Tx, shipment *ReturnShipment) error {
+	query := `
+		INSERT INTO return_shipments (id, return_id, provider, method, status, selected_cdek_office_code, customer_name, customer_phone, pickup_address, cdek_office_address, destination_address)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING created_at, updated_at
+	`
+	return tx.QueryRow(ctx, query, shipment.ID, shipment.ReturnID, shipment.Provider, shipment.Method, shipment.Status, shipment.SelectedCDEKOfficeCode, shipment.CustomerName, shipment.CustomerPhone, shipment.PickupAddress, shipment.CDEKOfficeAddress, shipment.DestinationAddress).Scan(&shipment.CreatedAt, &shipment.UpdatedAt)
+}
+
+func (r *Repository) GetReturnShipmentByReturnID(ctx context.Context, returnID uuid.UUID) (*ReturnShipment, error) {
+	query := `
+		SELECT id, return_id, provider, method, tracking_number, provider_shipment_id, status, selected_cdek_office_code, customer_name, customer_phone, pickup_address, cdek_office_address, destination_address, snapshots, created_at, updated_at
+		FROM return_shipments
+		WHERE return_id = $1 AND status != 'cancelled'
+	`
+	var s ReturnShipment
+	err := r.db.QueryRow(ctx, query, returnID).Scan(
+		&s.ID, &s.ReturnID, &s.Provider, &s.Method, &s.TrackingNumber, &s.ProviderShipmentID, &s.Status, &s.SelectedCDEKOfficeCode, &s.CustomerName, &s.CustomerPhone, &s.PickupAddress, &s.CDEKOfficeAddress, &s.DestinationAddress, &s.Snapshots, &s.CreatedAt, &s.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (r *Repository) GetReturnShipmentByReturnIDTx(ctx context.Context, tx pgx.Tx, returnID uuid.UUID) (*ReturnShipment, error) {
+	query := `
+		SELECT id, return_id, provider, method, tracking_number, provider_shipment_id, status, selected_cdek_office_code, customer_name, customer_phone, pickup_address, cdek_office_address, destination_address, snapshots, created_at, updated_at
+		FROM return_shipments
+		WHERE return_id = $1 AND status != 'cancelled'
+	`
+	var s ReturnShipment
+	err := tx.QueryRow(ctx, query, returnID).Scan(
+		&s.ID, &s.ReturnID, &s.Provider, &s.Method, &s.TrackingNumber, &s.ProviderShipmentID, &s.Status, &s.SelectedCDEKOfficeCode, &s.CustomerName, &s.CustomerPhone, &s.PickupAddress, &s.CDEKOfficeAddress, &s.DestinationAddress, &s.Snapshots, &s.CreatedAt, &s.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (r *Repository) UpdateReturnShipmentTx(ctx context.Context, tx pgx.Tx, shipment *ReturnShipment) error {
+	query := `
+		UPDATE return_shipments
+		SET provider = $1, method = $2, tracking_number = $3, provider_shipment_id = $4, status = $5, selected_cdek_office_code = $6,
+			customer_name = $7, customer_phone = $8, pickup_address = $9, cdek_office_address = $10, destination_address = $11, snapshots = $12, updated_at = NOW()
+		WHERE id = $13
+		RETURNING updated_at
+	`
+	return tx.QueryRow(ctx, query, shipment.Provider, shipment.Method, shipment.TrackingNumber, shipment.ProviderShipmentID, shipment.Status, shipment.SelectedCDEKOfficeCode, shipment.CustomerName, shipment.CustomerPhone, shipment.PickupAddress, shipment.CDEKOfficeAddress, shipment.DestinationAddress, shipment.Snapshots, shipment.ID).Scan(&shipment.UpdatedAt)
 }

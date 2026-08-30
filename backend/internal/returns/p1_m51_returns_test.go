@@ -74,7 +74,7 @@ func setupM51Fixture(t *testing.T) *m51Fixture {
 	payoutSvc := payouts.NewService(payoutRepo, client, returnsRepo, ordersRepo, cfg, notifSvc)
 
 	windowDays := 14
-	svc := returns.NewService(returnsRepo, ordersRepo, invSvc, client, payoutSvc, paySvc, windowDays, notifSvc, nil)
+	svc := returns.NewService(returnsRepo, ordersRepo, invSvc, client, payoutSvc, paySvc, windowDays, notifSvc, nil, returns.NewFakeLogisticsProvider())
 
 	fix := &m51Fixture{
 		client:      client,
@@ -151,6 +151,19 @@ func (fix *m51Fixture) createStagedEvidence(t *testing.T, customerID uuid.UUID, 
 		ids = append(ids, evID)
 	}
 	return ids
+}
+
+// createArrivedReturnShipment inserts a return_shipment row with status=arrived_at_zamk directly into
+// the DB. This models the prerequisite for warehouse receiving without going through the CDEK flow.
+// Use this in tests that focus on warehouse receiving, not on logistics itself.
+func (fix *m51Fixture) createArrivedReturnShipment(t *testing.T, returnID uuid.UUID) {
+	t.Helper()
+	ctx := context.Background()
+	_, err := fix.client.Pool.Exec(ctx,
+		`INSERT INTO return_shipments (id, return_id, provider, method, status)
+		 VALUES ($1, $2, 'cdek', 'cdek_office', 'arrived_at_zamk')`,
+		uuid.New(), returnID)
+	require.NoError(t, err)
 }
 
 func (fix *m51Fixture) createDeliveredOrder(t *testing.T, deliveredAt time.Time, qty int) testOrder {

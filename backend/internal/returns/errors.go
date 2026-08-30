@@ -23,6 +23,7 @@ var (
 	ErrItemNotSerialized          = errors.New("serialized inspection only allowed for serialized items")
 	ErrFinalizeMissingDisposition = errors.New("all scanned serialized units must have a disposition before finalize")
 	ErrInvalidInspectionQuantity  = errors.New("invalid inspection quantities")
+	ErrReturnNotArrived           = errors.New("return_not_arrived")
 	ErrInvalidUnitState           = errors.New("inventory unit is not in eligible state for return")
 
 	// M5.3.1A Evidence errors
@@ -33,4 +34,12 @@ var (
 	ErrEvidenceAlreadyBound  = errors.New("evidence already used in another return")
 	ErrEvidenceDuplicate     = errors.New("duplicate evidence photo")
 	ErrEvidenceInvalidFormat = errors.New("invalid evidence media format")
+
+	// M5.3.3A Logistics errors
+	ErrReturnNotApproved          = errors.New("return_not_approved")
+	ErrShipmentAlreadyExists      = errors.New("shipment_already_exists")
+	ErrInvalidShipmentTransition  = errors.New("invalid_shipment_status_transition")
+	ErrCDEKOfficeRequired         = errors.New("cdek_office_code_required")
+	ErrInvalidCDEKOffice          = errors.New("cdek_office_invalid")
+	ErrCourierInfoRequired        = errors.New("courier_info_required")
 )

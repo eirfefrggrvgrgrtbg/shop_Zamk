@@ -1,5 +1,17 @@
 import { request } from './client';
-import type { Cart, Order, ReturnRequest, ReturnResponse, ReviewCreateRequest, CustomerFulfillment } from './types';
+import type {
+  Cart,
+  Order,
+  ReturnRequest,
+  ReturnResponse,
+  CustomerReturnRecord,
+  CustomerReturnListResponse,
+  ReviewCreateRequest,
+  CustomerFulfillment,
+  ReturnShipment,
+  CreateReturnShipmentRequest,
+  CDEKOffice,
+} from './types';
 
 export const getCart = async (): Promise<Cart> => {
   const res = await request<Cart>('GET', '/customer/cart');
@@ -69,13 +81,16 @@ export const createReview = async (orderId: string, orderItemId: string, input: 
   return request('POST', `/customer/orders/${orderId}/items/${orderItemId}/review`, { body: input });
 };
 
-export const getCustomerReturns = async (): Promise<any> => {
-  const res = await request<any>('GET', '/customer/returns');
-  return { ...res, items: res?.items || [] };
+export const getCustomerReturns = async (): Promise<CustomerReturnListResponse> => {
+  const res = await request<CustomerReturnListResponse>('GET', '/customer/returns');
+  return {
+    items: res?.items || [],
+    totalCount: res?.totalCount ?? (res?.items?.length || 0),
+  };
 };
 
-export const getCustomerReturn = async (returnId: string): Promise<any> => {
-  return request('GET', `/customer/returns/${returnId}`);
+export const getCustomerReturn = async (returnId: string): Promise<CustomerReturnRecord> => {
+  return request<CustomerReturnRecord>('GET', `/customer/returns/${returnId}`);
 };
 
 export const getCustomerReviews = async (): Promise<any> => {
@@ -172,3 +187,15 @@ export async function deleteReturnEvidence(evidenceId: string): Promise<void> {
   return request<void>('DELETE', `/customer/returns/evidence/${evidenceId}`);
 }
 
+
+export const getCustomerReturnShipment = async (returnId: string): Promise<{ shipment: ReturnShipment | null }> => {
+  return request<{ shipment: ReturnShipment | null }>('GET', `/customer/returns/${returnId}/shipment`);
+};
+
+export const createCustomerReturnShipment = async (returnId: string, data: CreateReturnShipmentRequest): Promise<{ shipment: ReturnShipment }> => {
+  return request<{ shipment: ReturnShipment }>('POST', `/customer/returns/${returnId}/shipment`, { body: data });
+};
+
+export const getCDEKOffices = async (returnId: string): Promise<{ offices: CDEKOffice[] }> => {
+  return request<{ offices: CDEKOffice[] }>('GET', `/customer/returns/${returnId}/cdek/offices`);
+};

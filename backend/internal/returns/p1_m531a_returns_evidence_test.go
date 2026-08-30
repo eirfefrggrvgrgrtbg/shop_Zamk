@@ -492,7 +492,7 @@ func TestM531A_DeleteStagedEvidence_SecurityAndAtomicity(t *testing.T) {
 	paySvc := payments.NewService(payRepo, ordersRepo, nil, nil, fix.client, nil, cfg)
 	payoutRepo := payouts.NewRepository(fix.client.Pool)
 	payoutSvc := payouts.NewService(payoutRepo, fix.client, returnsRepo, ordersRepo, cfg, fix.notifSvc)
-	testSvc := returns.NewService(returnsRepo, ordersRepo, invSvc, fix.client, payoutSvc, paySvc, 14, fix.notifSvc, storageMock)
+	testSvc := returns.NewService(returnsRepo, ordersRepo, invSvc, fix.client, payoutSvc, paySvc, 14, fix.notifSvc, storageMock, returns.NewFakeLogisticsProvider())
 
 	otherCustID := uuid.New()
 	_, err := fix.client.Pool.Exec(ctx, "INSERT INTO users (id, name, phone, email, password_hash) VALUES ($1, 'Other Cust 2', '+79991112233', $2, 'hash')",
@@ -554,7 +554,7 @@ func TestM531A_DeleteStagedEvidence_SecurityAndAtomicity(t *testing.T) {
 
 	// E. Storage Provider Failure Semantics: if DeleteObject fails, DB row remains intact
 	failingMock := &failingStorageProvider{}
-	failingSvc := returns.NewService(returnsRepo, ordersRepo, invSvc, fix.client, payoutSvc, paySvc, 14, fix.notifSvc, failingMock)
+	failingSvc := returns.NewService(returnsRepo, ordersRepo, invSvc, fix.client, payoutSvc, paySvc, 14, fix.notifSvc, failingMock, returns.NewFakeLogisticsProvider())
 	stagedEvFail := fix.createStagedEvidence(t, fix.userID, 1)
 
 	err = failingSvc.DeleteStagedEvidence(ctx, fix.userID, stagedEvFail[0])

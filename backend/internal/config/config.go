@@ -17,6 +17,7 @@ type Config struct {
 	TBank     TBankConfig
 	Worker    WorkerConfig
 	RateLimit RateLimitConfig
+	CDEK      CDEKConfig
 }
 
 type AppConfig struct {
@@ -112,6 +113,12 @@ type RateLimitConfig struct {
 	AdminDangerousLimitPerMinute   int
 }
 
+type CDEKConfig struct {
+	ClientID     string
+	ClientSecret string
+	APIBaseURL   string
+}
+
 func Load() (*Config, error) {
 	cfg := &Config{
 		App: AppConfig{
@@ -194,6 +201,11 @@ func Load() (*Config, error) {
 			UploadLimitPerMinute:           getEnvAsInt("UPLOAD_LIMIT_PER_MINUTE", 10),
 			WebhookLimitPerMinute:          getEnvAsInt("WEBHOOK_LIMIT_PER_MINUTE", 120),
 			AdminDangerousLimitPerMinute:   getEnvAsInt("ADMIN_DANGEROUS_ACTION_LIMIT_PER_MINUTE", 30),
+		},
+		CDEK: CDEKConfig{
+			ClientID:     getEnv("CDEK_CLIENT_ID", ""),
+			ClientSecret: getEnv("CDEK_CLIENT_SECRET", ""),
+			APIBaseURL:   getEnv("CDEK_API_BASE_URL", "https://api.edu.cdek.ru/v2"),
 		},
 	}
 

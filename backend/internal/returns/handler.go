@@ -120,7 +120,7 @@ func (h *Handler) GetCustomerReturn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ret, items, err := h.service.GetCustomerReturn(r.Context(), userID, returnID)
+	retResp, err := h.service.GetCustomerReturn(r.Context(), userID, returnID)
 	if err != nil {
 		if errors.Is(err, ErrReturnNotFound) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
@@ -134,9 +134,8 @@ func (h *Handler) GetCustomerReturn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := ReturnResponse{Return: *ret, Items: items}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(retResp)
 }
 
 func (h *Handler) ListCustomerReturns(w http.ResponseWriter, r *http.Request) {
@@ -147,19 +146,13 @@ func (h *Handler) ListCustomerReturns(w http.ResponseWriter, r *http.Request) {
 	}
 
 	page := pagination.FromRequest(r)
-	returns, err := h.service.ListCustomerReturns(r.Context(), userID, page.Limit, page.Offset)
+	returnsList, total, err := h.service.ListCustomerReturns(r.Context(), userID, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list returns")
 		return
 	}
 
-	var items []ReturnResponse
-	for _, ret := range returns {
-		// Only list basic details to avoid N+1 queries. If detailed items are needed, user can query by ID.
-		items = append(items, ReturnResponse{Return: ret, Items: []ReturnItem{}})
-	}
-
-	resp := ReturnListResponse{Items: items, TotalCount: len(items)}
+	resp := ReturnListResponse{Items: returnsList, TotalCount: total}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -237,6 +230,11 @@ func (h *Handler) UpdateAdminReturnStatus(w http.ResponseWriter, r *http.Request
 			h.writeError(w, http.StatusBadRequest, "rejection_reason_required", "Rejection reason is required")
 			return
 		}
+		if errors.Is(err, ErrReturnNotArrived) {
+			h.writeError(w, http.StatusBadRequest, "return_not_arrived", "Return shipment has not arrived at ZAMK")
+			return
+		}
+
 		if errors.Is(err, ErrInvalidStatusTransition) {
 			h.writeError(w, http.StatusBadRequest, "invalid_transition", err.Error())
 			return
@@ -400,6 +398,11 @@ func (h *Handler) StartReceiving(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
 			return
 		}
+		if errors.Is(err, ErrReturnNotArrived) {
+			h.writeError(w, http.StatusBadRequest, "return_not_arrived", "Return shipment has not arrived at ZAMK")
+			return
+		}
+
 		if errors.Is(err, ErrInvalidStatusTransition) {
 			h.writeError(w, http.StatusBadRequest, "invalid_transition", err.Error())
 			return
@@ -752,4 +755,143 @@ func (h *Handler) DeleteCustomerReturnEvidence(w http.ResponseWriter, r *http.Re
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func mapReturnShipmentResponse(shipment *ReturnShipment) *ReturnShipmentResponse {
+	if shipment == nil {
+		return nil
+	}
+	var pickupDTO *PickupAddressDTO
+	if len(shipment.PickupAddress) > 0 {
+		var p PickupAddressDTO
+		if err := json.Unmarshal(shipment.PickupAddress, &p); err == nil {
+			pickupDTO = &p
+		}
+	}
+	return &ReturnShipmentResponse{
+		ID:                     shipment.ID,
+		Provider:               shipment.Provider,
+		Method:                 shipment.Method,
+		TrackingNumber:         shipment.TrackingNumber,
+		ProviderShipmentID:     shipment.ProviderShipmentID,
+		Status:                 shipment.Status,
+		SelectedCDEKOfficeCode: shipment.SelectedCDEKOfficeCode,
+		CustomerName:           shipment.CustomerName,
+		CustomerPhone:          shipment.CustomerPhone,
+		PickupAddress:          pickupDTO,
+		CDEKOfficeAddress:      shipment.CDEKOfficeAddress,
+	}
+}
+
+func (h *Handler) GetCustomerReturnShipment(w http.ResponseWriter, r *http.Request) {
+	userID := auth.GetUserID(r.Context())
+	if userID == uuid.Nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+	shipment, err := h.service.GetCustomerReturnShipment(r.Context(), userID, returnID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrReturnNotFound):
+			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
+		case errors.Is(err, ErrUnauthorized):
+			h.writeError(w, http.StatusForbidden, "forbidden", "Unauthorized")
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		}
+		return
+	}
+	if shipment == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{"shipment": nil})
+		return
+	}
+	resp := mapReturnShipmentResponse(shipment)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{"shipment": resp})
+}
+
+func (h *Handler) CreateCustomerReturnShipment(w http.ResponseWriter, r *http.Request) {
+	userID := auth.GetUserID(r.Context())
+	if userID == uuid.Nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+	var req CreateReturnShipmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		return
+	}
+	shipment, err := h.service.CreateCustomerReturnShipment(r.Context(), userID, returnID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrReturnNotFound):
+			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
+		case errors.Is(err, ErrUnauthorized):
+			h.writeError(w, http.StatusForbidden, "forbidden", "Unauthorized")
+		case errors.Is(err, ErrReturnNotApproved):
+			h.writeError(w, http.StatusBadRequest, "not_approved", "Return must be in approved status")
+		case errors.Is(err, ErrShipmentAlreadyExists):
+			h.writeError(w, http.StatusConflict, "shipment_exists", "An active shipment already exists for this return")
+		case errors.Is(err, ErrCDEKOfficeRequired):
+			h.writeError(w, http.StatusBadRequest, "cdek_office_required", "CDEK office code is required for office delivery")
+		case errors.Is(err, ErrInvalidCDEKOffice):
+			h.writeError(w, http.StatusBadRequest, "cdek_office_invalid", "Invalid or unknown CDEK office code")
+		case errors.Is(err, ErrCourierInfoRequired):
+			h.writeError(w, http.StatusBadRequest, "courier_info_required", "Customer name, phone, and pickup address are required for courier delivery")
+		case errors.Is(err, ErrCDEKNotConfigured):
+			h.writeError(w, http.StatusServiceUnavailable, "cdek_not_configured", "CDEK logistics is not configured")
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		}
+		return
+	}
+	resp := mapReturnShipmentResponse(shipment)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{"shipment": resp})
+}
+
+func (h *Handler) GetCDEKOffices(w http.ResponseWriter, r *http.Request) {
+	userID := auth.GetUserID(r.Context())
+	if userID == uuid.Nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+	offices, err := h.service.ListCDEKOffices(r.Context())
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrCDEKNotConfigured):
+			h.writeError(w, http.StatusServiceUnavailable, "cdek_not_configured", "CDEK logistics is not configured")
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		}
+		return
+	}
+	dtos := make([]CDEKOfficeDTO, 0, len(offices))
+	for _, o := range offices {
+		var wh *string
+		if o.WorkingHours != "" {
+			hCopy := o.WorkingHours
+			wh = &hCopy
+		}
+		dtos = append(dtos, CDEKOfficeDTO{Code: o.Code, Address: o.Address, Name: o.Name, WorkingHours: wh})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{"offices": dtos})
 }
