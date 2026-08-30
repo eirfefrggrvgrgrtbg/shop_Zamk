@@ -17,6 +17,7 @@ export interface AdminUser {
   status: string;
   mustChangePassword?: boolean;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface PaginatedAdminUsersResponse {
@@ -181,6 +182,7 @@ export interface PublicReview {
   comment?: string;
   customerName: string; // usually masked
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface RatingSummary {
@@ -195,6 +197,7 @@ export interface PublicSeller {
   description?: string;
   logoUrl?: string;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface PublicSellerStorefrontResponse {
@@ -240,6 +243,7 @@ export interface OrderItem {
   quantity: number;
   subtotalPriceCents: number;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface Order {
@@ -305,6 +309,7 @@ export interface CustomerReturnEvidence {
   contentType: string;
   sortOrder: number;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface CustomerReturnItem {
@@ -538,6 +543,7 @@ export interface ModerationLogEntry {
   toStatus: string;
   comment?: string;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface Notification {
@@ -554,6 +560,7 @@ export interface Notification {
   metadata?: Record<string, any> | null;
   readAt?: string | null;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface PaginatedNotifications {
@@ -715,6 +722,7 @@ export interface SellerLedgerEntry {
   currency: string;
   availableAt?: string;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface LedgerListResponse {
@@ -760,6 +768,7 @@ export interface ProductReviewModerationLog {
   toStatus: string;
   comment?: string;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 
@@ -796,6 +805,7 @@ export interface AdminSeller {
   averageRating: number;
   reviewsCount: number;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface CreateAdminSellerRequest {
@@ -845,6 +855,7 @@ export interface AdminProductImage {
   sortOrder: number;
   colorId?: string;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface AdminProductMaterialComposition {
@@ -1025,6 +1036,7 @@ export interface OrderSummaryDTO {
   orderTotalCents: number;
   customer: CustomerSummaryDTO | null;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface AdminPaymentAttempt {
@@ -1159,6 +1171,7 @@ export interface AdminInventoryMovement {
   referenceType?: string;
   referenceId?: string;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface AdminReturnEvidence {
@@ -1167,6 +1180,7 @@ export interface AdminReturnEvidence {
   contentType: string;
   sortOrder: number;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface AdminReturnItem {
@@ -1349,6 +1363,7 @@ export interface SellerStatusHistoryItem {
   reason?: string;
   actorUserId?: string;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface SellerWarning {
@@ -1468,6 +1483,7 @@ export interface AuctionLotImage {
   sortOrder: number;
   isPrimary: boolean;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface AuctionLotAttribute {
@@ -1510,6 +1526,7 @@ export interface AuctionBid {
   amountCents: number;
   idempotencyKey?: string | null;
   createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
 }
 
 export interface BidRequest {
@@ -1952,6 +1969,7 @@ export const formatReturnShipmentMethod = (method: string): string => {
 
 export const CUSTOMER_RETURN_STATUS_LABELS: Record<string, string> = {
   requested: 'Заявка на рассмотрении',
+  needs_info: 'Требуется уточнение',
   approved: 'Возврат одобрен',
   rejected: 'Возврат отклонён',
   receiving: 'Принимаем возврат',
@@ -1982,3 +2000,78 @@ export const formatReturnReason = (reason?: string): string => {
   return RETURN_REASON_LABELS[reason] || reason;
 };
 
+
+export const ACTIVE_RETURN_STATUSES = [
+  'requested',
+  'needs_info',
+  'approved',
+  'receiving',
+  'item_received',
+] as const;
+
+export const TERMINAL_RETURN_STATUSES = [
+  'rejected',
+  'refunded',
+  'completed',
+  'cancelled',
+] as const;
+
+export type ActiveReturnStatus = (typeof ACTIVE_RETURN_STATUSES)[number];
+export type TerminalReturnStatus = (typeof TERMINAL_RETURN_STATUSES)[number];
+
+export const isReturnConversationWritable = (status?: string): boolean => {
+  if (!status) return false;
+  return (ACTIVE_RETURN_STATUSES as readonly string[]).includes(status);
+};
+
+export const isReturnConversationTerminal = (status?: string): boolean => {
+  if (!status) return false;
+  return (TERMINAL_RETURN_STATUSES as readonly string[]).includes(status);
+};
+
+export type ReturnMessageSenderRole = 'customer' | 'admin';
+export type ReturnMessageType = 'message' | 'info_request';
+
+export interface ReturnMessage {
+  id: string;
+  returnId: string;
+  senderRole: ReturnMessageSenderRole;
+  messageType: ReturnMessageType;
+  body: string;
+  createdAt: string;
+  attachments?: ReturnMessageAttachmentResponse[];
+}
+
+export interface ReturnConversationResponse {
+  messages: ReturnMessage[];
+}
+
+
+
+export interface ReplyToReturnInfoRequest {
+  message: string;
+}
+
+export interface ReturnMessageAttachmentResponse {
+  id: string;
+  url: string;
+  contentType: string;
+  sizeBytes: number;
+  originalFilename?: string;
+}
+
+export interface UploadReturnMessageAttachmentResponse {
+  id: string;
+  url: string;
+}
+
+export interface AdminSendReturnMessageRequest {
+  message: string;
+  needsResponse: boolean;
+  attachmentIds?: string[];
+}
+
+export interface CustomerSendReturnMessageRequest {
+  message: string;
+  attachmentIds?: string[];
+}

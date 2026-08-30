@@ -5,6 +5,7 @@ import { AccountLayout } from '../components/account/AccountLayout';
 import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
 import { ReturnLifecycleProgress } from '../components/orders/ReturnLifecycleProgress';
 import { ReturnLogistics } from '../components/orders/ReturnLogistics';
+import { ReturnConversation } from '../components/orders/ReturnConversation';
 import { getCustomerReturn } from '@zamk/api-client/src/customer';
 import {
   type CustomerReturnRecord,
@@ -239,20 +240,17 @@ export function ReturnDetail() {
           />
         )}
 
-        {/* Future-Proof Layout Placeholder: Messages/Chat */}
-        <div className="p-5 md:p-6 rounded-[1.25rem] bg-white/80 dark:bg-white/10 backdrop-blur-xl border border-graphite/10 dark:border-white/15 shadow-sm">
-          <div className="flex items-center gap-3 mb-1.5">
-            <div className="w-7 h-7 rounded-full bg-graphite/5 dark:bg-white/10 flex items-center justify-center text-graphite/70 dark:text-white/70">
-              <MessageSquare className="w-3.5 h-3.5" />
-            </div>
-            <h3 className="text-base font-semibold text-graphite dark:text-white font-sans">
-              Переписка по возврату
-            </h3>
-          </div>
-          <p className="text-xs text-graphite/70 dark:text-white/70 leading-relaxed pl-10">
-            Здесь будет доступна переписка со службой поддержки и продавцом по данному возврату.
-          </p>
-        </div>
+        {/* Communication Thread Section */}
+        <ReturnConversation
+          returnId={returnData.id}
+          status={returnData.status}
+          onMessageSent={() => {
+            setReturnData((prev) =>
+              prev && prev.status === 'needs_info' ? { ...prev, status: 'requested' } : prev
+            );
+          }}
+        />
+
       </div>
 
       {/* Lightbox Preview */}

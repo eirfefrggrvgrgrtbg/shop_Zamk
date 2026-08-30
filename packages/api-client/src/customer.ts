@@ -4,7 +4,7 @@ import type {
   Order,
   ReturnRequest,
   ReturnResponse,
-  CustomerReturnRecord,
+  CustomerReturnRecord, CustomerSendReturnMessageRequest, UploadReturnMessageAttachmentResponse, ReturnConversationResponse,
   CustomerReturnListResponse,
   ReviewCreateRequest,
   CustomerFulfillment,
@@ -198,4 +198,18 @@ export const createCustomerReturnShipment = async (returnId: string, data: Creat
 
 export const getCDEKOffices = async (returnId: string): Promise<{ offices: CDEKOffice[] }> => {
   return request<{ offices: CDEKOffice[] }>('GET', `/customer/returns/${returnId}/cdek/offices`);
+};
+
+export const getCustomerReturnMessages = async (returnId: string): Promise<ReturnConversationResponse> => {
+  return request<ReturnConversationResponse>('GET', `/customer/returns/${returnId}/messages`);
+};
+
+export const sendCustomerReturnMessage = async (returnId: string, data: CustomerSendReturnMessageRequest): Promise<void> => {
+  await request('POST', `/customer/returns/${returnId}/messages`, { body: data });
+};
+
+export const uploadCustomerReturnMessageAttachment = async (returnId: string, file: File): Promise<UploadReturnMessageAttachmentResponse> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return request<UploadReturnMessageAttachmentResponse>('POST', `/customer/returns/${returnId}/messages/attachments`, { body: formData });
 };

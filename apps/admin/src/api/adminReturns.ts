@@ -3,6 +3,7 @@ import {
   getAdminReturn as apiGetAdminReturn,
   getAdminReturns as apiGetAdminReturns,
   rejectAdminReturn as apiRejectAdminReturn,
+  getAdminReturnMessages as getAdminReturnMessagesApi,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
 import type { AdminReturn, AdminReturnItem, AdminReturnEvidence, ReturnShipment, ReturnShipmentStatus, ReturnShipmentMethod } from '@zamk/api-client/src/types';
@@ -29,6 +30,7 @@ export const getReturnReasonLabel = (reason?: string): string => {
 
 export const RETURN_STATUS_LABELS: Record<string, string> = {
   requested: 'Новая заявка',
+  needs_info: 'Ожидает ответа покупателя',
   approved: 'Возврат одобрен',
   rejected: 'Отклонена',
   receiving: 'Приёмка на складе',
@@ -46,6 +48,8 @@ export const getStatusBadgeClass = (status: string): string => {
   switch (status) {
     case 'requested':
       return 'bg-amber-50 text-amber-800 border border-amber-200';
+    case 'needs_info':
+      return 'bg-yellow-50 text-yellow-800 border border-yellow-200';
     case 'approved':
       return 'bg-blue-50 text-blue-800 border border-blue-200';
     case 'receiving':
@@ -100,4 +104,12 @@ export const getAdminReturnErrorMessage = (error: unknown, fallback: string): st
     return error.message;
   }
   return fallback;
+};
+
+
+import type { ReturnConversationResponse } from '@zamk/api-client/src/types';
+
+
+export const getReturnMessages = async (id: string): Promise<ReturnConversationResponse> => {
+  return await getAdminReturnMessagesApi(id);
 };

@@ -1402,3 +1402,140 @@ func (r *Repository) UpdateReturnShipmentTx(ctx context.Context, tx pgx.Tx, ship
 	`
 	return tx.QueryRow(ctx, query, shipment.Provider, shipment.Method, shipment.TrackingNumber, shipment.ProviderShipmentID, shipment.Status, shipment.SelectedCDEKOfficeCode, shipment.CustomerName, shipment.CustomerPhone, shipment.PickupAddress, shipment.CDEKOfficeAddress, shipment.DestinationAddress, shipment.Snapshots, shipment.ID).Scan(&shipment.UpdatedAt)
 }
+
+func (r *Repository) CreateReturnMessageTx(ctx context.Context, tx pgx.Tx, msg *ReturnMessage) error {
+	query := `
+		INSERT INTO return_messages (id, return_id, sender_user_id, sender_role, message_type, body, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+	_, err := tx.Exec(ctx, query,
+		msg.ID, msg.ReturnID, msg.SenderUserID, msg.SenderRole, msg.MessageType, msg.Body, msg.CreatedAt,
+	)
+	return err
+}
+
+func (r *Repository) GetReturnMessages(ctx context.Context, returnID uuid.UUID) ([]ReturnMessageResponse, error) {
+	query := `
+		SELECT id, return_id, sender_role, message_type, body, created_at
+		FROM return_messages
+		WHERE return_id = $1
+		ORDER BY created_at ASC, id ASC
+	`
+	rows, err := r.db.Query(ctx, query, returnID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []ReturnMessageResponse
+	var msgIDs []uuid.UUID
+	msgMap := make(map[uuid.UUID]*ReturnMessageResponse)
+
+	for rows.Next() {
+		var m ReturnMessageResponse
+		if err := rows.Scan(
+			&m.ID, &m.ReturnID, &m.SenderRole, &m.MessageType, &m.Body, &m.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		m.Attachments = make([]ReturnMessageAttachmentResponse, 0)
+		messages = append(messages, m)
+		msgIDs = append(msgIDs, m.ID)
+	}
+	rows.Close()
+
+	if len(msgIDs) > 0 {
+		attQuery := `
+			SELECT id, message_id, storage_key, content_type, size_bytes, original_filename, sort_order
+			FROM return_message_attachments
+			WHERE message_id = ANY($1)
+			ORDER BY sort_order ASC
+		`
+		attRows, err := r.db.Query(ctx, attQuery, msgIDs)
+		if err != nil {
+			return nil, err
+		}
+		defer attRows.Close()
+
+		for i := range messages {
+			msgMap[messages[i].ID] = &messages[i]
+		}
+
+		for attRows.Next() {
+			var a ReturnMessageAttachmentResponse
+			var msgID uuid.UUID
+			var storageKey string
+			if err := attRows.Scan(&a.ID, &msgID, &storageKey, &a.ContentType, &a.SizeBytes, &a.OriginalFilename, &a.SortOrder); err != nil {
+				return nil, err
+			}
+			a.URL = storageKey // TEMPORARY, WILL BE REPLACED BY SERVICE
+			if m, ok := msgMap[msgID]; ok {
+				m.Attachments = append(m.Attachments, a)
+			}
+		}
+	}
+
+	if messages == nil {
+		messages = make([]ReturnMessageResponse, 0)
+	}
+	return messages, nil
+}
+
+func (r *Repository) CreateStagedMessageAttachment(ctx context.Context, att *ReturnStagedMessageAttachment) error {
+	query := `
+		INSERT INTO return_staged_message_attachments (id, return_id, uploader_user_id, storage_key, content_type, size_bytes, original_filename, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+	_, err := r.db.Exec(ctx, query, att.ID, att.ReturnID, att.UploaderUserID, att.StorageKey, att.ContentType, att.SizeBytes, att.OriginalFilename, att.CreatedAt)
+	return err
+}
+
+func (r *Repository) GetStagedMessageAttachmentsTx(ctx context.Context, tx pgx.Tx, returnID, uploaderID uuid.UUID, ids []uuid.UUID) ([]ReturnStagedMessageAttachment, error) {
+	if len(ids) == 0 {
+		return []ReturnStagedMessageAttachment{}, nil
+	}
+	query := `
+		SELECT id, return_id, uploader_user_id, storage_key, content_type, size_bytes, original_filename, created_at
+		FROM return_staged_message_attachments
+		WHERE return_id = $1 AND uploader_user_id = $2 AND id = ANY($3)
+		FOR UPDATE
+	`
+	rows, err := tx.Query(ctx, query, returnID, uploaderID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var atts []ReturnStagedMessageAttachment
+	for rows.Next() {
+		var a ReturnStagedMessageAttachment
+		if err := rows.Scan(&a.ID, &a.ReturnID, &a.UploaderUserID, &a.StorageKey, &a.ContentType, &a.SizeBytes, &a.OriginalFilename, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		atts = append(atts, a)
+	}
+	return atts, nil
+}
+
+func (r *Repository) BindMessageAttachmentsTx(ctx context.Context, tx pgx.Tx, messageID uuid.UUID, stagedAtts []ReturnStagedMessageAttachment) error {
+	if len(stagedAtts) == 0 {
+		return nil
+	}
+
+	insertQuery := `
+		INSERT INTO return_message_attachments (id, message_id, storage_key, content_type, size_bytes, original_filename, sort_order, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+	`
+
+	deleteQuery := `DELETE FROM return_staged_message_attachments WHERE id = $1`
+
+	for i, att := range stagedAtts {
+		if _, err := tx.Exec(ctx, insertQuery, att.ID, messageID, att.StorageKey, att.ContentType, att.SizeBytes, att.OriginalFilename, i); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, deleteQuery, att.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}

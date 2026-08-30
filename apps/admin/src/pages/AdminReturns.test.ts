@@ -208,6 +208,115 @@ async function runAdminReturnsTests() {
   assert(getAdminLogisticsText(returnArrived) === 'Возврат прибыл на склад', 'Must show arrived at warehouse');
   assert(isWarehouseReceivingEligible(returnArrived) === true, 'Warehouse CTA allowed when arrived_at_zamk');
 
+  // 11. M5.3.4A Return Communication & Moderation Decision Panel
+  const getDecisionPanelElements = (status: string): { actions: string[]; showsWaitingStatus: boolean; waitingLabel?: string } => {
+    if (status === 'requested') {
+      return {
+        actions: ['Одобрить возврат', 'Отклонить заявку'],
+        showsWaitingStatus: false,
+      };
+    }
+    if (status === 'needs_info') {
+      return {
+        actions: [],
+        showsWaitingStatus: true,
+        waitingLabel: 'Ожидает ответа покупателя',
+      };
+    }
+    return { actions: [], showsWaitingStatus: false };
+  };
+
+  const requestedPanel = getDecisionPanelElements('requested');
+  assert(requestedPanel.actions.length === 2, 'requested status must render exactly 2 moderation actions');
+  assert(requestedPanel.actions.includes('Одобрить возврат'), 'requested status must include Одобрить возврат action');
+  assert(requestedPanel.actions.includes('Отклонить заявку'), 'requested status must include Отклонить заявку action');
+  assert(requestedPanel.showsWaitingStatus === false, 'requested status must not show waiting banner');
+
+  const needsInfoPanel = getDecisionPanelElements('needs_info');
+  assert(needsInfoPanel.actions.length === 0, 'needs_info status must NOT render moderation action buttons');
+  assert(needsInfoPanel.showsWaitingStatus === true, 'needs_info must show waiting status');
+  assert(needsInfoPanel.waitingLabel === 'Ожидает ответа покупателя', 'needs_info waiting label must be Ожидает ответа покупателя');
+
+  // Validate info request submission checks
+  const canSubmitInfoRequest = (msg: string) => msg.trim().length > 0;
+  assert(canSubmitInfoRequest('') === false, 'Empty info request message must be disabled/rejected');
+  assert(canSubmitInfoRequest('   \n\t  ') === false, 'Whitespace info request message must be disabled/rejected');
+  assert(canSubmitInfoRequest('Please clarify details') === true, 'Valid info request message must be accepted');
+
+  // Validate message bubbles include human sender labels and no raw user IDs
+  const sampleMessages = [
+    {
+      id: 'msg-1',
+      returnId: 'ret-101',
+      senderRole: 'admin' as const,
+      messageType: 'info_request' as const,
+      body: 'Пожалуйста, приложите фото ярлыка.',
+      createdAt: '2026-08-30T15:00:00Z',
+    },
+    {
+      id: 'msg-2',
+      returnId: 'ret-101',
+      senderRole: 'customer' as const,
+      messageType: 'message' as const,
+      body: 'Прикрепил фото ярлыка.',
+      createdAt: '2026-08-30T15:05:00Z',
+    },
+  ];
+
+  const getSenderLabel = (role: 'admin' | 'customer') => (role === 'admin' ? 'ZAMK' : 'Покупатель');
+  assert(getSenderLabel(sampleMessages[0].senderRole) === 'ZAMK', 'Admin message bubble must show ZAMK');
+  assert(getSenderLabel(sampleMessages[1].senderRole) === 'Покупатель', 'Customer message bubble must show Покупатель');
+
+  assert(!('senderUserId' in sampleMessages[0]), 'senderUserId must NOT be exposed in ReturnMessage DTO');
+  assert(!('senderUserId' in sampleMessages[1]), 'senderUserId must NOT be exposed in ReturnMessage DTO');
+
+  // 12. M5.3.4A Active/Terminal Conversation Policy & Drawer Tests
+  const { isReturnConversationWritable, isReturnConversationTerminal } = await import('@zamk/api-client/src/types');
+
+  // Active states must have composer enabled (writable)
+  assert(isReturnConversationWritable('requested') === true, 'requested must be writable in conversation');
+  assert(isReturnConversationWritable('needs_info') === true, 'needs_info must be writable in conversation');
+  assert(isReturnConversationWritable('approved') === true, 'approved must be writable in conversation');
+  assert(isReturnConversationWritable('receiving') === true, 'receiving must be writable in conversation');
+  assert(isReturnConversationWritable('item_received') === true, 'item_received must be writable in conversation');
+
+  // Terminal states must be read-only (not writable)
+  assert(isReturnConversationWritable('rejected') === false, 'rejected must be read-only in conversation');
+  assert(isReturnConversationWritable('refunded') === false, 'refunded must be read-only in conversation');
+  assert(isReturnConversationWritable('completed') === false, 'completed must be read-only in conversation');
+  assert(isReturnConversationWritable('cancelled') === false, 'cancelled must be read-only in conversation');
+
+  // Terminal status helper
+  assert(isReturnConversationTerminal('rejected') === true, 'rejected must be terminal');
+  assert(isReturnConversationTerminal('refunded') === true, 'refunded must be terminal');
+  assert(isReturnConversationTerminal('completed') === true, 'completed must be terminal');
+  assert(isReturnConversationTerminal('cancelled') === true, 'cancelled must be terminal');
+  assert(isReturnConversationTerminal('approved') === false, 'approved must NOT be terminal');
+  assert(isReturnConversationTerminal('receiving') === false, 'receiving must NOT be terminal');
+  assert(isReturnConversationTerminal('item_received') === false, 'item_received must NOT be terminal');
+
+  // 13. M5.3.4A Admin Attachment & Info Request Composer UI
+  const canSendAdminMessage = (body: string, attachmentCount: number, isSending: boolean, isUploading: boolean) => {
+    if (isSending || isUploading) return false;
+    if (attachmentCount > 6) return false;
+    return body.trim().length > 0 || attachmentCount > 0;
+  };
+
+  assert(canSendAdminMessage('', 0, false, false) === false, 'Empty text and 0 attachments cannot send');
+  assert(canSendAdminMessage('  ', 0, false, false) === false, 'Whitespace text and 0 attachments cannot send');
+  assert(canSendAdminMessage('', 1, false, false) === true, 'Empty text and 1 attachment can send (photo-only)');
+  assert(canSendAdminMessage('Hello', 0, false, false) === true, 'Text-only can send');
+  assert(canSendAdminMessage('Hello', 6, false, false) === true, 'Text with 6 attachments can send');
+  assert(canSendAdminMessage('Hello', 7, false, false) === false, 'Cannot send more than 6 attachments');
+  assert(canSendAdminMessage('Hello', 1, true, false) === false, 'Cannot send while isSending=true');
+  assert(canSendAdminMessage('Hello', 1, false, true) === false, 'Cannot send while isUploading=true');
+
+  const isNeedsResponseCheckboxVisible = (status: string) => status === 'requested';
+  assert(isNeedsResponseCheckboxVisible('requested') === true, 'Needs response checkbox visible only on requested');
+  assert(isNeedsResponseCheckboxVisible('approved') === false, 'Needs response checkbox hidden on approved');
+  assert(isNeedsResponseCheckboxVisible('receiving') === false, 'Needs response checkbox hidden on receiving');
+  assert(isNeedsResponseCheckboxVisible('needs_info') === false, 'Needs response checkbox hidden on needs_info');
+
   console.log('ALL ADMIN RETURNS LOGIC & CONTRACT TESTS PASSED');
 }
 

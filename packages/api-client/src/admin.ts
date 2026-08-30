@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse } from './types';
+import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse } from './types';
 
 export const getAdminSellers = async (params?: {
   search?: string;
@@ -850,4 +850,19 @@ export interface ProcessFoundUnitResponse {
 
 export const processFoundUnit = (data: ProcessFoundUnitRequest): Promise<ProcessFoundUnitResponse> => {
   return request<ProcessFoundUnitResponse>('POST', '/admin/receiving/free-scan/process', { body: data });
+};
+
+
+export const sendAdminReturnMessage = async (returnId: string, data: AdminSendReturnMessageRequest): Promise<void> => {
+  await request('POST', `/admin/returns/${returnId}/messages`, { body: data });
+};
+
+export const getAdminReturnMessages = async (returnId: string): Promise<ReturnConversationResponse> => {
+  return request<ReturnConversationResponse>('GET', `/admin/returns/${returnId}/messages`);
+};
+
+export const uploadAdminReturnMessageAttachment = async (returnId: string, file: File): Promise<import('./types').UploadReturnMessageAttachmentResponse> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return request<import('./types').UploadReturnMessageAttachmentResponse>('POST', `/admin/returns/${returnId}/messages/attachments`, { body: formData});
 };

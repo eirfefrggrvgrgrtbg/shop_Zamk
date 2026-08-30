@@ -59,6 +59,10 @@ func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *i
 	}
 }
 
+func (s *Service) SetStorageProvider(p storage.Provider) {
+	s.storageProvider = p
+}
+
 func (s *Service) UploadReturnEvidence(ctx context.Context, customerID uuid.UUID, file io.Reader, filename string, size int64, contentType string) (*UploadEvidenceResponse, error) {
 	if s.storageProvider == nil {
 		return nil, errors.New("storage provider not configured")

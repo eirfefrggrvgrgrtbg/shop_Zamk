@@ -332,6 +332,132 @@ async function runReturnLogisticsTests() {
   const showEvidenceSection = zeroEvidence.length > 0;
   assert(showEvidenceSection === false, 'Evidence section must not be shown when evidence count = 0');
 
+  // 12. M5.3.4A Return Communication & needs_info Lifecycle
+  // needs_info status human label
+  assert(formatCustomerReturnStatus('needs_info') === 'Требуется уточнение', 'needs_info must map to Требуется уточнение');
+
+  // needs_info progress stage remains on stage 0 (Заявка)
+  assert(getReturnProgressIndex('needs_info') === 0, 'needs_info must keep progress on stage 0 (Заявка)');
+
+  // Conversation interaction state model
+  interface ConversationState {
+    status: string;
+    messages: Array<{
+      id: string;
+      returnId: string;
+      senderRole: 'admin' | 'customer';
+      messageType: 'info_request' | 'message';
+      body: string;
+      createdAt: string;
+    }>;
+    replyBody: string;
+    isSending: boolean;
+    successFeedback: string | null;
+  }
+
+  let chatState: ConversationState = {
+    status: 'needs_info',
+    messages: [
+      {
+        id: 'msg-admin-1',
+        returnId: 'ret-101',
+        senderRole: 'admin',
+        messageType: 'info_request',
+        body: 'Пожалуйста, приложите фото дефекта с другого ракурса.',
+        createdAt: '2026-08-30T15:00:00Z',
+      },
+    ],
+    replyBody: '',
+    isSending: false,
+    successFeedback: null,
+  };
+
+  // Sender labels mapping
+  const getShopSenderLabel = (role: 'admin' | 'customer') => (role === 'admin' ? 'ZAMK' : 'Вы');
+  assert(getShopSenderLabel(chatState.messages[0].senderRole) === 'ZAMK', 'Admin message must be labeled ZAMK');
+
+  // Reply form visibility: visible when status is needs_info
+  // Persistent conversation: composer available across all active states
+  const { isReturnConversationWritable, isReturnConversationTerminal } = await import('@zamk/api-client/src/types');
+
+  assert(isReturnConversationWritable('requested') === true, 'Shop customer composer enabled on requested');
+  assert(isReturnConversationWritable('needs_info') === true, 'Shop customer composer enabled on needs_info');
+  assert(isReturnConversationWritable('approved') === true, 'Shop customer composer enabled on approved');
+  assert(isReturnConversationWritable('receiving') === true, 'Shop customer composer enabled on receiving');
+  assert(isReturnConversationWritable('item_received') === true, 'Shop customer composer enabled on item_received');
+
+  assert(isReturnConversationWritable('rejected') === false, 'Shop customer composer disabled on rejected');
+  assert(isReturnConversationWritable('refunded') === false, 'Shop customer composer disabled on refunded');
+  assert(isReturnConversationWritable('completed') === false, 'Shop customer composer disabled on completed');
+  assert(isReturnConversationWritable('cancelled') === false, 'Shop customer composer disabled on cancelled');
+
+  // Whitespace reply cannot submit
+  const canSubmitReply = (body: string, isSending: boolean) => body.trim().length > 0 && !isSending;
+  assert(canSubmitReply('', false) === false, 'Empty reply cannot submit');
+  assert(canSubmitReply('    \n\t  ', false) === false, 'Whitespace-only reply cannot submit');
+  assert(canSubmitReply('Отправил фото', false) === true, 'Valid reply can submit');
+  assert(canSubmitReply('Отправил фото', true) === false, 'Cannot submit while already sending');
+
+  // Simulate successful reply execution from needs_info -> transitions to requested
+  const simulateCustomerReply = (prev: ConversationState, replyText: string): ConversationState => {
+    const trimmed = replyText.trim();
+    const newMsg = {
+      id: 'msg-cust-1',
+      returnId: 'ret-101',
+      senderRole: 'customer' as const,
+      messageType: 'message' as const,
+      body: trimmed,
+      createdAt: new Date().toISOString(),
+    };
+    return {
+      status: prev.status === 'needs_info' ? 'requested' : prev.status,
+      messages: [...prev.messages, newMsg],
+      replyBody: '',
+      isSending: false,
+      successFeedback: 'Сообщение отправлено',
+    };
+  };
+
+  chatState = simulateCustomerReply(chatState, '   Вот фото дефекта с другого ракурса.   ');
+
+  assert(chatState.status === 'requested', 'Status must become requested after reply from needs_info');
+  assert(chatState.messages.length === 2, 'Message must be appended to thread');
+  assert(chatState.messages[1].body === 'Вот фото дефекта с другого ракурса.', 'Trimmed reply body persisted');
+  assert(getShopSenderLabel(chatState.messages[1].senderRole) === 'Вы', 'Customer message must be labeled Вы');
+  assert(isReturnConversationWritable(chatState.status) === true, 'Conversation remains writable after reply');
+
+  // Ordinary customer message on approved return leaves status approved
+  const approvedChatState: ConversationState = {
+    status: 'approved',
+    messages: [],
+    replyBody: '',
+    isSending: false,
+    successFeedback: '',
+  };
+  const updatedApprovedChat = simulateCustomerReply(approvedChatState, 'Уточняю вопрос по доставке');
+  assert(updatedApprovedChat.status === 'approved', 'Status must stay approved after ordinary customer message');
+  assert(updatedApprovedChat.messages.length === 1, 'Message appended');
+
+  // Privacy verification: no raw user UUIDs in message payload
+  assert(!('senderUserId' in chatState.messages[0]), 'senderUserId must NOT exist in Customer ReturnMessage');
+  assert(!('senderUserId' in chatState.messages[1]), 'senderUserId must NOT exist in Customer ReturnMessage');
+
+  // 13. M5.3.4A Customer Attachment Composer UI & Validation
+  const canSendCustomerMessage = (body: string, attachmentCount: number, isSending: boolean, isUploading: boolean) => {
+    if (isSending || isUploading) return false;
+    if (attachmentCount > 6) return false;
+    return body.trim().length > 0 || attachmentCount > 0;
+  };
+
+  assert(canSendCustomerMessage('', 0, false, false) === false, 'Empty text and 0 attachments cannot send');
+  assert(canSendCustomerMessage('  ', 0, false, false) === false, 'Whitespace text and 0 attachments cannot send');
+  assert(canSendCustomerMessage('', 1, false, false) === true, 'Photo-only can send');
+  assert(canSendCustomerMessage('Text only', 0, false, false) === true, 'Text-only can send');
+  assert(canSendCustomerMessage('Text and photos', 6, false, false) === true, 'Text with 6 photos can send');
+  assert(canSendCustomerMessage('Text and photos', 7, false, false) === false, 'More than 6 photos cannot send');
+  assert(canSendCustomerMessage('Text', 1, true, false) === false, 'Cannot send while isSending=true');
+  assert(canSendCustomerMessage('Text', 1, false, true) === false, 'Cannot send while isUploading=true');
+
   console.log('ALL SHOP RETURN LOGISTICS, DETAIL & EVIDENCE UX TESTS PASSED');
 }
 

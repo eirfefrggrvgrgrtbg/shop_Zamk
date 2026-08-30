@@ -36,10 +36,20 @@ var (
 	ErrEvidenceInvalidFormat = errors.New("invalid evidence media format")
 
 	// M5.3.3A Logistics errors
-	ErrReturnNotApproved          = errors.New("return_not_approved")
-	ErrShipmentAlreadyExists      = errors.New("shipment_already_exists")
-	ErrInvalidShipmentTransition  = errors.New("invalid_shipment_status_transition")
-	ErrCDEKOfficeRequired         = errors.New("cdek_office_code_required")
-	ErrInvalidCDEKOffice          = errors.New("cdek_office_invalid")
-	ErrCourierInfoRequired        = errors.New("courier_info_required")
+	ErrReturnNotApproved         = errors.New("return_not_approved")
+	ErrShipmentAlreadyExists     = errors.New("shipment_already_exists")
+	ErrInvalidShipmentTransition = errors.New("invalid_shipment_status_transition")
+	ErrCDEKOfficeRequired        = errors.New("cdek_office_code_required")
+	ErrInvalidCDEKOffice         = errors.New("cdek_office_invalid")
+	ErrCourierInfoRequired       = errors.New("courier_info_required")
+
+	// M5.3.4A Communication errors
+	ErrReturnMessageRequired           = errors.New("message_required")
+	ErrReturnNotRequestableInfo        = errors.New("return_not_requestable_info")
+	ErrReturnNotAwaitingInfo           = errors.New("return_not_awaiting_info")
+	ErrReturnTerminalState             = errors.New("return_terminal_state")
+	ErrReturnMessageAttachmentInvalid  = errors.New("return_message_attachment_invalid")
+	ErrReturnMessageAttachmentTooLarge = errors.New("return_message_attachment_too_large")
+	ErrReturnMessageTooManyAttachments = errors.New("return_message_too_many_attachments")
+	ErrReturnMessageAttachmentNotOwned = errors.New("return_message_attachment_not_owned")
 )

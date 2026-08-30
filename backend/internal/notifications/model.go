@@ -42,10 +42,11 @@ const (
 	TypePayoutPaid     = "payout_paid"
 
 	// Return/Refund types
-	TypeReturnCreated  = "return_created"
-	TypeReturnApproved = "return_approved"
-	TypeReturnRejected = "return_rejected"
-	TypeRefundCreated  = "refund_created"
+	TypeReturnCreated   = "return_created"
+	TypeReturnNeedsInfo = "return_needs_info"
+	TypeReturnApproved  = "return_approved"
+	TypeReturnRejected  = "return_rejected"
+	TypeRefundCreated   = "refund_created"
 )
 
 type Notification struct {

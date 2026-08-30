@@ -13,6 +13,8 @@ import {
   User,
   X,
   XCircle,
+  MessageSquare,
+
 } from 'lucide-react';
 import { SellerContextBanner } from '../components/SellerContextBanner';
 import {
@@ -27,6 +29,7 @@ import {
   formatReturnShipmentStatus,
   formatReturnShipmentMethod,
 } from '../api/adminReturns';
+import { ReturnConversationDrawer } from '../components/returns/ReturnConversationDrawer';
 import type { AdminReturn, AdminReturnItem } from '../api/adminReturns';
 import { PermissionGuard } from '../components/PermissionGuard';
 
@@ -44,6 +47,7 @@ export function AdminReturns() {
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const [searchParams] = useSearchParams();
   const sellerId = searchParams.get('sellerId');
@@ -77,6 +81,7 @@ export function AdminReturns() {
   useEffect(() => {
     fetchReturns();
   }, []);
+
 
   const handleApprove = async () => {
     if (!selectedReturn) return;
@@ -322,6 +327,15 @@ export function AdminReturns() {
 
               {/* Right Column: Order/Customer Context & Moderation Decisions */}
               <div className="space-y-6">
+                <button
+                  type="button"
+                  onClick={() => setIsDrawerOpen(true)}
+                  className="w-full inline-flex items-center justify-center px-4 py-3 bg-white hover:bg-gray-50 text-gray-900 text-sm font-semibold rounded-xl border border-gray-200 shadow-sm transition-colors"
+                >
+                  <MessageSquare className="h-5 w-5 mr-2 text-gray-500" />
+                  Переписка с покупателем
+                </button>
+
                 {/* D. Order & Customer Context */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
                   <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
@@ -389,6 +403,7 @@ export function AdminReturns() {
                         <p className="text-xs text-gray-500">
                           Ознакомьтесь с причиной и фотографиями перед принятием решения.
                         </p>
+
                         <button
                           type="button"
                           onClick={() => setIsApproveModalOpen(true)}
@@ -409,6 +424,19 @@ export function AdminReturns() {
                         </button>
                       </div>
                     </PermissionGuard>
+                  )}
+
+                  {/* Needs Info State */}
+                  {selectedReturn.status === 'needs_info' && (
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-900 space-y-2">
+                      <div className="flex items-center space-x-2 font-semibold text-yellow-800">
+                        <MessageSquare className="h-5 w-5 text-yellow-600" />
+                        <span>Ожидает ответа покупателя</span>
+                      </div>
+                      <p className="text-xs text-yellow-700 leading-relaxed">
+                        Покупателю отправлен запрос на уточнение информации. Модерация возобновится после получения ответа.
+                      </p>
+                    </div>
                   )}
 
                   {/* Read-Only Status States */}
@@ -538,6 +566,16 @@ export function AdminReturns() {
                 </div>
               </div>
             </div>
+
+            {selectedReturn && (
+              <ReturnConversationDrawer
+                returnId={selectedReturn.id}
+                isOpen={isDrawerOpen}
+                onClose={() => setIsDrawerOpen(false)}
+                status={selectedReturn.status}
+                onStatusChange={() => fetchReturnDetail(selectedReturn.id)}
+              />
+            )}
           </div>
         ) : (
           /* ------------------------------------------------------------------ */
@@ -797,6 +835,7 @@ export function AdminReturns() {
             </div>
           </div>
         )}
+
 
         {/* ------------------------------------------------------------------ */}
         {/* LIGHTBOX IMAGE PREVIEW MODAL                                       */}

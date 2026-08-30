@@ -283,3 +283,43 @@ type ReturnShipmentResponse struct {
 	PickupAddress          *PickupAddressDTO `json:"pickupAddress,omitempty"`
 	CDEKOfficeAddress      *string           `json:"cdekOfficeAddress,omitempty"`
 }
+
+
+type ReturnMessageAttachmentResponse struct {
+	ID               uuid.UUID `json:"id"`
+	URL              string    `json:"url"`
+	ContentType      string    `json:"contentType"`
+	SizeBytes        int64     `json:"sizeBytes"`
+	OriginalFilename *string   `json:"originalFilename"`
+	SortOrder        int       `json:"sortOrder"`
+}
+
+type UploadReturnMessageAttachmentResponse struct {
+	ID  uuid.UUID `json:"id"`
+	URL string    `json:"url"`
+}
+
+type AdminSendReturnMessageRequest struct {
+	Message       string      `json:"message"`
+	NeedsResponse bool        `json:"needsResponse"`
+	AttachmentIDs []uuid.UUID `json:"attachmentIds"`
+}
+
+type CustomerSendReturnMessageRequest struct {
+	Message       string      `json:"message"`
+	AttachmentIDs []uuid.UUID `json:"attachmentIds"`
+}
+
+type ReturnMessageResponse struct {
+	ID          uuid.UUID                         `json:"id"`
+	ReturnID    uuid.UUID                         `json:"returnId"`
+	SenderRole  string                            `json:"senderRole"`
+	MessageType string                            `json:"messageType"`
+	Body        string                            `json:"body"`
+	CreatedAt   time.Time                         `json:"createdAt"`
+	Attachments []ReturnMessageAttachmentResponse `json:"attachments"`
+}
+
+type ReturnConversationResponse struct {
+	Messages []ReturnMessageResponse `json:"messages"`
+}
