@@ -364,3 +364,25 @@ func (h *Handler) writeError(w http.ResponseWriter, statusCode int, code, messag
 		},
 	})
 }
+
+func (h *Handler) GetAdminOrderTimeline(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	orderID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid order ID")
+		return
+	}
+
+	timeline, err := h.service.GetAdminOrderTimeline(r.Context(), orderID)
+	if err != nil {
+		if errors.Is(err, ErrOrderNotFound) {
+			h.writeError(w, http.StatusNotFound, "order_not_found", "Order not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(timeline)
+}

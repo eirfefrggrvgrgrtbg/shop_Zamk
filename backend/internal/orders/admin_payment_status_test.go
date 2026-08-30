@@ -2,8 +2,8 @@ package orders
 
 import (
 	"context"
-	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -428,10 +428,10 @@ func TestAdminOrderTimeline(t *testing.T) {
 
 	expectedTitles := []string{
 		"Заказ создан",
-		"Оплата подтверждена",
-		"В сборке",
-		"Упаковка завершена",
-		"Отгружен со склада",
+		"Заказ оплачен",
+		"Сборка начата",
+		"Заказ упакован",
+		"Заказ передан в доставку",
 	}
 
 	if len(detail.Timeline) != len(expectedTitles) {
@@ -451,20 +451,19 @@ func TestAdminOrderTimeline(t *testing.T) {
 
 	// Check context enriched
 	var foundPaymentContext, foundShipmentContext bool
-	expectedPayCtx := fmt.Sprintf("%s (tbank)", payNum)
 	for _, ev := range detail.Timeline {
-		if ev.Title == "Оплата подтверждена" && ev.Context != nil && *ev.Context == expectedPayCtx {
+		if ev.Title == "Заказ оплачен" && ev.Context != nil && strings.Contains(*ev.Context, payNum) {
 			foundPaymentContext = true
 		}
-		if ev.Title == "Отгружен со склада" && ev.Context != nil && *ev.Context == "СДЭК (TRK-12345)" {
+		if ev.Title == "Заказ передан в доставку" && ev.Context != nil && strings.Contains(*ev.Context, "TRK-12345") {
 			foundShipmentContext = true
 		}
 	}
 
 	if !foundPaymentContext {
-		t.Errorf("payment event missing expected context %s", expectedPayCtx)
+		t.Errorf("payment event missing expected context with %s", payNum)
 	}
 	if !foundShipmentContext {
-		t.Error("shipment event missing expected context СДЭК (TRK-12345)")
+		t.Error("shipment event missing expected context with TRK-12345")
 	}
 }

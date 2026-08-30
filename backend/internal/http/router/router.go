@@ -489,6 +489,7 @@ func New(
 		// Orders
 		r.With(perm("orders.read")).Get("/orders", ordersHandler.ListAdminOrders)
 		r.With(perm("orders.read")).Get("/orders/{id}", ordersHandler.GetAdminOrder)
+		r.With(perm("orders.read")).Get("/orders/{id}/timeline", ordersHandler.GetAdminOrderTimeline)
 		r.With(perm("orders.read")).Get("/orders/{orderId}/fulfillments", fulfillmentHandler.GetAdminOrderFulfillments)
 		r.With(perm("orders.update_status")).Patch("/orders/{id}/status", ordersHandler.UpdateOrderStatus)
 		r.With(perm("orders.update_status")).Patch("/orders/{id}/fulfillment-status", fulfillmentHandler.UpdateAdminOrderFulfillmentStatus)
@@ -523,6 +524,7 @@ func New(
 		// Returns
 		r.With(perm("returns.read")).Get("/returns", returnsHandler.ListAdminReturns)
 		r.With(perm("returns.read")).Get("/returns/{id}", returnsHandler.GetAdminReturn)
+		r.With(perm("returns.read")).Get("/returns/{id}/timeline", returnsHandler.GetAdminReturnTimeline)
 		r.With(perm("returns.read")).Get("/returns/{id}/messages", returnsHandler.GetAdminReturnMessages)
 		r.With(perm("returns.update_status")).Post("/returns/{id}/messages", returnsHandler.SendAdminReturnMessage)
 		r.With(perm("returns.update_status")).With(uploadLimit).Post("/returns/{id}/messages/attachments", returnsHandler.UploadAdminReturnMessageAttachment)

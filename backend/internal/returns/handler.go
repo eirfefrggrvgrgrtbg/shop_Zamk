@@ -895,3 +895,25 @@ func (h *Handler) GetCDEKOffices(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{"offices": dtos})
 }
+
+func (h *Handler) GetAdminReturnTimeline(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	timeline, err := h.service.GetAdminTimeline(r.Context(), returnID)
+	if err != nil {
+		if errors.Is(err, ErrReturnNotFound) {
+			h.writeError(w, http.StatusNotFound, "return_not_found", "Return not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(timeline)
+}

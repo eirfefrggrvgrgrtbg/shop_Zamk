@@ -101,3 +101,21 @@ type AdminOrderDetail struct {
 	Fulfillments               []OrderFulfillment   `json:"fulfillments"`
 	Timeline                   []OrderTimelineEvent `json:"timeline"`
 }
+
+type TimelineEvent struct {
+	ID          string                 `json:"id"`
+	Type        string                 `json:"type"`
+	OccurredAt  time.Time              `json:"occurredAt"`
+	Title       string                 `json:"title"`
+	Description string                 `json:"description"`
+	ActorType   string                 `json:"actorType"`
+	ActorLabel  string                 `json:"actorLabel"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+}
+
+type TimelineResponse struct {
+	EntityType          string          `json:"entityType"`
+	EntityID            uuid.UUID       `json:"entityId"`
+	CanonicalIdentifier string          `json:"canonicalIdentifier"`
+	Events              []TimelineEvent `json:"events"`
+}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/common"
@@ -371,264 +370,22 @@ func (r *Repository) GetAdminOrderDetail(ctx context.Context, id uuid.UUID) (*Ad
 }
 
 func (r *Repository) GetOrderTimeline(ctx context.Context, orderID uuid.UUID) ([]OrderTimelineEvent, error) {
-	var createdAt time.Time
-	var cancelledAt *time.Time
-	err := r.db.QueryRow(ctx, `SELECT created_at, cancelled_at FROM orders WHERE id = $1`, orderID).Scan(&createdAt, &cancelledAt)
+	resp, err := AssembleAdminOrderTimeline(ctx, r.db, orderID)
 	if err != nil {
 		return nil, err
 	}
-
-	var events []OrderTimelineEvent
-	events = append(events, OrderTimelineEvent{
-		ID:        fmt.Sprintf("order-created-%s", orderID),
-		Type:      "order_created",
-		Title:     "Заказ создан",
-		Timestamp: createdAt,
-	})
-
-	// Payments
-	pRows, err := r.db.Query(ctx, `
-		SELECT id, payment_number, provider, status, paid_at, failed_at, cancelled_at
-		FROM payments
-		WHERE order_id = $1
-		ORDER BY created_at ASC
-	`, orderID)
-	if err == nil {
-		defer pRows.Close()
-		for pRows.Next() {
-			var pID uuid.UUID
-			var pNum, provider, status string
-			var paidAt, failedAt, cancelledAt *time.Time
-			if err := pRows.Scan(&pID, &pNum, &provider, &status, &paidAt, &failedAt, &cancelledAt); err == nil {
-				contextInfo := pNum
-				if provider != "" {
-					contextInfo = fmt.Sprintf("%s (%s)", pNum, provider)
-				}
-				if status == "succeeded" && paidAt != nil {
-					events = append(events, OrderTimelineEvent{
-						ID:        fmt.Sprintf("payment-%s", pID),
-						Type:      "payment_succeeded",
-						Title:     "Оплата подтверждена",
-						Timestamp: *paidAt,
-						Context:   &contextInfo,
-					})
-				} else if status == "failed" && failedAt != nil {
-					events = append(events, OrderTimelineEvent{
-						ID:        fmt.Sprintf("payment-%s", pID),
-						Type:      "payment_failed",
-						Title:     "Ошибка оплаты",
-						Timestamp: *failedAt,
-						Context:   &contextInfo,
-					})
-				} else if status == "cancelled" && cancelledAt != nil {
-					events = append(events, OrderTimelineEvent{
-						ID:        fmt.Sprintf("payment-%s", pID),
-						Type:      "payment_cancelled",
-						Title:     "Оплата отменена",
-						Timestamp: *cancelledAt,
-						Context:   &contextInfo,
-					})
-				}
-			}
-		}
+	events := make([]OrderTimelineEvent, 0, len(resp.Events))
+	for _, ev := range resp.Events {
+		descCopy := ev.Description
+		events = append(events, OrderTimelineEvent{
+			ID:        ev.ID,
+			Type:      ev.Type,
+			Title:     ev.Title,
+			Timestamp: ev.OccurredAt,
+			Context:   &descCopy,
+		})
 	}
-
-	// Order status history
-	hRows, err := r.db.Query(ctx, `
-		SELECT id, from_status, to_status, comment, created_at
-		FROM order_status_history
-		WHERE order_id = $1
-		ORDER BY created_at ASC
-	`, orderID)
-	if err == nil {
-		defer hRows.Close()
-		for hRows.Next() {
-			var hID uuid.UUID
-			var fromStatus, toStatus, comment *string
-			var hCreatedAt time.Time
-			if err := hRows.Scan(&hID, &fromStatus, &toStatus, &comment, &hCreatedAt); err == nil {
-				if toStatus == nil {
-					continue
-				}
-				// Skip awaiting_payment if matching order created timestamp (< 2 sec)
-				diff := hCreatedAt.Sub(createdAt)
-				if diff < 0 {
-					diff = -diff
-				}
-				if *toStatus == "awaiting_payment" && diff < 2*time.Second {
-					continue
-				}
-
-				var title string
-				var evType string = "status_change"
-				switch *toStatus {
-				case "paid":
-					title = "Оплата подтверждена"
-					evType = "payment_succeeded"
-				case "assembling":
-					title = "В сборке"
-				case "packed":
-					title = "Упаковка завершена"
-				case "shipped":
-					title = "Отгружен со склада"
-				case "delivered":
-					title = "Заказ доставлен"
-				case "cancelled":
-					title = "Заказ отменён"
-				default:
-					title = fmt.Sprintf("Статус: %s", *toStatus)
-				}
-
-				var displayComment *string
-				if comment != nil && *comment != "" && *comment != "recalculated from fulfillment statuses" {
-					displayComment = comment
-				}
-
-				events = append(events, OrderTimelineEvent{
-					ID:        fmt.Sprintf("history-%s", hID),
-					Type:      evType,
-					Title:     title,
-					Timestamp: hCreatedAt,
-					Comment:   displayComment,
-				})
-			}
-		}
-	}
-
-	// Shipments
-	sRows, err := r.db.Query(ctx, `
-		SELECT id, carrier, tracking_number, status, shipped_at, delivered_at
-		FROM shipments
-		WHERE order_id = $1
-		ORDER BY created_at ASC
-	`, orderID)
-	if err == nil {
-		defer sRows.Close()
-		for sRows.Next() {
-			var sID uuid.UUID
-			var carrier, trackingNum *string
-			var sStatus string
-			var shippedAt, deliveredAt *time.Time
-			if err := sRows.Scan(&sID, &carrier, &trackingNum, &sStatus, &shippedAt, &deliveredAt); err == nil {
-				var sCtx string
-				if carrier != nil && *carrier != "" {
-					sCtx = *carrier
-					if trackingNum != nil && *trackingNum != "" {
-						sCtx += fmt.Sprintf(" (%s)", *trackingNum)
-					}
-				} else {
-					sCtx = "Склад ZAMK"
-				}
-
-				if shippedAt != nil {
-					events = append(events, OrderTimelineEvent{
-						ID:        fmt.Sprintf("shipment-shipped-%s", sID),
-						Type:      "shipment_dispatched",
-						Title:     "Отгружен со склада",
-						Timestamp: *shippedAt,
-						Context:   &sCtx,
-					})
-				}
-				if deliveredAt != nil {
-					events = append(events, OrderTimelineEvent{
-						ID:        fmt.Sprintf("shipment-delivered-%s", sID),
-						Type:      "shipment_delivered",
-						Title:     "Доставлен получателю",
-						Timestamp: *deliveredAt,
-						Context:   &sCtx,
-					})
-				}
-			}
-		}
-	}
-
-	// Multi-fulfillment packaging if > 1 fulfillment
-	fRows, err := r.db.Query(ctx, `
-		SELECT f.id, COALESCE(s.name, 'Склад'), f.packed_at
-		FROM order_fulfillments f
-		LEFT JOIN sellers s ON f.seller_id = s.id
-		WHERE f.order_id = $1 AND f.packed_at IS NOT NULL
-		ORDER BY f.packed_at ASC
-	`, orderID)
-	if err == nil {
-		defer fRows.Close()
-		type fInfo struct {
-			id       uuid.UUID
-			seller   string
-			packedAt time.Time
-		}
-		var fList []fInfo
-		for fRows.Next() {
-			var fi fInfo
-			var pAt *time.Time
-			if err := fRows.Scan(&fi.id, &fi.seller, &pAt); err == nil && pAt != nil {
-				fi.packedAt = *pAt
-				fList = append(fList, fi)
-			}
-		}
-		if len(fList) > 1 {
-			for _, fi := range fList {
-				sCtx := fmt.Sprintf("Продавец: %s", fi.seller)
-				events = append(events, OrderTimelineEvent{
-					ID:        fmt.Sprintf("fulfillment-packed-%s", fi.id),
-					Type:      "fulfillment_packed",
-					Title:     "Упакована часть заказа",
-					Timestamp: fi.packedAt,
-					Context:   &sCtx,
-				})
-			}
-		}
-	}
-
-	// Cancellation fallback if order cancelled_at is set but no cancellation event in history
-	if cancelledAt != nil {
-		var hasCancelled bool
-		for _, ev := range events {
-			if ev.Title == "Заказ отменён" {
-				hasCancelled = true
-				break
-			}
-		}
-		if !hasCancelled {
-			events = append(events, OrderTimelineEvent{
-				ID:        fmt.Sprintf("order-cancelled-%s", orderID),
-				Type:      "order_cancelled",
-				Title:     "Заказ отменён",
-				Timestamp: *cancelledAt,
-			})
-		}
-	}
-
-	// Sort chronologically ascending
-	sort.SliceStable(events, func(i, j int) bool {
-		return events[i].Timestamp.Before(events[j].Timestamp)
-	})
-
-	// Deduplicate equivalent events within 3 seconds having identical titles
-	var deduped []OrderTimelineEvent
-	for _, ev := range events {
-		if len(deduped) == 0 {
-			deduped = append(deduped, ev)
-			continue
-		}
-		last := &deduped[len(deduped)-1]
-		diff := ev.Timestamp.Sub(last.Timestamp)
-		if diff < 0 {
-			diff = -diff
-		}
-		if ev.Title == last.Title && diff <= 3*time.Second {
-			if last.Context == nil && ev.Context != nil {
-				last.Context = ev.Context
-			}
-			if last.Comment == nil && ev.Comment != nil {
-				last.Comment = ev.Comment
-			}
-			continue
-		}
-		deduped = append(deduped, ev)
-	}
-
-	return deduped, nil
+	return events, nil
 }
 
 func (r *Repository) ListSellerOrders(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerOrder, error) {
