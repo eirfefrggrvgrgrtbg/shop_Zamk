@@ -157,7 +157,14 @@ func SetupRealRouterAuthFixture(t *testing.T) *SetupData {
 	require.NoError(t, err)
 
 	// Return
-	_, err = pool.Exec(ctx, "INSERT INTO returns (id, order_id, user_id, status, reason, created_at, updated_at) VALUES ($1, $2, $3, 'pending', 'defective', $4, $4)", data.ReturnID, data.OrderID, data.CustomerID, now)
+	var fulfillmentID uuid.UUID
+	_ = pool.QueryRow(ctx, "SELECT id FROM order_fulfillments WHERE order_id = $1 LIMIT 1", data.OrderID).Scan(&fulfillmentID)
+	if fulfillmentID == uuid.Nil {
+		fulfillmentID = uuid.New()
+		_, _ = pool.Exec(ctx, "INSERT INTO order_fulfillments (id, order_id, seller_id, status) VALUES ($1, $2, $3, 'delivered')", fulfillmentID, data.OrderID, data.SellerID)
+	}
+
+	_, err = pool.Exec(ctx, "INSERT INTO returns (id, order_id, fulfillment_id, user_id, status, reason, created_at, updated_at) VALUES ($1, $2, $3, $4, 'item_received', 'defective', $5, $5)", data.ReturnID, data.OrderID, fulfillmentID, data.CustomerID, now)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, "INSERT INTO return_items (id, return_id, order_item_id, quantity, condition, created_at) VALUES ($1, $2, $3, 1, 'new', $4)", data.ReturnItemID, data.ReturnID, data.OrderItemID, now)

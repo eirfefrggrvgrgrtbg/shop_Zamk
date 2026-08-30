@@ -35,6 +35,11 @@ type CreateRefundRequest struct {
 	Reason *string `json:"reason"`
 }
 
+type CreateReturnResponse struct {
+	ReturnResponse
+	Returns []ReturnResponse `json:"returns"`
+}
+
 type ReturnResponse struct {
 	Return
 	Items []ReturnItem `json:"items"`

@@ -58,8 +58,15 @@ func TestAdminRefundReserve(t *testing.T) {
 	// Create test order and return
 	orderID := fix.OrderID
 
+	var fulfillmentID uuid.UUID
+	_ = client.Pool.QueryRow(ctx, "SELECT id FROM order_fulfillments WHERE order_id = $1 LIMIT 1", orderID).Scan(&fulfillmentID)
+	if fulfillmentID == uuid.Nil {
+		fulfillmentID = uuid.New()
+		_, _ = client.Pool.Exec(ctx, "INSERT INTO order_fulfillments (id, order_id, seller_id, status) VALUES ($1, $2, $3, 'delivered')", fulfillmentID, orderID, fix.SellerID)
+	}
+
 	returnID := uuid.New()
-	_, err := client.Pool.Exec(ctx, "INSERT INTO returns (id, order_id, user_id, status, reason, created_at, updated_at) VALUES ($1, $2, $3, 'pending', 'defective', now(), now())", returnID, orderID, fix.UserID)
+	_, err := client.Pool.Exec(ctx, "INSERT INTO returns (id, order_id, fulfillment_id, user_id, status, reason, created_at, updated_at) VALUES ($1, $2, $3, $4, 'item_received', 'defective', now(), now())", returnID, orderID, fulfillmentID, fix.UserID)
 	productID := uuid.New()
 	_, err = client.Pool.Exec(ctx, "INSERT INTO products (id, seller_id, title, slug, status, price_cents, created_at, updated_at) VALUES ($1, $2, 'Test Product', $3, 'published', 10000, now(), now())", productID, fix.SellerID, uuid.New().String())
 	require.NoError(t, err)
@@ -115,7 +122,7 @@ func TestAdminRefundReserve(t *testing.T) {
 	require.NoError(t, err)
 	req2, _ := http.NewRequest("POST", "/api/admin/returns/"+returnID.String()+"/refund", bytes.NewBufferString(reqBody))
 	req2.Header.Set("Content-Type", "application/json")
-	_, err = client.Pool.Exec(ctx, "UPDATE returns SET status = 'pending' WHERE id = $1", returnID)
+	_, err = client.Pool.Exec(ctx, "UPDATE returns SET status = 'item_received' WHERE id = $1", returnID)
 	require.NoError(t, err)
 
 	rr2 := httptest.NewRecorder()
@@ -125,7 +132,7 @@ func TestAdminRefundReserve(t *testing.T) {
 	// Try > available
 	_, err = client.Pool.Exec(ctx, "UPDATE order_items SET price_cents = 200000 WHERE id = $1", oiID)
 	require.NoError(t, err)
-	_, err = client.Pool.Exec(ctx, "UPDATE returns SET status = 'pending' WHERE id = $1", returnID)
+	_, err = client.Pool.Exec(ctx, "UPDATE returns SET status = 'item_received' WHERE id = $1", returnID)
 	require.NoError(t, err)
 	
 	req3, _ := http.NewRequest("POST", "/api/admin/returns/"+returnID.String()+"/refund", bytes.NewBufferString(reqBody))

@@ -62,7 +62,7 @@ func (h *Handler) CreateCustomerReturn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ret, items, err := h.service.CreateReturn(r.Context(), userID, orderID, req)
+	responses, err := h.service.CreateReturn(r.Context(), userID, orderID, req)
 	if err != nil {
 		if errors.Is(err, ErrOrderNotDelivered) || errors.Is(err, ErrReturnWindowExpired) || errors.Is(err, ErrInvalidQuantity) {
 			h.writeError(w, http.StatusBadRequest, "invalid_return", err.Error())
@@ -76,7 +76,12 @@ func (h *Handler) CreateCustomerReturn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := ReturnResponse{Return: *ret, Items: items}
+	var resp CreateReturnResponse
+	resp.Returns = responses
+	if len(responses) > 0 {
+		resp.ReturnResponse = responses[0]
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)

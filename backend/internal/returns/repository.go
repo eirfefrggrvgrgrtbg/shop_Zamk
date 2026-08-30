@@ -20,22 +20,22 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 
 func (r *Repository) CreateReturnTx(ctx context.Context, tx pgx.Tx, ret *Return, items []ReturnItem) error {
 	query := `
-		INSERT INTO returns (id, order_id, user_id, status, reason, comment)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO returns (id, order_id, fulfillment_id, user_id, status, reason, comment)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING created_at, updated_at
 	`
-	err := tx.QueryRow(ctx, query, ret.ID, ret.OrderID, ret.UserID, ret.Status, ret.Reason, ret.Comment).Scan(&ret.CreatedAt, &ret.UpdatedAt)
+	err := tx.QueryRow(ctx, query, ret.ID, ret.OrderID, ret.FulfillmentID, ret.UserID, ret.Status, ret.Reason, ret.Comment).Scan(&ret.CreatedAt, &ret.UpdatedAt)
 	if err != nil {
 		return err
 	}
 
 	for i := range items {
 		itemQuery := `
-			INSERT INTO return_items (id, return_id, order_item_id, quantity, reason, condition, restock)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			INSERT INTO return_items (id, return_id, order_item_id, quantity, reason, condition, restock, accepted_quantity, damaged_quantity, rejected_quantity)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING created_at
 		`
-		err = tx.QueryRow(ctx, itemQuery, items[i].ID, items[i].ReturnID, items[i].OrderItemID, items[i].Quantity, items[i].Reason, items[i].Condition, items[i].Restock).Scan(&items[i].CreatedAt)
+		err = tx.QueryRow(ctx, itemQuery, items[i].ID, items[i].ReturnID, items[i].OrderItemID, items[i].Quantity, items[i].Reason, items[i].Condition, items[i].Restock, items[i].AcceptedQuantity, items[i].DamagedQuantity, items[i].RejectedQuantity).Scan(&items[i].CreatedAt)
 		if err != nil {
 			return err
 		}
@@ -46,11 +46,11 @@ func (r *Repository) CreateReturnTx(ctx context.Context, tx pgx.Tx, ret *Return,
 func (r *Repository) UpdateReturnTx(ctx context.Context, tx pgx.Tx, ret *Return) error {
 	query := `
 		UPDATE returns 
-		SET status = $1, admin_comment = $2, updated_at = now(), approved_at = $3, rejected_at = $4, completed_at = $5
+		SET status = $1, admin_comment = $2, updated_at = now(), approved_at = $3, rejected_at = $4, completed_at = $5, receiving_started_at = $7
 		WHERE id = $6
 		RETURNING updated_at
 	`
-	return tx.QueryRow(ctx, query, ret.Status, ret.AdminComment, ret.ApprovedAt, ret.RejectedAt, ret.CompletedAt, ret.ID).Scan(&ret.UpdatedAt)
+	return tx.QueryRow(ctx, query, ret.Status, ret.AdminComment, ret.ApprovedAt, ret.RejectedAt, ret.CompletedAt, ret.ID, ret.ReceivingStartedAt).Scan(&ret.UpdatedAt)
 }
 
 func (r *Repository) UpdateReturnItemRestockTx(ctx context.Context, tx pgx.Tx, itemID uuid.UUID, restock bool) error {
@@ -61,13 +61,13 @@ func (r *Repository) UpdateReturnItemRestockTx(ctx context.Context, tx pgx.Tx, i
 
 func (r *Repository) GetReturn(ctx context.Context, id uuid.UUID) (*Return, []ReturnItem, error) {
 	query := `
-		SELECT id, order_id, user_id, status, reason, comment, admin_comment, created_at, updated_at, approved_at, rejected_at, completed_at
+		SELECT id, order_id, fulfillment_id, user_id, status, reason, comment, admin_comment, created_at, updated_at, approved_at, rejected_at, completed_at, receiving_started_at
 		FROM returns WHERE id = $1
 	`
 	var ret Return
 	err := r.db.QueryRow(ctx, query, id).Scan(
-		&ret.ID, &ret.OrderID, &ret.UserID, &ret.Status, &ret.Reason, &ret.Comment, &ret.AdminComment,
-		&ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt,
+		&ret.ID, &ret.OrderID, &ret.FulfillmentID, &ret.UserID, &ret.Status, &ret.Reason, &ret.Comment, &ret.AdminComment,
+		&ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt, &ret.ReceivingStartedAt,
 	)
 	if err != nil {
 		fmt.Printf("GetReturn %v err: %v\n", id, err)
@@ -78,7 +78,7 @@ func (r *Repository) GetReturn(ctx context.Context, id uuid.UUID) (*Return, []Re
 	}
 
 	itemsQuery := `
-		SELECT id, return_id, order_item_id, quantity, reason, condition, restock, created_at
+		SELECT id, return_id, order_item_id, quantity, reason, condition, restock, accepted_quantity, damaged_quantity, rejected_quantity, created_at
 		FROM return_items WHERE return_id = $1
 	`
 	rows, err := r.db.Query(ctx, itemsQuery, id)
@@ -90,7 +90,7 @@ func (r *Repository) GetReturn(ctx context.Context, id uuid.UUID) (*Return, []Re
 	var items []ReturnItem
 	for rows.Next() {
 		var item ReturnItem
-		if err := rows.Scan(&item.ID, &item.ReturnID, &item.OrderItemID, &item.Quantity, &item.Reason, &item.Condition, &item.Restock, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.ReturnID, &item.OrderItemID, &item.Quantity, &item.Reason, &item.Condition, &item.Restock, &item.AcceptedQuantity, &item.DamagedQuantity, &item.RejectedQuantity, &item.CreatedAt); err != nil {
 			return nil, nil, err
 		}
 		items = append(items, item)
@@ -104,7 +104,7 @@ func (r *Repository) GetReturn(ctx context.Context, id uuid.UUID) (*Return, []Re
 
 func (r *Repository) ListReturnsByCustomer(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Return, error) {
 	query := `
-		SELECT id, order_id, user_id, status, reason, comment, admin_comment, created_at, updated_at, approved_at, rejected_at, completed_at
+		SELECT id, order_id, fulfillment_id, user_id, status, reason, comment, admin_comment, created_at, updated_at, approved_at, rejected_at, completed_at, receiving_started_at
 		FROM returns WHERE user_id = $1 ORDER BY created_at DESC
 		LIMIT $2 OFFSET $3
 	`
@@ -117,7 +117,7 @@ func (r *Repository) ListReturnsByCustomer(ctx context.Context, userID uuid.UUID
 	var list []Return
 	for rows.Next() {
 		var ret Return
-		if err := rows.Scan(&ret.ID, &ret.OrderID, &ret.UserID, &ret.Status, &ret.Reason, &ret.Comment, &ret.AdminComment, &ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt); err != nil {
+		if err := rows.Scan(&ret.ID, &ret.OrderID, &ret.FulfillmentID, &ret.UserID, &ret.Status, &ret.Reason, &ret.Comment, &ret.AdminComment, &ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt, &ret.ReceivingStartedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, ret)
@@ -130,7 +130,7 @@ func (r *Repository) ListReturnsByCustomer(ctx context.Context, userID uuid.UUID
 
 func (r *Repository) ListAllReturns(ctx context.Context, limit, offset int) ([]Return, error) {
 	query := `
-		SELECT id, order_id, user_id, status, reason, comment, admin_comment, created_at, updated_at, approved_at, rejected_at, completed_at
+		SELECT id, order_id, fulfillment_id, user_id, status, reason, comment, admin_comment, created_at, updated_at, approved_at, rejected_at, completed_at, receiving_started_at
 		FROM returns ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
 	`
@@ -143,7 +143,7 @@ func (r *Repository) ListAllReturns(ctx context.Context, limit, offset int) ([]R
 	var list []Return
 	for rows.Next() {
 		var ret Return
-		if err := rows.Scan(&ret.ID, &ret.OrderID, &ret.UserID, &ret.Status, &ret.Reason, &ret.Comment, &ret.AdminComment, &ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt); err != nil {
+		if err := rows.Scan(&ret.ID, &ret.OrderID, &ret.FulfillmentID, &ret.UserID, &ret.Status, &ret.Reason, &ret.Comment, &ret.AdminComment, &ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt, &ret.ReceivingStartedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, ret)

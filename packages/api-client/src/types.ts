@@ -298,10 +298,55 @@ export interface ReturnRequest {
   items: ReturnItemRequest[];
 }
 
+export interface CustomerReturnItem {
+  id: string;
+  returnId: string;
+  orderItemId: string;
+  quantity: number;
+  reason?: string;
+  condition?: string;
+  restock: boolean;
+  acceptedQuantity: number;
+  damagedQuantity: number;
+  rejectedQuantity: number;
+  createdAt: string;
+}
+
+export interface CustomerReturnRecord {
+  id: string;
+  orderId: string;
+  fulfillmentId: string;
+  userId: string;
+  status: string;
+  reason: string;
+  comment?: string;
+  adminComment?: string;
+  createdAt: string;
+  updatedAt: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  completedAt?: string;
+  receivingStartedAt?: string;
+  items: CustomerReturnItem[];
+}
+
 export interface ReturnResponse {
   id: string;
   status: string;
   createdAt: string;
+  orderId?: string;
+  fulfillmentId?: string;
+  userId?: string;
+  reason?: string;
+  comment?: string;
+  adminComment?: string;
+  updatedAt?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  completedAt?: string;
+  receivingStartedAt?: string;
+  items?: CustomerReturnItem[];
+  returns?: CustomerReturnRecord[];
 }
 
 export interface ReviewCreateRequest {
