@@ -425,12 +425,24 @@ func (r *Repository) GetReturnReceivingState(ctx context.Context, returnID uuid.
 		}
 
 		allocMode := "serialized"
+		var notReceivedQty int
+		itemCanFinalize := true
+
 		if len(outboundAllocs) == 0 {
 			allocMode = "legacy"
 			state.LegacyRequested += item.Quantity
+			notReceivedQty = item.Quantity - (item.AcceptedQuantity + item.DamagedQuantity + item.RejectedQuantity)
+			itemCanFinalize = (item.AcceptedQuantity >= 0 && item.DamagedQuantity >= 0 && item.RejectedQuantity >= 0 && (item.AcceptedQuantity+item.DamagedQuantity+item.RejectedQuantity) <= item.Quantity)
 		} else {
 			state.SerializedRequested += item.Quantity
 			state.SerializedScanned += len(scannedUnits)
+			notReceivedQty = item.Quantity - len(scannedUnits)
+			for _, u := range scannedUnits {
+				if u.Disposition == nil || *u.Disposition == "" {
+					itemCanFinalize = false
+					break
+				}
+			}
 		}
 
 		scannedQty := len(scannedUnits)
@@ -448,7 +460,22 @@ func (r *Repository) GetReturnReceivingState(ctx context.Context, returnID uuid.
 			RequestedQuantity:   item.Quantity,
 			ScannedQuantity:     scannedQty,
 			RemainingQuantity:   remainingQty,
+			NotReceivedQuantity: notReceivedQty,
+			AcceptedQuantity:    item.AcceptedQuantity,
+			DamagedQuantity:     item.DamagedQuantity,
+			RejectedQuantity:    item.RejectedQuantity,
+			CanFinalize:         itemCanFinalize,
 		})
+	}
+
+	state.CanFinalize = (ret.Status == "receiving")
+	if ret.Status == "receiving" {
+		for _, it := range state.Items {
+			if !it.CanFinalize {
+				state.CanFinalize = false
+				break
+			}
+		}
 	}
 
 	return &state, nil
@@ -554,4 +581,133 @@ func (r *Repository) GetScannedUnitCountForReturnItemTx(ctx context.Context, tx 
 	var count int
 	err := tx.QueryRow(ctx, query, returnItemID).Scan(&count)
 	return count, err
+}
+
+func (r *Repository) GetReturnItemUnitWithReturnIDTx(ctx context.Context, tx pgx.Tx, unitID uuid.UUID) (*ReturnItemUnit, uuid.UUID, error) {
+	query := `
+		SELECT riu.id, riu.return_item_id, riu.order_item_allocation_id, riu.scanned_at, riu.inspected_condition, riu.disposition, riu.created_at, riu.updated_at, ri.return_id
+		FROM return_item_units riu
+		JOIN return_items ri ON ri.id = riu.return_item_id
+		WHERE riu.id = $1
+		FOR UPDATE
+	`
+	var u ReturnItemUnit
+	var returnID uuid.UUID
+	err := tx.QueryRow(ctx, query, unitID).Scan(&u.ID, &u.ReturnItemID, &u.OrderItemAllocationID, &u.ScannedAt, &u.InspectedCondition, &u.Disposition, &u.CreatedAt, &u.UpdatedAt, &returnID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, uuid.Nil, ErrUnitNotInReturn
+		}
+		return nil, uuid.Nil, err
+	}
+	return &u, returnID, nil
+}
+
+func (r *Repository) UpdateSerializedUnitInspectionTx(ctx context.Context, tx pgx.Tx, unitID uuid.UUID, condition *string, disposition string) error {
+	query := `
+		UPDATE return_item_units
+		SET inspected_condition = $1, disposition = $2, updated_at = now()
+		WHERE id = $3
+	`
+	tag, err := tx.Exec(ctx, query, condition, disposition, unitID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUnitNotInReturn
+	}
+	return nil
+}
+
+func (r *Repository) GetReturnItemByIDTx(ctx context.Context, tx pgx.Tx, itemID uuid.UUID) (*ReturnItem, error) {
+	query := `
+		SELECT id, return_id, order_item_id, quantity, reason, condition, restock, accepted_quantity, damaged_quantity, rejected_quantity, created_at
+		FROM return_items
+		WHERE id = $1
+		FOR UPDATE
+	`
+	var item ReturnItem
+	err := tx.QueryRow(ctx, query, itemID).Scan(&item.ID, &item.ReturnID, &item.OrderItemID, &item.Quantity, &item.Reason, &item.Condition, &item.Restock, &item.AcceptedQuantity, &item.DamagedQuantity, &item.RejectedQuantity, &item.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrReturnNotFound
+		}
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *Repository) UpdateLegacyItemInspectionTx(ctx context.Context, tx pgx.Tx, itemID uuid.UUID, accepted, damaged, rejected int) error {
+	query := `
+		UPDATE return_items
+		SET accepted_quantity = $1, damaged_quantity = $2, rejected_quantity = $3
+		WHERE id = $4
+	`
+	tag, err := tx.Exec(ctx, query, accepted, damaged, rejected, itemID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrReturnNotFound
+	}
+	return nil
+}
+
+func (r *Repository) GetAllocationsForOrderItemTx(ctx context.Context, tx pgx.Tx, orderItemID uuid.UUID) ([]OutboundAllocationDetail, error) {
+	query := `
+		SELECT oia.id, iu.unit_code, oia.picked_at, oia.released_at, iu.status
+		FROM order_item_allocations oia
+		JOIN inventory_units iu ON iu.id = oia.inventory_unit_id
+		WHERE oia.order_item_id = $1
+		ORDER BY oia.id ASC
+		FOR UPDATE
+	`
+	rows, err := tx.Query(ctx, query, orderItemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []OutboundAllocationDetail
+	for rows.Next() {
+		var d OutboundAllocationDetail
+		if err := rows.Scan(&d.AllocationID, &d.UnitCode, &d.PickedAt, &d.ReleasedAt, &d.UnitStatus); err != nil {
+			return nil, err
+		}
+		list = append(list, d)
+	}
+	if list == nil {
+		list = make([]OutboundAllocationDetail, 0)
+	}
+	return list, nil
+}
+
+func (r *Repository) GetScannedUnitsForReturnItemTx(ctx context.Context, tx pgx.Tx, returnItemID uuid.UUID) ([]ScannedUnitDetail, error) {
+	query := `
+		SELECT riu.id, riu.return_item_id, riu.order_item_allocation_id, iu.unit_code, riu.scanned_at, riu.inspected_condition, riu.disposition, riu.created_at, riu.updated_at
+		FROM return_item_units riu
+		JOIN order_item_allocations oia ON oia.id = riu.order_item_allocation_id
+		JOIN inventory_units iu ON iu.id = oia.inventory_unit_id
+		WHERE riu.return_item_id = $1
+		ORDER BY riu.id ASC
+		FOR UPDATE
+	`
+	rows, err := tx.Query(ctx, query, returnItemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []ScannedUnitDetail
+	for rows.Next() {
+		var u ScannedUnitDetail
+		if err := rows.Scan(&u.ID, &u.ReturnItemID, &u.OrderItemAllocationID, &u.UnitCode, &u.ScannedAt, &u.InspectedCondition, &u.Disposition, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, u)
+	}
+	if list == nil {
+		list = make([]ScannedUnitDetail, 0)
+	}
+	return list, nil
 }

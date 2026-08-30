@@ -96,6 +96,17 @@ type ScanReturnUnitResponse struct {
 	ReturnItemUnit ReturnItemUnit `json:"returnItemUnit"`
 }
 
+type UpdateSerializedUnitInspectionRequest struct {
+	InspectedCondition *string `json:"inspectedCondition"`
+	Disposition        string  `json:"disposition" validate:"required"`
+}
+
+type UpdateLegacyItemInspectionRequest struct {
+	AcceptedQuantity int `json:"acceptedQuantity"`
+	DamagedQuantity  int `json:"damagedQuantity"`
+	RejectedQuantity int `json:"rejectedQuantity"`
+}
+
 type AdminReturnReceivingState struct {
 	Return              Return                     `json:"return"`
 	OrderNumber         *string                    `json:"orderNumber"`
@@ -106,6 +117,7 @@ type AdminReturnReceivingState struct {
 	SerializedRequested int                        `json:"serializedRequested"`
 	SerializedScanned   int                        `json:"serializedScanned"`
 	LegacyRequested     int                        `json:"legacyRequested"`
+	CanFinalize         bool                       `json:"canFinalize"`
 }
 
 type OutboundAllocationDetail struct {
@@ -136,4 +148,9 @@ type AdminReturnReceivingItem struct {
 	RequestedQuantity   int                        `json:"requestedQuantity"`
 	ScannedQuantity     int                        `json:"scannedQuantity"`
 	RemainingQuantity   int                        `json:"remainingQuantity"`
+	NotReceivedQuantity int                        `json:"notReceivedQuantity"`
+	AcceptedQuantity    int                        `json:"acceptedQuantity"`
+	DamagedQuantity     int                        `json:"damagedQuantity"`
+	RejectedQuantity    int                        `json:"rejectedQuantity"`
+	CanFinalize         bool                       `json:"canFinalize"`
 }

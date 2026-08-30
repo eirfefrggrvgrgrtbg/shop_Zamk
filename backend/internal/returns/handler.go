@@ -447,6 +447,139 @@ func (h *Handler) ScanReturnUnit(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func (h *Handler) InspectSerializedUnit(w http.ResponseWriter, r *http.Request) {
+	returnIDStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(returnIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	unitIDStr := chi.URLParam(r, "unitId")
+	unitID, err := uuid.Parse(unitIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid unit ID")
+		return
+	}
+
+	var req UpdateSerializedUnitInspectionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	err = h.service.InspectSerializedUnit(r.Context(), returnID, unitID, req)
+	if err != nil {
+		if errors.Is(err, ErrReturnNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
+			return
+		}
+		if errors.Is(err, ErrUnitNotInReturn) {
+			h.writeError(w, http.StatusBadRequest, "unit_not_in_return", err.Error())
+			return
+		}
+		if errors.Is(err, ErrReturnNotInReceiving) {
+			h.writeError(w, http.StatusBadRequest, "invalid_state", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidDisposition) {
+			h.writeError(w, http.StatusBadRequest, "invalid_disposition", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update unit inspection")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) InspectLegacyItem(w http.ResponseWriter, r *http.Request) {
+	returnIDStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(returnIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	itemIDStr := chi.URLParam(r, "itemId")
+	itemID, err := uuid.Parse(itemIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid item ID")
+		return
+	}
+
+	var req UpdateLegacyItemInspectionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	err = h.service.InspectLegacyItem(r.Context(), returnID, itemID, req)
+	if err != nil {
+		if errors.Is(err, ErrReturnNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Return or item not found")
+			return
+		}
+		if errors.Is(err, ErrUnitNotInReturn) {
+			h.writeError(w, http.StatusBadRequest, "item_not_in_return", err.Error())
+			return
+		}
+		if errors.Is(err, ErrReturnNotInReceiving) {
+			h.writeError(w, http.StatusBadRequest, "invalid_state", err.Error())
+			return
+		}
+		if errors.Is(err, ErrItemNotLegacy) {
+			h.writeError(w, http.StatusBadRequest, "item_not_legacy", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidInspectionQuantity) {
+			h.writeError(w, http.StatusBadRequest, "invalid_quantity", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update legacy inspection")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) FinalizeReceiving(w http.ResponseWriter, r *http.Request) {
+	returnIDStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(returnIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	err = h.service.FinalizeReceiving(r.Context(), returnID)
+	if err != nil {
+		if errors.Is(err, ErrReturnNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
+			return
+		}
+		if errors.Is(err, ErrReturnNotInReceiving) {
+			h.writeError(w, http.StatusBadRequest, "invalid_state", err.Error())
+			return
+		}
+		if errors.Is(err, ErrFinalizeMissingDisposition) {
+			h.writeError(w, http.StatusBadRequest, "missing_disposition", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidUnitState) {
+			h.writeError(w, http.StatusBadRequest, "invalid_unit_state", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidInspectionQuantity) {
+			h.writeError(w, http.StatusBadRequest, "invalid_quantity", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to finalize receiving")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ---------------------------------------------------------
 // Seller Operations
 // ---------------------------------------------------------

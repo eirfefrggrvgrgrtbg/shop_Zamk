@@ -601,3 +601,230 @@ func (s *Service) ScanReturnUnit(ctx context.Context, returnID uuid.UUID, req Sc
 	}
 	return &resp, nil
 }
+
+func (s *Service) InspectSerializedUnit(ctx context.Context, returnID uuid.UUID, unitID uuid.UUID, req UpdateSerializedUnitInspectionRequest) error {
+	if req.Disposition != "restock" && req.Disposition != "damaged" && req.Disposition != "reject" {
+		return ErrInvalidDisposition
+	}
+
+	return s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		ret, err := s.repo.GetReturnTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+
+		if ret.Status != "receiving" {
+			return ErrReturnNotInReceiving
+		}
+
+		_, boundReturnID, err := s.repo.GetReturnItemUnitWithReturnIDTx(ctx, tx, unitID)
+		if err != nil {
+			return err
+		}
+
+		if boundReturnID != returnID {
+			return ErrUnitNotInReturn
+		}
+
+		return s.repo.UpdateSerializedUnitInspectionTx(ctx, tx, unitID, req.InspectedCondition, req.Disposition)
+	})
+}
+
+func (s *Service) InspectLegacyItem(ctx context.Context, returnID uuid.UUID, itemID uuid.UUID, req UpdateLegacyItemInspectionRequest) error {
+	if req.AcceptedQuantity < 0 || req.DamagedQuantity < 0 || req.RejectedQuantity < 0 {
+		return ErrInvalidInspectionQuantity
+	}
+
+	return s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		ret, err := s.repo.GetReturnTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+
+		if ret.Status != "receiving" {
+			return ErrReturnNotInReceiving
+		}
+
+		item, err := s.repo.GetReturnItemByIDTx(ctx, tx, itemID)
+		if err != nil {
+			return err
+		}
+
+		if item.ReturnID != returnID {
+			return ErrUnitNotInReturn
+		}
+
+		allocs, err := s.repo.GetAllocationsForOrderItemTx(ctx, tx, item.OrderItemID)
+		if err != nil {
+			return err
+		}
+		if len(allocs) > 0 {
+			return ErrItemNotLegacy
+		}
+
+		if req.AcceptedQuantity+req.DamagedQuantity+req.RejectedQuantity > item.Quantity {
+			return ErrInvalidInspectionQuantity
+		}
+
+		return s.repo.UpdateLegacyItemInspectionTx(ctx, tx, itemID, req.AcceptedQuantity, req.DamagedQuantity, req.RejectedQuantity)
+	})
+}
+
+func (s *Service) FinalizeReceiving(ctx context.Context, returnID uuid.UUID) error {
+	return s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		ret, err := s.repo.GetReturnTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+
+		if ret.Status == "item_received" {
+			return nil // idempotent no-op
+		}
+
+		if ret.Status != "receiving" {
+			return ErrReturnNotInReceiving
+		}
+
+		items, err := s.repo.GetReturnItemsForUpdateTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+
+		restockCounts := make(map[uuid.UUID]int)
+
+		for _, item := range items {
+			allocs, err := s.repo.GetAllocationsForOrderItemTx(ctx, tx, item.OrderItemID)
+			if err != nil {
+				return err
+			}
+
+			if len(allocs) > 0 {
+				// Serialized item
+				scannedUnits, err := s.repo.GetScannedUnitsForReturnItemTx(ctx, tx, item.ID)
+				if err != nil {
+					return err
+				}
+
+				for _, u := range scannedUnits {
+					if u.Disposition == nil || (*u.Disposition != "restock" && *u.Disposition != "damaged" && *u.Disposition != "reject") {
+						return ErrFinalizeMissingDisposition
+					}
+
+					var iuID uuid.UUID
+					var iuStatus string
+					var pvID uuid.UUID
+					var pickedAt *time.Time
+					var releasedAt *time.Time
+					var orderID uuid.UUID
+					var fulfillmentID *uuid.UUID
+
+					queryUnit := `
+						SELECT iu.id, iu.status, iu.product_variant_id, oia.picked_at, oia.released_at, oi.order_id, oi.order_fulfillment_id
+						FROM inventory_units iu
+						JOIN order_item_allocations oia ON oia.inventory_unit_id = iu.id
+						JOIN order_items oi ON oi.id = oia.order_item_id
+						WHERE oia.id = $1
+						FOR UPDATE
+					`
+					err = tx.QueryRow(ctx, queryUnit, u.OrderItemAllocationID).Scan(&iuID, &iuStatus, &pvID, &pickedAt, &releasedAt, &orderID, &fulfillmentID)
+					if err != nil {
+						return ErrInvalidUnitState
+					}
+
+					if iuStatus != "shipped" {
+						return ErrInvalidUnitState
+					}
+					if pickedAt == nil || releasedAt != nil {
+						return ErrInvalidUnitState
+					}
+					if orderID != ret.OrderID || fulfillmentID == nil || *fulfillmentID != ret.FulfillmentID {
+						return ErrInvalidUnitState
+					}
+
+					switch *u.Disposition {
+					case "restock":
+						_, err = tx.Exec(ctx, "UPDATE inventory_units SET status = 'warehouse', updated_at = now() WHERE id = $1", iuID)
+						if err != nil {
+							return err
+						}
+						restockCounts[pvID]++
+					case "damaged":
+						_, err = tx.Exec(ctx, "UPDATE inventory_units SET status = 'damaged', updated_at = now() WHERE id = $1", iuID)
+						if err != nil {
+							return err
+						}
+					case "reject":
+						// Remains shipped
+					}
+				}
+			} else {
+				// Legacy item
+				if item.AcceptedQuantity < 0 || item.DamagedQuantity < 0 || item.RejectedQuantity < 0 {
+					return ErrInvalidInspectionQuantity
+				}
+				if item.AcceptedQuantity+item.DamagedQuantity+item.RejectedQuantity > item.Quantity {
+					return ErrInvalidInspectionQuantity
+				}
+
+				if item.AcceptedQuantity > 0 {
+					var pvID uuid.UUID
+					err = tx.QueryRow(ctx, "SELECT product_variant_id FROM order_items WHERE id = $1", item.OrderItemID).Scan(&pvID)
+					if err != nil {
+						return err
+					}
+					restockCounts[pvID] += item.AcceptedQuantity
+				}
+			}
+		}
+
+		// Sort variant IDs deterministically to prevent deadlocks
+		var variantIDs []uuid.UUID
+		for vid := range restockCounts {
+			variantIDs = append(variantIDs, vid)
+		}
+		sort.Slice(variantIDs, func(i, j int) bool {
+			return variantIDs[i].String() < variantIDs[j].String()
+		})
+
+		for _, vid := range variantIDs {
+			qty := restockCounts[vid]
+			if qty <= 0 {
+				continue
+			}
+
+			var invItemID uuid.UUID
+			var prodID uuid.UUID
+			var sellerID uuid.UUID
+			var totalStock int
+
+			queryInv := `
+				SELECT id, product_id, seller_id, total_stock
+				FROM inventory_items
+				WHERE product_variant_id = $1
+				FOR UPDATE
+			`
+			err = tx.QueryRow(ctx, queryInv, vid).Scan(&invItemID, &prodID, &sellerID, &totalStock)
+			if err != nil {
+				return err
+			}
+
+			_, err = tx.Exec(ctx, "UPDATE inventory_items SET total_stock = total_stock + $1, updated_at = now() WHERE id = $2", qty, invItemID)
+			if err != nil {
+				return err
+			}
+
+			movID := uuid.New()
+			insertMov := `
+				INSERT INTO stock_movements (id, inventory_item_id, product_id, product_variant_id, seller_id, type, quantity, reason, reference_type, reference_id, created_at)
+				VALUES ($1, $2, $3, $4, $5, 'return', $6, 'return_restock', 'return', $7, now())
+			`
+			_, err = tx.Exec(ctx, insertMov, movID, invItemID, prodID, vid, sellerID, qty, ret.ID)
+			if err != nil {
+				return err
+			}
+		}
+
+		ret.Status = "item_received"
+		return s.repo.UpdateReturnTx(ctx, tx, ret)
+	})
+}

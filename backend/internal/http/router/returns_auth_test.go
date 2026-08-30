@@ -341,5 +341,168 @@ func TestAdminReturnsReceivingRouter_RBAC(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, scanResp.AlreadyScanned)
 		assert.Equal(t, allocID, scanResp.ReturnItemUnit.OrderItemAllocationID)
+
+		scannedUnitID := scanResp.ReturnItemUnit.ID
+
+		// Endpoint 4: PATCH /api/admin/returns/{id}/receiving/units/{unitId} (needs returns.update_status)
+		cond := "Good condition"
+		inspBody, _ := json.Marshal(returns.UpdateSerializedUnitInspectionRequest{
+			InspectedCondition: &cond,
+			Disposition:        "restock",
+		})
+
+		// 4A: unauthenticated -> 401
+		req4A := httptest.NewRequest("PATCH", fmt.Sprintf("/api/admin/returns/%s/receiving/units/%s", returnID, scannedUnitID), bytes.NewReader(inspBody))
+		rr4A := httptest.NewRecorder()
+		r.ServeHTTP(rr4A, req4A)
+		assert.Equal(t, http.StatusUnauthorized, rr4A.Code)
+
+		// 4B: customer -> 403
+		req4B := httptest.NewRequest("PATCH", fmt.Sprintf("/api/admin/returns/%s/receiving/units/%s", returnID, scannedUnitID), bytes.NewReader(inspBody))
+		req4B.Header.Set("Authorization", "Bearer "+customerToken)
+		rr4B := httptest.NewRecorder()
+		r.ServeHTTP(rr4B, req4B)
+		assert.Equal(t, http.StatusForbidden, rr4B.Code)
+
+		// 4C: admin with returns.read only -> 403
+		req4C := httptest.NewRequest("PATCH", fmt.Sprintf("/api/admin/returns/%s/receiving/units/%s", returnID, scannedUnitID), bytes.NewReader(inspBody))
+		req4C.Header.Set("Authorization", "Bearer "+adminReadToken)
+		rr4C := httptest.NewRecorder()
+		r.ServeHTTP(rr4C, req4C)
+		assert.Equal(t, http.StatusForbidden, rr4C.Code)
+
+		// 4D: admin with returns.update_status -> 204
+		req4D := httptest.NewRequest("PATCH", fmt.Sprintf("/api/admin/returns/%s/receiving/units/%s", returnID, scannedUnitID), bytes.NewReader(inspBody))
+		req4D.Header.Set("Authorization", "Bearer "+adminUpdateToken)
+		rr4D := httptest.NewRecorder()
+		r.ServeHTTP(rr4D, req4D)
+		assert.Equal(t, http.StatusNoContent, rr4D.Code)
+
+		// Verify serialized inspection was actually persisted in DB
+		var dbDisp string
+		var dbCond *string
+		err = pgClient.Pool.QueryRow(ctx, "SELECT disposition, inspected_condition FROM return_item_units WHERE id = $1", scannedUnitID).Scan(&dbDisp, &dbCond)
+		require.NoError(t, err)
+		assert.Equal(t, "restock", dbDisp)
+		require.NotNil(t, dbCond)
+		assert.Equal(t, "Good condition", *dbCond)
+
+		// Endpoint 5: PATCH /api/admin/returns/{id}/receiving/items/{itemId}/legacy-inspection (needs returns.update_status)
+		// Setup legacy return fixture
+		legOrderID := uuid.New()
+		legFID := uuid.New()
+		legOIID := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO orders (id, user_id, order_number, status, total_price_cents, currency, delivery_address, delivery_method_name, delivery_price_cents, customer_name, customer_email, customer_phone)
+			VALUES ($1, $2, $3, 'delivered', 5000, 'RUB', 'Addr', 'Method', 0, 'Name', 'Email', 'Phone')
+		`, legOrderID, buyerID, "ORD-LEGAUTH-"+uuid.New().String()[:6])
+		require.NoError(t, err)
+
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO order_fulfillments (id, order_id, seller_id, status)
+			VALUES ($1, $2, $3, 'delivered')
+		`, legFID, legOrderID, sellerID)
+		require.NoError(t, err)
+
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO order_items (id, order_id, order_fulfillment_id, seller_id, product_id, product_variant_id, title, product_slug, price_cents, subtotal_price_cents, quantity)
+			VALUES ($1, $2, $3, $4, $5, $6, 'Title', 'slug', 1000, 5000, 5)
+		`, legOIID, legOrderID, legFID, sellerID, prodID, varID)
+		require.NoError(t, err)
+
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO shipments (id, order_id, fulfillment_id, status, shipped_at, delivered_at, created_at, updated_at)
+			VALUES ($1, $2, $3, 'delivered', now() - interval '2 hours', now() - interval '1 hour', now(), now())
+		`, uuid.New(), legOrderID, legFID)
+		require.NoError(t, err)
+
+		legRetID := uuid.New()
+		legItemID := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO returns (id, order_id, fulfillment_id, user_id, status, reason, created_at, updated_at, receiving_started_at)
+			VALUES ($1, $2, $3, $4, 'receiving', 'defective', now(), now(), now())
+		`, legRetID, legOrderID, legFID, buyerID)
+		require.NoError(t, err)
+
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO return_items (id, return_id, order_item_id, quantity, created_at)
+			VALUES ($1, $2, $3, 5, now())
+		`, legItemID, legRetID, legOIID)
+		require.NoError(t, err)
+
+		legBody, _ := json.Marshal(returns.UpdateLegacyItemInspectionRequest{
+			AcceptedQuantity: 2,
+			DamagedQuantity:  1,
+			RejectedQuantity: 1,
+		})
+
+		// 5A: unauthenticated -> 401
+		req5A := httptest.NewRequest("PATCH", fmt.Sprintf("/api/admin/returns/%s/receiving/items/%s/legacy-inspection", legRetID, legItemID), bytes.NewReader(legBody))
+		rr5A := httptest.NewRecorder()
+		r.ServeHTTP(rr5A, req5A)
+		assert.Equal(t, http.StatusUnauthorized, rr5A.Code)
+
+		// 5B: customer -> 403
+		req5B := httptest.NewRequest("PATCH", fmt.Sprintf("/api/admin/returns/%s/receiving/items/%s/legacy-inspection", legRetID, legItemID), bytes.NewReader(legBody))
+		req5B.Header.Set("Authorization", "Bearer "+customerToken)
+		rr5B := httptest.NewRecorder()
+		r.ServeHTTP(rr5B, req5B)
+		assert.Equal(t, http.StatusForbidden, rr5B.Code)
+
+		// 5C: admin with returns.read only -> 403
+		req5C := httptest.NewRequest("PATCH", fmt.Sprintf("/api/admin/returns/%s/receiving/items/%s/legacy-inspection", legRetID, legItemID), bytes.NewReader(legBody))
+		req5C.Header.Set("Authorization", "Bearer "+adminReadToken)
+		rr5C := httptest.NewRecorder()
+		r.ServeHTTP(rr5C, req5C)
+		assert.Equal(t, http.StatusForbidden, rr5C.Code)
+
+		// 5D: admin with returns.update_status -> 204
+		req5D := httptest.NewRequest("PATCH", fmt.Sprintf("/api/admin/returns/%s/receiving/items/%s/legacy-inspection", legRetID, legItemID), bytes.NewReader(legBody))
+		req5D.Header.Set("Authorization", "Bearer "+adminUpdateToken)
+		rr5D := httptest.NewRecorder()
+		r.ServeHTTP(rr5D, req5D)
+		assert.Equal(t, http.StatusNoContent, rr5D.Code)
+
+		// Verify legacy inspection was actually persisted in DB
+		var accQty, dmgQty, rejQty int
+		err = pgClient.Pool.QueryRow(ctx, "SELECT accepted_quantity, damaged_quantity, rejected_quantity FROM return_items WHERE id = $1", legItemID).Scan(&accQty, &dmgQty, &rejQty)
+		require.NoError(t, err)
+		assert.Equal(t, 2, accQty)
+		assert.Equal(t, 1, dmgQty)
+		assert.Equal(t, 1, rejQty)
+
+		// Endpoint 6: POST /api/admin/returns/{id}/receiving/finalize (needs returns.update_status)
+		// 6A: unauthenticated -> 401
+		req6A := httptest.NewRequest("POST", "/api/admin/returns/"+returnID.String()+"/receiving/finalize", nil)
+		rr6A := httptest.NewRecorder()
+		r.ServeHTTP(rr6A, req6A)
+		assert.Equal(t, http.StatusUnauthorized, rr6A.Code)
+
+		// 6B: customer -> 403
+		req6B := httptest.NewRequest("POST", "/api/admin/returns/"+returnID.String()+"/receiving/finalize", nil)
+		req6B.Header.Set("Authorization", "Bearer "+customerToken)
+		rr6B := httptest.NewRecorder()
+		r.ServeHTTP(rr6B, req6B)
+		assert.Equal(t, http.StatusForbidden, rr6B.Code)
+
+		// 6C: admin with returns.read only -> 403
+		req6C := httptest.NewRequest("POST", "/api/admin/returns/"+returnID.String()+"/receiving/finalize", nil)
+		req6C.Header.Set("Authorization", "Bearer "+adminReadToken)
+		rr6C := httptest.NewRecorder()
+		r.ServeHTTP(rr6C, req6C)
+		assert.Equal(t, http.StatusForbidden, rr6C.Code)
+
+		// 6D: admin with returns.update_status -> 204
+		req6D := httptest.NewRequest("POST", "/api/admin/returns/"+returnID.String()+"/receiving/finalize", nil)
+		req6D.Header.Set("Authorization", "Bearer "+adminUpdateToken)
+		rr6D := httptest.NewRecorder()
+		r.ServeHTTP(rr6D, req6D)
+		assert.Equal(t, http.StatusNoContent, rr6D.Code)
+
+		// Verify return actually reached item_received in DB
+		var finStatus string
+		err = pgClient.Pool.QueryRow(ctx, "SELECT status FROM returns WHERE id = $1", returnID).Scan(&finStatus)
+		require.NoError(t, err)
+		assert.Equal(t, "item_received", finStatus)
 	})
 }
