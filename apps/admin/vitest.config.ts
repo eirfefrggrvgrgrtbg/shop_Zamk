@@ -5,6 +5,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/components/search/**/*.test.{ts,tsx}'],
+    include: [
+      'src/components/search/**/*.test.{ts,tsx}',
+      'src/pages/AdminSearchContextHandoff.test.tsx',
+    ],
   },
 });

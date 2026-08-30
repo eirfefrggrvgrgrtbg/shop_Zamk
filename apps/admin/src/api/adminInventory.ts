@@ -8,7 +8,9 @@ import {
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
 import { request } from '@zamk/api-client/src/client';
-import type { AdminInventoryItem, AdminInventoryMovement } from '@zamk/api-client/src/types';
+import type { AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, PhysicalUnitContext } from '@zamk/api-client/src/types';
+
+export type { PhysicalUnitContext };
 
 export interface AdminInventoryView {
   id: string;
@@ -98,10 +100,10 @@ export const mapInventoryMovement = (movement: AdminInventoryMovement): AdminInv
   };
 };
 
-export const getAdminInventory = async (params?: { q?: string; sellerId?: string; source?: string; lowStock?: boolean; limit?: number; offset?: number }): Promise<{ items: AdminInventoryView[]; totalCount: number }> => {
-  const response = await apiGetAdminInventory(params) as unknown as { items: AdminInventoryItem[]; totalCount: number };
+export const getAdminInventory = async (params?: { q?: string; sellerId?: string; source?: string; lowStock?: boolean; limit?: number; offset?: number }): Promise<{ items: AdminInventoryView[]; totalCount: number; unitContext?: PhysicalUnitContext }> => {
+  const response = await apiGetAdminInventory(params) as unknown as AdminInventoryListResponse;
   const items = response.items || [];
-  return { items: items.map(mapInventoryItem), totalCount: response.totalCount || 0 };
+  return { items: items.map(mapInventoryItem), totalCount: response.totalCount || 0, unitContext: response.unitContext };
 };
 
 export const getAdminInventoryItem = async (id: string): Promise<AdminInventoryView> => {

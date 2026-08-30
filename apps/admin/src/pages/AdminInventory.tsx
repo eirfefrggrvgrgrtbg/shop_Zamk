@@ -8,25 +8,24 @@ import {
   getAdminInventoryErrorMessage,
   getAdminInventoryItem,
   getAdminInventoryMovements,
-  
+  type PhysicalUnitContext,
 } from '../api/adminInventory';
 import type { AdminInventoryMovementView, AdminInventoryView } from '../api/adminInventory';
-
-
-
 
 export function AdminInventory() {
   const [inventory, setInventory] = useState<AdminInventoryView[]>([]);
   const [selectedItem, setSelectedItem] = useState<AdminInventoryView | null>(null);
   const [movements, setMovements] = useState<AdminInventoryMovementView[]>([]);
+  const [unitContext, setUnitContext] = useState<PhysicalUnitContext | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMovementsLoading, setIsMovementsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-          const [searchQuery, setSearchQuery] = useState('');
-  const [sourceFilter, setSourceFilter] = useState('');
   const [searchParams] = useSearchParams();
   const urlSellerId = searchParams.get('sellerId');
+  const urlQ = searchParams.get('q');
 
+  const [searchQuery, setSearchQuery] = useState(urlQ || '');
+  const [sourceFilter, setSourceFilter] = useState('');
   const [sellerFilter, setSellerFilter] = useState(urlSellerId || '');
 
   useEffect(() => {
@@ -34,6 +33,12 @@ export function AdminInventory() {
       setSellerFilter(urlSellerId);
     }
   }, [urlSellerId]);
+
+  useEffect(() => {
+    if (urlQ !== null) {
+      setSearchQuery(urlQ);
+    }
+  }, [urlQ]);
   const [lowStockFilter, setLowStockFilter] = useState(false);
   const [pagination, setPagination] = useState({ limit: 50, offset: 0, total: 0 });
 
@@ -51,12 +56,14 @@ export function AdminInventory() {
       });
       setInventory(resp.items);
       setPagination(p => ({ ...p, total: resp.totalCount }));
+      setUnitContext(resp.unitContext ?? null);
       if (selectedItem) {
         const refreshed = resp.items.find((item) => item.id === selectedItem.id) ?? null;
         setSelectedItem(refreshed);
       }
     } catch (err: unknown) {
       setError(getAdminInventoryErrorMessage(err, 'Не удалось загрузить остатки.'));
+      setUnitContext(null);
     } finally {
       setIsLoading(false);
     }
@@ -117,7 +124,7 @@ export function AdminInventory() {
           <input
             type="text"
             className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
-            placeholder="Поиск по названию или SKU..."
+            placeholder="Поиск по названию, SKU или ZMU..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -164,6 +171,37 @@ export function AdminInventory() {
         </div>
       )}
 
+      {/* Physical ZMU Context Card */}
+      {unitContext && (
+        <div
+          data-testid="admin-inventory-zmu-context"
+          className="p-4 bg-indigo-50/90 border border-indigo-200 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2 rounded-lg bg-indigo-100 text-indigo-700 flex-shrink-0">
+              <Boxes className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-semibold text-gray-900 flex items-center space-x-2">
+                <span>{unitContext.unitCode}</span>
+                <span className="text-gray-300">·</span>
+                <span>{unitContext.productTitle}</span>
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                {unitContext.variant ? `${unitContext.variant} · ` : ''}
+                Физическая единица товара
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="text-xs text-gray-500 font-medium">Статус единицы:</span>
+            <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-white text-indigo-800 border border-indigo-200 shadow-2xs">
+              {unitContext.statusLabel || unitContext.status}
+            </span>
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="text-center py-10">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
@@ -172,8 +210,14 @@ export function AdminInventory() {
       ) : inventory.length === 0 ? (
         <div className="text-center py-10 bg-white rounded-lg shadow">
           <Boxes className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Нет данных</h3>
-          <p className="mt-1 text-sm text-gray-500">Записи об остатках пока отсутствуют.</p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">
+            {unitContext ? 'Нет агрегированных остатков' : 'Нет данных'}
+          </h3>
+          <p className="mt-1 text-sm text-gray-500">
+            {unitContext
+              ? 'Физическая единица найдена, но агрегированные складские остатки отсутствуют.'
+              : 'Записи об остатках пока отсутствуют.'}
+          </p>
         </div>
       ) : (
       <div className="flex flex-col">

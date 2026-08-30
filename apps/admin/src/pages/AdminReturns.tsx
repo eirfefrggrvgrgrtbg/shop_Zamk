@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   AlertCircle,
@@ -49,8 +49,10 @@ export function AdminReturns() {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const sellerId = searchParams.get('sellerId');
+  const urlReturnId = searchParams.get('id');
+  const initialReturnIdHandledRef = useRef<string | null>(null);
 
   const fetchReturns = async () => {
     try {
@@ -73,6 +75,7 @@ export function AdminReturns() {
       setSelectedReturn(detail);
     } catch (err: unknown) {
       setError(getAdminReturnErrorMessage(err, 'Не удалось загрузить детали возврата.'));
+      setSelectedReturn(null);
     } finally {
       setIsDetailLoading(false);
     }
@@ -81,6 +84,24 @@ export function AdminReturns() {
   useEffect(() => {
     fetchReturns();
   }, []);
+
+  // Handle URL return ID context handoff from Global Search
+  useEffect(() => {
+    if (urlReturnId && initialReturnIdHandledRef.current !== urlReturnId) {
+      initialReturnIdHandledRef.current = urlReturnId;
+      fetchReturnDetail(urlReturnId);
+    }
+  }, [urlReturnId]);
+
+  const handleBackToList = () => {
+    setSelectedReturn(null);
+    if (searchParams.has('id') || searchParams.has('orderNumber')) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('id');
+      nextParams.delete('orderNumber');
+      setSearchParams(nextParams, { replace: true });
+    }
+  };
 
 
   const handleApprove = async () => {
@@ -177,7 +198,7 @@ export function AdminReturns() {
               <div className="flex items-center space-x-4">
                 <button
                   type="button"
-                  onClick={() => setSelectedReturn(null)}
+                  onClick={handleBackToList}
                   className="inline-flex items-center text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors"
                 >
                   <ArrowLeft className="h-4 w-4 mr-1.5" />

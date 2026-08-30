@@ -36,9 +36,21 @@ type AdminInventoryItem struct {
 	UpdatedAt        string    `json:"updatedAt"`
 }
 
+type PhysicalUnitContext struct {
+	UnitCode     string    `json:"unitCode"`
+	Status       string    `json:"status"`
+	StatusLabel  string    `json:"statusLabel"`
+	ProductTitle string    `json:"productTitle"`
+	VariantLabel string    `json:"variant"`
+	SKU          string    `json:"sku"`
+	ProductID    uuid.UUID `json:"productId"`
+	VariantID    uuid.UUID `json:"variantId"`
+}
+
 type AdminInventoryListResponse struct {
-	Items      []AdminInventoryItem `json:"items"`
-	TotalCount int                  `json:"totalCount"`
+	Items       []AdminInventoryItem `json:"items"`
+	TotalCount  int                  `json:"totalCount"`
+	UnitContext *PhysicalUnitContext `json:"unitContext,omitempty"`
 }
 
 type InventoryListResponse struct {

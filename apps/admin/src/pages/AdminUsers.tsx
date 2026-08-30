@@ -1,19 +1,29 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { getAdminUsers } from '@zamk/api-client/src/admin';
 import type { AdminUser } from '@zamk/api-client/src/types';
 import { AlertCircle, Search, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export function AdminUsers() {
+  const [searchParams] = useSearchParams();
+  const urlQ = searchParams.get('q') || searchParams.get('search');
+
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(urlQ || '');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  
+  useEffect(() => {
+    if (urlQ !== null) {
+      setSearch(urlQ);
+      setPage(1);
+    }
+  }, [urlQ]);
+
   // Pagination
   const [page, setPage] = useState(1);
   const limit = 20;

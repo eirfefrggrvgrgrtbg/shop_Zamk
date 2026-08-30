@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse } from './types';
+import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse } from './types';
 
 export const getAdminSellers = async (params?: {
   search?: string;
@@ -364,7 +364,7 @@ export const adminBlockProduct = async (id: string, comment?: string, expectedUp
   return request<void>('POST', `/admin/moderation/products/${id}/block`, { body: { comment, expectedUpdatedAt } });
 };
 
-export const getAdminInventory = async (params?: { q?: string; sellerId?: string; source?: string; lowStock?: boolean; limit?: number; offset?: number }): Promise<{ items: AdminInventoryItem[]; totalCount: number }> => {
+export const getAdminInventory = async (params?: { q?: string; sellerId?: string; source?: string; lowStock?: boolean; limit?: number; offset?: number }): Promise<AdminInventoryListResponse> => {
   const query = new URLSearchParams();
   if (params?.q) query.append('q', params.q);
   if (params?.sellerId) query.append('sellerId', params.sellerId);
@@ -374,7 +374,7 @@ export const getAdminInventory = async (params?: { q?: string; sellerId?: string
   if (params?.offset) query.append('offset', params.offset.toString());
   
   const qStr = query.toString() ? `?${query.toString()}` : '';
-  return request<{ items: AdminInventoryItem[]; totalCount: number }>('GET', `/admin/inventory${qStr}`);
+  return request<AdminInventoryListResponse>('GET', `/admin/inventory${qStr}`);
 };
 
 export const getAdminInventoryItem = async (id: string): Promise<AdminInventoryItem> => {

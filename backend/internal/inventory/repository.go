@@ -9,6 +9,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"strings"
 	"time"
 )
 
@@ -331,7 +332,65 @@ func (r *Repository) ListMovementsByInventoryItemID(ctx context.Context, itemID 
 	return movs, nil
 }
 
-func (r *Repository) ListAdminInventoryRich(ctx context.Context, q, sellerId, source string, lowStock bool, limit, offset int) ([]AdminInventoryItem, int, error) {
+func FormatUnitStatus(s string) string {
+	switch strings.ToLower(s) {
+	case "warehouse":
+		return "На складе"
+	case "expected":
+		return "Ожидается"
+	case "damaged":
+		return "Поврежден"
+	case "written_off":
+		return "Списан"
+	case "shipped":
+		return "Отгружен"
+	default:
+		return s
+	}
+}
+
+func (r *Repository) ListAdminInventoryRich(ctx context.Context, q, sellerId, source string, lowStock bool, limit, offset int) ([]AdminInventoryItem, int, *PhysicalUnitContext, error) {
+	qTrimmed := strings.TrimSpace(q)
+	var unitCtx *PhysicalUnitContext
+
+	if qTrimmed != "" {
+		unitQuery := `
+			SELECT iu.unit_code, iu.status, p.id, p.title, pv.id, COALESCE(pv.sku, ''), COALESCE(pv.size, ''), COALESCE(pv.color, '')
+			FROM inventory_units iu
+			JOIN product_variants pv ON pv.id = iu.product_variant_id
+			JOIN products p ON p.id = pv.product_id
+			WHERE iu.unit_code = $1 OR iu.unit_code = UPPER($1)
+			LIMIT 1
+		`
+		var uCode, uStatus, pTitle, pSku, pSize, pColor string
+		var pID, pvID uuid.UUID
+		err := r.db.QueryRow(ctx, unitQuery, qTrimmed).Scan(&uCode, &uStatus, &pID, &pTitle, &pvID, &pSku, &pSize, &pColor)
+		if err == nil {
+			var variantParts []string
+			if pSku != "" {
+				variantParts = append(variantParts, pSku)
+			}
+			if pSize != "" {
+				variantParts = append(variantParts, pSize)
+			}
+			if pColor != "" {
+				variantParts = append(variantParts, pColor)
+			}
+			vLabel := strings.Join(variantParts, " / ")
+
+			unitCtx = &PhysicalUnitContext{
+				UnitCode:     uCode,
+				Status:       uStatus,
+				StatusLabel:  FormatUnitStatus(uStatus),
+				ProductTitle: pTitle,
+				VariantLabel: vLabel,
+				SKU:          pSku,
+				ProductID:    pID,
+				VariantID:    pvID,
+			}
+		}
+	}
+
 	baseQuery := `
 		FROM inventory_items i
 		JOIN products p ON i.product_id = p.id
@@ -342,10 +401,16 @@ func (r *Repository) ListAdminInventoryRich(ctx context.Context, q, sellerId, so
 	args := []interface{}{}
 	argID := 1
 
-	if q != "" {
-		baseQuery += ` AND (p.title ILIKE $` + fmt.Sprintf("%d", argID) + ` OR pv.sku ILIKE $` + fmt.Sprintf("%d", argID+1) + `)`
-		args = append(args, "%"+q+"%", "%"+q+"%")
-		argID += 2
+	if qTrimmed != "" {
+		if unitCtx != nil {
+			baseQuery += ` AND (p.title ILIKE $` + fmt.Sprintf("%d", argID) + ` OR pv.sku ILIKE $` + fmt.Sprintf("%d", argID+1) + ` OR i.product_variant_id = $` + fmt.Sprintf("%d", argID+2) + `)`
+			args = append(args, "%"+qTrimmed+"%", "%"+qTrimmed+"%", unitCtx.VariantID)
+			argID += 3
+		} else {
+			baseQuery += ` AND (p.title ILIKE $` + fmt.Sprintf("%d", argID) + ` OR pv.sku ILIKE $` + fmt.Sprintf("%d", argID+1) + `)`
+			args = append(args, "%"+qTrimmed+"%", "%"+qTrimmed+"%")
+			argID += 2
+		}
 	}
 
 	if sellerId != "" {
@@ -368,7 +433,7 @@ func (r *Repository) ListAdminInventoryRich(ctx context.Context, q, sellerId, so
 	var totalCount int
 	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 
 	selectQuery := `
@@ -386,7 +451,7 @@ func (r *Repository) ListAdminInventoryRich(ctx context.Context, q, sellerId, so
 
 	rows, err := r.db.Query(ctx, selectQuery, args...)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 	defer rows.Close()
 
@@ -405,7 +470,7 @@ func (r *Repository) ListAdminInventoryRich(ctx context.Context, q, sellerId, so
 			&item.TotalStock, &item.ReservedStock, &cAt, &uAt,
 		)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, nil, err
 		}
 
 		item.AvailableStock = item.TotalStock - item.ReservedStock
@@ -440,7 +505,7 @@ func (r *Repository) ListAdminInventoryRich(ctx context.Context, q, sellerId, so
 		items = append(items, item)
 	}
 
-	return items, totalCount, nil
+	return items, totalCount, unitCtx, nil
 }
 
 func (r *Repository) GetAdminInventoryItemRich(ctx context.Context, id uuid.UUID) (*AdminInventoryItem, error) {

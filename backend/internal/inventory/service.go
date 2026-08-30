@@ -69,14 +69,14 @@ func (s *Service) getSellerForUser(ctx context.Context, userID uuid.UUID) (*sell
 // ---------------------------------------------------------
 
 func (s *Service) ListAdminInventory(ctx context.Context, q, sellerId, source string, lowStock bool, limit, offset int) (AdminInventoryListResponse, error) {
-	items, total, err := s.repo.ListAdminInventoryRich(ctx, q, sellerId, source, lowStock, limit, offset)
+	items, total, unitCtx, err := s.repo.ListAdminInventoryRich(ctx, q, sellerId, source, lowStock, limit, offset)
 	if err != nil {
 		return AdminInventoryListResponse{}, err
 	}
 	if items == nil {
 		items = []AdminInventoryItem{}
 	}
-	return AdminInventoryListResponse{Items: items, TotalCount: total}, nil
+	return AdminInventoryListResponse{Items: items, TotalCount: total, UnitContext: unitCtx}, nil
 }
 
 func (s *Service) GetAdminInventoryItem(ctx context.Context, id uuid.UUID) (AdminInventoryItem, error) {

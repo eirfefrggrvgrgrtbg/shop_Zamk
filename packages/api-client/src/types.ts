@@ -1146,6 +1146,23 @@ export interface AdminFulfillment {
   items: AdminFulfillmentItem[];
 }
 
+export interface PhysicalUnitContext {
+  unitCode: string;
+  status: string;
+  statusLabel: string;
+  productTitle: string;
+  variant: string;
+  sku: string;
+  productId: string;
+  variantId: string;
+}
+
+export interface AdminInventoryListResponse {
+  items: AdminInventoryItem[];
+  totalCount: number;
+  unitContext?: PhysicalUnitContext;
+}
+
 export interface AdminInventoryItem {
   id: string;
   productId: string;
