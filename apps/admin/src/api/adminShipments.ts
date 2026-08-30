@@ -1,13 +1,17 @@
 import {
   createAdminShipment as apiCreateAdminShipment,
   createAdminFulfillmentShipment as apiCreateAdminFulfillmentShipment,
+  deliverAdminShipment as apiDeliverAdminShipment,
   getAdminShipment as apiGetAdminShipment,
   getAdminShipments as apiGetAdminShipments,
   updateAdminShipmentStatus as apiUpdateAdminShipmentStatus,
   updateAdminOrderFulfillmentStatus as apiUpdateAdminOrderFulfillmentStatus,
 } from '@zamk/api-client/src/admin';
+import type { AdminShipmentDeliveryResult } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
 import type { AdminShipment } from '@zamk/api-client/src/types';
+
+export type { AdminShipmentDeliveryResult };
 
 export interface AdminShipmentView {
   id: string;
@@ -53,6 +57,10 @@ const shipmentStatuses = ['pending', 'assembling', 'packed', 'shipped', 'deliver
 const genericEditableShipmentStatuses = ['pending', 'assembling', 'packed', 'failed', 'cancelled'];
 
 export const getShipmentStatuses = (): string[] => shipmentStatuses;
+
+export const isShipmentEligibleForDelivery = (status: string): boolean => {
+  return status === 'shipped';
+};
 
 export const getGenericEditableShipmentStatuses = (currentStatus?: string): string[] => {
   if (currentStatus === 'shipped' || currentStatus === 'delivered') {
@@ -118,6 +126,43 @@ export const updateAdminShipmentStatus = async (id: string, input: ShipmentStatu
     trackingUrl: input.trackingUrl || undefined,
     comment: input.comment || undefined,
   });
+};
+
+export const deliverAdminShipment = async (id: string, data?: { comment?: string }): Promise<AdminShipmentDeliveryResult> => {
+  return apiDeliverAdminShipment(id, data);
+};
+
+export const getDeliveryErrorMessage = (error: unknown, fallback = 'Произошла ошибка при подтверждении доставки'): string => {
+  if (error instanceof ApiError) {
+    switch (error.code) {
+      case 'shipment_not_found':
+        return 'Отправление не найдено';
+      case 'shipment_not_linked_to_fulfillment':
+        return 'Отправление не привязано к сборке';
+      case 'shipment_already_delivered':
+        return 'Отправление уже отмечено как доставленное';
+      case 'delivery_not_allowed':
+        return 'Доставка недоступна: отправление должно быть в статусе «Отгружен»';
+      case 'fulfillment_not_shipped':
+        return 'Связанная сборка не находится в статусе «Отгружен»';
+      case 'contradictory_shipment_state':
+        return 'Состояние отправления противоречит статусу заказа или сборки';
+      case 'order_cancelled':
+        return 'Заказ отменен';
+      case 'fulfillment_not_found':
+        return 'Сборка заказа не найдена';
+      default:
+        if (error.status === 403) return 'Недостаточно прав для подтверждения доставки';
+        if (error.status === 404) return 'Отправление не найдено';
+        if (error.status === 409) return error.message || 'Конфликт состояния при подтверждении доставки';
+        if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
+        return error.message || fallback;
+    }
+  }
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+  return fallback;
 };
 
 export const getAdminShipmentErrorMessage = (error: unknown, fallback: string): string => {

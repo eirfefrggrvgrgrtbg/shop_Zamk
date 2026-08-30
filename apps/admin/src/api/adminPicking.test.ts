@@ -14,7 +14,13 @@ import {
   PackResult,
   DispatchResult,
 } from './adminPicking';
-import { getGenericEditableShipmentStatuses, getShipmentStatusLabel } from './adminShipments';
+import {
+  deliverAdminShipment,
+  getDeliveryErrorMessage,
+  getGenericEditableShipmentStatuses,
+  getShipmentStatusLabel,
+  isShipmentEligibleForDelivery,
+} from './adminShipments';
 
 async function runTests() {
   console.log('--- Running adminPicking tests ---');
@@ -860,6 +866,137 @@ async function runTests() {
     }
 
     console.log('✓ Admin Order Detail operational timeline tests passed.');
+
+    // 12. Testing Admin Delivery UI logic, error mappers, API integration, and eligibility
+    console.log('12. Testing Admin Delivery UI logic, error mappers, API integration, and eligibility...');
+
+    // 12.1 Testing isShipmentEligibleForDelivery (shipped -> delivery CTA visible, non-shipped -> no delivery CTA)
+    assert.strictEqual(isShipmentEligibleForDelivery('shipped'), true, 'shipped status must be eligible for delivery CTA');
+    for (const nonShippedStatus of ['pending', 'assembling', 'packed', 'delivered', 'failed', 'cancelled', 'unknown', '']) {
+      assert.strictEqual(
+        isShipmentEligibleForDelivery(nonShippedStatus),
+        false,
+        `status ${nonShippedStatus} must NOT be eligible for delivery CTA`
+      );
+    }
+
+    // 12.2 Testing getDeliveryErrorMessage mapping for all canonical backend error codes
+    const deliveryErrorCases = [
+      { code: 'shipment_not_found', expected: 'Отправление не найдено' },
+      { code: 'shipment_not_linked_to_fulfillment', expected: 'Отправление не привязано к сборке' },
+      { code: 'shipment_already_delivered', expected: 'Отправление уже отмечено как доставленное' },
+      { code: 'delivery_not_allowed', expected: 'Доставка недоступна: отправление должно быть в статусе «Отгружен»' },
+      { code: 'fulfillment_not_shipped', expected: 'Связанная сборка не находится в статусе «Отгружен»' },
+      { code: 'contradictory_shipment_state', expected: 'Состояние отправления противоречит статусу заказа или сборки' },
+      { code: 'order_cancelled', expected: 'Заказ отменен' },
+      { code: 'fulfillment_not_found', expected: 'Сборка заказа не найдена' },
+    ];
+
+    for (const tc of deliveryErrorCases) {
+      const err = new ApiError('Raw backend error', tc.code, 409);
+      assert.strictEqual(
+        getDeliveryErrorMessage(err),
+        tc.expected,
+        `Error code ${tc.code} did not produce expected Russian message`
+      );
+    }
+
+    // 403 Forbidden check
+    const delivErr403 = new ApiError('Forbidden', 'forbidden', 403);
+    assert.strictEqual(getDeliveryErrorMessage(delivErr403), 'Недостаточно прав для подтверждения доставки');
+
+    // 404 Not Found check
+    const delivErr404 = new ApiError('Not found', 'not_found', 404);
+    assert.strictEqual(getDeliveryErrorMessage(delivErr404), 'Отправление не найдено');
+
+    // Network error check
+    const delivNetErr = new ApiError('Network failure', 'NETWORK_ERROR', 0);
+    assert.strictEqual(
+      getDeliveryErrorMessage(delivNetErr),
+      'Не удалось подключиться к серверу. Проверьте, запущен ли backend.'
+    );
+
+    // Generic Error check
+    const delivGenericErr = new Error('Custom exception');
+    assert.strictEqual(getDeliveryErrorMessage(delivGenericErr), 'Custom exception');
+    assert.strictEqual(getDeliveryErrorMessage(null), 'Произошла ошибка при подтверждении доставки');
+
+    // 12.3 Mock Fetch: successful POST /api/admin/shipments/{id}/deliver
+    (global as any).fetch = async (url: string, options: any) => {
+      assert(url.includes('/admin/shipments/ship-123/deliver'));
+      assert.strictEqual(options.method, 'POST');
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          shipment_id: 'ship-123',
+          fulfillment_id: 'fulf-123',
+          order_id: 'ord-123',
+          shipment_status: 'delivered',
+          fulfillment_status: 'delivered',
+          order_status: 'delivered',
+          delivered_at: '2026-08-30T10:00:00Z',
+        }),
+      };
+    };
+
+    const deliveryResult = await deliverAdminShipment('ship-123');
+    assert.strictEqual(deliveryResult.shipmentId, 'ship-123');
+    assert.strictEqual(deliveryResult.fulfillmentId, 'fulf-123');
+    assert.strictEqual(deliveryResult.orderId, 'ord-123');
+    assert.strictEqual(deliveryResult.shipmentStatus, 'delivered');
+    assert.strictEqual(deliveryResult.fulfillmentStatus, 'delivered');
+    assert.strictEqual(deliveryResult.orderStatus, 'delivered');
+    assert.strictEqual(deliveryResult.deliveredAt, '2026-08-30T10:00:00Z');
+
+    // 12.4 Mock Fetch: already delivered conflict error (409 shipment_already_delivered)
+    (global as any).fetch = async (_url: string, _options: any) => {
+      return {
+        ok: false,
+        status: 409,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          error: {
+            code: 'shipment_already_delivered',
+            message: 'shipment is already delivered',
+          },
+        }),
+      };
+    };
+
+    let conflictErr: any = null;
+    try {
+      await deliverAdminShipment('ship-123');
+    } catch (err: any) {
+      conflictErr = err;
+    }
+    assert(conflictErr instanceof ApiError);
+    assert.strictEqual(conflictErr.code, 'shipment_already_delivered');
+    assert.strictEqual(conflictErr.status, 409);
+    assert.strictEqual(getDeliveryErrorMessage(conflictErr), 'Отправление уже отмечено как доставленное');
+
+    // 12.5 Generic status dropdown verification: delivered cannot be bypassed
+    const deliveredGenericStatuses = getGenericEditableShipmentStatuses('delivered');
+    assert.deepStrictEqual(
+      deliveredGenericStatuses,
+      ['delivered'],
+      'delivered shipment status dropdown cannot transition to other generic statuses'
+    );
+
+    const pendingShipmentStatuses = getGenericEditableShipmentStatuses('pending');
+    assert(
+      !pendingShipmentStatuses.includes('delivered'),
+      'generic editable statuses for pending must NOT contain delivered'
+    );
+
+    const packedShipmentStatuses = getGenericEditableShipmentStatuses('packed');
+    assert(
+      !packedShipmentStatuses.includes('delivered'),
+      'generic editable statuses for packed must NOT contain delivered'
+    );
+
+    console.log('✓ All Admin Delivery UI and API integration tests passed.');
   } finally {
     global.fetch = originalFetch;
   }

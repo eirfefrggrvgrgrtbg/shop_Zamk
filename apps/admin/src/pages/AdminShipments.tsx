@@ -9,13 +9,17 @@ import {
   RefreshCw,
   CheckCircle2,
   ChevronRight,
+  X,
 } from 'lucide-react';
 import {
+  deliverAdminShipment,
   getAdminShipment,
   getAdminShipmentErrorMessage,
   getAdminShipments,
+  getDeliveryErrorMessage,
   getGenericEditableShipmentStatuses,
   getShipmentStatusLabel,
+  isShipmentEligibleForDelivery,
   updateAdminShipmentStatus,
 } from '../api/adminShipments';
 import type { AdminShipmentView } from '../api/adminShipments';
@@ -32,6 +36,11 @@ export function AdminShipments() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const [deliveryTarget, setDeliveryTarget] = useState<AdminShipmentView | null>(null);
+  const [isDelivering, setIsDelivering] = useState(false);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
 
   const [carrier, setCarrier] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
@@ -101,6 +110,27 @@ export function AdminShipments() {
     }
   };
 
+  const handleConfirmDelivery = async () => {
+    if (!deliveryTarget) return;
+    try {
+      setIsDelivering(true);
+      setDeliveryError(null);
+      setSuccessMessage(null);
+      await deliverAdminShipment(deliveryTarget.id);
+      const targetId = deliveryTarget.id;
+      setDeliveryTarget(null);
+      setSuccessMessage(`Отправление ${targetId.substring(0, 8)}... успешно доставлено.`);
+      await fetchData();
+      if (selectedShipment?.id === targetId) {
+        await fetchShipmentDetail(targetId);
+      }
+    } catch (err: unknown) {
+      setDeliveryError(getDeliveryErrorMessage(err, 'Не удалось подтвердить доставку.'));
+    } finally {
+      setIsDelivering(false);
+    }
+  };
+
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case 'delivered':
@@ -148,6 +178,21 @@ export function AdminShipments() {
           Обновить данные
         </button>
       </div>
+
+      {successMessage && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center justify-between shadow-sm animate-in fade-in">
+          <div className="flex items-center">
+            <CheckCircle2 className="h-5 w-5 mr-2 shrink-0 text-emerald-600" />
+            <span className="text-sm font-medium">{successMessage}</span>
+          </div>
+          <button
+            onClick={() => setSuccessMessage(null)}
+            className="text-emerald-600 hover:text-emerald-800 p-1 rounded-lg transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center shadow-sm">
@@ -384,6 +429,21 @@ export function AdminShipments() {
                         {formatDate(shipment.shippedAt)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-xs font-medium space-x-3">
+                        {isShipmentEligibleForDelivery(shipment.status) && (
+                          <PermissionGuard permission="shipments.update_status">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeliveryTarget(shipment);
+                                setDeliveryError(null);
+                              }}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-xs text-xs"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Подтвердить доставку</span>
+                            </button>
+                          </PermissionGuard>
+                        )}
                         {shipment.fulfillmentId && (
                           <Link
                             to={`/fulfillment/dispatch/${shipment.fulfillmentId}`}
@@ -425,28 +485,55 @@ export function AdminShipments() {
           </div>
 
           {selectedShipment.fulfillmentId && (
-            <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+              selectedShipment.status === 'delivered'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-blue-50 border-blue-200 text-blue-900'
+            }`}>
               <div>
                 <strong className="block text-sm font-bold text-gray-900">
-                  {selectedShipment.status === 'shipped'
+                  {selectedShipment.status === 'delivered'
+                    ? 'Отправление доставлено покупателю'
+                    : selectedShipment.status === 'shipped'
                     ? 'Сборка отгружена со склада'
                     : 'Физическая отгрузка сборки'}
                 </strong>
                 <span>
-                  {selectedShipment.status === 'shipped'
-                    ? 'Сборка переведена в статус «Отгружен» и передана в доставку.'
+                  {selectedShipment.status === 'delivered'
+                    ? 'Заказ успешно вручен получателю.'
+                    : selectedShipment.status === 'shipped'
+                    ? 'Сборка переведена в статус «Отгружен» и находится в пути к покупателю.'
                     : 'Списание складских остатков и физическая передача товаров выполняются через процесс отгрузки сборки.'}
                 </span>
               </div>
-              <Link
-                to={`/fulfillment/dispatch/${selectedShipment.fulfillmentId}`}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shrink-0 transition-colors shadow-sm"
-              >
-                <Truck className="w-3.5 h-3.5" />
-                <span>
-                  {selectedShipment.status === 'shipped' ? 'Карточка отгрузки' : 'Перейти к отгрузке'}
-                </span>
-              </Link>
+              <div className="flex items-center gap-2 shrink-0">
+                {selectedShipment.status === 'shipped' && (
+                  <PermissionGuard permission="shipments.update_status">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeliveryTarget(selectedShipment);
+                        setDeliveryError(null);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-colors shadow-sm text-xs"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Подтвердить доставку</span>
+                    </button>
+                  </PermissionGuard>
+                )}
+                <Link
+                  to={`/fulfillment/dispatch/${selectedShipment.fulfillmentId}`}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-colors shadow-sm"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>
+                    {selectedShipment.status === 'shipped' || selectedShipment.status === 'delivered'
+                      ? 'Карточка отгрузки'
+                      : 'Перейти к отгрузке'}
+                  </span>
+                </Link>
+              </div>
             </div>
           )}
 
@@ -565,6 +652,113 @@ export function AdminShipments() {
               </div>
             </form>
           </PermissionGuard>
+        </div>
+      )}
+
+      {/* Confirmation Modal for Delivery */}
+      {deliveryTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 border border-gray-100">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Подтвердить доставку?</h3>
+                  <p className="text-xs text-gray-500">
+                    Отправление #{deliveryTarget.id.substring(0, 8)}...
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isDelivering) {
+                    setDeliveryTarget(null);
+                    setDeliveryError(null);
+                  }
+                }}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                Отметить отправление как доставленное покупателю?
+              </p>
+
+              <dl className="grid grid-cols-2 gap-2 p-3.5 bg-gray-50 rounded-xl text-xs">
+                <div>
+                  <dt className="text-gray-400 font-medium">Заказ</dt>
+                  <dd className="font-semibold text-gray-900 truncate mt-0.5">
+                    {deliveryTarget.orderId ? `${deliveryTarget.orderId.substring(0, 8)}...` : '—'}
+                  </dd>
+                </div>
+                {deliveryTarget.fulfillmentId && (
+                  <div>
+                    <dt className="text-gray-400 font-medium">Сборка</dt>
+                    <dd className="font-semibold text-gray-900 truncate mt-0.5">
+                      {deliveryTarget.fulfillmentId.substring(0, 8)}...
+                    </dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="text-gray-400 font-medium">Служба доставки</dt>
+                  <dd className="font-semibold text-gray-900 mt-0.5">
+                    {deliveryTarget.carrier || '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-400 font-medium">Номер отслеживания</dt>
+                  <dd className="font-semibold text-gray-900 truncate mt-0.5">
+                    {deliveryTarget.trackingNumber || '—'}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            {deliveryError && (
+              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center gap-2.5 text-xs font-medium">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{deliveryError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeliveryTarget(null);
+                  setDeliveryError(null);
+                }}
+                disabled={isDelivering}
+                className="px-4 py-2.5 rounded-xl border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelivery}
+                disabled={isDelivering}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white transition-colors shadow-sm disabled:opacity-50"
+              >
+                {isDelivering ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Подтверждение...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Подтвердить доставку</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

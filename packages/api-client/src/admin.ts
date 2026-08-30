@@ -477,6 +477,29 @@ export const updateAdminShipmentStatus = async (id: string, data: { status: stri
   return request<void>('PATCH', `/admin/shipments/${id}/status`, { body: data });
 };
 
+export interface AdminShipmentDeliveryResult {
+  shipmentId: string;
+  fulfillmentId: string;
+  orderId: string;
+  shipmentStatus: string;
+  fulfillmentStatus: string;
+  orderStatus: string;
+  deliveredAt: string;
+}
+
+export const deliverAdminShipment = async (id: string, data?: { comment?: string }): Promise<AdminShipmentDeliveryResult> => {
+  const res = await request<any>('POST', `/admin/shipments/${id}/deliver`, { body: data || {} });
+  return {
+    shipmentId: res.shipment_id || res.shipmentId,
+    fulfillmentId: res.fulfillment_id || res.fulfillmentId,
+    orderId: res.order_id || res.orderId,
+    shipmentStatus: res.shipment_status || res.shipmentStatus,
+    fulfillmentStatus: res.fulfillment_status || res.fulfillmentStatus,
+    orderStatus: res.order_status || res.orderStatus,
+    deliveredAt: res.delivered_at || res.deliveredAt,
+  };
+};
+
 export const getAdminReturns = async (): Promise<{ items: AdminReturn[]; totalCount: number }> => {
   const res = await request<any>('GET', '/admin/returns');
   return { ...res, items: res?.items || [] };
