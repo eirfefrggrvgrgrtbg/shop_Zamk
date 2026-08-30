@@ -1,31 +1,50 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertCircle, RotateCcw } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  FileText,
+  Image as ImageIcon,
+  Package,
+  RotateCcw,
+  User,
+  X,
+  XCircle,
+} from 'lucide-react';
 import { SellerContextBanner } from '../components/SellerContextBanner';
 import {
-  createAdminRefund,
+  approveAdminReturn,
   getAdminReturn,
   getAdminReturnErrorMessage,
   getAdminReturns,
+  getReturnReasonLabel,
   getReturnStatusLabel,
-  getReturnStatusTargets,
-  updateAdminReturnStatus,
+  getStatusBadgeClass,
+  rejectAdminReturn,
 } from '../api/adminReturns';
-import type { AdminReturnView } from '../api/adminReturns';
+import type { AdminReturn, AdminReturnItem } from '../api/adminReturns';
 import { PermissionGuard } from '../components/PermissionGuard';
 
 export function AdminReturns() {
-  const [returns, setReturns] = useState<AdminReturnView[]>([]);
-  const [selectedReturn, setSelectedReturn] = useState<AdminReturnView | null>(null);
+  const [returns, setReturns] = useState<AdminReturn[]>([]);
+  const [selectedReturn, setSelectedReturn] = useState<AdminReturn | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [statusDraft, setStatusDraft] = useState('');
-  const [adminComment, setAdminComment] = useState('');
-  const [itemRestock, setItemRestock] = useState<Record<string, boolean>>({});
-  const [refundReason, setRefundReason] = useState('');
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Modals state
+  const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+
+  const [searchParams] = useSearchParams();
+  const sellerId = searchParams.get('sellerId');
 
   const fetchReturns = async () => {
     try {
@@ -46,9 +65,6 @@ export function AdminReturns() {
       setError(null);
       const detail = await getAdminReturn(id);
       setSelectedReturn(detail);
-      setStatusDraft('');
-      setAdminComment('');
-      setRefundReason('');
     } catch (err: unknown) {
       setError(getAdminReturnErrorMessage(err, 'Не удалось загрузить детали возврата.'));
     } finally {
@@ -60,242 +76,703 @@ export function AdminReturns() {
     fetchReturns();
   }, []);
 
-  const handleStatusUpdate = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!selectedReturn || !statusDraft) return;
-
-    try {
-      setIsSubmitting(true);
-      setError(null);
-      setSuccess(null);
-      await updateAdminReturnStatus(selectedReturn.id, {
-        status: statusDraft,
-        adminComment: adminComment || undefined,
-        itemRestock: selectedReturn.items.map(item => ({
-          returnItemId: item.id,
-          restock: itemRestock[item.id] ?? false
-        }))
-      });
-      await fetchReturns();
-      await fetchReturnDetail(selectedReturn.id);
-      setSuccess('Статус возврата обновлён.');
-    } catch (err: unknown) {
-      setError(getAdminReturnErrorMessage(err, 'Не удалось обновить статус возврата.'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCreateRefund = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const handleApprove = async () => {
     if (!selectedReturn) return;
-    if (!window.confirm('Создать возмещение для этого возврата? Бэкенд рассчитает сумму.')) return;
-
     try {
       setIsSubmitting(true);
       setError(null);
       setSuccess(null);
-      await createAdminRefund(selectedReturn.id, refundReason);
+      await approveAdminReturn(selectedReturn.id);
       await fetchReturns();
       await fetchReturnDetail(selectedReturn.id);
-      setSuccess('Возмещение создано бэкендом.');
+      setIsApproveModalOpen(false);
+      setSuccess('Возврат успешно одобрен.');
     } catch (err: unknown) {
-      setError(getAdminReturnErrorMessage(err, 'Не удалось создать возмещение.'));
+      setError(getAdminReturnErrorMessage(err, 'Не удалось одобрить возврат.'));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case 'completed':
-      case 'refunded':
-        return 'bg-green-100 text-green-800';
-      case 'approved':
-      case 'item_received':
-        return 'bg-blue-100 text-blue-800';
-      case 'rejected':
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-yellow-100 text-yellow-800';
+  const handleReject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedReturn || !rejectReason.trim()) return;
+    try {
+      setIsSubmitting(true);
+      setError(null);
+      setSuccess(null);
+      await rejectAdminReturn(selectedReturn.id, rejectReason.trim());
+      await fetchReturns();
+      await fetchReturnDetail(selectedReturn.id);
+      setIsRejectModalOpen(false);
+      setRejectReason('');
+      setSuccess('Заявка на возврат отклонена.');
+    } catch (err: unknown) {
+      setError(getAdminReturnErrorMessage(err, 'Не удалось отклонить возврат.'));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString('ru-RU') : '-';
+  const formatDate = (value?: string) => {
+    if (!value) return '—';
+    const d = new Date(value);
+    return d.toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
 
-  const [searchParams] = useSearchParams();
-  const sellerId = searchParams.get('sellerId');
+  const formatPrice = (cents?: number) => {
+    if (cents === undefined || cents === null) return '—';
+    return (cents / 100).toLocaleString('ru-RU', {
+      style: 'currency',
+      currency: 'RUB',
+      maximumFractionDigits: 0,
+    });
+  };
 
-  const filteredReturns = sellerId ? returns.filter(r => (r as any).sellerId === sellerId) : returns;
+  const filteredReturns = sellerId
+    ? returns.filter((r) => r.sellerId === sellerId)
+    : returns;
+
+  // Flatten evidence across all items in selected return
+  const allEvidence = (selectedReturn?.items || []).flatMap((item) => item.evidence || []);
 
   return (
     <PermissionGuard permission="returns.read">
       <div className="space-y-6">
         <SellerContextBanner />
-        <div className="sm:flex sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Возвраты</h1>
-        </div>
 
         {error && (
-          <div className="p-4 bg-red-50 text-red-700 rounded-md flex items-center">
-            <AlertCircle className="h-5 w-5 mr-2" />
-            {error}
+          <div className="p-4 bg-red-50 text-red-700 rounded-lg flex items-center border border-red-200 shadow-sm">
+            <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+            <span>{error}</span>
           </div>
         )}
-        {success && <div className="p-4 bg-green-50 text-green-700 rounded-md">{success}</div>}
+        {success && (
+          <div className="p-4 bg-green-50 text-green-700 rounded-lg flex items-center border border-green-200 shadow-sm">
+            <CheckCircle2 className="h-5 w-5 mr-2 flex-shrink-0" />
+            <span>{success}</span>
+          </div>
+        )}
 
-        {isLoading ? (
-          <div className="text-center py-10">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-2 text-sm text-gray-500">Загрузка возвратов...</p>
-          </div>
-        ) : filteredReturns.length === 0 ? (
-          <div className="text-center py-10 bg-white rounded-lg shadow">
-            <RotateCcw className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Возвратов нет</h3>
-            <p className="mt-1 text-sm text-gray-500">Заявок на возврат пока нет.</p>
-          </div>
-        ) : (
-          <div className="flex flex-col">
-            <div className="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-              <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
-                <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID возврата</th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID заказа</th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Покупатель</th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Причина</th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
-                        <th scope="col" className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredReturns.map((req) => (
-                        <tr key={req.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {req.id}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {req.orderId}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {req.customerName || req.userId || '-'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {req.reason}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(req.status)}`}>
-                              {req.statusLabel}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button onClick={() => fetchReturnDetail(req.id)} className="text-indigo-600 hover:text-indigo-900">Открыть</button>
-                          </td>
-                        </tr>
+        {/* ------------------------------------------------------------------ */}
+        {/* DOSSIER / CLAIM REVIEW VIEW                                        */}
+        {/* ------------------------------------------------------------------ */}
+        {selectedReturn ? (
+          <div className="space-y-6">
+            {/* Dossier Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white p-5 rounded-xl border border-gray-200 shadow-sm gap-4">
+              <div className="flex items-center space-x-4">
+                <button
+                  type="button"
+                  onClick={() => setSelectedReturn(null)}
+                  className="inline-flex items-center text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-1.5" />
+                  Назад к списку
+                </button>
+                <div>
+                  <div className="flex items-center space-x-3">
+                    <h1 className="text-xl font-bold text-gray-900">Заявка на возврат</h1>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getStatusBadgeClass(
+                        selectedReturn.status
+                      )}`}
+                    >
+                      {getReturnStatusLabel(selectedReturn.status)}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    Заказ{' '}
+                    <span className="font-semibold text-gray-700">
+                      {selectedReturn.orderNumber || selectedReturn.orderId}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              {isDetailLoading && <span className="text-sm text-gray-500">Обновление...</span>}
+            </div>
+
+            {/* Dossier Body: 2 Columns */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left Column: Product, Claim & Evidence (2 cols wide on desktop) */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* A. Product Card */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
+                  <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
+                    <Package className="h-5 w-5 text-gray-500" />
+                    <h2 className="text-base font-semibold text-gray-900">Товары к возврату</h2>
+                  </div>
+
+                  {!selectedReturn.items || selectedReturn.items.length === 0 ? (
+                    <p className="text-sm text-gray-500">Нет позиций</p>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {selectedReturn.items.map((item: AdminReturnItem) => (
+                        <div key={item.id} className="py-3 first:pt-0 last:pb-0 flex items-start space-x-4">
+                          <div className="w-16 h-16 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                            {item.productImageUrl ? (
+                              <img
+                                src={item.productImageUrl}
+                                alt={item.productTitle || ''}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <ImageIcon className="h-6 w-6 text-gray-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-sm font-semibold text-gray-900 truncate">
+                              {item.productTitle || 'Товар'}
+                            </h3>
+                            <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-2">
+                              {item.variantSize && <span>Размер: <span className="font-medium text-gray-700">{item.variantSize}</span></span>}
+                              {item.variantColor && <span>Цвет: <span className="font-medium text-gray-700">{item.variantColor}</span></span>}
+                              {item.sku && <span>Артикул: <span className="font-mono text-gray-700">{item.sku}</span></span>}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Количество: <span className="font-medium text-gray-900">{item.quantity} шт.</span>
+                              {item.priceCents > 0 && (
+                                <span className="ml-3">
+                                  Цена: <span className="font-medium text-gray-900">{formatPrice(item.priceCents)}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  )}
+
+                  {selectedReturn.sellerName && (
+                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                      <span>Продавец: <span className="font-medium text-gray-700">{selectedReturn.sellerName}</span></span>
+                    </div>
+                  )}
+                </div>
+
+                {/* B. Customer Claim Details */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
+                  <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
+                    <FileText className="h-5 w-5 text-gray-500" />
+                    <h2 className="text-base font-semibold text-gray-900">Претензия покупателя</h2>
+                  </div>
+
+                  <div>
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Причина возврата</span>
+                    <p className="mt-1 text-base font-semibold text-gray-900">
+                      {getReturnReasonLabel(selectedReturn.reason)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Комментарий покупателя</span>
+                    <div className="mt-1.5 p-3.5 bg-gray-50 rounded-lg border border-gray-200 text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                      {selectedReturn.comment || <span className="text-gray-400 italic">Комментарий не указан</span>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* C. Evidence Photos Gallery */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                    <div className="flex items-center space-x-2">
+                      <ImageIcon className="h-5 w-5 text-gray-500" />
+                      <h2 className="text-base font-semibold text-gray-900">Фотографии покупателя</h2>
+                    </div>
+                    <span className="text-xs text-gray-500 font-medium">
+                      {allEvidence.length} {allEvidence.length === 1 ? 'фотография' : 'фото'}
+                    </span>
+                  </div>
+
+                  {allEvidence.length === 0 ? (
+                    <div className="py-6 text-center text-sm text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                      Фотографии не приложены
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      {allEvidence.map((ev, index) => (
+                        <button
+                          key={ev.id}
+                          type="button"
+                          onClick={() => setPreviewImageUrl(ev.url)}
+                          className="group relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100 hover:ring-2 hover:ring-indigo-500 focus:outline-none transition-all"
+                        >
+                          <img
+                            src={ev.url}
+                            alt={`Фото доказательства ${index + 1}`}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                          />
+                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                            <ExternalLink className="h-5 w-5" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Order/Customer Context & Moderation Decisions */}
+              <div className="space-y-6">
+                {/* D. Order & Customer Context */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
+                  <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
+                    <User className="h-5 w-5 text-gray-500" />
+                    <h2 className="text-base font-semibold text-gray-900">Заказ и покупатель</h2>
+                  </div>
+
+                  <dl className="space-y-3 text-sm">
+                    <div>
+                      <dt className="text-xs text-gray-500">Номер заказа</dt>
+                      <dd className="font-semibold text-gray-900">
+                        {selectedReturn.orderNumber || selectedReturn.orderId}
+                      </dd>
+                    </div>
+
+                    <div>
+                      <dt className="text-xs text-gray-500">Покупатель</dt>
+                      <dd className="font-medium text-gray-900">
+                        {selectedReturn.customerName || 'Покупатель'}
+                      </dd>
+                    </div>
+
+                    {selectedReturn.customerEmail && (
+                      <div>
+                        <dt className="text-xs text-gray-500">Email</dt>
+                        <dd className="text-gray-800 font-mono text-xs">{selectedReturn.customerEmail}</dd>
+                      </div>
+                    )}
+
+                    {selectedReturn.customerPhone && (
+                      <div>
+                        <dt className="text-xs text-gray-500">Телефон</dt>
+                        <dd className="text-gray-800">{selectedReturn.customerPhone}</dd>
+                      </div>
+                    )}
+
+                    {selectedReturn.deliveredAt && (
+                      <div>
+                        <dt className="text-xs text-gray-500">Дата доставки заказа</dt>
+                        <dd className="text-gray-800">{formatDate(selectedReturn.deliveredAt)}</dd>
+                      </div>
+                    )}
+
+                    <div>
+                      <dt className="text-xs text-gray-500">Дата создания заявки</dt>
+                      <dd className="text-gray-800">{formatDate(selectedReturn.createdAt)}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                {/* E. Moderation Actions / Status Box */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
+                  <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
+                    <Clock className="h-5 w-5 text-gray-500" />
+                    <h2 className="text-base font-semibold text-gray-900">Решение по заявке</h2>
+                  </div>
+
+                  {/* For requested status: Action Buttons */}
+                  {selectedReturn.status === 'requested' && (
+                    <PermissionGuard
+                      permission="returns.update_status"
+                      fallback={<p className="text-sm text-gray-500">У вас нет прав для модерации возвратов.</p>}
+                    >
+                      <div className="space-y-3 pt-1">
+                        <p className="text-xs text-gray-500">
+                          Ознакомьтесь с причиной и фотографиями перед принятием решения.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsApproveModalOpen(true)}
+                          disabled={isSubmitting}
+                          className="w-full inline-flex items-center justify-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          Одобрить возврат
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsRejectModalOpen(true)}
+                          disabled={isSubmitting}
+                          className="w-full inline-flex items-center justify-center px-4 py-2.5 bg-white hover:bg-red-50 text-red-700 text-sm font-semibold rounded-lg border border-red-300 shadow-sm transition-colors disabled:opacity-50"
+                        >
+                          <XCircle className="h-4 w-4 mr-2" />
+                          Отклонить заявку
+                        </button>
+                      </div>
+                    </PermissionGuard>
+                  )}
+
+                  {/* Read-Only Status States */}
+                  {selectedReturn.status === 'approved' && (
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 space-y-2">
+                      <div className="flex items-center space-x-2 font-semibold">
+                        <CheckCircle2 className="h-5 w-5 text-blue-600" />
+                        <span>Возврат одобрен</span>
+                      </div>
+                      <p className="text-xs text-blue-700">Ожидает приёмки на складе.</p>
+                      {selectedReturn.approvedAt && (
+                        <p className="text-xs text-blue-500 pt-1">
+                          Одобрено: {formatDate(selectedReturn.approvedAt)}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedReturn.status === 'rejected' && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-900 space-y-2">
+                      <div className="flex items-center space-x-2 font-semibold">
+                        <XCircle className="h-5 w-5 text-red-600" />
+                        <span>Заявка отклонена</span>
+                      </div>
+                      {selectedReturn.adminComment && (
+                        <div>
+                          <span className="text-xs font-medium text-red-700 block">Причина отказа:</span>
+                          <p className="text-xs text-red-800 mt-0.5 whitespace-pre-wrap">{selectedReturn.adminComment}</p>
+                        </div>
+                      )}
+                      {selectedReturn.rejectedAt && (
+                        <p className="text-xs text-red-500 pt-1">
+                          Отклонено: {formatDate(selectedReturn.rejectedAt)}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedReturn.status === 'receiving' && (
+                    <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-900 space-y-1">
+                      <div className="font-semibold">Идёт приёмка на складе</div>
+                      <p className="text-xs text-purple-700">Товары сканируются на складе.</p>
+                    </div>
+                  )}
+
+                  {selectedReturn.status === 'item_received' && (
+                    <div className="p-4 bg-teal-50 border border-teal-200 rounded-lg text-sm text-teal-900 space-y-1">
+                      <div className="font-semibold">Товар принят на складе</div>
+                      <p className="text-xs text-teal-700">Приёмка завершена сотрудником склада.</p>
+                    </div>
+                  )}
+
+                  {selectedReturn.status === 'refunded' && (
+                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-900 space-y-1">
+                      <div className="font-semibold">Деньги возвращены</div>
+                      <p className="text-xs text-green-700">Возмещение средств покупателю выполнено.</p>
+                    </div>
+                  )}
+
+                  {selectedReturn.status === 'completed' && (
+                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-900 space-y-1">
+                      <div className="font-semibold">Возврат завершён</div>
+                      <p className="text-xs text-green-700">Все операции по возврату успешно закрыты.</p>
+                      {selectedReturn.completedAt && (
+                        <p className="text-xs text-green-600 pt-1">
+                          Завершено: {formatDate(selectedReturn.completedAt)}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedReturn.status === 'cancelled' && (
+                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 space-y-1">
+                      <div className="font-semibold">Заявка отменена</div>
+                      <p className="text-xs text-gray-600">Заявка на возврат была отменена покупателем.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
-        )}
-
-      {selectedReturn && (
-        <div className="bg-white shadow sm:rounded-lg p-6">
-          <div className="sm:flex sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-lg font-medium text-gray-900">Детали возврата</h2>
-              <p className="mt-1 text-sm text-gray-500">{selectedReturn.id}</p>
+        ) : (
+          /* ------------------------------------------------------------------ */
+          /* RETURNS LIST VIEW                                                  */
+          /* ------------------------------------------------------------------ */
+          <div className="space-y-4">
+            <div className="sm:flex sm:items-center sm:justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Возвраты</h1>
+                <p className="text-sm text-gray-500 mt-1">
+                  Модерация претензий покупателей и контроль возвратов
+                </p>
+              </div>
             </div>
-            {isDetailLoading && <span className="text-sm text-gray-500">Загрузка...</span>}
-          </div>
 
-          <dl className="mt-4 grid gap-4 md:grid-cols-4">
-            <div><dt className="text-sm font-medium text-gray-500">Заказ</dt><dd className="mt-1 text-sm text-gray-900">{selectedReturn.orderId}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Статус</dt><dd className="mt-1 text-sm text-gray-900">{selectedReturn.statusLabel}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Причина</dt><dd className="mt-1 text-sm text-gray-900">{selectedReturn.reason || '—'}</dd></div>
-            <div><dt className="text-sm font-medium text-gray-500">Создан</dt><dd className="mt-1 text-sm text-gray-900">{formatDate(selectedReturn.createdAt)}</dd></div>
-          </dl>
-
-          <div className="mt-6">
-            <h3 className="text-sm font-medium text-gray-700">Позиции</h3>
-            {!selectedReturn.items || selectedReturn.items.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500">Нет данных</p>
+            {isLoading ? (
+              <div className="text-center py-16 bg-white rounded-xl border border-gray-200 shadow-sm">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+                <p className="mt-2 text-sm text-gray-500">Загрузка возвратов...</p>
+              </div>
+            ) : filteredReturns.length === 0 ? (
+              <div className="text-center py-16 bg-white rounded-xl border border-gray-200 shadow-sm">
+                <RotateCcw className="mx-auto h-12 w-12 text-gray-300" />
+                <h3 className="mt-2 text-base font-semibold text-gray-900">Возвратов нет</h3>
+                <p className="mt-1 text-sm text-gray-500">Заявок на возврат пока нет.</p>
+              </div>
             ) : (
-              <div className="mt-2 overflow-hidden border border-gray-200 sm:rounded-lg">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <tbody className="divide-y divide-gray-200 bg-white">
-                    {(selectedReturn.items || []).map((item) => (
-                      <tr key={item.id}>
-                        <td className="px-4 py-2 text-sm text-gray-900">{item.productTitle || item.orderItemId}</td>
-                        <td className="px-4 py-2 text-sm text-gray-500">x{item.quantity}</td>
-                        <td className="px-4 py-2 text-sm text-gray-500">{item.reason || '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-500">{item.condition || '-'}</td>
-                        <td className="px-4 py-2 text-sm text-gray-500">
-                          {selectedReturn.status === 'approved' ? (
-                            <label className="flex items-center space-x-2">
-                              <input 
-                                type="checkbox" 
-                                checked={itemRestock[item.id] || false}
-                                onChange={(e) => setItemRestock(prev => ({...prev, [item.id]: e.target.checked}))}
-                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                              />
-                              <span>Вернуть на сток</span>
-                            </label>
-                          ) : (
-                            <span>Возврат на склад: {item.restock ? 'да' : 'нет'}</span>
-                          )}
-                        </td>
+              <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Товар
+                        </th>
+                        <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Заказ
+                        </th>
+                        <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Покупатель
+                        </th>
+                        <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Причина
+                        </th>
+                        <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Материалы
+                        </th>
+                        <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Создана
+                        </th>
+                        <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Статус
+                        </th>
+                        <th scope="col" className="relative px-6 py-3.5">
+                          <span className="sr-only">Действия</span>
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredReturns.map((req) => {
+                        const primaryItem = req.items?.[0];
+                        return (
+                          <tr key={req.id} className="hover:bg-gray-50 transition-colors">
+                            {/* Product column with photo */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                  {primaryItem?.productImageUrl ? (
+                                    <img
+                                      src={primaryItem.productImageUrl}
+                                      alt=""
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <Package className="h-5 w-5 text-gray-400" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 max-w-xs">
+                                  <div className="text-sm font-semibold text-gray-900 truncate">
+                                    {primaryItem?.productTitle || 'Товар'}
+                                  </div>
+                                  {(primaryItem?.variantSize || primaryItem?.variantColor) && (
+                                    <div className="text-xs text-gray-500 truncate">
+                                      {[primaryItem.variantSize, primaryItem.variantColor].filter(Boolean).join(' · ')}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Order column */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                              {req.orderNumber || req.orderId}
+                            </td>
+
+                            {/* Customer column */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">
+                                {req.customerName || 'Покупатель'}
+                              </div>
+                              {req.customerEmail && (
+                                <div className="text-xs text-gray-500">{req.customerEmail}</div>
+                              )}
+                            </td>
+
+                            {/* Reason column */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                              {getReturnReasonLabel(req.reason)}
+                            </td>
+
+                            {/* Materials / Evidence column */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {(req.evidenceCount || 0) > 0 ? (
+                                <span className="inline-flex items-center text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                                  <ImageIcon className="h-3.5 w-3.5 mr-1 text-gray-500" />
+                                  {req.evidenceCount} фото
+                                </span>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+
+                            {/* Created date column */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {formatDate(req.createdAt)}
+                            </td>
+
+                            {/* Status badge column */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getStatusBadgeClass(
+                                  req.status
+                                )}`}
+                              >
+                                {getReturnStatusLabel(req.status)}
+                              </span>
+                            </td>
+
+                            {/* Action column */}
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <button
+                                type="button"
+                                onClick={() => fetchReturnDetail(req.id)}
+                                className="inline-flex items-center px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition-colors"
+                              >
+                                Рассмотреть
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
+        )}
 
-          <div className="mt-6 grid gap-6 md:grid-cols-2">
-            <PermissionGuard
-              permission="returns.update_status"
-              fallback={<p className="text-sm text-gray-500">У вас нет прав для изменения статуса возврата.</p>}
-            >
-              <form onSubmit={handleStatusUpdate} className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700">Изменить статус возврата</h3>
-                <select required value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                  <option value="">Выберите статус</option>
-                  {getReturnStatusTargets(selectedReturn.status).map((status) => (
-                    <option key={status} value={status}>{getReturnStatusLabel(status)}</option>
-                  ))}
-                </select>
-                <textarea rows={3} required={statusDraft === 'rejected'} value={adminComment} onChange={(event) => setAdminComment(event.target.value)} placeholder="Комментарий администратора / причина отклонения" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-                <button type="submit" disabled={isSubmitting || !statusDraft} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-                  Обновить статус
-                </button>
-              </form>
-            </PermissionGuard>
+        {/* ------------------------------------------------------------------ */}
+        {/* APPROVE CONFIRMATION MODAL                                         */}
+        {/* ------------------------------------------------------------------ */}
+        {isApproveModalOpen && selectedReturn && (
+          <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-gray-200 space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Одобрить возврат?</h3>
+                  <p className="text-xs text-gray-500">Заказ {selectedReturn.orderNumber || selectedReturn.orderId}</p>
+                </div>
+              </div>
 
-            <PermissionGuard
-              permission="refunds.create"
-              fallback={<p className="text-sm text-gray-500">У вас нет прав для создания возмещения.</p>}
-            >
-              <form onSubmit={handleCreateRefund} className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700">Создать возмещение</h3>
-                <p className="text-xs text-gray-500">Возврат средств выполняется в тестовом режиме. Реальный перевод не производится. Сумма возмещения рассчитывается бэкендом.</p>
-                <textarea rows={3} value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="Причина возмещения (необязательно)" className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-                <button type="submit" disabled={isSubmitting || selectedReturn.status !== 'item_received'} className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
-                  Создать возмещение
+              <p className="text-sm text-gray-600 leading-relaxed">
+                После одобрения товар можно будет принять на складе.
+              </p>
+
+              <div className="pt-2 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setIsApproveModalOpen(false)}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Отмена
                 </button>
-              </form>
-            </PermissionGuard>
+                <button
+                  type="button"
+                  onClick={handleApprove}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Одобрение...' : 'Подтвердить одобрение'}
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* REJECT MODAL                                                       */}
+        {/* ------------------------------------------------------------------ */}
+        {isRejectModalOpen && selectedReturn && (
+          <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-gray-200 space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0">
+                  <XCircle className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Отклонение заявки</h3>
+                  <p className="text-xs text-gray-500">Заказ {selectedReturn.orderNumber || selectedReturn.orderId}</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleReject} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Причина отказа <span className="text-red-500">*</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Укажите причину отказа. Она будет сохранена в системе.
+                  </p>
+                  <textarea
+                    rows={3}
+                    required
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="Например: товар со следами носки, сорваны бирки..."
+                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm"
+                  />
+                </div>
+
+                <div className="pt-2 flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRejectModalOpen(false);
+                      setRejectReason('');
+                    }}
+                    disabled={isSubmitting}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !rejectReason.trim()}
+                    className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                  >
+                    {isSubmitting ? 'Отклонение...' : 'Отклонить заявку'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* LIGHTBOX IMAGE PREVIEW MODAL                                       */}
+        {/* ------------------------------------------------------------------ */}
+        {previewImageUrl && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setPreviewImageUrl(null)}
+          >
+            <div className="relative max-w-4xl max-h-[90vh] bg-transparent flex flex-col items-center">
+              <button
+                type="button"
+                onClick={() => setPreviewImageUrl(null)}
+                className="absolute -top-10 right-0 text-white hover:text-gray-300 p-1 rounded-full bg-black/50"
+              >
+                <X className="h-6 w-6" />
+              </button>
+              <img
+                src={previewImageUrl}
+                alt="Просмотр доказательства"
+                className="max-h-[85vh] max-w-full rounded-lg object-contain shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        )}
+      </div>
     </PermissionGuard>
   );
 }

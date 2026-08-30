@@ -175,6 +175,222 @@ func (r *Repository) ListAllReturns(ctx context.Context, limit, offset int) ([]R
 	return list, nil
 }
 
+func (r *Repository) GetAdminReturn(ctx context.Context, returnID uuid.UUID, buildURL func(key string) string) (*AdminReturnResponse, error) {
+	query := `
+		SELECT
+			r.id, r.order_id, o.order_number, r.fulfillment_id, r.user_id,
+			o.customer_name, o.customer_email, o.customer_phone,
+			of.seller_id, s.brand_name,
+			r.status, r.reason, r.comment, r.admin_comment,
+			r.created_at, r.updated_at, r.approved_at, r.rejected_at, r.completed_at,
+			sh.delivered_at,
+			(SELECT COUNT(*) FROM return_item_evidences rie JOIN return_items ri ON ri.id = rie.return_item_id WHERE ri.return_id = r.id) as evidence_count
+		FROM returns r
+		JOIN orders o ON o.id = r.order_id
+		LEFT JOIN order_fulfillments of ON of.id = r.fulfillment_id
+		LEFT JOIN sellers s ON s.id = of.seller_id
+		LEFT JOIN shipments sh ON sh.fulfillment_id = r.fulfillment_id
+		WHERE r.id = $1
+	`
+	var res AdminReturnResponse
+	err := r.db.QueryRow(ctx, query, returnID).Scan(
+		&res.ID, &res.OrderID, &res.OrderNumber, &res.FulfillmentID, &res.UserID,
+		&res.CustomerName, &res.CustomerEmail, &res.CustomerPhone,
+		&res.SellerID, &res.SellerName,
+		&res.Status, &res.Reason, &res.Comment, &res.AdminComment,
+		&res.CreatedAt, &res.UpdatedAt, &res.ApprovedAt, &res.RejectedAt, &res.CompletedAt,
+		&res.DeliveredAt,
+		&res.EvidenceCount,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrReturnNotFound
+		}
+		return nil, err
+	}
+
+	itemsQuery := `
+		SELECT
+			ri.id, ri.return_id, ri.order_item_id,
+			oi.title, oi.image_url, oi.variant_size, oi.variant_color, oi.sku,
+			ri.quantity, oi.price_cents, (oi.price_cents * ri.quantity),
+			ri.reason, ri.condition, ri.restock
+		FROM return_items ri
+		JOIN order_items oi ON oi.id = ri.order_item_id
+		WHERE ri.return_id = $1
+		ORDER BY ri.created_at ASC
+	`
+	rows, err := r.db.Query(ctx, itemsQuery, returnID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var itemIDs []uuid.UUID
+	var items []AdminReturnItemDetail
+	for rows.Next() {
+		var it AdminReturnItemDetail
+		if err := rows.Scan(
+			&it.ID, &it.ReturnID, &it.OrderItemID,
+			&it.ProductTitle, &it.ProductImageURL, &it.VariantSize, &it.VariantColor, &it.SKU,
+			&it.Quantity, &it.PriceCents, &it.SubtotalPriceCents,
+			&it.Reason, &it.Condition, &it.Restock,
+		); err != nil {
+			return nil, err
+		}
+		it.Evidence = make([]AdminReturnEvidence, 0)
+		items = append(items, it)
+		itemIDs = append(itemIDs, it.ID)
+	}
+	rows.Close()
+
+	if len(itemIDs) > 0 {
+		evQuery := `
+			SELECT id, return_item_id, storage_key, content_type, sort_order, created_at
+			FROM return_item_evidences
+			WHERE return_item_id = ANY($1)
+			ORDER BY sort_order ASC, created_at ASC
+		`
+		evRows, err := r.db.Query(ctx, evQuery, itemIDs)
+		if err != nil {
+			return nil, err
+		}
+		defer evRows.Close()
+
+		evMap := make(map[uuid.UUID][]AdminReturnEvidence)
+		for evRows.Next() {
+			var evID, retItemID uuid.UUID
+			var storageKey, contentType string
+			var sortOrder int
+			var createdAt time.Time
+			if err := evRows.Scan(&evID, &retItemID, &storageKey, &contentType, &sortOrder, &createdAt); err != nil {
+				return nil, err
+			}
+			url := "/media/" + storageKey
+			if buildURL != nil {
+				url = buildURL(storageKey)
+			}
+			evMap[retItemID] = append(evMap[retItemID], AdminReturnEvidence{
+				ID:          evID,
+				URL:         url,
+				ContentType: contentType,
+				SortOrder:   sortOrder,
+				CreatedAt:   createdAt,
+			})
+		}
+		evRows.Close()
+
+		for i := range items {
+			if evList, ok := evMap[items[i].ID]; ok {
+				items[i].Evidence = evList
+			}
+		}
+	}
+
+	if items == nil {
+		items = make([]AdminReturnItemDetail, 0)
+	}
+	res.Items = items
+	return &res, nil
+}
+
+func (r *Repository) ListAdminReturns(ctx context.Context, limit, offset int, buildURL func(key string) string) ([]AdminReturnResponse, int, error) {
+	var totalCount int
+	if err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM returns").Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT
+			r.id, r.order_id, o.order_number, r.fulfillment_id, r.user_id,
+			o.customer_name, o.customer_email, o.customer_phone,
+			of.seller_id, s.brand_name,
+			r.status, r.reason, r.comment, r.admin_comment,
+			r.created_at, r.updated_at, r.approved_at, r.rejected_at, r.completed_at,
+			sh.delivered_at,
+			(SELECT COUNT(*) FROM return_item_evidences rie JOIN return_items ri ON ri.id = rie.return_item_id WHERE ri.return_id = r.id) as evidence_count
+		FROM returns r
+		JOIN orders o ON o.id = r.order_id
+		LEFT JOIN order_fulfillments of ON of.id = r.fulfillment_id
+		LEFT JOIN sellers s ON s.id = of.seller_id
+		LEFT JOIN shipments sh ON sh.fulfillment_id = r.fulfillment_id
+		ORDER BY r.created_at DESC
+		LIMIT $1 OFFSET $2
+	`
+	rows, err := r.db.Query(ctx, query, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var list []AdminReturnResponse
+	var returnIDs []uuid.UUID
+	for rows.Next() {
+		var res AdminReturnResponse
+		if err := rows.Scan(
+			&res.ID, &res.OrderID, &res.OrderNumber, &res.FulfillmentID, &res.UserID,
+			&res.CustomerName, &res.CustomerEmail, &res.CustomerPhone,
+			&res.SellerID, &res.SellerName,
+			&res.Status, &res.Reason, &res.Comment, &res.AdminComment,
+			&res.CreatedAt, &res.UpdatedAt, &res.ApprovedAt, &res.RejectedAt, &res.CompletedAt,
+			&res.DeliveredAt,
+			&res.EvidenceCount,
+		); err != nil {
+			return nil, 0, err
+		}
+		res.Items = make([]AdminReturnItemDetail, 0)
+		list = append(list, res)
+		returnIDs = append(returnIDs, res.ID)
+	}
+	rows.Close()
+
+	if len(returnIDs) > 0 {
+		itemsQuery := `
+			SELECT
+				ri.id, ri.return_id, ri.order_item_id,
+				oi.title, oi.image_url, oi.variant_size, oi.variant_color, oi.sku,
+				ri.quantity, oi.price_cents, (oi.price_cents * ri.quantity),
+				ri.reason, ri.condition, ri.restock
+			FROM return_items ri
+			JOIN order_items oi ON oi.id = ri.order_item_id
+			WHERE ri.return_id = ANY($1)
+			ORDER BY ri.created_at ASC
+		`
+		itemRows, err := r.db.Query(ctx, itemsQuery, returnIDs)
+		if err != nil {
+			return nil, 0, err
+		}
+		defer itemRows.Close()
+
+		itemsMap := make(map[uuid.UUID][]AdminReturnItemDetail)
+		for itemRows.Next() {
+			var it AdminReturnItemDetail
+			if err := itemRows.Scan(
+				&it.ID, &it.ReturnID, &it.OrderItemID,
+				&it.ProductTitle, &it.ProductImageURL, &it.VariantSize, &it.VariantColor, &it.SKU,
+				&it.Quantity, &it.PriceCents, &it.SubtotalPriceCents,
+				&it.Reason, &it.Condition, &it.Restock,
+			); err != nil {
+				return nil, 0, err
+			}
+			it.Evidence = make([]AdminReturnEvidence, 0)
+			itemsMap[it.ReturnID] = append(itemsMap[it.ReturnID], it)
+		}
+		itemRows.Close()
+
+		for i := range list {
+			if itList, ok := itemsMap[list[i].ID]; ok {
+				list[i].Items = itList
+			}
+		}
+	}
+
+	if list == nil {
+		list = make([]AdminReturnResponse, 0)
+	}
+	return list, totalCount, nil
+}
+
 func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerReturnItem, error) {
 	query := `
 		SELECT

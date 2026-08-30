@@ -222,7 +222,7 @@ func TestM522_SerializedRejectFinalize(t *testing.T) {
 
 	// Assertions:
 	// 1. return.status = item_received
-	ret, _, err := fix.svc.GetAdminReturn(ctx, retID)
+	ret, err := fix.svc.GetAdminReturn(ctx, retID)
 	require.NoError(t, err)
 	assert.Equal(t, "item_received", ret.Status)
 
@@ -304,7 +304,7 @@ func TestM522_LegacyFinalize_FullBucket(t *testing.T) {
 
 	// Assertions:
 	// 1. Return -> item_received
-	ret, _, err := fix.svc.GetAdminReturn(ctx, retID)
+	ret, err := fix.svc.GetAdminReturn(ctx, retID)
 	require.NoError(t, err)
 	assert.Equal(t, "item_received", ret.Status)
 
@@ -539,7 +539,7 @@ func TestM522_InspectionAfterFinalize(t *testing.T) {
 	require.NoError(t, fix.svc.FinalizeReceiving(ctx, legRetID))
 
 	// Assert return.status = item_received
-	retLeg, _, err := fix.svc.GetAdminReturn(ctx, legRetID)
+	retLeg, err := fix.svc.GetAdminReturn(ctx, legRetID)
 	require.NoError(t, err)
 	assert.Equal(t, "item_received", retLeg.Status)
 

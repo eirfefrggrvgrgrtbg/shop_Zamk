@@ -56,6 +56,62 @@ type RefundListResponse struct {
 	TotalCount int      `json:"totalCount"`
 }
 
+type AdminReturnEvidence struct {
+	ID          uuid.UUID `json:"id"`
+	URL         string    `json:"url"`
+	ContentType string    `json:"contentType"`
+	SortOrder   int       `json:"sortOrder"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+type AdminReturnItemDetail struct {
+	ID                 uuid.UUID             `json:"id"`
+	ReturnID           uuid.UUID             `json:"returnId"`
+	OrderItemID        uuid.UUID             `json:"orderItemId"`
+	ProductTitle       string                `json:"productTitle"`
+	ProductImageURL    *string               `json:"productImageUrl"`
+	VariantSize        *string               `json:"variantSize"`
+	VariantColor       *string               `json:"variantColor"`
+	SKU                *string               `json:"sku"`
+	Quantity           int                   `json:"quantity"`
+	PriceCents         int64                 `json:"priceCents"`
+	SubtotalPriceCents int64                 `json:"subtotalPriceCents"`
+	Reason             *string               `json:"reason"`
+	Condition          *string               `json:"condition"`
+	Restock            bool                  `json:"restock"`
+	Evidence           []AdminReturnEvidence `json:"evidence"`
+}
+
+type AdminReturnResponse struct {
+	ID            uuid.UUID               `json:"id"`
+	OrderID       uuid.UUID               `json:"orderId"`
+	OrderNumber   *string                 `json:"orderNumber"`
+	FulfillmentID uuid.UUID               `json:"fulfillmentId"`
+	UserID        uuid.UUID               `json:"userId"`
+	CustomerName  *string                 `json:"customerName"`
+	CustomerEmail *string                 `json:"customerEmail"`
+	CustomerPhone *string                 `json:"customerPhone"`
+	SellerID      *uuid.UUID              `json:"sellerId"`
+	SellerName    *string                 `json:"sellerName"`
+	Status        string                  `json:"status"`
+	Reason        string                  `json:"reason"`
+	Comment       *string                 `json:"comment"`
+	AdminComment  *string                 `json:"adminComment"`
+	CreatedAt     time.Time               `json:"createdAt"`
+	UpdatedAt     time.Time               `json:"updatedAt"`
+	ApprovedAt    *time.Time              `json:"approvedAt"`
+	RejectedAt    *time.Time              `json:"rejectedAt"`
+	CompletedAt   *time.Time              `json:"completedAt"`
+	DeliveredAt   *time.Time              `json:"deliveredAt"`
+	EvidenceCount int                     `json:"evidenceCount"`
+	Items         []AdminReturnItemDetail `json:"items"`
+}
+
+type AdminReturnListResponse struct {
+	Items      []AdminReturnResponse `json:"items"`
+	TotalCount int                   `json:"totalCount"`
+}
+
 type SellerReturnItem struct {
 	ReturnItemID             uuid.UUID `json:"returnItemId"`
 	ReturnID                 uuid.UUID `json:"returnId"`

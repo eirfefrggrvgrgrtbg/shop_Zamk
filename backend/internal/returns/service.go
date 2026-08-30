@@ -386,12 +386,24 @@ func (s *Service) ListCustomerReturns(ctx context.Context, userID uuid.UUID, lim
 	return s.repo.ListReturnsByCustomer(ctx, userID, limit, offset)
 }
 
-func (s *Service) GetAdminReturn(ctx context.Context, returnID uuid.UUID) (*Return, []ReturnItem, error) {
-	return s.repo.GetReturn(ctx, returnID)
+func (s *Service) GetAdminReturn(ctx context.Context, returnID uuid.UUID) (*AdminReturnResponse, error) {
+	buildURL := func(key string) string {
+		if s.storageProvider != nil {
+			return s.storageProvider.BuildPublicURL(key)
+		}
+		return "/media/" + key
+	}
+	return s.repo.GetAdminReturn(ctx, returnID, buildURL)
 }
 
-func (s *Service) ListAdminReturns(ctx context.Context, limit, offset int) ([]Return, error) {
-	return s.repo.ListAllReturns(ctx, limit, offset)
+func (s *Service) ListAdminReturns(ctx context.Context, limit, offset int) ([]AdminReturnResponse, int, error) {
+	buildURL := func(key string) string {
+		if s.storageProvider != nil {
+			return s.storageProvider.BuildPublicURL(key)
+		}
+		return "/media/" + key
+	}
+	return s.repo.ListAdminReturns(ctx, limit, offset, buildURL)
 }
 
 func (s *Service) UpdateReturnStatus(ctx context.Context, adminID, returnID uuid.UUID, req UpdateReturnStatusRequest) error {
@@ -426,10 +438,15 @@ func (s *Service) UpdateReturnStatus(ctx context.Context, adminID, returnID uuid
 		}
 
 		ret.Status = req.Status
-		if req.AdminComment != nil {
-			ret.AdminComment = req.AdminComment
-		} else if req.Status == "rejected" {
-			return ErrRejectReasonRequired
+		if req.Status == "rejected" {
+			if req.AdminComment == nil || strings.TrimSpace(*req.AdminComment) == "" {
+				return ErrRejectReasonRequired
+			}
+			trimmed := strings.TrimSpace(*req.AdminComment)
+			ret.AdminComment = &trimmed
+		} else if req.AdminComment != nil {
+			trimmed := strings.TrimSpace(*req.AdminComment)
+			ret.AdminComment = &trimmed
 		}
 
 		now := time.Now()

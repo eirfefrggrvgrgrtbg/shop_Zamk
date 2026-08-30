@@ -170,18 +170,13 @@ func (h *Handler) ListCustomerReturns(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListAdminReturns(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	returns, err := h.service.ListAdminReturns(r.Context(), page.Limit, page.Offset)
+	returnsList, total, err := h.service.ListAdminReturns(r.Context(), page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list returns")
 		return
 	}
 
-	var items []ReturnResponse
-	for _, ret := range returns {
-		items = append(items, ReturnResponse{Return: ret, Items: []ReturnItem{}})
-	}
-
-	resp := ReturnListResponse{Items: items, TotalCount: len(items)}
+	resp := AdminReturnListResponse{Items: returnsList, TotalCount: total}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -194,7 +189,7 @@ func (h *Handler) GetAdminReturn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ret, items, err := h.service.GetAdminReturn(r.Context(), returnID)
+	resp, err := h.service.GetAdminReturn(r.Context(), returnID)
 	if err != nil {
 		if errors.Is(err, ErrReturnNotFound) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
@@ -204,7 +199,6 @@ func (h *Handler) GetAdminReturn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := ReturnResponse{Return: *ret, Items: items}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -237,6 +231,10 @@ func (h *Handler) UpdateAdminReturnStatus(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		if errors.Is(err, ErrReturnNotFound) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
+			return
+		}
+		if errors.Is(err, ErrRejectReasonRequired) {
+			h.writeError(w, http.StatusBadRequest, "rejection_reason_required", "Rejection reason is required")
 			return
 		}
 		if errors.Is(err, ErrInvalidStatusTransition) {

@@ -1136,10 +1136,45 @@ export interface AdminInventoryMovement {
   createdAt: string;
 }
 
+export interface AdminReturnEvidence {
+  id: string;
+  url: string;
+  contentType: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface AdminReturnItem {
+  id: string;
+  returnId?: string;
+  orderItemId: string;
+  productTitle?: string;
+  productImageUrl?: string;
+  variantSize?: string;
+  variantColor?: string;
+  sku?: string;
+  quantity: number;
+  priceCents: number;
+  subtotalPriceCents: number;
+  reason?: string;
+  condition?: string;
+  evidenceIds?: string[];
+  evidence?: AdminReturnEvidence[];
+  restock?: boolean;
+  createdAt?: string;
+}
+
 export interface AdminReturn {
   id: string;
   orderId: string;
+  orderNumber?: string;
+  fulfillmentId?: string;
   userId?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  sellerId?: string;
+  sellerName?: string;
   status: string;
   reason?: string;
   comment?: string;
@@ -1149,20 +1184,9 @@ export interface AdminReturn {
   approvedAt?: string;
   rejectedAt?: string;
   completedAt?: string;
+  deliveredAt?: string;
+  evidenceCount?: number;
   items?: AdminReturnItem[];
-}
-
-export interface AdminReturnItem {
-  id: string;
-  returnId?: string;
-  orderItemId: string;
-  productTitle?: string;
-  quantity: number;
-  reason?: string;
-  condition?: string;
-  evidenceIds?: string[];
-  restock?: boolean;
-  createdAt?: string;
 }
 
 export interface AdminRefund {

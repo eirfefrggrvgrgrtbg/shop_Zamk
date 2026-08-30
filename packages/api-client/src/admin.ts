@@ -513,6 +513,14 @@ export const updateAdminReturnStatus = async (id: string, data: { status: string
   return request<void>('PATCH', `/admin/returns/${id}/status`, { body: data });
 };
 
+export const approveAdminReturn = async (id: string): Promise<void> => {
+  return request<void>('PATCH', `/admin/returns/${id}/status`, { body: { status: 'approved' } });
+};
+
+export const rejectAdminReturn = async (id: string, reason: string): Promise<void> => {
+  return request<void>('PATCH', `/admin/returns/${id}/status`, { body: { status: 'rejected', adminComment: reason } });
+};
+
 export const createAdminRefundForReturn = async (returnId: string, data: { reason?: string }): Promise<AdminRefund> => {
   return request<AdminRefund>('POST', `/admin/returns/${returnId}/refund`, { body: data });
 };
