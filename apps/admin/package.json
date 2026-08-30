@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 3002 --strictPort",
     "build": "tsc -b && vite build",
-    "test": "npx tsx src/api/adminPicking.test.ts",
+    "test": "vitest run && npx tsx src/api/adminPicking.test.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -18,10 +18,14 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.0",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "jsdom": "^30.0.1",
     "tailwindcss": "^4.3.0",
     "typescript": "~5.9.3",
-    "vite": "^6.4.3"
+    "vite": "^6.4.3",
+    "vitest": "^4.1.11"
   }
 }

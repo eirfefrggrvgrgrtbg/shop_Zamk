@@ -23,10 +23,13 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PackageCheck,
+  Search,
 } from 'lucide-react';
 
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 import { NotificationBell } from './notifications/NotificationBell';
+import { AdminSearchPalette } from './search/AdminSearchPalette';
+import { useAdminGlobalSearchShortcut } from './search/useAdminGlobalSearchShortcut';
 
 interface NavItem {
   name: string;
@@ -38,6 +41,12 @@ interface NavItem {
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { logout, user, staff, hasPermission, hasAnyPermission } = useAdminAuth();
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  // Global shortcut listener for Cmd+K / Ctrl+K with input safety
+  useAdminGlobalSearchShortcut(isSearchOpen, setIsSearchOpen);
+
+  const isMac = typeof window !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
   // Collapsed sidebar state from localStorage ONLY (Manual control)
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
@@ -188,7 +197,23 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
               {allNavItems.find(item => location.pathname.startsWith(item.path))?.name || 'Панель администратора'}
             </span>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3 sm:space-x-4">
+            {/* Global Search Button */}
+            <button
+              type="button"
+              data-testid="admin-global-search-trigger"
+              onClick={() => setIsSearchOpen(true)}
+              className="flex items-center space-x-2 px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 bg-gray-100/80 hover:bg-gray-200/80 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 rounded-xl border border-gray-200/60 dark:border-slate-700/60 transition-colors shadow-2xs"
+              title={`Поиск (${isMac ? '⌘K' : 'Ctrl+K'})`}
+            >
+              <Search className="w-4 h-4 text-gray-400 dark:text-slate-400 shrink-0" />
+              <span className="hidden md:inline font-normal text-gray-600 dark:text-slate-300">Поиск...</span>
+              <span className="md:hidden font-normal text-gray-600 dark:text-slate-300">Поиск</span>
+              <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold text-gray-400 dark:text-slate-500 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded font-mono">
+                {isMac ? '⌘K' : 'Ctrl+K'}
+              </kbd>
+            </button>
+
             <NotificationBell />
             <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold uppercase" title={user?.email}>
               {user?.email?.charAt(0) || 'A'}
@@ -201,6 +226,9 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Global Search Palette */}
+      <AdminSearchPalette isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
     </div>
   );
 }

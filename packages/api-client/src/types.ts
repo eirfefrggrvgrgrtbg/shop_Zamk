@@ -2075,3 +2075,18 @@ export interface CustomerSendReturnMessageRequest {
   message: string;
   attachmentIds?: string[];
 }
+
+export type GlobalSearchResultType = 'order' | 'return' | 'inventory_unit' | 'product_variant' | 'product' | 'customer';
+
+export interface GlobalSearchResult {
+  type: GlobalSearchResultType;
+  id: string;
+  title: string;
+  subtitle: string;
+  canonicalIdentifier: string;
+  navigationTarget: string;
+}
+
+export interface GlobalSearchResponse {
+  results: GlobalSearchResult[];
+}

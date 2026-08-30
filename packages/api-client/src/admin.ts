@@ -866,3 +866,7 @@ export const uploadAdminReturnMessageAttachment = async (returnId: string, file:
   formData.append('file', file);
   return request<import('./types').UploadReturnMessageAttachmentResponse>('POST', `/admin/returns/${returnId}/messages/attachments`, { body: formData});
 };
+
+export const getAdminGlobalSearch = async (query: string): Promise<import('./types').GlobalSearchResponse> => {
+  return request<import('./types').GlobalSearchResponse>('GET', `/admin/search?q=${encodeURIComponent(query)}`);
+};
