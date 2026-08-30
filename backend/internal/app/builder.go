@@ -10,6 +10,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/dashboard"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/reports"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/search"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/audit"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
@@ -174,6 +175,9 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	dashboardHandler := dashboard.NewHandler(dashboardService)
 
 	reportsHandler := reports.NewHandler(dashboardService, logger)
+	searchRepo := search.NewRepository(pgClient.Pool)
+	searchService := search.NewService(searchRepo)
+	searchHandler := search.NewHandler(searchService, staffService, logger)
 
 	auditLogRepo := audit.NewRepository(pgClient.Pool)
 	auditLogService := audit.NewService(auditLogRepo, logger)
@@ -213,7 +217,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 		testLabHandler = testlab.NewHandler(testLabSvc, cfg.App.Env)
 	}
 
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, auditLogHandler, deliveryHandler, suppliesHandler, analyticsHandler, testLabHandler)
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, searchHandler, auditLogHandler, deliveryHandler, suppliesHandler, analyticsHandler, testLabHandler)
 
 	return r, cancelWorkers
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/dashboard"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/reports"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/search"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/audit"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
@@ -73,6 +74,7 @@ func New(
 	auctionsCustomerHandler *auctions.CustomerHandler,
 	dashboardHandler *dashboard.Handler,
 	reportsHandler *reports.Handler,
+	searchHandler *search.Handler,
 	auditHandler *audit.Handler,
 	deliveryHandler *delivery.Handler,
 	suppliesHandler *supplies.Handler,
@@ -412,6 +414,7 @@ func New(
 
 		// /api/admin/me — no fine-grained permission required, role=admin is enough
 		r.Get("/me", staffHandler.GetAdminMe)
+		r.Get("/search", searchHandler.HandleGlobalSearch)
 		r.With(perm("dashboard.read")).Get("/dashboard/summary", dashboardHandler.GetDashboardSummary)
 
 		if testLabHandler != nil {
