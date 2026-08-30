@@ -84,3 +84,56 @@ type SellerReturnListResponse struct {
 	Items      []SellerReturnItem `json:"items"`
 	TotalCount int                `json:"totalCount"`
 }
+
+type StartReceivingRequest struct{}
+
+type ScanReturnUnitRequest struct {
+	Code string `json:"code" validate:"required"`
+}
+
+type ScanReturnUnitResponse struct {
+	AlreadyScanned bool           `json:"alreadyScanned"`
+	ReturnItemUnit ReturnItemUnit `json:"returnItemUnit"`
+}
+
+type AdminReturnReceivingState struct {
+	Return              Return                     `json:"return"`
+	OrderNumber         *string                    `json:"orderNumber"`
+	Items               []AdminReturnReceivingItem `json:"items"`
+	TotalRequested      int                        `json:"totalRequested"`
+	TotalScanned        int                        `json:"totalScanned"`
+	TotalRemaining      int                        `json:"totalRemaining"`
+	SerializedRequested int                        `json:"serializedRequested"`
+	SerializedScanned   int                        `json:"serializedScanned"`
+	LegacyRequested     int                        `json:"legacyRequested"`
+}
+
+type OutboundAllocationDetail struct {
+	AllocationID uuid.UUID  `json:"allocationId"`
+	UnitCode     string     `json:"unitCode"`
+	PickedAt     *time.Time `json:"pickedAt"`
+	ReleasedAt   *time.Time `json:"releasedAt"`
+	UnitStatus   string     `json:"unitStatus"`
+}
+
+type ScannedUnitDetail struct {
+	ID                    uuid.UUID  `json:"id"`
+	ReturnItemID          uuid.UUID  `json:"returnItemId"`
+	OrderItemAllocationID uuid.UUID  `json:"orderItemAllocationId"`
+	UnitCode              string     `json:"unitCode"`
+	ScannedAt             *time.Time `json:"scannedAt"`
+	InspectedCondition    *string    `json:"inspectedCondition"`
+	Disposition           *string    `json:"disposition"`
+	CreatedAt             time.Time  `json:"createdAt"`
+	UpdatedAt             time.Time  `json:"updatedAt"`
+}
+
+type AdminReturnReceivingItem struct {
+	ReturnItem          ReturnItem                 `json:"returnItem"`
+	AllocationMode      string                     `json:"allocationMode"` // "serialized" | "legacy"
+	OutboundAllocations []OutboundAllocationDetail `json:"outboundAllocations"`
+	ScannedUnits        []ScannedUnitDetail        `json:"scannedUnits"`
+	RequestedQuantity   int                        `json:"requestedQuantity"`
+	ScannedQuantity     int                        `json:"scannedQuantity"`
+	RemainingQuantity   int                        `json:"remainingQuantity"`
+}

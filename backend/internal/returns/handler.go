@@ -351,6 +351,102 @@ func (h *Handler) GetAdminRefund(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(ref)
 }
 
+func (h *Handler) GetAdminReturnReceivingState(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	state, err := h.service.GetAdminReturnReceivingState(r.Context(), returnID)
+	if err != nil {
+		if errors.Is(err, ErrReturnNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get receiving state")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(state)
+}
+
+func (h *Handler) StartReceiving(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	err = h.service.StartReceiving(r.Context(), returnID)
+	if err != nil {
+		if errors.Is(err, ErrReturnNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
+			return
+		}
+		if errors.Is(err, ErrInvalidStatusTransition) {
+			h.writeError(w, http.StatusBadRequest, "invalid_transition", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to start receiving")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) ScanReturnUnit(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	var req ScanReturnUnitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+	if err := h.validator.Struct(req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	resp, err := h.service.ScanReturnUnit(r.Context(), returnID, req)
+	if err != nil {
+		if errors.Is(err, ErrReturnNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
+			return
+		}
+		if errors.Is(err, ErrReturnNotInReceiving) {
+			h.writeError(w, http.StatusBadRequest, "invalid_state", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidZMUForReturn) {
+			h.writeError(w, http.StatusBadRequest, "invalid_zmu", err.Error())
+			return
+		}
+		if errors.Is(err, ErrAllocationAlreadyBound) {
+			h.writeError(w, http.StatusConflict, "already_bound", err.Error())
+			return
+		}
+		if errors.Is(err, ErrQuantityExceeded) {
+			h.writeError(w, http.StatusBadRequest, "quantity_exceeded", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to scan ZMU")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
 // ---------------------------------------------------------
 // Seller Operations
 // ---------------------------------------------------------

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -45,7 +46,7 @@ func (r *Repository) CreateReturnTx(ctx context.Context, tx pgx.Tx, ret *Return,
 
 func (r *Repository) UpdateReturnTx(ctx context.Context, tx pgx.Tx, ret *Return) error {
 	query := `
-		UPDATE returns 
+		UPDATE returns
 		SET status = $1, admin_comment = $2, updated_at = now(), approved_at = $3, rejected_at = $4, completed_at = $5, receiving_started_at = $7
 		WHERE id = $6
 		RETURNING updated_at
@@ -102,6 +103,26 @@ func (r *Repository) GetReturn(ctx context.Context, id uuid.UUID) (*Return, []Re
 	return &ret, items, nil
 }
 
+func (r *Repository) GetReturnTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*Return, error) {
+	query := `
+		SELECT id, order_id, fulfillment_id, user_id, status, reason, comment, admin_comment, created_at, updated_at, approved_at, rejected_at, completed_at, receiving_started_at
+		FROM returns WHERE id = $1 FOR UPDATE
+	`
+	var ret Return
+	err := tx.QueryRow(ctx, query, id).Scan(
+		&ret.ID, &ret.OrderID, &ret.FulfillmentID, &ret.UserID, &ret.Status, &ret.Reason,
+		&ret.Comment, &ret.AdminComment, &ret.CreatedAt, &ret.UpdatedAt,
+		&ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt, &ret.ReceivingStartedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrReturnNotFound
+		}
+		return nil, err
+	}
+	return &ret, nil
+}
+
 func (r *Repository) ListReturnsByCustomer(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Return, error) {
 	query := `
 		SELECT id, order_id, fulfillment_id, user_id, status, reason, comment, admin_comment, created_at, updated_at, approved_at, rejected_at, completed_at, receiving_started_at
@@ -156,17 +177,17 @@ func (r *Repository) ListAllReturns(ctx context.Context, limit, offset int) ([]R
 
 func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerReturnItem, error) {
 	query := `
-		SELECT 
-			ri.id, ri.return_id, r.order_id, o.order_number, ri.order_item_id, 
-			r.status, ri.quantity, ri.reason, ri.condition, 
-			oi.title, oi.variant_size, oi.variant_color, oi.sku, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity), 
+		SELECT
+			ri.id, ri.return_id, r.order_id, o.order_number, ri.order_item_id,
+			r.status, ri.quantity, ri.reason, ri.condition,
+			oi.title, oi.variant_size, oi.variant_color, oi.sku, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity),
 			ri.restock, r.admin_comment,
 			(SELECT amount_cents FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
-			(SELECT CASE 
+			(SELECT CASE
 				WHEN sle.metadata->>'reason' = 'return_post_payout' THEN 'debt'
 				WHEN sle.available_at IS NULL THEN 'debt'
 				WHEN sle.available_at > now() THEN 'frozen'
-				ELSE 'available' END 
+				ELSE 'available' END
 			FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
 			r.created_at, r.updated_at
 		FROM return_items ri
@@ -199,17 +220,17 @@ func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUI
 
 func (r *Repository) GetSellerReturnItemsForReturn(ctx context.Context, sellerID, returnID uuid.UUID) ([]SellerReturnItem, error) {
 	query := `
-		SELECT 
-			ri.id, ri.return_id, r.order_id, o.order_number, ri.order_item_id, 
-			r.status, ri.quantity, ri.reason, ri.condition, 
-			oi.title, oi.variant_size, oi.variant_color, oi.sku, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity), 
+		SELECT
+			ri.id, ri.return_id, r.order_id, o.order_number, ri.order_item_id,
+			r.status, ri.quantity, ri.reason, ri.condition,
+			oi.title, oi.variant_size, oi.variant_color, oi.sku, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity),
 			ri.restock, r.admin_comment,
 			(SELECT amount_cents FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
-			(SELECT CASE 
+			(SELECT CASE
 				WHEN sle.metadata->>'reason' = 'return_post_payout' THEN 'debt'
 				WHEN sle.available_at IS NULL THEN 'debt'
 				WHEN sle.available_at > now() THEN 'frozen'
-				ELSE 'available' END 
+				ELSE 'available' END
 			FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
 			r.created_at, r.updated_at
 		FROM return_items ri
@@ -305,4 +326,232 @@ func (r *Repository) GetTotalReturnedQuantityForOrderItem(ctx context.Context, o
 	var total int
 	err := r.db.QueryRow(ctx, query, orderItemID).Scan(&total)
 	return total, err
+}
+
+func (r *Repository) GetReturnReceivingState(ctx context.Context, returnID uuid.UUID) (*AdminReturnReceivingState, error) {
+	queryReturn := `
+		SELECT r.id, r.order_id, r.fulfillment_id, r.user_id, r.status, r.reason, r.comment, r.admin_comment, r.created_at, r.updated_at, r.approved_at, r.rejected_at, r.completed_at, r.receiving_started_at, o.order_number
+		FROM returns r
+		JOIN orders o ON o.id = r.order_id
+		WHERE r.id = $1
+	`
+	var ret Return
+	var orderNumber *string
+	err := r.db.QueryRow(ctx, queryReturn, returnID).Scan(&ret.ID, &ret.OrderID, &ret.FulfillmentID, &ret.UserID, &ret.Status, &ret.Reason, &ret.Comment, &ret.AdminComment, &ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt, &ret.ReceivingStartedAt, &orderNumber)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrReturnNotFound
+		}
+		return nil, err
+	}
+
+	queryItems := `
+		SELECT id, return_id, order_item_id, quantity, reason, condition, restock, accepted_quantity, damaged_quantity, rejected_quantity, created_at
+		FROM return_items WHERE return_id = $1
+		ORDER BY created_at ASC
+	`
+	rows, err := r.db.Query(ctx, queryItems, returnID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var state AdminReturnReceivingState
+	state.Return = ret
+	state.OrderNumber = orderNumber
+	state.Items = make([]AdminReturnReceivingItem, 0)
+
+	var returnItems []ReturnItem
+	for rows.Next() {
+		var item ReturnItem
+		if err := rows.Scan(&item.ID, &item.ReturnID, &item.OrderItemID, &item.Quantity, &item.Reason, &item.Condition, &item.Restock, &item.AcceptedQuantity, &item.DamagedQuantity, &item.RejectedQuantity, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		returnItems = append(returnItems, item)
+	}
+
+	for _, item := range returnItems {
+		// 1. Fetch outbound allocations
+		queryOutbound := `
+			SELECT oia.id, iu.unit_code, oia.picked_at, oia.released_at, iu.status
+			FROM order_item_allocations oia
+			JOIN inventory_units iu ON iu.id = oia.inventory_unit_id
+			WHERE oia.order_item_id = $1
+			ORDER BY oia.created_at ASC
+		`
+		outRows, err := r.db.Query(ctx, queryOutbound, item.OrderItemID)
+		if err != nil {
+			return nil, err
+		}
+		var outboundAllocs []OutboundAllocationDetail
+		for outRows.Next() {
+			var d OutboundAllocationDetail
+			if err := outRows.Scan(&d.AllocationID, &d.UnitCode, &d.PickedAt, &d.ReleasedAt, &d.UnitStatus); err != nil {
+				outRows.Close()
+				return nil, err
+			}
+			outboundAllocs = append(outboundAllocs, d)
+		}
+		outRows.Close()
+		if outboundAllocs == nil {
+			outboundAllocs = make([]OutboundAllocationDetail, 0)
+		}
+
+		// 2. Fetch scanned units
+		queryUnits := `
+			SELECT riu.id, riu.return_item_id, riu.order_item_allocation_id, iu.unit_code, riu.scanned_at, riu.inspected_condition, riu.disposition, riu.created_at, riu.updated_at
+			FROM return_item_units riu
+			JOIN order_item_allocations oia ON oia.id = riu.order_item_allocation_id
+			JOIN inventory_units iu ON iu.id = oia.inventory_unit_id
+			WHERE riu.return_item_id = $1
+			ORDER BY riu.created_at ASC
+		`
+		unitRows, err := r.db.Query(ctx, queryUnits, item.ID)
+		if err != nil {
+			return nil, err
+		}
+		var scannedUnits []ScannedUnitDetail
+		for unitRows.Next() {
+			var u ScannedUnitDetail
+			if err := unitRows.Scan(&u.ID, &u.ReturnItemID, &u.OrderItemAllocationID, &u.UnitCode, &u.ScannedAt, &u.InspectedCondition, &u.Disposition, &u.CreatedAt, &u.UpdatedAt); err != nil {
+				unitRows.Close()
+				return nil, err
+			}
+			scannedUnits = append(scannedUnits, u)
+		}
+		unitRows.Close()
+		if scannedUnits == nil {
+			scannedUnits = make([]ScannedUnitDetail, 0)
+		}
+
+		allocMode := "serialized"
+		if len(outboundAllocs) == 0 {
+			allocMode = "legacy"
+			state.LegacyRequested += item.Quantity
+		} else {
+			state.SerializedRequested += item.Quantity
+			state.SerializedScanned += len(scannedUnits)
+		}
+
+		scannedQty := len(scannedUnits)
+		remainingQty := item.Quantity - scannedQty
+
+		state.TotalRequested += item.Quantity
+		state.TotalScanned += scannedQty
+		state.TotalRemaining += remainingQty
+
+		state.Items = append(state.Items, AdminReturnReceivingItem{
+			ReturnItem:          item,
+			AllocationMode:      allocMode,
+			OutboundAllocations: outboundAllocs,
+			ScannedUnits:        scannedUnits,
+			RequestedQuantity:   item.Quantity,
+			ScannedQuantity:     scannedQty,
+			RemainingQuantity:   remainingQty,
+		})
+	}
+
+	return &state, nil
+}
+
+type AllocationLookupResult struct {
+	OrderItemAllocationID uuid.UUID
+	OrderItemID           uuid.UUID
+	FulfillmentID         uuid.UUID
+	OrderID               uuid.UUID
+	UnitStatus            string
+	PickedAt              *time.Time
+	ReleasedAt            *time.Time
+}
+
+func (r *Repository) GetAllocationByZMUCode(ctx context.Context, code string) (*AllocationLookupResult, error) {
+	query := `
+		SELECT oia.id, oia.order_item_id, oi.order_fulfillment_id, oi.order_id, iu.status, oia.picked_at, oia.released_at
+		FROM inventory_units iu
+		JOIN order_item_allocations oia ON oia.inventory_unit_id = iu.id
+		JOIN order_items oi ON oi.id = oia.order_item_id
+		WHERE iu.unit_code = $1
+		ORDER BY oia.created_at DESC
+		LIMIT 1
+	`
+	var res AllocationLookupResult
+	var fulfillmentID *uuid.UUID
+	err := r.db.QueryRow(ctx, query, code).Scan(&res.OrderItemAllocationID, &res.OrderItemID, &fulfillmentID, &res.OrderID, &res.UnitStatus, &res.PickedAt, &res.ReleasedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("zmu not found or not allocated")
+		}
+		return nil, err
+	}
+	if fulfillmentID == nil {
+		return nil, errors.New("zmu allocation has no fulfillment")
+	}
+	res.FulfillmentID = *fulfillmentID
+	return &res, nil
+}
+
+func (r *Repository) GetReturnItemUnitByAllocationID(ctx context.Context, allocationID uuid.UUID) (*ReturnItemUnit, error) {
+	query := `
+		SELECT id, return_item_id, order_item_allocation_id, scanned_at, inspected_condition, disposition, created_at, updated_at
+		FROM return_item_units WHERE order_item_allocation_id = $1
+	`
+	var u ReturnItemUnit
+	err := r.db.QueryRow(ctx, query, allocationID).Scan(&u.ID, &u.ReturnItemID, &u.OrderItemAllocationID, &u.ScannedAt, &u.InspectedCondition, &u.Disposition, &u.CreatedAt, &u.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (r *Repository) CreateReturnItemUnitTx(ctx context.Context, tx pgx.Tx, unit *ReturnItemUnit) error {
+	query := `
+		INSERT INTO return_item_units (id, return_item_id, order_item_allocation_id, scanned_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`
+	if unit.ID == uuid.Nil {
+		unit.ID = uuid.New()
+	}
+	now := time.Now()
+	if unit.CreatedAt.IsZero() {
+		unit.CreatedAt = now
+	}
+	unit.UpdatedAt = now
+
+	_, err := tx.Exec(ctx, query, unit.ID, unit.ReturnItemID, unit.OrderItemAllocationID, unit.ScannedAt, unit.CreatedAt, unit.UpdatedAt)
+	return err
+}
+
+func (r *Repository) GetReturnItemsForUpdateTx(ctx context.Context, tx pgx.Tx, returnID uuid.UUID) ([]ReturnItem, error) {
+	query := `
+		SELECT id, return_id, order_item_id, quantity, reason, condition, restock, accepted_quantity, damaged_quantity, rejected_quantity, created_at
+		FROM return_items WHERE return_id = $1 FOR UPDATE
+	`
+	rows, err := tx.Query(ctx, query, returnID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []ReturnItem
+	for rows.Next() {
+		var item ReturnItem
+		if err := rows.Scan(&item.ID, &item.ReturnID, &item.OrderItemID, &item.Quantity, &item.Reason, &item.Condition, &item.Restock, &item.AcceptedQuantity, &item.DamagedQuantity, &item.RejectedQuantity, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, item)
+	}
+	if list == nil {
+		list = make([]ReturnItem, 0)
+	}
+	return list, nil
+}
+
+func (r *Repository) GetScannedUnitCountForReturnItemTx(ctx context.Context, tx pgx.Tx, returnItemID uuid.UUID) (int, error) {
+	query := `SELECT COUNT(*) FROM return_item_units WHERE return_item_id = $1`
+	var count int
+	err := tx.QueryRow(ctx, query, returnItemID).Scan(&count)
+	return count, err
 }

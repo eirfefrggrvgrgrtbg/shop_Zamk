@@ -469,3 +469,135 @@ func (s *Service) ListAdminRefunds(ctx context.Context, limit, offset int) ([]Re
 func (s *Service) GetAdminRefund(ctx context.Context, id uuid.UUID) (*Refund, error) {
 	return s.repo.GetRefund(ctx, id)
 }
+
+func (s *Service) GetAdminReturnReceivingState(ctx context.Context, returnID uuid.UUID) (*AdminReturnReceivingState, error) {
+	return s.repo.GetReturnReceivingState(ctx, returnID)
+}
+
+func (s *Service) StartReceiving(ctx context.Context, returnID uuid.UUID) error {
+	return s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		ret, err := s.repo.GetReturnTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+
+		if ret.Status == "receiving" {
+			return nil // idempotent
+		}
+
+		if ret.Status != "approved" {
+			return ErrInvalidStatusTransition
+		}
+
+		now := time.Now()
+		ret.Status = "receiving"
+		ret.ReceivingStartedAt = &now
+
+		return s.repo.UpdateReturnTx(ctx, tx, ret)
+	})
+}
+
+func (s *Service) ScanReturnUnit(ctx context.Context, returnID uuid.UUID, req ScanReturnUnitRequest) (*ScanReturnUnitResponse, error) {
+	var resp ScanReturnUnitResponse
+	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		ret, err := s.repo.GetReturnTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+
+		if ret.Status != "receiving" {
+			return ErrReturnNotInReceiving
+		}
+
+		allocRes, err := s.repo.GetAllocationByZMUCode(ctx, req.Code)
+		if err != nil {
+			return ErrInvalidZMUForReturn
+		}
+
+		if allocRes.UnitStatus != "shipped" {
+			return ErrInvalidZMUForReturn
+		}
+
+		if allocRes.PickedAt == nil {
+			return ErrInvalidZMUForReturn
+		}
+
+		if allocRes.ReleasedAt != nil {
+			return ErrInvalidZMUForReturn
+		}
+
+		if allocRes.OrderID != ret.OrderID || allocRes.FulfillmentID != ret.FulfillmentID {
+			return ErrInvalidZMUForReturn
+		}
+
+		existingUnit, err := s.repo.GetReturnItemUnitByAllocationID(ctx, allocRes.OrderItemAllocationID)
+		if err != nil {
+			return err
+		}
+
+		if existingUnit != nil {
+			// Check if bound to THIS return
+			var itemForUnit ReturnItem
+			err := tx.QueryRow(ctx, "SELECT return_id FROM return_items WHERE id = $1", existingUnit.ReturnItemID).Scan(&itemForUnit.ReturnID)
+			if err != nil {
+				return err
+			}
+			if itemForUnit.ReturnID == ret.ID {
+				resp.AlreadyScanned = true
+				resp.ReturnItemUnit = *existingUnit
+				return nil
+			}
+			return ErrAllocationAlreadyBound
+		}
+
+		items, err := s.repo.GetReturnItemsForUpdateTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+
+		hasItemInReturn := false
+		var targetItem *ReturnItem
+		for _, it := range items {
+			if it.OrderItemID == allocRes.OrderItemID {
+				hasItemInReturn = true
+				count, err := s.repo.GetScannedUnitCountForReturnItemTx(ctx, tx, it.ID)
+				if err != nil {
+					return err
+				}
+				if count < it.Quantity {
+					itCopy := it
+					targetItem = &itCopy
+					break
+				}
+			}
+		}
+
+		if targetItem == nil {
+			if !hasItemInReturn {
+				return ErrInvalidZMUForReturn
+			}
+			return ErrQuantityExceeded
+		}
+
+		now := time.Now()
+		newUnit := ReturnItemUnit{
+			ID:                    uuid.New(),
+			ReturnItemID:          targetItem.ID,
+			OrderItemAllocationID: allocRes.OrderItemAllocationID,
+			ScannedAt:             &now,
+		}
+
+		if err := s.repo.CreateReturnItemUnitTx(ctx, tx, &newUnit); err != nil {
+			return err
+		}
+
+		resp.AlreadyScanned = false
+		resp.ReturnItemUnit = newUnit
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}

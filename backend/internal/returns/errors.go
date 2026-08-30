@@ -13,4 +13,8 @@ var (
 	ErrRefundExceedsPaid    = errors.New("refund exceeds total paid amount")
 	ErrRejectReasonRequired = errors.New("admin comment/reason is required for rejection")
 	ErrReturnAlreadyRefunded = errors.New("return is already refunded or completed")
+	ErrReturnNotInReceiving = errors.New("return is not in receiving state")
+	ErrInvalidZMUForReturn = errors.New("zmu code is not valid for this return")
+	ErrAllocationAlreadyBound = errors.New("zmu allocation is already bound to a different return")
+	ErrQuantityExceeded = errors.New("scanned quantity exceeds requested return quantity")
 )

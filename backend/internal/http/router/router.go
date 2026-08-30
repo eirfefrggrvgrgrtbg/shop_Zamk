@@ -512,6 +512,9 @@ func New(
 		// Returns
 		r.With(perm("returns.read")).Get("/returns", returnsHandler.ListAdminReturns)
 		r.With(perm("returns.read")).Get("/returns/{id}", returnsHandler.GetAdminReturn)
+		r.With(perm("returns.read")).Get("/returns/{id}/receiving", returnsHandler.GetAdminReturnReceivingState)
+		r.With(perm("returns.update_status")).Post("/returns/{id}/receiving/start", returnsHandler.StartReceiving)
+		r.With(perm("returns.update_status")).Post("/returns/{id}/receiving/scan", returnsHandler.ScanReturnUnit)
 		r.With(perm("returns.update_status")).Patch("/returns/{id}/status", returnsHandler.UpdateAdminReturnStatus)
 		r.With(adminDangerousLimit, perm("refunds.create")).Post("/returns/{id}/refund", returnsHandler.CreateAdminRefund)
 
