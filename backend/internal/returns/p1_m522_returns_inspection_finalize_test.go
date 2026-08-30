@@ -65,9 +65,11 @@ func TestM522_SerializedInspection(t *testing.T) {
 	`, allocID, tOrd.orderItemID, invUnitID, resID, pickedTime)
 	require.NoError(t, err)
 
+	evIDs1 := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDs1}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -197,8 +199,9 @@ func TestM522_SerializedRejectFinalize(t *testing.T) {
 	require.NoError(t, err)
 
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "size_fit",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -276,8 +279,9 @@ func TestM522_LegacyFinalize_FullBucket(t *testing.T) {
 	require.NoError(t, err)
 
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "legacy return",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 5}},
+		Reason:  "legacy return",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 5}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -382,9 +386,11 @@ func TestM522_LegacyEndpoint_RejectsSerializedItem(t *testing.T) {
 	`, allocID, tOrd.orderItemID, invUnitID, resID)
 	require.NoError(t, err)
 
+	evIDsLeg := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDsLeg}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -461,9 +467,11 @@ func TestM522_InspectionAfterFinalize(t *testing.T) {
 	`, allocID, tOrd.orderItemID, invUnitID, resID, pickedTime)
 	require.NoError(t, err)
 
+	evIDsFin := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDsFin}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -504,8 +512,9 @@ func TestM522_InspectionAfterFinalize(t *testing.T) {
 	tOrdLeg := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 3)
 
 	respLeg, err := fix.svc.CreateReturn(ctx, fix.userID, tOrdLeg.orderID, returns.CreateReturnRequest{
-		Reason: "legacy return",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrdLeg.orderItemID, Quantity: 3}},
+		Reason:  "legacy return",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrdLeg.orderItemID, Quantity: 3}},
 	})
 	require.NoError(t, err)
 	legRetID := respLeg[0].Return.ID
@@ -616,9 +625,11 @@ func TestM522_InspectionVsFinalizeRace(t *testing.T) {
 	`, allocID, tOrd.orderItemID, invUnitID, resID, pickedTime)
 	require.NoError(t, err)
 
+	evIDsRace := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDsRace}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -736,9 +747,11 @@ func TestM522_ConcurrentFinalize(t *testing.T) {
 	`, allocID, tOrd.orderItemID, invUnitID, resID, pickedTime)
 	require.NoError(t, err)
 
+	evIDsConc := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDsConc}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -835,9 +848,11 @@ func TestM522_CanFinalize_ReadModel(t *testing.T) {
 		allocB, tOrd.orderItemID, invUnitB, resID, pickedTime)
 	require.NoError(t, err)
 
+	evIDsCanFin := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 2}},
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 2, EvidenceIDs: evIDsCanFin}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -867,8 +882,9 @@ func TestM522_CanFinalize_ReadModel(t *testing.T) {
 	// C. Legacy return with valid quantities -> canFinalize = true, notReceived = 1
 	tOrdLeg := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 5)
 	respLeg, err := fix.svc.CreateReturn(ctx, fix.userID, tOrdLeg.orderID, returns.CreateReturnRequest{
-		Reason: "legacy return",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrdLeg.orderItemID, Quantity: 5}},
+		Reason:  "legacy return",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrdLeg.orderItemID, Quantity: 5}},
 	})
 	require.NoError(t, err)
 	legRetID := respLeg[0].Return.ID
@@ -956,9 +972,11 @@ func TestM522_NoFinancialSideEffects(t *testing.T) {
 	`, allocID, tOrd.orderItemID, invUnitID, resID, pickedTime)
 	require.NoError(t, err)
 
+	evIDsNoFin := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDsNoFin}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID

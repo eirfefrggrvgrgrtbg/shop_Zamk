@@ -312,10 +312,34 @@ const getSafeErrorMessage = (code?: string, fallback?: string): string => {
       return 'Товар недоступен для заказа';
     case 'insufficient_stock':
       return 'Недостаточно товара на складе';
+    case 'invalid_quantity':
+    case 'invalid return quantity':
+    case 'INVALID_QUANTITY':
+      return 'На это количество товара уже оформлена заявка на возврат.';
+    case 'comment_required':
+    case 'comment is required':
+    case 'COMMENT_REQUIRED':
+      return 'Пожалуйста, опишите причину возврата в комментарии.';
+    case 'evidence_required':
+    case '2 to 6 photos required for this return reason':
+    case 'EVIDENCE_REQUIRED':
+      return 'Для этой причины возврата необходимо прикрепить фотографии товара.';
+    case 'evidence_too_many':
+    case 'maximum 6 photos allowed':
+    case 'EVIDENCE_TOO_MANY':
+      return 'Максимум 6 фотографий.';
+    case 'order_not_delivered':
+    case 'can only return delivered orders':
+    case 'ORDER_NOT_DELIVERED':
+      return 'Возврат возможен только для доставленных заказов.';
+    case 'return_window_expired':
+    case 'return window has expired':
+    case 'RETURN_WINDOW_EXPIRED':
+      return 'Срок оформления возврата для этого заказа истёк.';
     case 'invalid_return':
       if (fallback?.includes('window expired')) return 'Срок возврата истёк';
       if (fallback?.includes('not delivered')) return 'Заказ ещё не доставлен';
-      if (fallback?.includes('quantity')) return 'Недопустимое количество для возврата';
+      if (fallback?.includes('quantity')) return 'На это количество товара уже оформлена заявка на возврат.';
       return 'Недопустимый возврат';
     case 'bad_request':
       return fallback || 'Некорректный запрос';

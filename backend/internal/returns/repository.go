@@ -259,7 +259,6 @@ func (r *Repository) GetSellerReturnItemsForReturn(ctx context.Context, sellerID
 	return list, nil
 }
 
-
 func (r *Repository) GetTotalRefundedAmountForOrder(ctx context.Context, orderID uuid.UUID) (int64, error) {
 	query := `
 		SELECT COALESCE(SUM(amount_cents), 0)
@@ -710,4 +709,130 @@ func (r *Repository) GetScannedUnitsForReturnItemTx(ctx context.Context, tx pgx.
 		list = make([]ScannedUnitDetail, 0)
 	}
 	return list, nil
+}
+
+func (r *Repository) CreateEvidence(ctx context.Context, evidence *ReturnItemEvidence) error {
+	query := `
+		INSERT INTO return_item_evidences (id, customer_id, return_item_id, storage_key, content_type, sort_order)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING created_at
+	`
+	return r.db.QueryRow(ctx, query, evidence.ID, evidence.CustomerID, evidence.ReturnItemID, evidence.StorageKey, evidence.ContentType, evidence.SortOrder).Scan(&evidence.CreatedAt)
+}
+
+func (r *Repository) BindEvidenceTx(ctx context.Context, tx pgx.Tx, customerID uuid.UUID, evidenceIDs []uuid.UUID, returnItemID uuid.UUID) error {
+	if len(evidenceIDs) == 0 {
+		return nil
+	}
+
+	seen := make(map[uuid.UUID]bool)
+	for _, id := range evidenceIDs {
+		if seen[id] {
+			return ErrEvidenceDuplicate
+		}
+		seen[id] = true
+	}
+
+	query := `
+		SELECT id, customer_id, return_item_id, content_type
+		FROM return_item_evidences
+		WHERE id = ANY($1)
+		FOR UPDATE
+	`
+	rows, err := tx.Query(ctx, query, evidenceIDs)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	found := make(map[uuid.UUID]ReturnItemEvidence)
+	for rows.Next() {
+		var ev ReturnItemEvidence
+		if err := rows.Scan(&ev.ID, &ev.CustomerID, &ev.ReturnItemID, &ev.ContentType); err != nil {
+			return err
+		}
+		found[ev.ID] = ev
+	}
+	rows.Close()
+
+	validTypes := map[string]bool{
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/webp": true,
+	}
+
+	for _, id := range evidenceIDs {
+		ev, ok := found[id]
+		if !ok || ev.CustomerID != customerID {
+			return ErrEvidenceNotFound
+		}
+		if ev.ReturnItemID != nil {
+			return ErrEvidenceAlreadyBound
+		}
+		if !validTypes[ev.ContentType] {
+			return ErrEvidenceInvalidFormat
+		}
+	}
+
+	queryUpdate := `
+		UPDATE return_item_evidences SET return_item_id = $1 WHERE id = ANY($2)
+	`
+	_, err = tx.Exec(ctx, queryUpdate, returnItemID, evidenceIDs)
+	return err
+}
+
+func (r *Repository) GetEvidencesByReturnItem(ctx context.Context, returnItemID uuid.UUID) ([]ReturnItemEvidence, error) {
+	query := `
+		SELECT id, customer_id, return_item_id, storage_key, content_type, sort_order, created_at
+		FROM return_item_evidences
+		WHERE return_item_id = $1
+		ORDER BY sort_order ASC
+	`
+	rows, err := r.db.Query(ctx, query, returnItemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var evidences []ReturnItemEvidence
+	for rows.Next() {
+		var ev ReturnItemEvidence
+		if err := rows.Scan(&ev.ID, &ev.CustomerID, &ev.ReturnItemID, &ev.StorageKey, &ev.ContentType, &ev.SortOrder, &ev.CreatedAt); err != nil {
+			return nil, err
+		}
+		evidences = append(evidences, ev)
+	}
+	if evidences == nil {
+		evidences = make([]ReturnItemEvidence, 0)
+	}
+	return evidences, nil
+}
+
+func (r *Repository) GetEvidenceByID(ctx context.Context, evidenceID uuid.UUID) (*ReturnItemEvidence, error) {
+	query := `
+		SELECT id, customer_id, return_item_id, storage_key, content_type, sort_order, created_at
+		FROM return_item_evidences
+		WHERE id = $1
+	`
+	var ev ReturnItemEvidence
+	err := r.db.QueryRow(ctx, query, evidenceID).Scan(&ev.ID, &ev.CustomerID, &ev.ReturnItemID, &ev.StorageKey, &ev.ContentType, &ev.SortOrder, &ev.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrEvidenceNotFound
+		}
+		return nil, err
+	}
+	return &ev, nil
+}
+
+func (r *Repository) DeleteEvidence(ctx context.Context, evidenceID uuid.UUID) error {
+	query := `DELETE FROM return_item_evidences WHERE id = $1`
+	res, err := r.db.Exec(ctx, query, evidenceID)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() == 0 {
+		return ErrEvidenceNotFound
+	}
+	return nil
 }

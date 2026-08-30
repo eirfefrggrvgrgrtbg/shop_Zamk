@@ -64,3 +64,13 @@ type Refund struct {
 	ProcessedAt      *time.Time `json:"processedAt"`
 	FailedAt         *time.Time `json:"failedAt"`
 }
+
+type ReturnItemEvidence struct {
+	ID           uuid.UUID  `json:"id"`
+	CustomerID   uuid.UUID  `json:"customerId"`
+	ReturnItemID *uuid.UUID `json:"returnItemId"`
+	StorageKey   string     `json:"storageKey"`
+	ContentType  string     `json:"contentType"`
+	SortOrder    int        `json:"sortOrder"`
+	CreatedAt    time.Time  `json:"createdAt"`
+}

@@ -2,17 +2,23 @@ package returns
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 )
 
 type payoutsService interface {
@@ -25,30 +31,113 @@ type paymentsService interface {
 }
 
 type Service struct {
-	repo         *Repository
-	ordersRepo   *orders.Repository
-	inventorySvc *inventory.Service
-	db           *postgres.Client
-	payouts      payoutsService
-	payments     paymentsService
-	windowDays   int
-	notifs       *notifications.Service
+	storageProvider storage.Provider
+	repo            *Repository
+	ordersRepo      *orders.Repository
+	inventorySvc    *inventory.Service
+	db              *postgres.Client
+	payouts         payoutsService
+	payments        paymentsService
+	windowDays      int
+	notifs          *notifications.Service
 }
 
-func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *inventory.Service, db *postgres.Client, payouts payoutsService, payments paymentsService, windowDays int, notifs *notifications.Service) *Service {
+func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *inventory.Service, db *postgres.Client, payouts payoutsService, payments paymentsService, windowDays int, notifs *notifications.Service, storageProvider storage.Provider) *Service {
 	return &Service{
-		repo:         repo,
-		ordersRepo:   ordersRepo,
-		inventorySvc: inventorySvc,
-		db:           db,
-		payouts:      payouts,
-		payments:     payments,
-		windowDays:   windowDays,
-		notifs:       notifs,
+		storageProvider: storageProvider,
+		repo:            repo,
+		ordersRepo:      ordersRepo,
+		inventorySvc:    inventorySvc,
+		db:              db,
+		payouts:         payouts,
+		payments:        payments,
+		windowDays:      windowDays,
+		notifs:          notifs,
 	}
 }
 
+func (s *Service) UploadReturnEvidence(ctx context.Context, customerID uuid.UUID, file io.Reader, filename string, size int64, contentType string) (*UploadEvidenceResponse, error) {
+	if s.storageProvider == nil {
+		return nil, errors.New("storage provider not configured")
+	}
+
+	if size > 10*1024*1024 {
+		return nil, errors.New("file too large")
+	}
+
+	validMimes := map[string]bool{
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/webp": true,
+	}
+	if !validMimes[contentType] {
+		return nil, ErrEvidenceInvalidFormat
+	}
+
+	ext := strings.ToLower(filepath.Ext(filename))
+	validExts := map[string]bool{
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".webp": true,
+	}
+	if !validExts[ext] {
+		return nil, ErrEvidenceInvalidFormat
+	}
+
+	evidenceID := uuid.New()
+	objectKey := "returns/" + customerID.String() + "/" + evidenceID.String() + ext
+
+	stored, err := s.storageProvider.UploadImage(ctx, file, size, objectKey, contentType)
+	if err != nil {
+		return nil, err
+	}
+
+	evidence := &ReturnItemEvidence{
+		ID:          evidenceID,
+		CustomerID:  customerID,
+		StorageKey:  stored.ObjectKey,
+		ContentType: contentType,
+		SortOrder:   0,
+	}
+
+	if err := s.repo.CreateEvidence(ctx, evidence); err != nil {
+		return nil, err
+	}
+
+	return &UploadEvidenceResponse{
+		ID:  evidence.ID,
+		URL: s.storageProvider.BuildPublicURL(stored.ObjectKey),
+	}, nil
+}
+
+func (s *Service) DeleteStagedEvidence(ctx context.Context, customerID, evidenceID uuid.UUID) error {
+	ev, err := s.repo.GetEvidenceByID(ctx, evidenceID)
+	if err != nil {
+		return err
+	}
+	if ev.CustomerID != customerID {
+		return ErrEvidenceNotFound
+	}
+	if ev.ReturnItemID != nil {
+		return ErrEvidenceAlreadyBound
+	}
+
+	if s.storageProvider != nil && ev.StorageKey != "" {
+		if err := s.storageProvider.DeleteObject(ctx, ev.StorageKey); err != nil {
+			return fmt.Errorf("failed to delete storage object: %w", err)
+		}
+	}
+
+	if err := s.repo.DeleteEvidence(ctx, evidenceID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *Service) CreateReturn(ctx context.Context, userID, orderID uuid.UUID, req CreateReturnRequest) ([]ReturnResponse, error) {
+
 	var responses []ReturnResponse
 
 	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
@@ -75,6 +164,11 @@ func (s *Service) CreateReturn(ctx context.Context, userID, orderID uuid.UUID, r
 		if len(requestedItemIDs) == 0 {
 			return ErrInvalidQuantity
 		}
+
+		if req.Comment == nil || strings.TrimSpace(*req.Comment) == "" {
+			return ErrCommentRequired
+		}
+		trimmedComment := strings.TrimSpace(*req.Comment)
 
 		// Lock order items
 		query := `SELECT id, order_id, order_fulfillment_id, quantity, seller_id FROM order_items WHERE id = ANY($1) AND order_id = $2 ORDER BY id FOR UPDATE`
@@ -154,13 +248,47 @@ func (s *Service) CreateReturn(ctx context.Context, userID, orderID uuid.UUID, r
 				UserID:        userID,
 				Status:        "requested",
 				Reason:        req.Reason,
-				Comment:       req.Comment,
+				Comment:       &trimmedComment,
 			}
 
 			var retItems []ReturnItem
 
 			for _, li := range itemsGroup {
 				itemReq := reqItemMap[li.ID]
+
+				// Taxonomy validation
+				reason := req.Reason
+				if itemReq.Reason != nil && *itemReq.Reason != "" {
+					reason = *itemReq.Reason
+				}
+
+				isCanonicalRequired := map[string]bool{
+					"defective":        true,
+					"damaged":          true,
+					"wrong_item":       true,
+					"not_as_described": true,
+					"incomplete":       true,
+				}
+				isCanonicalOptional := map[string]bool{
+					"size_fit":     true,
+					"changed_mind": true,
+					"other":        true,
+				}
+
+				evCount := len(itemReq.EvidenceIDs)
+
+				if isCanonicalRequired[reason] {
+					if evCount < 2 {
+						return ErrEvidenceRequired
+					}
+					if evCount > 6 {
+						return ErrEvidenceTooMany
+					}
+				} else if isCanonicalOptional[reason] {
+					if evCount > 6 {
+						return ErrEvidenceTooMany
+					}
+				}
 
 				// Calculate active return qty (locking guarantees safe sum)
 				var returnedQty int
@@ -178,13 +306,23 @@ func (s *Service) CreateReturn(ctx context.Context, userID, orderID uuid.UUID, r
 					return ErrInvalidQuantity
 				}
 
+				itemReason := itemReq.Reason
+				if itemReason == nil || *itemReason == "" {
+					itemReason = &req.Reason
+				}
+				itemCond := itemReq.Condition
+				if itemCond == nil || *itemCond == "" {
+					defaultCond := "new"
+					itemCond = &defaultCond
+				}
+
 				retItems = append(retItems, ReturnItem{
 					ID:               uuid.New(),
 					ReturnID:         ret.ID,
 					OrderItemID:      li.ID,
 					Quantity:         itemReq.Quantity,
-					Reason:           itemReq.Reason,
-					Condition:        itemReq.Condition,
+					Reason:           itemReason,
+					Condition:        itemCond,
 					Restock:          false,
 					AcceptedQuantity: 0,
 					DamagedQuantity:  0,
@@ -194,6 +332,16 @@ func (s *Service) CreateReturn(ctx context.Context, userID, orderID uuid.UUID, r
 
 			if err := s.repo.CreateReturnTx(ctx, tx, ret, retItems); err != nil {
 				return err
+			}
+
+			// Bind evidences
+			for i, li := range itemsGroup {
+				itemReq := reqItemMap[li.ID]
+				if len(itemReq.EvidenceIDs) > 0 {
+					if err := s.repo.BindEvidenceTx(ctx, tx, userID, itemReq.EvidenceIDs, retItems[i].ID); err != nil {
+						return err
+					}
+				}
 			}
 
 			// Notify seller safely from canonical order_fulfillments.seller_id

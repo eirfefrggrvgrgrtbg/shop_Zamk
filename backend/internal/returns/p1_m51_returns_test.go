@@ -74,7 +74,7 @@ func setupM51Fixture(t *testing.T) *m51Fixture {
 	payoutSvc := payouts.NewService(payoutRepo, client, returnsRepo, ordersRepo, cfg, notifSvc)
 
 	windowDays := 14
-	svc := returns.NewService(returnsRepo, ordersRepo, invSvc, client, payoutSvc, paySvc, windowDays, notifSvc)
+	svc := returns.NewService(returnsRepo, ordersRepo, invSvc, client, payoutSvc, paySvc, windowDays, notifSvc, nil)
 
 	fix := &m51Fixture{
 		client:      client,
@@ -137,6 +137,20 @@ type testOrder struct {
 	fulfillmentID uuid.UUID
 	shipmentID    uuid.UUID
 	orderItemID   uuid.UUID
+}
+
+func (fix *m51Fixture) createStagedEvidence(t *testing.T, customerID uuid.UUID, count int) []uuid.UUID {
+	t.Helper()
+	ctx := context.Background()
+	var ids []uuid.UUID
+	for i := 0; i < count; i++ {
+		evID := uuid.New()
+		_, err := fix.client.Pool.Exec(ctx, "INSERT INTO return_item_evidences (id, customer_id, storage_key, content_type, sort_order, created_at) VALUES ($1, $2, $3, 'image/jpeg', $4, now())",
+			evID, customerID, fmt.Sprintf("returns/%s/%s-photo.jpg", customerID.String(), evID.String()), i)
+		require.NoError(t, err)
+		ids = append(ids, evID)
+	}
+	return ids
 }
 
 func (fix *m51Fixture) createDeliveredOrder(t *testing.T, deliveredAt time.Time, qty int) testOrder {
@@ -334,10 +348,12 @@ func TestM51_ReturnWindowEligibility(t *testing.T) {
 
 	// A. Delivered shipment inside window (delivered 2 days ago, window = 14 days) -> Succeeds
 	tOrdInside := fix.createDeliveredOrder(t, time.Now().Add(-2*24*time.Hour), 1)
+	evIDsA := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrdInside.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
 		Items: []returns.CreateReturnItemRequest{
-			{OrderItemID: tOrdInside.orderItemID, Quantity: 1},
+			{OrderItemID: tOrdInside.orderItemID, Quantity: 1, EvidenceIDs: evIDsA},
 		},
 	})
 	require.NoError(t, err)
@@ -346,10 +362,12 @@ func TestM51_ReturnWindowEligibility(t *testing.T) {
 
 	// B. Delivered shipment outside window (delivered 20 days ago) -> Fails with ErrReturnWindowExpired
 	tOrdExpired := fix.createDeliveredOrder(t, time.Now().Add(-20*24*time.Hour), 1)
+	evIDsB := fix.createStagedEvidence(t, fix.userID, 2)
 	_, err = fix.svc.CreateReturn(ctx, fix.userID, tOrdExpired.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
 		Items: []returns.CreateReturnItemRequest{
-			{OrderItemID: tOrdExpired.orderItemID, Quantity: 1},
+			{OrderItemID: tOrdExpired.orderItemID, Quantity: 1, EvidenceIDs: evIDsB},
 		},
 	})
 	assert.ErrorIs(t, err, returns.ErrReturnWindowExpired)
@@ -357,10 +375,12 @@ func TestM51_ReturnWindowEligibility(t *testing.T) {
 	// C. Mutating orders.updated_at to NOW() does NOT extend window when shipment.delivered_at is expired
 	_, err = fix.client.Pool.Exec(ctx, "UPDATE orders SET updated_at = now() WHERE id = $1", tOrdExpired.orderID)
 	require.NoError(t, err)
+	evIDsC := fix.createStagedEvidence(t, fix.userID, 2)
 	_, err = fix.svc.CreateReturn(ctx, fix.userID, tOrdExpired.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
 		Items: []returns.CreateReturnItemRequest{
-			{OrderItemID: tOrdExpired.orderItemID, Quantity: 1},
+			{OrderItemID: tOrdExpired.orderItemID, Quantity: 1, EvidenceIDs: evIDsC},
 		},
 	})
 	assert.ErrorIs(t, err, returns.ErrReturnWindowExpired, "Window must use shipment.delivered_at, NEVER orders.updated_at")
@@ -369,10 +389,12 @@ func TestM51_ReturnWindowEligibility(t *testing.T) {
 	tOrdShipped := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
 	_, err = fix.client.Pool.Exec(ctx, "UPDATE shipments SET status = 'shipped' WHERE id = $1", tOrdShipped.shipmentID)
 	require.NoError(t, err)
+	evIDsD := fix.createStagedEvidence(t, fix.userID, 2)
 	_, err = fix.svc.CreateReturn(ctx, fix.userID, tOrdShipped.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
 		Items: []returns.CreateReturnItemRequest{
-			{OrderItemID: tOrdShipped.orderItemID, Quantity: 1},
+			{OrderItemID: tOrdShipped.orderItemID, Quantity: 1, EvidenceIDs: evIDsD},
 		},
 	})
 	assert.ErrorIs(t, err, returns.ErrOrderNotDelivered)
@@ -381,10 +403,12 @@ func TestM51_ReturnWindowEligibility(t *testing.T) {
 	tOrdNullDelivered := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
 	_, err = fix.client.Pool.Exec(ctx, "UPDATE shipments SET delivered_at = NULL WHERE id = $1", tOrdNullDelivered.shipmentID)
 	require.NoError(t, err)
+	evIDsE := fix.createStagedEvidence(t, fix.userID, 2)
 	_, err = fix.svc.CreateReturn(ctx, fix.userID, tOrdNullDelivered.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
 		Items: []returns.CreateReturnItemRequest{
-			{OrderItemID: tOrdNullDelivered.orderItemID, Quantity: 1},
+			{OrderItemID: tOrdNullDelivered.orderItemID, Quantity: 1, EvidenceIDs: evIDsE},
 		},
 	})
 	assert.ErrorIs(t, err, returns.ErrOrderNotDelivered)
@@ -442,8 +466,9 @@ func TestM51_ReturnWindowEligibility(t *testing.T) {
 
 	// Item A alone succeeds using A's delivered_at
 	respA, err := fix.svc.CreateReturn(ctx, fix.userID, orderID_AB, returns.CreateReturnRequest{
-		Reason: "item_a_return",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: oiID_A, Quantity: 1}},
+		Reason:  "item_a_return",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: oiID_A, Quantity: 1}},
 	})
 	require.NoError(t, err)
 	assert.Len(t, respA, 1)
@@ -451,8 +476,9 @@ func TestM51_ReturnWindowEligibility(t *testing.T) {
 
 	// Item B alone fails with ErrReturnWindowExpired using B's delivered_at
 	_, err = fix.svc.CreateReturn(ctx, fix.userID, orderID_AB, returns.CreateReturnRequest{
-		Reason: "item_b_return",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: oiID_B, Quantity: 1}},
+		Reason:  "item_b_return",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: oiID_B, Quantity: 1}},
 	})
 	assert.ErrorIs(t, err, returns.ErrReturnWindowExpired)
 }
@@ -478,7 +504,8 @@ func TestM51_ConcurrencyAndQuantityLimits(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-				Reason: "size_mismatch",
+				Reason:  "size_mismatch",
+				Comment: func() *string { s := "Valid test comment"; return &s }(),
 				Items: []returns.CreateReturnItemRequest{
 					{OrderItemID: tOrd.orderItemID, Quantity: 1},
 				},
@@ -512,39 +539,44 @@ func TestM51_ConcurrencyAndQuantityLimits(t *testing.T) {
 
 	// Step 1: Return 2 of 5 -> Succeeds (remaining 3)
 	resp1, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd5.orderID, returns.CreateReturnRequest{
-		Reason: "reason 1",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd5.orderItemID, Quantity: 2}},
+		Reason:  "reason 1",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd5.orderItemID, Quantity: 2}},
 	})
 	require.NoError(t, err)
 	assert.Len(t, resp1, 1)
 
 	// Step 2: Return 2 of 5 -> Succeeds (remaining 1)
 	resp2, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd5.orderID, returns.CreateReturnRequest{
-		Reason: "reason 2",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd5.orderItemID, Quantity: 2}},
+		Reason:  "reason 2",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd5.orderItemID, Quantity: 2}},
 	})
 	require.NoError(t, err)
 	assert.Len(t, resp2, 1)
 
 	// Step 3: Return 2 of 5 -> Fails because 2 + 2 + 2 > 5
 	_, err = fix.svc.CreateReturn(ctx, fix.userID, tOrd5.orderID, returns.CreateReturnRequest{
-		Reason: "reason 3",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd5.orderItemID, Quantity: 2}},
+		Reason:  "reason 3",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd5.orderItemID, Quantity: 2}},
 	})
 	assert.ErrorIs(t, err, returns.ErrInvalidQuantity)
 
 	// Step 4: Return remaining 1 -> Succeeds
 	resp4, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd5.orderID, returns.CreateReturnRequest{
-		Reason: "reason 4",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd5.orderItemID, Quantity: 1}},
+		Reason:  "reason 4",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd5.orderItemID, Quantity: 1}},
 	})
 	require.NoError(t, err)
 	assert.Len(t, resp4, 1)
 
 	// Step 5: Return 1 more -> Fails (exhausted)
 	_, err = fix.svc.CreateReturn(ctx, fix.userID, tOrd5.orderID, returns.CreateReturnRequest{
-		Reason: "reason 5",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd5.orderItemID, Quantity: 1}},
+		Reason:  "reason 5",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd5.orderItemID, Quantity: 1}},
 	})
 	assert.ErrorIs(t, err, returns.ErrInvalidQuantity)
 }
@@ -619,7 +651,8 @@ func TestM51_MultiFulfillmentAtomicityAndSellerIsolation(t *testing.T) {
 
 	// A. One submission with items from Fulfillment A and B -> exactly TWO Returns created
 	responses, err := fix.svc.CreateReturn(ctx, fix.userID, orderID, returns.CreateReturnRequest{
-		Reason: "multi_return",
+		Reason:  "multi_return",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
 		Items: []returns.CreateReturnItemRequest{
 			{OrderItemID: oiIDA, Quantity: 1},
 			{OrderItemID: oiIDB, Quantity: 1},
@@ -713,7 +746,8 @@ func TestM51_MultiFulfillmentAtomicityAndSellerIsolation(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = fix.svc.CreateReturn(ctx, fix.userID, orderID2, returns.CreateReturnRequest{
-		Reason: "atomic_test",
+		Reason:  "atomic_test",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
 		Items: []returns.CreateReturnItemRequest{
 			{OrderItemID: oiIDA2, Quantity: 1},
 			{OrderItemID: oiIDB2, Quantity: 1},
@@ -774,7 +808,8 @@ func TestM51_MultiFulfillmentDeterminism(t *testing.T) {
 
 	// Submit items in arbitrary / non-sorted order (3, 1, 2)
 	responses, err := fix.svc.CreateReturn(ctx, fix.userID, orderID, returns.CreateReturnRequest{
-		Reason: "det_test",
+		Reason:  "det_test",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
 		Items: []returns.CreateReturnItemRequest{
 			{OrderItemID: oiID3, Quantity: 1},
 			{OrderItemID: oiID1, Quantity: 1},
@@ -881,7 +916,8 @@ func TestM51_NoSideEffects(t *testing.T) {
 
 	// Execute CreateReturn
 	_, err = fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "no_side_effects",
+		Reason:  "no_side_effects",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
 		Items: []returns.CreateReturnItemRequest{
 			{OrderItemID: tOrd.orderItemID, Quantity: 1},
 		},
@@ -978,7 +1014,8 @@ func TestM51_OldRestockSafety(t *testing.T) {
 
 	// 1. Create return
 	responses, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "restock_safety_test",
+		Reason:  "restock_safety_test",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
 		Items: []returns.CreateReturnItemRequest{
 			{OrderItemID: tOrd.orderItemID, Quantity: 1},
 		},
@@ -1056,13 +1093,14 @@ func TestM51_APIContract(t *testing.T) {
 
 	reqBodySingle := fmt.Sprintf(`{
 		"reason": "contract_test",
+		"comment": "Problem explanation",
 		"items": [{"orderItemId": "%s", "quantity": 1}]
 	}`, tOrd.orderItemID)
 
 	reqSingle, err := http.NewRequest("POST", "/customer/orders/"+tOrd.orderID.String()+"/returns", strings.NewReader(reqBodySingle))
 	require.NoError(t, err)
 	reqSingle = reqSingle.WithContext(context.WithValue(reqSingle.Context(), "userID", fix.userID))
-	
+
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", tOrd.orderID.String())
 	reqSingle = reqSingle.WithContext(context.WithValue(reqSingle.Context(), chi.RouteCtxKey, rctx))

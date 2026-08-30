@@ -161,3 +161,14 @@ export const markAllCustomerNotificationsRead = async (): Promise<void> => {
   return request<void>('POST', '/customer/notifications/read-all');
 };
 
+
+export async function uploadReturnEvidence(file: File): Promise<{ id: string; url: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return request<{ id: string; url: string }>('POST', '/customer/returns/evidence/upload', { body: formData });
+}
+
+export async function deleteReturnEvidence(evidenceId: string): Promise<void> {
+  return request<void>('DELETE', `/customer/returns/evidence/${evidenceId}`);
+}
+

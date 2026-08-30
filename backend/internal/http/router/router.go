@@ -270,6 +270,8 @@ func New(
 		r.Post("/orders/{id}/cancel", ordersHandler.CancelCustomerOrder)
 		r.Post("/orders/{id}/payment", paymentsHandler.CreatePayment)
 		r.Get("/orders/{id}/shipment", fulfillmentHandler.GetCustomerShipment)
+		r.With(uploadLimit).Post("/returns/evidence/upload", returnsHandler.UploadReturnEvidence)
+		r.Delete("/returns/evidence/{evidenceId}", returnsHandler.DeleteCustomerReturnEvidence)
 		r.Post("/orders/{id}/returns", returnsHandler.CreateCustomerReturn)
 		r.Get("/returns", returnsHandler.ListCustomerReturns)
 		r.Get("/returns/{id}", returnsHandler.GetCustomerReturn)

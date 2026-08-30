@@ -118,9 +118,6 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	suppliesService := supplies.NewService(pgClient.Pool, suppliesRepo)
 	suppliesHandler := supplies.NewHandler(suppliesService, logger)
 
-	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, paymentsService, cfg.Worker.ReturnWindowDays, notificationsService)
-	returnsHandler := returns.NewHandler(returnsService)
-
 	// In test mode without S3 configured, this might fail, so check err or configure dummy
 	var storageHandler *storage.Handler
 	storageProvider, err := storage.NewS3Client(&cfg.S3)
@@ -131,6 +128,10 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 		// Log error if it happens in prod, but allow missing S3 in tests?
 		logger.Warn("failed to create storage provider, continuing without storage handler", "error", err)
 	}
+
+	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, paymentsService, cfg.Worker.ReturnWindowDays, notificationsService, storageProvider)
+	returnsHandler := returns.NewHandler(returnsService)
+
 
 	// Staff RBAC
 	staffRepo := staff.NewRepository(pgClient.Pool)

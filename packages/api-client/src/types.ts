@@ -290,6 +290,7 @@ export interface ReturnItemRequest {
   quantity: number;
   reason?: string;
   condition?: string;
+  evidenceIds?: string[];
 }
 
 export interface ReturnRequest {
@@ -305,6 +306,7 @@ export interface CustomerReturnItem {
   quantity: number;
   reason?: string;
   condition?: string;
+  evidenceIds?: string[];
   restock: boolean;
   acceptedQuantity: number;
   damagedQuantity: number;
@@ -590,6 +592,7 @@ export interface SellerReturn {
   quantity: number;
   reason?: string;
   condition?: string;
+  evidenceIds?: string[];
   productTitle: string;
   variantSize?: string;
   variantColor?: string;
@@ -1157,6 +1160,7 @@ export interface AdminReturnItem {
   quantity: number;
   reason?: string;
   condition?: string;
+  evidenceIds?: string[];
   restock?: boolean;
   createdAt?: string;
 }

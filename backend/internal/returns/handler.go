@@ -7,11 +7,14 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-playground/validator/v10"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+	"path/filepath"
+	"strings"
 )
 
 type Handler struct {
@@ -38,12 +41,11 @@ func (h *Handler) WithAudit(ar *staff.AuditRepository) *Handler {
 // ---------------------------------------------------------
 
 func (h *Handler) CreateCustomerReturn(w http.ResponseWriter, r *http.Request) {
-	val := r.Context().Value("userID")
-	if val == nil {
+	userID := auth.GetUserID(r.Context())
+	if userID == uuid.Nil {
 		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
-	userID := val.(uuid.UUID)
 
 	idStr := chi.URLParam(r, "id")
 	orderID, err := uuid.Parse(idStr)
@@ -64,15 +66,32 @@ func (h *Handler) CreateCustomerReturn(w http.ResponseWriter, r *http.Request) {
 
 	responses, err := h.service.CreateReturn(r.Context(), userID, orderID, req)
 	if err != nil {
-		if errors.Is(err, ErrOrderNotDelivered) || errors.Is(err, ErrReturnWindowExpired) || errors.Is(err, ErrInvalidQuantity) {
-			h.writeError(w, http.StatusBadRequest, "invalid_return", err.Error())
-			return
-		}
-		if errors.Is(err, ErrUnauthorized) {
+		switch {
+		case errors.Is(err, ErrUnauthorized):
 			h.writeError(w, http.StatusForbidden, "forbidden", "Unauthorized")
-			return
+		case errors.Is(err, ErrOrderNotDelivered):
+			h.writeError(w, http.StatusBadRequest, "order_not_delivered", err.Error())
+		case errors.Is(err, ErrReturnWindowExpired):
+			h.writeError(w, http.StatusBadRequest, "return_window_expired", err.Error())
+		case errors.Is(err, ErrInvalidQuantity):
+			h.writeError(w, http.StatusBadRequest, "invalid_quantity", err.Error())
+		case errors.Is(err, ErrEvidenceRequired):
+			h.writeError(w, http.StatusBadRequest, "evidence_required", err.Error())
+		case errors.Is(err, ErrEvidenceTooMany):
+			h.writeError(w, http.StatusBadRequest, "evidence_too_many", err.Error())
+		case errors.Is(err, ErrCommentRequired):
+			h.writeError(w, http.StatusBadRequest, "comment_required", err.Error())
+		case errors.Is(err, ErrEvidenceNotFound):
+			h.writeError(w, http.StatusBadRequest, "evidence_not_found", err.Error())
+		case errors.Is(err, ErrEvidenceAlreadyBound):
+			h.writeError(w, http.StatusBadRequest, "evidence_already_used", err.Error())
+		case errors.Is(err, ErrEvidenceDuplicate):
+			h.writeError(w, http.StatusBadRequest, "evidence_duplicate", err.Error())
+		case errors.Is(err, ErrEvidenceInvalidFormat):
+			h.writeError(w, http.StatusBadRequest, "evidence_invalid_format", err.Error())
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create return")
 		}
-		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create return")
 		return
 	}
 
@@ -88,12 +107,11 @@ func (h *Handler) CreateCustomerReturn(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetCustomerReturn(w http.ResponseWriter, r *http.Request) {
-	val := r.Context().Value("userID")
-	if val == nil {
+	userID := auth.GetUserID(r.Context())
+	if userID == uuid.Nil {
 		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
-	userID := val.(uuid.UUID)
 
 	idStr := chi.URLParam(r, "id")
 	returnID, err := uuid.Parse(idStr)
@@ -122,12 +140,11 @@ func (h *Handler) GetCustomerReturn(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListCustomerReturns(w http.ResponseWriter, r *http.Request) {
-	val := r.Context().Value("userID")
-	if val == nil {
+	userID := auth.GetUserID(r.Context())
+	if userID == uuid.Nil {
 		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
-	userID := val.(uuid.UUID)
 
 	page := pagination.FromRequest(r)
 	returns, err := h.service.ListCustomerReturns(r.Context(), userID, page.Limit, page.Offset)
@@ -193,12 +210,11 @@ func (h *Handler) GetAdminReturn(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateAdminReturnStatus(w http.ResponseWriter, r *http.Request) {
-	val := r.Context().Value("userID")
-	if val == nil {
+	adminID := auth.GetUserID(r.Context())
+	if adminID == uuid.Nil {
 		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
-	adminID := val.(uuid.UUID)
 
 	idStr := chi.URLParam(r, "id")
 	returnID, err := uuid.Parse(idStr)
@@ -254,12 +270,11 @@ func (h *Handler) UpdateAdminReturnStatus(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) CreateAdminRefund(w http.ResponseWriter, r *http.Request) {
-	val := r.Context().Value("userID")
-	if val == nil {
+	adminID := auth.GetUserID(r.Context())
+	if adminID == uuid.Nil {
 		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
-	adminID := val.(uuid.UUID)
 
 	idStr := chi.URLParam(r, "id")
 	returnID, err := uuid.Parse(idStr)
@@ -585,12 +600,11 @@ func (h *Handler) FinalizeReceiving(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------
 
 func (h *Handler) ListSellerReturns(w http.ResponseWriter, r *http.Request) {
-	val := r.Context().Value("userID") // In this system seller users are authenticated via user ID
-	if val == nil {
+	userID := auth.GetUserID(r.Context())
+	if userID == uuid.Nil {
 		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
-	userID := val.(uuid.UUID)
 
 	page := pagination.FromRequest(r)
 	items, err := h.service.ListSellerReturns(r.Context(), userID, page.Limit, page.Offset)
@@ -609,12 +623,11 @@ func (h *Handler) ListSellerReturns(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetSellerReturn(w http.ResponseWriter, r *http.Request) {
-	val := r.Context().Value("userID")
-	if val == nil {
+	userID := auth.GetUserID(r.Context())
+	if userID == uuid.Nil {
 		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
-	userID := val.(uuid.UUID)
 
 	idStr := chi.URLParam(r, "id")
 	returnID, err := uuid.Parse(idStr)
@@ -651,4 +664,94 @@ func (h *Handler) writeError(w http.ResponseWriter, statusCode int, code, messag
 			"message": message,
 		},
 	})
+}
+
+func (h *Handler) UploadReturnEvidence(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	userID := auth.GetUserID(ctx)
+	if userID == uuid.Nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+
+	maxMemory := int64(10) * 1024 * 1024
+	if err := r.ParseMultipartForm(maxMemory); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "invalid form data")
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		file, header, err = r.FormFile("image")
+		if err != nil {
+			h.writeError(w, http.StatusBadRequest, "missing_file", "missing file in form")
+			return
+		}
+	}
+	defer file.Close()
+
+	if header.Size > maxMemory {
+		h.writeError(w, http.StatusBadRequest, "file_too_large", "file exceeds maximum allowed size")
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	validExts := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
+	if !validExts[ext] {
+		h.writeError(w, http.StatusBadRequest, "invalid_file_type", "only jpeg, png, and webp are allowed")
+		return
+	}
+
+	contentType := header.Header.Get("Content-Type")
+	validMimes := map[string]bool{"image/jpeg": true, "image/png": true, "image/webp": true}
+	if !validMimes[contentType] {
+		h.writeError(w, http.StatusBadRequest, "invalid_file_type", "only jpeg, png, and webp are allowed")
+		return
+	}
+
+	resp, err := h.service.UploadReturnEvidence(ctx, userID, file, header.Filename, header.Size, contentType)
+	if err != nil {
+		if errors.Is(err, ErrEvidenceInvalidFormat) {
+			h.writeError(w, http.StatusBadRequest, "invalid_file_type", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "upload_failed", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) DeleteCustomerReturnEvidence(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	customerID := auth.GetUserID(ctx)
+	if customerID == uuid.Nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+
+	evidenceIDStr := chi.URLParam(r, "evidenceId")
+	evidenceID, err := uuid.Parse(evidenceIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_evidence_id", "invalid evidence id")
+		return
+	}
+
+	err = h.service.DeleteStagedEvidence(ctx, customerID, evidenceID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrEvidenceNotFound):
+			h.writeError(w, http.StatusNotFound, "evidence_not_found", "evidence not found")
+		case errors.Is(err, ErrEvidenceAlreadyBound):
+			h.writeError(w, http.StatusBadRequest, "evidence_already_bound", "cannot delete bound return evidence")
+		default:
+			h.writeError(w, http.StatusInternalServerError, "delete_failed", err.Error())
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

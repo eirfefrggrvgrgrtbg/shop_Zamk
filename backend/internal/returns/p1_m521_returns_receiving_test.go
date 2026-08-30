@@ -21,10 +21,12 @@ func TestM521_StartReceiving_IdempotencyAndStateMatrix(t *testing.T) {
 
 	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
 
+	evIDs := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
 		Items: []returns.CreateReturnItemRequest{
-			{OrderItemID: tOrd.orderItemID, Quantity: 1},
+			{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDs},
 		},
 	})
 	require.NoError(t, err)
@@ -205,9 +207,11 @@ func TestM521_ScanValidationMatrix(t *testing.T) {
 	_ = createZMUWithAlloc(releasedZMU, "shipped", &pickedTime, &relTime, tOrd.orderID, tOrd.orderItemID)
 
 	// Create return in requested status
+	evIDsScan := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDsScan}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -318,16 +322,18 @@ func TestM521_AnotherReturnOwnsAllocation(t *testing.T) {
 
 	// Return A (qty 1)
 	respA, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "reason A",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "reason A",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
 	})
 	require.NoError(t, err)
 	retIDA := respA[0].Return.ID
 
 	// Return B (qty 1)
 	respB, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "reason B",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "reason B",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
 	})
 	require.NoError(t, err)
 	retIDB := respB[0].Return.ID
@@ -407,9 +413,11 @@ func TestM521_DuplicateSameReturnScan(t *testing.T) {
 	`, allocID, tOrd.orderItemID, invUnitID, resID)
 	require.NoError(t, err)
 
+	evIDsDup := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDsDup}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -504,9 +512,11 @@ func TestM521_QuantityRace_TwoDifferentZMUs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Return item requested quantity = 1 ONLY!
+	evIDsRace := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDsRace}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -598,9 +608,11 @@ func TestM521_SameZMUConcurrency(t *testing.T) {
 	`, allocID, tOrd.orderItemID, invUnitID, resID)
 	require.NoError(t, err)
 
+	evIDsSame := fix.createStagedEvidence(t, fix.userID, 2)
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "defective",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "defective",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDsSame}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -650,8 +662,9 @@ func TestM521_LegacyItem(t *testing.T) {
 	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
 
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "legacy return",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "legacy return",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -768,7 +781,8 @@ func TestM521_MixedReturn(t *testing.T) {
 
 	// Create single Return with BOTH items
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, orderID, returns.CreateReturnRequest{
-		Reason: "mixed return",
+		Reason:  "mixed return",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
 		Items: []returns.CreateReturnItemRequest{
 			{OrderItemID: oiSerial, Quantity: 1},
 			{OrderItemID: oiLegacy, Quantity: 1},
@@ -874,8 +888,9 @@ func TestM521_ReadModelCompleteness(t *testing.T) {
 	require.NoError(t, err)
 
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "read model check",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "read model check",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID
@@ -976,8 +991,9 @@ func TestM521_FullNoSideEffectProof(t *testing.T) {
 	require.NoError(t, err)
 
 	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
-		Reason: "no side effects",
-		Items:  []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
+		Reason:  "no side effects",
+		Comment: func() *string { s := "Valid test comment"; return &s }(),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1}},
 	})
 	require.NoError(t, err)
 	retID := resp[0].Return.ID

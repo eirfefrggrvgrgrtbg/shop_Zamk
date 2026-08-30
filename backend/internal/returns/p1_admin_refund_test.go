@@ -15,9 +15,9 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payments"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 )
 
 func setupHTTPFixture(t *testing.T) (*postgres.Client, *Service) {
@@ -27,11 +27,11 @@ func setupHTTPFixture(t *testing.T) (*postgres.Client, *Service) {
 
 	repo := NewRepository(client.Pool)
 	ordersRepo := orders.NewRepository(client.Pool)
-	
+
 	payRepo := payments.NewRepository(client.Pool)
 	cfg := &config.Config{App: config.AppConfig{PaymentStuckPendingMinutes: 30}}
 	paySvc := payments.NewService(payRepo, ordersRepo, nil, nil, client, nil, cfg)
-	svc := NewService(repo, ordersRepo, nil, client, nil, paySvc, 30, nil)
+	svc := NewService(repo, ordersRepo, nil, client, nil, paySvc, 30, nil, nil)
 
 	return client, svc
 }
@@ -42,7 +42,7 @@ func TestAdminRefundReserve(t *testing.T) {
 
 	h := NewHandler(svc)
 	r := chi.NewRouter()
-	
+
 	// Need a payment fixture
 	fix := payments.SetupFixture(t, client, "succeeded", "paid", 100000, false, "")
 
@@ -101,14 +101,14 @@ func TestAdminRefundReserve(t *testing.T) {
 	r.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusCreated, rr.Code)
-	
+
 	var resp Refund
 	err = json.NewDecoder(rr.Body).Decode(&resp)
 	require.NoError(t, err)
 
 	assert.NotEqual(t, uuid.Nil, resp.ID)
 	assert.Equal(t, "pending", resp.Status)
-	
+
 	// mock Refund returns these fields null/zero because it's a mock!
 	// We'll just verify HTTP status mostly, as requested by prompt.
 	// But let's check actual Refund in DB
@@ -134,7 +134,7 @@ func TestAdminRefundReserve(t *testing.T) {
 	require.NoError(t, err)
 	_, err = client.Pool.Exec(ctx, "UPDATE returns SET status = 'item_received' WHERE id = $1", returnID)
 	require.NoError(t, err)
-	
+
 	req3, _ := http.NewRequest("POST", "/api/admin/returns/"+returnID.String()+"/refund", bytes.NewBufferString(reqBody))
 	req3.Header.Set("Content-Type", "application/json")
 	rr3 := httptest.NewRecorder()

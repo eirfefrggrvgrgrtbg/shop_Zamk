@@ -7,16 +7,17 @@ import (
 )
 
 type CreateReturnRequest struct {
-	Reason  string                   `json:"reason" validate:"required"`
-	Comment *string                  `json:"comment"`
+	Reason  string                    `json:"reason" validate:"required"`
+	Comment *string                   `json:"comment"`
 	Items   []CreateReturnItemRequest `json:"items" validate:"required,min=1"`
 }
 
 type CreateReturnItemRequest struct {
-	OrderItemID uuid.UUID `json:"orderItemId" validate:"required"`
-	Quantity    int       `json:"quantity" validate:"required,min=1"`
-	Reason      *string   `json:"reason"`
-	Condition   *string   `json:"condition"`
+	OrderItemID uuid.UUID   `json:"orderItemId" validate:"required"`
+	Quantity    int         `json:"quantity" validate:"required,min=1"`
+	Reason      *string     `json:"reason"`
+	Condition   *string     `json:"condition"`
+	EvidenceIDs []uuid.UUID `json:"evidenceIds"`
 }
 
 type UpdateReturnStatusRequest struct {
@@ -56,28 +57,28 @@ type RefundListResponse struct {
 }
 
 type SellerReturnItem struct {
-	ReturnItemID       uuid.UUID `json:"returnItemId"`
-	ReturnID           uuid.UUID `json:"returnId"`
-	OrderID            uuid.UUID `json:"orderId"`
-	OrderNumber        *string   `json:"orderNumber"`
-	OrderItemID        uuid.UUID `json:"orderItemId"`
-	Status             string    `json:"status"` // return status
-	Quantity           int       `json:"quantity"`
-	Reason             *string   `json:"reason"`
-	Condition          *string   `json:"condition"`
-	ProductTitle       string     `json:"productTitle"`
-	VariantSize        *string    `json:"variantSize"`
-	VariantColor       *string    `json:"variantColor"`
-	SKU                *string    `json:"sku"`
-	ImageURL           *string    `json:"imageUrl"`
-	PriceCents         int64      `json:"priceCents"`
-	SubtotalPriceCents int64      `json:"subtotalPriceCents"`
-	Restock            bool       `json:"restock"`
-	AdminComment       *string    `json:"adminComment"`
-	FinancialAdjustmentCents *int64 `json:"financialAdjustmentCents"`
-	FinancialImpactType      *string `json:"financialImpactType"`
-	CreatedAt          time.Time  `json:"createdAt"`
-	UpdatedAt          time.Time  `json:"updatedAt"`
+	ReturnItemID             uuid.UUID `json:"returnItemId"`
+	ReturnID                 uuid.UUID `json:"returnId"`
+	OrderID                  uuid.UUID `json:"orderId"`
+	OrderNumber              *string   `json:"orderNumber"`
+	OrderItemID              uuid.UUID `json:"orderItemId"`
+	Status                   string    `json:"status"` // return status
+	Quantity                 int       `json:"quantity"`
+	Reason                   *string   `json:"reason"`
+	Condition                *string   `json:"condition"`
+	ProductTitle             string    `json:"productTitle"`
+	VariantSize              *string   `json:"variantSize"`
+	VariantColor             *string   `json:"variantColor"`
+	SKU                      *string   `json:"sku"`
+	ImageURL                 *string   `json:"imageUrl"`
+	PriceCents               int64     `json:"priceCents"`
+	SubtotalPriceCents       int64     `json:"subtotalPriceCents"`
+	Restock                  bool      `json:"restock"`
+	AdminComment             *string   `json:"adminComment"`
+	FinancialAdjustmentCents *int64    `json:"financialAdjustmentCents"`
+	FinancialImpactType      *string   `json:"financialImpactType"`
+	CreatedAt                time.Time `json:"createdAt"`
+	UpdatedAt                time.Time `json:"updatedAt"`
 }
 
 type SellerReturnListResponse struct {
@@ -153,4 +154,9 @@ type AdminReturnReceivingItem struct {
 	DamagedQuantity     int                        `json:"damagedQuantity"`
 	RejectedQuantity    int                        `json:"rejectedQuantity"`
 	CanFinalize         bool                       `json:"canFinalize"`
+}
+
+type UploadEvidenceResponse struct {
+	ID  uuid.UUID `json:"id"`
+	URL string    `json:"url"`
 }

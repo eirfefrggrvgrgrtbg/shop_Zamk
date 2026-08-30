@@ -27,24 +27,24 @@ import (
 )
 
 type SetupData struct {
-	Pool              *pgxpool.Pool
-	Router            *chi.Mux
-	TokenService      *auth.TokenService
-	CustomerID        uuid.UUID
-	SellerID          uuid.UUID
-	AdminNoPermID     uuid.UUID
-	AdminWithPermID   uuid.UUID
-	OrderID           uuid.UUID
-	PaymentID         uuid.UUID
-	ReturnID          uuid.UUID
-	FulfillmentID     uuid.UUID
-	OrderItemID       uuid.UUID
-	ReturnItemID      uuid.UUID
-	ProductID         uuid.UUID
-	VariantID         uuid.UUID
-	SellerProfileID   uuid.UUID
-	RoleNoPermID      uuid.UUID
-	RoleWithPermID    uuid.UUID
+	Pool            *pgxpool.Pool
+	Router          *chi.Mux
+	TokenService    *auth.TokenService
+	CustomerID      uuid.UUID
+	SellerID        uuid.UUID
+	AdminNoPermID   uuid.UUID
+	AdminWithPermID uuid.UUID
+	OrderID         uuid.UUID
+	PaymentID       uuid.UUID
+	ReturnID        uuid.UUID
+	FulfillmentID   uuid.UUID
+	OrderItemID     uuid.UUID
+	ReturnItemID    uuid.UUID
+	ProductID       uuid.UUID
+	VariantID       uuid.UUID
+	SellerProfileID uuid.UUID
+	RoleNoPermID    uuid.UUID
+	RoleWithPermID  uuid.UUID
 }
 
 func SetupRealRouterAuthFixture(t *testing.T) *SetupData {
@@ -174,30 +174,30 @@ func SetupRealRouterAuthFixture(t *testing.T) *SetupData {
 		ctx := context.Background()
 		// Cleanup refunds
 		pool.Exec(ctx, "DELETE FROM refunds WHERE return_id = $1", data.ReturnID)
-		
+
 		// Cleanup returns
 		pool.Exec(ctx, "DELETE FROM return_items WHERE return_id = $1", data.ReturnID)
 		pool.Exec(ctx, "DELETE FROM returns WHERE id = $1", data.ReturnID)
-		
+
 		// Cleanup payments & events
 		pool.Exec(ctx, "DELETE FROM payment_events WHERE payment_id = $1", data.PaymentID)
 		pool.Exec(ctx, "DELETE FROM payments WHERE id = $1", data.PaymentID)
-		
+
 		// Cleanup order items & fulfillments & orders
 		pool.Exec(ctx, "DELETE FROM order_items WHERE id = $1", data.OrderItemID)
 		pool.Exec(ctx, "DELETE FROM order_fulfillments WHERE id = $1", data.FulfillmentID)
 		pool.Exec(ctx, "DELETE FROM orders WHERE id = $1", data.OrderID)
-		
+
 		// Cleanup products
 		pool.Exec(ctx, "DELETE FROM product_variants WHERE id = $1", data.VariantID)
 		pool.Exec(ctx, "DELETE FROM products WHERE id = $1", data.ProductID)
-		
+
 		// Cleanup sellers & staff
 		pool.Exec(ctx, "DELETE FROM sellers WHERE id = $1", data.SellerProfileID)
 		pool.Exec(ctx, "DELETE FROM staff_members WHERE user_id = $1 OR user_id = $2", data.AdminNoPermID, data.AdminWithPermID)
 		pool.Exec(ctx, "DELETE FROM staff_role_permissions WHERE role_id = $1 OR role_id = $2", data.RoleNoPermID, data.RoleWithPermID)
 		pool.Exec(ctx, "DELETE FROM staff_roles WHERE id = $1 OR id = $2", data.RoleNoPermID, data.RoleWithPermID)
-		
+
 		// Cleanup users
 		pool.Exec(ctx, "DELETE FROM users WHERE id IN ($1, $2, $3, $4)", data.CustomerID, data.SellerID, data.AdminNoPermID, data.AdminWithPermID)
 	})
@@ -275,13 +275,12 @@ func TestAdminRefundReserve_RealRouterAuth(t *testing.T) {
 		verifyNoRefundCreated(t)
 	})
 
-
 	t.Run("admin_success", func(t *testing.T) {
 		defer data.Pool.Exec(context.Background(), "DELETE FROM refunds")
 		token := generateToken(data.AdminWithPermID, "admin")
-		
+
 		bodyBytes, _ := json.Marshal(map[string]interface{}{
-			"reason": "defective",
+			"reason":       "defective",
 			"amount_cents": 100000,
 		})
 		req, _ := http.NewRequest("POST", "/api/admin/returns/"+data.ReturnID.String()+"/refund", bytes.NewReader(bodyBytes))
@@ -308,7 +307,7 @@ func TestAdminRefundReserve_RealRouterAuth(t *testing.T) {
 			FROM refunds
 			WHERE return_id = $1
 		`, data.ReturnID).Scan(&dbRefundID, &dbReturnID, &dbPaymentID, &dbOrderID, &dbStatus, &dbAmountCents, &dbCurrency, &dbProviderRefundID)
-		
+
 		require.NoError(t, err)
 		assert.Equal(t, data.ReturnID, dbReturnID)
 		assert.Equal(t, data.PaymentID, dbPaymentID)
