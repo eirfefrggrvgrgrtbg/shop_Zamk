@@ -985,7 +985,7 @@ func (s *Service) CreateCustomerReturnShipment(ctx context.Context, customerID, 
 		if err != nil {
 			return err
 		}
-		if existing != nil {
+		if existing != nil && existing.Status != "cancelled" {
 			return ErrShipmentAlreadyExists
 		}
 
@@ -1112,4 +1112,90 @@ func (s *Service) ListCDEKOffices(ctx context.Context) ([]Office, error) {
 		return nil, ErrCDEKNotConfigured
 	}
 	return s.logisticsProvider.ListOffices(ctx)
+}
+
+// CreateSimulatedReturnShipment creates a simulated ReturnShipment in dev/test environments.
+func (s *Service) CreateSimulatedReturnShipment(ctx context.Context, returnID uuid.UUID) (*ReturnShipment, error) {
+	var result *ReturnShipment
+	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		ret, err := s.repo.GetReturnTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+		if ret == nil {
+			return ErrReturnNotFound
+		}
+		if ret.Status != "approved" {
+			return ErrReturnNotApproved
+		}
+		existing, err := s.repo.GetReturnShipmentByReturnIDTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+		if existing != nil && existing.Status != "cancelled" {
+			return ErrShipmentAlreadyExists
+		}
+
+		officeCode := "MSK-SIM-DEV"
+		officeAddr := "г. Москва, тестовый пункт приёма ZAMK (Dev Simulator)"
+		custName := "Тестовый Покупатель"
+		custPhone := "+79990000000"
+
+		shipment := &ReturnShipment{
+			ID:                     uuid.New(),
+			ReturnID:               returnID,
+			Provider:               "cdek",
+			Method:                 "cdek_office",
+			Status:                 "awaiting_handover",
+			SelectedCDEKOfficeCode: &officeCode,
+			CDEKOfficeAddress:      &officeAddr,
+			CustomerName:           &custName,
+			CustomerPhone:          &custPhone,
+		}
+
+		if err := s.repo.CreateReturnShipmentTx(ctx, tx, shipment); err != nil {
+			return err
+		}
+		result = shipment
+		return nil
+	})
+	return result, err
+}
+
+// AdvanceSimulatedReturnShipment advances the current active ReturnShipment to its next canonical sequential status.
+func (s *Service) AdvanceSimulatedReturnShipment(ctx context.Context, returnID uuid.UUID) (*ReturnShipment, error) {
+	var result *ReturnShipment
+	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		shipment, err := s.repo.GetReturnShipmentByReturnIDTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+		if shipment == nil {
+			return ErrShipmentNotFound
+		}
+
+		var nextStatus string
+		switch shipment.Status {
+		case "awaiting_handover":
+			nextStatus = "handed_over"
+		case "handed_over":
+			nextStatus = "in_transit"
+		case "in_transit":
+			nextStatus = "arrived_at_zamk"
+		default:
+			return ErrInvalidShipmentTransition
+		}
+
+		if !IsValidShipmentTransition(shipment.Status, nextStatus) {
+			return ErrInvalidShipmentTransition
+		}
+
+		shipment.Status = nextStatus
+		if err := s.repo.UpdateReturnShipmentTx(ctx, tx, shipment); err != nil {
+			return err
+		}
+		result = shipment
+		return nil
+	})
+	return result, err
 }

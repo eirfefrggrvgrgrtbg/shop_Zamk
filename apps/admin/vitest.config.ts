@@ -9,6 +9,7 @@ export default defineConfig({
       'src/components/search/**/*.test.{ts,tsx}',
       'src/pages/AdminSearchContextHandoff.test.tsx',
       'src/pages/AdminReturnRefundUI.test.tsx',
+      'src/pages/AdminReturnReceiving.test.tsx',
       'src/pages/AdminReturns.test.ts',
       'src/components/EntityTimeline.test.tsx',
       'src/api/adminTimeline.test.ts',

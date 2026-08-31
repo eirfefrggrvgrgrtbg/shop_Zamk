@@ -6,6 +6,14 @@ import {
   getAdminReturnMessages as getAdminReturnMessagesApi,
   getAdminReturnRefundQuote as apiGetAdminReturnRefundQuote,
   createAdminRefundForReturn as apiCreateAdminRefundForReturn,
+  getAdminReturnReceivingState as apiGetAdminReturnReceivingState,
+  startAdminReturnReceiving as apiStartAdminReturnReceiving,
+  scanAdminReturnUnit as apiScanAdminReturnUnit,
+  inspectSerializedReturnUnit as apiInspectSerializedReturnUnit,
+  inspectLegacyReturnItem as apiInspectLegacyReturnItem,
+  finalizeAdminReturnReceiving as apiFinalizeAdminReturnReceiving,
+  simulateCreateAdminReturnShipment as apiSimulateCreateAdminReturnShipment,
+  simulateAdvanceAdminReturnShipment as apiSimulateAdvanceAdminReturnShipment,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
 import type {
@@ -18,6 +26,13 @@ import type {
   AdminReturnRefundQuote,
   AdminReturnRefundQuoteItem,
   AdminRefund,
+  AdminReturnReceivingItem,
+  AdminReturnReceivingState,
+  ScanReturnUnitResponse,
+  UpdateSerializedUnitInspectionInput,
+  UpdateLegacyItemInspectionInput,
+  OutboundAllocationDetail,
+  ScannedUnitDetail,
 } from '@zamk/api-client/src/types';
 import { formatReturnShipmentStatus, formatReturnShipmentMethod } from '@zamk/api-client/src/types';
 
@@ -31,8 +46,47 @@ export type {
   AdminReturnRefundQuote,
   AdminReturnRefundQuoteItem,
   AdminRefund,
+  AdminReturnReceivingItem,
+  AdminReturnReceivingState,
+  ScanReturnUnitResponse,
+  UpdateSerializedUnitInspectionInput,
+  UpdateLegacyItemInspectionInput,
+  OutboundAllocationDetail,
+  ScannedUnitDetail,
 };
 export { formatReturnShipmentStatus, formatReturnShipmentMethod };
+
+export const RETURN_LOGISTICS_LABELS: Record<string, string> = {
+  draft: 'Черновик',
+  awaiting_handover: 'Ожидает передачи',
+  handed_over: 'Передан в СДЭК',
+  in_transit: 'В пути',
+  arrived_at_zamk: 'Прибыл на склад',
+  cancelled: 'Отменена',
+};
+
+export const getReturnLogisticsLabel = (status?: string | null): string => {
+  if (!status) return '—';
+  return RETURN_LOGISTICS_LABELS[status] || status;
+};
+
+export const getReturnLogisticsBadgeClass = (status?: string | null): string => {
+  if (!status) return 'text-gray-400';
+  switch (status) {
+    case 'arrived_at_zamk':
+      return 'bg-blue-100 text-blue-800 font-semibold';
+    case 'in_transit':
+    case 'handed_over':
+      return 'bg-amber-100 text-amber-800';
+    case 'awaiting_handover':
+    case 'draft':
+      return 'bg-gray-100 text-gray-700';
+    case 'cancelled':
+      return 'bg-red-100 text-red-700';
+    default:
+      return 'bg-gray-100 text-gray-700';
+  }
+};
 
 export const RETURN_REASON_LABELS: Record<string, string> = {
   defective: 'Товар неисправен',
@@ -118,11 +172,79 @@ export const createAdminRefundForReturn = async (returnId: string, reason?: stri
   return await apiCreateAdminRefundForReturn(returnId, { reason });
 };
 
+export const getAdminReturnReceivingState = async (returnId: string): Promise<AdminReturnReceivingState> => {
+  return await apiGetAdminReturnReceivingState(returnId);
+};
+
+export const startAdminReturnReceiving = async (returnId: string): Promise<void> => {
+  await apiStartAdminReturnReceiving(returnId);
+};
+
+export const scanAdminReturnUnit = async (returnId: string, code: string): Promise<ScanReturnUnitResponse> => {
+  return await apiScanAdminReturnUnit(returnId, code);
+};
+
+export const inspectSerializedReturnUnit = async (
+  returnId: string,
+  unitId: string,
+  input: UpdateSerializedUnitInspectionInput,
+): Promise<void> => {
+  await apiInspectSerializedReturnUnit(returnId, unitId, input);
+};
+
+export const inspectLegacyReturnItem = async (
+  returnId: string,
+  itemId: string,
+  input: UpdateLegacyItemInspectionInput,
+): Promise<void> => {
+  await apiInspectLegacyReturnItem(returnId, itemId, input);
+};
+
+export const finalizeAdminReturnReceiving = async (returnId: string): Promise<void> => {
+  await apiFinalizeAdminReturnReceiving(returnId);
+};
+
 export const getAdminReturnErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiError) {
     if (error.status === 403) return 'Недостаточно прав для управления возвратами.';
     if (error.code === 'rejection_reason_required' || error.message?.includes('rejection reason')) {
       return 'Укажите причину отказа в комментарии.';
+    }
+    if (error.code === 'return_not_arrived') {
+      return 'Приёмка невозможна: возврат ещё не прибыл на склад ZAMK.';
+    }
+    if (error.code === 'invalid_zmu') {
+      return 'Код ZMU не найден или не принадлежит данному возврату.';
+    }
+    if (error.code === 'already_bound') {
+      return 'Данный ZMU уже привязан к возвращенной единице.';
+    }
+    if (error.code === 'quantity_exceeded') {
+      return 'Все единицы данной позиции уже отсканированы.';
+    }
+    if (error.code === 'missing_disposition') {
+      return 'Укажите решение (диспозицию) для всех отсканированных единиц перед завершением.';
+    }
+    if (error.code === 'invalid_quantity') {
+      return 'Сумма количеств проверки не может превышать запрошенное количество.';
+    }
+    if (error.code === 'item_not_legacy') {
+      return 'Позиция является сериализованной и принимается через сканирование ZMU.';
+    }
+    if (error.code === 'item_not_serialized') {
+      return 'Позиция не является сериализованной.';
+    }
+    if (error.code === 'invalid_unit_state') {
+      return 'Единица товара находится в недопустимом статусе на складе.';
+    }
+    if (error.code === 'invalid_state') {
+      return 'Возврат находится в неподходящем статусе для этой операции.';
+    }
+    if (error.code === 'unit_not_in_return' || error.code === 'item_not_in_return') {
+      return 'Позиция не найдена в текущем возврате.';
+    }
+    if (error.code === 'invalid_disposition') {
+      return 'Выбрано недопустимое решение по позиции.';
     }
     if (error.code === 'refund_allocation_invariant') {
       return 'Несогласованное состояние резервирования: количество единиц не соответствует заказу.';
@@ -161,4 +283,12 @@ import type { ReturnConversationResponse } from '@zamk/api-client/src/types';
 
 export const getReturnMessages = async (id: string): Promise<ReturnConversationResponse> => {
   return await getAdminReturnMessagesApi(id);
+};
+
+export const simulateCreateAdminReturnShipment = async (returnId: string): Promise<{ shipment: ReturnShipment }> => {
+  return await apiSimulateCreateAdminReturnShipment(returnId);
+};
+
+export const simulateAdvanceAdminReturnShipment = async (returnId: string): Promise<{ shipment: ReturnShipment }> => {
+  return await apiSimulateAdvanceAdminReturnShipment(returnId);
 };

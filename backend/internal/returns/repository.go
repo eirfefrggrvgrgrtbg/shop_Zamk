@@ -262,10 +262,15 @@ func (r *Repository) ListReturnsByCustomer(ctx context.Context, userID uuid.UUID
 
 		// Also load shipments if present
 		shipmentsQuery := `
-			SELECT
+			SELECT DISTINCT ON (return_id)
 				id, return_id, provider, method, tracking_number, provider_shipment_id, status, selected_cdek_office_code
 			FROM return_shipments
 			WHERE return_id = ANY($1)
+			ORDER BY
+				return_id,
+				CASE WHEN status != 'cancelled' THEN 0 ELSE 1 END ASC,
+				created_at DESC,
+				id DESC
 		`
 		sRows, err := r.db.Query(ctx, shipmentsQuery, returnIDs)
 		if err == nil {
@@ -582,6 +587,8 @@ func (r *Repository) GetAdminReturn(ctx context.Context, returnID uuid.UUID, bui
 			Status:                 shipment.Status,
 			SelectedCDEKOfficeCode: shipment.SelectedCDEKOfficeCode,
 		}
+		res.ShipmentStatus = &shipment.Status
+		res.ShipmentMethod = &shipment.Method
 	}
 	return &res, nil
 }
@@ -673,6 +680,44 @@ func (r *Repository) ListAdminReturns(ctx context.Context, limit, offset int, bu
 		for i := range list {
 			if itList, ok := itemsMap[list[i].ID]; ok {
 				list[i].Items = itList
+			}
+		}
+
+		// Load shipments for all return IDs using deterministic canonical selection:
+		// Active (status != 'cancelled') first, then newest created_at, then tie-break by id.
+		shipmentsQuery := `
+			SELECT DISTINCT ON (return_id)
+				id, return_id, provider, method, tracking_number, provider_shipment_id, status, selected_cdek_office_code
+			FROM return_shipments
+			WHERE return_id = ANY($1)
+			ORDER BY
+				return_id,
+				CASE WHEN status != 'cancelled' THEN 0 ELSE 1 END ASC,
+				created_at DESC,
+				id DESC
+		`
+		sRows, err := r.db.Query(ctx, shipmentsQuery, returnIDs)
+		if err == nil {
+			defer sRows.Close()
+			shipmentMap := make(map[uuid.UUID]*ReturnShipmentResponse)
+			for sRows.Next() {
+				var s ReturnShipmentResponse
+				var retID uuid.UUID
+				if err := sRows.Scan(
+					&s.ID, &retID, &s.Provider, &s.Method,
+					&s.TrackingNumber, &s.ProviderShipmentID, &s.Status, &s.SelectedCDEKOfficeCode,
+				); err == nil {
+					shipmentMap[retID] = &s
+				}
+			}
+			sRows.Close()
+
+			for i := range list {
+				if sh, ok := shipmentMap[list[i].ID]; ok {
+					list[i].Shipment = sh
+					list[i].ShipmentStatus = &sh.Status
+					list[i].ShipmentMethod = &sh.Method
+				}
 			}
 		}
 	}
@@ -902,9 +947,13 @@ func (r *Repository) getReturnReceivingState(ctx context.Context, db interface {
 	}
 
 	queryItems := `
-		SELECT id, return_id, order_item_id, quantity, reason, condition, restock, accepted_quantity, damaged_quantity, rejected_quantity, created_at
-		FROM return_items WHERE return_id = $1
-		ORDER BY created_at ASC
+		SELECT
+			ri.id, ri.return_id, ri.order_item_id, ri.quantity, ri.reason, ri.condition, ri.restock, ri.accepted_quantity, ri.damaged_quantity, ri.rejected_quantity, ri.created_at,
+			oi.title, oi.image_url, oi.variant_size, oi.variant_color, oi.sku, oi.price_cents
+		FROM return_items ri
+		JOIN order_items oi ON oi.id = ri.order_item_id
+		WHERE ri.return_id = $1
+		ORDER BY ri.created_at ASC
 	`
 	rows, err := db.Query(ctx, queryItems, returnID)
 	if err != nil {
@@ -917,16 +966,35 @@ func (r *Repository) getReturnReceivingState(ctx context.Context, db interface {
 	state.OrderNumber = orderNumber
 	state.Items = make([]AdminReturnReceivingItem, 0)
 
-	var returnItems []ReturnItem
-	for rows.Next() {
-		var item ReturnItem
-		if err := rows.Scan(&item.ID, &item.ReturnID, &item.OrderItemID, &item.Quantity, &item.Reason, &item.Condition, &item.Restock, &item.AcceptedQuantity, &item.DamagedQuantity, &item.RejectedQuantity, &item.CreatedAt); err != nil {
-			return nil, err
-		}
-		returnItems = append(returnItems, item)
+	type itemWithProduct struct {
+		item            ReturnItem
+		productTitle    *string
+		productImageURL *string
+		variantSize     *string
+		variantColor    *string
+		sku             *string
+		priceCents      *int64
 	}
 
-	for _, item := range returnItems {
+	var returnItems []itemWithProduct
+	for rows.Next() {
+		var iwp itemWithProduct
+		var title string
+		if err := rows.Scan(
+			&iwp.item.ID, &iwp.item.ReturnID, &iwp.item.OrderItemID, &iwp.item.Quantity,
+			&iwp.item.Reason, &iwp.item.Condition, &iwp.item.Restock,
+			&iwp.item.AcceptedQuantity, &iwp.item.DamagedQuantity, &iwp.item.RejectedQuantity,
+			&iwp.item.CreatedAt,
+			&title, &iwp.productImageURL, &iwp.variantSize, &iwp.variantColor, &iwp.sku, &iwp.priceCents,
+		); err != nil {
+			return nil, err
+		}
+		iwp.productTitle = &title
+		returnItems = append(returnItems, iwp)
+	}
+
+	for _, iwp := range returnItems {
+		item := iwp.item
 		// 1. Fetch outbound allocations
 		queryOutbound := `
 			SELECT oia.id, iu.unit_code, oia.picked_at, oia.released_at, iu.status
@@ -1010,6 +1078,12 @@ func (r *Repository) getReturnReceivingState(ctx context.Context, db interface {
 
 		state.Items = append(state.Items, AdminReturnReceivingItem{
 			ReturnItem:          item,
+			ProductTitle:        iwp.productTitle,
+			ProductImageURL:     iwp.productImageURL,
+			VariantSize:         iwp.variantSize,
+			VariantColor:        iwp.variantColor,
+			SKU:                 iwp.sku,
+			PriceCents:          iwp.priceCents,
 			AllocationMode:      allocMode,
 			OutboundAllocations: outboundAllocs,
 			ScannedUnits:        scannedUnits,
@@ -1407,7 +1481,12 @@ func (r *Repository) GetReturnShipmentByReturnID(ctx context.Context, returnID u
 	query := `
 		SELECT id, return_id, provider, method, tracking_number, provider_shipment_id, status, selected_cdek_office_code, customer_name, customer_phone, pickup_address, cdek_office_address, destination_address, snapshots, created_at, updated_at
 		FROM return_shipments
-		WHERE return_id = $1 AND status != 'cancelled'
+		WHERE return_id = $1
+		ORDER BY
+			CASE WHEN status != 'cancelled' THEN 0 ELSE 1 END ASC,
+			created_at DESC,
+			id DESC
+		LIMIT 1
 	`
 	var s ReturnShipment
 	err := r.db.QueryRow(ctx, query, returnID).Scan(
@@ -1426,7 +1505,12 @@ func (r *Repository) GetReturnShipmentByReturnIDTx(ctx context.Context, tx pgx.T
 	query := `
 		SELECT id, return_id, provider, method, tracking_number, provider_shipment_id, status, selected_cdek_office_code, customer_name, customer_phone, pickup_address, cdek_office_address, destination_address, snapshots, created_at, updated_at
 		FROM return_shipments
-		WHERE return_id = $1 AND status != 'cancelled'
+		WHERE return_id = $1
+		ORDER BY
+			CASE WHEN status != 'cancelled' THEN 0 ELSE 1 END ASC,
+			created_at DESC,
+			id DESC
+		LIMIT 1
 	`
 	var s ReturnShipment
 	err := tx.QueryRow(ctx, query, returnID).Scan(

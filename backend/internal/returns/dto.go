@@ -134,8 +134,10 @@ type AdminReturnResponse struct {
 	CompletedAt   *time.Time              `json:"completedAt"`
 	DeliveredAt   *time.Time              `json:"deliveredAt"`
 	EvidenceCount int                     `json:"evidenceCount"`
-	Items         []AdminReturnItemDetail `json:"items"`
-	Shipment      *ReturnShipmentResponse `json:"shipment,omitempty"`
+	Items          []AdminReturnItemDetail `json:"items"`
+	Shipment       *ReturnShipmentResponse `json:"shipment,omitempty"`
+	ShipmentStatus *string                 `json:"shipmentStatus"`
+	ShipmentMethod *string                 `json:"shipmentMethod,omitempty"`
 }
 
 type AdminReturnListResponse struct {
@@ -230,6 +232,12 @@ type ScannedUnitDetail struct {
 
 type AdminReturnReceivingItem struct {
 	ReturnItem          ReturnItem                 `json:"returnItem"`
+	ProductTitle        *string                    `json:"productTitle,omitempty"`
+	ProductImageURL     *string                    `json:"productImageUrl,omitempty"`
+	VariantSize         *string                    `json:"variantSize,omitempty"`
+	VariantColor        *string                    `json:"variantColor,omitempty"`
+	SKU                 *string                    `json:"sku,omitempty"`
+	PriceCents          *int64                     `json:"priceCents,omitempty"`
 	AllocationMode      string                     `json:"allocationMode"` // "serialized" | "legacy"
 	OutboundAllocations []OutboundAllocationDetail `json:"outboundAllocations"`
 	ScannedUnits        []ScannedUnitDetail        `json:"scannedUnits"`

@@ -1217,6 +1217,9 @@ export interface AdminReturnItem {
   evidenceIds?: string[];
   evidence?: AdminReturnEvidence[];
   restock?: boolean;
+  acceptedQuantity?: number;
+  damagedQuantity?: number;
+  rejectedQuantity?: number;
   createdAt?: string;
 }
 
@@ -1242,8 +1245,95 @@ export interface AdminReturn {
   completedAt?: string;
   deliveredAt?: string;
   evidenceCount?: number;
+  receivingStartedAt?: string;
   items?: AdminReturnItem[];
   shipment?: ReturnShipment;
+  shipmentStatus?: string | null;
+  shipmentMethod?: string | null;
+}
+
+export interface OutboundAllocationDetail {
+  id?: string;
+  allocationId?: string;
+  inventoryUnitId?: string;
+  unitCode?: string;
+  status?: string;
+  unitStatus?: string;
+  allocatedAt?: string;
+  pickedAt?: string;
+  releasedAt?: string;
+  shippedAt?: string;
+}
+
+export interface ScannedUnitDetail {
+  id: string;
+  returnId?: string;
+  returnItemId: string;
+  orderItemAllocationId?: string;
+  inventoryUnitId?: string;
+  unitCode: string;
+  disposition?: 'restock' | 'damaged' | 'reject' | string;
+  inspectedCondition?: string;
+  scannedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminReturnReceivingItem {
+  returnItem: AdminReturnItem;
+  productTitle?: string;
+  productImageUrl?: string;
+  variantSize?: string;
+  variantColor?: string;
+  sku?: string;
+  priceCents?: number;
+  allocationMode: 'serialized' | 'legacy';
+  outboundAllocations: OutboundAllocationDetail[];
+  scannedUnits: ScannedUnitDetail[];
+  requestedQuantity: number;
+  scannedQuantity: number;
+  remainingQuantity: number;
+  notReceivedQuantity?: number;
+  acceptedQuantity: number;
+  damagedQuantity: number;
+  rejectedQuantity: number;
+  canFinalize: boolean;
+}
+
+export interface AdminReturnReceivingState {
+  return: AdminReturn & {
+    fulfillmentId?: string;
+    receivingStartedAt?: string;
+  };
+  orderNumber?: string;
+  items: AdminReturnReceivingItem[];
+  totalRequested: number;
+  totalScanned: number;
+  totalRemaining: number;
+  serializedRequested: number;
+  serializedScanned: number;
+  legacyRequested: number;
+  canFinalize: boolean;
+}
+
+export interface ScanReturnUnitResponse {
+  scannedUnit: ScannedUnitDetail;
+  item: AdminReturnReceivingItem;
+  canFinalize: boolean;
+  isDuplicate?: boolean;
+  alreadyScanned?: boolean;
+}
+
+export interface UpdateSerializedUnitInspectionInput {
+  disposition: 'restock' | 'damaged' | 'reject';
+  inspectedCondition?: string;
+}
+
+export interface UpdateLegacyItemInspectionInput {
+  acceptedQuantity: number;
+  damagedQuantity: number;
+  rejectedQuantity: number;
+  condition?: string;
 }
 
 export interface AdminReturnRefundQuoteItem {

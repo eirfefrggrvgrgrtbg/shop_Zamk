@@ -7,6 +7,8 @@ import {
   type AdminReturn,
   type AdminReturnEvidence,
   type AdminReturnRefundQuote,
+  type AdminReturnReceivingItem,
+  type AdminReturnReceivingState,
 } from '../api/adminReturns';
 import { ApiError } from '@zamk/api-client/src/errors';
 
@@ -467,11 +469,279 @@ async function runAdminReturnsTests() {
     'return_already_refunded error mapping must match',
   );
 
-  console.log('ALL ADMIN RETURNS LOGIC & CONTRACT TESTS PASSED');
+  // 17. Warehouse Receiving CTA Availability Matrix
+  const getWarehouseReceivingCTA = (status: string, shipmentStatus?: string) => {
+    if (status === 'approved') {
+      if (shipmentStatus === 'arrived_at_zamk') return 'Начать приёмку на складе';
+      return null;
+    }
+    if (status === 'receiving') return 'Продолжить приёмку';
+    if (status === 'item_received') return 'Открыть результат приёмки';
+    return null;
+  };
+
+  assert(getWarehouseReceivingCTA('requested') === null, 'requested status must NOT have warehouse CTA');
+  assert(getWarehouseReceivingCTA('needs_info') === null, 'needs_info status must NOT have warehouse CTA');
+  assert(getWarehouseReceivingCTA('approved', undefined) === null, 'approved without shipment must NOT have warehouse CTA');
+  assert(getWarehouseReceivingCTA('approved', 'draft') === null, 'approved with draft shipment must NOT have warehouse CTA');
+  assert(getWarehouseReceivingCTA('approved', 'created') === null, 'approved with created shipment must NOT have warehouse CTA');
+  assert(getWarehouseReceivingCTA('approved', 'in_transit') === null, 'approved with in_transit shipment must NOT have warehouse CTA');
+  assert(getWarehouseReceivingCTA('approved', 'delivered_cdek_office') === null, 'approved with delivered_cdek_office must NOT have warehouse CTA');
+  assert(getWarehouseReceivingCTA('approved', 'arrived_at_zamk') === 'Начать приёмку на складе', 'approved with arrived_at_zamk MUST offer Начать приёмку на складе');
+  assert(getWarehouseReceivingCTA('receiving') === 'Продолжить приёмку', 'receiving status MUST offer Продолжить приёмку');
+  assert(getWarehouseReceivingCTA('item_received') === 'Открыть результат приёмки', 'item_received status MUST offer Открыть результат приёмки');
+  assert(getWarehouseReceivingCTA('rejected') === null, 'rejected status must NOT have warehouse CTA');
+  assert(getWarehouseReceivingCTA('refunded') === null, 'refunded status must NOT have warehouse CTA');
+  assert(getWarehouseReceivingCTA('completed') === null, 'completed status must NOT have warehouse CTA');
+  assert(getWarehouseReceivingCTA('cancelled') === null, 'cancelled status must NOT have warehouse CTA');
+
+  // 18. Warehouse Receiving Error Message Mappings
+  const warehouseErrorCases = [
+    { code: 'return_not_arrived', status: 400, expected: 'Приёмка невозможна: возврат ещё не прибыл на склад ZAMK.' },
+    { code: 'invalid_zmu', status: 400, expected: 'Код ZMU не найден или не принадлежит данному возврату.' },
+    { code: 'already_bound', status: 409, expected: 'Данный ZMU уже привязан к возвращенной единице.' },
+    { code: 'quantity_exceeded', status: 400, expected: 'Все единицы данной позиции уже отсканированы.' },
+    { code: 'missing_disposition', status: 400, expected: 'Укажите решение (диспозицию) для всех отсканированных единиц перед завершением.' },
+    { code: 'invalid_quantity', status: 400, expected: 'Сумма количеств проверки не может превышать запрошенное количество.' },
+    { code: 'item_not_legacy', status: 400, expected: 'Позиция является сериализованной и принимается через сканирование ZMU.' },
+    { code: 'item_not_serialized', status: 400, expected: 'Позиция не является сериализованной.' },
+    { code: 'invalid_unit_state', status: 400, expected: 'Единица товара находится в недопустимом статусе на складе.' },
+    { code: 'invalid_state', status: 400, expected: 'Возврат находится в неподходящем статусе для этой операции.' },
+    { code: 'unit_not_in_return', status: 400, expected: 'Позиция не найдена в текущем возврате.' },
+    { code: 'item_not_in_return', status: 400, expected: 'Позиция не найдена в текущем возврате.' },
+    { code: 'invalid_disposition', status: 400, expected: 'Выбрано недопустимое решение по позиции.' },
+  ];
+
+  for (const tc of warehouseErrorCases) {
+    const err = new ApiError('Test err', tc.code, tc.status);
+    const msg = getAdminReturnErrorMessage(err, 'Fallback message');
+    assert(msg === tc.expected, `Error ${tc.code} must map to ${tc.expected}`);
+  }
+
+  // 19. Product Identity and Presentation in Item Card
+  const formatItemTitle = (item: AdminReturnReceivingItem) => item.productTitle || item.returnItem.productTitle || 'Товар';
+  const formatItemMeta = (item: AdminReturnReceivingItem) => {
+    const parts = [];
+    if (item.variantSize) parts.push(`Размер: ${item.variantSize}`);
+    if (item.variantColor) parts.push(`Цвет: ${item.variantColor}`);
+    if (item.sku) parts.push(`Артикул: ${item.sku}`);
+    return parts.join(' · ');
+  };
+
+  const sampleSerializedReceivingItem: AdminReturnReceivingItem = {
+    returnItem: { id: 'ri-ser-1', orderItemId: 'oi-ser-1', quantity: 1, priceCents: 1500000, subtotalPriceCents: 1500000 },
+    productTitle: 'Dev Wool Coat',
+    productImageUrl: 'https://minio.local/media/coat.jpg',
+    variantSize: 'M',
+    variantColor: 'Graphite',
+    sku: 'DEV-SKU-0',
+    allocationMode: 'serialized',
+    outboundAllocations: [{ id: 'alloc-1', unitCode: 'ZMU-XUJBQQ5ADSW4BWTX', status: 'shipped', unitStatus: 'shipped', allocatedAt: '2026-08-30T10:00:00Z' }],
+    scannedUnits: [
+      { id: 'scan-1', returnId: 'ret-1', returnItemId: 'ri-ser-1', inventoryUnitId: 'iu-1', unitCode: 'ZMU-XUJBQQ5ADSW4BWTX', disposition: 'restock', createdAt: '2026-08-30T10:00:00Z', updatedAt: '2026-08-30T10:00:00Z' },
+    ],
+    requestedQuantity: 1,
+    scannedQuantity: 1,
+    remainingQuantity: 0,
+    acceptedQuantity: 1,
+    damagedQuantity: 0,
+    rejectedQuantity: 0,
+    canFinalize: true,
+  };
+
+  assert(formatItemTitle(sampleSerializedReceivingItem) === 'Dev Wool Coat', 'Item title must be product title Dev Wool Coat');
+  assert(!formatItemTitle(sampleSerializedReceivingItem).includes('oi-ser-1'), 'Item title must NOT contain order_item UUID');
+  assert(formatItemMeta(sampleSerializedReceivingItem) === 'Размер: M · Цвет: Graphite · Артикул: DEV-SKU-0', 'Item meta must format Size, Color, SKU');
+  assert(sampleSerializedReceivingItem.outboundAllocations[0].unitCode === 'ZMU-XUJBQQ5ADSW4BWTX', 'ZMU code must remain visible for warehouse operator');
+
+  // 20. Mixed Return State Verification
+  const legacyItem: AdminReturnReceivingItem = {
+    returnItem: { id: 'ri-leg', orderItemId: 'oi-leg', quantity: 2, priceCents: 500, subtotalPriceCents: 1000 },
+    productTitle: 'Basic Cotton T-Shirt',
+    variantSize: 'L',
+    variantColor: 'White',
+    sku: 'TSHIRT-WHT-L',
+    allocationMode: 'legacy',
+    outboundAllocations: [],
+    scannedUnits: [],
+    requestedQuantity: 2,
+    scannedQuantity: 2,
+    remainingQuantity: 0,
+    acceptedQuantity: 1,
+    damagedQuantity: 1,
+    rejectedQuantity: 0,
+    canFinalize: true,
+  };
+
+  const mixedState: AdminReturnReceivingState = {
+    return: { id: 'ret-mix', orderId: 'ord-mix', orderNumber: 'ORD-MIXED-100', status: 'receiving' },
+    orderNumber: 'ORD-MIXED-100',
+    items: [sampleSerializedReceivingItem, legacyItem],
+    totalRequested: 3,
+    totalScanned: 3,
+    totalRemaining: 0,
+    serializedRequested: 1,
+    serializedScanned: 1,
+    legacyRequested: 2,
+    canFinalize: true,
+  };
+
+  assert(mixedState.items.length === 2, 'Mixed return must contain 2 items');
+  assert(mixedState.items[0].allocationMode === 'serialized', 'First item is serialized');
+  assert(mixedState.items[1].allocationMode === 'legacy', 'Second item is legacy');
+  assert(mixedState.canFinalize === true, 'Backend canFinalize flag is authoritative');
+
+  // 21. Finalize Gatekeeper and Read-Only State
+  const isFinalizeAllowed = (st: AdminReturnReceivingState) => st.return.status === 'receiving' && st.canFinalize === true;
+  assert(isFinalizeAllowed(mixedState) === true, 'Receiving state with canFinalize=true allows finalize');
+
+  const approvedState: AdminReturnReceivingState = { ...mixedState, return: { ...mixedState.return, status: 'approved' }, canFinalize: false };
+  assert(isFinalizeAllowed(approvedState) === false, 'Approved state does NOT allow finalize');
+
+  const finalizedState: AdminReturnReceivingState = { ...mixedState, return: { ...mixedState.return, status: 'item_received' }, canFinalize: false };
+  assert(isFinalizeAllowed(finalizedState) === false, 'Finalized item_received state does NOT allow finalize');
+  assert(finalizedState.return.status === 'item_received', 'Finalized return has status item_received');
+
+  // 22. Partial Receiving & Missing Unit Derivations
+  const deriveNotReceived = (item: AdminReturnReceivingItem) => {
+    if (item.allocationMode === 'serialized') {
+      return Math.max(0, item.requestedQuantity - item.scannedUnits.length);
+    }
+    return Math.max(0, item.requestedQuantity - (item.acceptedQuantity + item.damagedQuantity + item.rejectedQuantity));
+  };
+
+  // Case A: Serialized partial (Q=3, 2 scanned)
+  const partialSerializedItem: AdminReturnReceivingItem = {
+    ...sampleSerializedReceivingItem,
+    requestedQuantity: 3,
+    scannedQuantity: 2,
+    scannedUnits: [
+      { id: 's-1', returnId: 'r-1', returnItemId: 'ri-1', inventoryUnitId: 'u-1', unitCode: 'ZMU-1', disposition: 'restock', createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z' },
+      { id: 's-2', returnId: 'r-1', returnItemId: 'ri-1', inventoryUnitId: 'u-2', unitCode: 'ZMU-2', disposition: 'damaged', createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z' },
+    ],
+    canFinalize: true,
+  };
+  assert(deriveNotReceived(partialSerializedItem) === 1, 'Partial serialized Q=3, 2 scanned must derive notReceived=1');
+
+  // Case B: Serialized zero-scanned (Q=1, 0 scanned)
+  const zeroSerializedItem: AdminReturnReceivingItem = {
+    ...sampleSerializedReceivingItem,
+    requestedQuantity: 1,
+    scannedQuantity: 0,
+    scannedUnits: [],
+    canFinalize: true,
+  };
+  assert(deriveNotReceived(zeroSerializedItem) === 1, 'Zero-scanned serialized Q=1, 0 scanned must derive notReceived=1');
+
+  // Case C: Legacy partial (Q=5, acc=2, dam=1, rej=1)
+  const partialLegacyItem: AdminReturnReceivingItem = {
+    ...legacyItem,
+    requestedQuantity: 5,
+    acceptedQuantity: 2,
+    damagedQuantity: 1,
+    rejectedQuantity: 1,
+    canFinalize: true,
+  };
+  assert(deriveNotReceived(partialLegacyItem) === 1, 'Partial legacy Q=5 (2+1+1) must derive notReceived=1');
+
+  // 23. Return Logistics Column & Warehouse Ready Matrix
+  const { getReturnLogisticsLabel, getReturnLogisticsBadgeClass } = await import('../api/adminReturns');
+
+  // Verify human labels (no raw enum leakage)
+  assert(getReturnLogisticsLabel(null) === '—', 'null logistics must render —');
+  assert(getReturnLogisticsLabel(undefined) === '—', 'undefined logistics must render —');
+  assert(getReturnLogisticsLabel('') === '—', 'empty logistics must render —');
+  assert(getReturnLogisticsLabel('draft') === 'Черновик', 'draft must render Черновик');
+  assert(getReturnLogisticsLabel('awaiting_handover') === 'Ожидает передачи', 'awaiting_handover must render Ожидает передачи');
+  assert(getReturnLogisticsLabel('handed_over') === 'Передан в СДЭК', 'handed_over must render Передан в СДЭК');
+  assert(getReturnLogisticsLabel('in_transit') === 'В пути', 'in_transit must render В пути');
+  assert(getReturnLogisticsLabel('arrived_at_zamk') === 'Прибыл на склад', 'arrived_at_zamk must render Прибыл на склад');
+  assert(getReturnLogisticsLabel('cancelled') === 'Отменена', 'cancelled must render Отменена');
+
+  assert(getReturnLogisticsBadgeClass('arrived_at_zamk').includes('blue'), 'Arrived badge must use blue emphasis');
+  assert(getReturnLogisticsBadgeClass(null).includes('gray'), 'Null logistics badge must use muted styling');
+
+  const getListRowAction = (r: AdminReturn) => {
+    const effectiveShipmentStatus = r.shipmentStatus || r.shipment?.status || null;
+    const isWarehouseReady = r.status === 'approved' && effectiveShipmentStatus === 'arrived_at_zamk';
+    return isWarehouseReady ? 'Принять на складе' : 'Рассмотреть';
+  };
+
+  // Matrix Case 1: approved + no shipment
+  const appNoShipment: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipment: undefined, shipmentStatus: null };
+  assert(getReturnLogisticsLabel(appNoShipment.shipmentStatus) === '—', 'No shipment must render —');
+  assert(getListRowAction(appNoShipment) === 'Рассмотреть', 'Approved without shipment is not warehouse-ready');
+
+  // Matrix Case 2: approved + awaiting_handover
+  const appAwaiting: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipmentStatus: 'awaiting_handover' };
+  assert(getReturnLogisticsLabel(appAwaiting.shipmentStatus) === 'Ожидает передачи', 'Awaiting handover must render Ожидает передачи');
+  assert(getListRowAction(appAwaiting) === 'Рассмотреть', 'Approved awaiting handover is not warehouse-ready');
+
+  // Matrix Case 3: approved + in_transit
+  const appInTransit: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipmentStatus: 'in_transit' };
+  assert(getReturnLogisticsLabel(appInTransit.shipmentStatus) === 'В пути', 'In transit must render В пути');
+  assert(getListRowAction(appInTransit) === 'Рассмотреть', 'Approved in transit is not warehouse-ready');
+
+  // Matrix Case 4: approved + arrived_at_zamk (Warehouse Ready!)
+  const appArrived: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipmentStatus: 'arrived_at_zamk' };
+  assert(getReturnLogisticsLabel(appArrived.shipmentStatus) === 'Прибыл на склад', 'Arrived at ZAMK must render Прибыл на склад');
+  assert(getListRowAction(appArrived) === 'Принять на складе', 'Approved + arrived_at_zamk MUST show Принять на складе action');
+
+  // Matrix Case 5: rejected + arrived_at_zamk (Must NOT be warehouse-ready)
+  const rejArrived: AdminReturn = { ...sampleReturnWithEvidence, status: 'rejected', shipmentStatus: 'arrived_at_zamk' };
+  assert(getListRowAction(rejArrived) === 'Рассмотреть', 'Rejected return must NOT show warehouse receiving action even if shipment arrived');
+
+  // Matrix Case 6: approved + cancelled (Must render Отменена and NOT be warehouse-ready)
+  const appCancelled: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipmentStatus: 'cancelled' };
+  assert(getReturnLogisticsLabel(appCancelled.shipmentStatus) === 'Отменена', 'Cancelled shipment must render Отменена');
+  assert(getListRowAction(appCancelled) === 'Рассмотреть', 'Approved return with cancelled shipment must NOT show warehouse receiving action');
+
+  // 24. Dev Logistics Simulator Action Rules
+  const getDevSimulatorAction = (r: AdminReturn): string | null => {
+    if (r.status !== 'approved') return null;
+    if (!r.shipment || r.shipment.status === 'cancelled') {
+      return 'Создать тестовую отправку';
+    }
+    switch (r.shipment.status) {
+      case 'awaiting_handover':
+        return 'Отметить передачу в СДЭК';
+      case 'handed_over':
+        return 'Отметить отправку в пути';
+      case 'in_transit':
+        return 'Отметить прибытие на склад';
+      case 'arrived_at_zamk':
+        return null; // Terminal simulator state; warehouse receiving CTA takes over
+      default:
+        return null;
+    }
+  };
+
+  const simReturnNoShipment: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipment: undefined };
+  assert(getDevSimulatorAction(simReturnNoShipment) === 'Создать тестовую отправку', 'No shipment must show create action');
+
+  const simReturnCancelled: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipment: { ...sampleReturnWithEvidence.shipment!, status: 'cancelled' } };
+  assert(getDevSimulatorAction(simReturnCancelled) === 'Создать тестовую отправку', 'Cancelled shipment must allow new create action');
+
+  const simReturnAwaiting: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipment: { ...sampleReturnWithEvidence.shipment!, status: 'awaiting_handover' } };
+  assert(getDevSimulatorAction(simReturnAwaiting) === 'Отметить передачу в СДЭК', 'awaiting_handover must show handover action');
+
+  const simReturnHanded: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipment: { ...sampleReturnWithEvidence.shipment!, status: 'handed_over' } };
+  assert(getDevSimulatorAction(simReturnHanded) === 'Отметить отправку в пути', 'handed_over must show in_transit action');
+
+  const simReturnInTransit: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipment: { ...sampleReturnWithEvidence.shipment!, status: 'in_transit' } };
+  assert(getDevSimulatorAction(simReturnInTransit) === 'Отметить прибытие на склад', 'in_transit must show arrived action');
+
+  const simReturnArrived: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipment: { ...sampleReturnWithEvidence.shipment!, status: 'arrived_at_zamk' } };
+  assert(getDevSimulatorAction(simReturnArrived) === null, 'arrived_at_zamk has no further simulator action');
+
+  const simReturnRejected: AdminReturn = { ...sampleReturnWithEvidence, status: 'rejected' };
+  assert(getDevSimulatorAction(simReturnRejected) === null, 'Rejected return must have no simulator action');
+
+  console.log('ALL ADMIN RETURNS & RECEIVING PRESENTATION & CONTRACT TESTS PASSED');
 }
 
 describe('Admin Returns Contract & State Logic', () => {
-  it('passes all canonical logic and refund mapping assertions', async () => {
+  it('passes all canonical logic, receiving matrix, and refund mapping assertions', async () => {
     await runAdminReturnsTests();
   });
 });

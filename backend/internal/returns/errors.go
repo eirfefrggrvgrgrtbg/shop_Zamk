@@ -58,4 +58,8 @@ var (
 	ErrReturnMessageAttachmentTooLarge = errors.New("return_message_attachment_too_large")
 	ErrReturnMessageTooManyAttachments = errors.New("return_message_too_many_attachments")
 	ErrReturnMessageAttachmentNotOwned = errors.New("return_message_attachment_not_owned")
+
+	// Dev simulator errors
+	ErrShipmentNotFound = errors.New("shipment_not_found")
+	ErrDevToolDisabled  = errors.New("dev_tool_disabled")
 )

@@ -14,7 +14,7 @@ import {
   X,
   XCircle,
   MessageSquare,
-
+  Wrench,
 } from 'lucide-react';
 import { SellerContextBanner } from '../components/SellerContextBanner';
 import {
@@ -30,6 +30,10 @@ import {
   rejectAdminReturn,
   formatReturnShipmentStatus,
   formatReturnShipmentMethod,
+  getReturnLogisticsLabel,
+  getReturnLogisticsBadgeClass,
+  simulateCreateAdminReturnShipment,
+  simulateAdvanceAdminReturnShipment,
 } from '../api/adminReturns';
 import { ReturnConversationDrawer } from '../components/returns/ReturnConversationDrawer';
 import type { AdminReturn, AdminReturnItem, AdminReturnRefundQuote } from '../api/adminReturns';
@@ -181,6 +185,42 @@ export function AdminReturns() {
       setTimelineRefreshKey((k) => k + 1);
     } catch (err: unknown) {
       setError(getAdminReturnErrorMessage(err, 'Не удалось запустить возврат средств.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSimulateCreateShipment = async () => {
+    if (!selectedReturn) return;
+    setError(null);
+    setSuccess(null);
+    setIsSubmitting(true);
+    try {
+      await simulateCreateAdminReturnShipment(selectedReturn.id);
+      setSuccess('Тестовая отправка создана со статусом «Ожидает передачи».');
+      await fetchReturns();
+      await fetchReturnDetail(selectedReturn.id);
+      setTimelineRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      setError(getAdminReturnErrorMessage(err, 'Не удалось создать тестовую отправку.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSimulateAdvanceShipment = async () => {
+    if (!selectedReturn) return;
+    setError(null);
+    setSuccess(null);
+    setIsSubmitting(true);
+    try {
+      await simulateAdvanceAdminReturnShipment(selectedReturn.id);
+      setSuccess('Статус отправки успешно продвинут.');
+      await fetchReturns();
+      await fetchReturnDetail(selectedReturn.id);
+      setTimelineRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      setError(getAdminReturnErrorMessage(err, 'Не удалось изменить статус отправки.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -733,6 +773,71 @@ export function AdminReturns() {
                           )}
                         </div>
                       )}
+
+                      {/* Dev-only Logistics Simulator Tool */}
+                      {import.meta.env.DEV && (
+                        <div data-testid="dev-logistics-simulator" className="p-4 bg-amber-50 border border-amber-300 rounded-lg text-sm space-y-3">
+                          <div className="flex items-center space-x-2 text-amber-900 font-semibold">
+                            <Wrench className="h-4 w-4 text-amber-700" />
+                            <span>Локальная симуляция логистики (Dev Tool)</span>
+                          </div>
+                          <p className="text-xs text-amber-800 leading-relaxed">
+                            Тестовый инструмент для локальной приёмки без боевой интеграции СДЭК. Создает и продвигает реальное состояние ReturnShipment в БД.
+                          </p>
+
+                          {/* If no active shipment exists (or previous was cancelled) */}
+                          {(!selectedReturn.shipment || selectedReturn.shipment.status === 'cancelled') && (
+                            <button
+                              type="button"
+                              onClick={handleSimulateCreateShipment}
+                              disabled={isSubmitting}
+                              className="w-full inline-flex items-center justify-center px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                            >
+                              Создать тестовую отправку
+                            </button>
+                          )}
+
+                          {/* If active shipment exists, show sequential allowed step */}
+                          {selectedReturn.shipment && selectedReturn.shipment.status === 'awaiting_handover' && (
+                            <button
+                              type="button"
+                              onClick={handleSimulateAdvanceShipment}
+                              disabled={isSubmitting}
+                              className="w-full inline-flex items-center justify-center px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                            >
+                              Отметить передачу в СДЭК
+                            </button>
+                          )}
+
+                          {selectedReturn.shipment && selectedReturn.shipment.status === 'handed_over' && (
+                            <button
+                              type="button"
+                              onClick={handleSimulateAdvanceShipment}
+                              disabled={isSubmitting}
+                              className="w-full inline-flex items-center justify-center px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                            >
+                              Отметить отправку в пути
+                            </button>
+                          )}
+
+                          {selectedReturn.shipment && selectedReturn.shipment.status === 'in_transit' && (
+                            <button
+                              type="button"
+                              onClick={handleSimulateAdvanceShipment}
+                              disabled={isSubmitting}
+                              className="w-full inline-flex items-center justify-center px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                            >
+                              Отметить прибытие на склад
+                            </button>
+                          )}
+
+                          {selectedReturn.shipment && selectedReturn.shipment.status === 'arrived_at_zamk' && (
+                            <div className="p-2 bg-amber-100/70 rounded text-xs text-amber-900 font-medium">
+                              ✓ Отправление прибыло на склад ZAMK. Доступна складская приёмка.
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -757,16 +862,30 @@ export function AdminReturns() {
                   )}
 
                   {selectedReturn.status === 'receiving' && (
-                    <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-900 space-y-1">
+                    <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-900 space-y-2">
                       <div className="font-semibold">Идёт приёмка на складе</div>
                       <p className="text-xs text-purple-700">Товары сканируются на складе.</p>
+                      <Link
+                        to={`/returns/${selectedReturn.id}/receiving`}
+                        className="mt-2 w-full inline-flex items-center justify-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                      >
+                        <Package className="h-4 w-4 mr-2" />
+                        Продолжить приёмку
+                      </Link>
                     </div>
                   )}
 
                   {selectedReturn.status === 'item_received' && (
-                    <div className="p-4 bg-teal-50 border border-teal-200 rounded-lg text-sm text-teal-900 space-y-1">
+                    <div className="p-4 bg-teal-50 border border-teal-200 rounded-lg text-sm text-teal-900 space-y-2">
                       <div className="font-semibold">Товар принят на складе</div>
                       <p className="text-xs text-teal-700">Приёмка завершена сотрудником склада.</p>
+                      <Link
+                        to={`/returns/${selectedReturn.id}/receiving`}
+                        className="mt-2 w-full inline-flex items-center justify-center px-4 py-2 bg-white hover:bg-gray-50 text-teal-800 text-xs font-semibold rounded-lg border border-teal-300 shadow-sm transition-colors"
+                      >
+                        <Package className="h-3.5 w-3.5 mr-1.5" />
+                        Открыть результат приёмки
+                      </Link>
                     </div>
                   )}
 
@@ -861,6 +980,9 @@ export function AdminReturns() {
                         <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                           Статус
                         </th>
+                        <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Логистика
+                        </th>
                         <th scope="col" className="relative px-6 py-3.5">
                           <span className="sr-only">Действия</span>
                         </th>
@@ -869,6 +991,8 @@ export function AdminReturns() {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {filteredReturns.map((req) => {
                         const primaryItem = req.items?.[0];
+                        const effectiveShipmentStatus = req.shipmentStatus || req.shipment?.status || null;
+                        const isWarehouseReady = req.status === 'approved' && effectiveShipmentStatus === 'arrived_at_zamk';
                         return (
                           <tr key={req.id} className="hover:bg-gray-50 transition-colors">
                             {/* Product column with photo */}
@@ -946,15 +1070,39 @@ export function AdminReturns() {
                               </span>
                             </td>
 
+                            {/* Logistics column */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {effectiveShipmentStatus ? (
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getReturnLogisticsBadgeClass(
+                                    effectiveShipmentStatus
+                                  )}`}
+                                >
+                                  {getReturnLogisticsLabel(effectiveShipmentStatus)}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-gray-400">—</span>
+                              )}
+                            </td>
+
                             {/* Action column */}
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              <button
-                                type="button"
-                                onClick={() => fetchReturnDetail(req.id)}
-                                className="inline-flex items-center px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition-colors"
-                              >
-                                Рассмотреть
-                              </button>
+                              {isWarehouseReady ? (
+                                <Link
+                                  to={`/returns/${req.id}/receiving`}
+                                  className="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                                >
+                                  Принять на складе
+                                </Link>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => fetchReturnDetail(req.id)}
+                                  className="inline-flex items-center px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition-colors"
+                                >
+                                  Рассмотреть
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );

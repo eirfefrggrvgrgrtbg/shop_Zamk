@@ -22,12 +22,18 @@ type Handler struct {
 	service   *Service
 	validator *validator.Validate
 	auditRepo *staff.AuditRepository
+	appEnv    string
 }
 
-func NewHandler(service *Service) *Handler {
+func NewHandler(service *Service, appEnv ...string) *Handler {
+	env := "development"
+	if len(appEnv) > 0 && appEnv[0] != "" {
+		env = appEnv[0]
+	}
 	return &Handler{
 		service:   service,
 		validator: validator.New(),
+		appEnv:    env,
 	}
 }
 
@@ -974,4 +980,70 @@ func (h *Handler) GetAdminReturnTimeline(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(timeline)
+}
+
+func (h *Handler) SimulateCreateReturnShipment(w http.ResponseWriter, r *http.Request) {
+	if h.appEnv == "production" {
+		h.writeError(w, http.StatusForbidden, "dev_tool_disabled", "Dev logistics simulator is disabled in production")
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	shipment, err := h.service.CreateSimulatedReturnShipment(r.Context(), returnID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrReturnNotFound):
+			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
+		case errors.Is(err, ErrReturnNotApproved):
+			h.writeError(w, http.StatusBadRequest, "not_approved", "Return must be in approved status to simulate shipment")
+		case errors.Is(err, ErrShipmentAlreadyExists):
+			h.writeError(w, http.StatusConflict, "shipment_exists", "An active shipment already exists for this return")
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		}
+		return
+	}
+
+	resp := mapReturnShipmentResponse(shipment)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{"shipment": resp})
+}
+
+func (h *Handler) SimulateAdvanceReturnShipment(w http.ResponseWriter, r *http.Request) {
+	if h.appEnv == "production" {
+		h.writeError(w, http.StatusForbidden, "dev_tool_disabled", "Dev logistics simulator is disabled in production")
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	shipment, err := h.service.AdvanceSimulatedReturnShipment(r.Context(), returnID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrReturnNotFound), errors.Is(err, ErrShipmentNotFound):
+			h.writeError(w, http.StatusNotFound, "not_found", "Shipment or return not found")
+		case errors.Is(err, ErrInvalidShipmentTransition):
+			h.writeError(w, http.StatusBadRequest, "invalid_transition", "Cannot advance shipment beyond its terminal state or invalid state")
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		}
+		return
+	}
+
+	resp := mapReturnShipmentResponse(shipment)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{"shipment": resp})
 }

@@ -28,6 +28,7 @@ import { AdminPaymentDetail } from './pages/AdminPaymentDetail';
 import { AdminShipments } from './pages/AdminShipments';
 import { AdminInventory } from './pages/AdminInventory';
 import { AdminReturns } from './pages/AdminReturns';
+import { AdminReturnReceiving } from './pages/AdminReturnReceiving';
 import { AdminRefunds } from './pages/AdminRefunds';
 import { AdminPayouts } from './pages/AdminPayouts';
 import { AdminReviews } from './pages/AdminReviews';
@@ -84,6 +85,7 @@ export default function App() {
           <Route path="/shipments" element={<AdminProtectedRoute permission="shipments.read"><AdminLayout><AdminShipments /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/inventory" element={<AdminProtectedRoute permission="inventory.read"><AdminLayout><AdminInventory /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/returns" element={<AdminProtectedRoute permission="returns.read"><AdminLayout><AdminReturns /></AdminLayout></AdminProtectedRoute>} />
+          <Route path="/returns/:id/receiving" element={<AdminProtectedRoute permission="returns.read"><AdminLayout><AdminReturnReceiving /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/refunds" element={<AdminProtectedRoute permission="refunds.read"><AdminLayout><AdminRefunds /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/payouts" element={<AdminProtectedRoute permission="payouts.read"><AdminLayout><AdminPayouts /></AdminLayout></AdminProtectedRoute>} />
           <Route path="/reviews" element={<AdminProtectedRoute permission="reviews.read"><AdminLayout><AdminReviews /></AdminLayout></AdminProtectedRoute>} />

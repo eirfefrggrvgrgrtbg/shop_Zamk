@@ -424,3 +424,152 @@ func TestM533A_CustomerReturns_ReadModel_EnrichedWithProductAndOrder(t *testing.
 	assert.NotEmpty(t, found.Items[0].ProductTitle)
 }
 
+func insertTestReturnShipment(t *testing.T, fix *m51Fixture, returnID uuid.UUID, status string, createdAt time.Time) uuid.UUID {
+	t.Helper()
+	ctx := context.Background()
+	shID := uuid.New()
+	_, err := fix.client.Pool.Exec(ctx, `
+		INSERT INTO return_shipments (id, return_id, provider, method, status, created_at, updated_at)
+		VALUES ($1, $2, 'cdek', 'cdek_office', $3, $4, $4)
+	`, shID, returnID, status, createdAt)
+	require.NoError(t, err)
+	return shID
+}
+
+func TestM532_AdminReturnLogisticsVisibility(t *testing.T) {
+	fix := setupM51Fixture(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	// ── Case A: No shipment (shipmentStatus == nil) ──
+	tOrdA := fix.createDeliveredOrder(t, now.Add(-1*time.Hour), 1)
+	evIDsA := fix.createStagedEvidence(t, fix.userID, 2)
+	respA, err := fix.svc.CreateReturn(ctx, fix.userID, tOrdA.orderID, returns.CreateReturnRequest{
+		Reason:  "defective",
+		Comment: strPtr("Case A no shipment"),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrdA.orderItemID, Quantity: 1, EvidenceIDs: evIDsA}},
+	})
+	require.NoError(t, err)
+	retIDA := respA[0].Return.ID
+	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retIDA, returns.UpdateReturnStatusRequest{Status: "approved"}))
+
+	// ── Case B: awaiting_handover ──
+	tOrdB := fix.createDeliveredOrder(t, now.Add(-1*time.Hour), 1)
+	evIDsB := fix.createStagedEvidence(t, fix.userID, 2)
+	respB, err := fix.svc.CreateReturn(ctx, fix.userID, tOrdB.orderID, returns.CreateReturnRequest{
+		Reason:  "defective",
+		Comment: strPtr("Case B awaiting_handover"),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrdB.orderItemID, Quantity: 1, EvidenceIDs: evIDsB}},
+	})
+	require.NoError(t, err)
+	retIDB := respB[0].Return.ID
+	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retIDB, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	insertTestReturnShipment(t, fix, retIDB, "awaiting_handover", now.Add(-30*time.Minute))
+
+	// ── Case C: arrived_at_zamk ──
+	tOrdC := fix.createDeliveredOrder(t, now.Add(-2*time.Hour), 1)
+	evIDsC := fix.createStagedEvidence(t, fix.userID, 2)
+	respC, err := fix.svc.CreateReturn(ctx, fix.userID, tOrdC.orderID, returns.CreateReturnRequest{
+		Reason:  "damaged",
+		Comment: strPtr("Case C arrived_at_zamk"),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrdC.orderItemID, Quantity: 1, EvidenceIDs: evIDsC}},
+	})
+	require.NoError(t, err)
+	retIDC := respC[0].Return.ID
+	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retIDC, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	insertTestReturnShipment(t, fix, retIDC, "arrived_at_zamk", now.Add(-20*time.Minute))
+
+	// ── Case D: cancelled only ──
+	tOrdD := fix.createDeliveredOrder(t, now.Add(-1*time.Hour), 1)
+	evIDsD := fix.createStagedEvidence(t, fix.userID, 2)
+	respD, err := fix.svc.CreateReturn(ctx, fix.userID, tOrdD.orderID, returns.CreateReturnRequest{
+		Reason:  "damaged",
+		Comment: strPtr("Case D cancelled only"),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrdD.orderItemID, Quantity: 1, EvidenceIDs: evIDsD}},
+	})
+	require.NoError(t, err)
+	retIDD := respD[0].Return.ID
+	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retIDD, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	insertTestReturnShipment(t, fix, retIDD, "cancelled", now.Add(-40*time.Minute))
+
+	// ── Case E: older cancelled + newer in_transit (in_transit must win) ──
+	tOrdE := fix.createDeliveredOrder(t, now.Add(-1*time.Hour), 1)
+	evIDsE := fix.createStagedEvidence(t, fix.userID, 2)
+	respE, err := fix.svc.CreateReturn(ctx, fix.userID, tOrdE.orderID, returns.CreateReturnRequest{
+		Reason:  "damaged",
+		Comment: strPtr("Case E older cancelled + newer in_transit"),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrdE.orderItemID, Quantity: 1, EvidenceIDs: evIDsE}},
+	})
+	require.NoError(t, err)
+	retIDE := respE[0].Return.ID
+	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retIDE, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	// Insert older cancelled shipment
+	insertTestReturnShipment(t, fix, retIDE, "cancelled", now.Add(-50*time.Minute))
+	// Insert newer in_transit shipment
+	insertTestReturnShipment(t, fix, retIDE, "in_transit", now.Add(-10*time.Minute))
+
+	// ── Case F: older arrived (cancelled) + newer arrived_at_zamk ──
+	tOrdF := fix.createDeliveredOrder(t, now.Add(-1*time.Hour), 1)
+	evIDsF := fix.createStagedEvidence(t, fix.userID, 2)
+	respF, err := fix.svc.CreateReturn(ctx, fix.userID, tOrdF.orderID, returns.CreateReturnRequest{
+		Reason:  "damaged",
+		Comment: strPtr("Case F re-issued shipment"),
+		Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrdF.orderItemID, Quantity: 1, EvidenceIDs: evIDsF}},
+	})
+	require.NoError(t, err)
+	retIDF := respF[0].Return.ID
+	require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retIDF, returns.UpdateReturnStatusRequest{Status: "approved"}))
+	insertTestReturnShipment(t, fix, retIDF, "cancelled", now.Add(-60*time.Minute))
+	insertTestReturnShipment(t, fix, retIDF, "arrived_at_zamk", now.Add(-5*time.Minute))
+
+	// ── Verify GetAdminReturn for all cases ──
+	detA, err := fix.svc.GetAdminReturn(ctx, retIDA)
+	require.NoError(t, err)
+	assert.Nil(t, detA.ShipmentStatus, "Case A: must be nil")
+
+	detB, err := fix.svc.GetAdminReturn(ctx, retIDB)
+	require.NoError(t, err)
+	require.NotNil(t, detB.ShipmentStatus)
+	assert.Equal(t, "awaiting_handover", *detB.ShipmentStatus, "Case B: awaiting_handover")
+
+	detC, err := fix.svc.GetAdminReturn(ctx, retIDC)
+	require.NoError(t, err)
+	require.NotNil(t, detC.ShipmentStatus)
+	assert.Equal(t, "arrived_at_zamk", *detC.ShipmentStatus, "Case C: arrived_at_zamk")
+
+	detD, err := fix.svc.GetAdminReturn(ctx, retIDD)
+	require.NoError(t, err)
+	require.NotNil(t, detD.ShipmentStatus)
+	assert.Equal(t, "cancelled", *detD.ShipmentStatus, "Case D: cancelled")
+
+	detE, err := fix.svc.GetAdminReturn(ctx, retIDE)
+	require.NoError(t, err)
+	require.NotNil(t, detE.ShipmentStatus)
+	assert.Equal(t, "in_transit", *detE.ShipmentStatus, "Case E: in_transit active wins over older cancelled")
+
+	detF, err := fix.svc.GetAdminReturn(ctx, retIDF)
+	require.NoError(t, err)
+	require.NotNil(t, detF.ShipmentStatus)
+	assert.Equal(t, "arrived_at_zamk", *detF.ShipmentStatus, "Case F: arrived_at_zamk active wins over older cancelled")
+
+	// ── Verify ListAdminReturns for all cases ──
+	list, _, err := fix.svc.ListAdminReturns(ctx, 20, 0)
+	require.NoError(t, err)
+
+	statusMap := make(map[uuid.UUID]*string)
+	for i := range list {
+		statusMap[list[i].ID] = list[i].ShipmentStatus
+	}
+
+	assert.Nil(t, statusMap[retIDA], "List Case A: must be nil")
+	require.NotNil(t, statusMap[retIDB], "List Case B: must not be nil")
+	assert.Equal(t, "awaiting_handover", *statusMap[retIDB], "List Case B: awaiting_handover")
+	require.NotNil(t, statusMap[retIDC], "List Case C: must not be nil")
+	assert.Equal(t, "arrived_at_zamk", *statusMap[retIDC], "List Case C: arrived_at_zamk")
+	require.NotNil(t, statusMap[retIDD], "List Case D: must not be nil")
+	assert.Equal(t, "cancelled", *statusMap[retIDD], "List Case D: cancelled")
+	require.NotNil(t, statusMap[retIDE], "List Case E: must not be nil")
+	assert.Equal(t, "in_transit", *statusMap[retIDE], "List Case E: in_transit")
+	require.NotNil(t, statusMap[retIDF], "List Case F: must not be nil")
+	assert.Equal(t, "arrived_at_zamk", *statusMap[retIDF], "List Case F: arrived_at_zamk")
+}

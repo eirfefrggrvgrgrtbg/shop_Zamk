@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse } from './types';
+import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, ReturnShipment, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse, AdminReturnReceivingState, ScanReturnUnitResponse, UpdateSerializedUnitInspectionInput, UpdateLegacyItemInspectionInput } from './types';
 
 export const getAdminSellers = async (params?: {
   search?: string;
@@ -521,12 +521,44 @@ export const rejectAdminReturn = async (id: string, reason: string): Promise<voi
   return request<void>('PATCH', `/admin/returns/${id}/status`, { body: { status: 'rejected', adminComment: reason } });
 };
 
+export const getAdminReturnReceivingState = async (returnId: string): Promise<AdminReturnReceivingState> => {
+  return request<AdminReturnReceivingState>('GET', `/admin/returns/${returnId}/receiving`);
+};
+
+export const startAdminReturnReceiving = async (returnId: string): Promise<void> => {
+  return request<void>('POST', `/admin/returns/${returnId}/receiving/start`);
+};
+
+export const scanAdminReturnUnit = async (returnId: string, code: string): Promise<ScanReturnUnitResponse> => {
+  return request<ScanReturnUnitResponse>('POST', `/admin/returns/${returnId}/receiving/scan`, { body: { code } });
+};
+
+export const inspectSerializedReturnUnit = async (returnId: string, unitId: string, input: UpdateSerializedUnitInspectionInput): Promise<void> => {
+  return request<void>('PATCH', `/admin/returns/${returnId}/receiving/units/${unitId}`, { body: input });
+};
+
+export const inspectLegacyReturnItem = async (returnId: string, itemId: string, input: UpdateLegacyItemInspectionInput): Promise<void> => {
+  return request<void>('PATCH', `/admin/returns/${returnId}/receiving/items/${itemId}/legacy-inspection`, { body: input });
+};
+
+export const finalizeAdminReturnReceiving = async (returnId: string): Promise<void> => {
+  return request<void>('POST', `/admin/returns/${returnId}/receiving/finalize`);
+};
+
 export const getAdminReturnRefundQuote = async (returnId: string): Promise<AdminReturnRefundQuote> => {
   return request<AdminReturnRefundQuote>('GET', `/admin/returns/${returnId}/refund-quote`);
 };
 
 export const createAdminRefundForReturn = async (returnId: string, data?: { reason?: string }): Promise<AdminRefund> => {
   return request<AdminRefund>('POST', `/admin/returns/${returnId}/refund`, { body: data ?? {} });
+};
+
+export const simulateCreateAdminReturnShipment = async (returnId: string): Promise<{ shipment: ReturnShipment }> => {
+  return request<{ shipment: ReturnShipment }>('POST', `/admin/returns/${returnId}/simulate-shipment`);
+};
+
+export const simulateAdvanceAdminReturnShipment = async (returnId: string): Promise<{ shipment: ReturnShipment }> => {
+  return request<{ shipment: ReturnShipment }>('POST', `/admin/returns/${returnId}/simulate-shipment-step`);
 };
 
 export const getAdminRefunds = async (): Promise<{ items: AdminRefund[]; totalCount: number }> => {
