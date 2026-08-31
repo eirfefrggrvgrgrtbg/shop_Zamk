@@ -60,6 +60,8 @@ var (
 	ErrReturnMessageAttachmentNotOwned = errors.New("return_message_attachment_not_owned")
 
 	// Dev simulator errors
-	ErrShipmentNotFound = errors.New("shipment_not_found")
-	ErrDevToolDisabled  = errors.New("dev_tool_disabled")
+	ErrShipmentNotFound       = errors.New("shipment_not_found")
+	ErrDevToolDisabled        = errors.New("dev_tool_disabled")
+	ErrNoPendingRefund        = errors.New("no_pending_refund")
+	ErrMultiplePendingRefunds = errors.New("multiple_pending_refunds")
 )

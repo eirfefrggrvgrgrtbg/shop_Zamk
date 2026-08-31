@@ -561,6 +561,14 @@ export const simulateAdvanceAdminReturnShipment = async (returnId: string): Prom
   return request<{ shipment: ReturnShipment }>('POST', `/admin/returns/${returnId}/simulate-shipment-step`);
 };
 
+export const simulateRefundSuccessForReturn = async (returnId: string): Promise<AdminRefund> => {
+  return request<AdminRefund>('POST', `/admin/returns/${returnId}/simulate-refund-success`);
+};
+
+export const simulateRefundFailureForReturn = async (returnId: string): Promise<AdminRefund> => {
+  return request<AdminRefund>('POST', `/admin/returns/${returnId}/simulate-refund-failure`);
+};
+
 export const getAdminRefunds = async (): Promise<{ items: AdminRefund[]; totalCount: number }> => {
   const res = await request<any>('GET', '/admin/refunds');
   return { ...res, items: res?.items || [] };

@@ -854,6 +854,25 @@ func (r *Repository) GetRefund(ctx context.Context, id uuid.UUID) (*Refund, erro
 	return &ref, nil
 }
 
+func (r *Repository) GetRefundTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*Refund, error) {
+	query := `
+		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, provider, provider_refund_id, reason, created_at, updated_at, processed_at, failed_at
+		FROM refunds WHERE id = $1
+	`
+	var ref Refund
+	err := tx.QueryRow(ctx, query, id).Scan(
+		&ref.ID, &ref.ReturnID, &ref.PaymentID, &ref.OrderID, &ref.Status, &ref.AmountCents, &ref.Currency,
+		&ref.Provider, &ref.ProviderRefundID, &ref.Reason, &ref.CreatedAt, &ref.UpdatedAt, &ref.ProcessedAt, &ref.FailedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrRefundNotFound
+		}
+		return nil, err
+	}
+	return &ref, nil
+}
+
 func (r *Repository) GetRefundByReturnID(ctx context.Context, returnID uuid.UUID) (*Refund, error) {
 	query := `
 		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, provider, provider_refund_id, reason, created_at, updated_at, processed_at, failed_at
@@ -890,6 +909,33 @@ func (r *Repository) GetRefundByReturnIDTx(ctx context.Context, tx pgx.Tx, retur
 		return nil, err
 	}
 	return &ref, nil
+}
+
+func (r *Repository) GetPendingRefundsByReturnIDTx(ctx context.Context, tx pgx.Tx, returnID uuid.UUID) ([]Refund, error) {
+	query := `
+		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, provider, provider_refund_id, reason, created_at, updated_at, processed_at, failed_at
+		FROM refunds
+		WHERE return_id = $1 AND status IN ('pending', 'processing')
+		ORDER BY created_at DESC, id DESC
+	`
+	rows, err := tx.Query(ctx, query, returnID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Refund
+	for rows.Next() {
+		var ref Refund
+		if err := rows.Scan(
+			&ref.ID, &ref.ReturnID, &ref.PaymentID, &ref.OrderID, &ref.Status, &ref.AmountCents, &ref.Currency,
+			&ref.Provider, &ref.ProviderRefundID, &ref.Reason, &ref.CreatedAt, &ref.UpdatedAt, &ref.ProcessedAt, &ref.FailedAt,
+		); err != nil {
+			return nil, err
+		}
+		list = append(list, ref)
+	}
+	return list, rows.Err()
 }
 
 func (r *Repository) ListAllRefunds(ctx context.Context, limit, offset int) ([]Refund, error) {

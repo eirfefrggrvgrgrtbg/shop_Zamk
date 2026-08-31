@@ -34,6 +34,8 @@ import {
   getReturnLogisticsBadgeClass,
   simulateCreateAdminReturnShipment,
   simulateAdvanceAdminReturnShipment,
+  simulateRefundSuccessForReturn,
+  simulateRefundFailureForReturn,
 } from '../api/adminReturns';
 import { ReturnConversationDrawer } from '../components/returns/ReturnConversationDrawer';
 import type { AdminReturn, AdminReturnItem, AdminReturnRefundQuote } from '../api/adminReturns';
@@ -57,6 +59,8 @@ export function AdminReturns() {
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [isSimulateSuccessModalOpen, setIsSimulateSuccessModalOpen] = useState(false);
+  const [isSimulateFailureModalOpen, setIsSimulateFailureModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [refundReason, setRefundReason] = useState('');
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -221,6 +225,44 @@ export function AdminReturns() {
       setTimelineRefreshKey((k) => k + 1);
     } catch (err: unknown) {
       setError(getAdminReturnErrorMessage(err, 'Не удалось изменить статус отправки.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSimulateRefundSuccess = async () => {
+    if (!selectedReturn) return;
+    setError(null);
+    setSuccess(null);
+    setIsSubmitting(true);
+    try {
+      await simulateRefundSuccessForReturn(selectedReturn.id);
+      setIsSimulateSuccessModalOpen(false);
+      setSuccess('Успешный возврат средств успешно симулирован.');
+      await fetchReturns();
+      await fetchReturnDetail(selectedReturn.id);
+      setTimelineRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      setError(getAdminReturnErrorMessage(err, 'Не удалось симулировать успешный возврат средств.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSimulateRefundFailure = async () => {
+    if (!selectedReturn) return;
+    setError(null);
+    setSuccess(null);
+    setIsSubmitting(true);
+    try {
+      await simulateRefundFailureForReturn(selectedReturn.id);
+      setIsSimulateFailureModalOpen(false);
+      setSuccess('Ошибка возврата средств успешно симулирована.');
+      await fetchReturns();
+      await fetchReturnDetail(selectedReturn.id);
+      setTimelineRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      setError(getAdminReturnErrorMessage(err, 'Не удалось симулировать ошибку возврата средств.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -531,6 +573,39 @@ export function AdminReturns() {
                           <div>
                             <span className="font-semibold block text-gray-900">Возврат средств недоступен</span>
                             <span className="text-gray-600 mt-0.5 block">{refundQuote.blockingReason || 'Условия возврата средств не выполнены.'}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Dev-only Refund Completion Simulator Tool */}
+                      {import.meta.env.DEV && refundQuote.latestRefundStatus === 'pending' && (
+                        <div data-testid="dev-refund-simulator" className="p-3.5 bg-amber-50 border border-amber-300 rounded-lg text-xs space-y-2.5">
+                          <div className="flex items-center space-x-2 text-amber-900 font-semibold">
+                            <Wrench className="h-4 w-4 text-amber-700 flex-shrink-0" />
+                            <span>Локальная симуляция платежа (Dev Tool)</span>
+                          </div>
+                          <p className="text-amber-800 leading-relaxed">
+                            Тестовый инструмент для симуляции ответа платёжной системы по текущему ожидающему возврату.
+                          </p>
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setIsSimulateSuccessModalOpen(true)}
+                              disabled={isSubmitting}
+                              className="flex-1 inline-flex items-center justify-center px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                              Завершить успешно
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsSimulateFailureModalOpen(true)}
+                              disabled={isSubmitting}
+                              className="flex-1 inline-flex items-center justify-center px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                            >
+                              <XCircle className="h-3.5 w-3.5 mr-1.5" />
+                              Завершить с ошибкой
+                            </button>
                           </div>
                         </div>
                       )}
@@ -1204,6 +1279,104 @@ export function AdminReturns() {
                     'Повторить возврат'
                   ) : (
                     'Запустить возврат'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* SIMULATE REFUND SUCCESS MODAL                                      */}
+        {/* ------------------------------------------------------------------ */}
+        {isSimulateSuccessModalOpen && selectedReturn && (
+          <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-gray-200 space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Подтвердить успешный возврат средств?</h3>
+                  <p className="text-xs text-gray-500">Заказ {selectedReturn.orderNumber || selectedReturn.orderId}</p>
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Это локальная симуляция ответа платёжной системы.
+              </p>
+
+              <div className="pt-2 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSimulateSuccessModalOpen(false)}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSimulateRefundSuccess}
+                  disabled={isSubmitting}
+                  className="inline-flex items-center px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                      Обработка...
+                    </>
+                  ) : (
+                    'Подтвердить успех'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* SIMULATE REFUND FAILURE MODAL                                      */}
+        {/* ------------------------------------------------------------------ */}
+        {isSimulateFailureModalOpen && selectedReturn && (
+          <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-gray-200 space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0">
+                  <XCircle className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Симулировать ошибку возврата средств?</h3>
+                  <p className="text-xs text-gray-500">Заказ {selectedReturn.orderNumber || selectedReturn.orderId}</p>
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Возврат останется доступен для повторного запуска.
+              </p>
+
+              <div className="pt-2 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSimulateFailureModalOpen(false)}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSimulateRefundFailure}
+                  disabled={isSubmitting}
+                  className="inline-flex items-center px-4 py-2 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                      Обработка...
+                    </>
+                  ) : (
+                    'Симулировать ошибку'
                   )}
                 </button>
               </div>

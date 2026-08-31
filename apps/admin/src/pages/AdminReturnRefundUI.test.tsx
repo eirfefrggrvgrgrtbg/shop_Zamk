@@ -398,4 +398,148 @@ describe('Admin Returns Refund UI (M5.4B)', () => {
 
     expect(screen.getByTestId('return-refund-card')).toBeDefined();
   });
+
+  it('renders Dev Tool with success and failure controls when latestRefundStatus is pending in DEV', async () => {
+    const pendingQuote: AdminReturnRefundQuote = {
+      ...mockEligibleQuote,
+      canRefund: false,
+      latestRefundStatus: 'pending',
+      pendingRefundCents: 1500000,
+      alreadyRefundedCents: 0,
+      succeededRefundedCents: 0,
+      remainingRefundableCents: 0,
+      blockingReason: 'Возврат средств уже зарезервирован и ожидает обработки',
+    };
+
+    vi.spyOn(adminReturnsApi, 'getAdminReturns').mockResolvedValue([mockReturn]);
+    vi.spyOn(adminReturnsApi, 'getAdminReturn').mockResolvedValue(mockReturn);
+    vi.spyOn(adminReturnsApi, 'getAdminReturnRefundQuote').mockResolvedValue(pendingQuote);
+
+    render(
+      <MemoryRouter initialEntries={['/returns?id=ret-100193-id']}>
+        <AdminReturns />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dev-refund-simulator')).toBeDefined();
+    });
+
+    const devTool = screen.getByTestId('dev-refund-simulator');
+    expect(devTool.textContent).toContain('Локальная симуляция платежа (Dev Tool)');
+    expect(screen.getByRole('button', { name: /Завершить успешно/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Завершить с ошибкой/i })).toBeDefined();
+
+    // Must NOT leak raw UUIDs
+    expect(devTool.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  });
+
+  it('does NOT render Dev Tool when latestRefundStatus is not pending', async () => {
+    vi.spyOn(adminReturnsApi, 'getAdminReturns').mockResolvedValue([mockReturn]);
+    vi.spyOn(adminReturnsApi, 'getAdminReturn').mockResolvedValue(mockReturn);
+    vi.spyOn(adminReturnsApi, 'getAdminReturnRefundQuote').mockResolvedValue(mockEligibleQuote);
+
+    render(
+      <MemoryRouter initialEntries={['/returns?id=ret-100193-id']}>
+        <AdminReturns />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('return-refund-card')).toBeDefined();
+    });
+
+    expect(screen.queryByTestId('dev-refund-simulator')).toBeNull();
+  });
+
+  it('opens confirmation modal and calls simulateRefundSuccessForReturn on success confirmation', async () => {
+    const pendingQuote: AdminReturnRefundQuote = {
+      ...mockEligibleQuote,
+      canRefund: false,
+      latestRefundStatus: 'pending',
+      pendingRefundCents: 1500000,
+      alreadyRefundedCents: 0,
+      succeededRefundedCents: 0,
+      remainingRefundableCents: 0,
+    };
+
+    vi.spyOn(adminReturnsApi, 'getAdminReturns').mockResolvedValue([mockReturn]);
+    vi.spyOn(adminReturnsApi, 'getAdminReturn').mockResolvedValue(mockReturn);
+    vi.spyOn(adminReturnsApi, 'getAdminReturnRefundQuote').mockResolvedValue(pendingQuote);
+    const simulateSuccessSpy = vi.spyOn(adminReturnsApi, 'simulateRefundSuccessForReturn').mockResolvedValue({
+      id: 'ref-succeeded-1',
+      orderId: 'ord-100193-id',
+      status: 'succeeded',
+      amountCents: 1500000,
+      currency: 'RUB',
+      createdAt: '2026-08-31T10:00:00Z',
+      processedAt: '2026-08-31T10:05:00Z',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/returns?id=ret-100193-id']}>
+        <AdminReturns />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Завершить успешно/i })).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Завершить успешно/i }));
+
+    expect(screen.getByText('Подтвердить успешный возврат средств?')).toBeDefined();
+    expect(screen.getByText('Это локальная симуляция ответа платёжной системы.')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Подтвердить успех$/i }));
+
+    await waitFor(() => {
+      expect(simulateSuccessSpy).toHaveBeenCalledWith('ret-100193-id');
+    });
+  });
+
+  it('opens confirmation modal and calls simulateRefundFailureForReturn on failure confirmation', async () => {
+    const pendingQuote: AdminReturnRefundQuote = {
+      ...mockEligibleQuote,
+      canRefund: false,
+      latestRefundStatus: 'pending',
+      pendingRefundCents: 1500000,
+      alreadyRefundedCents: 0,
+      succeededRefundedCents: 0,
+      remainingRefundableCents: 0,
+    };
+
+    vi.spyOn(adminReturnsApi, 'getAdminReturns').mockResolvedValue([mockReturn]);
+    vi.spyOn(adminReturnsApi, 'getAdminReturn').mockResolvedValue(mockReturn);
+    vi.spyOn(adminReturnsApi, 'getAdminReturnRefundQuote').mockResolvedValue(pendingQuote);
+    const simulateFailureSpy = vi.spyOn(adminReturnsApi, 'simulateRefundFailureForReturn').mockResolvedValue({
+      id: 'ref-failed-1',
+      orderId: 'ord-100193-id',
+      status: 'failed',
+      amountCents: 1500000,
+      currency: 'RUB',
+      createdAt: '2026-08-31T10:00:00Z',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/returns?id=ret-100193-id']}>
+        <AdminReturns />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Завершить с ошибкой/i })).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Завершить с ошибкой/i }));
+
+    expect(screen.getByText('Симулировать ошибку возврата средств?')).toBeDefined();
+    expect(screen.getByText('Возврат останется доступен для повторного запуска.')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Симулировать ошибку$/i }));
+
+    await waitFor(() => {
+      expect(simulateFailureSpy).toHaveBeenCalledWith('ret-100193-id');
+    });
+  });
 });

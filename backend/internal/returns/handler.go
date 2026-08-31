@@ -1047,3 +1047,65 @@ func (h *Handler) SimulateAdvanceReturnShipment(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{"shipment": resp})
 }
+
+func (h *Handler) SimulateRefundSuccess(w http.ResponseWriter, r *http.Request) {
+	if h.appEnv == "production" {
+		h.writeError(w, http.StatusForbidden, "dev_tool_disabled", "Dev refund simulator is disabled in production")
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	ref, err := h.service.SimulateRefundSuccess(r.Context(), returnID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrReturnNotFound), errors.Is(err, ErrNoPendingRefund):
+			h.writeError(w, http.StatusNotFound, "no_pending_refund", "No pending refund found for this return")
+		case errors.Is(err, ErrMultiplePendingRefunds):
+			h.writeError(w, http.StatusConflict, "multiple_pending_refunds", "Multiple pending refunds found for this return")
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(ref)
+}
+
+func (h *Handler) SimulateRefundFailure(w http.ResponseWriter, r *http.Request) {
+	if h.appEnv == "production" {
+		h.writeError(w, http.StatusForbidden, "dev_tool_disabled", "Dev refund simulator is disabled in production")
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	ref, err := h.service.SimulateRefundFailure(r.Context(), returnID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrReturnNotFound), errors.Is(err, ErrNoPendingRefund):
+			h.writeError(w, http.StatusNotFound, "no_pending_refund", "No pending refund found for this return")
+		case errors.Is(err, ErrMultiplePendingRefunds):
+			h.writeError(w, http.StatusConflict, "multiple_pending_refunds", "Multiple pending refunds found for this return")
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(ref)
+}

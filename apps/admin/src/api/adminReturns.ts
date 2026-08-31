@@ -14,6 +14,8 @@ import {
   finalizeAdminReturnReceiving as apiFinalizeAdminReturnReceiving,
   simulateCreateAdminReturnShipment as apiSimulateCreateAdminReturnShipment,
   simulateAdvanceAdminReturnShipment as apiSimulateAdvanceAdminReturnShipment,
+  simulateRefundSuccessForReturn as apiSimulateRefundSuccessForReturn,
+  simulateRefundFailureForReturn as apiSimulateRefundFailureForReturn,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
 import type {
@@ -267,6 +269,15 @@ export const getAdminReturnErrorMessage = (error: unknown, fallback: string): st
     if (error.code === 'return_already_refunded') {
       return 'Возврат средств уже выполнен.';
     }
+    if (error.code === 'no_pending_refund') {
+      return 'Нет ожидающего возврата средств для симуляции.';
+    }
+    if (error.code === 'multiple_pending_refunds') {
+      return 'Ошибка: обнаружено несколько ожидающих возвратов средств.';
+    }
+    if (error.code === 'dev_tool_disabled') {
+      return 'Инструмент симуляции отключен в производственной среде.';
+    }
     if (error.status === 400 || error.code === 'invalid_transition' || error.code === 'validation_error') {
       return error.message || 'Действие отклонено сервером.';
     }
@@ -291,4 +302,12 @@ export const simulateCreateAdminReturnShipment = async (returnId: string): Promi
 
 export const simulateAdvanceAdminReturnShipment = async (returnId: string): Promise<{ shipment: ReturnShipment }> => {
   return await apiSimulateAdvanceAdminReturnShipment(returnId);
+};
+
+export const simulateRefundSuccessForReturn = async (returnId: string): Promise<AdminRefund> => {
+  return await apiSimulateRefundSuccessForReturn(returnId);
+};
+
+export const simulateRefundFailureForReturn = async (returnId: string): Promise<AdminRefund> => {
+  return await apiSimulateRefundFailureForReturn(returnId);
 };

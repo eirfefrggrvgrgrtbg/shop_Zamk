@@ -514,3 +514,70 @@ func (s *Service) ProcessRefundFailure(ctx context.Context, refundID uuid.UUID) 
 		return s.ProcessRefundFailureTx(ctx, tx, refundID)
 	})
 }
+
+// SimulateRefundSuccess resolves the exact single pending refund for a return and completes it via canonical ProcessRefundSuccessTx.
+func (s *Service) SimulateRefundSuccess(ctx context.Context, returnID uuid.UUID) (*Refund, error) {
+	var completedRefund *Refund
+	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		pendingList, err := s.repo.GetPendingRefundsByReturnIDTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+		if len(pendingList) == 0 {
+			return ErrNoPendingRefund
+		}
+		if len(pendingList) > 1 {
+			return ErrMultiplePendingRefunds
+		}
+		target := pendingList[0]
+
+		procTime := time.Now().Truncate(time.Microsecond)
+		if err := s.ProcessRefundSuccessTx(ctx, tx, target.ID, procTime); err != nil {
+			return err
+		}
+
+		updated, err := s.repo.GetRefundTx(ctx, tx, target.ID)
+		if err != nil {
+			return err
+		}
+		completedRefund = updated
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return completedRefund, nil
+}
+
+// SimulateRefundFailure resolves the exact single pending refund for a return and fails it via canonical ProcessRefundFailureTx.
+func (s *Service) SimulateRefundFailure(ctx context.Context, returnID uuid.UUID) (*Refund, error) {
+	var completedRefund *Refund
+	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		pendingList, err := s.repo.GetPendingRefundsByReturnIDTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+		if len(pendingList) == 0 {
+			return ErrNoPendingRefund
+		}
+		if len(pendingList) > 1 {
+			return ErrMultiplePendingRefunds
+		}
+		target := pendingList[0]
+
+		if err := s.ProcessRefundFailureTx(ctx, tx, target.ID); err != nil {
+			return err
+		}
+
+		updated, err := s.repo.GetRefundTx(ctx, tx, target.ID)
+		if err != nil {
+			return err
+		}
+		completedRefund = updated
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return completedRefund, nil
+}
