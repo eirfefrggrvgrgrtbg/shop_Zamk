@@ -8,6 +8,8 @@ export default defineConfig({
     include: [
       'src/components/search/**/*.test.{ts,tsx}',
       'src/pages/AdminSearchContextHandoff.test.tsx',
+      'src/components/EntityTimeline.test.tsx',
+      'src/api/adminTimeline.test.ts',
     ],
   },
 });

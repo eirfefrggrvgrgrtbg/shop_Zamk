@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   AlertCircle,
@@ -32,6 +32,9 @@ import {
 import { ReturnConversationDrawer } from '../components/returns/ReturnConversationDrawer';
 import type { AdminReturn, AdminReturnItem } from '../api/adminReturns';
 import { PermissionGuard } from '../components/PermissionGuard';
+import { getAdminReturnTimeline } from '../api/adminTimeline';
+import { EntityTimeline } from '../components/EntityTimeline';
+
 
 export function AdminReturns() {
   const [returns, setReturns] = useState<AdminReturn[]>([]);
@@ -162,6 +165,13 @@ export function AdminReturns() {
       maximumFractionDigits: 0,
     });
   };
+
+  // Stable fetcher for EntityTimeline — re-created only when the selected return changes
+  const returnTimelineFetcher = useCallback(
+    () => getAdminReturnTimeline(selectedReturn!.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedReturn?.id],
+  );
 
   const filteredReturns = sellerId
     ? returns.filter((r) => r.sellerId === sellerId)
@@ -343,6 +353,14 @@ export function AdminReturns() {
                       ))}
                     </div>
                   )}
+                </div>
+
+                {/* D. Return Timeline — История возврата */}
+                <div data-testid="return-timeline-card" className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                  <EntityTimeline
+                    fetcher={returnTimelineFetcher}
+                    title="История возврата"
+                  />
                 </div>
               </div>
 

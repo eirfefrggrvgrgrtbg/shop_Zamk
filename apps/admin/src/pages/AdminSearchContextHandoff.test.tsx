@@ -24,6 +24,14 @@ vi.mock('../contexts/AdminAuthContext', () => ({
   }),
 }));
 
+// Stub timeline endpoints so EntityTimeline inside AdminReturns/AdminOrderDetail
+// does not make real network calls during these integration tests.
+vi.mock('../api/adminTimeline', () => ({
+  getAdminOrderTimeline: () => Promise.resolve({ entityType: 'order', entityId: '', canonicalIdentifier: '', events: [] }),
+  getAdminReturnTimeline: () => Promise.resolve({ entityType: 'return', entityId: '', canonicalIdentifier: '', events: [] }),
+}));
+
+
 describe('Admin Global Search Context Handoff (M6.1C Tests)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
