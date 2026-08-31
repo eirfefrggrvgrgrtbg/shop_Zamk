@@ -589,8 +589,11 @@ func New(
 		r.Use(appMiddleware.RequireCustomerAccess())
 
 		r.Post("/api/customer/orders/{orderId}/items/{orderItemId}/review", reviewsHandler.CreateCustomerReview)
+		r.Post("/api/customer/reviews", reviewsHandler.CreateCustomerReview)
+		r.Post("/api/reviews", reviewsHandler.CreateCustomerReview)
 		r.Get("/api/customer/reviews", reviewsHandler.GetCustomerReviews)
 		r.Get("/api/customer/reviews/{id}", reviewsHandler.GetCustomerReview)
+		r.Get("/api/me/reviews", reviewsHandler.GetCustomerReviews)
 	})
 
 	r.Group(func(r chi.Router) {

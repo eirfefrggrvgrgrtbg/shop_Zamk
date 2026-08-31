@@ -41,18 +41,20 @@ func (r *Repository) CreateReview(ctx context.Context, tx postgres.DBTX, review 
 	)
 
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique violation
-		return ErrDuplicateReview
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "product_reviews_order_item_id_key" {
+		return ErrReviewAlreadyExists
 	}
 	return err
 }
 
 func (r *Repository) GetReviewByID(ctx context.Context, tx postgres.DBTX, id uuid.UUID) (*ProductReview, error) {
 	query := `
-		SELECT id, product_id, product_variant_id, order_id, order_item_id, user_id, seller_id,
-			   rating, title, comment, status, created_at, updated_at, published_at, rejected_at, moderation_comment
-		FROM product_reviews
-		WHERE id = $1
+		SELECT r.id, r.product_id, r.product_variant_id, r.order_id, r.order_item_id, r.user_id, r.seller_id,
+			   r.rating, r.title, r.comment, r.status, r.created_at, r.updated_at, r.published_at, r.rejected_at, r.moderation_comment,
+			   oi.title as order_item_title
+		FROM product_reviews r
+		LEFT JOIN order_items oi ON oi.id = r.order_item_id
+		WHERE r.id = $1
 	`
 	dbExecutor := tx
 	if dbExecutor == nil {
@@ -64,6 +66,7 @@ func (r *Repository) GetReviewByID(ctx context.Context, tx postgres.DBTX, id uui
 		&review.ID, &review.ProductID, &review.ProductVariantID, &review.OrderID, &review.OrderItemID,
 		&review.UserID, &review.SellerID, &review.Rating, &review.Title, &review.Comment,
 		&review.Status, &review.CreatedAt, &review.UpdatedAt, &review.PublishedAt, &review.RejectedAt, &review.ModerationComment,
+		&review.ProductTitle,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -74,7 +77,7 @@ func (r *Repository) GetReviewByID(ctx context.Context, tx postgres.DBTX, id uui
 	return &review, nil
 }
 
-func (r *Repository) UpdateReviewStatus(ctx context.Context, tx postgres.DBTX, id uuid.UUID, status string, publishedAt, rejectedAt *time.Time, modComment *string) error {
+func (r *Repository) UpdateReviewStatus(ctx context.Context, tx postgres.DBTX, id uuid.UUID, status string, publishedAt, rejectedAt *time.Time, modText *string) error {
 	query := `
 		UPDATE product_reviews
 		SET status = $2, published_at = COALESCE($3, published_at), rejected_at = COALESCE($4, rejected_at), moderation_comment = COALESCE($5, moderation_comment), updated_at = now()
@@ -85,7 +88,7 @@ func (r *Repository) UpdateReviewStatus(ctx context.Context, tx postgres.DBTX, i
 		dbExecutor = r.db.Pool
 	}
 
-	cmd, err := dbExecutor.Exec(ctx, query, id, status, publishedAt, rejectedAt, modComment)
+	cmd, err := dbExecutor.Exec(ctx, query, id, status, publishedAt, rejectedAt, modText)
 	if err != nil {
 		return err
 	}
@@ -115,38 +118,39 @@ func (r *Repository) LogModeration(ctx context.Context, tx postgres.DBTX, log *P
 }
 
 func (r *Repository) ListReviews(ctx context.Context, filters map[string]interface{}, limit, offset int) ([]ProductReview, error) {
-	// A simple query builder for demonstration
 	query := `
-		SELECT id, product_id, product_variant_id, order_id, order_item_id, user_id, seller_id,
-			   rating, title, comment, status, created_at, updated_at, published_at, rejected_at, moderation_comment
-		FROM product_reviews
+		SELECT r.id, r.product_id, r.product_variant_id, r.order_id, r.order_item_id, r.user_id, r.seller_id,
+			   r.rating, r.title, r.comment, r.status, r.created_at, r.updated_at, r.published_at, r.rejected_at, r.moderation_comment,
+			   oi.title as order_item_title
+		FROM product_reviews r
+		LEFT JOIN order_items oi ON oi.id = r.order_item_id
 		WHERE 1=1
 	`
 	var args []interface{}
 	argIdx := 1
 
 	if val, ok := filters["product_id"]; ok {
-		query += fmt.Sprintf(" AND product_id = $%d", argIdx)
+		query += fmt.Sprintf(" AND r.product_id = $%d", argIdx)
 		args = append(args, val)
 		argIdx++
 	}
 	if val, ok := filters["seller_id"]; ok {
-		query += fmt.Sprintf(" AND seller_id = $%d", argIdx)
+		query += fmt.Sprintf(" AND r.seller_id = $%d", argIdx)
 		args = append(args, val)
 		argIdx++
 	}
 	if val, ok := filters["user_id"]; ok {
-		query += fmt.Sprintf(" AND user_id = $%d", argIdx)
+		query += fmt.Sprintf(" AND r.user_id = $%d", argIdx)
 		args = append(args, val)
 		argIdx++
 	}
 	if val, ok := filters["status"]; ok {
-		query += fmt.Sprintf(" AND status = $%d", argIdx)
+		query += fmt.Sprintf(" AND r.status = $%d", argIdx)
 		args = append(args, val)
 		argIdx++
 	}
 
-	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
+	query += fmt.Sprintf(" ORDER BY r.created_at DESC, r.id DESC LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
 	args = append(args, limit, offset)
 
 	rows, err := r.db.Pool.Query(ctx, query, args...)
@@ -162,6 +166,7 @@ func (r *Repository) ListReviews(ctx context.Context, filters map[string]interfa
 			&rev.ID, &rev.ProductID, &rev.ProductVariantID, &rev.OrderID, &rev.OrderItemID,
 			&rev.UserID, &rev.SellerID, &rev.Rating, &rev.Title, &rev.Comment,
 			&rev.Status, &rev.CreatedAt, &rev.UpdatedAt, &rev.PublishedAt, &rev.RejectedAt, &rev.ModerationComment,
+			&rev.ProductTitle,
 		); err != nil {
 			return nil, err
 		}
@@ -224,4 +229,59 @@ func (r *Repository) RecalculateSellerRating(ctx context.Context, tx postgres.DB
 	}
 	_, err := dbExecutor.Exec(ctx, query, sellerID)
 	return err
+}
+
+func (r *Repository) ResolvePublishedProductID(ctx context.Context, idOrSlug string) (uuid.UUID, error) {
+	query := `
+		SELECT p.id
+		FROM products p
+		INNER JOIN sellers s ON p.seller_id = s.id
+		WHERE (p.slug = $1 OR p.id::text = $1) AND p.status = 'published' AND s.status = 'active'
+		LIMIT 1
+	`
+	var id uuid.UUID
+	err := r.db.Pool.QueryRow(ctx, query, idOrSlug).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, ErrProductNotFound
+		}
+		return uuid.Nil, err
+	}
+	return id, nil
+}
+
+func (r *Repository) ListPublicReviews(ctx context.Context, productID uuid.UUID, limit, offset int) ([]PublicReviewRow, error) {
+	query := `
+		SELECT r.id, r.product_id, r.product_variant_id, r.order_id, r.order_item_id, r.user_id, r.seller_id,
+			   r.rating, r.title, r.comment, r.status, r.created_at, r.updated_at, r.published_at, r.rejected_at, r.moderation_comment,
+			   COALESCE(u.first_name, '') as reviewer_first_name, COALESCE(u.last_name, '') as reviewer_last_name,
+			   oi.title as order_item_title, oi.variant_size as order_item_size, oi.variant_color as order_item_color
+		FROM product_reviews r
+		JOIN users u ON u.id = r.user_id
+		JOIN order_items oi ON oi.id = r.order_item_id
+		WHERE r.product_id = $1 AND r.status = 'published'
+		ORDER BY r.created_at DESC, r.id DESC
+		LIMIT $2 OFFSET $3
+	`
+	rows, err := r.db.Pool.Query(ctx, query, productID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []PublicReviewRow
+	for rows.Next() {
+		var rev PublicReviewRow
+		if err := rows.Scan(
+			&rev.ID, &rev.ProductID, &rev.ProductVariantID, &rev.OrderID, &rev.OrderItemID,
+			&rev.UserID, &rev.SellerID, &rev.Rating, &rev.Title, &rev.Comment,
+			&rev.Status, &rev.CreatedAt, &rev.UpdatedAt, &rev.PublishedAt, &rev.RejectedAt, &rev.ModerationComment,
+			&rev.ReviewerFirstName, &rev.ReviewerLastName,
+			&rev.OrderItemTitle, &rev.OrderItemSize, &rev.OrderItemColor,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, rev)
+	}
+	return results, nil
 }

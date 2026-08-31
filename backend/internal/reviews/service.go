@@ -31,39 +31,46 @@ func NewService(repo *Repository, ordersRepo *orders.Repository, sellerRepo *sel
 	}
 }
 
-func (s *Service) CreateReview(ctx context.Context, userID, orderID, orderItemID uuid.UUID, req CreateReviewRequest) (*ProductReview, error) {
+func (s *Service) CreateReview(ctx context.Context, userID uuid.UUID, orderItemID uuid.UUID, pathOrderID *uuid.UUID, req CreateReviewRequest) (*ProductReview, error) {
 	if req.Rating < 1 || req.Rating > 5 {
 		return nil, ErrInvalidRating
 	}
 
+	var reviewText *string
+	if req.Text != nil {
+		reviewText = req.Text
+	} else if req.Comment != nil {
+		reviewText = req.Comment
+	}
+
+	if reviewText != nil && len(*reviewText) > 1000 {
+		return nil, ErrReviewTextTooLong
+	}
+
 	var review *ProductReview
 	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
-		// Verify order belongs to user and is delivered
-		order, err := s.ordersRepo.GetOrder(ctx, orderID)
+		// 1. Get order item and verify existence & quantity
+		targetItem, err := s.ordersRepo.GetOrderItemByID(ctx, tx, orderItemID)
+		if err != nil {
+			return ErrItemNotPurchased
+		}
+		if targetItem.Quantity <= 0 {
+			return ErrItemNotPurchased
+		}
+
+		// 2. Verify order belongs to user and is delivered
+		order, err := s.ordersRepo.GetOrder(ctx, targetItem.OrderID)
 		if err != nil {
 			return err
 		}
 		if order.UserID != userID {
 			return ErrItemNotPurchased
 		}
+		if pathOrderID != nil && order.ID != *pathOrderID {
+			return ErrItemNotPurchased
+		}
 		if order.Status != "delivered" {
 			return ErrOrderNotDelivered
-		}
-
-		// Verify order item
-		items, err := s.ordersRepo.GetOrderItems(ctx, orderID)
-		if err != nil {
-			return err
-		}
-		var targetItem *orders.OrderItem
-		for _, it := range items {
-			if it.ID == orderItemID {
-				targetItem = &it
-				break
-			}
-		}
-		if targetItem == nil {
-			return ErrItemNotPurchased
 		}
 
 		var variantID *uuid.UUID
@@ -72,25 +79,19 @@ func (s *Service) CreateReview(ctx context.Context, userID, orderID, orderItemID
 			variantID = &vid
 		}
 
-		if req.Title != nil && len(*req.Title) > 100 {
-			return ErrInvalidRating // I'll use a generic error for now or maybe better just add ErrReviewTooLong, wait, I can just do errors.New
-		}
-		if req.Comment != nil && len(*req.Comment) > 1000 {
-			return ErrInvalidRating // I'll add ErrInvalidLength below
-		}
-
 		now := time.Now()
 		review = &ProductReview{
 			ID:               uuid.New(),
 			ProductID:        targetItem.ProductID,
 			ProductVariantID: variantID,
-			OrderID:          orderID,
+			ProductTitle:     &targetItem.Title,
+			OrderID:          order.ID,
 			OrderItemID:      orderItemID,
 			UserID:           userID,
 			SellerID:         targetItem.SellerID,
 			Rating:           req.Rating,
 			Title:            req.Title,
-			Comment:          req.Comment,
+			Comment:          reviewText,
 			Status:           "pending_moderation",
 			CreatedAt:        now,
 			UpdatedAt:        now,
@@ -249,8 +250,12 @@ func (s *Service) GetSellerReviewByID(ctx context.Context, userID, reviewID uuid
 	return rev, nil
 }
 
-func (s *Service) GetPublicProductReviews(ctx context.Context, productID uuid.UUID, limit, offset int) ([]ProductReview, error) {
-	return s.repo.ListReviews(ctx, map[string]interface{}{"product_id": productID, "status": "published"}, limit, offset)
+func (s *Service) ResolvePublishedProductID(ctx context.Context, idOrSlug string) (uuid.UUID, error) {
+	return s.repo.ResolvePublishedProductID(ctx, idOrSlug)
+}
+
+func (s *Service) GetPublicProductReviews(ctx context.Context, productID uuid.UUID, limit, offset int) ([]PublicReviewRow, error) {
+	return s.repo.ListPublicReviews(ctx, productID, limit, offset)
 }
 
 func (s *Service) GetRatingSummary(ctx context.Context, productID uuid.UUID) (*RatingSummaryResponse, error) {

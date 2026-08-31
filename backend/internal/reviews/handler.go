@@ -3,33 +3,35 @@ package reviews
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
 
 type Handler struct {
 	svc       *Service
-	auditRepo *staff.AuditRepository
 	staffSvc  *staff.Service
+	auditRepo *staff.AuditRepository
 }
 
 func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// WithAudit attaches an audit repository for fire-and-forget audit logging.
 func (h *Handler) WithAudit(ar *staff.AuditRepository) *Handler {
 	h.auditRepo = ar
 	return h
 }
 
-// WithStaffSvc attaches a staff service for handler-level permission checks.
-func (h *Handler) WithStaffSvc(svc *staff.Service) *Handler {
-	h.staffSvc = svc
+func (h *Handler) WithStaffSvc(ss *staff.Service) *Handler {
+	h.staffSvc = ss
 	return h
 }
 
@@ -41,19 +43,6 @@ func (h *Handler) CreateCustomerReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := val.(uuid.UUID)
-	orderIDStr := chi.URLParam(r, "orderId")
-	orderItemIDStr := chi.URLParam(r, "orderItemId")
-
-	orderID, err := uuid.Parse(orderIDStr)
-	if err != nil {
-		http.Error(w, "invalid order ID", http.StatusBadRequest)
-		return
-	}
-	orderItemID, err := uuid.Parse(orderItemIDStr)
-	if err != nil {
-		http.Error(w, "invalid order item ID", http.StatusBadRequest)
-		return
-	}
 
 	var req CreateReviewRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -61,13 +50,40 @@ func (h *Handler) CreateCustomerReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rev, err := h.svc.CreateReview(r.Context(), userID, orderID, orderItemID, req)
+	var pathOrderID *uuid.UUID
+	paramOrderID := chi.URLParam(r, "orderId")
+	if paramOrderID != "" {
+		parsed, err := uuid.Parse(paramOrderID)
+		if err != nil {
+			http.Error(w, "invalid orderId in url", http.StatusBadRequest)
+			return
+		}
+		pathOrderID = &parsed
+	}
+
+	var orderItemID uuid.UUID
+	paramOrderItemID := chi.URLParam(r, "orderItemId")
+	if paramOrderItemID != "" {
+		parsed, err := uuid.Parse(paramOrderItemID)
+		if err != nil {
+			http.Error(w, "invalid orderItemId in url", http.StatusBadRequest)
+			return
+		}
+		orderItemID = parsed
+	} else if req.OrderItemID != nil && *req.OrderItemID != uuid.Nil {
+		orderItemID = *req.OrderItemID
+	} else {
+		http.Error(w, "orderItemId is required", http.StatusBadRequest)
+		return
+	}
+
+	rev, err := h.svc.CreateReview(r.Context(), userID, orderItemID, pathOrderID, req)
 	if err != nil {
-		if err == ErrInvalidRating || err == ErrItemNotPurchased || err == ErrOrderNotDelivered {
+		if errors.Is(err, ErrInvalidRating) || errors.Is(err, ErrReviewTextTooLong) || errors.Is(err, ErrOrderNotDelivered) || errors.Is(err, ErrItemNotPurchased) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err == ErrDuplicateReview {
+		if errors.Is(err, ErrReviewAlreadyExists) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
@@ -86,6 +102,7 @@ func (h *Handler) GetCustomerReviews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := val.(uuid.UUID)
+
 	page := pagination.FromRequest(r)
 	reviews, err := h.svc.GetCustomerReviews(r.Context(), userID, page.Limit, page.Offset)
 	if err != nil {
@@ -116,7 +133,7 @@ func (h *Handler) GetCustomerReview(w http.ResponseWriter, r *http.Request) {
 
 	rev, err := h.svc.GetCustomerReviewByID(r.Context(), userID, id)
 	if err != nil {
-		if err == ErrReviewNotFound {
+		if errors.Is(err, ErrReviewNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -151,7 +168,7 @@ func (h *Handler) GetAdminReview(w http.ResponseWriter, r *http.Request) {
 	}
 	rev, err := h.svc.GetAdminReviewByID(r.Context(), id)
 	if err != nil {
-		if err == ErrReviewNotFound {
+		if errors.Is(err, ErrReviewNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -233,7 +250,7 @@ func (h *Handler) ModerateReview(w http.ResponseWriter, r *http.Request) {
 
 	err = h.svc.ModerateReview(r.Context(), adminID, id, toStatus, req.Comment)
 	if err != nil {
-		if err == ErrReviewNotFound {
+		if errors.Is(err, ErrReviewNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -297,7 +314,7 @@ func (h *Handler) GetSellerReview(w http.ResponseWriter, r *http.Request) {
 
 	rev, err := h.svc.GetSellerReviewByID(r.Context(), userID, id)
 	if err != nil {
-		if err == ErrReviewNotFound {
+		if errors.Is(err, ErrReviewNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -307,17 +324,26 @@ func (h *Handler) GetSellerReview(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(mapToReviewResponse(rev))
 }
 
-// Public Endpoints (Usually handled through Catalog, but can expose directly)
+// Public Endpoints
 func (h *Handler) GetPublicProductReviews(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "idOrSlug") // assuming productId for now
-	id, err := uuid.Parse(idStr)
+	idOrSlug := chi.URLParam(r, "idOrSlug")
+	if strings.TrimSpace(idOrSlug) == "" {
+		http.Error(w, "invalid product id or slug", http.StatusBadRequest)
+		return
+	}
+
+	productID, err := h.svc.ResolvePublishedProductID(r.Context(), idOrSlug)
 	if err != nil {
-		http.Error(w, "invalid product id", http.StatusBadRequest)
+		if errors.Is(err, ErrProductNotFound) {
+			http.Error(w, "product not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	page := pagination.FromRequest(r)
-	reviews, err := h.svc.GetPublicProductReviews(r.Context(), id, page.Limit, page.Offset)
+	reviews, err := h.svc.GetPublicProductReviews(r.Context(), productID, page.Limit, page.Offset)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -327,17 +353,41 @@ func (h *Handler) GetPublicProductReviews(w http.ResponseWriter, r *http.Request
 	for i, v := range reviews {
 		res[i] = mapToPublicReviewResponse(&v)
 	}
-	json.NewEncoder(w).Encode(PublicReviewListResponse{Items: res, TotalCount: len(res)})
+
+	summary, err := h.svc.GetRatingSummary(r.Context(), productID)
+	var avg float64
+	var count int
+	if err == nil && summary != nil {
+		avg = summary.Average
+		count = summary.Count
+	}
+
+	json.NewEncoder(w).Encode(PublicReviewListResponse{
+		Items:         res,
+		AverageRating: avg,
+		ReviewCount:   count,
+		TotalCount:    count,
+	})
 }
 
 func (h *Handler) GetPublicRatingSummary(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "idOrSlug")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "invalid product id", http.StatusBadRequest)
+	idOrSlug := chi.URLParam(r, "idOrSlug")
+	if strings.TrimSpace(idOrSlug) == "" {
+		http.Error(w, "invalid product id or slug", http.StatusBadRequest)
 		return
 	}
-	summary, err := h.svc.GetRatingSummary(r.Context(), id)
+
+	productID, err := h.svc.ResolvePublishedProductID(r.Context(), idOrSlug)
+	if err != nil {
+		if errors.Is(err, ErrProductNotFound) {
+			http.Error(w, "product not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	summary, err := h.svc.GetRatingSummary(r.Context(), productID)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -349,9 +399,12 @@ func mapToReviewResponse(rev *ProductReview) ReviewResponse {
 	return ReviewResponse{
 		ID:                rev.ID,
 		ProductID:         rev.ProductID,
+		ProductVariantID:  rev.ProductVariantID,
+		ProductTitle:      rev.ProductTitle,
 		Rating:            rev.Rating,
 		Title:             rev.Title,
 		Comment:           rev.Comment,
+		Text:              rev.Comment,
 		Status:            rev.Status,
 		CreatedAt:         rev.CreatedAt,
 		PublishedAt:       rev.PublishedAt,
@@ -359,13 +412,24 @@ func mapToReviewResponse(rev *ProductReview) ReviewResponse {
 	}
 }
 
-func mapToPublicReviewResponse(rev *ProductReview) PublicReviewResponse {
+func mapToPublicReviewResponse(rev *PublicReviewRow) PublicReviewResponse {
+	name := strings.TrimSpace(rev.ReviewerFirstName)
+	if name == "" {
+		name = "Покупатель"
+	}
 	return PublicReviewResponse{
-		ID:         rev.ID,
-		Rating:     rev.Rating,
-		Title:      rev.Title,
-		Comment:    rev.Comment,
-		AuthorName: "Customer", // masked
-		CreatedAt:  rev.CreatedAt,
+		ID:                  rev.ID,
+		Rating:              rev.Rating,
+		Title:               rev.Title,
+		Comment:             rev.Comment,
+		Text:                rev.Comment,
+		ReviewerDisplayName: name,
+		AuthorName:          name,
+		ProductTitle:        rev.OrderItemTitle,
+		VariantSize:         rev.OrderItemSize,
+		VariantColor:        rev.OrderItemColor,
+		CreatedAt:           rev.CreatedAt,
 	}
 }
+
+var _ = users.RoleCustomer

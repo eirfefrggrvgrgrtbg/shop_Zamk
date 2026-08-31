@@ -695,3 +695,26 @@ func (r *Repository) GetOrderByIdempotencyKey(ctx context.Context, userID uuid.U
 	}
 	return &o, nil
 }
+func (r *Repository) GetOrderItemByID(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*OrderItem, error) {
+	var dbExecutor interface {
+		QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	} = tx
+	if dbExecutor == nil || tx == nil {
+		dbExecutor = r.db
+	}
+
+	query := `
+		SELECT id, order_id, product_id, product_variant_id, seller_id, title, product_slug, variant_size, variant_color, sku, image_url, price_cents, quantity, subtotal_price_cents, created_at
+		FROM order_items
+		WHERE id = $1
+	`
+	var item OrderItem
+	err := dbExecutor.QueryRow(ctx, query, id).Scan(
+		&item.ID, &item.OrderID, &item.ProductID, &item.ProductVariantID, &item.SellerID, &item.Title, &item.ProductSlug,
+		&item.VariantSize, &item.VariantColor, &item.Sku, &item.ImageURL, &item.PriceCents, &item.Quantity, &item.SubtotalPriceCents, &item.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}

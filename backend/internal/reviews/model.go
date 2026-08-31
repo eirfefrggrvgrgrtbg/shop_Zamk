@@ -10,6 +10,7 @@ type ProductReview struct {
 	ID                uuid.UUID  `json:"id" db:"id"`
 	ProductID         uuid.UUID  `json:"productId" db:"product_id"`
 	ProductVariantID  *uuid.UUID `json:"productVariantId,omitempty" db:"product_variant_id"`
+	ProductTitle      *string    `json:"productTitle,omitempty" db:"product_title"`
 	OrderID           uuid.UUID  `json:"orderId" db:"order_id"`
 	OrderItemID       uuid.UUID  `json:"orderItemId" db:"order_item_id"`
 	UserID            uuid.UUID  `json:"userId" db:"user_id"`
