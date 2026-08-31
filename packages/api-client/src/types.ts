@@ -1246,6 +1246,32 @@ export interface AdminReturn {
   shipment?: ReturnShipment;
 }
 
+export interface AdminReturnRefundQuoteItem {
+  orderItemId: string;
+  productTitle: string;
+  mode: 'serialized' | 'legacy' | string;
+  requestedQuantity: number;
+  refundableQuantity: number;
+  unitPriceCents: number;
+  refundCents: number;
+}
+
+export interface AdminReturnRefundQuote {
+  returnId: string;
+  orderNumber?: string | null;
+  currency: string;
+  items: AdminReturnRefundQuoteItem[];
+  productsRefundCents: number;
+  deliveryRefundCents: number;
+  totalRefundCents: number;
+  alreadyRefundedCents: number;
+  remainingRefundableCents: number;
+  canRefund: boolean;
+  blockingReason?: string | null;
+  latestRefundStatus?: 'pending' | 'succeeded' | 'failed' | null;
+  latestRefundProcessedAt?: string | null;
+}
+
 export interface AdminRefund {
   id: string;
   returnId?: string;

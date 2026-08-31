@@ -22,6 +22,8 @@ import {
   getAdminReturn,
   getAdminReturnErrorMessage,
   getAdminReturns,
+  getAdminReturnRefundQuote,
+  createAdminRefundForReturn,
   getReturnReasonLabel,
   getReturnStatusLabel,
   getStatusBadgeClass,
@@ -30,7 +32,7 @@ import {
   formatReturnShipmentMethod,
 } from '../api/adminReturns';
 import { ReturnConversationDrawer } from '../components/returns/ReturnConversationDrawer';
-import type { AdminReturn, AdminReturnItem } from '../api/adminReturns';
+import type { AdminReturn, AdminReturnItem, AdminReturnRefundQuote } from '../api/adminReturns';
 import { PermissionGuard } from '../components/PermissionGuard';
 import { getAdminReturnTimeline } from '../api/adminTimeline';
 import { EntityTimeline } from '../components/EntityTimeline';
@@ -39,8 +41,10 @@ import { EntityTimeline } from '../components/EntityTimeline';
 export function AdminReturns() {
   const [returns, setReturns] = useState<AdminReturn[]>([]);
   const [selectedReturn, setSelectedReturn] = useState<AdminReturn | null>(null);
+  const [refundQuote, setRefundQuote] = useState<AdminReturnRefundQuote | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -48,9 +52,12 @@ export function AdminReturns() {
   // Modals state
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [refundReason, setRefundReason] = useState('');
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const sellerId = searchParams.get('sellerId');
@@ -70,15 +77,29 @@ export function AdminReturns() {
     }
   };
 
+  const fetchRefundQuote = async (id: string) => {
+    try {
+      setIsQuoteLoading(true);
+      const quote = await getAdminReturnRefundQuote(id);
+      setRefundQuote(quote);
+    } catch {
+      setRefundQuote(null);
+    } finally {
+      setIsQuoteLoading(false);
+    }
+  };
+
   const fetchReturnDetail = async (id: string) => {
     try {
       setIsDetailLoading(true);
       setError(null);
       const detail = await getAdminReturn(id);
       setSelectedReturn(detail);
+      await fetchRefundQuote(id);
     } catch (err: unknown) {
       setError(getAdminReturnErrorMessage(err, 'Не удалось загрузить детали возврата.'));
       setSelectedReturn(null);
+      setRefundQuote(null);
     } finally {
       setIsDetailLoading(false);
     }
@@ -98,6 +119,7 @@ export function AdminReturns() {
 
   const handleBackToList = () => {
     setSelectedReturn(null);
+    setRefundQuote(null);
     if (searchParams.has('id') || searchParams.has('orderNumber')) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete('id');
@@ -105,7 +127,6 @@ export function AdminReturns() {
       setSearchParams(nextParams, { replace: true });
     }
   };
-
 
   const handleApprove = async () => {
     if (!selectedReturn) return;
@@ -140,6 +161,26 @@ export function AdminReturns() {
       setSuccess('Заявка на возврат отклонена.');
     } catch (err: unknown) {
       setError(getAdminReturnErrorMessage(err, 'Не удалось отклонить возврат.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRefund = async () => {
+    if (!selectedReturn) return;
+    try {
+      setIsSubmitting(true);
+      setError(null);
+      setSuccess(null);
+      await createAdminRefundForReturn(selectedReturn.id, refundReason.trim() || undefined);
+      setIsRefundModalOpen(false);
+      setRefundReason('');
+      setSuccess('Возврат средств поставлен в обработку.');
+      await fetchReturns();
+      await fetchReturnDetail(selectedReturn.id);
+      setTimelineRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      setError(getAdminReturnErrorMessage(err, 'Не удалось запустить возврат средств.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -294,7 +335,158 @@ export function AdminReturns() {
                   )}
                 </div>
 
-                {/* B. Customer Claim Details */}
+                {/* B. Financial Refund Card — Возврат средств */}
+                <div data-testid="return-refund-card" className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                    <div className="flex items-center space-x-2">
+                      <RotateCcw className="h-5 w-5 text-gray-500" />
+                      <h2 className="text-base font-semibold text-gray-900">Возврат средств</h2>
+                    </div>
+                    {refundQuote && (() => {
+                      const isSucceeded = selectedReturn.status === 'refunded' || refundQuote.latestRefundStatus === 'succeeded';
+                      const isPending = refundQuote.latestRefundStatus === 'pending';
+                      const isAvailable = refundQuote.canRefund && refundQuote.remainingRefundableCents > 0;
+                      return (
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          isSucceeded
+                            ? 'bg-green-50 text-green-800 border border-green-200'
+                            : isPending
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                            : isAvailable
+                            ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                            : 'bg-gray-50 text-gray-700 border border-gray-200'
+                        }`}>
+                          {isSucceeded
+                            ? 'Выполнен'
+                            : isPending
+                            ? 'Обрабатывается'
+                            : isAvailable
+                            ? 'Доступен'
+                            : 'Недоступен'}
+                        </span>
+                      );
+                    })()}
+                  </div>
+
+                  {isQuoteLoading ? (
+                    <div className="py-6 text-center text-sm text-gray-400">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600 mx-auto mb-2" />
+                      Загрузка расчета возврата средств...
+                    </div>
+                  ) : !refundQuote ? (
+                    <div className="py-4 text-sm text-gray-500">Информация о возврате средств недоступна</div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Items table */}
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-100 text-xs">
+                          <thead>
+                            <tr className="text-gray-500 text-left">
+                              <th className="py-2 pr-3 font-medium">Товар</th>
+                              <th className="py-2 px-3 font-medium text-center">Запрошено</th>
+                              <th className="py-2 px-3 font-medium text-center">К возврату</th>
+                              <th className="py-2 px-3 font-medium text-right">Цена за шт.</th>
+                              <th className="py-2 pl-3 font-medium text-right">Сумма возврата</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {refundQuote.items.map((item) => (
+                              <tr key={item.orderItemId} className="text-gray-900">
+                                <td className="py-2.5 pr-3">
+                                  <div className="font-medium text-gray-900">{item.productTitle}</div>
+                                  <div className="text-[11px] text-gray-500 mt-0.5">
+                                    {item.mode === 'serialized' ? (
+                                      <span className="inline-flex items-center text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded font-medium">Поштучный учёт</span>
+                                    ) : item.mode === 'legacy' ? (
+                                      <span className="inline-flex items-center text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded font-medium">Количественный учёт</span>
+                                    ) : null}
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-3 text-center text-gray-700 font-medium whitespace-nowrap">{item.requestedQuantity} шт.</td>
+                                <td className="py-2.5 px-3 text-center font-semibold whitespace-nowrap">
+                                  <span className={item.refundableQuantity > 0 ? 'text-green-700' : 'text-gray-400'}>
+                                    {item.refundableQuantity} шт.
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{formatPrice(item.unitPriceCents)}</td>
+                                <td className="py-2.5 pl-3 text-right font-semibold text-gray-900 whitespace-nowrap">{formatPrice(item.refundCents)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Totals breakdown */}
+                      <div className="bg-gray-50 rounded-lg p-3.5 border border-gray-100 text-xs space-y-1.5">
+                        <div className="flex justify-between text-gray-600">
+                          <span>Товары:</span>
+                          <span className="font-medium text-gray-900">{formatPrice(refundQuote.productsRefundCents)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-600">
+                          <span>Доставка:</span>
+                          <span className="font-medium text-gray-900">{formatPrice(refundQuote.deliveryRefundCents)}</span>
+                        </div>
+                        {refundQuote.alreadyRefundedCents > 0 && (
+                          <div className="flex justify-between text-gray-600">
+                            <span>Ранее возвращено:</span>
+                            <span className="font-medium text-gray-700">{formatPrice(refundQuote.alreadyRefundedCents)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-1.5 border-t border-gray-200 text-sm font-semibold text-gray-900">
+                          <span>Итого к возврату:</span>
+                          <span>{formatPrice(refundQuote.totalRefundCents)}</span>
+                        </div>
+                      </div>
+
+                      {/* Status States & Action */}
+                      {selectedReturn.status === 'refunded' || refundQuote.latestRefundStatus === 'succeeded' ? (
+                        <div className="p-3.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-900 space-y-1">
+                          <div className="flex items-center space-x-2 font-semibold">
+                            <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                            <span>Возврат средств выполнен</span>
+                          </div>
+                          <p className="text-green-700 pl-6">
+                            Возврат средств выполнен.
+                          </p>
+                        </div>
+                      ) : refundQuote.latestRefundStatus === 'pending' ? (
+                        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1">
+                          <div className="flex items-center space-x-2 font-semibold">
+                            <Clock className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                            <span>Возврат средств обрабатывается</span>
+                          </div>
+                          <p className="text-amber-700 pl-6">
+                            Возврат зарегистрирован и ожидает обработки платежной системой.
+                          </p>
+                        </div>
+                      ) : refundQuote.canRefund && refundQuote.remainingRefundableCents > 0 ? (
+                        <PermissionGuard
+                          permission="refunds.create"
+                          fallback={<p className="text-xs text-gray-500">У вас нет прав для создания возвратов средств.</p>}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setIsRefundModalOpen(true)}
+                            className="w-full inline-flex items-center justify-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+                          >
+                            <RotateCcw className="h-4 w-4 mr-2" />
+                            {refundQuote.latestRefundStatus === 'failed' ? 'Повторить возврат средств' : 'Запустить возврат средств'}
+                          </button>
+                        </PermissionGuard>
+                      ) : (
+                        <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-700 flex items-start space-x-2">
+                          <AlertCircle className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <span className="font-semibold block text-gray-900">Возврат средств недоступен</span>
+                            <span className="text-gray-600 mt-0.5 block">{refundQuote.blockingReason || 'Условия возврата средств не выполнены.'}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* C. Customer Claim Details */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
                   <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
                     <FileText className="h-5 w-5 text-gray-500" />
@@ -316,7 +508,7 @@ export function AdminReturns() {
                   </div>
                 </div>
 
-                {/* C. Evidence Photos Gallery */}
+                {/* D. Evidence Photos Gallery */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
                   <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                     <div className="flex items-center space-x-2">
@@ -355,9 +547,10 @@ export function AdminReturns() {
                   )}
                 </div>
 
-                {/* D. Return Timeline — История возврата */}
+                {/* E. Return Timeline — История возврата */}
                 <div data-testid="return-timeline-card" className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                   <EntityTimeline
+                    key={timelineRefreshKey}
                     fetcher={returnTimelineFetcher}
                     title="История возврата"
                   />
@@ -771,6 +964,90 @@ export function AdminReturns() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* REFUND CONFIRMATION MODAL                                          */}
+        {/* ------------------------------------------------------------------ */}
+        {isRefundModalOpen && selectedReturn && refundQuote && (
+          <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-gray-200 space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
+                  <RotateCcw className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    {refundQuote.latestRefundStatus === 'failed' ? 'Повторить возврат средств?' : 'Запустить возврат средств?'}
+                  </h3>
+                  <p className="text-xs text-gray-500">Заказ {selectedReturn.orderNumber || selectedReturn.orderId}</p>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-3.5 border border-gray-200 text-xs space-y-1.5">
+                <div className="flex justify-between text-gray-600">
+                  <span>К возврату (товары):</span>
+                  <span className="font-medium text-gray-900">{formatPrice(refundQuote.productsRefundCents)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Доставка:</span>
+                  <span className="font-medium text-gray-900">{formatPrice(refundQuote.deliveryRefundCents)}</span>
+                </div>
+                <div className="flex justify-between pt-1.5 border-t border-gray-200 text-sm font-semibold text-gray-900">
+                  <span>Итого к возврату:</span>
+                  <span className="text-indigo-600">{formatPrice(refundQuote.totalRefundCents)}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Причина возврата (опционально)
+                </label>
+                <input
+                  type="text"
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  placeholder="Например: брак при производстве"
+                  className="w-full text-xs rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <p className="text-xs text-gray-500 leading-relaxed">
+                После подтверждения возврат будет поставлен в обработку.
+              </p>
+
+              <div className="pt-2 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRefundModalOpen(false);
+                    setRefundReason('');
+                  }}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRefund}
+                  disabled={isSubmitting}
+                  className="inline-flex items-center px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                      Обработка...
+                    </>
+                  ) : refundQuote.latestRefundStatus === 'failed' ? (
+                    'Повторить возврат'
+                  ) : (
+                    'Запустить возврат'
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

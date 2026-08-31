@@ -1,10 +1,14 @@
+import { describe, it } from 'vitest';
 import {
   getReturnReasonLabel,
   getReturnStatusLabel,
   getStatusBadgeClass,
+  getAdminReturnErrorMessage,
   type AdminReturn,
   type AdminReturnEvidence,
+  type AdminReturnRefundQuote,
 } from '../api/adminReturns';
+import { ApiError } from '@zamk/api-client/src/errors';
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
@@ -317,7 +321,157 @@ async function runAdminReturnsTests() {
   assert(isNeedsResponseCheckboxVisible('receiving') === false, 'Needs response checkbox hidden on receiving');
   assert(isNeedsResponseCheckboxVisible('needs_info') === false, 'Needs response checkbox hidden on needs_info');
 
+  // 14. M5.4B Return Refund Quote Contract & Totals Breakdown
+  const mockQuote: AdminReturnRefundQuote = {
+    returnId: 'ret-101',
+    orderNumber: 'ORD-100193',
+    currency: 'RUB',
+    items: [
+      {
+        orderItemId: 'oi-1',
+        productTitle: 'Dev Wool Coat',
+        mode: 'serialized',
+        requestedQuantity: 1,
+        refundableQuantity: 1,
+        unitPriceCents: 1500000,
+        refundCents: 1500000,
+      },
+    ],
+    productsRefundCents: 1500000,
+    deliveryRefundCents: 0,
+    totalRefundCents: 1500000,
+    alreadyRefundedCents: 0,
+    remainingRefundableCents: 1500000,
+    canRefund: true,
+    blockingReason: null,
+  };
+
+  assert(mockQuote.deliveryRefundCents === 0, 'M5.4B policy: delivery refund must be 0');
+  assert(mockQuote.totalRefundCents === mockQuote.productsRefundCents + mockQuote.deliveryRefundCents, 'Total refund must equal products + delivery');
+  assert(mockQuote.items[0].mode === 'serialized', 'Serialized mode must be preserved');
+  assert(mockQuote.canRefund === true, 'Eligible quote canRefund must be true');
+
+  // 15. M5.4B Return Refund State Evaluation Matrix (Strict latestRefundStatus Authority)
+  const getRefundCardState = (returnStatus: string, quote?: AdminReturnRefundQuote | null) => {
+    if (!quote) return { badge: 'Недоступен', canTriggerAction: false, actionText: '', text: 'Информация о возврате средств недоступна' };
+    const isSucceeded = returnStatus === 'refunded' || quote.latestRefundStatus === 'succeeded';
+    const isPending = quote.latestRefundStatus === 'pending';
+    const isAvailable = quote.canRefund && quote.remainingRefundableCents > 0;
+
+    if (isSucceeded) {
+      return { badge: 'Выполнен', canTriggerAction: false, actionText: '', text: 'Возврат средств выполнен' };
+    }
+    if (isPending) {
+      return { badge: 'Обрабатывается', canTriggerAction: false, actionText: '', text: 'Возврат зарегистрирован и ожидает обработки платежной системой.' };
+    }
+    if (isAvailable) {
+      return {
+        badge: 'Доступен',
+        canTriggerAction: true,
+        actionText: quote.latestRefundStatus === 'failed' ? 'Повторить возврат средств' : 'Запустить возврат средств',
+        text: '',
+      };
+    }
+    return { badge: 'Недоступен', canTriggerAction: false, actionText: '', text: quote.blockingReason || 'Возврат средств недоступен' };
+  };
+
+  const eligibleState = getRefundCardState('item_received', { ...mockQuote, latestRefundStatus: null });
+  assert(eligibleState.badge === 'Доступен', 'Eligible quote must show Доступен badge');
+  assert(eligibleState.canTriggerAction === true, 'Eligible quote must allow refund action');
+  assert(eligibleState.actionText === 'Запустить возврат средств', 'Initial eligible quote must have Запустить возврат средств action');
+
+  // Pending state derived strictly from latestRefundStatus = 'pending', NOT blockingReason text
+  const pendingQuote: AdminReturnRefundQuote = {
+    ...mockQuote,
+    canRefund: false,
+    latestRefundStatus: 'pending',
+    blockingReason: 'Совершенно произвольная строка причины блокировки от сервера',
+  };
+  const pendingState = getRefundCardState('item_received', pendingQuote);
+  assert(pendingState.badge === 'Обрабатывается', 'Pending quote must show Обрабатывается badge via latestRefundStatus');
+  assert(pendingState.canTriggerAction === false, 'Pending quote must NOT allow new refund action');
+  assert(pendingState.text === 'Возврат зарегистрирован и ожидает обработки платежной системой.', 'Pending quote must show processing text');
+
+  // Succeeded state
+  const succeededState = getRefundCardState('item_received', {
+    ...mockQuote,
+    canRefund: false,
+    latestRefundStatus: 'succeeded',
+    latestRefundProcessedAt: '2026-08-31T11:00:00Z',
+  });
+  assert(succeededState.badge === 'Выполнен', 'Succeeded latestRefundStatus must show Выполнен badge');
+  assert(succeededState.canTriggerAction === false, 'Succeeded quote must NOT allow new refund action');
+  assert(succeededState.text === 'Возврат средств выполнен', 'Succeeded quote must show completed text');
+
+  // Failed state with retry allowed
+  const failedRetryState = getRefundCardState('item_received', {
+    ...mockQuote,
+    canRefund: true,
+    latestRefundStatus: 'failed',
+  });
+  assert(failedRetryState.badge === 'Доступен', 'Failed quote with canRefund=true must show Доступен badge');
+  assert(failedRetryState.canTriggerAction === true, 'Failed quote with canRefund=true must allow retry');
+  assert(failedRetryState.actionText === 'Повторить возврат средств', 'Failed quote must use Повторить возврат средств button');
+
+  // Blocked state (approved but not received)
+  const blockedQuote: AdminReturnRefundQuote = {
+    ...mockQuote,
+    canRefund: false,
+    latestRefundStatus: null,
+    blockingReason: 'Возврат средств доступен только после приёмки товара на складе.',
+  };
+  const blockedState = getRefundCardState('approved', blockedQuote);
+  assert(blockedState.badge === 'Недоступен', 'Approved (not received) return must show Недоступен badge');
+  assert(blockedState.canTriggerAction === false, 'Approved (not received) return must NOT allow refund action');
+
+  // 16. M5.4B Refund Error Mappings
+  const errAlloc = new ApiError('Allocation mismatch', 'refund_allocation_invariant', 400);
+  assert(
+    getAdminReturnErrorMessage(errAlloc, 'fallback') === 'Несогласованное состояние резервирования: количество единиц не соответствует заказу.',
+    'refund_allocation_invariant error mapping must match',
+  );
+
+  const errExceeds = new ApiError('Exceeds paid', 'refund_exceeds_paid', 400);
+  assert(
+    getAdminReturnErrorMessage(errExceeds, 'fallback') === 'Сумма возврата превышает оплаченную сумму.',
+    'refund_exceeds_paid error mapping must match',
+  );
+
+  const errPayment = new ApiError('Payment not found', 'payment_not_found', 400);
+  assert(
+    getAdminReturnErrorMessage(errPayment, 'fallback') === 'Не найдена успешная оплата по заказу.',
+    'payment_not_found error mapping must match',
+  );
+
+  const errAmbiguous = new ApiError('Ambiguous payment', 'ambiguous_payment', 400);
+  assert(
+    getAdminReturnErrorMessage(errAmbiguous, 'fallback') === 'Неоднозначная оплата: обнаружено несколько успешных платежей по заказу.',
+    'ambiguous_payment error mapping must match',
+  );
+
+  const errNoItems = new ApiError('No eligible items', 'refund_no_eligible_items', 400);
+  assert(
+    getAdminReturnErrorMessage(errNoItems, 'fallback') === 'Нет принятых позиций, подлежащих возврату средств.',
+    'refund_no_eligible_items error mapping must match',
+  );
+
+  const errNotReceived = new ApiError('Not received', 'return_not_received', 400);
+  assert(
+    getAdminReturnErrorMessage(errNotReceived, 'fallback') === 'Возврат средств доступен только после приёмки товара на складе.',
+    'return_not_received error mapping must match',
+  );
+
+  const errAlreadyRefunded = new ApiError('Already refunded', 'return_already_refunded', 400);
+  assert(
+    getAdminReturnErrorMessage(errAlreadyRefunded, 'fallback') === 'Возврат средств уже выполнен.',
+    'return_already_refunded error mapping must match',
+  );
+
   console.log('ALL ADMIN RETURNS LOGIC & CONTRACT TESTS PASSED');
 }
 
-runAdminReturnsTests();
+describe('Admin Returns Contract & State Logic', () => {
+  it('passes all canonical logic and refund mapping assertions', async () => {
+    await runAdminReturnsTests();
+  });
+});

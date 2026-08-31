@@ -152,13 +152,19 @@ func (s *Service) CalculateRefundQuote(ctx context.Context, returnID uuid.UUID) 
 
 	var blockingReason *string
 	canRefund := true
+	var latestRefundStatus *string
+	var latestRefundProcessedAt *time.Time
 
 	// Check if an active (pending or succeeded) refund already exists for this return
 	existingRefund, err := s.repo.GetRefundByReturnID(ctx, returnID)
 	if err == nil && existingRefund != nil {
+		statusStr := existingRefund.Status
+		latestRefundStatus = &statusStr
+		latestRefundProcessedAt = existingRefund.ProcessedAt
+
 		if existingRefund.Status == "pending" {
 			canRefund = false
-			reason := "Возврат средств уже зарезервирован и ожидает обработки (pending)"
+			reason := "Возврат средств уже зарезервирован и ожидает обработки"
 			blockingReason = &reason
 		} else if existingRefund.Status == "succeeded" || existingRefund.Status == "completed" {
 			canRefund = false
@@ -172,7 +178,7 @@ func (s *Service) CalculateRefundQuote(ctx context.Context, returnID uuid.UUID) 
 	if canRefund {
 		if retStatus == "requested" || retStatus == "needs_info" || retStatus == "approved" || retStatus == "receiving" {
 			canRefund = false
-			reason := "Возврат средств доступен только для возвратов в статусе 'Товар принят на складе' (item_received)"
+			reason := "Возврат средств доступен только после приёмки товара на складе."
 			blockingReason = &reason
 		} else if retStatus == "rejected" {
 			canRefund = false
@@ -190,7 +196,7 @@ func (s *Service) CalculateRefundQuote(ctx context.Context, returnID uuid.UUID) 
 			// Check allocation invariant error
 			if errors.Is(breakdownErr, ErrRefundAllocationInvariant) {
 				canRefund = false
-				reason := "Несогласованное состояние резервирования: количество единиц не соответствует заказу (refund_allocation_invariant)"
+				reason := "Несогласованное состояние резервирования: количество единиц не соответствует заказу"
 				blockingReason = &reason
 			} else if breakdownErr != nil {
 				canRefund = false
@@ -221,7 +227,7 @@ func (s *Service) CalculateRefundQuote(ctx context.Context, returnID uuid.UUID) 
 			}
 		} else {
 			canRefund = false
-			reason := fmt.Sprintf("Недопустимый статус возврата (%s)", retStatus)
+			reason := "Недопустимый статус возврата"
 			blockingReason = &reason
 		}
 	}
@@ -238,6 +244,8 @@ func (s *Service) CalculateRefundQuote(ctx context.Context, returnID uuid.UUID) 
 		RemainingRefundableCents: remainingRefundable,
 		CanRefund:                canRefund,
 		BlockingReason:           blockingReason,
+		LatestRefundStatus:       latestRefundStatus,
+		LatestRefundProcessedAt:  latestRefundProcessedAt,
 	}, nil
 }
 

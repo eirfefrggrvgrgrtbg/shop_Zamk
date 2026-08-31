@@ -321,6 +321,8 @@ type ReturnRefundQuote struct {
 	RemainingRefundableCents int64                   `json:"remainingRefundableCents"`
 	CanRefund                bool                    `json:"canRefund"`
 	BlockingReason           *string                 `json:"blockingReason"`
+	LatestRefundStatus       *string                 `json:"latestRefundStatus"`
+	LatestRefundProcessedAt  *time.Time              `json:"latestRefundProcessedAt,omitempty"`
 }
 
 type AdminSendReturnMessageRequest struct {

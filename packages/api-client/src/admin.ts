@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse } from './types';
+import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse } from './types';
 
 export const getAdminSellers = async (params?: {
   search?: string;
@@ -521,8 +521,12 @@ export const rejectAdminReturn = async (id: string, reason: string): Promise<voi
   return request<void>('PATCH', `/admin/returns/${id}/status`, { body: { status: 'rejected', adminComment: reason } });
 };
 
-export const createAdminRefundForReturn = async (returnId: string, data: { reason?: string }): Promise<AdminRefund> => {
-  return request<AdminRefund>('POST', `/admin/returns/${returnId}/refund`, { body: data });
+export const getAdminReturnRefundQuote = async (returnId: string): Promise<AdminReturnRefundQuote> => {
+  return request<AdminReturnRefundQuote>('GET', `/admin/returns/${returnId}/refund-quote`);
+};
+
+export const createAdminRefundForReturn = async (returnId: string, data?: { reason?: string }): Promise<AdminRefund> => {
+  return request<AdminRefund>('POST', `/admin/returns/${returnId}/refund`, { body: data ?? {} });
 };
 
 export const getAdminRefunds = async (): Promise<{ items: AdminRefund[]; totalCount: number }> => {

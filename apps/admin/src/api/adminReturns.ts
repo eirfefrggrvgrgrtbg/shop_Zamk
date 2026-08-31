@@ -4,12 +4,34 @@ import {
   getAdminReturns as apiGetAdminReturns,
   rejectAdminReturn as apiRejectAdminReturn,
   getAdminReturnMessages as getAdminReturnMessagesApi,
+  getAdminReturnRefundQuote as apiGetAdminReturnRefundQuote,
+  createAdminRefundForReturn as apiCreateAdminRefundForReturn,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
-import type { AdminReturn, AdminReturnItem, AdminReturnEvidence, ReturnShipment, ReturnShipmentStatus, ReturnShipmentMethod } from '@zamk/api-client/src/types';
+import type {
+  AdminReturn,
+  AdminReturnItem,
+  AdminReturnEvidence,
+  ReturnShipment,
+  ReturnShipmentStatus,
+  ReturnShipmentMethod,
+  AdminReturnRefundQuote,
+  AdminReturnRefundQuoteItem,
+  AdminRefund,
+} from '@zamk/api-client/src/types';
 import { formatReturnShipmentStatus, formatReturnShipmentMethod } from '@zamk/api-client/src/types';
 
-export type { AdminReturn, AdminReturnItem, AdminReturnEvidence, ReturnShipment, ReturnShipmentStatus, ReturnShipmentMethod };
+export type {
+  AdminReturn,
+  AdminReturnItem,
+  AdminReturnEvidence,
+  ReturnShipment,
+  ReturnShipmentStatus,
+  ReturnShipmentMethod,
+  AdminReturnRefundQuote,
+  AdminReturnRefundQuoteItem,
+  AdminRefund,
+};
 export { formatReturnShipmentStatus, formatReturnShipmentMethod };
 
 export const RETURN_REASON_LABELS: Record<string, string> = {
@@ -88,11 +110,40 @@ export const rejectAdminReturn = async (id: string, reason: string): Promise<voi
   await apiRejectAdminReturn(id, reason);
 };
 
+export const getAdminReturnRefundQuote = async (returnId: string): Promise<AdminReturnRefundQuote> => {
+  return await apiGetAdminReturnRefundQuote(returnId);
+};
+
+export const createAdminRefundForReturn = async (returnId: string, reason?: string): Promise<AdminRefund> => {
+  return await apiCreateAdminRefundForReturn(returnId, { reason });
+};
+
 export const getAdminReturnErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiError) {
     if (error.status === 403) return 'Недостаточно прав для управления возвратами.';
     if (error.code === 'rejection_reason_required' || error.message?.includes('rejection reason')) {
       return 'Укажите причину отказа в комментарии.';
+    }
+    if (error.code === 'refund_allocation_invariant') {
+      return 'Несогласованное состояние резервирования: количество единиц не соответствует заказу.';
+    }
+    if (error.code === 'refund_exceeds_paid') {
+      return 'Сумма возврата превышает оплаченную сумму.';
+    }
+    if (error.code === 'payment_not_found') {
+      return 'Не найдена успешная оплата по заказу.';
+    }
+    if (error.code === 'ambiguous_payment') {
+      return 'Неоднозначная оплата: обнаружено несколько успешных платежей по заказу.';
+    }
+    if (error.code === 'refund_no_eligible_items') {
+      return 'Нет принятых позиций, подлежащих возврату средств.';
+    }
+    if (error.code === 'return_not_received') {
+      return 'Возврат средств доступен только после приёмки товара на складе.';
+    }
+    if (error.code === 'return_already_refunded') {
+      return 'Возврат средств уже выполнен.';
     }
     if (error.status === 400 || error.code === 'invalid_transition' || error.code === 'validation_error') {
       return error.message || 'Действие отклонено сервером.';
@@ -106,9 +157,7 @@ export const getAdminReturnErrorMessage = (error: unknown, fallback: string): st
   return fallback;
 };
 
-
 import type { ReturnConversationResponse } from '@zamk/api-client/src/types';
-
 
 export const getReturnMessages = async (id: string): Promise<ReturnConversationResponse> => {
   return await getAdminReturnMessagesApi(id);

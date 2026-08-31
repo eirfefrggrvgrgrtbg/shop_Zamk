@@ -800,7 +800,7 @@ func (r *Repository) GetRefund(ctx context.Context, id uuid.UUID) (*Refund, erro
 func (r *Repository) GetRefundByReturnID(ctx context.Context, returnID uuid.UUID) (*Refund, error) {
 	query := `
 		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, provider, provider_refund_id, reason, created_at, updated_at, processed_at, failed_at
-		FROM refunds WHERE return_id = $1 ORDER BY created_at DESC LIMIT 1
+		FROM refunds WHERE return_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1
 	`
 	var ref Refund
 	err := r.db.QueryRow(ctx, query, returnID).Scan(
@@ -819,7 +819,7 @@ func (r *Repository) GetRefundByReturnID(ctx context.Context, returnID uuid.UUID
 func (r *Repository) GetRefundByReturnIDTx(ctx context.Context, tx pgx.Tx, returnID uuid.UUID) (*Refund, error) {
 	query := `
 		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, provider, provider_refund_id, reason, created_at, updated_at, processed_at, failed_at
-		FROM refunds WHERE return_id = $1 ORDER BY created_at DESC LIMIT 1
+		FROM refunds WHERE return_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1
 	`
 	var ref Refund
 	err := tx.QueryRow(ctx, query, returnID).Scan(

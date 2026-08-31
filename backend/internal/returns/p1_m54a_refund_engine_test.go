@@ -1678,3 +1678,95 @@ func TestM54A_PaymentCapacityAfterFailure(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// ----------------------------------------------------------------------------
+// 19. M5.4B QUOTE CONTRACT & LATEST REFUND STATUS
+// ----------------------------------------------------------------------------
+
+func TestM54B_QuoteContractLatestRefundStatus(t *testing.T) {
+	fix := setupM51Fixture(t)
+	ctx := context.Background()
+
+	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-2*time.Hour), 3) // price = 1000 -> total 3000
+	createSucceededPayment(t, fix, tOrd.orderID, 3000)
+
+	earningID := uuid.New()
+	_, err := fix.client.Pool.Exec(ctx, `
+		INSERT INTO seller_ledger_entries (id, seller_id, order_id, order_item_id, type, amount_cents, currency, available_at, metadata, created_at)
+		VALUES ($1, $2, $3, $4, 'seller_earning', 3000, 'RUB', now(), '{}', now())
+	`, earningID, fix.sellerAID, tOrd.orderID, tOrd.orderItemID)
+	require.NoError(t, err)
+
+	retID := uuid.New()
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO returns (id, order_id, fulfillment_id, user_id, status, reason, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, 'item_received', 'defective', now(), now())
+	`, retID, tOrd.orderID, tOrd.fulfillmentID, fix.userID)
+	require.NoError(t, err)
+
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO return_items (id, return_id, order_item_id, quantity, accepted_quantity, created_at)
+		VALUES ($1, $2, $3, 3, 3, now())
+	`, uuid.New(), retID, tOrd.orderItemID)
+	require.NoError(t, err)
+
+	// 1. Initial state (no refunds): latestRefundStatus must be nil, canRefund = true
+	quote1, err := fix.svc.CalculateRefundQuote(ctx, retID)
+	require.NoError(t, err)
+	assert.Nil(t, quote1.LatestRefundStatus, "Initial quote must have nil latestRefundStatus")
+	assert.Nil(t, quote1.LatestRefundProcessedAt)
+	assert.True(t, quote1.CanRefund)
+
+	// 2. Create pending refund: latestRefundStatus must be "pending", canRefund = false
+	ref1, err := fix.svc.CreateRefund(ctx, fix.userID, retID, returns.CreateRefundRequest{})
+	require.NoError(t, err)
+	assert.Equal(t, "pending", ref1.Status)
+
+	quote2, err := fix.svc.CalculateRefundQuote(ctx, retID)
+	require.NoError(t, err)
+	require.NotNil(t, quote2.LatestRefundStatus)
+	assert.Equal(t, "pending", *quote2.LatestRefundStatus)
+	assert.False(t, quote2.CanRefund)
+
+	// 3. Mark refund as failed: latestRefundStatus must be "failed", canRefund = true (allows retry)
+	err = fix.svc.ProcessRefundFailure(ctx, ref1.ID)
+	require.NoError(t, err)
+
+	quote3, err := fix.svc.CalculateRefundQuote(ctx, retID)
+	require.NoError(t, err)
+	require.NotNil(t, quote3.LatestRefundStatus)
+	assert.Equal(t, "failed", *quote3.LatestRefundStatus)
+	assert.True(t, quote3.CanRefund, "Failed refund must allow retry when conditions permit")
+
+	// 4. Create retry refund (now pending): latestRefundStatus must be "pending", canRefund = false
+	ref2, err := fix.svc.CreateRefund(ctx, fix.userID, retID, returns.CreateRefundRequest{})
+	require.NoError(t, err)
+	assert.NotEqual(t, ref1.ID, ref2.ID)
+	assert.Equal(t, "pending", ref2.Status)
+
+	quote4, err := fix.svc.CalculateRefundQuote(ctx, retID)
+	require.NoError(t, err)
+	require.NotNil(t, quote4.LatestRefundStatus)
+	assert.Equal(t, "pending", *quote4.LatestRefundStatus)
+	assert.False(t, quote4.CanRefund)
+
+	// 5. Refund #2 succeeds: latestRefundStatus must be "succeeded", canRefund = false, processedAt populated
+	procTime := time.Now().Truncate(time.Microsecond)
+	err = fix.svc.ProcessRefundSuccess(ctx, ref2.ID, procTime)
+	require.NoError(t, err)
+
+	quote5, err := fix.svc.CalculateRefundQuote(ctx, retID)
+	require.NoError(t, err)
+	require.NotNil(t, quote5.LatestRefundStatus)
+	assert.Equal(t, "succeeded", *quote5.LatestRefundStatus)
+	require.NotNil(t, quote5.LatestRefundProcessedAt)
+	assert.Equal(t, procTime.Unix(), quote5.LatestRefundProcessedAt.Unix())
+	assert.False(t, quote5.CanRefund)
+
+	// 6. Old failed row + newer succeeded row: succeeded wins deterministically
+	var totalRefundRows int
+	err = fix.client.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM refunds WHERE return_id = $1", retID).Scan(&totalRefundRows)
+	require.NoError(t, err)
+	assert.Equal(t, 2, totalRefundRows, "Must have 2 refund records (1 failed, 1 succeeded)")
+	assert.Equal(t, "succeeded", *quote5.LatestRefundStatus)
+}
+
