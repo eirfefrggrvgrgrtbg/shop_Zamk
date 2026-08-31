@@ -466,14 +466,26 @@ export function AdminReturns() {
                           <span>Доставка:</span>
                           <span className="font-medium text-gray-900">{formatPrice(refundQuote.deliveryRefundCents)}</span>
                         </div>
-                        {refundQuote.alreadyRefundedCents > 0 && (
+                        {((refundQuote.succeededRefundedCents ?? refundQuote.alreadyRefundedCents) > 0) && (
                           <div className="flex justify-between text-gray-600">
                             <span>Ранее возвращено:</span>
-                            <span className="font-medium text-gray-700">{formatPrice(refundQuote.alreadyRefundedCents)}</span>
+                            <span className="font-medium text-green-700">{formatPrice(refundQuote.succeededRefundedCents ?? refundQuote.alreadyRefundedCents)}</span>
+                          </div>
+                        )}
+                        {((refundQuote.pendingRefundCents || 0) > 0) && (
+                          <div className="flex justify-between text-gray-600">
+                            <span>В обработке:</span>
+                            <span className="font-medium text-amber-700">{formatPrice(refundQuote.pendingRefundCents)}</span>
                           </div>
                         )}
                         <div className="flex justify-between pt-1.5 border-t border-gray-200 text-sm font-semibold text-gray-900">
-                          <span>Итого к возврату:</span>
+                          <span>
+                            {refundQuote.latestRefundStatus === 'pending'
+                              ? 'Расчётная сумма возврата:'
+                              : refundQuote.latestRefundStatus === 'succeeded' || selectedReturn.status === 'refunded'
+                              ? 'Итого возвращено:'
+                              : 'Итого к возврату:'}
+                          </span>
                           <span>{formatPrice(refundQuote.totalRefundCents)}</span>
                         </div>
                       </div>

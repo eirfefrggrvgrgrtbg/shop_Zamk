@@ -326,6 +326,8 @@ type ReturnRefundQuote struct {
 	DeliveryRefundCents      int64                   `json:"deliveryRefundCents"`
 	TotalRefundCents         int64                   `json:"totalRefundCents"`
 	AlreadyRefundedCents     int64                   `json:"alreadyRefundedCents"`
+	SucceededRefundedCents   int64                   `json:"succeededRefundedCents"`
+	PendingRefundCents       int64                   `json:"pendingRefundCents"`
 	RemainingRefundableCents int64                   `json:"remainingRefundableCents"`
 	CanRefund                bool                    `json:"canRefund"`
 	BlockingReason           *string                 `json:"blockingReason"`

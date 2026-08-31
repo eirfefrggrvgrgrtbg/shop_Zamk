@@ -1355,6 +1355,8 @@ export interface AdminReturnRefundQuote {
   deliveryRefundCents: number;
   totalRefundCents: number;
   alreadyRefundedCents: number;
+  succeededRefundedCents?: number;
+  pendingRefundCents?: number;
   remainingRefundableCents: number;
   canRefund: boolean;
   blockingReason?: string | null;

@@ -125,7 +125,7 @@ func (s *Service) CalculateRefundQuote(ctx context.Context, returnID uuid.UUID) 
 		}
 	}
 
-	totalRefunded, err := s.repo.GetTotalRefundedAmountForOrder(ctx, state.Return.OrderID)
+	succeededRefunded, pendingRefund, err := s.repo.GetRefundSumsForOrder(ctx, state.Return.OrderID)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (s *Service) CalculateRefundQuote(ctx context.Context, returnID uuid.UUID) 
 		})
 	}
 
-	remainingRefundable := breakdown.TotalRefundCents - totalRefunded
+	remainingRefundable := breakdown.TotalRefundCents - succeededRefunded - pendingRefund
 	if remainingRefundable < 0 {
 		remainingRefundable = 0
 	}
@@ -240,7 +240,9 @@ func (s *Service) CalculateRefundQuote(ctx context.Context, returnID uuid.UUID) 
 		ProductsRefundCents:      breakdown.ProductsRefundCents,
 		DeliveryRefundCents:      breakdown.DeliveryRefundCents,
 		TotalRefundCents:         breakdown.TotalRefundCents,
-		AlreadyRefundedCents:     totalRefunded,
+		AlreadyRefundedCents:     succeededRefunded,
+		SucceededRefundedCents:   succeededRefunded,
+		PendingRefundCents:       pendingRefund,
 		RemainingRefundableCents: remainingRefundable,
 		CanRefund:                canRefund,
 		BlockingReason:           blockingReason,

@@ -1715,6 +1715,11 @@ func TestM54B_QuoteContractLatestRefundStatus(t *testing.T) {
 	assert.Nil(t, quote1.LatestRefundStatus, "Initial quote must have nil latestRefundStatus")
 	assert.Nil(t, quote1.LatestRefundProcessedAt)
 	assert.True(t, quote1.CanRefund)
+	assert.Equal(t, int64(3000), quote1.TotalRefundCents)
+	assert.Equal(t, int64(0), quote1.SucceededRefundedCents)
+	assert.Equal(t, int64(0), quote1.PendingRefundCents)
+	assert.Equal(t, int64(0), quote1.AlreadyRefundedCents)
+	assert.Equal(t, int64(3000), quote1.RemainingRefundableCents)
 
 	// 2. Create pending refund: latestRefundStatus must be "pending", canRefund = false
 	ref1, err := fix.svc.CreateRefund(ctx, fix.userID, retID, returns.CreateRefundRequest{})
@@ -1726,6 +1731,11 @@ func TestM54B_QuoteContractLatestRefundStatus(t *testing.T) {
 	require.NotNil(t, quote2.LatestRefundStatus)
 	assert.Equal(t, "pending", *quote2.LatestRefundStatus)
 	assert.False(t, quote2.CanRefund)
+	assert.Equal(t, int64(3000), quote2.TotalRefundCents)
+	assert.Equal(t, int64(0), quote2.SucceededRefundedCents, "Pending refund must NOT count as succeeded")
+	assert.Equal(t, int64(3000), quote2.PendingRefundCents, "Pending refund must be reflected in PendingRefundCents")
+	assert.Equal(t, int64(0), quote2.AlreadyRefundedCents, "AlreadyRefundedCents must be 0 when only pending")
+	assert.Equal(t, int64(0), quote2.RemainingRefundableCents, "RemainingRefundableCents must be 0 while fully reserved in pending")
 
 	// 3. Mark refund as failed: latestRefundStatus must be "failed", canRefund = true (allows retry)
 	err = fix.svc.ProcessRefundFailure(ctx, ref1.ID)
@@ -1736,6 +1746,11 @@ func TestM54B_QuoteContractLatestRefundStatus(t *testing.T) {
 	require.NotNil(t, quote3.LatestRefundStatus)
 	assert.Equal(t, "failed", *quote3.LatestRefundStatus)
 	assert.True(t, quote3.CanRefund, "Failed refund must allow retry when conditions permit")
+	assert.Equal(t, int64(3000), quote3.TotalRefundCents)
+	assert.Equal(t, int64(0), quote3.SucceededRefundedCents)
+	assert.Equal(t, int64(0), quote3.PendingRefundCents, "Failed refund must contribute 0 to pending")
+	assert.Equal(t, int64(0), quote3.AlreadyRefundedCents)
+	assert.Equal(t, int64(3000), quote3.RemainingRefundableCents, "Failed refund must restore remaining refundable capacity")
 
 	// 4. Create retry refund (now pending): latestRefundStatus must be "pending", canRefund = false
 	ref2, err := fix.svc.CreateRefund(ctx, fix.userID, retID, returns.CreateRefundRequest{})
@@ -1748,6 +1763,11 @@ func TestM54B_QuoteContractLatestRefundStatus(t *testing.T) {
 	require.NotNil(t, quote4.LatestRefundStatus)
 	assert.Equal(t, "pending", *quote4.LatestRefundStatus)
 	assert.False(t, quote4.CanRefund)
+	assert.Equal(t, int64(3000), quote4.TotalRefundCents)
+	assert.Equal(t, int64(0), quote4.SucceededRefundedCents)
+	assert.Equal(t, int64(3000), quote4.PendingRefundCents)
+	assert.Equal(t, int64(0), quote4.AlreadyRefundedCents)
+	assert.Equal(t, int64(0), quote4.RemainingRefundableCents)
 
 	// 5. Refund #2 succeeds: latestRefundStatus must be "succeeded", canRefund = false, processedAt populated
 	procTime := time.Now().Truncate(time.Microsecond)
@@ -1761,6 +1781,11 @@ func TestM54B_QuoteContractLatestRefundStatus(t *testing.T) {
 	require.NotNil(t, quote5.LatestRefundProcessedAt)
 	assert.Equal(t, procTime.Unix(), quote5.LatestRefundProcessedAt.Unix())
 	assert.False(t, quote5.CanRefund)
+	assert.Equal(t, int64(3000), quote5.TotalRefundCents)
+	assert.Equal(t, int64(3000), quote5.SucceededRefundedCents, "Succeeded refund must be reflected in SucceededRefundedCents")
+	assert.Equal(t, int64(0), quote5.PendingRefundCents)
+	assert.Equal(t, int64(3000), quote5.AlreadyRefundedCents)
+	assert.Equal(t, int64(0), quote5.RemainingRefundableCents)
 
 	// 6. Old failed row + newer succeeded row: succeeded wins deterministically
 	var totalRefundRows int

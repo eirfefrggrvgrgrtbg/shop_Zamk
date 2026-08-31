@@ -823,6 +823,18 @@ func (r *Repository) GetTotalRefundedAmountForOrder(ctx context.Context, orderID
 	return total, err
 }
 
+func (r *Repository) GetRefundSumsForOrder(ctx context.Context, orderID uuid.UUID) (succeededCents int64, pendingCents int64, err error) {
+	query := `
+		SELECT
+			COALESCE(SUM(CASE WHEN status IN ('succeeded', 'completed') THEN amount_cents ELSE 0 END), 0) AS succeeded_cents,
+			COALESCE(SUM(CASE WHEN status IN ('pending', 'processing') THEN amount_cents ELSE 0 END), 0) AS pending_cents
+		FROM refunds
+		WHERE order_id = $1
+	`
+	err = r.db.QueryRow(ctx, query, orderID).Scan(&succeededCents, &pendingCents)
+	return succeededCents, pendingCents, err
+}
+
 func (r *Repository) GetRefund(ctx context.Context, id uuid.UUID) (*Refund, error) {
 	query := `
 		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, provider, provider_refund_id, reason, created_at, updated_at, processed_at, failed_at

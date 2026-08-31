@@ -737,6 +737,62 @@ async function runAdminReturnsTests() {
   const simReturnRejected: AdminReturn = { ...sampleReturnWithEvidence, status: 'rejected' };
   assert(getDevSimulatorAction(simReturnRejected) === null, 'Rejected return must have no simulator action');
 
+  // 25. Financial Breakdown Presentation Rules for Refund Quotes
+  const getFinancialBreakdownLines = (quote: AdminReturnRefundQuote, returnStatus: string) => {
+    const lines: Array<{ label: string; amountCents: number; variant?: 'green' | 'amber' | 'default' }> = [
+      { label: 'Товары:', amountCents: quote.productsRefundCents },
+      { label: 'Доставка:', amountCents: quote.deliveryRefundCents },
+    ];
+    const succeededAmount = quote.succeededRefundedCents ?? quote.alreadyRefundedCents;
+    if (succeededAmount > 0) {
+      lines.push({ label: 'Ранее возвращено:', amountCents: succeededAmount, variant: 'green' });
+    }
+    if ((quote.pendingRefundCents || 0) > 0) {
+      lines.push({ label: 'В обработке:', amountCents: quote.pendingRefundCents!, variant: 'amber' });
+    }
+    const totalLabel = quote.latestRefundStatus === 'pending'
+      ? 'Расчётная сумма возврата:'
+      : quote.latestRefundStatus === 'succeeded' || returnStatus === 'refunded'
+      ? 'Итого возвращено:'
+      : 'Итого к возврату:';
+    lines.push({ label: totalLabel, amountCents: quote.totalRefundCents });
+    return lines;
+  };
+
+  // Case A: Pending refund (ORD-100193 scenario)
+  const pendingBreakdown = getFinancialBreakdownLines({
+    ...mockQuote,
+    productsRefundCents: 1299000,
+    deliveryRefundCents: 0,
+    totalRefundCents: 1299000,
+    succeededRefundedCents: 0,
+    alreadyRefundedCents: 0,
+    pendingRefundCents: 1299000,
+    remainingRefundableCents: 0,
+    latestRefundStatus: 'pending',
+  }, 'item_received');
+
+  assert(pendingBreakdown.some(l => l.label === 'В обработке:' && l.amountCents === 1299000), 'Pending quote must render В обработке: 12 990');
+  assert(!pendingBreakdown.some(l => l.label === 'Ранее возвращено:'), 'Pending quote must NOT render Ранее возвращено');
+  assert(pendingBreakdown.some(l => l.label === 'Расчётная сумма возврата:' && l.amountCents === 1299000), 'Pending quote must render Расчётная сумма возврата');
+
+  // Case B: Succeeded refund
+  const succeededBreakdown = getFinancialBreakdownLines({
+    ...mockQuote,
+    productsRefundCents: 1299000,
+    deliveryRefundCents: 0,
+    totalRefundCents: 1299000,
+    succeededRefundedCents: 1299000,
+    alreadyRefundedCents: 1299000,
+    pendingRefundCents: 0,
+    remainingRefundableCents: 0,
+    latestRefundStatus: 'succeeded',
+  }, 'refunded');
+
+  assert(succeededBreakdown.some(l => l.label === 'Ранее возвращено:' && l.amountCents === 1299000), 'Succeeded quote must render Ранее возвращено');
+  assert(!succeededBreakdown.some(l => l.label === 'В обработке:'), 'Succeeded quote must NOT render В обработке');
+  assert(succeededBreakdown.some(l => l.label === 'Итого возвращено:' && l.amountCents === 1299000), 'Succeeded quote must render Итого возвращено');
+
   console.log('ALL ADMIN RETURNS & RECEIVING PRESENTATION & CONTRACT TESTS PASSED');
 }
 

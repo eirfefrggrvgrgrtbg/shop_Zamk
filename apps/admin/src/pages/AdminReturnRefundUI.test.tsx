@@ -273,6 +273,8 @@ describe('Admin Returns Refund UI (M5.4B)', () => {
       latestRefundProcessedAt: '2026-08-31T10:05:00Z',
       blockingReason: 'Возврат средств уже выполнен',
       alreadyRefundedCents: 1500000,
+      succeededRefundedCents: 1500000,
+      pendingRefundCents: 0,
       remainingRefundableCents: 0,
     };
 
@@ -293,6 +295,46 @@ describe('Admin Returns Refund UI (M5.4B)', () => {
     const refundCard = screen.getByTestId('return-refund-card');
     expect(refundCard.textContent).toContain('Выполнен');
     expect(refundCard.textContent).toContain('Возврат средств выполнен');
+    expect(refundCard.textContent).toContain('Ранее возвращено:');
+    expect(refundCard.textContent).toMatch(/15\s*000\s*₽/);
+    expect(refundCard.textContent).toContain('Итого возвращено:');
+    expect(refundCard.textContent).not.toContain('В обработке:');
+    expect(screen.queryByRole('button', { name: /Запустить возврат средств/i })).toBeNull();
+  });
+
+  it('renders pending state breakdown with "В обработке" and without "Ранее возвращено"', async () => {
+    const pendingQuote: AdminReturnRefundQuote = {
+      ...mockEligibleQuote,
+      canRefund: false,
+      latestRefundStatus: 'pending',
+      blockingReason: 'Возврат средств уже зарезервирован и ожидает обработки',
+      alreadyRefundedCents: 0,
+      succeededRefundedCents: 0,
+      pendingRefundCents: 1500000,
+      remainingRefundableCents: 0,
+    };
+
+    vi.spyOn(adminReturnsApi, 'getAdminReturns').mockResolvedValue([mockReturn]);
+    vi.spyOn(adminReturnsApi, 'getAdminReturn').mockResolvedValue(mockReturn);
+    vi.spyOn(adminReturnsApi, 'getAdminReturnRefundQuote').mockResolvedValue(pendingQuote);
+
+    render(
+      <MemoryRouter initialEntries={['/returns?id=ret-100193-id']}>
+        <AdminReturns />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('return-refund-card')).toBeDefined();
+    });
+
+    const refundCard = screen.getByTestId('return-refund-card');
+    expect(refundCard.textContent).toContain('Обрабатывается');
+    expect(refundCard.textContent).toContain('В обработке:');
+    expect(refundCard.textContent).toMatch(/15\s*000\s*₽/);
+    expect(refundCard.textContent).toContain('Расчётная сумма возврата:');
+    expect(refundCard.textContent).not.toContain('Ранее возвращено:');
+    expect(refundCard.textContent).not.toContain('Итого возвращено:');
     expect(screen.queryByRole('button', { name: /Запустить возврат средств/i })).toBeNull();
   });
 
