@@ -299,6 +299,30 @@ type UploadReturnMessageAttachmentResponse struct {
 	URL string    `json:"url"`
 }
 
+type ReturnRefundQuoteItem struct {
+	OrderItemID        uuid.UUID `json:"orderItemId"`
+	ProductTitle       string    `json:"productTitle"`
+	Mode               string    `json:"mode"` // "serialized" | "legacy"
+	RequestedQuantity  int       `json:"requestedQuantity"`
+	RefundableQuantity int       `json:"refundableQuantity"`
+	UnitPriceCents     int64     `json:"unitPriceCents"`
+	RefundCents        int64     `json:"refundCents"`
+}
+
+type ReturnRefundQuote struct {
+	ReturnID                 uuid.UUID               `json:"returnId"`
+	OrderNumber              *string                 `json:"orderNumber"`
+	Currency                 string                  `json:"currency"`
+	Items                    []ReturnRefundQuoteItem `json:"items"`
+	ProductsRefundCents      int64                   `json:"productsRefundCents"`
+	DeliveryRefundCents      int64                   `json:"deliveryRefundCents"`
+	TotalRefundCents         int64                   `json:"totalRefundCents"`
+	AlreadyRefundedCents     int64                   `json:"alreadyRefundedCents"`
+	RemainingRefundableCents int64                   `json:"remainingRefundableCents"`
+	CanRefund                bool                    `json:"canRefund"`
+	BlockingReason           *string                 `json:"blockingReason"`
+}
+
 type AdminSendReturnMessageRequest struct {
 	Message       string      `json:"message"`
 	NeedsResponse bool        `json:"needsResponse"`

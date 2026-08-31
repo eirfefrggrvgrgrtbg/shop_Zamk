@@ -85,7 +85,7 @@ func TestRefundReservationRejectsMismatchedOrderAndPayment(t *testing.T) {
 	fixB := SetupFixture(t, client, "succeeded", "paid", 100000, false, "")
 
 	returnID := uuid.New()
-	_, err := client.Pool.Exec(ctx, "INSERT INTO returns (id, order_id, user_id, status, reason, created_at, updated_at) VALUES ($1, $2, $3, 'pending', 'defective', now(), now())", returnID, fixB.OrderID, fixB.UserID)
+	_, err := client.Pool.Exec(ctx, "INSERT INTO returns (id, order_id, fulfillment_id, user_id, status, reason, created_at, updated_at) VALUES ($1, $2, $3, $4, 'approved', 'defective', now(), now())", returnID, fixB.OrderID, fixB.FulfillmentID, fixB.UserID)
 	require.NoError(t, err)
 
 	// Now try to refund using fixA.PaymentID, but providing fixB returnID.

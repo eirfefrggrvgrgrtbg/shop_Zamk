@@ -79,7 +79,7 @@ func TestAdminRefundReserve(t *testing.T) {
 	_, err = client.Pool.Exec(ctx, "INSERT INTO order_items (id, order_id, order_fulfillment_id, product_id, product_variant_id, seller_id, title, product_slug, variant_size, variant_color, sku, image_url, price_cents, quantity, subtotal_price_cents, created_at) VALUES ($1, $2, $3, $4, $5, $6, 'Test Item', 'test-slug', 'M', 'Red', 'SKU', '', 10000, 1, 10000, now())", oiID, orderID, fix.FulfillmentID, productID, variantID, fix.SellerID)
 	require.NoError(t, err)
 
-	_, err = client.Pool.Exec(ctx, "INSERT INTO return_items (id, return_id, order_item_id, quantity, restock, created_at) VALUES ($1, $2, $3, 1, false, now())", uuid.New(), returnID, oiID)
+	_, err = client.Pool.Exec(ctx, "INSERT INTO return_items (id, return_id, order_item_id, quantity, restock, accepted_quantity, damaged_quantity, rejected_quantity, created_at) VALUES ($1, $2, $3, 1, false, 1, 0, 0, now())", uuid.New(), returnID, oiID)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
@@ -127,7 +127,7 @@ func TestAdminRefundReserve(t *testing.T) {
 
 	rr2 := httptest.NewRecorder()
 	r.ServeHTTP(rr2, req2)
-	assert.Equal(t, http.StatusInternalServerError, rr2.Code)
+	assert.Equal(t, http.StatusBadRequest, rr2.Code)
 
 	// Try > available
 	_, err = client.Pool.Exec(ctx, "UPDATE order_items SET price_cents = 200000 WHERE id = $1", oiID)
@@ -139,6 +139,6 @@ func TestAdminRefundReserve(t *testing.T) {
 	req3.Header.Set("Content-Type", "application/json")
 	rr3 := httptest.NewRecorder()
 	r.ServeHTTP(rr3, req3)
-	assert.Equal(t, http.StatusInternalServerError, rr3.Code)
+	assert.Equal(t, http.StatusBadRequest, rr3.Code)
 
 }

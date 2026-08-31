@@ -9,6 +9,7 @@ import (
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payments"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -295,12 +296,40 @@ func (h *Handler) CreateAdminRefund(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
 			return
 		}
-		if errors.Is(err, ErrRefundExceedsPaid) {
-			h.writeError(w, http.StatusBadRequest, "refund_exceeds_paid", err.Error())
+		if errors.Is(err, ErrReturnNotReceived) {
+			h.writeError(w, http.StatusBadRequest, "return_not_received", err.Error())
+			return
+		}
+		if errors.Is(err, ErrReturnRejected) {
+			h.writeError(w, http.StatusBadRequest, "return_rejected", err.Error())
 			return
 		}
 		if errors.Is(err, ErrReturnAlreadyRefunded) {
 			h.writeError(w, http.StatusBadRequest, "already_refunded", "Return is already refunded or completed")
+			return
+		}
+		if errors.Is(err, ErrRefundNoEligibleItems) {
+			h.writeError(w, http.StatusBadRequest, "no_eligible_items", err.Error())
+			return
+		}
+		if errors.Is(err, ErrRefundAllocationInvariant) {
+			h.writeError(w, http.StatusBadRequest, "refund_allocation_invariant", "Inconsistent order item allocation state")
+			return
+		}
+		if errors.Is(err, ErrAmbiguousFundingPayment) || errors.Is(err, payments.ErrAmbiguousFundingPayment) {
+			h.writeError(w, http.StatusUnprocessableEntity, "ambiguous_funding", "Ambiguous funding payment: multiple succeeded payments exist for order")
+			return
+		}
+		if errors.Is(err, ErrPaymentNotFound) || errors.Is(err, payments.ErrPaymentNotFound) {
+			h.writeError(w, http.StatusBadRequest, "payment_not_found", "Succeeded payment for order not found")
+			return
+		}
+		if errors.Is(err, ErrRefundExceedsPaid) || errors.Is(err, payments.ErrRefundExceedsPaid) {
+			h.writeError(w, http.StatusBadRequest, "refund_exceeds_paid", err.Error())
+			return
+		}
+		if errors.Is(err, payments.ErrInvalidRefundAmount) {
+			h.writeError(w, http.StatusBadRequest, "invalid_refund_amount", err.Error())
 			return
 		}
 		log.Printf("CreateRefund failed: %v", err)
@@ -325,6 +354,35 @@ func (h *Handler) CreateAdminRefund(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(ref)
+}
+
+func (h *Handler) GetAdminRefundQuote(w http.ResponseWriter, r *http.Request) {
+	adminID := auth.GetUserID(r.Context())
+	if adminID == uuid.Nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	quote, err := h.service.CalculateRefundQuote(r.Context(), returnID)
+	if err != nil {
+		if errors.Is(err, ErrReturnNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Return not found")
+			return
+		}
+		log.Printf("CalculateRefundQuote failed: %v", err)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to calculate refund quote")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(quote)
 }
 
 func (h *Handler) ListAdminRefunds(w http.ResponseWriter, r *http.Request) {

@@ -797,6 +797,44 @@ func (r *Repository) GetRefund(ctx context.Context, id uuid.UUID) (*Refund, erro
 	return &ref, nil
 }
 
+func (r *Repository) GetRefundByReturnID(ctx context.Context, returnID uuid.UUID) (*Refund, error) {
+	query := `
+		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, provider, provider_refund_id, reason, created_at, updated_at, processed_at, failed_at
+		FROM refunds WHERE return_id = $1 ORDER BY created_at DESC LIMIT 1
+	`
+	var ref Refund
+	err := r.db.QueryRow(ctx, query, returnID).Scan(
+		&ref.ID, &ref.ReturnID, &ref.PaymentID, &ref.OrderID, &ref.Status, &ref.AmountCents, &ref.Currency,
+		&ref.Provider, &ref.ProviderRefundID, &ref.Reason, &ref.CreatedAt, &ref.UpdatedAt, &ref.ProcessedAt, &ref.FailedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrRefundNotFound
+		}
+		return nil, err
+	}
+	return &ref, nil
+}
+
+func (r *Repository) GetRefundByReturnIDTx(ctx context.Context, tx pgx.Tx, returnID uuid.UUID) (*Refund, error) {
+	query := `
+		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, provider, provider_refund_id, reason, created_at, updated_at, processed_at, failed_at
+		FROM refunds WHERE return_id = $1 ORDER BY created_at DESC LIMIT 1
+	`
+	var ref Refund
+	err := tx.QueryRow(ctx, query, returnID).Scan(
+		&ref.ID, &ref.ReturnID, &ref.PaymentID, &ref.OrderID, &ref.Status, &ref.AmountCents, &ref.Currency,
+		&ref.Provider, &ref.ProviderRefundID, &ref.Reason, &ref.CreatedAt, &ref.UpdatedAt, &ref.ProcessedAt, &ref.FailedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrRefundNotFound
+		}
+		return nil, err
+	}
+	return &ref, nil
+}
+
 func (r *Repository) ListAllRefunds(ctx context.Context, limit, offset int) ([]Refund, error) {
 	query := `
 		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, provider, provider_refund_id, reason, created_at, updated_at, processed_at, failed_at
@@ -836,6 +874,17 @@ func (r *Repository) GetTotalReturnedQuantityForOrderItem(ctx context.Context, o
 }
 
 func (r *Repository) GetReturnReceivingState(ctx context.Context, returnID uuid.UUID) (*AdminReturnReceivingState, error) {
+	return r.getReturnReceivingState(ctx, r.db, returnID)
+}
+
+func (r *Repository) GetReturnReceivingStateTx(ctx context.Context, tx pgx.Tx, returnID uuid.UUID) (*AdminReturnReceivingState, error) {
+	return r.getReturnReceivingState(ctx, tx, returnID)
+}
+
+func (r *Repository) getReturnReceivingState(ctx context.Context, db interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, returnID uuid.UUID) (*AdminReturnReceivingState, error) {
 	queryReturn := `
 		SELECT r.id, r.order_id, r.fulfillment_id, r.user_id, r.status, r.reason, r.comment, r.admin_comment, r.created_at, r.updated_at, r.approved_at, r.rejected_at, r.completed_at, r.receiving_started_at, o.order_number
 		FROM returns r
@@ -844,7 +893,7 @@ func (r *Repository) GetReturnReceivingState(ctx context.Context, returnID uuid.
 	`
 	var ret Return
 	var orderNumber *string
-	err := r.db.QueryRow(ctx, queryReturn, returnID).Scan(&ret.ID, &ret.OrderID, &ret.FulfillmentID, &ret.UserID, &ret.Status, &ret.Reason, &ret.Comment, &ret.AdminComment, &ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt, &ret.ReceivingStartedAt, &orderNumber)
+	err := db.QueryRow(ctx, queryReturn, returnID).Scan(&ret.ID, &ret.OrderID, &ret.FulfillmentID, &ret.UserID, &ret.Status, &ret.Reason, &ret.Comment, &ret.AdminComment, &ret.CreatedAt, &ret.UpdatedAt, &ret.ApprovedAt, &ret.RejectedAt, &ret.CompletedAt, &ret.ReceivingStartedAt, &orderNumber)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrReturnNotFound
@@ -857,7 +906,7 @@ func (r *Repository) GetReturnReceivingState(ctx context.Context, returnID uuid.
 		FROM return_items WHERE return_id = $1
 		ORDER BY created_at ASC
 	`
-	rows, err := r.db.Query(ctx, queryItems, returnID)
+	rows, err := db.Query(ctx, queryItems, returnID)
 	if err != nil {
 		return nil, err
 	}
@@ -886,7 +935,7 @@ func (r *Repository) GetReturnReceivingState(ctx context.Context, returnID uuid.
 			WHERE oia.order_item_id = $1
 			ORDER BY oia.created_at ASC
 		`
-		outRows, err := r.db.Query(ctx, queryOutbound, item.OrderItemID)
+		outRows, err := db.Query(ctx, queryOutbound, item.OrderItemID)
 		if err != nil {
 			return nil, err
 		}
@@ -913,7 +962,7 @@ func (r *Repository) GetReturnReceivingState(ctx context.Context, returnID uuid.
 			WHERE riu.return_item_id = $1
 			ORDER BY riu.created_at ASC
 		`
-		unitRows, err := r.db.Query(ctx, queryUnits, item.ID)
+		unitRows, err := db.Query(ctx, queryUnits, item.ID)
 		if err != nil {
 			return nil, err
 		}

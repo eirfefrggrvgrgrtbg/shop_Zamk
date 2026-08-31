@@ -1059,6 +1059,10 @@ func TestM51_OldRestockSafety(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 10, totalStockBefore)
 
+	// Set accepted_quantity so CreateRefund calculates > 0 amount
+	_, err = fix.client.Pool.Exec(ctx, "UPDATE return_items SET accepted_quantity = 1 WHERE id = $1", retItem.ID)
+	require.NoError(t, err)
+
 	// 4. Execute CreateRefund via normal service path
 	refundReason := "customer_return_refund"
 	refund, err := fix.svc.CreateRefund(ctx, adminID, ret.ID, returns.CreateRefundRequest{

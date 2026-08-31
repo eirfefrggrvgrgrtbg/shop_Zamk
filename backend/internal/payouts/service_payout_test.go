@@ -3,7 +3,6 @@ package payouts
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"

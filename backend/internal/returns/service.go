@@ -28,6 +28,7 @@ type payoutsService interface {
 
 type paymentsService interface {
 	ReserveRefund(ctx context.Context, paymentID uuid.UUID, requestedAmountCents int64, reason string, returnID *uuid.UUID) error
+	ReserveRefundTx(ctx context.Context, tx pgx.Tx, paymentID uuid.UUID, requestedAmountCents int64, reason string, returnID *uuid.UUID) error
 	GetSucceededPaymentIDForOrder(ctx context.Context, orderID uuid.UUID) (uuid.UUID, error)
 }
 
@@ -548,83 +549,6 @@ func (s *Service) UpdateReturnStatus(ctx context.Context, adminID, returnID uuid
 
 		return nil
 	})
-}
-
-func (s *Service) CreateRefund(ctx context.Context, adminID, returnID uuid.UUID, req CreateRefundRequest) (*Refund, error) {
-	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
-		ret, items, err := s.repo.GetReturn(ctx, returnID)
-		if err != nil {
-			return err
-		}
-
-		if ret.Status == "refunded" || ret.Status == "completed" {
-			return ErrReturnAlreadyRefunded
-		}
-
-		// Calculate refund amount based on return items
-		orderItems, err := s.ordersRepo.GetOrderItems(ctx, ret.OrderID)
-		if err != nil {
-			return err
-		}
-		orderItemMap := make(map[uuid.UUID]orders.OrderItem)
-		for _, oi := range orderItems {
-			orderItemMap[oi.ID] = oi
-		}
-
-		var amountCentsToRefund int64 = 0
-		for _, item := range items {
-			oi := orderItemMap[item.OrderItemID]
-			// We refund the proportionate price. Total subtotal for oi.Quantity was oi.SubtotalPriceCents.
-			// However, in our system oi.PriceCents * oi.Quantity = oi.SubtotalPriceCents.
-			itemPrice := oi.PriceCents
-			amountCentsToRefund += itemPrice * int64(item.Quantity)
-		}
-
-		// 3. Find the succeeded payment for this order
-		paymentID, err := s.payments.GetSucceededPaymentIDForOrder(ctx, ret.OrderID)
-		if err != nil {
-			return err // Either not found or DB error
-		}
-
-		reason := ""
-		if req.Reason != nil {
-			reason = *req.Reason
-		}
-		// 4. Reserve refund in payments module (this creates the pending refund record)
-		if err := s.payments.ReserveRefund(ctx, paymentID, amountCentsToRefund, reason, &ret.ID); err != nil {
-			return err
-		}
-
-		// Update return status to refunded
-		ret.Status = "refunded"
-		if err := s.repo.UpdateReturnTx(ctx, tx, ret); err != nil {
-			return err
-		}
-
-		// Process payouts deduction for return items (financial deduction only; old generic physical restock removed before M5.2)
-		var deductionItems []payouts.ReturnItemDeduction
-		for _, item := range items {
-			deductionItems = append(deductionItems, payouts.ReturnItemDeduction{
-				OrderItemID: item.OrderItemID,
-				Quantity:    item.Quantity,
-			})
-		}
-
-		if s.payouts != nil {
-			if err := s.payouts.ProcessReturnDeduction(ctx, tx, ret.ID, ret.OrderID, deductionItems); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a mock Refund object to return so handler doesn't crash
-	return &Refund{ID: uuid.New(), Status: "pending"}, nil
 }
 
 func (s *Service) ListSellerReturns(ctx context.Context, userID uuid.UUID, limit, offset int) ([]SellerReturnItem, error) {

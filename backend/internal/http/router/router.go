@@ -535,6 +535,7 @@ func New(
 		r.With(perm("returns.update_status")).Patch("/returns/{id}/receiving/items/{itemId}/legacy-inspection", returnsHandler.InspectLegacyItem)
 		r.With(perm("returns.update_status")).Post("/returns/{id}/receiving/finalize", returnsHandler.FinalizeReceiving)
 		r.With(perm("returns.update_status")).Patch("/returns/{id}/status", returnsHandler.UpdateAdminReturnStatus)
+		r.With(perm("returns.read")).Get("/returns/{id}/refund-quote", returnsHandler.GetAdminRefundQuote)
 		r.With(adminDangerousLimit, perm("refunds.create")).Post("/returns/{id}/refund", returnsHandler.CreateAdminRefund)
 
 		// Refunds

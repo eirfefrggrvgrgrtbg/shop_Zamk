@@ -167,7 +167,7 @@ func SetupRealRouterAuthFixture(t *testing.T) *SetupData {
 	_, err = pool.Exec(ctx, "INSERT INTO returns (id, order_id, fulfillment_id, user_id, status, reason, created_at, updated_at) VALUES ($1, $2, $3, $4, 'item_received', 'defective', $5, $5)", data.ReturnID, data.OrderID, fulfillmentID, data.CustomerID, now)
 	require.NoError(t, err)
 
-	_, err = pool.Exec(ctx, "INSERT INTO return_items (id, return_id, order_item_id, quantity, condition, created_at) VALUES ($1, $2, $3, 1, 'new', $4)", data.ReturnItemID, data.ReturnID, data.OrderItemID, now)
+	_, err = pool.Exec(ctx, "INSERT INTO return_items (id, return_id, order_item_id, quantity, condition, accepted_quantity, created_at) VALUES ($1, $2, $3, 1, 'new', 1, $4)", data.ReturnItemID, data.ReturnID, data.OrderItemID, now)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {

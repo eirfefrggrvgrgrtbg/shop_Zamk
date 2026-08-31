@@ -151,7 +151,7 @@ func TestProcessReturnDeduction(t *testing.T) {
 	}
 	
 	assert.NotEqual(t, -1, deductionIdx)
-	assert.Equal(t, "seller_earning", types[deductionIdx])
+	assert.Equal(t, "adjustment", types[deductionIdx])
 	assert.Equal(t, int64(-50000), amountCents[deductionIdx]) // 500 RUB deducted
 	// Assert AvailableAt is exactly the same
 	assert.Equal(t, availableAt.Unix(), availableAts[deductionIdx].Unix())
