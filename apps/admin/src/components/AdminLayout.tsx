@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useLocation, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard,
   Store,
@@ -15,7 +15,6 @@ import {
   CreditCard,
   Truck,
   ReceiptText,
-  Star,
   Users,
   Shield,
   ClipboardList,
@@ -30,6 +29,9 @@ import { useAdminAuth } from '../contexts/AdminAuthContext';
 import { NotificationBell } from './notifications/NotificationBell';
 import { AdminSearchPalette } from './search/AdminSearchPalette';
 import { useAdminGlobalSearchShortcut } from './search/useAdminGlobalSearchShortcut';
+import { getAdminSellers } from '@zamk/api-client/src/admin';
+import { getModerationProducts } from '../api/adminProducts';
+import { getAdminReviews } from '../api/adminReviews';
 
 interface NavItem {
   name: string;
@@ -38,7 +40,7 @@ interface NavItem {
   permission?: string | string[];
 }
 
-export function AdminLayout({ children }: { children: React.ReactNode }) {
+export function AdminLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
   const { logout, user, staff, hasPermission, hasAnyPermission } = useAdminAuth();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -74,12 +76,70 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     return hasPermission(permission);
   };
 
+  // Moderation pending counts
+  const [moderationCounts, setModerationCounts] = useState({
+    total: 0,
+    sellers: 0,
+    products: 0,
+    reviews: 0,
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadCounts = async () => {
+      try {
+        const canReadSellers = isPermissionVisible('sellers.read');
+        const canModerateProducts = isPermissionVisible('products.moderate');
+        const canReadReviews = isPermissionVisible('reviews.read');
+
+        const [sellersRes, productsRes, reviewsRes] = await Promise.allSettled([
+          canReadSellers ? getAdminSellers({ limit: 100 }) : Promise.resolve({ items: [] }),
+          canModerateProducts ? getModerationProducts({ status: 'pending_moderation', limit: 1 }) : Promise.resolve({ items: [], totalCount: 0 }),
+          canReadReviews ? getAdminReviews() : Promise.resolve([]),
+        ]);
+
+        let sellersCount = 0;
+        if (sellersRes.status === 'fulfilled') {
+          const items = sellersRes.value?.items || [];
+          sellersCount = items.filter((s: any) => s.status === 'pending' || s.status === 'pending_setup' || s.status === 'pending_review').length;
+        }
+
+        let productsCount = 0;
+        if (productsRes.status === 'fulfilled') {
+          productsCount = productsRes.value?.totalCount ?? (productsRes.value?.items?.length || 0);
+        }
+
+        let reviewsCount = 0;
+        if (reviewsRes.status === 'fulfilled') {
+          const items = Array.isArray(reviewsRes.value) ? reviewsRes.value : (reviewsRes.value as any)?.items || [];
+          reviewsCount = items.filter((r: any) => r.status === 'pending_moderation').length;
+        }
+
+        if (isMounted) {
+          setModerationCounts({
+            sellers: sellersCount,
+            products: productsCount,
+            reviews: reviewsCount,
+            total: sellersCount + productsCount + reviewsCount,
+          });
+        }
+      } catch {}
+    };
+
+    loadCounts();
+    const interval = setInterval(loadCounts, 30_000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [location.pathname, staff]);
+
   const baseNavItems: NavItem[] = [
     { name: 'Главная', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Продавцы', path: '/sellers', icon: Store, permission: 'sellers.read' },
     { name: 'Аукционы', path: '/auctions', icon: Gavel, permission: 'auctions.read' },
     { name: 'Товары', path: '/products', icon: Package, permission: 'products.read' },
-    { name: 'Модерация', path: '/moderation', icon: ShieldAlert, permission: 'products.moderate' },
+    { name: 'Модерация', path: '/moderation', icon: ShieldAlert, permission: ['products.moderate', 'reviews.read', 'sellers.read'] },
     { name: 'Категории и бренды', path: '/catalog', icon: BookOpen, permission: ['categories.read', 'brands.read'] },
     { name: 'Заказы', path: '/orders', icon: ShoppingCart, permission: 'orders.read' },
     { name: 'Сборка заказов', path: '/fulfillment/picking', icon: PackageCheck, permission: 'orders.read' },
@@ -90,7 +150,6 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { name: 'Возвраты', path: '/returns', icon: RotateCcw, permission: 'returns.read' },
     { name: 'Возмещения', path: '/refunds', icon: ReceiptText, permission: 'refunds.read' },
     { name: 'Выплаты продавцам', path: '/payouts', icon: Wallet, permission: 'payouts.read' },
-    { name: 'Отзывы', path: '/reviews', icon: Star, permission: 'reviews.read' },
   ];
 
   const staffNavItems: NavItem[] = [
@@ -100,9 +159,22 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { name: 'Журнал действий', path: '/audit', icon: ClipboardList, permission: 'audit.read' },
   ];
 
+  const canReadSellers = isPermissionVisible('sellers.read');
+  const canModerateProducts = isPermissionVisible('products.moderate');
+  const canReadReviews = isPermissionVisible('reviews.read');
+
+  const moderationSubItems = [
+    { name: 'Очередь', path: '/moderation/queue', count: moderationCounts.total, visible: canReadSellers || canModerateProducts || canReadReviews },
+    { name: 'Продавцы', path: '/moderation/sellers', count: moderationCounts.sellers, visible: canReadSellers },
+    { name: 'Товары', path: '/moderation/products', count: moderationCounts.products, visible: canModerateProducts },
+    { name: 'Отзывы', path: '/moderation/reviews', count: moderationCounts.reviews, visible: canReadReviews },
+  ].filter((s) => s.visible);
+
   const visibleBaseItems = baseNavItems.filter(item => isPermissionVisible(item.permission));
   const visibleStaffItems = staffNavItems.filter(item => isPermissionVisible(item.permission));
   const allNavItems = [...visibleBaseItems, ...visibleStaffItems];
+
+  const isModerationActive = location.pathname.startsWith('/moderation');
 
   return (
     <div data-testid="admin-layout" className="flex h-screen bg-gray-50">
@@ -127,19 +199,65 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {visibleBaseItems.map((item) => {
-            const isActive = location.pathname === item.path || (location.pathname.startsWith(item.path + '/') && item.path !== '/');
+            const isModerationItem = item.path === '/moderation';
+            const isActive = isModerationItem
+              ? isModerationActive
+              : (location.pathname === item.path || (location.pathname.startsWith(item.path + '/') && item.path !== '/'));
+
             return (
-              <Link
-                key={item.path}
-                to={item.path}
-                title={isCollapsed ? item.name : undefined}
-                className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-xl group transition-colors ${
-                  isActive ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                } ${isCollapsed ? 'justify-center' : ''}`}
-              >
-                <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-400 group-hover:text-slate-300'} ${!isCollapsed ? 'mr-3' : ''}`} />
-                {!isCollapsed && <span className="truncate">{item.name}</span>}
-              </Link>
+              <div key={item.path}>
+                <Link
+                  to={item.path}
+                  title={isCollapsed ? item.name : undefined}
+                  className={`flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-xl group transition-colors ${
+                    isActive ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  } ${isCollapsed ? 'justify-center' : ''}`}
+                >
+                  <div className="flex items-center min-w-0">
+                    <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-400 group-hover:text-slate-300'} ${!isCollapsed ? 'mr-3' : ''}`} />
+                    {!isCollapsed && <span className="truncate">{item.name}</span>}
+                  </div>
+
+                  {!isCollapsed && isModerationItem && moderationCounts.total > 0 && (
+                    <span className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      {moderationCounts.total}
+                    </span>
+                  )}
+                </Link>
+
+                {/* Sub-items for Moderation */}
+                {!isCollapsed && isModerationItem && isModerationActive && (
+                  <div className="ml-5 pl-3 border-l border-slate-700/60 my-1 space-y-0.5">
+                    {moderationSubItems.map((sub) => {
+                      const isSubActive =
+                        location.pathname === sub.path ||
+                        (sub.path === '/moderation/queue' && (location.pathname === '/moderation' || location.pathname === '/moderation/')) ||
+                        (sub.path === '/moderation/products' && location.pathname.startsWith('/moderation/products')) ||
+                        (sub.path === '/moderation/sellers' && location.pathname.startsWith('/moderation/sellers')) ||
+                        (sub.path === '/moderation/reviews' && location.pathname.startsWith('/moderation/reviews'));
+
+                      return (
+                        <Link
+                          key={sub.path}
+                          to={sub.path}
+                          className={`flex items-center justify-between px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                            isSubActive
+                              ? 'bg-indigo-600/30 text-indigo-300 font-semibold'
+                              : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'
+                          }`}
+                        >
+                          <span className="truncate">{sub.name}</span>
+                          {sub.count > 0 && (
+                            <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                              {sub.count}
+                            </span>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
 
@@ -194,7 +312,9 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             <span className="hidden sm:inline">ZAMK Admin</span>
             <span className="hidden sm:inline mx-2 text-gray-300">/</span>
             <span className="text-gray-800 font-semibold">
-              {allNavItems.find(item => location.pathname.startsWith(item.path))?.name || 'Панель администратора'}
+              {isModerationActive
+                ? 'Модерация'
+                : (allNavItems.find(item => location.pathname.startsWith(item.path))?.name || 'Панель администратора')}
             </span>
           </div>
           <div className="flex items-center space-x-3 sm:space-x-4">
@@ -223,7 +343,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900">
-          {children}
+          {children || <Outlet />}
         </main>
       </div>
 

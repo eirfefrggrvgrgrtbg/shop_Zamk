@@ -27,6 +27,7 @@ type ReviewResponse struct {
 	ProductID         uuid.UUID  `json:"productId"`
 	ProductVariantID  *uuid.UUID `json:"variantId,omitempty"`
 	ProductTitle      *string    `json:"productTitle,omitempty"`
+	OrderItemID       *uuid.UUID `json:"orderItemId,omitempty"`
 	Rating            int        `json:"rating"`
 	Title             *string    `json:"title,omitempty"`
 	Comment           *string    `json:"comment,omitempty"`

@@ -77,8 +77,30 @@ export const createReturn = async (orderId: string, input: ReturnRequest): Promi
   return request<ReturnResponse>('POST', `/customer/orders/${orderId}/returns`, { body: input });
 };
 
-export const createReview = async (orderId: string, orderItemId: string, input: ReviewCreateRequest): Promise<any> => {
-  return request('POST', `/customer/orders/${orderId}/items/${orderItemId}/review`, { body: input });
+export interface CustomerCreateReviewPayload {
+  orderItemId: string;
+  rating: number;
+  text?: string;
+  comment?: string;
+  title?: string;
+}
+
+export const createCustomerReview = async (input: CustomerCreateReviewPayload): Promise<any> => {
+  return request('POST', '/customer/reviews', { body: input });
+};
+
+export const createReview = async (
+  orderIdOrInput: string | CustomerCreateReviewPayload,
+  orderItemId?: string,
+  input?: ReviewCreateRequest
+): Promise<any> => {
+  if (typeof orderIdOrInput === 'object' && orderIdOrInput !== null) {
+    return request('POST', '/customer/reviews', { body: orderIdOrInput });
+  }
+  if (typeof orderIdOrInput === 'string' && orderItemId) {
+    return request('POST', `/customer/orders/${orderIdOrInput}/items/${orderItemId}/review`, { body: input });
+  }
+  return request('POST', '/customer/reviews', { body: orderIdOrInput });
 };
 
 export const getCustomerReturns = async (): Promise<CustomerReturnListResponse> => {

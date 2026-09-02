@@ -27,11 +27,11 @@ export interface AdminReviewView {
 }
 
 const labels: Record<string, string> = {
-  pending_moderation: 'Pending moderation',
-  published: 'Published',
-  rejected: 'Rejected',
-  hidden: 'Hidden',
-  blocked: 'Blocked',
+  pending_moderation: 'На проверке',
+  published: 'Опубликован',
+  rejected: 'Отклонён',
+  hidden: 'Скрыт',
+  blocked: 'Заблокирован',
 };
 
 const unwrapItems = <T>(response: ListResponse<T>): T[] => Array.isArray(response) ? response : response.items ?? [];

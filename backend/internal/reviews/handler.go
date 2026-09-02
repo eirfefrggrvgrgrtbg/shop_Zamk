@@ -396,11 +396,17 @@ func (h *Handler) GetPublicRatingSummary(w http.ResponseWriter, r *http.Request)
 }
 
 func mapToReviewResponse(rev *ProductReview) ReviewResponse {
+	var orderItemID *uuid.UUID
+	if rev.OrderItemID != uuid.Nil {
+		id := rev.OrderItemID
+		orderItemID = &id
+	}
 	return ReviewResponse{
 		ID:                rev.ID,
 		ProductID:         rev.ProductID,
 		ProductVariantID:  rev.ProductVariantID,
 		ProductTitle:      rev.ProductTitle,
+		OrderItemID:       orderItemID,
 		Rating:            rev.Rating,
 		Title:             rev.Title,
 		Comment:           rev.Comment,

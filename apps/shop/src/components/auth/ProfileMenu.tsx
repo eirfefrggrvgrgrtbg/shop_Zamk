@@ -60,10 +60,6 @@ export function ProfileMenu() {
                 <Heart className="w-[15px] h-[15px]" />
                 Избранное
               </Link>
-              <Link to="/reviews" onClick={() => setIsOpen(false)} className={linkClass}>
-                <Star className="w-[15px] h-[15px]" />
-                Отзывы
-              </Link>
               <Link to="/settings" onClick={() => setIsOpen(false)} className={linkClass}>
                 <Settings className="w-[15px] h-[15px]" />
                 Настройки

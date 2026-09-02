@@ -147,7 +147,18 @@ export const request = async <T>(
         throw new ApiError(getSafeErrorMessage(code, data.message), code, response.status, data);
       }
 
-      throw new ApiError(data?.message || `HTTP Error ${response.status}`, data?.code || 'HTTP_ERROR', response.status, data);
+      // Handle plain string error response
+      if (typeof data === 'string' && data.trim()) {
+        const trimmed = data.trim();
+        const code = response.status === 409 ? 'duplicate_review' : trimmed;
+        throw new ApiError(getSafeErrorMessage(code, trimmed), code, response.status, data);
+      }
+
+      if (response.status === 409) {
+        throw new ApiError(getSafeErrorMessage('duplicate_review', 'duplicate review'), 'duplicate_review', 409, data);
+      }
+
+      throw new ApiError(data?.message || getSafeErrorMessage(data?.code, `HTTP Error ${response.status}`), data?.code || 'HTTP_ERROR', response.status, data);
     }
 
     return data;
@@ -156,7 +167,7 @@ export const request = async <T>(
   return execute();
 };
 
-const getSafeErrorMessage = (code?: string, fallback?: string): string => {
+export const getSafeErrorMessage = (code?: string, fallback?: string): string => {
   switch (code) {
     case 'supply_carrier_required':
     case 'SUPPLY_CARRIER_REQUIRED':
@@ -331,6 +342,9 @@ const getSafeErrorMessage = (code?: string, fallback?: string): string => {
     case 'order_not_delivered':
     case 'can only return delivered orders':
     case 'ORDER_NOT_DELIVERED':
+      if (fallback && (fallback.toLowerCase().includes('review') || fallback.toLowerCase().includes('отзыв'))) {
+        return 'Отзыв можно оставить только после доставки заказа';
+      }
       return 'Возврат возможен только для доставленных заказов.';
     case 'return_window_expired':
     case 'return window has expired':
@@ -346,9 +360,11 @@ const getSafeErrorMessage = (code?: string, fallback?: string): string => {
     default:
       if (fallback) {
         const lower = fallback.toLowerCase();
-        if (lower.includes('duplicate review')) return 'Вы уже оставили отзыв на этот товар';
-        if (lower.includes('not purchased')) return 'Вы можете оставить отзыв только на купленный товар';
-        if (lower.includes('not delivered')) return 'Заказ ещё не доставлен';
+        if (lower.includes('duplicate review') || lower.includes('review already exists')) return 'Вы уже оставили отзыв на этот товар';
+        if (lower.includes('not purchased') || lower.includes('item not purchased') || lower.includes('was not purchased')) return 'Вы можете оставить отзыв только на купленный товар';
+        if (lower.includes('not delivered') || lower.includes('order not delivered') || lower.includes('must be delivered')) return 'Отзыв можно оставить только после доставки заказа';
+        if (lower.includes('too long') || lower.includes('max 1000')) return 'Текст отзыва слишком длинный (максимум 1000 символов)';
+        if (lower.includes('rating') && (lower.includes('between 1 and 5') || lower.includes('invalid rating'))) return 'Оценка должна быть от 1 до 5';
         if (!lower.startsWith('http')) return fallback;
       }
       return 'Произошла ошибка. Попробуйте позже';

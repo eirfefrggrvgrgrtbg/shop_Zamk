@@ -11,6 +11,7 @@ export default defineConfig({
       'src/pages/AdminReturnRefundUI.test.tsx',
       'src/pages/AdminReturnReceiving.test.tsx',
       'src/pages/AdminReturns.test.ts',
+      'src/pages/AdminModeration.test.tsx',
       'src/components/EntityTimeline.test.tsx',
       'src/api/adminTimeline.test.ts',
     ],
