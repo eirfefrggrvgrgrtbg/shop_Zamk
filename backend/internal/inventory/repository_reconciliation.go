@@ -400,6 +400,19 @@ func (r *Repository) GetReconciliationReview(ctx context.Context, sessionID uuid
 	}
 	defer rows.Close()
 
+	// Load resolved units for this session to protect historical count evidence
+	resolvedUnits := make(map[uuid.UUID]bool)
+	resRows, resErr := r.db.Query(ctx, "SELECT inventory_unit_id FROM inventory_reconciliation_resolutions WHERE session_id = $1", sessionID)
+	if resErr == nil {
+		defer resRows.Close()
+		for resRows.Next() {
+			var uID uuid.UUID
+			if err := resRows.Scan(&uID); err == nil {
+				resolvedUnits[uID] = true
+			}
+		}
+	}
+
 	for rows.Next() {
 		var item ReconciliationReviewItemDTO
 		var snapStatus *string
@@ -417,7 +430,7 @@ func (r *Repository) GetReconciliationReview(ctx context.Context, sessionID uuid
 		}
 
 		if classification != nil && *classification == "expected_found" {
-			if item.SnapshotStatus != item.CurrentStatus {
+			if item.SnapshotStatus != item.CurrentStatus && !resolvedUnits[item.UnitID] {
 				review.ChangedDuringCount = append(review.ChangedDuringCount, item)
 			} else {
 				review.ExpectedFound = append(review.ExpectedFound, item)
@@ -425,8 +438,8 @@ func (r *Repository) GetReconciliationReview(ctx context.Context, sessionID uuid
 		} else if classification != nil && *classification == "unexpected_found" {
 			review.UnexpectedFound = append(review.UnexpectedFound, item)
 		} else if classification == nil {
-			// Expected but not found
-			if item.SnapshotStatus != item.CurrentStatus {
+			// Expected but not found (missing during count)
+			if item.SnapshotStatus != item.CurrentStatus && !resolvedUnits[item.UnitID] {
 				review.ChangedDuringCount = append(review.ChangedDuringCount, item)
 			} else {
 				review.Missing = append(review.Missing, item)

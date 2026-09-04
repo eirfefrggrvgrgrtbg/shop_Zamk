@@ -481,10 +481,35 @@ type ReconciliationResolutionCase struct {
 	Explanation          string                           `json:"explanation"`
 	AllowedActions       []ReconciliationResolutionAction `json:"allowedActions"`
 	HistoricalContext    *ReconciliationHistoricalContext `json:"historicalContext,omitempty"`
-	BlockedReason        string                           `json:"blockedReason,omitempty"`
+	BlockedReason         string                           `json:"blockedReason,omitempty"`
+	Resolution            *ResolutionAuditDTO              `json:"resolution,omitempty"`
+	ReplacementCandidates []ReplacementCandidateDTO        `json:"replacementCandidates,omitempty"`
+}
+
+type ReplacementCandidateDTO struct {
+	UnitID   uuid.UUID `json:"unitId"`
+	UnitCode string    `json:"unitCode"`
+}
+
+type ResolutionAuditDTO struct {
+	ActionID            string    `json:"actionId"`
+	PerformedBy         uuid.UUID `json:"performedBy"`
+	PerformedAt         time.Time `json:"performedAt"`
+	ReplacementUnitCode string    `json:"replacementUnitCode,omitempty"`
 }
 
 type ReconciliationResolutionPlanDTO struct {
-	SessionID uuid.UUID                      `json:"sessionId"`
-	Cases     []ReconciliationResolutionCase `json:"cases"`
+	SessionID          uuid.UUID                      `json:"sessionId"`
+	Cases              []ReconciliationResolutionCase `json:"cases"`
+	ResolutionsCount   int                            `json:"resolutionsCount"`
+	ResolvedCasesCount int                            `json:"resolvedCasesCount"`
+}
+
+type ResolveReconciliationCaseRequest struct {
+	UnitID              *uuid.UUID `json:"unitId,omitempty"`
+	UnitCode            string     `json:"unitCode,omitempty"`
+	ActionID            string     `json:"actionId"`
+	ReplacementUnitID   *uuid.UUID `json:"replacementUnitId,omitempty"`
+	ReplacementUnitCode string     `json:"replacementUnitCode,omitempty"`
+	Note                string     `json:"note,omitempty"`
 }

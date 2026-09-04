@@ -19,6 +19,7 @@ type RawResolutionFact struct {
 	CurrentStatus  string  // from inventory_units
 	Classification *string // nil if not scanned; 'expected_found', 'unexpected_found', etc.
 	ScannedAt      *time.Time
+	Resolution     *ResolutionAuditDTO
 
 	// Allocation context
 	AllocationID            *uuid.UUID
@@ -199,8 +200,8 @@ func ClassifyResolutionFact(fact RawResolutionFact) *ReconciliationResolutionCas
 	}
 
 	// 1. RULE H: changed_during_count takes PRECEDENCE over missing/unexpected.
-	// If snapshot status was recorded, and current status in DB differs:
-	if fact.SnapshotStatus != nil && *fact.SnapshotStatus != fact.CurrentStatus {
+	// If snapshot status was recorded, and current status in DB differs (and unit was not resolved via reconciliation resolution):
+	if fact.SnapshotStatus != nil && *fact.SnapshotStatus != fact.CurrentStatus && fact.Resolution == nil {
 		baseCase.CaseType = CaseTypeChangedDuringCount
 		baseCase.Title = "Состояние изменилось во время проверки"
 		baseCase.Severity = SeverityWarning
@@ -419,15 +420,7 @@ func ClassifyResolutionFact(fact RawResolutionFact) *ReconciliationResolutionCas
 					ID:            ActionIDCloseStaleAllocation,
 					SafetyLevel:   ActionSafetyMutationRequiresConfirmation,
 					Label:         "Освободить зависшее назначение",
-					BlockedReason: "Автоматическое освобождение аллокации будет доступно в P2.2B",
-					Enabled:       false,
-				},
-				{
-					ID:            ActionIDConfirmMissing,
-					SafetyLevel:   ActionSafetyMutationRequiresConfirmation,
-					Label:         "Списать недостачу",
-					BlockedReason: "Списание недостачи будет доступно в P2.2B",
-					Enabled:       false,
+					Enabled:       true,
 				},
 			}
 			if fact.OrderID != nil {
@@ -464,9 +457,9 @@ func ClassifyResolutionFact(fact RawResolutionFact) *ReconciliationResolutionCas
 				},
 				{
 					ID:            ActionIDConfirmMissing,
-					SafetyLevel:   ActionSafetyMutationRequiresConfirmation,
-					Label:         "Списать недостачу",
-					BlockedReason: "Списание недостачи будет доступно в P2.2B",
+					SafetyLevel:   ActionSafetyBlocked,
+					Label:         "Требуется ручная проверка отбора",
+					BlockedReason: "Единица уже отобрана в заказ. Автоматическое списание заблокировано.",
 					Enabled:       false,
 				},
 			}
@@ -514,9 +507,8 @@ func ClassifyResolutionFact(fact RawResolutionFact) *ReconciliationResolutionCas
 				{
 					ID:            ActionIDConfirmMissing,
 					SafetyLevel:   ActionSafetyMutationRequiresConfirmation,
-					Label:         "Списать недостачу",
-					BlockedReason: "Списание недостачи будет доступно в P2.2B",
-					Enabled:       false,
+					Label:         "Подтвердить отсутствие и заменить единицу",
+					Enabled:       true,
 				},
 			}
 			if fact.OrderID != nil {
@@ -549,9 +541,8 @@ func ClassifyResolutionFact(fact RawResolutionFact) *ReconciliationResolutionCas
 			{
 				ID:            ActionIDConfirmMissing,
 				SafetyLevel:   ActionSafetyMutationRequiresConfirmation,
-				Label:         "Списать недостачу",
-				BlockedReason: "Списание недостачи будет доступно в P2.2B",
-				Enabled:       false,
+				Label:         "Подтвердить отсутствие",
+				Enabled:       true,
 			},
 		}
 		return &baseCase

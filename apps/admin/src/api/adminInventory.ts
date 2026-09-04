@@ -394,6 +394,21 @@ export interface ReconciliationVariantContext {
   barcode?: string;
 }
 
+export interface ReconciliationResolutionAudit {
+  actionId: string;
+  performedBy: string;
+  performedAt: string;
+  replacementUnitCode?: string;
+}
+
+export interface ReplacementCandidate {
+  unitId: string;
+  unitCode: string;
+  variantId: string;
+  status: string;
+  createdAt: string;
+}
+
 export interface ReconciliationResolutionCase {
   unitId: string;
   unitCode: string;
@@ -404,21 +419,58 @@ export interface ReconciliationResolutionCase {
   severity: 'info' | 'warning' | 'high' | 'critical';
   explanation: string;
   allowedActions: ReconciliationResolutionAction[];
+  replacementCandidates?: ReplacementCandidate[];
   historicalContext?: ReconciliationHistoricalContext;
   snapshotStatus?: string;
   currentStatus?: string;
   currentAllocationCtx?: string;
   lineageCtx?: string;
   blockedReason?: string;
+  resolution?: ReconciliationResolutionAudit;
 }
 
 export interface ReconciliationResolutionPlan {
   sessionId: string;
   cases: ReconciliationResolutionCase[];
+  resolutionsCount?: number;
+  resolvedCasesCount?: number;
 }
 
 export const getReconciliationResolutionPlan = async (sessionId: string): Promise<ReconciliationResolutionPlan> => {
   return request('GET', `/admin/inventory/reconciliations/${sessionId}/resolution-plan`);
+};
+
+export interface ResolveReconciliationCaseInput {
+  unitId?: string;
+  unitCode?: string;
+  actionId: string;
+  replacementUnitId?: string;
+  replacementUnitCode?: string;
+  note?: string;
+}
+
+export const resolveInventoryReconciliationCase = async (
+  sessionId: string,
+  input: ResolveReconciliationCaseInput,
+): Promise<ReconciliationResolutionPlan> => {
+  return request('POST', `/admin/inventory/reconciliations/${sessionId}/resolve`, {
+    body: input,
+  });
+};
+
+export const resolveReconciliationCase = async (
+  sessionId: string,
+  unitId: string,
+  actionId: string,
+  replacementUnitId?: string,
+  note?: string,
+): Promise<ReconciliationResolutionPlan> => {
+  return resolveInventoryReconciliationCase(sessionId, {
+    unitId,
+    actionId,
+    replacementUnitId,
+    note,
+  });
 };
 
 export const getInventoryReconciliationReview = async (sessionId: string): Promise<ReconciliationReview> => {

@@ -551,10 +551,7 @@ export const ZmuTraceabilityDrawer: React.FC<ZmuTraceabilityDrawerProps> = ({
                             {visual.icon}
                           </div>
 
-                          <div
-                            className="bg-white border border-slate-200 hover:border-slate-300 rounded-xl p-3.5 transition-colors shadow-2xs"
-                            title={event.sourceEntity ? `Технический источник: ${event.sourceEntity}` : undefined}
-                          >
+                          <div className="bg-white border border-slate-200 hover:border-slate-300 rounded-xl p-3.5 transition-colors shadow-2xs">
                             <div className="flex items-start justify-between gap-2 flex-wrap mb-1">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold text-slate-900">

@@ -87,6 +87,12 @@ func (s *Service) ListAdminInventory(ctx context.Context, q, sellerId, source, a
 func (s *Service) GetAdminInventoryItem(ctx context.Context, id uuid.UUID) (AdminInventoryItem, error) {
 	i, err := s.repo.GetAdminInventoryItemRich(ctx, id)
 	if err != nil {
+		if errors.Is(err, ErrInventoryItemNotFound) || errors.Is(err, pgx.ErrNoRows) {
+			i2, err2 := s.repo.GetAdminInventoryItemRichByVariantID(ctx, id)
+			if err2 == nil && i2 != nil {
+				return *i2, nil
+			}
+		}
 		return AdminInventoryItem{}, err
 	}
 	return *i, nil

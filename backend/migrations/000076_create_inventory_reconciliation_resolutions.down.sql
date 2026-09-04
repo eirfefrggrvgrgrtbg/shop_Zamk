@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS inventory_reconciliation_resolutions;

@@ -333,7 +333,7 @@ func seedDevProducts(ctx context.Context, tx postgres.DBTX, sellerID, categoryID
 				price_cents = EXCLUDED.price_cents,
 				is_active = true,
 				updated_at = now()
-		`, variantID, productID, sku, s.size, s.color, fmt.Sprintf("00000000000%d", i), s.priceCents)
+		`, variantID, productID, sku, s.size, s.color, fmt.Sprintf("ZMK-DEV-%04d", i+1), s.priceCents)
 		if err != nil {
 			return fmt.Errorf("upsert variant %s: %w", s.slug, err)
 		}

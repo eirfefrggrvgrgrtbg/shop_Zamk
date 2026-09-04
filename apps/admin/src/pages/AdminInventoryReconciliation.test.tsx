@@ -1,7 +1,11 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { AdminInventoryReconciliation } from "./AdminInventoryReconciliation";
+import {
+  AdminInventoryReconciliation,
+  formatResolvedDiscrepanciesBanner,
+  classifyResolutionBucket,
+} from "./AdminInventoryReconciliation";
 import * as api from "../api/adminInventory";
 
 vi.mock("../api/adminInventory", () => ({
@@ -12,6 +16,8 @@ vi.mock("../api/adminInventory", () => ({
   cancelInventoryReconciliation: vi.fn(),
   getInventoryReconciliationReview: vi.fn(),
   getReconciliationResolutionPlan: vi.fn(),
+  resolveInventoryReconciliationCase: vi.fn(),
+  getAdminInventoryItem: vi.fn(),
 }));
 
 
@@ -718,5 +724,1018 @@ describe("AdminInventoryReconciliation", () => {
     expect(releaseBtn.hasAttribute("disabled")).toBe(true);
     const writeOffBtn = screen.getByRole("button", { name: "Списать недостачу" });
     expect(writeOffBtn.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("P2.2B: Stale Allocation modal opens and submits without native alert/confirm", async () => {
+    const alertSpy = vi.spyOn(window, "alert");
+    const confirmSpy = vi.spyOn(window, "confirm");
+
+    const completedSession: api.ReconciliationSession = {
+      ...mockSession,
+      status: "completed",
+    };
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(completedSession);
+    vi.mocked(api.getAdminInventoryItem).mockResolvedValue({
+      id: "variant-1",
+      productId: "prod-1",
+      productTitle: "Шерстяное пальто",
+      productVariantId: "variant-1",
+      variant: "M · Графит",
+      source: "fbo",
+      totalStock: 5,
+      reservedStock: 1,
+      availableStock: 4,
+      aggregate: { total: 5, reserved: 1, available: 4 },
+      physical: { warehouse: 5, allocated: 1, picked: 0, free: 4, expected: 0, damaged: 0, writtenOff: 0, shipped: 0 },
+      legacy: { onHand: 0, reserved: 0, available: 0 },
+      accountingMode: "serialized",
+      health: { status: "healthy", issues: [] },
+    });
+
+    const planWithEnabledStale: api.ReconciliationResolutionPlan = {
+      sessionId: "session-1",
+      cases: [
+        {
+          unitId: "unit-stale",
+          unitCode: "ZMU-STALE-1",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Шерстяное пальто",
+            size: "M",
+            color: "Графит",
+          },
+          caseType: "stale_allocation",
+          title: "Зависшая аллокация на ненайденной единице",
+          severity: "high",
+          explanation: "Единица не найдена, и на неё числится резерв под завершённый заказ.",
+          allowedActions: [
+            {
+              id: "close_stale_allocation",
+              safetyLevel: "MUTATION_REQUIRES_CONFIRMATION",
+              label: "Освободить зависшее назначение",
+              enabled: true,
+            },
+          ],
+        },
+      ],
+    };
+    vi.mocked(api.getReconciliationResolutionPlan).mockResolvedValue(planWithEnabledStale);
+    vi.mocked(api.resolveInventoryReconciliationCase).mockResolvedValue({
+      sessionId: "session-1",
+      cases: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("РАЗБОР РАСХОЖДЕНИЙ")).toBeDefined();
+    });
+    fireEvent.click(screen.getByText("РАЗБОР РАСХОЖДЕНИЙ"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Освободить зависшее назначение" })).toBeDefined();
+    });
+
+    const btn = screen.getByRole("button", { name: "Освободить зависшее назначение" });
+    expect(btn.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(btn);
+
+    // Modal is rendered with clear explanation
+    await waitFor(() => {
+      expect(screen.getByText(/Старое зависшее назначение по завершённому или отменённому заказу будет освобождено/i)).toBeDefined();
+      expect(screen.getAllByText("ZMU-STALE-1").length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Submit mutation
+    const confirmBtn = screen.getAllByRole("button", { name: "Освободить зависшее назначение" }).pop()!;
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(api.resolveInventoryReconciliationCase).toHaveBeenCalledWith("session-1", {
+        unitId: "unit-stale",
+        actionId: "close_stale_allocation",
+        replacementUnitId: undefined,
+      });
+    });
+
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(confirmSpy).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+    confirmSpy.mockRestore();
+  });
+
+  it("P2.2B: Missing Free modal renders exact -1 stock impact and submits", async () => {
+    const completedSession: api.ReconciliationSession = {
+      ...mockSession,
+      status: "completed",
+    };
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(completedSession);
+    vi.mocked(api.getAdminInventoryItem).mockResolvedValue({
+      id: "variant-1",
+      productId: "prod-1",
+      productTitle: "Шерстяное пальто",
+      productVariantId: "variant-1",
+      variant: "M · Графит",
+      source: "fbo",
+      totalStock: 5,
+      reservedStock: 0,
+      availableStock: 5,
+      aggregate: { total: 5, reserved: 0, available: 5 },
+      physical: { warehouse: 5, allocated: 0, picked: 0, free: 5, expected: 0, damaged: 0, writtenOff: 0, shipped: 0 },
+      legacy: { onHand: 0, reserved: 0, available: 0 },
+      accountingMode: "serialized",
+      health: { status: "healthy", issues: [] },
+    });
+
+    const plan: api.ReconciliationResolutionPlan = {
+      sessionId: "session-1",
+      cases: [
+        {
+          unitId: "unit-missing-free",
+          unitCode: "ZMU-FREE-1",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Шерстяное пальто",
+            size: "M",
+            color: "Графит",
+          },
+          caseType: "missing_free",
+          title: "Единица не найдена",
+          severity: "warning",
+          explanation: "Ожидаемая единица товара не найдена на складе.",
+          allowedActions: [
+            {
+              id: "confirm_missing",
+              safetyLevel: "MUTATION_REQUIRES_CONFIRMATION",
+              label: "Подтвердить отсутствие",
+              enabled: true,
+            },
+          ],
+        },
+      ],
+    };
+    vi.mocked(api.getReconciliationResolutionPlan).mockResolvedValue(plan);
+    vi.mocked(api.resolveInventoryReconciliationCase).mockResolvedValue({
+      sessionId: "session-1",
+      cases: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "РАЗБОР РАСХОЖДЕНИЙ" })).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "РАЗБОР РАСХОЖДЕНИЙ" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Подтвердить отсутствие" })).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить отсутствие" }));
+
+    // Verify modal displays exact stock impact
+    await waitFor(() => {
+      expect(screen.getByText("ОБЩИЙ ОСТАТОК")).toBeDefined();
+      expect(screen.getAllByText(/5\s*→/).length).toBe(2);
+      expect(screen.getByText("ФИЗИЧЕСКИЕ ZMU НА СКЛАДЕ")).toBeDefined();
+      expect(screen.getByText("БЕЗ ZMU")).toBeDefined();
+      expect(screen.getByText("-1")).toBeDefined();
+      expect(screen.getAllByText("ZMU-FREE-1").length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Confirm writeoff
+    const confirmBtn = screen.getAllByRole("button", { name: "Подтвердить отсутствие" }).pop()!;
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(api.resolveInventoryReconciliationCase).toHaveBeenCalledWith("session-1", {
+        unitId: "unit-missing-free",
+        actionId: "confirm_missing",
+        replacementUnitId: undefined,
+      });
+    });
+  });
+
+  it("P2.2B: Missing Live Allocated renders candidate selector, prevents auto-selection, blocks empty submit, and submits selected candidate", async () => {
+    const completedSession: api.ReconciliationSession = {
+      ...mockSession,
+      status: "completed",
+    };
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(completedSession);
+    vi.mocked(api.getAdminInventoryItem).mockResolvedValue({
+      id: "variant-1",
+      productId: "prod-1",
+      productTitle: "Шерстяное пальто",
+      productVariantId: "variant-1",
+      variant: "M · Графит",
+      source: "fbo",
+      totalStock: 5,
+      reservedStock: 1,
+      availableStock: 4,
+      aggregate: { total: 5, reserved: 1, available: 4 },
+      physical: { warehouse: 5, allocated: 1, picked: 0, free: 4, expected: 0, damaged: 0, writtenOff: 0, shipped: 0 },
+      legacy: { onHand: 0, reserved: 0, available: 0 },
+      accountingMode: "serialized",
+      health: { status: "healthy", issues: [] },
+    });
+
+    const plan: api.ReconciliationResolutionPlan = {
+      sessionId: "session-1",
+      cases: [
+        {
+          unitId: "unit-live-alloc",
+          unitCode: "ZMU-MISSING-LIVE",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Шерстяное пальто",
+            size: "M",
+            color: "Графит",
+          },
+          caseType: "missing_live_allocated",
+          title: "Не найдена — назначена заказу",
+          severity: "high",
+          explanation: "Единица назначена заказу ORD-1001.",
+          replacementCandidates: [
+            {
+              unitId: "cand-1",
+              unitCode: "ZMU-CAND-01",
+              variantId: "variant-1",
+              status: "warehouse",
+              createdAt: "2026-09-01T10:00:00Z",
+            },
+            {
+              unitId: "cand-2",
+              unitCode: "ZMU-CAND-02",
+              variantId: "variant-1",
+              status: "warehouse",
+              createdAt: "2026-09-02T10:00:00Z",
+            },
+          ],
+          allowedActions: [
+            {
+              id: "confirm_missing",
+              safetyLevel: "MUTATION_REQUIRES_CONFIRMATION",
+              label: "Подтвердить отсутствие и заменить единицу",
+              enabled: true,
+            },
+          ],
+        },
+      ],
+    };
+    vi.mocked(api.getReconciliationResolutionPlan).mockResolvedValue(plan);
+    vi.mocked(api.resolveInventoryReconciliationCase).mockResolvedValue({
+      sessionId: "session-1",
+      cases: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("РАЗБОР РАСХОЖДЕНИЙ")).toBeDefined();
+    });
+    fireEvent.click(screen.getByText("РАЗБОР РАСХОЖДЕНИЙ"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Подтвердить отсутствие и заменить единицу" })).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить отсутствие и заменить единицу" }));
+
+    // Verify candidate selector is rendered and NO candidate is auto-selected
+    await waitFor(() => {
+      expect(screen.getByText(/Выберите единицу на замену/i)).toBeDefined();
+    });
+
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    expect(select.value).toBe(""); // NO auto-selection!
+
+    // Confirm button is disabled without explicit selection
+    const confirmBtn = screen.getAllByRole("button", { name: "Подтвердить отсутствие и заменить единицу" }).pop()!;
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(true);
+
+    // Option labels say "— Свободна"
+    expect(screen.getByText("ZMU-CAND-01 — Свободна")).toBeDefined();
+    expect(screen.getByText("ZMU-CAND-02 — Свободна")).toBeDefined();
+
+    // Now select cand-2
+    fireEvent.change(select, { target: { value: "cand-2" } });
+    expect(select.value).toBe("cand-2");
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(false);
+
+    // Change back to placeholder -> confirm button disabled again
+    fireEvent.change(select, { target: { value: "" } });
+    expect(select.value).toBe("");
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(true);
+
+    // Re-select cand-2 -> confirm button enabled
+    fireEvent.change(select, { target: { value: "cand-2" } });
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(false);
+
+    // Click confirm
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(api.resolveInventoryReconciliationCase).toHaveBeenCalledWith("session-1", {
+        unitId: "unit-live-alloc",
+        actionId: "confirm_missing",
+        replacementUnitId: "cand-2",
+      });
+    });
+  });
+
+  it("P2.2B: 409 conflict renders human error message and preserves UI state", async () => {
+    const completedSession: api.ReconciliationSession = {
+      ...mockSession,
+      status: "completed",
+    };
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(completedSession);
+    vi.mocked(api.getAdminInventoryItem).mockResolvedValue({
+      id: "variant-1",
+      productId: "prod-1",
+      productTitle: "Шерстяное пальто",
+      productVariantId: "variant-1",
+      variant: "M · Графит",
+      source: "fbo",
+      totalStock: 5,
+      reservedStock: 0,
+      availableStock: 5,
+      aggregate: { total: 5, reserved: 0, available: 5 },
+      physical: { warehouse: 5, allocated: 0, picked: 0, free: 5, expected: 0, damaged: 0, writtenOff: 0, shipped: 0 },
+      legacy: { onHand: 0, reserved: 0, available: 0 },
+      accountingMode: "serialized",
+      health: { status: "healthy", issues: [] },
+    });
+
+    const plan: api.ReconciliationResolutionPlan = {
+      sessionId: "session-1",
+      cases: [
+        {
+          unitId: "unit-free",
+          unitCode: "ZMU-FREE-1",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Шерстяное пальто",
+            size: "M",
+            color: "Графит",
+          },
+          caseType: "missing_free",
+          title: "Единица не найдена",
+          severity: "warning",
+          explanation: "Ожидаемая единица товара не найдена на складе.",
+          allowedActions: [
+            {
+              id: "confirm_missing",
+              safetyLevel: "MUTATION_REQUIRES_CONFIRMATION",
+              label: "Подтвердить отсутствие",
+              enabled: true,
+            },
+          ],
+        },
+      ],
+    };
+    vi.mocked(api.getReconciliationResolutionPlan).mockResolvedValue(plan);
+
+    const conflictErr = new Error("Конфликт состояния при разрешении расхождения: unit status changed");
+    (conflictErr as any).status = 409;
+    vi.mocked(api.resolveInventoryReconciliationCase).mockRejectedValue(conflictErr);
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("РАЗБОР РАСХОЖДЕНИЙ")).toBeDefined();
+    });
+    fireEvent.click(screen.getByText("РАЗБОР РАСХОЖДЕНИЙ"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Подтвердить отсутствие" })).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить отсутствие" }));
+
+    const confirmBtn = screen.getAllByRole("button", { name: "Подтвердить отсутствие" }).pop()!;
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Состояние изменилось. Обновите данные и повторите действие.")).toBeDefined();
+    });
+  });
+
+  it("P2.2B: completed reconciliation preserves historical evidence and displays dedicated resolution progress", async () => {
+    // 1. Completed session with expected 4, foundExpected 3 -> historical missing count remains 1
+    const completedSession: api.ReconciliationSession = {
+      ...mockSession,
+      status: "completed",
+      expectedCount: 4,
+      foundExpectedCount: 3,
+      unexpectedCount: 1,
+      problemsCount: 1,
+    };
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(completedSession);
+
+    // 2. Resolution summary shows: total 2, resolved 1, manual review 1, actionable 0
+    const plan: api.ReconciliationResolutionPlan = {
+      sessionId: "session-1",
+      resolutionsCount: 1,
+      cases: [
+        {
+          unitId: "unit-resolved",
+          unitCode: "ZMU-RESOLVED-1",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Шерстяное пальто",
+            size: "M",
+            color: "Графит",
+          },
+          caseType: "missing_free",
+          title: "Единица не найдена",
+          severity: "warning",
+          explanation: "Единица списана со склада.",
+          allowedActions: [],
+          resolution: {
+            actionId: "confirm_missing",
+            performedBy: "admin",
+            performedAt: "2026-09-04T10:07:52Z",
+          },
+        },
+        {
+          unitId: "unit-manual",
+          unitCode: "ZMU-MANUAL-1",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Шерстяное пальто",
+            size: "M",
+            color: "Графит",
+          },
+          caseType: "shipped_found",
+          title: "Отгруженная единица обнаружена",
+          severity: "critical",
+          explanation: "Требуется ручной разбор отгрузки.",
+          allowedActions: [
+            {
+              id: "blocked_inspect",
+              label: "Ручная проверка",
+              safetyLevel: "BLOCKED",
+              blockedReason: "Требуется физическая верификация",
+              enabled: false,
+            },
+          ],
+        },
+      ],
+    };
+    vi.mocked(api.getReconciliationResolutionPlan).mockResolvedValue(plan);
+    vi.mocked(api.getInventoryReconciliationReview).mockResolvedValue({
+      expectedFound: [{ unitId: "u1", unitCode: "ZMU-1", classification: "expected_found", snapshotStatus: "warehouse", currentStatus: "warehouse" }],
+      missing: [{ unitId: "unit-resolved", unitCode: "ZMU-RESOLVED-1", classification: "missing", snapshotStatus: "warehouse", currentStatus: "written_off" }],
+      unexpectedFound: [{ unitId: "u-unexp", unitCode: "ZMU-UNEXP", classification: "unexpected_found", snapshotStatus: "sold", currentStatus: "sold" }],
+      changedDuringCount: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    // Verify historical stats: expected 4, found 3, missing 1
+    await waitFor(() => {
+      expect(screen.getByText("Ожидалось").nextElementSibling?.textContent).toBe("4");
+      expect(screen.getByText("Найдено").nextElementSibling?.textContent).toBe("3");
+      expect(screen.getByText("Не найдено").nextElementSibling?.textContent).toBe("1");
+    });
+
+    // Verify separate resolution summary card
+    expect(screen.getByText("Разбор расхождений")).toBeDefined();
+    expect(screen.getByText("Всего расхождений").nextElementSibling?.textContent).toBe("2");
+    expect(screen.getByText("Исправлено").nextElementSibling?.textContent).toBe("1");
+    expect(screen.getByText("Требует ручной проверки").nextElementSibling?.textContent).toBe("1");
+    expect(screen.getByText("Требует действий").nextElementSibling?.textContent).toBe("0");
+
+    // 4. Banner truth: resolved cases = 1 -> "Инвентаризация завершена. Исправлено 1 расхождение."
+    expect(screen.getByText("Инвентаризация завершена. Исправлено 1 расхождение.")).toBeDefined();
+    expect(screen.queryByText("Инвентаризация завершена. Складской учёт не изменён.")).toBeNull();
+
+    // Central card truth: resolvedDiscrepancies > 0 -> "Обнаружены расхождения. Часть расхождений уже исправлена."
+    expect(screen.getByText(/Часть расхождений уже исправлена/)).toBeDefined();
+    expect(screen.queryByText(/Они зафиксированы, но складской учёт не изменён/)).toBeNull();
+  });
+
+  it("P2.2B: 2 resolution audit records for 1 discrepancy case displays '1' in summary and 'Исправлено 1 расхождение' in banner", async () => {
+    const completedSession: api.ReconciliationSession = {
+      ...mockSession,
+      status: "completed",
+    };
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(completedSession);
+    const plan: api.ReconciliationResolutionPlan = {
+      sessionId: "session-1",
+      resolutionsCount: 2, // 2 audit rows (e.g. close_stale_allocation + confirm_missing)
+      resolvedCasesCount: 1, // 1 resolved discrepancy case
+      cases: [
+        {
+          unitId: "unit-resolved",
+          unitCode: "ZMU-RESOLVED-1",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Шерстяное пальто",
+            size: "M",
+            color: "Графит",
+          },
+          caseType: "missing_free",
+          severity: "critical",
+          title: "Отсутствует",
+          explanation: "Unit missing",
+          resolution: {
+            actionId: "confirm_missing",
+            performedBy: "admin",
+            performedAt: "2026-09-04T12:00:00Z",
+          },
+          allowedActions: [],
+        },
+      ],
+    };
+    vi.mocked(api.getReconciliationResolutionPlan).mockResolvedValue(plan);
+    vi.mocked(api.getInventoryReconciliationReview).mockResolvedValue({
+      expectedFound: [],
+      missing: [{ unitId: "unit-resolved", unitCode: "ZMU-RESOLVED-1", classification: "missing", snapshotStatus: "warehouse", currentStatus: "written_off" }],
+      unexpectedFound: [],
+      changedDuringCount: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    // Summary card must say "Исправлено: 1"
+    await waitFor(() => {
+      expect(screen.getByText("Исправлено").nextElementSibling?.textContent).toBe("1");
+    });
+
+    // Banner must say "Инвентаризация завершена. Исправлено 1 расхождение." (NOT 2)
+    expect(screen.getByText("Инвентаризация завершена. Исправлено 1 расхождение.")).toBeDefined();
+    expect(screen.queryByText(/Исправлено 2/)).toBeNull();
+  });
+
+  it("P2.2B: banner shows 'Складской учёт не изменён' when resolutionsCount is 0", async () => {
+    const completedSession: api.ReconciliationSession = {
+      ...mockSession,
+      status: "completed",
+    };
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(completedSession);
+    const plan: api.ReconciliationResolutionPlan = {
+      sessionId: "session-1",
+      resolutionsCount: 0,
+      cases: [],
+    };
+    vi.mocked(api.getReconciliationResolutionPlan).mockResolvedValue(plan);
+
+    vi.mocked(api.getInventoryReconciliationReview).mockResolvedValue({
+      expectedFound: [],
+      missing: [{ unitId: "u-miss", unitCode: "ZMU-MISS", classification: "missing", snapshotStatus: "warehouse", currentStatus: "warehouse" }],
+      unexpectedFound: [],
+      changedDuringCount: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Инвентаризация завершена. Складской учёт не изменён.")).toBeDefined();
+    });
+    expect(screen.queryByText(/Исправлено \d+ расхожден/)).toBeNull();
+
+    // Central card message: 0 resolved -> "Они зафиксированы, но складской учёт не изменён."
+    expect(screen.getByText(/Они зафиксированы, но складской учёт не изменён/)).toBeDefined();
+    expect(screen.queryByText(/Часть расхождений уже исправлена/)).toBeNull();
+  });
+
+  it("P2.2B: confirmation modal displays canonical 29 -> 28, physical 4 -> 3, legacy 25 -> 25 without broken values", async () => {
+    const completedSession: api.ReconciliationSession = {
+      ...mockSession,
+      status: "completed",
+    };
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(completedSession);
+    vi.mocked(api.getAdminInventoryItem).mockResolvedValue({
+      id: "variant-1",
+      productId: "prod-1",
+      productTitle: "Шерстяное пальто",
+      productVariantId: "variant-1",
+      variant: "M · Графит",
+      source: "fbo",
+      totalStock: 29,
+      reservedStock: 2,
+      availableStock: 27,
+      aggregate: { total: 29, reserved: 2, available: 27 },
+      physical: { warehouse: 4, allocated: 0, picked: 0, free: 4, expected: 0, damaged: 0, writtenOff: 0, shipped: 0 },
+      legacy: { onHand: 25, reserved: 2, available: 23 },
+      accountingMode: "mixed",
+      health: { status: "healthy", issues: [] },
+    });
+
+    const plan: api.ReconciliationResolutionPlan = {
+      sessionId: "session-1",
+      cases: [
+        {
+          unitId: "unit-writeoff",
+          unitCode: "ZMU-XUJBQQ5ADSW4BWTX",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Шерстяное пальто",
+            size: "M",
+            color: "Графит",
+          },
+          caseType: "missing_free",
+          title: "Единица не найдена",
+          severity: "warning",
+          explanation: "Ожидаемая единица товара не найдена на складе.",
+          allowedActions: [
+            {
+              id: "confirm_missing",
+              safetyLevel: "MUTATION_REQUIRES_CONFIRMATION",
+              label: "Подтвердить отсутствие",
+              enabled: true,
+            },
+          ],
+        },
+      ],
+    };
+    vi.mocked(api.getReconciliationResolutionPlan).mockResolvedValue(plan);
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "РАЗБОР РАСХОЖДЕНИЙ" })).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "РАЗБОР РАСХОЖДЕНИЙ" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Подтвердить отсутствие" })).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить отсутствие" }));
+
+    // Verify modal displays exact canonical stock impact
+    await waitFor(() => {
+      expect(screen.getByText("ОБЩИЙ ОСТАТОК")).toBeDefined();
+      expect(screen.getByText(/29\s*→/)).toBeDefined();
+
+      expect(screen.getByText("ФИЗИЧЕСКИЕ ZMU НА СКЛАДЕ")).toBeDefined();
+      expect(screen.getByText(/4\s*→/)).toBeDefined();
+
+      expect(screen.getByText("БЕЗ ZMU")).toBeDefined();
+      expect(screen.getByText("25 → 25")).toBeDefined();
+
+      expect(screen.getByText("-1")).toBeDefined();
+    });
+
+    // Ensure broken legacy format "— -1" is never rendered
+    expect(screen.queryByText(/—\s*-1/)).toBeNull();
+    expect(screen.queryByText(/Текущий общий остаток: 4 шт./)).toBeNull();
+  });
+
+  it("P2.2B: real live-allocation replacement modal safety polish (disabled button, truthful stock impact, free candidate labeling, replacement preview)", async () => {
+    const completedSession: api.ReconciliationSession = {
+      ...mockSession,
+      status: "completed",
+      expectedCount: 4,
+    };
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(completedSession);
+    vi.mocked(api.getAdminInventoryItem).mockResolvedValue({
+      id: "variant-1",
+      productId: "prod-1",
+      productTitle: "Dev Wool Coat",
+      productVariantId: "variant-1",
+      variant: "M · Graphite",
+      source: "fbo",
+      totalStock: 28,
+      reservedStock: 1,
+      availableStock: 27,
+      aggregate: { total: 28, reserved: 1, available: 27 },
+      accountingMode: "mixed",
+      physical: {
+        warehouse: 3,
+        allocated: 1,
+        picked: 0,
+        free: 2,
+        expected: 1,
+        damaged: 1,
+        writtenOff: 1,
+        shipped: 2,
+      },
+      legacy: {
+        onHand: 25,
+        reserved: 0,
+        available: 25,
+      },
+      health: {
+        status: "healthy",
+        issues: [],
+      },
+    });
+
+    const plan: api.ReconciliationResolutionPlan = {
+      sessionId: "session-1",
+      cases: [
+        {
+          unitId: "unit-wjef",
+          unitCode: "ZMU-WJEFXRQDGPYY6JF7",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Dev Wool Coat",
+            size: "M",
+            color: "Graphite",
+          },
+          caseType: "missing_live_allocated",
+          title: "Не найдена — назначена заказу",
+          severity: "high",
+          explanation: "Единица назначена заказу ORD-100196.",
+          historicalContext: {
+            orderNumber: "ORD-100196",
+            orderStatus: "assembling",
+          },
+          replacementCandidates: [
+            {
+              unitId: "cand-brfe",
+              unitCode: "ZMU-BRFEA757ZAMUQYVW",
+              variantId: "variant-1",
+              status: "warehouse",
+              createdAt: "2026-09-01T10:00:00Z",
+            },
+            {
+              unitId: "cand-zyn",
+              unitCode: "ZMU-ZYN3FBJXEWUH4GQZ",
+              variantId: "variant-1",
+              status: "warehouse",
+              createdAt: "2026-09-02T10:00:00Z",
+            },
+          ],
+          allowedActions: [
+            {
+              id: "confirm_missing",
+              safetyLevel: "MUTATION_REQUIRES_CONFIRMATION",
+              label: "Подтвердить отсутствие и заменить единицу",
+              enabled: true,
+            },
+          ],
+        },
+      ],
+    };
+    vi.mocked(api.getReconciliationResolutionPlan).mockResolvedValue(plan);
+    vi.mocked(api.getInventoryReconciliationReview).mockResolvedValue({
+      expectedFound: [],
+      missing: [{ unitId: "unit-wjef", unitCode: "ZMU-WJEFXRQDGPYY6JF7", classification: "missing", snapshotStatus: "warehouse", currentStatus: "warehouse" }],
+      unexpectedFound: [],
+      changedDuringCount: [],
+    });
+    vi.mocked(api.resolveInventoryReconciliationCase).mockResolvedValue({
+      sessionId: "session-1",
+      cases: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "РАЗБОР РАСХОЖДЕНИЙ" })).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "РАЗБОР РАСХОЖДЕНИЙ" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Подтвердить отсутствие и заменить единицу" })).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить отсутствие и заменить единицу" }));
+
+    // Verify modal elements
+    await waitFor(() => {
+      expect(screen.getByText(/Отсутствующая единица будет списана/)).toBeDefined();
+      expect(screen.getByText(/Выбранная свободная ZMU будет назначена заказу ORD-100196/)).toBeDefined();
+      expect(screen.getByText(/Количество зарезервированного товара для заказа не изменится/)).toBeDefined();
+    });
+
+    // Stock impact checks: 28 -> 27, 3 -> 2, 25 -> 25, 1 -> 1
+    expect(screen.getByText("ОБЩИЙ ОСТАТОК")).toBeDefined();
+    expect(screen.getByText(/28\s*→/)).toBeDefined();
+    expect(screen.getByText("ФИЗИЧЕСКИЕ ZMU НА СКЛАДЕ")).toBeDefined();
+    expect(screen.getByText(/3\s*→/)).toBeDefined();
+    expect(screen.getByText("БЕЗ ZMU")).toBeDefined();
+    expect(screen.getByText("25 → 25")).toBeDefined();
+    expect(screen.getByText("В РЕЗЕРВЕ")).toBeDefined();
+    expect(screen.getByText("1 → 1")).toBeDefined();
+
+    // Check candidate options label format: "— Свободна"
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    expect(select.value).toBe(""); // No auto-selection!
+    expect(screen.getByText("ZMU-BRFEA757ZAMUQYVW — Свободна")).toBeDefined();
+    expect(screen.getByText("ZMU-ZYN3FBJXEWUH4GQZ — Свободна")).toBeDefined();
+
+    // Confirm button is disabled without selection
+    const confirmBtn = screen.getAllByRole("button", { name: "Подтвердить отсутствие и заменить единицу" }).pop()!;
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(true);
+
+    // No replacement preview before selection
+    expect(screen.queryByText("ЗАМЕНА")).toBeNull();
+
+    // Select first candidate
+    fireEvent.change(select, { target: { value: "cand-brfe" } });
+    expect(select.value).toBe("cand-brfe");
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(false);
+
+    // Replacement preview is rendered: ZMU-WJEF... -> ZMU-BRFE...
+    expect(screen.getByText("ЗАМЕНА")).toBeDefined();
+    const previewBrfe = screen.getByText("ЗАМЕНА").parentElement!;
+    expect(previewBrfe.textContent).toContain("ZMU-WJEFXRQDGPYY6JF7");
+    expect(previewBrfe.textContent).toContain("ZMU-BRFEA757ZAMUQYVW");
+
+    // Change back to placeholder
+    fireEvent.change(select, { target: { value: "" } });
+    expect(select.value).toBe("");
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText("ЗАМЕНА")).toBeNull();
+
+    // Select second candidate
+    fireEvent.change(select, { target: { value: "cand-zyn" } });
+    expect(select.value).toBe("cand-zyn");
+    expect((confirmBtn as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText("ЗАМЕНА")).toBeDefined();
+    const previewZyn = screen.getByText("ЗАМЕНА").parentElement!;
+    expect(previewZyn.textContent).toContain("ZMU-WJEFXRQDGPYY6JF7");
+    expect(previewZyn.textContent).toContain("ZMU-ZYN3FBJXEWUH4GQZ");
+
+    // Submit
+    fireEvent.click(confirmBtn);
+    await waitFor(() => {
+      expect(api.resolveInventoryReconciliationCase).toHaveBeenCalledWith("session-1", {
+        unitId: "unit-wjef",
+        actionId: "confirm_missing",
+        replacementUnitId: "cand-zyn",
+      });
+    });
+  });
+
+  describe("formatResolvedDiscrepanciesBanner pluralization", () => {
+    it("formats 0 count as 'Инвентаризация завершена. Складской учёт не изменён.'", () => {
+      expect(formatResolvedDiscrepanciesBanner(0)).toBe("Инвентаризация завершена. Складской учёт не изменён.");
+      expect(formatResolvedDiscrepanciesBanner(-1)).toBe("Инвентаризация завершена. Складской учёт не изменён.");
+    });
+
+    it("formats 1 count as 'Инвентаризация завершена. Исправлено 1 расхождение.'", () => {
+      expect(formatResolvedDiscrepanciesBanner(1)).toBe("Инвентаризация завершена. Исправлено 1 расхождение.");
+      expect(formatResolvedDiscrepanciesBanner(21)).toBe("Инвентаризация завершена. Исправлено 21 расхождение.");
+      expect(formatResolvedDiscrepanciesBanner(101)).toBe("Инвентаризация завершена. Исправлено 101 расхождение.");
+    });
+
+    it("formats 2-4 count as 'Инвентаризация завершена. Исправлено N расхождения.'", () => {
+      expect(formatResolvedDiscrepanciesBanner(2)).toBe("Инвентаризация завершена. Исправлено 2 расхождения.");
+      expect(formatResolvedDiscrepanciesBanner(3)).toBe("Инвентаризация завершена. Исправлено 3 расхождения.");
+      expect(formatResolvedDiscrepanciesBanner(4)).toBe("Инвентаризация завершена. Исправлено 4 расхождения.");
+      expect(formatResolvedDiscrepanciesBanner(22)).toBe("Инвентаризация завершена. Исправлено 22 расхождения.");
+    });
+
+    it("formats 5-20 and teens count as 'Инвентаризация завершена. Исправлено N расхождений.'", () => {
+      expect(formatResolvedDiscrepanciesBanner(5)).toBe("Инвентаризация завершена. Исправлено 5 расхождений.");
+      expect(formatResolvedDiscrepanciesBanner(11)).toBe("Инвентаризация завершена. Исправлено 11 расхождений.");
+      expect(formatResolvedDiscrepanciesBanner(12)).toBe("Инвентаризация завершена. Исправлено 12 расхождений.");
+      expect(formatResolvedDiscrepanciesBanner(14)).toBe("Инвентаризация завершена. Исправлено 14 расхождений.");
+      expect(formatResolvedDiscrepanciesBanner(20)).toBe("Инвентаризация завершена. Исправлено 20 расхождений.");
+    });
+  });
+
+  describe("Resolution summary mutually exclusive buckets contract", () => {
+    const unresolvedMissingCase: api.ReconciliationResolutionCase = {
+      unitId: "u-missing",
+      unitCode: "ZMU-MISSING",
+      variantId: "v-1",
+      variant: { productTitle: "Coat" },
+      caseType: "missing_free",
+      title: "Единица не найдена",
+      severity: "warning",
+      explanation: "Не найдена",
+      allowedActions: [
+        { id: "confirm_missing", label: "Подтвердить отсутствие", safetyLevel: "MUTATION_REQUIRES_CONFIRMATION", enabled: true },
+      ],
+    };
+
+    const shippedFoundCase: api.ReconciliationResolutionCase = {
+      unitId: "u-shipped",
+      unitCode: "ZMU-C5MXPTQ7WH8WZYQP",
+      variantId: "v-1",
+      variant: { productTitle: "Coat" },
+      caseType: "shipped_found",
+      title: "Найдена, хотя числится отгруженной",
+      severity: "critical",
+      explanation: "Отгруженная единица найдена на складе",
+      allowedActions: [
+        { id: "open_order", label: "Открыть заказ", safetyLevel: "WORKFLOW_HANDOFF", enabled: true },
+        { id: "investigate_shipped_found", label: "Ручная проверка", safetyLevel: "BLOCKED", enabled: false },
+        { id: "open_unit_history", label: "История движения", safetyLevel: "WORKFLOW_HANDOFF", enabled: true },
+      ],
+    };
+
+    const resolvedCase: api.ReconciliationResolutionCase = {
+      unitId: "u-resolved",
+      unitCode: "ZMU-XUJBQQ5ADSW4BWTX",
+      variantId: "v-1",
+      variant: { productTitle: "Coat" },
+      caseType: "missing_free",
+      title: "Единица не найдена",
+      severity: "critical",
+      explanation: "Списана со склада",
+      allowedActions: [],
+      resolution: {
+        actionId: "confirm_missing",
+        performedBy: "admin",
+        performedAt: "2026-09-04T13:07:52Z",
+      },
+    };
+
+    it("unresolved missing_free -> actionRequired", () => {
+      const bucket = classifyResolutionBucket(unresolvedMissingCase);
+      expect(bucket).toBe("action_required");
+      expect(bucket).not.toBe("resolved");
+      expect(bucket).not.toBe("manual_review");
+    });
+
+    it("shipped_found -> manualReview only (even with enabled workflow actions)", () => {
+      const bucket = classifyResolutionBucket(shippedFoundCase);
+      expect(bucket).toBe("manual_review");
+      expect(bucket).not.toBe("action_required");
+      expect(bucket).not.toBe("resolved");
+    });
+
+    it("resolved case -> resolved only", () => {
+      const bucket = classifyResolutionBucket(resolvedCase);
+      expect(bucket).toBe("resolved");
+      expect(bucket).not.toBe("manual_review");
+      expect(bucket).not.toBe("action_required");
+    });
+
+    it("no case belongs to more than one summary bucket and all buckets are mutually exclusive", () => {
+      const testCases = [unresolvedMissingCase, shippedFoundCase, resolvedCase];
+      testCases.forEach((c) => {
+        const bucket = classifyResolutionBucket(c);
+        const validBuckets = ["resolved", "manual_review", "action_required"];
+        expect(validBuckets).toContain(bucket);
+      });
+    });
+
+    it("real semantic session: total=2, resolved=1, manualReview=1, actionRequired=0 (1 + 1 + 0 == 2)", () => {
+      const realCases = [shippedFoundCase, resolvedCase];
+      const total = realCases.length;
+      const resolved = realCases.filter((c) => classifyResolutionBucket(c) === "resolved").length;
+      const manualReview = realCases.filter((c) => classifyResolutionBucket(c) === "manual_review").length;
+      const actionRequired = realCases.filter((c) => classifyResolutionBucket(c) === "action_required").length;
+
+      expect(total).toBe(2);
+      expect(resolved).toBe(1);
+      expect(manualReview).toBe(1);
+      expect(actionRequired).toBe(0);
+
+      // Invariant assertion:
+      expect(resolved + manualReview + actionRequired).toBe(total);
+      expect(1 + 1 + 0).toBe(2);
+    });
   });
 });

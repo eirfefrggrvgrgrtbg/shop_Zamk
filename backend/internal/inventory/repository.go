@@ -1175,6 +1175,12 @@ func businessCausalOrder(t string) int {
 		return 110
 	case "return_received", "return_damaged":
 		return 120
+	case "reconciliation_stale_allocation_released":
+		return 36
+	case "reconciliation_replacement_allocated":
+		return 37
+	case "reconciliation_missing_written_off":
+		return 125
 	default:
 		return 999
 	}
@@ -1578,7 +1584,14 @@ func (r *Repository) GetAdminInventoryUnitTraceability(ctx context.Context, unit
 		if ar.releasedAt != nil {
 			reasonDesc := "Резерв единицы освобождён"
 			if ar.releaseReason != nil && *ar.releaseReason != "" {
-				reasonDesc = fmt.Sprintf("Резерв освобождён: %s", *ar.releaseReason)
+				switch *ar.releaseReason {
+				case "inventory_reconciliation":
+					reasonDesc = "Резерв освобождён в ходе инвентаризации"
+				case "order_cancelled":
+					reasonDesc = "Резерв освобождён: заказ отменён"
+				default:
+					reasonDesc = fmt.Sprintf("Резерв освобождён: %s", *ar.releaseReason)
+				}
 			}
 			timeline = append(timeline, AdminInventoryUnitTimelineEvent{
 				ID:              fmt.Sprintf("rel-%s", ar.allocationID.String()),
@@ -1715,6 +1728,126 @@ func (r *Repository) GetAdminInventoryUnitTraceability(ctx context.Context, unit
 					Link:            fmt.Sprintf("/returns?id=%s", rr.returnID.String()),
 				})
 			}
+		}
+	}
+
+	// 4. Reconciliation resolutions
+	reconQuery := `
+		SELECT
+			irr.id, irr.session_id, irr.inventory_unit_id, irr.case_type, irr.action_id,
+			irr.performed_by, irr.performed_at, irr.related_allocation_id, irr.replacement_inventory_unit_id,
+			irr.note, COALESCE(u.name, '') as staff_name,
+			COALESCE(o.order_number, '') as order_number
+		FROM inventory_reconciliation_resolutions irr
+		LEFT JOIN users u ON u.id = irr.performed_by
+		LEFT JOIN order_item_allocations oia ON oia.id = irr.related_allocation_id
+		LEFT JOIN order_items oi ON oi.id = oia.order_item_id
+		LEFT JOIN orders o ON o.id = oi.order_id
+		WHERE irr.inventory_unit_id = $1 OR irr.replacement_inventory_unit_id = $1
+		ORDER BY irr.performed_at ASC
+	`
+	reconRows, err := r.db.Query(ctx, reconQuery, uID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unit reconciliation resolutions: %w", err)
+	}
+	defer reconRows.Close()
+
+	type reconRow struct {
+		id                         uuid.UUID
+		sessionID                  uuid.UUID
+		inventoryUnitID            uuid.UUID
+		caseType                   string
+		actionID                   string
+		performedBy                uuid.UUID
+		performedAt                time.Time
+		relatedAllocationID        *uuid.UUID
+		replacementInventoryUnitID *uuid.UUID
+		note                       *string
+		staffName                  string
+		orderNumber                string
+	}
+	var reconList []reconRow
+	for reconRows.Next() {
+		var rr reconRow
+		if err := reconRows.Scan(
+			&rr.id, &rr.sessionID, &rr.inventoryUnitID, &rr.caseType, &rr.actionID,
+			&rr.performedBy, &rr.performedAt, &rr.relatedAllocationID, &rr.replacementInventoryUnitID,
+			&rr.note, &rr.staffName, &rr.orderNumber,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan recon row: %w", err)
+		}
+		reconList = append(reconList, rr)
+	}
+
+	for _, rr := range reconList {
+		sessionIDCopy := rr.sessionID
+		refNum := fmt.Sprintf("Сверка %s", rr.sessionID.String()[:8])
+		link := fmt.Sprintf("/inventory/reconciliation/%s", rr.sessionID.String())
+
+		if rr.inventoryUnitID == uID {
+			if rr.actionID == "close_stale_allocation" {
+				desc := "Старое зависшее назначение освобождено по результатам инвентаризации"
+				if rr.orderNumber != "" {
+					desc = fmt.Sprintf("Старое зависшее назначение заказа %s освобождено по результатам инвентаризации", rr.orderNumber)
+				}
+				if rr.note != nil && *rr.note != "" {
+					desc += fmt.Sprintf(" (%s)", *rr.note)
+				}
+				timeline = append(timeline, AdminInventoryUnitTimelineEvent{
+					ID:              fmt.Sprintf("recon-stale-%s", rr.id.String()),
+					Type:            "reconciliation_stale_allocation_released",
+					Category:        "commitment",
+					EventName:       "Старое назначение освобождено",
+					Description:     desc,
+					Timestamp:       rr.performedAt,
+					SourceEntity:    "inventory_reconciliation_resolutions",
+					ReferenceNumber: refNum,
+					ReferenceID:     &sessionIDCopy,
+					ActorRole:       "staff",
+					ActorName:       rr.staffName,
+					Link:            link,
+				})
+			} else if rr.actionID == "confirm_missing" {
+				desc := "Единица признана отсутствующей и списана по результатам инвентаризации"
+				if rr.note != nil && *rr.note != "" {
+					desc += fmt.Sprintf(" (%s)", *rr.note)
+				}
+				timeline = append(timeline, AdminInventoryUnitTimelineEvent{
+					ID:              fmt.Sprintf("recon-missing-%s", rr.id.String()),
+					Type:            "reconciliation_missing_written_off",
+					Category:        "physical",
+					EventName:       "Списана по результатам инвентаризации",
+					Description:     desc,
+					Timestamp:       rr.performedAt,
+					SourceEntity:    "inventory_reconciliation_resolutions",
+					ReferenceNumber: refNum,
+					ReferenceID:     &sessionIDCopy,
+					ActorRole:       "staff",
+					ActorName:       rr.staffName,
+					Link:            link,
+				})
+			}
+		}
+
+		if rr.replacementInventoryUnitID != nil && *rr.replacementInventoryUnitID == uID {
+			desc := "Единица назначена заказу взамен отсутствующей по результатам инвентаризации"
+			if rr.note != nil && *rr.note != "" {
+				desc += fmt.Sprintf(" (%s)", *rr.note)
+			}
+			timeline = append(timeline, AdminInventoryUnitTimelineEvent{
+				ID:              fmt.Sprintf("recon-repl-%s", rr.id.String()),
+				Type:            "reconciliation_replacement_allocated",
+				Category:        "commitment",
+				EventName:       "Назначена заказу после инвентаризации",
+				Description:     desc,
+				Timestamp:       rr.performedAt,
+				SourceEntity:    "inventory_reconciliation_resolutions",
+				ReferenceNumber: refNum,
+				ReferenceID:     &sessionIDCopy,
+				ActorRole:       "staff",
+				ActorName:       rr.staffName,
+				Link:            link,
+			})
 		}
 	}
 

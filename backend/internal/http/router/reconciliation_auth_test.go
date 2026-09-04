@@ -143,4 +143,51 @@ func TestReconciliationEndpoints_RoutingAndRBAC(t *testing.T) {
 		router.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	}
+
+	// 5. POST /api/admin/inventory/reconciliations/{id}/resolve - Unauthenticated -> 401
+	{
+		dummySessionID := uuid.New()
+		body, _ := json.Marshal(map[string]interface{}{"actionId": "confirm_missing", "unitId": uuid.New()})
+		req := httptest.NewRequest("POST", fmt.Sprintf("/api/admin/inventory/reconciliations/%s/resolve", dummySessionID), bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	}
+
+	// 6. POST /api/admin/inventory/reconciliations/{id}/resolve - Missing inventory.adjust -> 403
+	{
+		dummySessionID := uuid.New()
+		body, _ := json.Marshal(map[string]interface{}{"actionId": "confirm_missing", "unitId": uuid.New()})
+		req := httptest.NewRequest("POST", fmt.Sprintf("/api/admin/inventory/reconciliations/%s/resolve", dummySessionID), bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", tokenNoPerm))
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	}
+
+	// 7. POST /api/admin/inventory/reconciliations/{id}/resolve - Missing actionId -> 400
+	{
+		dummySessionID := uuid.New()
+		body, _ := json.Marshal(map[string]interface{}{"unitId": uuid.New()})
+		req := httptest.NewRequest("POST", fmt.Sprintf("/api/admin/inventory/reconciliations/%s/resolve", dummySessionID), bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", tokenAdjust))
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	}
+
+	// 8. POST /api/admin/inventory/reconciliations/{id}/resolve - Nonexistent session -> 404
+	{
+		dummySessionID := uuid.New()
+		body, _ := json.Marshal(map[string]interface{}{"actionId": "confirm_missing", "unitId": uuid.New()})
+		req := httptest.NewRequest("POST", fmt.Sprintf("/api/admin/inventory/reconciliations/%s/resolve", dummySessionID), bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", tokenAdjust))
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	}
 }

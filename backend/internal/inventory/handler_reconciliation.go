@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -260,6 +261,44 @@ func (h *Handler) GetReconciliationResolutionPlan(w http.ResponseWriter, r *http
 			return
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(plan)
+}
+
+func (h *Handler) ResolveReconciliationCase(w http.ResponseWriter, r *http.Request) {
+	sessionIDParam := chi.URLParam(r, "id")
+	sessionID, err := uuid.Parse(sessionIDParam)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "invalid session id")
+		return
+	}
+
+	var req ResolveReconciliationCaseRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_body", "invalid JSON payload")
+		return
+	}
+
+	if strings.TrimSpace(req.ActionID) == "" || (req.UnitID == nil && strings.TrimSpace(req.UnitCode) == "") {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "actionId and (unitId or unitCode) are required")
+		return
+	}
+
+	adminID, _ := r.Context().Value("userID").(uuid.UUID)
+	plan, err := h.service.ResolveReconciliationCase(r.Context(), sessionID, adminID, req)
+	if err != nil {
+		if errors.Is(err, ErrReconciliationNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "reconciliation session not found")
+			return
+		}
+		if errors.Is(err, ErrReconciliationConflict) {
+			h.writeError(w, http.StatusConflict, "conflict", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
 

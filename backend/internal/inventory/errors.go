@@ -22,4 +22,5 @@ var (
 	ErrReconciliationNotInProgress    = errors.New("Сканирование возможно только в активной сессии.")
 	ErrInvalidReconciliationState     = errors.New("Неверное состояние сессии для этой операции.")
 	ErrReconciliationNotFound         = errors.New("Сессия инвентаризации не найдена")
+	ErrReconciliationConflict         = errors.New("Конфликт состояния при разрешении расхождения")
 )

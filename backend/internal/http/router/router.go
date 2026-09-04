@@ -493,6 +493,7 @@ func New(
 		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/reconciliations/{id}/cancel", inventoryHandler.CancelReconciliation)
 		r.With(perm("inventory.read")).Get("/inventory/reconciliations/{id}/review", inventoryHandler.GetReconciliationReview)
 		r.With(perm("inventory.read")).Get("/inventory/reconciliations/{id}/resolution-plan", inventoryHandler.GetReconciliationResolutionPlan)
+		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/reconciliations/{id}/resolve", inventoryHandler.ResolveReconciliationCase)
 
 		r.With(perm("inventory.read")).Get("/inventory/reconciliations/{id}", inventoryHandler.GetReconciliation)
 		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/reconciliations/{id}/scan", inventoryHandler.ScanReconciliation)

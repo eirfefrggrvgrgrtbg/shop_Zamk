@@ -194,6 +194,32 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 		)
 	}
 
+	// In-process order expiration fallback for local development and test environments where cmd/worker is not running.
+	// In production, order expiration is canonically owned and executed exclusively by cmd/worker.
+	if cfg.App.Env == "local" || cfg.App.Env == "test" {
+		expirationInterval := cfg.Worker.OrderExpirationIntervalSeconds
+		if expirationInterval <= 0 {
+			expirationInterval = 30
+		}
+		go func() {
+			ticker := time.NewTicker(time.Duration(expirationInterval) * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-workerCtx.Done():
+					return
+				case <-ticker.C:
+					timeoutMinutes := cfg.Worker.OrderPaymentTimeoutMinutes
+					if timeoutMinutes <= 0 {
+						timeoutMinutes = 30
+					}
+					olderThan := time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute)
+					_, _ = ordersService.ExpireAwaitingPaymentOrders(workerCtx, olderThan, 100)
+				}
+			}
+		}()
+	}
+
 	analyticsRepo := selleranalytics.NewRepository(pgClient.Pool)
 	analyticsSvc := selleranalytics.NewService(analyticsRepo)
 	analyticsHandler := selleranalytics.NewHandler(analyticsSvc, analyticsRepo)

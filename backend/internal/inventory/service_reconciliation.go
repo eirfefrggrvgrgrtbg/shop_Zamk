@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Service) StartReconciliationSession(ctx context.Context, sessionID, variantID, startedBy uuid.UUID) error {
@@ -51,5 +52,16 @@ func (s *Service) ListReconciliationSessionsByVariant(ctx context.Context, varia
 }
 
 func (s *Service) GetReconciliationResolutionPlan(ctx context.Context, sessionID uuid.UUID) (*ReconciliationResolutionPlanDTO, error) {
+	return s.repo.GetReconciliationResolutionPlan(ctx, sessionID)
+}
+
+func (s *Service) ResolveReconciliationCase(ctx context.Context, sessionID uuid.UUID, adminID uuid.UUID, req ResolveReconciliationCaseRequest) (*ReconciliationResolutionPlanDTO, error) {
+	err := s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.repo.WithTx(tx)
+		return txRepo.resolveReconciliationCaseTx(ctx, tx, sessionID, adminID, req)
+	})
+	if err != nil {
+		return nil, err
+	}
 	return s.repo.GetReconciliationResolutionPlan(ctx, sessionID)
 }
