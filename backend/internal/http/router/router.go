@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -25,6 +26,7 @@ import (
 	appMiddleware "github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/middleware"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payments"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
@@ -80,8 +82,22 @@ func New(
 	suppliesHandler *supplies.Handler,
 	sellerAnalyticsHandler *selleranalytics.Handler,
 	testLabHandler *testlab.Handler,
+	obs ...*observability.Provider,
 ) *chi.Mux {
 	r := chi.NewRouter()
+
+	var obsProvider *observability.Provider
+	if len(obs) > 0 && obs[0] != nil {
+		obsProvider = obs[0]
+	} else {
+		obsCfg := observability.Config{
+			ServiceName: cfg.Observability.ServiceName,
+			Environment: cfg.Observability.Environment,
+			Enabled:     false,
+		}
+		obsProvider, _ = observability.Init(context.Background(), obsCfg, logger)
+	}
+
 	rateLimiter := ratelimit.NewMiddleware(
 		ratelimit.New(rdb.Client),
 		cfg.RateLimit.Enabled,
@@ -101,10 +117,8 @@ func New(
 		return appMiddleware.RequirePermission(staffSvc, p)
 	}
 
-	r.Use(middleware.RequestID)
+	r.Use(observability.Middleware(obsProvider, logger))
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
 
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

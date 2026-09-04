@@ -23,6 +23,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/router"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payments"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
@@ -41,7 +42,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
 
-func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Client, redisClient *redis.Client, logger *slog.Logger) (*chi.Mux, func()) {
+func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Client, redisClient *redis.Client, logger *slog.Logger, obs ...*observability.Provider) (*chi.Mux, func()) {
 	userRepo := users.NewRepository(pgClient.Pool)
 	authRepo := auth.NewRepository(pgClient)
 	tokenService := auth.NewTokenService(cfg.JWT.AccessTokenSecret, cfg.JWT.RefreshTokenSecret, cfg.JWT.AccessTokenTTLMinutes)
@@ -243,7 +244,12 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 		testLabHandler = testlab.NewHandler(testLabSvc, cfg.App.Env)
 	}
 
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, searchHandler, auditLogHandler, deliveryHandler, suppliesHandler, analyticsHandler, testLabHandler)
+	var obsProvider *observability.Provider
+	if len(obs) > 0 {
+		obsProvider = obs[0]
+	}
+
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, searchHandler, auditLogHandler, deliveryHandler, suppliesHandler, analyticsHandler, testLabHandler, obsProvider)
 
 	return r, cancelWorkers
 }

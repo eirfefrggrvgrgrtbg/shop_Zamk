@@ -4,6 +4,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 )
 
 type Config struct {
@@ -16,8 +18,9 @@ type Config struct {
 	CORS      CORSConfig
 	TBank     TBankConfig
 	Worker    WorkerConfig
-	RateLimit RateLimitConfig
-	CDEK      CDEKConfig
+	RateLimit     RateLimitConfig
+	CDEK          CDEKConfig
+	Observability ObservabilityConfig
 }
 
 type AppConfig struct {
@@ -119,6 +122,8 @@ type CDEKConfig struct {
 	APIBaseURL   string
 }
 
+type ObservabilityConfig = observability.Config
+
 func Load() (*Config, error) {
 	cfg := &Config{
 		App: AppConfig{
@@ -206,6 +211,14 @@ func Load() (*Config, error) {
 			ClientID:     getEnv("CDEK_CLIENT_ID", ""),
 			ClientSecret: getEnv("CDEK_CLIENT_SECRET", ""),
 			APIBaseURL:   getEnv("CDEK_API_BASE_URL", "https://api.edu.cdek.ru/v2"),
+		},
+		Observability: ObservabilityConfig{
+			ServiceName:    getEnv("OTEL_SERVICE_NAME", "zamk-api"),
+			Environment:    getEnv("ZAMK_ENVIRONMENT", getEnv("APP_ENV", "local")),
+			ServiceVersion: getEnv("SERVICE_VERSION", "1.0.0"),
+			OTLPEndpoint:   getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
+			OTLPInsecure:   getEnvAsBool("OTEL_EXPORTER_OTLP_INSECURE", true),
+			Enabled:        getEnvAsBool("OBSERVABILITY_ENABLED", true),
 		},
 	}
 
