@@ -1,0 +1,105 @@
+version: '3.8'
+
+networks:
+  backend_default:
+    external: true
+
+volumes:
+  grafana_data:
+  prometheus_data:
+  loki_data:
+  tempo_data:
+
+services:
+  grafana:
+    image: grafana/grafana:13.2.1
+    container_name: zamk_grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    ports:
+      - "127.0.0.1:3003:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    networks:
+      - backend_default
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  loki:
+    image: grafana/loki:3.7.7
+    container_name: zamk_loki
+    command: -config.file=/etc/loki/loki.yaml
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./loki/loki.yaml:/etc/loki/loki.yaml
+      - loki_data:/loki
+    networks:
+      - backend_default
+
+  tempo:
+    image: grafana/tempo:3.0.3
+    container_name: zamk_tempo
+    command: -config.file=/etc/tempo/tempo.yaml
+    ports:
+      - "127.0.0.1:3200:3200"
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml
+      - tempo_data:/var/tempo
+    networks:
+      - backend_default
+
+  prometheus:
+    image: prom/prometheus:v3.13.2
+    container_name: zamk_prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-remote-write-receiver'
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - backend_default
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:9090/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  alloy:
+    image: grafana/alloy:v1.19.2
+    container_name: zamk_alloy
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+    ports:
+      - "127.0.0.1:12345:12345"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy
+    networks:
+      - backend_default
+
+  minio-mc:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: zamk_minio_mc
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc alias set zamk_minio http://minio:9000 zamk_minio zamk_minio_password) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc mb zamk_minio/zamk-loki --ignore-existing;
+      /usr/bin/mc mb zamk_minio/zamk-tempo --ignore-existing;
+      exit 0;
+      "
+    networks:
+      - backend_default

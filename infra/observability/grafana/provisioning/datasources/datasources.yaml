@@ -1,0 +1,49 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://zamk_prometheus:9090
+    uid: prometheus
+    isDefault: true
+    jsonData:
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://zamk_loki:3100
+    uid: loki
+    jsonData:
+      derivedFields:
+        - datasourceUid: tempo
+          matcherType: regex
+          matcherRegex: '"traceid":"([a-fA-F0-9]+)"'
+          name: TraceID
+          url: '$${__value.raw}'
+          urlDisplayLabel: 'View in Tempo'
+
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://zamk_tempo:3200
+    uid: tempo
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: 'loki'
+        tags:
+          - key: 'service.name'
+            value: 'service_name'
+        customQuery: true
+        query: '{service_name="$${__tags[\"service.name\"]}"} |~ "$${__trace.traceId}"'
+      tracesToMetrics:
+        datasourceUid: 'prometheus'
+        tags:
+          - key: 'service.name'
+            value: 'service_name'
+        queries:
+          - name: 'Request Rate'
+            query: 'sum(rate(http_requests_total{service_name="$${__tags[\"service.name\"]}"}[5m]))'

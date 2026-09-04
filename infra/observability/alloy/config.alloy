@@ -1,0 +1,85 @@
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    metrics = [otelcol.exporter.prometheus.default.input]
+    logs    = [otelcol.processor.transform.add_level.input]
+    traces  = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.processor.transform "add_level" {
+  error_mode = "ignore"
+
+  log_statements {
+    context = "log"
+    statements = [
+      "set(log.attributes[\"level\"], log.severity_text) where log.attributes[\"level\"] == nil and log.severity_text != \"\"",
+      "set(log.attributes[\"level\"], \"INFO\") where log.attributes[\"level\"] == nil",
+    ]
+  }
+
+  output {
+    logs = [otelcol.processor.attributes.loki_labels.input]
+  }
+}
+
+otelcol.processor.attributes "loki_labels" {
+  action {
+    key    = "loki.resource.labels"
+    action = "insert"
+    value  = "service.name, environment"
+  }
+  action {
+    key    = "loki.attribute.labels"
+    action = "insert"
+    value  = "environment, component, level"
+  }
+
+  output {
+    logs = [otelcol.exporter.loki.default.input]
+  }
+}
+
+otelcol.exporter.loki "default" {
+  forward_to = [loki.process.filter_labels.receiver]
+}
+
+loki.process "filter_labels" {
+  forward_to = [loki.write.default.receiver]
+
+  stage.label_drop {
+    values = ["exporter"]
+  }
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://zamk_loki:3100/loki/api/v1/push"
+  }
+}
+
+otelcol.exporter.prometheus "default" {
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = "http://zamk_prometheus:9090/api/v1/write"
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "zamk_tempo:4317"
+    tls {
+      insecure             = true
+      insecure_skip_verify = true
+    }
+  }
+}

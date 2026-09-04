@@ -6,6 +6,10 @@
     "packages/*"
   ],
   "scripts": {
+    "observability:up": "docker-compose -f infra/observability/docker-compose.observability.yml up -d",
+    "observability:down": "docker-compose -f infra/observability/docker-compose.observability.yml down",
+    "observability:check": "bash infra/observability/scripts/check.sh",
+    "observability:smoke": "bash infra/observability/scripts/smoke.sh",
     "dev:shop": "npm run dev --workspace=shop",
     "dev:seller": "npm run dev --workspace=seller",
     "dev:admin": "npm run dev --workspace=admin",
