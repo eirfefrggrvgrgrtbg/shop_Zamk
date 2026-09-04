@@ -583,6 +583,7 @@ func TestDelivery_ConflictingMutationRace(t *testing.T) {
 		assert.Equal(t, "delivered", finalFulfillmentStatus)
 		assert.Equal(t, "delivered", finalOrderStatus)
 		assert.NoError(t, deliverErr)
+		assert.Error(t, updateErr)
 	} else if finalShipmentStatus == "failed" {
 		assert.NoError(t, updateErr)
 		assert.Error(t, deliverErr)
@@ -597,6 +598,83 @@ func TestDelivery_ConflictingMutationRace(t *testing.T) {
 	if finalFulfillmentStatus == "delivered" {
 		assert.Equal(t, "delivered", finalShipmentStatus, "shipment must be delivered if fulfillment is delivered")
 	}
+}
+
+func TestDelivery_DeliveredThenFailedRejected(t *testing.T) {
+	ctx := context.Background()
+	f := setupPickingFixture(t, ctx)
+	defer f.db.Close()
+
+	orderID, fID := f.createOrderAndFulfillment(t, ctx, "shipped", "shipped")
+	sID := uuid.New()
+	_, err := f.db.Exec(ctx, `
+		INSERT INTO shipments (id, order_id, fulfillment_id, status, shipped_at, created_at, updated_at)
+		VALUES ($1, $2, $3, 'shipped', now(), now(), now())
+	`, sID, orderID, fID)
+	require.NoError(t, err)
+
+	// Step 1: DeliverShipment succeeds
+	_, err = f.svc.DeliverShipment(ctx, f.adminID, sID, fulfillment.DeliverShipmentRequest{})
+	require.NoError(t, err)
+
+	// Step 2: Attempting to update shipment status to 'failed' must be rejected
+	err = f.svc.UpdateShipmentStatus(ctx, f.adminID, sID, fulfillment.UpdateShipmentStatusRequest{
+		Status: "failed",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot change status of delivered shipment")
+
+	// Step 3: Verify all entities remain cleanly delivered
+	var sStatus, fStatus, oStatus string
+	err = f.db.QueryRow(ctx, `SELECT status FROM shipments WHERE id = $1`, sID).Scan(&sStatus)
+	require.NoError(t, err)
+	assert.Equal(t, "delivered", sStatus)
+
+	err = f.db.QueryRow(ctx, `SELECT status FROM order_fulfillments WHERE id = $1`, fID).Scan(&fStatus)
+	require.NoError(t, err)
+	assert.Equal(t, "delivered", fStatus)
+
+	err = f.db.QueryRow(ctx, `SELECT status FROM orders WHERE id = $1`, orderID).Scan(&oStatus)
+	require.NoError(t, err)
+	assert.Equal(t, "delivered", oStatus)
+}
+
+func TestDelivery_FailedThenDeliverRejected(t *testing.T) {
+	ctx := context.Background()
+	f := setupPickingFixture(t, ctx)
+	defer f.db.Close()
+
+	orderID, fID := f.createOrderAndFulfillment(t, ctx, "shipped", "shipped")
+	sID := uuid.New()
+	_, err := f.db.Exec(ctx, `
+		INSERT INTO shipments (id, order_id, fulfillment_id, status, shipped_at, created_at, updated_at)
+		VALUES ($1, $2, $3, 'shipped', now(), now(), now())
+	`, sID, orderID, fID)
+	require.NoError(t, err)
+
+	// Step 1: UpdateShipmentStatus to 'failed' succeeds
+	err = f.svc.UpdateShipmentStatus(ctx, f.adminID, sID, fulfillment.UpdateShipmentStatusRequest{
+		Status: "failed",
+	})
+	require.NoError(t, err)
+
+	// Step 2: DeliverShipment on failed shipment must be rejected
+	_, err = f.svc.DeliverShipment(ctx, f.adminID, sID, fulfillment.DeliverShipmentRequest{})
+	assert.ErrorIs(t, err, fulfillment.ErrDeliveryNotAllowed)
+
+	// Step 3: Verify shipment remains failed, fulfillment and order remain shipped (never delivered)
+	var sStatus, fStatus, oStatus string
+	err = f.db.QueryRow(ctx, `SELECT status FROM shipments WHERE id = $1`, sID).Scan(&sStatus)
+	require.NoError(t, err)
+	assert.Equal(t, "failed", sStatus)
+
+	err = f.db.QueryRow(ctx, `SELECT status FROM order_fulfillments WHERE id = $1`, fID).Scan(&fStatus)
+	require.NoError(t, err)
+	assert.Equal(t, "shipped", fStatus)
+
+	err = f.db.QueryRow(ctx, `SELECT status FROM orders WHERE id = $1`, orderID).Scan(&oStatus)
+	require.NoError(t, err)
+	assert.Equal(t, "shipped", oStatus)
 }
 
 func TestDelivery_GenericPatchCannotBypassDelivery(t *testing.T) {

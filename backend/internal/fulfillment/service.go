@@ -184,11 +184,14 @@ func (s *Service) UpdateShipmentStatus(ctx context.Context, adminID, shipmentID 
 	var reqOrderID uuid.UUID
 
 	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
-		shipment, err := s.repo.GetShipment(ctx, shipmentID)
+		lockedCtx, err := s.repo.LockShipmentForUpdateTx(ctx, tx, shipmentID)
 		if err != nil {
 			return err
 		}
 
+		shipment := lockedCtx.Shipment
+		orderStatus := lockedCtx.OrderStatus
+		fulfillmentStatus := lockedCtx.FulfillmentStatus
 		reqOrderID = shipment.OrderID
 
 		if shipment.Status == req.Status && req.Carrier == nil && req.TrackingNumber == nil && req.TrackingUrl == nil {
@@ -196,11 +199,14 @@ func (s *Service) UpdateShipmentStatus(ctx context.Context, adminID, shipmentID 
 		}
 
 		oldStatus := shipment.Status
-		if oldStatus == "delivered" {
+		if oldStatus == "delivered" || fulfillmentStatus == "delivered" || orderStatus == "delivered" {
 			return errors.New("cannot change status of delivered shipment")
 		}
-		if oldStatus == "cancelled" {
+		if oldStatus == "cancelled" || fulfillmentStatus == "cancelled" || orderStatus == "cancelled" {
 			return errors.New("cannot change status of cancelled shipment")
+		}
+		if oldStatus == "failed" && req.Status != "failed" {
+			return errors.New("cannot change status of failed shipment")
 		}
 		if req.Status != oldStatus && (req.Status == "shipped" || req.Status == "delivered") {
 			return ErrDispatchNotAllowed
@@ -220,7 +226,7 @@ func (s *Service) UpdateShipmentStatus(ctx context.Context, adminID, shipmentID 
 			shipment.TrackingUrl = req.TrackingUrl
 		}
 
-		now := time.Now()
+		now := time.Now().UTC()
 		if req.Status == "shipped" && shipment.ShippedAt == nil {
 			shipment.ShippedAt = &now
 		}
@@ -259,7 +265,7 @@ func (s *Service) UpdateShipmentStatus(ctx context.Context, adminID, shipmentID 
 						f, err := s.repo.GetAdminFulfillmentTx(ctx, tx, *shipment.FulfillmentID)
 						if err == nil && f != nil {
 							order, errOrder := s.ordersRepo.GetOrderForUpdateTx(ctx, tx, f.OrderID)
-							if errOrder == nil {
+							if errOrder == nil && s.notifSvc != nil {
 								bodyC := "Ваша сборка отправлена."
 								if req.Status == "delivered" {
 									bodyC = "Ваша сборка доставлена."
@@ -273,23 +279,23 @@ func (s *Service) UpdateShipmentStatus(ctx context.Context, adminID, shipmentID 
 									EntityType:      "shipment",
 									EntityID:        shipment.ID,
 								}
-								s.notifSvc.CreateNotificationTx(ctx, tx, notifC)
-							}
+								_ = s.notifSvc.CreateNotificationTx(ctx, tx, notifC)
 
-							bodyS := "Сборка отправлена."
-							if req.Status == "delivered" {
-								bodyS = "Сборка доставлена."
+								bodyS := "Сборка отправлена."
+								if req.Status == "delivered" {
+									bodyS = "Сборка доставлена."
+								}
+								notifS := notifications.Notification{
+									RecipientSellerID: &f.SellerID,
+									RecipientKind:     notifications.RecipientKindSeller,
+									Type:              "shipment_" + req.Status,
+									Title:             "Статус отправления обновлен",
+									Body:              bodyS,
+									EntityType:        "shipment",
+									EntityID:          shipment.ID,
+								}
+								_ = s.notifSvc.CreateNotificationTx(ctx, tx, notifS)
 							}
-							notifS := notifications.Notification{
-								RecipientSellerID: &f.SellerID,
-								RecipientKind:     notifications.RecipientKindSeller,
-								Type:              "shipment_" + req.Status,
-								Title:             "Статус отправления обновлен",
-								Body:              bodyS,
-								EntityType:        "shipment",
-								EntityID:          shipment.ID,
-							}
-							s.notifSvc.CreateNotificationTx(ctx, tx, notifS)
 						}
 					}
 

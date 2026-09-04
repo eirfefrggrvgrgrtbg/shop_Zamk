@@ -3,6 +3,7 @@ package fulfillment
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -124,4 +125,102 @@ func (r *Repository) UpdateOrderFulfillmentsStatus(ctx context.Context, orderID 
 	`
 	_, err := r.db.Exec(ctx, query, status, orderID)
 	return err
+}
+
+type LockedShipmentContext struct {
+	Shipment          *Shipment
+	OrderStatus       string
+	FulfillmentStatus string
+}
+
+func (r *Repository) LockShipmentForUpdateTx(ctx context.Context, tx pgx.Tx, shipmentID uuid.UUID) (*LockedShipmentContext, error) {
+	// 1. Resolve preliminary linkage from shipment without row lock
+	var preOrderID uuid.UUID
+	var preFulfillmentID *uuid.UUID
+
+	queryPre := `
+		SELECT order_id, fulfillment_id
+		FROM shipments
+		WHERE id = $1
+	`
+	err := tx.QueryRow(ctx, queryPre, shipmentID).Scan(&preOrderID, &preFulfillmentID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrShipmentNotFound
+		}
+		return nil, fmt.Errorf("failed to lookup shipment linkage: %w", err)
+	}
+
+	var orderStatus string
+	var fulfillmentStatus string
+
+	// 2. Lock parent order and linked fulfillment (canonical lock order: orders/fulfillments -> shipments)
+	if preFulfillmentID != nil {
+		var realOrderID uuid.UUID
+		queryHeader := `
+			SELECT o.id, o.status, of.status
+			FROM order_fulfillments of
+			JOIN orders o ON o.id = of.order_id
+			WHERE of.id = $1 AND of.order_id = $2
+			FOR UPDATE OF of, o
+		`
+		err = tx.QueryRow(ctx, queryHeader, *preFulfillmentID, preOrderID).Scan(&realOrderID, &orderStatus, &fulfillmentStatus)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, ErrFulfillmentNotFound
+			}
+			return nil, fmt.Errorf("failed to lock fulfillment and order: %w", err)
+		}
+	} else {
+		queryOrder := `
+			SELECT o.id, o.status
+			FROM orders o
+			WHERE o.id = $1
+			FOR UPDATE
+		`
+		var realOrderID uuid.UUID
+		err = tx.QueryRow(ctx, queryOrder, preOrderID).Scan(&realOrderID, &orderStatus)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, errors.New("order not found")
+			}
+			return nil, fmt.Errorf("failed to lock order: %w", err)
+		}
+	}
+
+	// 3. Lock shipment row
+	queryShipment := `
+		SELECT id, order_id, fulfillment_id, status, carrier, tracking_number, tracking_url, shipped_at, delivered_at, created_at, updated_at
+		FROM shipments
+		WHERE id = $1
+		FOR UPDATE
+	`
+	var s Shipment
+	err = tx.QueryRow(ctx, queryShipment, shipmentID).Scan(
+		&s.ID, &s.OrderID, &s.FulfillmentID, &s.Status, &s.Carrier, &s.TrackingNumber, &s.TrackingUrl, &s.ShippedAt, &s.DeliveredAt, &s.CreatedAt, &s.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrShipmentNotFound
+		}
+		return nil, fmt.Errorf("failed to lock shipment: %w", err)
+	}
+
+	// 4. Re-validate linkages under active locks
+	if s.OrderID != preOrderID {
+		return nil, ErrShipmentContradictoryState
+	}
+	if preFulfillmentID != nil {
+		if s.FulfillmentID == nil || *s.FulfillmentID != *preFulfillmentID {
+			return nil, ErrShipmentContradictoryState
+		}
+	} else if s.FulfillmentID != nil {
+		return nil, ErrShipmentContradictoryState
+	}
+
+	return &LockedShipmentContext{
+		Shipment:          &s,
+		OrderStatus:       orderStatus,
+		FulfillmentStatus: fulfillmentStatus,
+	}, nil
 }
