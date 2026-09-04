@@ -68,15 +68,20 @@ func (s *Service) getSellerForUser(ctx context.Context, userID uuid.UUID) (*sell
 // Admin Operations
 // ---------------------------------------------------------
 
-func (s *Service) ListAdminInventory(ctx context.Context, q, sellerId, source string, lowStock bool, limit, offset int) (AdminInventoryListResponse, error) {
-	items, total, unitCtx, err := s.repo.ListAdminInventoryRich(ctx, q, sellerId, source, lowStock, limit, offset)
+func (s *Service) ListAdminInventory(ctx context.Context, q, sellerId, source, accountingMode, stockStatus string, lowStock bool, limit, offset int) (AdminInventoryListResponse, error) {
+	items, total, issuesCount, unitCtx, err := s.repo.ListAdminInventoryRich(ctx, q, sellerId, source, accountingMode, stockStatus, lowStock, limit, offset)
 	if err != nil {
 		return AdminInventoryListResponse{}, err
 	}
 	if items == nil {
 		items = []AdminInventoryItem{}
 	}
-	return AdminInventoryListResponse{Items: items, TotalCount: total, UnitContext: unitCtx}, nil
+	return AdminInventoryListResponse{
+		Items:       items,
+		TotalCount:  total,
+		IssuesCount: issuesCount,
+		UnitContext: unitCtx,
+	}, nil
 }
 
 func (s *Service) GetAdminInventoryItem(ctx context.Context, id uuid.UUID) (AdminInventoryItem, error) {
@@ -85,6 +90,10 @@ func (s *Service) GetAdminInventoryItem(ctx context.Context, id uuid.UUID) (Admi
 		return AdminInventoryItem{}, err
 	}
 	return *i, nil
+}
+
+func (s *Service) GetAdminInventoryUnitTraceability(ctx context.Context, unitCode string) (*AdminInventoryUnitTraceability, error) {
+	return s.repo.GetAdminInventoryUnitTraceability(ctx, unitCode)
 }
 
 func (s *Service) ListMovements(ctx context.Context, itemID uuid.UUID, limit, offset int) (StockMovementsListResponse, error) {

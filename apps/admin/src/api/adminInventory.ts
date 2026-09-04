@@ -5,12 +5,45 @@ import {
   getAdminInventory as apiGetAdminInventory,
   getAdminInventoryItem as apiGetAdminInventoryItem,
   getAdminInventoryMovements as apiGetAdminInventoryMovements,
+  getAdminInventoryUnitTraceability as apiGetAdminInventoryUnitTraceability,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
 import { request } from '@zamk/api-client/src/client';
-import type { AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, PhysicalUnitContext } from '@zamk/api-client/src/types';
+import type {
+  AdminInventoryItem,
+  AdminInventoryMovement,
+  AdminInventoryListResponse,
+  PhysicalUnitContext,
+  AggregateStock,
+  PhysicalStock,
+  LegacyStock,
+  InventoryHealth,
+  AdminInventoryPhysicalUnit,
+  AdminInventoryAllocationInfo,
+  AdminInventorySupplyLineage,
+  AdminInventoryUnitTraceability,
+  AdminInventoryUnitIdentity,
+  AdminInventoryUnitCurrentState,
+  AdminInventoryUnitTimelineEvent,
+  AdminInventoryUnitContext,
+} from '@zamk/api-client/src/types';
 
-export type { PhysicalUnitContext };
+export type {
+  PhysicalUnitContext,
+  AggregateStock,
+  PhysicalStock,
+  LegacyStock,
+  InventoryHealth,
+  AdminInventoryPhysicalUnit,
+  AdminInventoryAllocationInfo,
+  AdminInventorySupplyLineage,
+  AdminInventoryUnitTraceability,
+  AdminInventoryUnitIdentity,
+  AdminInventoryUnitCurrentState,
+  AdminInventoryUnitTimelineEvent,
+  AdminInventoryUnitContext,
+  AdminInventoryMovement,
+};
 
 export interface AdminInventoryView {
   id: string;
@@ -19,14 +52,23 @@ export interface AdminInventoryView {
   productVariantId: string;
   variant: string;
   sku?: string;
+  sellerSku?: string;
+  barcode?: string;
   size?: string;
   color?: string;
+  mainImageUrl?: string;
   sellerId?: string;
   sellerName?: string;
   source: string;
   totalStock: number;
   reservedStock: number;
   availableStock: number;
+  aggregate: AggregateStock;
+  physical: PhysicalStock;
+  legacy: LegacyStock;
+  accountingMode: 'serialized' | 'mixed' | 'legacy';
+  health: InventoryHealth;
+  physicalUnits?: AdminInventoryPhysicalUnit[];
   updatedAt?: string;
 }
 
@@ -63,26 +105,73 @@ const getString = (source: Record<string, unknown>, key: string): string | undef
 
 export const mapInventoryItem = (item: AdminInventoryItem): AdminInventoryView => {
   const flexible = item as unknown as Record<string, unknown>;
-  const sku = getString(flexible, 'sku');
-  const size = getString(flexible, 'size');
-  const color = getString(flexible, 'color');
+  const sku = item.variantInfo?.sku || getString(flexible, 'sku');
+  const size = item.variantInfo?.size || getString(flexible, 'size');
+  const color = item.variantInfo?.color || getString(flexible, 'color');
   const variantParts = [sku, size, color].filter(Boolean);
+
+  const agg = item.aggregate || {
+    total: item.totalStock,
+    reserved: item.reservedStock,
+    available: Math.max(item.totalStock - item.reservedStock, 0),
+  };
+
+  const phys = item.physical || {
+    warehouse: 0,
+    allocated: 0,
+    picked: 0,
+    free: 0,
+    expected: 0,
+    damaged: 0,
+    writtenOff: 0,
+    shipped: 0,
+  };
+
+  const leg = item.legacy || {
+    onHand: agg.total - phys.warehouse,
+    reserved: agg.reserved - phys.allocated,
+    available: (agg.total - phys.warehouse) - (agg.reserved - phys.allocated),
+  };
+
+  const health = item.health || {
+    status: 'healthy' as const,
+    issues: [],
+  };
+
+  const accountingMode = (
+    item.accountingMode === 'serialized' || item.accountingMode === 'mixed' || item.accountingMode === 'legacy'
+      ? item.accountingMode
+      : phys.warehouse > 0 && leg.onHand <= 0
+      ? 'serialized'
+      : phys.warehouse > 0 && leg.onHand > 0
+      ? 'mixed'
+      : 'legacy'
+  );
 
   return {
     id: item.id,
     productId: item.productId,
-    productTitle: getString(flexible, 'productTitle') ?? item.productId,
+    productTitle: item.product?.title || getString(flexible, 'productTitle') || item.productId,
     productVariantId: item.productVariantId,
-    variant: variantParts.length > 0 ? variantParts.join(' / ') : item.productVariantId,
+    variant: item.variantInfo?.label || (variantParts.length > 0 ? variantParts.join(' / ') : item.productVariantId),
     sku,
+    sellerSku: item.variantInfo?.sellerSku,
+    barcode: item.variantInfo?.barcode,
     size,
     color,
+    mainImageUrl: item.product?.mainImageUrl,
     sellerId: item.sellerId,
-    sellerName: getString(flexible, 'sellerName'),
+    sellerName: item.seller?.name || getString(flexible, 'sellerName'),
     source: getString(flexible, 'source') || 'seller',
-    totalStock: item.totalStock,
-    reservedStock: item.reservedStock,
-    availableStock: item.availableStock,
+    totalStock: agg.total,
+    reservedStock: agg.reserved,
+    availableStock: agg.available,
+    aggregate: agg,
+    physical: phys,
+    legacy: leg,
+    accountingMode,
+    health,
+    physicalUnits: item.physicalUnits,
     updatedAt: item.updatedAt,
   };
 };
@@ -100,10 +189,24 @@ export const mapInventoryMovement = (movement: AdminInventoryMovement): AdminInv
   };
 };
 
-export const getAdminInventory = async (params?: { q?: string; sellerId?: string; source?: string; lowStock?: boolean; limit?: number; offset?: number }): Promise<{ items: AdminInventoryView[]; totalCount: number; unitContext?: PhysicalUnitContext }> => {
+export const getAdminInventory = async (params?: {
+  q?: string;
+  sellerId?: string;
+  source?: string;
+  accountingMode?: string;
+  stockStatus?: string;
+  lowStock?: boolean;
+  limit?: number;
+  offset?: number;
+}): Promise<{ items: AdminInventoryView[]; totalCount: number; issuesCount: number; unitContext?: PhysicalUnitContext }> => {
   const response = await apiGetAdminInventory(params) as unknown as AdminInventoryListResponse;
   const items = response.items || [];
-  return { items: items.map(mapInventoryItem), totalCount: response.totalCount || 0, unitContext: response.unitContext };
+  return {
+    items: items.map(mapInventoryItem),
+    totalCount: response.totalCount || 0,
+    issuesCount: response.issuesCount || 0,
+    unitContext: response.unitContext,
+  };
 };
 
 export const getAdminInventoryItem = async (id: string): Promise<AdminInventoryView> => {
@@ -157,4 +260,104 @@ export const adjustAdminInventory = async (id: string, input: { type: string; qu
 export const getAdminInventoryReservations = async (id: string): Promise<any[]> => {
   const resp = await request<{ items: any[] }>('GET', `/admin/inventory/${id}/reservations`);
   return resp.items || [];
+};
+
+export const getAdminInventoryUnitTraceability = async (unitCode: string): Promise<AdminInventoryUnitTraceability> => {
+  return apiGetAdminInventoryUnitTraceability(unitCode);
+};
+
+export interface ReconciliationSession {
+  id: string;
+  variantId: string;
+  status: 'in_progress' | 'review' | 'completed' | 'cancelled';
+  startedBy: string;
+  startedAt: string;
+  completedAt?: string;
+  completedBy?: string;
+  notes?: string;
+
+  variantTitle?: string;
+  variantSize?: string;
+  variantColor?: string;
+  variantSKU?: string;
+  variantBarcode?: string;
+  accountingMode?: string;
+  legacyOnHand?: number;
+
+  expectedCount: number;
+  foundExpectedCount: number;
+  unexpectedCount: number;
+  problemsCount: number;
+}
+
+export interface ReconciliationScanUnitContext {
+  unitCode: string;
+  productTitle: string;
+  size?: string;
+  color?: string;
+  sku?: string;
+  barcode?: string;
+  status: string;
+}
+
+export interface ScanReconciliationResponse {
+  classification: 'expected_found' | 'duplicate' | 'unexpected_found' | 'wrong_variant' | 'unknown_code';
+  unit?: AdminInventoryPhysicalUnit;
+  unitContext?: ReconciliationScanUnitContext;
+  session: ReconciliationSession;
+}
+
+export const getReconciliationRoute = (sessionId: string): string => `/inventory/reconciliation/${sessionId}`;
+
+export const startInventoryReconciliation = async (variantId: string): Promise<ReconciliationSession> => {
+  return request('POST', '/admin/inventory/reconciliations', { body: { variantId } });
+};
+
+export const getInventoryReconciliation = async (sessionId: string): Promise<ReconciliationSession> => {
+  return request('GET', `/admin/inventory/reconciliations/${sessionId}`);
+};
+
+export const scanInventoryReconciliation = async (sessionId: string, rawCode: string): Promise<ScanReconciliationResponse> => {
+  return request('POST', `/admin/inventory/reconciliations/${sessionId}/scan`, { body: { rawCode } });
+};
+
+export const completeInventoryReconciliation = async (sessionId: string): Promise<{status: string}> => {
+  return request('POST', `/admin/inventory/reconciliations/${sessionId}/complete`);
+};
+
+export const getActiveInventoryReconciliation = async (variantId: string): Promise<ReconciliationSession | null> => {
+  return request('GET', '/admin/inventory/reconciliations/active' + '?' + new URLSearchParams({ variantId }).toString());
+};
+
+export const listInventoryReconciliations = async (variantId: string, limit = 10): Promise<ReconciliationSession[]> => {
+  const resp = await request<{ items: ReconciliationSession[] }>('GET', `/admin/inventory/reconciliations?variantId=${variantId}&limit=${limit}`);
+  return resp?.items || [];
+};
+
+export const moveInventoryReconciliationToReview = async (sessionId: string): Promise<{status: string}> => {
+  return request('POST', `/admin/inventory/reconciliations/${sessionId}/review`);
+};
+
+export const cancelInventoryReconciliation = async (sessionId: string): Promise<{status: string}> => {
+  return request('POST', `/admin/inventory/reconciliations/${sessionId}/cancel`);
+};
+
+export interface ReconciliationReviewItem {
+  unitId: string;
+  unitCode: string;
+  snapshotStatus: string;
+  currentStatus: string;
+  classification: string;
+  scannedAt?: string;
+}
+
+export interface ReconciliationReview {
+  expectedFound: ReconciliationReviewItem[];
+  missing: ReconciliationReviewItem[];
+  unexpectedFound: ReconciliationReviewItem[];
+  changedDuringCount: ReconciliationReviewItem[];
+}
+
+export const getInventoryReconciliationReview = async (sessionId: string): Promise<ReconciliationReview> => {
+  return request('GET', `/admin/inventory/reconciliations/${sessionId}/review`);
 };

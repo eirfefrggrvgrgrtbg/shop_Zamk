@@ -32,6 +32,7 @@ import { useAdminGlobalSearchShortcut } from './search/useAdminGlobalSearchShort
 import { getAdminSellers } from '@zamk/api-client/src/admin';
 import { getModerationProducts } from '../api/adminProducts';
 import { getAdminReviews } from '../api/adminReviews';
+import { getAdminPickingQueue } from '../api/adminPicking';
 
 interface NavItem {
   name: string;
@@ -83,6 +84,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     products: 0,
     reviews: 0,
   });
+  const [pickingCount, setPickingCount] = useState<number>(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -91,12 +93,19 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
         const canReadSellers = isPermissionVisible('sellers.read');
         const canModerateProducts = isPermissionVisible('products.moderate');
         const canReadReviews = isPermissionVisible('reviews.read');
+        const canReadOrders = isPermissionVisible('orders.read');
 
-        const [sellersRes, productsRes, reviewsRes] = await Promise.allSettled([
+        const [sellersRes, productsRes, reviewsRes, pickingRes] = await Promise.allSettled([
           canReadSellers ? getAdminSellers({ limit: 100 }) : Promise.resolve({ items: [] }),
           canModerateProducts ? getModerationProducts({ status: 'pending_moderation', limit: 1 }) : Promise.resolve({ items: [], totalCount: 0 }),
           canReadReviews ? getAdminReviews() : Promise.resolve([]),
+          canReadOrders ? getAdminPickingQueue() : Promise.resolve([]),
         ]);
+
+        let pCount = 0;
+        if (pickingRes.status === 'fulfilled' && Array.isArray(pickingRes.value)) {
+          pCount = pickingRes.value.length;
+        }
 
         let sellersCount = 0;
         if (sellersRes.status === 'fulfilled') {
@@ -116,6 +125,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
         }
 
         if (isMounted) {
+          setPickingCount(pCount);
           setModerationCounts({
             sellers: sellersCount,
             products: productsCount,
@@ -221,6 +231,15 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
                   {!isCollapsed && isModerationItem && moderationCounts.total > 0 && (
                     <span className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                       {moderationCounts.total}
+                    </span>
+                  )}
+
+                  {!isCollapsed && item.path === '/fulfillment/picking' && pickingCount > 0 && (
+                    <span
+                      data-testid="sidebar-picking-count"
+                      className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                    >
+                      {pickingCount}
                     </span>
                   )}
                 </Link>

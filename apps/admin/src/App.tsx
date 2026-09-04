@@ -30,6 +30,7 @@ import { AdminPayments } from './pages/AdminPayments';
 import { AdminPaymentDetail } from './pages/AdminPaymentDetail';
 import { AdminShipments } from './pages/AdminShipments';
 import { AdminInventory } from './pages/AdminInventory';
+import { AdminInventoryReconciliation } from './pages/AdminInventoryReconciliation';
 import { AdminReturns } from './pages/AdminReturns';
 import { AdminReturnReceiving } from './pages/AdminReturnReceiving';
 import { AdminRefunds } from './pages/AdminRefunds';
@@ -96,6 +97,7 @@ export default function App() {
             <Route path="/payments/:paymentId" element={<AdminProtectedRoute permission="payments.read"><AdminPaymentDetail /></AdminProtectedRoute>} />
             <Route path="/shipments" element={<AdminProtectedRoute permission="shipments.read"><AdminShipments /></AdminProtectedRoute>} />
             <Route path="/inventory" element={<AdminProtectedRoute permission="inventory.read"><AdminInventory /></AdminProtectedRoute>} />
+            <Route path="/inventory/reconciliation/:id" element={<AdminProtectedRoute permission="inventory.adjust"><AdminInventoryReconciliation /></AdminProtectedRoute>} />
             <Route path="/returns" element={<AdminProtectedRoute permission="returns.read"><AdminReturns /></AdminProtectedRoute>} />
             <Route path="/returns/:id/receiving" element={<AdminProtectedRoute permission="returns.read"><AdminReturnReceiving /></AdminProtectedRoute>} />
             <Route path="/refunds" element={<AdminProtectedRoute permission="refunds.read"><AdminRefunds /></AdminProtectedRoute>} />

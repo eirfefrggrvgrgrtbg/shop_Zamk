@@ -9,15 +9,29 @@ export interface PickingAllocatedUnit {
   pickedAt?: string | null;
 }
 
+export interface CompatibleUnit {
+  inventoryUnitId: string;
+  unitCode: string;
+  productVariantId: string;
+  availability: 'allocated_to_current_item' | 'free';
+  pickedAt?: string | null;
+}
+
 export interface PickingItem {
   orderItemId: string;
   title: string;
   productVariantId: string;
+  variantSize?: string | null;
+  variantColor?: string | null;
+  imageUrl?: string | null;
+  sku?: string | null;
+  barcode?: string | null;
   quantity: number;
   pickedQuantity: number;
   remainingQuantity: number;
   allocationMode: 'serialized' | 'legacy';
   allocatedUnits: PickingAllocatedUnit[];
+  compatibleUnitsCount?: number;
 }
 
 export interface PickingOrder {
@@ -36,6 +50,7 @@ export interface PickingScanDetail {
   newlyPicked: boolean;
   alreadyPicked: boolean;
   alreadyComplete: boolean;
+  substituted?: boolean;
 }
 
 export interface PickingItemState {
@@ -65,6 +80,7 @@ export interface PickingQueueItem {
   orderId: string;
   orderNumber?: string | null;
   status: string;
+  orderStatus?: string;
   sellerName?: string | null;
   customerName?: string | null;
   createdAt: string;
@@ -75,6 +91,29 @@ export interface PickingQueueItem {
   progressPercent: number;
   isComplete: boolean;
 }
+
+export const getCompatibleUnits = async (
+  fulfillmentId: string,
+  orderItemId: string
+): Promise<CompatibleUnit[]> => {
+  const token = getAccessToken();
+  const res = await fetch(
+    `${API_URL}/admin/fulfillments/${fulfillmentId}/picking/compatible-units?orderItemId=${encodeURIComponent(orderItemId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  if (!res.ok) {
+    let data: any = {};
+    try {
+      data = await res.json();
+    } catch (_) {}
+    throw new ApiError(data.message || 'Не удалось загрузить подходящие единицы', data.error || 'get_compatible_units_failed', res.status);
+  }
+  return res.json();
+};
 
 export const getAdminPickingOrder = async (fulfillmentId: string): Promise<PickingOrder> => {
   const response = await fetch(`${API_URL}/admin/fulfillments/${fulfillmentId}/picking`, {
@@ -89,14 +128,22 @@ export const getAdminPickingOrder = async (fulfillmentId: string): Promise<Picki
   return data;
 };
 
-export const scanPickingCode = async (fulfillmentId: string, code: string): Promise<PickingScanResult> => {
+export const scanPickingCode = async (
+  fulfillmentId: string,
+  code: string,
+  orderItemId?: string
+): Promise<PickingScanResult> => {
+  const body: { code: string; orderItemId?: string } = { code: code.trim() };
+  if (orderItemId) {
+    body.orderItemId = orderItemId;
+  }
   const response = await fetch(`${API_URL}/admin/fulfillments/${fulfillmentId}/picking/scan`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${getAccessToken() || ''}`,
     },
-    body: JSON.stringify({ code: code.trim() }),
+    body: JSON.stringify(body),
   });
   const data = await response.json();
   if (!response.ok) {
@@ -134,6 +181,7 @@ export const getAdminPickingQueue = async (): Promise<PickingQueueItem[]> => {
         orderId: f.orderId,
         orderNumber: f.orderNumber || po.orderNumber,
         status: f.status,
+        orderStatus: po.orderStatus,
         sellerName: f.sellerName,
         customerName: f.customerName,
         createdAt: f.createdAt,
@@ -147,25 +195,44 @@ export const getAdminPickingQueue = async (): Promise<PickingQueueItem[]> => {
     })
   );
 
-  // Sort: assembling first, then by createdAt descending
-  return queueItems.sort((a, b) => {
+  // Filter only actionable picking work (eligible fulfillment & order status, unpicked units remain)
+  const actionableItems = queueItems.filter(
+    (i) =>
+      (i.status === 'paid' || i.status === 'assembling') &&
+      (!i.orderStatus || i.orderStatus === 'paid' || i.orderStatus === 'assembling') &&
+      !i.isComplete &&
+      i.remainingQuantity > 0
+  );
+
+  // Sort: assembling first, then oldest actionable order first (FIFO)
+  return actionableItems.sort((a, b) => {
     if (a.status === 'assembling' && b.status !== 'assembling') return -1;
     if (a.status !== 'assembling' && b.status === 'assembling') return 1;
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
 };
 
 export const getPickingErrorMessage = (error: unknown, fallback = 'Произошла ошибка при сканировании'): string => {
   if (error instanceof ApiError) {
     switch (error.code) {
+      case 'unit_variant_mismatch':
+        return 'Эта единица относится к другому варианту товара.';
       case 'unit_allocated_to_other_order':
-        return 'Эта единица зарезервирована для другого заказа';
-      case 'unit_not_allocated_to_fulfillment':
-        return 'Эта единица не назначена этому заказу';
+        return 'Эта единица уже предназначена для другого заказа. Возьмите другую.';
+      case 'unit_allocated_to_other_order_item':
+        return 'Эта единица назначена другой позиции заказа.';
+      case 'order_item_required_for_substitution':
+        return 'Для выбора свободной единицы сначала откройте конкретную позицию сборки.';
       case 'unit_not_in_warehouse':
-        return 'Эта единица сейчас не находится на складе';
+        return 'Эта единица сейчас недоступна для сборки.';
+      case 'no_unpicked_allocation_for_variant':
+        return 'Все единицы этого варианта уже собраны.';
+      case 'unit_not_allocated_to_fulfillment':
+        return 'Эта единица не относится к текущей сборке';
       case 'cannot_pick_serialized_with_barcode':
-        return 'Для этого товара нужно отсканировать конкретный ZMU';
+        return 'Для этой позиции нужно отсканировать конкретную ZMU';
+      case 'already_picked':
+        return 'Эта единица уже была отобрана';
       case 'ambiguous_picking_code':
         return 'Штрихкод соответствует нескольким позициям заказа';
       case 'picking_code_not_found':

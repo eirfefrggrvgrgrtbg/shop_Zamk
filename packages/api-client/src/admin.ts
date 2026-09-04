@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, ReturnShipment, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse, AdminReturnReceivingState, ScanReturnUnitResponse, UpdateSerializedUnitInspectionInput, UpdateLegacyItemInspectionInput } from './types';
+import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, ReturnShipment, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, AdminInventoryUnitTraceability, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse, AdminReturnReceivingState, ScanReturnUnitResponse, UpdateSerializedUnitInspectionInput, UpdateLegacyItemInspectionInput } from './types';
 
 export const getAdminSellers = async (params?: {
   search?: string;
@@ -364,11 +364,22 @@ export const adminBlockProduct = async (id: string, comment?: string, expectedUp
   return request<void>('POST', `/admin/moderation/products/${id}/block`, { body: { comment, expectedUpdatedAt } });
 };
 
-export const getAdminInventory = async (params?: { q?: string; sellerId?: string; source?: string; lowStock?: boolean; limit?: number; offset?: number }): Promise<AdminInventoryListResponse> => {
+export const getAdminInventory = async (params?: {
+  q?: string;
+  sellerId?: string;
+  source?: string;
+  accountingMode?: string;
+  stockStatus?: string;
+  lowStock?: boolean;
+  limit?: number;
+  offset?: number;
+}): Promise<AdminInventoryListResponse> => {
   const query = new URLSearchParams();
   if (params?.q) query.append('q', params.q);
   if (params?.sellerId) query.append('sellerId', params.sellerId);
   if (params?.source) query.append('source', params.source);
+  if (params?.accountingMode) query.append('accountingMode', params.accountingMode);
+  if (params?.stockStatus) query.append('stockStatus', params.stockStatus);
   if (params?.lowStock) query.append('lowStock', 'true');
   if (params?.limit) query.append('limit', params.limit.toString());
   if (params?.offset) query.append('offset', params.offset.toString());
@@ -379,6 +390,10 @@ export const getAdminInventory = async (params?: { q?: string; sellerId?: string
 
 export const getAdminInventoryItem = async (id: string): Promise<AdminInventoryItem> => {
   return request<AdminInventoryItem>('GET', `/admin/inventory/${id}`);
+};
+
+export const getAdminInventoryUnitTraceability = async (unitCode: string): Promise<AdminInventoryUnitTraceability> => {
+  return request<AdminInventoryUnitTraceability>('GET', `/admin/inventory/units/${encodeURIComponent(unitCode)}`);
 };
 
 export const getAdminInventoryMovements = async (id: string): Promise<{ items: AdminInventoryMovement[]; totalCount: number }> => {

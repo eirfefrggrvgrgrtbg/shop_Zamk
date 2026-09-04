@@ -478,6 +478,7 @@ func New(
 
 		// Inventory
 		r.With(perm("inventory.read")).Get("/inventory", inventoryHandler.ListAdminInventory)
+		r.With(perm("inventory.read")).Get("/inventory/units/{unitCode}", inventoryHandler.GetAdminInventoryUnitTraceability)
 		r.With(perm("inventory.read")).Get("/inventory/{id}", inventoryHandler.GetAdminInventoryItem)
 		r.With(perm("inventory.movements.read")).Get("/inventory/{id}/movements", inventoryHandler.ListMovements)
 		r.With(adminDangerousLimit, perm("inventory.receipt")).Post("/inventory/receipts", inventoryHandler.ReceiveStock)
@@ -485,7 +486,16 @@ func New(
 		r.With(adminDangerousLimit, perm("inventory.write_off")).Post("/inventory/write-offs", inventoryHandler.WriteOffStock)
 		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/{id}/adjust", inventoryHandler.AdjustStockUnified)
 		r.With(perm("inventory.read")).Get("/inventory/{id}/reservations", inventoryHandler.GetAdminInventoryReservations)
+		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/reconciliations", inventoryHandler.StartReconciliation)
+		r.With(perm("inventory.read")).Get("/inventory/reconciliations", inventoryHandler.ListReconciliations)
+		r.With(perm("inventory.read")).Get("/inventory/reconciliations/active", inventoryHandler.GetActiveReconciliation)
+		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/reconciliations/{id}/review", inventoryHandler.MoveReconciliationToReview)
+		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/reconciliations/{id}/cancel", inventoryHandler.CancelReconciliation)
+		r.With(perm("inventory.read")).Get("/inventory/reconciliations/{id}/review", inventoryHandler.GetReconciliationReview)
 
+		r.With(perm("inventory.read")).Get("/inventory/reconciliations/{id}", inventoryHandler.GetReconciliation)
+		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/reconciliations/{id}/scan", inventoryHandler.ScanReconciliation)
+		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/reconciliations/{id}/complete", inventoryHandler.CompleteReconciliation)
 		// Orders
 		r.With(perm("orders.read")).Get("/orders", ordersHandler.ListAdminOrders)
 		r.With(perm("orders.read")).Get("/orders/{id}", ordersHandler.GetAdminOrder)
@@ -517,6 +527,7 @@ func New(
 		r.With(perm("orders.read")).Post("/fulfillments/{id}/receiving/discrepancy", fulfillmentHandler.RecordDiscrepancy)
 
 		r.With(perm("orders.read")).Get("/fulfillments/{id}/picking", fulfillmentHandler.GetPickingOrder)
+		r.With(perm("orders.read")).Get("/fulfillments/{id}/picking/compatible-units", fulfillmentHandler.GetCompatibleUnits)
 		r.With(perm("orders.read")).Post("/fulfillments/{id}/picking/scan", fulfillmentHandler.ScanPickingCode)
 		r.With(perm("orders.update_status")).Post("/fulfillments/{id}/pack", fulfillmentHandler.PackFulfillment)
 		r.With(perm("orders.update_status")).Post("/fulfillments/{id}/dispatch", fulfillmentHandler.DispatchFulfillment)

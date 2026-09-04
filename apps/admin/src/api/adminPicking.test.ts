@@ -31,19 +31,35 @@ async function runTests() {
   const testCases = [
     {
       code: 'unit_allocated_to_other_order',
-      expected: 'Эта единица зарезервирована для другого заказа',
+      expected: 'Эта единица уже предназначена для другого заказа. Возьмите другую.',
+    },
+    {
+      code: 'unit_allocated_to_other_order_item',
+      expected: 'Эта единица назначена другой позиции заказа.',
+    },
+    {
+      code: 'order_item_required_for_substitution',
+      expected: 'Для выбора свободной единицы сначала откройте конкретную позицию сборки.',
     },
     {
       code: 'unit_not_allocated_to_fulfillment',
-      expected: 'Эта единица не назначена этому заказу',
+      expected: 'Эта единица не относится к текущей сборке',
     },
     {
       code: 'unit_not_in_warehouse',
-      expected: 'Эта единица сейчас не находится на складе',
+      expected: 'Эта единица сейчас недоступна для сборки.',
+    },
+    {
+      code: 'unit_variant_mismatch',
+      expected: 'Эта единица относится к другому варианту товара.',
     },
     {
       code: 'cannot_pick_serialized_with_barcode',
-      expected: 'Для этого товара нужно отсканировать конкретный ZMU',
+      expected: 'Для этой позиции нужно отсканировать конкретную ZMU',
+    },
+    {
+      code: 'already_picked',
+      expected: 'Эта единица уже была отобрана',
     },
     {
       code: 'ambiguous_picking_code',
@@ -224,7 +240,7 @@ async function runTests() {
     assert(caughtError instanceof ApiError);
     assert.strictEqual(caughtError.code, 'unit_not_in_warehouse');
     assert.strictEqual(caughtError.status, 409);
-    assert.strictEqual(getPickingErrorMessage(caughtError), 'Эта единица сейчас не находится на складе');
+    assert.strictEqual(getPickingErrorMessage(caughtError), 'Эта единица сейчас недоступна для сборки.');
 
     // D. Successful packFulfillment
     (global as any).fetch = async (url: string, options: any) => {
@@ -416,6 +432,78 @@ async function runTests() {
     assert.strictEqual(row.itemPositionsCount, 2);
 
     console.log('✓ Successful queue preserved canonical 4/7 picking progress.');
+
+    // Scenario D: canonical filtering - fully picked (1/1) must be excluded from queue
+    (global as any).fetch = async (url: string) => {
+      if (url.includes('/admin/order-fulfillments?status=paid')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            items: [
+              { id: 'fulf-actionable', orderId: 'ord-act', status: 'paid', createdAt: '2026-08-26T10:00:00Z' },
+              { id: 'fulf-complete', orderId: 'ord-done', status: 'paid', createdAt: '2026-08-26T10:30:00Z' },
+            ],
+          }),
+        };
+      }
+      if (url.includes('/admin/order-fulfillments?status=assembling')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            items: [
+              { id: 'fulf-assembling-complete', orderId: 'ord-asm-done', status: 'assembling', createdAt: '2026-08-26T11:00:00Z' },
+            ],
+          }),
+        };
+      }
+      if (url.includes('/admin/fulfillments/fulf-actionable/picking')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            orderId: 'ord-act',
+            orderStatus: 'paid',
+            fulfillmentId: 'fulf-actionable',
+            fulfillmentStatus: 'paid',
+            items: [{ orderItemId: 'i-1', title: 'A', quantity: 2, pickedQuantity: 1, remainingQuantity: 1, allocationMode: 'serialized', allocatedUnits: [] }],
+          }),
+        };
+      }
+      if (url.includes('/admin/fulfillments/fulf-complete/picking')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            orderId: 'ord-done',
+            orderStatus: 'paid',
+            fulfillmentId: 'fulf-complete',
+            fulfillmentStatus: 'paid',
+            items: [{ orderItemId: 'i-2', title: 'B', quantity: 1, pickedQuantity: 1, remainingQuantity: 0, allocationMode: 'serialized', allocatedUnits: [] }],
+          }),
+        };
+      }
+      if (url.includes('/admin/fulfillments/fulf-assembling-complete/picking')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            orderId: 'ord-asm-done',
+            orderStatus: 'assembling',
+            fulfillmentId: 'fulf-assembling-complete',
+            fulfillmentStatus: 'assembling',
+            items: [{ orderItemId: 'i-3', title: 'C', quantity: 1, pickedQuantity: 1, remainingQuantity: 0, allocationMode: 'legacy', allocatedUnits: [] }],
+          }),
+        };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    };
+
+    const filteredQueue = await getAdminPickingQueue();
+    assert.strictEqual(filteredQueue.length, 1, 'Only the fulfillment with unfinished units must remain in queue');
+    assert.strictEqual(filteredQueue[0].fulfillmentId, 'fulf-actionable');
+    console.log('✓ Actionable queue correctly excludes completed 1/1 fulfillments.');
 
     // 4. Order mapping and totals integrity test
     console.log('4. Testing order mapping and totals integrity...');

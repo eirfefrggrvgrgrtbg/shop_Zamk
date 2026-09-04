@@ -42,9 +42,11 @@ func (h *Handler) ListAdminInventory(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	sellerId := r.URL.Query().Get("sellerId")
 	source := r.URL.Query().Get("source")
+	accountingMode := r.URL.Query().Get("accountingMode")
+	stockStatus := r.URL.Query().Get("stockStatus")
 	lowStock := r.URL.Query().Get("lowStock") == "true"
 
-	resp, err := h.service.ListAdminInventory(r.Context(), q, sellerId, source, lowStock, page.Limit, page.Offset)
+	resp, err := h.service.ListAdminInventory(r.Context(), q, sellerId, source, accountingMode, stockStatus, lowStock, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list inventory")
 		return
@@ -74,6 +76,27 @@ func (h *Handler) GetAdminInventoryItem(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(item)
+}
+
+func (h *Handler) GetAdminInventoryUnitTraceability(w http.ResponseWriter, r *http.Request) {
+	unitCode := chi.URLParam(r, "unitCode")
+	if unitCode == "" {
+		h.writeError(w, http.StatusBadRequest, "invalid_unit_code", "Unit code is required")
+		return
+	}
+
+	detail, err := h.service.GetAdminInventoryUnitTraceability(r.Context(), unitCode)
+	if err != nil {
+		if errors.Is(err, ErrInventoryUnitNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Physical inventory unit not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get unit traceability")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(detail)
 }
 
 func (h *Handler) ReceiveStock(w http.ResponseWriter, r *http.Request) {

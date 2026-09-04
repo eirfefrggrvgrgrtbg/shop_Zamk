@@ -1157,9 +1157,61 @@ export interface PhysicalUnitContext {
   variantId: string;
 }
 
+export interface AggregateStock {
+  total: number;
+  reserved: number;
+  available: number;
+}
+
+export interface PhysicalStock {
+  warehouse: number;
+  allocated: number;
+  picked: number;
+  free: number;
+  expected: number;
+  damaged: number;
+  writtenOff: number;
+  shipped: number;
+  staleAllocated?: number;
+}
+
+export interface LegacyStock {
+  onHand: number;
+  reserved: number;
+  available: number;
+}
+
+export interface InventoryHealth {
+  status: 'healthy' | 'warning' | 'critical';
+  issues: string[];
+}
+
+export interface InventoryProductInfo {
+  id: string;
+  title: string;
+  slug: string;
+  mainImageUrl?: string;
+}
+
+export interface InventoryVariantInfo {
+  id: string;
+  sku: string;
+  sellerSku?: string;
+  barcode?: string;
+  size?: string;
+  color?: string;
+  label: string;
+}
+
+export interface InventorySellerInfo {
+  id: string;
+  name: string;
+}
+
 export interface AdminInventoryListResponse {
   items: AdminInventoryItem[];
   totalCount: number;
+  issuesCount?: number;
   unitContext?: PhysicalUnitContext;
 }
 
@@ -1167,12 +1219,108 @@ export interface AdminInventoryItem {
   id: string;
   productId: string;
   productVariantId: string;
+  productTitle?: string;
+  variant?: string;
   sellerId?: string;
+  sellerName?: string;
+  source?: string;
   totalStock: number;
   reservedStock: number;
   availableStock: number;
   createdAt?: string;
   updatedAt?: string;
+
+  product?: InventoryProductInfo;
+  variantInfo?: InventoryVariantInfo;
+  seller?: InventorySellerInfo;
+  aggregate?: AggregateStock;
+  physical?: PhysicalStock;
+  legacy?: LegacyStock;
+  accountingMode?: 'serialized' | 'mixed' | 'legacy';
+  health?: InventoryHealth;
+  physicalUnits?: AdminInventoryPhysicalUnit[];
+}
+
+export interface AdminInventoryAllocationInfo {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  orderStatus: string;
+  fulfillmentId?: string;
+  fulfillmentStatus?: string;
+  pickedAt?: string;
+}
+
+export interface AdminInventorySupplyLineage {
+  supplyId: string;
+  supplyNumber: string;
+  supplyStatus: string;
+  receivedAt?: string;
+}
+
+export interface AdminInventoryPhysicalUnit {
+  id: string;
+  unitCode: string;
+  status: string; // 'expected' | 'warehouse' | 'damaged' | 'written_off' | 'shipped'
+  createdAt: string;
+  availability: string; // 'free' | 'allocated' | 'picked' | 'unavailable_expected' | 'unavailable_damaged' | 'unavailable_written_off' | 'unavailable_shipped'
+  isStaleAllocation: boolean;
+  liveAllocation?: AdminInventoryAllocationInfo;
+  staleAllocation?: AdminInventoryAllocationInfo;
+  supplyLineage?: AdminInventorySupplyLineage;
+}
+
+export interface AdminInventoryUnitIdentity {
+  id: string;
+  unitCode: string;
+  variantId: string;
+  productId: string;
+  productTitle: string;
+  variantName: string;
+  sku: string;
+  barcode: string;
+  size: string;
+  color: string;
+  sellerId: string;
+  sellerName: string;
+  source: string;
+}
+
+export interface AdminInventoryUnitCurrentState {
+  status: string;
+  availability: string;
+  location: string;
+  isStaleAllocation: boolean;
+  healthIssue?: string;
+}
+
+export interface AdminInventoryUnitContext {
+  liveAllocation?: AdminInventoryAllocationInfo;
+  staleAllocation?: AdminInventoryAllocationInfo;
+}
+
+export interface AdminInventoryUnitTimelineEvent {
+  id: string;
+  type: string;
+  category: 'physical' | 'commitment' | 'operation' | 'order_lifecycle' | 'diagnostic';
+  eventName: string;
+  description: string;
+  timestamp: string;
+  sourceEntity: string;
+  referenceNumber?: string;
+  referenceId?: string;
+  actorRole?: 'system' | 'staff' | 'customer' | 'seller';
+  actorName?: string;
+  link?: string;
+}
+
+export interface AdminInventoryUnitTraceability {
+  identity: AdminInventoryUnitIdentity;
+  currentState: AdminInventoryUnitCurrentState;
+  origin?: AdminInventorySupplyLineage;
+  currentContext: AdminInventoryUnitContext;
+  timeline: AdminInventoryUnitTimelineEvent[];
+  hasPartialHistory: boolean;
 }
 
 export interface AdminInventoryMovement {

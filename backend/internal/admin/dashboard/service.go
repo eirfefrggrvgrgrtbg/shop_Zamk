@@ -1,12 +1,19 @@
 package dashboard
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
-type Service struct {
-	repo *Repository
+type RepositoryInterface interface {
+	GetSummary(ctx context.Context) (*DashboardSummary, error)
 }
 
-func NewService(repo *Repository) *Service {
+type Service struct {
+	repo RepositoryInterface
+}
+
+func NewService(repo RepositoryInterface) *Service {
 	return &Service{repo: repo}
 }
 
@@ -59,6 +66,26 @@ func (s *Service) GetDashboardSummary(ctx context.Context) (*DashboardSummary, e
 			Count:    summary.Sellers.WaitingModeration,
 			Severity: "warning",
 			Link:     "/admin/sellers",
+		})
+	}
+
+	if summary.Orders.RequiresPicking > 0 {
+		cnt := summary.Orders.RequiresPicking
+		var title string
+		switch {
+		case cnt%10 == 1 && cnt%100 != 11:
+			title = fmt.Sprintf("%d заказ требует сборки", cnt)
+		case cnt%10 >= 2 && cnt%10 <= 4 && (cnt%100 < 10 || cnt%100 >= 20):
+			title = fmt.Sprintf("%d заказа требуют сборки", cnt)
+		default:
+			title = fmt.Sprintf("%d заказов требуют сборки", cnt)
+		}
+
+		attention = append(attention, AttentionItem{
+			Title:    title,
+			Count:    cnt,
+			Severity: "warning",
+			Link:     "/admin/fulfillment/picking",
 		})
 	}
 

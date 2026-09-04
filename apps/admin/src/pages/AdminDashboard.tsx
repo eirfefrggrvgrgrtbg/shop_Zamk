@@ -35,6 +35,7 @@ function normalizeRoute(rawLink?: string, title?: string): { path: string; disab
     if (title?.toLowerCase().includes('продавец')) return { path: '/sellers', disabled: false };
     if (title?.toLowerCase().includes('аукцион') || title?.toLowerCase().includes('лот')) return { path: '/auctions', disabled: false };
     if (title?.toLowerCase().includes('остаток')) return { path: '/inventory', disabled: false };
+    if (title?.toLowerCase().includes('сборк')) return { path: '/fulfillment/picking', disabled: false };
     return { path: '#', disabled: true };
   }
 

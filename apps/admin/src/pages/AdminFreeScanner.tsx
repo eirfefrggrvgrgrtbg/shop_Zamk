@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PackageSearch, ArrowRight, XCircle, CheckCircle2, Box, Store, RefreshCw, Check, AlertTriangle } from 'lucide-react';
 import { processFoundUnit, ProcessFoundUnitResponse, finalizeSupplyReceivingSession } from '@zamk/api-client/src/admin';
 import { playBeepSound } from '../utils/audio';
 
 export function AdminFreeScanner() {
-  const [unitCode, setUnitCode] = useState('');
+  const [searchParams] = useSearchParams();
+  const initialCode = (searchParams.get('q') || searchParams.get('code') || searchParams.get('unitCode') || '').trim();
+  const [unitCode, setUnitCode] = useState(initialCode);
   const [isDamaged, setIsDamaged] = useState(false);
   const [loading, setLoading] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
@@ -12,6 +15,12 @@ export function AdminFreeScanner() {
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<ProcessFoundUnitResponse | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (initialCode) {
+      setUnitCode(initialCode);
+    }
+  }, [initialCode]);
 
   useEffect(() => {
     inputRef.current?.focus();

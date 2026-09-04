@@ -2,6 +2,7 @@ package fulfillment_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/fulfillment"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/supplies"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
@@ -136,7 +138,8 @@ func (f *pickingFixture) createUnitWithStatus(t *testing.T, ctx context.Context,
 	require.NoError(t, err)
 
 	unitID := uuid.New()
-	unitCode := "ZMU-" + uuid.New().String()[:8]
+	unitCode, err := supplies.GenerateUnitCode()
+	require.NoError(t, err)
 	_, err = f.db.Exec(ctx, `INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status) VALUES ($1, $2, $3, $4, $5, 1, $6)`, unitID, unitCode, variantID, supplyID, supplyItemID, unitStatus)
 	require.NoError(t, err)
 
@@ -157,7 +160,8 @@ func (f *pickingFixture) createUnallocatedUnit(t *testing.T, ctx context.Context
 	require.NoError(t, err)
 
 	unitID := uuid.New()
-	unitCode := "ZMU-" + uuid.New().String()[:8]
+	unitCode, err := supplies.GenerateUnitCode()
+	require.NoError(t, err)
 	_, err = f.db.Exec(ctx, `INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status) VALUES ($1, $2, $3, $4, $5, 1, 'warehouse')`, unitID, unitCode, variantID, supplyID, supplyItemID)
 	require.NoError(t, err)
 
@@ -178,7 +182,9 @@ func (f *pickingFixture) createAllocation(t *testing.T, ctx context.Context, ord
 	require.NoError(t, err)
 
 	unitID := uuid.New()
-	_, err = f.db.Exec(ctx, `INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status) VALUES ($1, $2, $3, $4, $5, 1, 'warehouse')`, unitID, uuid.New().String()[:12], variantID, supplyID, supplyItemID)
+	unitCode, err := supplies.GenerateUnitCode()
+	require.NoError(t, err)
+	_, err = f.db.Exec(ctx, `INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status) VALUES ($1, $2, $3, $4, $5, 1, 'warehouse')`, unitID, unitCode, variantID, supplyID, supplyItemID)
 	require.NoError(t, err)
 
 	allocID := uuid.New()
@@ -311,4 +317,73 @@ func TestPickingRead_Classification_InvalidOverallocation(t *testing.T) {
 
 	_, err := f.svc.GetPickingOrder(ctx, fulfillmentID)
 	require.ErrorIs(t, err, fulfillment.ErrInvariantViolation)
+}
+
+func TestPickingRead_ItemMetadata(t *testing.T) {
+	ctx := context.Background()
+	f := setupPickingFixture(t, ctx)
+	defer f.db.Close()
+
+	orderID, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "paid", "paid")
+	itemID := f.createOrderItem(t, ctx, orderID, fulfillmentID, 1, 0)
+	f.createAllocation(t, ctx, itemID, false)
+
+	// Update order_item with metadata
+	size := "M"
+	color := "Graphite"
+	img := "https://example.com/coat.jpg"
+	sku := "SKU-DEV-COAT-M"
+	_, err := f.db.Exec(ctx, `
+		UPDATE order_items
+		SET variant_size = $1, variant_color = $2, image_url = $3, sku = $4
+		WHERE id = $5
+	`, size, color, img, sku, itemID)
+	require.NoError(t, err)
+
+	po, err := f.svc.GetPickingOrder(ctx, fulfillmentID)
+	require.NoError(t, err)
+	require.Len(t, po.Items, 1)
+
+	item := po.Items[0]
+	require.NotNil(t, item.VariantSize)
+	assert.Equal(t, "M", *item.VariantSize)
+	require.NotNil(t, item.VariantColor)
+	assert.Equal(t, "Graphite", *item.VariantColor)
+	require.NotNil(t, item.ImageURL)
+	assert.Equal(t, "https://example.com/coat.jpg", *item.ImageURL)
+	require.NotNil(t, item.SKU)
+	assert.Equal(t, "SKU-DEV-COAT-M", *item.SKU)
+	require.NotNil(t, item.Barcode)
+	assert.NotEmpty(t, *item.Barcode)
+}
+
+func TestPickingRead_PlaceholderBarcode_Sanitized(t *testing.T) {
+	ctx := context.Background()
+	f := setupPickingFixture(t, ctx)
+	defer f.db.Close()
+
+	orderID, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "paid", "paid")
+	itemID := f.createOrderItem(t, ctx, orderID, fulfillmentID, 1, 0)
+
+	var variantID uuid.UUID
+	err := f.db.QueryRow(ctx, `SELECT product_variant_id FROM order_items WHERE id = $1`, itemID).Scan(&variantID)
+	require.NoError(t, err)
+
+	// Set a placeholder all-zero barcode on the variant
+	placeholder := strings.Repeat("0", 25)
+	_, err = f.db.Exec(ctx, `UPDATE product_variants SET barcode = $1, sku = 'DEV-SKU-TEST' WHERE id = $2`, placeholder, variantID)
+	require.NoError(t, err)
+	defer func() {
+		_, _ = f.db.Exec(context.Background(), `UPDATE product_variants SET barcode = NULL WHERE id = $1`, variantID)
+	}()
+	_, err = f.db.Exec(ctx, `UPDATE order_items SET sku = 'DEV-SKU-TEST' WHERE id = $1`, itemID)
+	require.NoError(t, err)
+
+	po, err := f.svc.GetPickingOrder(ctx, fulfillmentID)
+	require.NoError(t, err)
+	require.Len(t, po.Items, 1)
+
+	item := po.Items[0]
+	assert.Equal(t, "DEV-SKU-TEST", *item.SKU)
+	assert.Nil(t, item.Barcode, "placeholder all-zero barcode must be sanitized to nil in picking read model")
 }

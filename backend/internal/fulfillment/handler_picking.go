@@ -10,7 +10,8 @@ import (
 )
 
 type ScanPickingCodeRequest struct {
-	Code string `json:"code"`
+	Code        string     `json:"code"`
+	OrderItemID *uuid.UUID `json:"orderItemId,omitempty"`
 }
 
 func (h *Handler) ScanPickingCode(w http.ResponseWriter, r *http.Request) {
@@ -38,14 +39,42 @@ func (h *Handler) ScanPickingCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.svc.ScanPickingCode(r.Context(), adminID, fulfillmentID, req.Code)
+	res, err := h.svc.ScanPickingCode(r.Context(), adminID, fulfillmentID, req.Code, req.OrderItemID)
 	if err != nil {
+		if errors.Is(err, ErrItemNotInFulfillment) {
+			h.writeError(w, http.StatusNotFound, "item_not_in_fulfillment", "Order item not found in this fulfillment")
+			return
+		}
+		if errors.Is(err, ErrItemNotSerialized) {
+			h.writeError(w, http.StatusConflict, "item_not_serialized", "Position is not serialized")
+			return
+		}
+		if errors.Is(err, ErrItemAlreadyComplete) {
+			h.writeError(w, http.StatusConflict, "item_already_complete", "Position is already fully picked")
+			return
+		}
+		if errors.Is(err, ErrUnitAllocatedToOtherOrderItem) {
+			h.writeError(w, http.StatusConflict, "unit_allocated_to_other_order_item", "Эта единица назначена другой позиции заказа.")
+			return
+		}
+		if errors.Is(err, ErrOrderItemRequiredForSubstitution) {
+			h.writeError(w, http.StatusConflict, "order_item_required_for_substitution", "Для выбора свободной единицы сначала откройте конкретную позицию сборки.")
+			return
+		}
 		if errors.Is(err, ErrPickingNotAllowed) {
 			h.writeError(w, http.StatusConflict, "picking_not_allowed", "Picking is not allowed for this fulfillment state")
 			return
 		}
 		if errors.Is(err, ErrUnitNotInWarehouse) {
-			h.writeError(w, http.StatusConflict, "unit_not_in_warehouse", "Unit is not in warehouse")
+			h.writeError(w, http.StatusConflict, "unit_not_in_warehouse", "Эта единица сейчас недоступна для сборки.")
+			return
+		}
+		if errors.Is(err, ErrUnitVariantMismatch) {
+			h.writeError(w, http.StatusConflict, "unit_variant_mismatch", "Эта единица относится к другому варианту товара.")
+			return
+		}
+		if errors.Is(err, ErrNoUnpickedAllocationForVariant) {
+			h.writeError(w, http.StatusConflict, "no_unpicked_allocation_for_variant", "Все единицы этого варианта уже собраны.")
 			return
 		}
 		if errors.Is(err, ErrUnitNotAllocatedToFulfillment) {
@@ -53,7 +82,7 @@ func (h *Handler) ScanPickingCode(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, ErrUnitAllocatedToOtherOrder) {
-			h.writeError(w, http.StatusConflict, "unit_allocated_to_other_order", "Unit is allocated to another order")
+			h.writeError(w, http.StatusConflict, "unit_allocated_to_other_order", "Эта единица уже предназначена для другого заказа. Возьмите другую.")
 			return
 		}
 		if errors.Is(err, ErrAmbiguousPickingCode) {
@@ -114,4 +143,61 @@ func (h *Handler) GetPickingOrder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(po)
+}
+
+func (h *Handler) GetCompatibleUnits(w http.ResponseWriter, r *http.Request) {
+	fIDStr := chi.URLParam(r, "id")
+	fulfillmentID, err := uuid.Parse(fIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid fulfillment ID")
+		return
+	}
+
+	orderItemIDStr := r.URL.Query().Get("orderItemId")
+	if orderItemIDStr == "" {
+		h.writeError(w, http.StatusBadRequest, "missing_order_item_id", "orderItemId query parameter is required")
+		return
+	}
+	orderItemID, err := uuid.Parse(orderItemIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_order_item_id", "Invalid order item ID")
+		return
+	}
+
+	units, err := h.svc.GetCompatibleUnits(r.Context(), fulfillmentID, orderItemID)
+	if err != nil {
+		if errors.Is(err, ErrFulfillmentNotFound) {
+			h.writeError(w, http.StatusNotFound, "fulfillment_not_found", "Fulfillment not found")
+			return
+		}
+		if errors.Is(err, ErrPickingNotAllowed) {
+			h.writeError(w, http.StatusConflict, "picking_not_allowed", "Picking is not allowed for this fulfillment state")
+			return
+		}
+		if errors.Is(err, ErrItemNotInFulfillment) {
+			h.writeError(w, http.StatusNotFound, "item_not_in_fulfillment", "Order item not found in this fulfillment")
+			return
+		}
+		if errors.Is(err, ErrItemNotSerialized) {
+			h.writeError(w, http.StatusConflict, "item_not_serialized", "Position is not serialized")
+			return
+		}
+		if errors.Is(err, ErrItemAlreadyComplete) {
+			h.writeError(w, http.StatusConflict, "item_already_complete", "Position is already fully picked")
+			return
+		}
+		if errors.Is(err, ErrInvariantViolation) {
+			h.writeError(w, http.StatusInternalServerError, "invariant_violation", "Invalid allocation data for item")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to load compatible units")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if units == nil {
+		units = []CompatibleUnit{}
+	}
+	json.NewEncoder(w).Encode(units)
 }

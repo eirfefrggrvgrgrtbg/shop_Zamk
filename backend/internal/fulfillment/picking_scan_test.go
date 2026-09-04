@@ -2,6 +2,7 @@ package fulfillment_test
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestPickingScan_Serialized(t *testing.T) {
 
 	// A. Scan first ZMU
 	adminID := f.adminID
-	res, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, allocs[0].UnitCode)
+	res, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, allocs[0].UnitCode, nil)
 	require.NoError(t, err)
 	assert.True(t, res.ScanResult.NewlyPicked)
 	assert.False(t, res.ScanResult.AlreadyPicked)
@@ -46,14 +47,14 @@ func TestPickingScan_Serialized(t *testing.T) {
 	assert.Equal(t, "assembling", f_db.Status)
 
 	// B. Duplicate scan
-	res2, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, allocs[0].UnitCode)
+	res2, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, allocs[0].UnitCode, nil)
 	require.NoError(t, err)
 	assert.False(t, res2.ScanResult.NewlyPicked)
 	assert.True(t, res2.ScanResult.AlreadyPicked)
 	assert.Equal(t, 1, res2.Item.PickedQuantity)
 
 	// C. Scan second ZMU
-	res3, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, allocs[1].UnitCode)
+	res3, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, allocs[1].UnitCode, nil)
 	require.NoError(t, err)
 	assert.True(t, res3.ScanResult.NewlyPicked)
 	assert.Equal(t, 2, res3.Item.PickedQuantity)
@@ -108,7 +109,7 @@ func TestPickingScan_CoherentEligibility(t *testing.T) {
 			`, itemID).Scan(&unitCode)
 			require.NoError(t, err)
 
-			res, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode)
+			res, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode, nil)
 			assert.Nil(t, res)
 			assert.ErrorIs(t, err, fulfillment.ErrPickingNotAllowed)
 		})
@@ -143,7 +144,7 @@ func TestPickingScan_CoherentEligibility(t *testing.T) {
 			`, itemID).Scan(&unitCode)
 			require.NoError(t, err)
 
-			res, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode)
+			res, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode, nil)
 			require.NoError(t, err)
 			assert.NotNil(t, res)
 		})
@@ -167,10 +168,17 @@ func TestPickingScan_InvalidScanKeepsPaidStatus(t *testing.T) {
 	var foreignUnitCode string
 	_ = f.db.QueryRow(ctx, `SELECT u.unit_code FROM inventory_units u JOIN order_item_allocations a ON a.inventory_unit_id = u.id WHERE a.order_item_id = $1`, itemID2).Scan(&foreignUnitCode)
 
-	// Unallocated ZMU
+	// Unallocated ZMU of wrong variant
 	var variantID uuid.UUID
 	_ = f.db.QueryRow(ctx, `SELECT product_variant_id FROM order_items WHERE id = $1`, itemID).Scan(&variantID)
-	_, unallocatedUnitCode := f.createUnallocatedUnit(t, ctx, variantID)
+
+	otherVariantID := uuid.New()
+	prodID := uuid.New()
+	catID := uuid.New()
+	_, _ = f.db.Exec(ctx, `INSERT INTO categories (id, name, slug, created_at, updated_at) VALUES ($1, 'Cat2', $2, now(), now())`, catID, uuid.New().String())
+	_, _ = f.db.Exec(ctx, `INSERT INTO products (id, seller_id, category_id, title, slug, price_cents, status, created_at, updated_at) VALUES ($1, $2, $3, 'Prod2', $4, 1000, 'published', now(), now())`, prodID, f.sellerID, catID, uuid.New().String())
+	_, _ = f.db.Exec(ctx, `INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, 1000, true, now(), now())`, otherVariantID, prodID, uuid.New().String(), uuid.New().String(), uuid.New().String())
+	_, unallocatedUnitCode := f.createUnallocatedUnit(t, ctx, otherVariantID)
 
 	// Non-warehouse ZMU
 	orderID3, fulfillmentID3 := f.createOrderAndFulfillment(t, ctx, "paid", "paid")
@@ -196,29 +204,29 @@ func TestPickingScan_InvalidScanKeepsPaidStatus(t *testing.T) {
 	}
 
 	// 1. Unknown code
-	_, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, "UNKNOWN_CODE_9999")
+	_, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, "UNKNOWN_CODE_9999", nil)
 	assert.ErrorIs(t, err, fulfillment.ErrCodeNotFound)
 	assertPaidState()
 
 	// 2. Foreign ZMU
-	_, err = f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, foreignUnitCode)
+	_, err = f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, foreignUnitCode, nil)
 	assert.ErrorIs(t, err, fulfillment.ErrUnitAllocatedToOtherOrder)
 	assertPaidState()
 
-	// 3. Unallocated ZMU
-	_, err = f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, unallocatedUnitCode)
-	assert.ErrorIs(t, err, fulfillment.ErrUnitNotAllocatedToFulfillment)
+	// 3. Unallocated ZMU of wrong variant -> ErrUnitVariantMismatch
+	_, err = f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, unallocatedUnitCode, nil)
+	assert.ErrorIs(t, err, fulfillment.ErrUnitVariantMismatch)
 	assertPaidState()
 
 	// 4. Non-warehouse ZMU (scanned on fulfillment3)
-	_, err = f.svc.ScanPickingCode(ctx, adminID, fulfillmentID3, damagedUnitCode)
+	_, err = f.svc.ScanPickingCode(ctx, adminID, fulfillmentID3, damagedUnitCode, nil)
 	assert.ErrorIs(t, err, fulfillment.ErrUnitNotInWarehouse)
 	var f3Status string
 	_ = f.db.QueryRow(ctx, `SELECT status FROM order_fulfillments WHERE id = $1`, fulfillmentID3).Scan(&f3Status)
 	assert.Equal(t, "paid", f3Status)
 
 	// 5. Barcode for serialized item
-	_, err = f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, variantBarcode)
+	_, err = f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, variantBarcode, nil)
 	assert.ErrorIs(t, err, fulfillment.ErrCannotPickSerializedWithBarcode)
 	assertPaidState()
 }
@@ -235,7 +243,7 @@ func TestPickingScan_UnallocatedZMU(t *testing.T) {
 
 	unitID, unitCode := f.createUnallocatedUnit(t, ctx, variantID)
 
-	_, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode)
+	_, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode, nil)
 	require.ErrorIs(t, err, fulfillment.ErrUnitNotAllocatedToFulfillment)
 
 	// Verify unit is still unallocated and status is warehouse
@@ -257,7 +265,7 @@ func TestPickingScan_NonWarehouseZMU(t *testing.T) {
 	itemID := f.createOrderItem(t, ctx, orderID, fulfillmentID, 1, 0)
 	unitID, unitCode := f.createUnitWithStatus(t, ctx, itemID, "damaged")
 
-	_, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode)
+	_, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode, nil)
 	require.ErrorIs(t, err, fulfillment.ErrUnitNotInWarehouse)
 
 	// Verify picked_at stays NULL
@@ -291,7 +299,7 @@ func TestPickingScan_PartialAllocationRollback(t *testing.T) {
 	`, itemID).Scan(&unitID, &unitCode)
 	require.NoError(t, err)
 
-	_, err = f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode)
+	_, err = f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode, nil)
 	require.ErrorIs(t, err, fulfillment.ErrInvariantViolation)
 
 	// Verify whole transaction rolled back: picked_at remains NULL
@@ -317,7 +325,7 @@ func TestPickingScan_SerializedItemViaBarcode(t *testing.T) {
 	var barcode string
 	_ = f.db.QueryRow(ctx, `SELECT pv.barcode FROM product_variants pv JOIN order_items oi ON oi.product_variant_id = pv.id WHERE oi.id = $1`, itemID).Scan(&barcode)
 
-	_, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, barcode)
+	_, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, barcode, nil)
 	require.ErrorIs(t, err, fulfillment.ErrCannotPickSerializedWithBarcode)
 
 	// Verify allocation picked_at remains NULL
@@ -352,7 +360,7 @@ func TestPickingScan_AmbiguousLegacyCode(t *testing.T) {
 	`, itemID2, orderID, prodID, variantID, f.sellerID, fulfillmentID)
 	require.NoError(t, err)
 
-	_, err = f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, barcode)
+	_, err = f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, barcode, nil)
 	require.ErrorIs(t, err, fulfillment.ErrAmbiguousPickingCode)
 
 	// Neither item incremented
@@ -386,7 +394,7 @@ func TestPickingScan_ForeignZMU_NoMutation(t *testing.T) {
 	_ = f.db.QueryRow(ctx, `SELECT u.unit_code FROM inventory_units u JOIN order_item_allocations a ON a.inventory_unit_id = u.id WHERE a.order_item_id = $1`, itemID1).Scan(&unitCode)
 
 	adminID := f.adminID
-	_, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID2, unitCode)
+	_, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID2, unitCode, nil)
 	require.ErrorIs(t, err, fulfillment.ErrUnitAllocatedToOtherOrder)
 
 	// Foreign allocation unchanged
@@ -426,7 +434,7 @@ func TestPickingScan_SerializedConcurrency(t *testing.T) {
 		idx := i
 		go func() {
 			defer wg.Done()
-			res, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, unitCode)
+			res, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, unitCode, nil)
 			outcomes[idx] = scanOutcome{res: res, err: err}
 		}()
 	}
@@ -479,7 +487,7 @@ func TestPickingScan_LegacyConcurrency_LastUnit(t *testing.T) {
 		idx := i
 		go func() {
 			defer wg.Done()
-			res, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, barcode)
+			res, err := f.svc.ScanPickingCode(ctx, adminID, fulfillmentID, barcode, nil)
 			outcomes[idx] = scanOutcome{res: res, err: err}
 		}()
 	}
@@ -546,18 +554,88 @@ func TestPickingScan_StockInvariants(t *testing.T) {
 	assertInvariants()
 
 	// 1. Rejected scan (e.g. unknown code)
-	_, _ = f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, "UNKNOWN_CODE")
+	_, _ = f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, "UNKNOWN_CODE", nil)
 	assertInvariants()
 
 	// 2. Successful scan
-	res, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode)
+	res, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode, nil)
 	require.NoError(t, err)
 	assert.True(t, res.ScanResult.NewlyPicked)
 	assertInvariants()
 
 	// 3. Duplicate scan
-	res2, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode)
+	res2, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, unitCode, nil)
 	require.NoError(t, err)
 	assert.True(t, res2.ScanResult.AlreadyPicked)
 	assertInvariants()
+}
+
+func TestPickingScan_PlaceholderBarcode_Rejected(t *testing.T) {
+	ctx := context.Background()
+	f := setupPickingFixture(t, ctx)
+	defer f.db.Close()
+
+	orderID, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "paid", "paid")
+	itemID := f.createOrderItem(t, ctx, orderID, fulfillmentID, 1, 0)
+
+	var variantID uuid.UUID
+	err := f.db.QueryRow(ctx, `SELECT product_variant_id FROM order_items WHERE id = $1`, itemID).Scan(&variantID)
+	require.NoError(t, err)
+
+	placeholder := strings.Repeat("0", 18)
+	_, err = f.db.Exec(ctx, `UPDATE product_variants SET barcode = $1, sku = 'DEV-SKU-TEST' WHERE id = $2`, placeholder, variantID)
+	require.NoError(t, err)
+	defer func() {
+		_, _ = f.db.Exec(context.Background(), `UPDATE product_variants SET barcode = NULL WHERE id = $1`, variantID)
+	}()
+
+	// Attempt to scan placeholder barcode
+	_, err = f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, placeholder, nil)
+	require.ErrorIs(t, err, fulfillment.ErrCodeNotFound, "scanning placeholder all-zero barcode must be rejected")
+
+	// Picked quantity must remain 0 and status remains paid
+	var pickedQ int
+	err = f.db.QueryRow(ctx, `SELECT picked_quantity FROM order_items WHERE id = $1`, itemID).Scan(&pickedQ)
+	require.NoError(t, err)
+	assert.Equal(t, 0, pickedQ)
+
+	var fStatus string
+	err = f.db.QueryRow(ctx, `SELECT status FROM order_fulfillments WHERE id = $1`, fulfillmentID).Scan(&fStatus)
+	require.NoError(t, err)
+	assert.Equal(t, "paid", fStatus)
+}
+
+func TestPickingScan_LegacySKU_Accepted(t *testing.T) {
+	ctx := context.Background()
+	f := setupPickingFixture(t, ctx)
+	defer f.db.Close()
+
+	orderID, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "paid", "paid")
+	itemID := f.createOrderItem(t, ctx, orderID, fulfillmentID, 1, 0)
+
+	var variantID uuid.UUID
+	err := f.db.QueryRow(ctx, `SELECT product_variant_id FROM order_items WHERE id = $1`, itemID).Scan(&variantID)
+	require.NoError(t, err)
+
+	_, err = f.db.Exec(ctx, `UPDATE product_variants SET barcode = NULL, sku = 'DEV-SKU-REAL-42' WHERE id = $1`, variantID)
+	require.NoError(t, err)
+
+	// Scanning the real SKU succeeds
+	res, err := f.svc.ScanPickingCode(ctx, f.adminID, fulfillmentID, "DEV-SKU-REAL-42", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "legacy", res.ScanResult.Type)
+	assert.True(t, res.ScanResult.NewlyPicked)
+	assert.Equal(t, 1, res.Item.PickedQuantity)
+	assert.True(t, res.FulfillmentProgress.IsComplete)
+
+	// Picked quantity in DB is 1 and status advanced to assembling
+	var pickedQ int
+	err = f.db.QueryRow(ctx, `SELECT picked_quantity FROM order_items WHERE id = $1`, itemID).Scan(&pickedQ)
+	require.NoError(t, err)
+	assert.Equal(t, 1, pickedQ)
+
+	var fStatus string
+	err = f.db.QueryRow(ctx, `SELECT status FROM order_fulfillments WHERE id = $1`, fulfillmentID).Scan(&fStatus)
+	require.NoError(t, err)
+	assert.Equal(t, "assembling", fStatus)
 }

@@ -19,11 +19,17 @@ type PickingItem struct {
 	OrderItemID       uuid.UUID              `json:"orderItemId"`
 	Title             string                 `json:"title"`
 	ProductVariantID  uuid.UUID              `json:"productVariantId"`
+	VariantSize       *string                `json:"variantSize,omitempty"`
+	VariantColor      *string                `json:"variantColor,omitempty"`
+	ImageURL          *string                `json:"imageUrl,omitempty"`
+	SKU               *string                `json:"sku,omitempty"`
+	Barcode           *string                `json:"barcode,omitempty"`
 	Quantity          int                    `json:"quantity"`
 	AllocationMode    string                 `json:"allocationMode"` // "serialized" | "legacy"
 	PickedQuantity    int                    `json:"pickedQuantity"`
-	RemainingQuantity int                    `json:"remainingQuantity"`
-	AllocatedUnits    []PickingAllocatedUnit `json:"allocatedUnits"`
+	RemainingQuantity    int                    `json:"remainingQuantity"`
+	AllocatedUnits       []PickingAllocatedUnit `json:"allocatedUnits"`
+	CompatibleUnitsCount int                    `json:"compatibleUnitsCount"`
 }
 
 type PickingAllocatedUnit struct {
@@ -46,6 +52,7 @@ type PickingScanDetail struct {
 	Code            string    `json:"code"`
 	NewlyPicked     bool      `json:"newlyPicked"`
 	AlreadyPicked   bool      `json:"alreadyPicked,omitempty"`
+	Substituted     bool      `json:"substituted,omitempty"`
 	AlreadyComplete bool      `json:"alreadyComplete,omitempty"`
 }
 
@@ -61,4 +68,12 @@ type PickingProgress struct {
 	PickedQuantity    int  `json:"pickedQuantity"`
 	RemainingQuantity int  `json:"remainingQuantity"`
 	IsComplete        bool `json:"isComplete"`
+}
+
+type CompatibleUnit struct {
+	InventoryUnitID  uuid.UUID  `json:"inventoryUnitId"`
+	UnitCode         string     `json:"unitCode"`
+	ProductVariantID uuid.UUID  `json:"productVariantId"`
+	Availability     string     `json:"availability"` // "allocated_to_current_item" | "free"
+	PickedAt         *time.Time `json:"pickedAt,omitempty"`
 }

@@ -13,4 +13,13 @@ var (
 	ErrInvalidMovementType    = errors.New("invalid stock movement type")
 	ErrProductVariantNotFound = errors.New("product variant not found")
 	ErrSellerMismatch         = errors.New("product variant does not belong to specified seller")
+	ErrInventoryUnitNotFound  = errors.New("inventory unit not found")
+)
+
+var (
+	ErrLegacyReconciliationNotAllowed = errors.New("Инвентаризация невозможна для legacy вариантов")
+	ErrReconciliationAlreadyActive    = errors.New("Для этого варианта уже идёт инвентаризация.")
+	ErrReconciliationNotInProgress    = errors.New("Сканирование возможно только в активной сессии.")
+	ErrInvalidReconciliationState     = errors.New("Неверное состояние сессии для этой операции.")
+	ErrReconciliationNotFound         = errors.New("Сессия инвентаризации не найдена")
 )

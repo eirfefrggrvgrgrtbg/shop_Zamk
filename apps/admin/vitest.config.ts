@@ -14,6 +14,10 @@ export default defineConfig({
       'src/pages/AdminModeration.test.tsx',
       'src/components/EntityTimeline.test.tsx',
       'src/api/adminTimeline.test.ts',
+      'src/components/inventory/**/*.test.{ts,tsx}',
+      'src/pages/AdminGuidedPicking.test.tsx',
+      'src/pages/AdminFreeScanner.test.tsx',
+      'src/pages/AdminInventoryReconciliation.test.tsx',
     ],
   },
 });

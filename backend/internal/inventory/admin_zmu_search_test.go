@@ -169,7 +169,7 @@ func TestAdminInventory_ZMUContextHandoff(t *testing.T) {
 
 	// TEST A: Exact Warehouse ZMU query
 	t.Run("exact warehouse ZMU resolves owning inventory variant", func(t *testing.T) {
-		resp, err := service.ListAdminInventory(ctx, zmuWarehouse, "", "", false, 50, 0)
+		resp, err := service.ListAdminInventory(ctx, zmuWarehouse, "", "", "", "", false, 50, 0)
 		require.NoError(t, err)
 
 		// Unit Context must be populated
@@ -186,11 +186,20 @@ func TestAdminInventory_ZMUContextHandoff(t *testing.T) {
 		assert.Equal(t, 15, resp.Items[0].TotalStock)
 		assert.Equal(t, 2, resp.Items[0].ReservedStock)
 		assert.Equal(t, 13, resp.Items[0].AvailableStock)
+
+		// Canonical P0.1 read model assertions
+		assert.Equal(t, 15, resp.Items[0].Aggregate.Total)
+		assert.Equal(t, 2, resp.Items[0].Aggregate.Reserved)
+		assert.Equal(t, 13, resp.Items[0].Aggregate.Available)
+		assert.Equal(t, 1, resp.Items[0].Physical.Warehouse)
+		assert.Equal(t, 1, resp.Items[0].Physical.Free)
+		assert.Equal(t, "mixed", resp.Items[0].AccountingMode)
+		assert.Equal(t, "healthy", resp.Items[0].Health.Status)
 	})
 
 	// TEST B: Exact Shipped ZMU query (valid physical history)
 	t.Run("exact shipped ZMU resolves owning inventory variant and status", func(t *testing.T) {
-		resp, err := service.ListAdminInventory(ctx, zmuShipped, "", "", false, 50, 0)
+		resp, err := service.ListAdminInventory(ctx, zmuShipped, "", "", "", "", false, 50, 0)
 		require.NoError(t, err)
 
 		require.NotNil(t, resp.UnitContext)
@@ -205,7 +214,7 @@ func TestAdminInventory_ZMUContextHandoff(t *testing.T) {
 
 	// TEST C: Exact Damaged ZMU query
 	t.Run("exact damaged ZMU resolves owning inventory variant and status", func(t *testing.T) {
-		resp, err := service.ListAdminInventory(ctx, zmuDamaged, "", "", false, 50, 0)
+		resp, err := service.ListAdminInventory(ctx, zmuDamaged, "", "", "", "", false, 50, 0)
 		require.NoError(t, err)
 
 		require.NotNil(t, resp.UnitContext)
@@ -219,7 +228,7 @@ func TestAdminInventory_ZMUContextHandoff(t *testing.T) {
 
 	// TEST D: Unknown ZMU query -> gracefully empty
 	t.Run("unknown ZMU returns empty without error", func(t *testing.T) {
-		resp, err := service.ListAdminInventory(ctx, "ZMU-NONEXISTENT9999", "", "", false, 50, 0)
+		resp, err := service.ListAdminInventory(ctx, "ZMU-NONEXISTENT9999", "", "", "", "", false, 50, 0)
 		require.NoError(t, err)
 
 		assert.Nil(t, resp.UnitContext, "UnitContext must be nil for non-existent ZMU")
@@ -229,7 +238,7 @@ func TestAdminInventory_ZMUContextHandoff(t *testing.T) {
 
 	// TEST E: Case-insensitive lowercase ZMU query
 	t.Run("lowercase ZMU input resolves canonical unit", func(t *testing.T) {
-		resp, err := service.ListAdminInventory(ctx, strings.ToLower(zmuWarehouse), "", "", false, 50, 0)
+		resp, err := service.ListAdminInventory(ctx, strings.ToLower(zmuWarehouse), "", "", "", "", false, 50, 0)
 		require.NoError(t, err)
 
 		require.NotNil(t, resp.UnitContext)
@@ -240,18 +249,19 @@ func TestAdminInventory_ZMUContextHandoff(t *testing.T) {
 
 	// TEST F: Existing Product Title Search Unchanged
 	t.Run("existing title search is unchanged", func(t *testing.T) {
-		resp, err := service.ListAdminInventory(ctx, "Silk Scarf", "", "", false, 50, 0)
+		resp, err := service.ListAdminInventory(ctx, "Silk Scarf", "", "", "", "", false, 50, 0)
 		require.NoError(t, err)
 
 		assert.Nil(t, resp.UnitContext)
 		require.Len(t, resp.Items, 1)
 		assert.Equal(t, "Dev Silk Scarf", resp.Items[0].ProductTitle)
 		assert.Equal(t, var2ID, resp.Items[0].ProductVariantID)
+		assert.Equal(t, "legacy", resp.Items[0].AccountingMode)
 	})
 
 	// TEST G: Existing SKU Search Unchanged
 	t.Run("existing SKU search is unchanged", func(t *testing.T) {
-		resp, err := service.ListAdminInventory(ctx, "SKU-COAT", "", "", false, 50, 0)
+		resp, err := service.ListAdminInventory(ctx, "SKU-COAT", "", "", "", "", false, 50, 0)
 		require.NoError(t, err)
 
 		assert.Nil(t, resp.UnitContext)

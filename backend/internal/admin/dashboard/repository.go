@@ -3,6 +3,8 @@ package dashboard
 import (
 	"context"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/fulfillment"
 )
 
 type Repository struct {
@@ -39,12 +41,15 @@ func (r *Repository) GetSummary(ctx context.Context) (*DashboardSummary, error) 
 	summary.Overview.Returns7d = returns7d
 	summary.Overview.PreviousReturns7d = prevReturns7d
 	
+	requiresPicking, _ := fulfillment.CountActionablePicking(ctx, r.db)
+
 	summary.Orders = OrdersMetrics{
 		NewOrPending:        newOrPending,
 		Paid:                paid,
 		InFulfillment:       inFulfillment,
 		ShippedOrDelivered:  shippedDelivered,
 		CancelledOrRefunded: cancelledRefunded,
+		RequiresPicking:     requiresPicking,
 	}
 
 	// Query Revenue and Averages

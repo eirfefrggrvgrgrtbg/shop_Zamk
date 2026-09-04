@@ -249,18 +249,28 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		assert.Equal(t, "picking_not_allowed", res.Error.Code)
 	})
 
-	// 7. Domain error: unit_not_allocated_to_fulfillment -> 409
-	t.Run("unallocated unit -> 409 unit_not_allocated_to_fulfillment", func(t *testing.T) {
+	// 7. Domain error: unit of wrong variant -> 409 unit_variant_mismatch
+	t.Run("unit of wrong variant -> 409 unit_variant_mismatch", func(t *testing.T) {
+		unallocProdID := uuid.New()
+		unallocCatID := uuid.New()
+		unallocVariantID := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO categories (id, name, slug, created_at, updated_at) VALUES ($1, 'CatU', $2, now(), now())`, unallocCatID, uuid.New().String())
+		require.NoError(t, err)
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO products (id, seller_id, category_id, title, slug, price_cents, status, created_at, updated_at) VALUES ($1, $2, $3, 'ProdU', $4, 1000, 'published', now(), now())`, unallocProdID, sellerID, unallocCatID, uuid.New().String())
+		require.NoError(t, err)
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, 1000, true, now(), now())`, unallocVariantID, unallocProdID, uuid.New().String(), uuid.New().String(), uuid.New().String())
+		require.NoError(t, err)
+
 		unallocSupplyID := uuid.New()
 		unallocSupplyItemID := uuid.New()
 		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO seller_supplies (id, seller_id, status, supply_number, handoff_method, created_at, updated_at) VALUES ($1, $2, 'completed', $3, 'pickup', now(), now())`, unallocSupplyID, sellerID, uuid.New().String()[:8])
 		require.NoError(t, err)
-		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO seller_supply_items (id, supply_id, variant_id, expected_quantity, created_at, updated_at) VALUES ($1, $2, $3, 1, now(), now())`, unallocSupplyItemID, unallocSupplyID, variantID)
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO seller_supply_items (id, supply_id, variant_id, expected_quantity, created_at, updated_at) VALUES ($1, $2, $3, 1, now(), now())`, unallocSupplyItemID, unallocSupplyID, unallocVariantID)
 		require.NoError(t, err)
 
 		unallocUnitID := uuid.New()
 		unallocCode := "ZMU-UNALLOC-" + unallocUnitID.String()[:8]
-		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status) VALUES ($1, $2, $3, $4, $5, 1, 'warehouse')`, unallocUnitID, unallocCode, variantID, unallocSupplyID, unallocSupplyItemID)
+		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status) VALUES ($1, $2, $3, $4, $5, 1, 'warehouse')`, unallocUnitID, unallocCode, unallocVariantID, unallocSupplyID, unallocSupplyItemID)
 		require.NoError(t, err)
 
 		body, _ := json.Marshal(map[string]string{"code": unallocCode})
@@ -273,7 +283,7 @@ func TestAdminPickingScanRouter(t *testing.T) {
 
 		var res errResponse
 		require.NoError(t, json.NewDecoder(rr.Body).Decode(&res))
-		assert.Equal(t, "unit_not_allocated_to_fulfillment", res.Error.Code)
+		assert.Equal(t, "unit_variant_mismatch", res.Error.Code)
 	})
 
 	// 8. Domain error: unit_allocated_to_other_order -> 409
@@ -452,5 +462,34 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		assert.Equal(t, "serialized", po.Items[0].AllocationMode)
 		assert.Equal(t, 1, po.Items[0].Quantity)
 		assert.Equal(t, 1, po.Items[0].PickedQuantity) // picked in previous subtest
+	})
+
+	// 13. Valid admin GET compatible units -> 200 with []CompatibleUnit
+	t.Run("valid admin get compatible units -> 200", func(t *testing.T) {
+		// Reset picked_at so item is unpicked (actionable)
+		_, err := pgClient.Pool.Exec(ctx, `UPDATE order_item_allocations SET picked_at = NULL WHERE order_item_id = $1`, itemID)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking/compatible-units?orderItemId="+itemID.String(), nil)
+		req.Header.Set("Authorization", "Bearer "+adminTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var units []fulfillment.CompatibleUnit
+		require.NoError(t, json.NewDecoder(rr.Body).Decode(&units))
+		assert.Len(t, units, 1)
+	})
+
+	// 14. Completed item -> 409 item_already_complete
+	t.Run("completed item -> 409 item_already_complete", func(t *testing.T) {
+		_, err := pgClient.Pool.Exec(ctx, `UPDATE order_item_allocations SET picked_at = now() WHERE order_item_id = $1`, itemID)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking/compatible-units?orderItemId="+itemID.String(), nil)
+		req.Header.Set("Authorization", "Bearer "+adminTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusConflict, rr.Code)
 	})
 }

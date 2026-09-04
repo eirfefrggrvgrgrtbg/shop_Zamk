@@ -36,6 +36,7 @@ type OrdersMetrics struct {
 	InFulfillment       int `json:"inFulfillment"`
 	ShippedOrDelivered  int `json:"shippedOrDelivered"`
 	CancelledOrRefunded int `json:"cancelledOrRefunded"`
+	RequiresPicking     int `json:"requiresPicking"`
 }
 
 type SellersMetrics struct {

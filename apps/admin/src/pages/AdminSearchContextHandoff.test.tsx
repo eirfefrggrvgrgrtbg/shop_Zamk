@@ -165,10 +165,37 @@ describe('Admin Global Search Context Handoff (M6.1C Tests)', () => {
             totalStock: 25,
             reservedStock: 0,
             availableStock: 25,
+            aggregate: {
+              total: 25,
+              reserved: 0,
+              available: 25,
+            },
+            physical: {
+              warehouse: 25,
+              allocated: 0,
+              picked: 0,
+              free: 25,
+              expected: 0,
+              damaged: 0,
+              writtenOff: 0,
+              shipped: 0,
+              staleAllocated: 0,
+            },
+            legacy: {
+              onHand: 0,
+              reserved: 0,
+              available: 0,
+            },
+            accountingMode: 'serialized',
+            health: {
+              status: 'healthy',
+              issues: [],
+            },
             updatedAt: '2026-08-30T12:00:00Z',
           },
         ],
         totalCount: 1,
+        issuesCount: 0,
         unitContext: {
           unitCode: 'ZMU-C5MXPTQ7WH8WZYQP',
           status: 'shipped',
@@ -188,7 +215,7 @@ describe('Admin Global Search Context Handoff (M6.1C Tests)', () => {
       );
 
       // Verifies search input is populated with ZMU code
-      const input = screen.getByPlaceholderText('Поиск по названию, SKU или ZMU...') as HTMLInputElement;
+      const input = screen.getByPlaceholderText('Товар, SKU, ZMK или ZMU...') as HTMLInputElement;
       expect(input.value).toBe('ZMU-C5MXPTQ7WH8WZYQP');
 
       // Verifies API was called with the ZMU query param
@@ -218,6 +245,7 @@ describe('Admin Global Search Context Handoff (M6.1C Tests)', () => {
       vi.spyOn(adminInventoryApi, 'getAdminInventory').mockResolvedValue({
         items: [],
         totalCount: 0,
+        issuesCount: 0,
         unitContext: {
           unitCode: 'ZMU-C5MXPTQ7WH8WZYQP',
           status: 'damaged',
@@ -247,6 +275,7 @@ describe('Admin Global Search Context Handoff (M6.1C Tests)', () => {
       const getInventorySpy = vi.spyOn(adminInventoryApi, 'getAdminInventory').mockResolvedValue({
         items: [],
         totalCount: 0,
+        issuesCount: 0,
       });
 
       render(
@@ -255,7 +284,7 @@ describe('Admin Global Search Context Handoff (M6.1C Tests)', () => {
         </MemoryRouter>
       );
 
-      const input = screen.getByPlaceholderText('Поиск по названию, SKU или ZMU...') as HTMLInputElement;
+      const input = screen.getByPlaceholderText('Товар, SKU, ZMK или ZMU...') as HTMLInputElement;
       expect(input.value).toBe('');
 
       await waitFor(() => {

@@ -64,7 +64,7 @@ export function AdminPickingQueue() {
           <div className="text-xl font-bold mt-1 text-blue-600">{assemblingOrders}</div>
         </div>
         <div className="p-3.5 rounded-xl border bg-white border-gray-200 shadow-sm">
-          <div className="text-xs text-gray-500 font-medium">Ожидают сборки</div>
+          <div className="text-xs text-gray-500 font-medium">Требуют сборки</div>
           <div className="text-xl font-bold mt-1 text-amber-600">{pendingOrders}</div>
         </div>
         <div className="p-3.5 rounded-xl border bg-white border-gray-200 shadow-sm">
@@ -135,12 +135,12 @@ export function AdminPickingQueue() {
                       Заказ #{formatOrderNumber({ id: item.orderId, orderNumber: item.orderNumber })}
                     </span>
                     {isAssembling ? (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                        Сборка
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200" data-testid="picking-status-badge">
+                        Сборка начата
                       </span>
                     ) : (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                        Ожидает сборки
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200" data-testid="picking-status-badge">
+                        Требует сборки
                       </span>
                     )}
                     {item.sellerName && (
