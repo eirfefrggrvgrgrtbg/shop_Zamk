@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -27,7 +28,10 @@ type Provider struct {
 	MeterProvider  *sdkmetric.MeterProvider
 	LoggerProvider *sdklog.LoggerProvider
 	Metrics        *HTTPMetrics
+	DBMetrics      *DBMetrics
+	RedisMetrics   *RedisMetrics
 	Tracer         trace.Tracer
+	logger         *slog.Logger
 	cfg            Config
 }
 
@@ -125,6 +129,20 @@ func Init(ctx context.Context, cfg Config, logger *slog.Logger) (*Provider, erro
 		}
 	}
 
+	dbMetrics, err := NewDBMetrics(meter)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("failed to initialize DB metrics", "error", err)
+		}
+	}
+
+	redisMetrics, err := NewRedisMetrics(meter)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("failed to initialize Redis metrics", "error", err)
+		}
+	}
+
 	// 3. Log Exporter & Provider
 	var logOpts []otlploggrpc.Option
 	logOpts = append(logOpts, otlploggrpc.WithEndpoint(cfg.OTLPEndpoint))
@@ -154,9 +172,62 @@ func Init(ctx context.Context, cfg Config, logger *slog.Logger) (*Provider, erro
 		MeterProvider:  mp,
 		LoggerProvider: lp,
 		Metrics:        httpMetrics,
+		DBMetrics:      dbMetrics,
+		RedisMetrics:   redisMetrics,
 		Tracer:         tracer,
+		logger:         logger,
 		cfg:            cfg,
 	}, nil
+}
+
+// NewPgTracer creates a centrally-configured PgTracer using the provider's tracer and metrics.
+func (p *Provider) NewPgTracer(host, port, dbName string, slowThreshold ...time.Duration) *PgTracer {
+	var tracer trace.Tracer
+	var logger *slog.Logger
+	var metrics *DBMetrics
+	threshold := 250 * time.Millisecond
+	if p != nil {
+		tracer = p.Tracer
+		logger = p.logger
+		metrics = p.DBMetrics
+		if p.cfg.DBSlowQueryThresholdMs > 0 {
+			threshold = time.Duration(p.cfg.DBSlowQueryThresholdMs) * time.Millisecond
+		}
+	}
+	if len(slowThreshold) > 0 && slowThreshold[0] > 0 {
+		threshold = slowThreshold[0]
+	}
+	return NewPgTracer(tracer, logger, metrics, host, port, dbName, threshold)
+}
+
+// NewRedisHook creates a centrally-configured RedisHook using the provider's tracer and metrics.
+func (p *Provider) NewRedisHook(addr string, slowThreshold ...time.Duration) *RedisHook {
+	var tracer trace.Tracer
+	var logger *slog.Logger
+	var metrics *RedisMetrics
+	threshold := 50 * time.Millisecond
+	if p != nil {
+		tracer = p.Tracer
+		logger = p.logger
+		metrics = p.RedisMetrics
+		if p.cfg.RedisSlowOpThresholdMs > 0 {
+			threshold = time.Duration(p.cfg.RedisSlowOpThresholdMs) * time.Millisecond
+		}
+	}
+	if len(slowThreshold) > 0 && slowThreshold[0] > 0 {
+		threshold = slowThreshold[0]
+	}
+	return NewRedisHook(tracer, logger, metrics, addr, threshold)
+}
+
+// RegisterPoolMetrics registers asynchronous gauge metrics for the given pgxpool.Pool.
+func (p *Provider) RegisterPoolMetrics(pool *pgxpool.Pool) error {
+	if p == nil || pool == nil {
+		return nil
+	}
+	meter := otel.GetMeterProvider().Meter(p.cfg.ServiceName)
+	_, err := RegisterPoolMetrics(meter, pool)
+	return err
 }
 
 // Shutdown flushes in-flight telemetry and gracefully shuts down providers.

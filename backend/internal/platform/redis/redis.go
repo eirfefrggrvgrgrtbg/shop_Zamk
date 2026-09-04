@@ -12,12 +12,25 @@ type Client struct {
 	Client *goredis.Client
 }
 
-func NewClient(ctx context.Context, addr, password string, db int) (*Client, error) {
+type Option func(*goredis.Client)
+
+// WithHook attaches a Hook to the Redis client.
+func WithHook(hook goredis.Hook) Option {
+	return func(c *goredis.Client) {
+		c.AddHook(hook)
+	}
+}
+
+func NewClient(ctx context.Context, addr, password string, db int, opts ...Option) (*Client, error) {
 	rdb := goredis.NewClient(&goredis.Options{
 		Addr:     addr,
 		Password: password,
 		DB:       db,
 	})
+
+	for _, opt := range opts {
+		opt(rdb)
+	}
 
 	client := &Client{Client: rdb}
 

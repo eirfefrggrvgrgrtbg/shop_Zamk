@@ -20,7 +20,16 @@ type Client struct {
 	Pool *pgxpool.Pool
 }
 
-func NewClient(ctx context.Context, dsn string) (*Client, error) {
+type Option func(*pgxpool.Config)
+
+// WithTracer attaches a QueryTracer to the pool connection configuration.
+func WithTracer(tracer pgx.QueryTracer) Option {
+	return func(cfg *pgxpool.Config) {
+		cfg.ConnConfig.Tracer = tracer
+	}
+}
+
+func NewClient(ctx context.Context, dsn string, opts ...Option) (*Client, error) {
 	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse postgres dsn: %w", err)
@@ -30,6 +39,10 @@ func NewClient(ctx context.Context, dsn string) (*Client, error) {
 	config.MinConns = 2
 	config.MaxConnLifetime = time.Hour
 	config.MaxConnIdleTime = time.Minute * 30
+
+	for _, opt := range opts {
+		opt(config)
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
@@ -50,7 +63,7 @@ func (c *Client) Ping(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := c.Pool.Ping(ctx); err != nil {
+	if _, err := c.Pool.Exec(ctx, ";"); err != nil {
 		return fmt.Errorf("postgres ping failed: %w", err)
 	}
 	return nil

@@ -46,24 +46,31 @@ func main() {
 	logger := observability.NewLogger(cfg.Observability, obsProvider.LoggerProvider, os.Stdout)
 	slog.SetDefault(logger)
 
-	// Connect to PostgreSQL
-	logger.Info("connecting to postgres", "dsn", cfg.Postgres.DSN)
-	pgClient, err := postgres.NewClient(ctx, cfg.Postgres.DSN)
+	// Connect to PostgreSQL with central observability
+	pgTracer := obsProvider.NewPgTracer(cfg.Postgres.Host, cfg.Postgres.Port, cfg.Postgres.Database)
+	pgClient, err := postgres.NewClient(ctx, cfg.Postgres.DSN, postgres.WithTracer(pgTracer))
 	if err != nil {
 		logger.Error("failed to connect to postgres", "error", err)
 		os.Exit(1)
 	}
 	defer pgClient.Close()
-	logger.Info("connected to postgres")
+	if err := obsProvider.RegisterPoolMetrics(pgClient.Pool); err != nil {
+		logger.Warn("failed to register postgres pool metrics", "error", err)
+	}
 
-	// Connect to Redis
-	redisClient, err := redis.NewClient(ctx, cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
+	// Connect to Redis with central observability
+	redisHook := obsProvider.NewRedisHook(cfg.Redis.Addr)
+	redisClient, err := redis.NewClient(ctx, cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB, redis.WithHook(redisHook))
 	if err != nil {
 		logger.Error("failed to connect to redis", "error", err)
 		os.Exit(1)
 	}
 	defer redisClient.Close()
-	logger.Info("connected to redis")
+
+	// Startup Database & Schema Diagnostics
+	if _, err := observability.RunStartupDiagnostics(ctx, pgClient.Pool, redisClient.Client, cfg.Postgres.Database, cfg.Redis.Addr, cfg.Observability.MigrationsPath, logger); err != nil {
+		logger.Warn("startup diagnostics check reported warning", "error", err)
+	}
 
 	r, cancelWorkers := app.BuildRouter(ctx, cfg, pgClient, redisClient, logger, obsProvider)
 	defer cancelWorkers()

@@ -126,10 +126,62 @@
     },
     {
       "id": 8,
+      "type": "timeseries",
+      "title": "PostgreSQL Pool Connections",
+      "description": "Active and idle connections in PostgreSQL pool",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "db_pool_connections", "refId": "A", "legendFormat": "{{state}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "PostgreSQL Errors & Operations",
+      "description": "Rate of database operations and errors",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(db_operations_total[5m])) by (operation)", "refId": "A", "legendFormat": "{{operation}} ops/s" },
+        { "expr": "sum(rate(db_errors_total[5m]))", "refId": "B", "legendFormat": "errors/s" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Redis Operations & Errors",
+      "description": "Rate of Redis commands and errors",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(redis_operations_total[5m])) by (operation)", "refId": "A", "legendFormat": "{{operation}} cmds/s" },
+        { "expr": "sum(rate(redis_errors_total[5m]))", "refId": "B", "legendFormat": "errors/s" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" }
+        }
+      }
+    },
+    {
+      "id": 11,
       "type": "logs",
       "title": "Recent ERROR Logs",
       "description": "Diagnostic error logs from Loki",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         { "expr": "{level=~\"(?i)error\"}", "refId": "A" }
