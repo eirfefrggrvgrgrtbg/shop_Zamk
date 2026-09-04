@@ -16,9 +16,19 @@ import {
   moveInventoryReconciliationToReview,
   cancelInventoryReconciliation,
   getInventoryReconciliationReview,
+  getReconciliationResolutionPlan,
   type ReconciliationSession,
-  type ReconciliationReview
+  type ReconciliationReview,
+  type ReconciliationResolutionPlan,
+  type ReconciliationResolutionCase,
+  type ReconciliationResolutionAction
 } from '../api/adminInventory';
+import {
+  humanizeOrderStatus,
+  humanizeShipmentStatus,
+  humanizeReturnStatus,
+  humanizeSupplyStatus
+} from '../utils/statusMapper';
 
 const formatHumanUnitStatus = (status?: string): string => {
   switch (status) {
@@ -33,7 +43,7 @@ const formatHumanUnitStatus = (status?: string): string => {
     case 'warehouse':
       return 'на складе';
     default:
-      return status ? `в статусе «${status}»` : 'неизвестной';
+      return 'в неопределённом статусе';
   }
 };
 
@@ -50,7 +60,41 @@ const formatSnapshotStatus = (status?: string): string => {
     case 'written_off':
       return 'Списано';
     default:
-      return status || '—';
+      return status ? 'Статус не определён' : '—';
+  }
+};
+
+const getSeverityBadge = (severity: string) => {
+  switch (severity) {
+    case 'critical':
+      return {
+        cardBorder: 'border-rose-200',
+        headerBg: 'bg-rose-50 text-rose-900 border-rose-200',
+        badgeBg: 'bg-rose-100 text-rose-800',
+        label: 'Критично',
+      };
+    case 'high':
+      return {
+        cardBorder: 'border-orange-200',
+        headerBg: 'bg-orange-50 text-orange-900 border-orange-200',
+        badgeBg: 'bg-orange-100 text-orange-800',
+        label: 'Высокий риск',
+      };
+    case 'warning':
+      return {
+        cardBorder: 'border-amber-200',
+        headerBg: 'bg-amber-50 text-amber-900 border-amber-200',
+        badgeBg: 'bg-amber-100 text-amber-800',
+        label: 'Внимание',
+      };
+    case 'info':
+    default:
+      return {
+        cardBorder: 'border-blue-200',
+        headerBg: 'bg-blue-50 text-blue-900 border-blue-200',
+        badgeBg: 'bg-blue-100 text-blue-800',
+        label: 'Информация',
+      };
   }
 };
 
@@ -61,6 +105,9 @@ export function AdminInventoryReconciliation() {
 
   const [session, setSession] = useState<ReconciliationSession | null>(null);
   const [review, setReview] = useState<ReconciliationReview | null>(null);
+  const [activeTab, setActiveTab] = useState<'review' | 'resolution'>('review');
+  const [resolutionPlan, setResolutionPlan] = useState<ReconciliationResolutionPlan | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [scanCode, setScanCode] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -81,6 +128,9 @@ export function AdminInventoryReconciliation() {
           if (data.status === 'review' || data.status === 'completed' || data.status === 'cancelled') {
             loadReview(data.id);
           }
+          if (data.status === 'completed') {
+            loadResolutionPlan(data.id);
+          }
           setLoading(false);
         })
         .catch(() => navigate('/inventory'));
@@ -91,6 +141,15 @@ export function AdminInventoryReconciliation() {
     try {
       const data = await getInventoryReconciliationReview(sessionId);
       setReview(data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const loadResolutionPlan = async (sessionId: string) => {
+    try {
+      const data = await getReconciliationResolutionPlan(sessionId);
+      setResolutionPlan(data);
     } catch (e) {
       console.error(e);
     }
@@ -160,10 +219,12 @@ export function AdminInventoryReconciliation() {
       await completeInventoryReconciliation(session.id);
       setSession(prev => prev ? { ...prev, status: 'completed' } : null);
       await loadReview(session.id);
+      await loadResolutionPlan(session.id);
     } catch (e: any) {
       setActionError(e.message || "Ошибка завершения проверки");
     }
   };
+
 
   const handleConfirmCancel = async () => {
     if (!session) return;
@@ -370,8 +431,166 @@ export function AdminInventoryReconciliation() {
             </div>
           )}
 
+          {/* Tabs for Completed Session */}
+          {session?.status === 'completed' && (
+            <div className="flex gap-4 border-b border-slate-200 mb-4">
+              <button
+                type="button"
+                className={`pb-2 px-1 text-sm font-semibold ${activeTab === 'review' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                onClick={() => setActiveTab('review')}
+              >
+                РЕЗУЛЬТАТЫ СВЕРКИ
+              </button>
+              <button
+                type="button"
+                className={`pb-2 px-1 text-sm font-semibold ${activeTab === 'resolution' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                onClick={() => setActiveTab('resolution')}
+              >
+                РАЗБОР РАСХОЖДЕНИЙ
+              </button>
+            </div>
+          )}
+
+          {/* Resolution Plan */}
+          {activeTab === 'resolution' && resolutionPlan && (
+            <div className="flex flex-col gap-4">
+              {resolutionPlan.cases.length === 0 ? (
+                <div className="bg-emerald-50 rounded-xl p-6 border border-emerald-200 text-center">
+                  <h3 className="text-emerald-900 font-bold mb-2">Расхождений не обнаружено</h3>
+                  <p className="text-emerald-700 text-sm">Все ожидаемые единицы найдены, лишних не обнаружено.</p>
+                </div>
+              ) : (
+                resolutionPlan.cases.map((c: ReconciliationResolutionCase) => {
+                  const sev = getSeverityBadge(c.severity);
+                  const variantDetails = [
+                    c.variant?.productTitle,
+                    c.variant?.size ? `Размер: ${c.variant.size}` : null,
+                    c.variant?.color ? `Цвет: ${c.variant.color}` : null,
+                    c.variant?.sku ? `SKU: ${c.variant.sku}` : null,
+                  ].filter(Boolean).join(' · ');
+
+                  const orderStatusLabel = humanizeOrderStatus(c.historicalContext?.orderStatus);
+                  const shipmentStatusLabel = humanizeShipmentStatus(c.historicalContext?.shipmentStatus);
+                  const returnStatusLabel = humanizeReturnStatus(c.historicalContext?.returnStatus);
+                  const supplyStatusLabel = humanizeSupplyStatus(c.historicalContext?.supplyStatus);
+
+                  const blockedActions = c.allowedActions?.filter(a => a.safetyLevel === 'BLOCKED') || [];
+                  const executableActions = c.allowedActions?.filter(a => a.safetyLevel !== 'BLOCKED') || [];
+
+                  return (
+                    <div key={c.unitId} className={`bg-white rounded-xl border overflow-hidden ${sev.cardBorder}`}>
+                      <div className={`px-4 py-3 border-b font-semibold flex items-center justify-between ${sev.headerBg}`}>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm">{c.unitCode}</span>
+                          <span className="opacity-40">·</span>
+                          <span className="text-sm">{c.title}</span>
+                        </div>
+                        <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${sev.badgeBg}`}>
+                          {sev.label}
+                        </span>
+                      </div>
+                      <div className="p-4 space-y-3">
+                        {variantDetails && (
+                          <div className="text-xs text-slate-500 font-medium">
+                            {variantDetails}
+                          </div>
+                        )}
+
+                        <p className="text-slate-700 text-sm leading-relaxed">{c.explanation}</p>
+
+                        {/* Blocked Informational Callout (not a button) */}
+                        {blockedActions.length > 0 && (
+                          <div className="p-3 rounded-lg bg-amber-50/80 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+                            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                            <div className="space-y-1">
+                              {blockedActions.map(action => (
+                                <div key={action.id}>
+                                  <div className="font-semibold text-amber-950">{action.label}</div>
+                                  {action.blockedReason && (
+                                    <div className="text-amber-800 text-[11px] mt-0.5">{action.blockedReason}</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Structured context chips */}
+                        {(c.historicalContext || c.currentAllocationCtx || c.lineageCtx) && (
+                          <div className="flex flex-wrap gap-2 text-xs pt-1">
+                            {c.historicalContext?.orderNumber && (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 font-medium">
+                                Заказ {c.historicalContext.orderNumber}{orderStatusLabel ? ` · ${orderStatusLabel}` : ''}
+                              </span>
+                            )}
+                            {c.historicalContext?.shipmentStatus && (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 font-medium">
+                                Отгрузка{shipmentStatusLabel ? ` · ${shipmentStatusLabel}` : ''}
+                              </span>
+                            )}
+                            {c.historicalContext?.returnStatus && (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 font-medium">
+                                Возврат{returnStatusLabel ? ` · ${returnStatusLabel}` : ''}
+                              </span>
+                            )}
+                            {c.historicalContext?.supplyNumber && (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 font-medium">
+                                Поставка {c.historicalContext.supplyNumber}{supplyStatusLabel ? ` · ${supplyStatusLabel}` : ''}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Executable Actions & Future Mutation Buttons */}
+                        {executableActions.length > 0 && (
+                          <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2">
+                            {executableActions.map((action: ReconciliationResolutionAction) => {
+                              if (action.enabled && action.route) {
+                                return (
+                                  <Link
+                                    key={action.id}
+                                    to={action.route}
+                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors shadow-xs ${
+                                      action.safetyLevel === 'WORKFLOW_HANDOFF'
+                                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                        : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    {action.label}
+                                  </Link>
+                                );
+                              }
+                              return (
+                                <div key={action.id} className="inline-flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    disabled={true}
+                                    title={action.blockedReason || 'Действие недоступно'}
+                                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                                  >
+                                    {action.label}
+                                  </button>
+                                  {action.blockedReason && (
+                                    <span className="text-[11px] text-slate-400">
+                                      ({action.blockedReason})
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+
           {/* Review Details */}
-          {review && (
+          {activeTab === 'review' && review && (
             <div className="flex flex-col gap-4">
               {review.missing.length > 0 && (
                 <div className="bg-white rounded-xl border border-red-200 overflow-hidden">

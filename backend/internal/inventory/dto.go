@@ -389,3 +389,102 @@ type ReconciliationReviewDTO struct {
 	UnexpectedFound    []ReconciliationReviewItemDTO `json:"unexpectedFound"`
 	ChangedDuringCount []ReconciliationReviewItemDTO `json:"changedDuringCount"`
 }
+
+const (
+	ActionSafetyNavigation                   = "NAVIGATION"
+	ActionSafetyWorkflowHandoff              = "WORKFLOW_HANDOFF"
+	ActionSafetyMutationRequiresConfirmation = "MUTATION_REQUIRES_CONFIRMATION"
+	ActionSafetyBlocked                      = "BLOCKED"
+)
+
+const (
+	SeverityInfo     = "info"
+	SeverityWarning  = "warning"
+	SeverityHigh     = "high"
+	SeverityCritical = "critical"
+)
+
+const (
+	CaseTypeMissingFree             = "missing_free"
+	CaseTypeMissingLiveAllocated    = "missing_live_allocated"
+	CaseTypeMissingPickedNotShipped = "missing_picked_not_shipped"
+	CaseTypeExpectedFound           = "expected_found"
+	CaseTypeShippedFound            = "shipped_found"
+	CaseTypeDamagedFound            = "damaged_found"
+	CaseTypeStaleAllocation         = "stale_allocation"
+	CaseTypeChangedDuringCount      = "changed_during_count"
+	CaseTypeUnexpectedFree          = "unexpected_free"
+)
+
+const (
+	ActionIDRecount                 = "recount"
+	ActionIDConfirmMissing          = "confirm_missing"
+	ActionIDInspectAllocation       = "inspect_allocation"
+	ActionIDCloseStaleAllocation    = "close_stale_allocation"
+	ActionIDOpenReceiving           = "open_receiving"
+	ActionIDOpenOrder               = "open_order"
+	ActionIDOpenReturn              = "open_return"
+	ActionIDOpenSupply              = "open_supply"
+	ActionIDOpenUnitHistory         = "open_unit_history"
+	ActionIDInvestigateShippedFound = "investigate_shipped_found"
+	ActionIDNoActionStateChanged    = "no_action_state_changed"
+)
+
+type ReconciliationResolutionAction struct {
+	ID            string `json:"id"`
+	SafetyLevel   string `json:"safetyLevel"`
+	Label         string `json:"label"`
+	Route         string `json:"route,omitempty"`
+	BlockedReason string `json:"blockedReason,omitempty"`
+	Enabled       bool   `json:"enabled"`
+}
+
+type ReconciliationHistoricalContext struct {
+	OrderID           *uuid.UUID `json:"orderId,omitempty"`
+	OrderNumber       string     `json:"orderNumber,omitempty"`
+	OrderStatus       string     `json:"orderStatus,omitempty"`
+	FulfillmentID     *uuid.UUID `json:"fulfillmentId,omitempty"`
+	FulfillmentStatus string     `json:"fulfillmentStatus,omitempty"`
+	ShipmentID        *uuid.UUID `json:"shipmentId,omitempty"`
+	ShipmentStatus    string     `json:"shipmentStatus,omitempty"`
+	ReturnID          *uuid.UUID `json:"returnId,omitempty"`
+	ReturnStatus      string     `json:"returnStatus,omitempty"`
+	SupplyID          *uuid.UUID `json:"supplyId,omitempty"`
+	SupplyNumber      string     `json:"supplyNumber,omitempty"`
+	AllocationID      *uuid.UUID `json:"allocationId,omitempty"`
+	PickedAt          *time.Time `json:"pickedAt,omitempty"`
+	ReleasedAt        *time.Time `json:"releasedAt,omitempty"`
+	ReleaseReason     string     `json:"releaseReason,omitempty"`
+}
+
+type ReconciliationVariantContext struct {
+	ProductTitle string `json:"productTitle"`
+	Size         string `json:"size,omitempty"`
+	Color        string `json:"color,omitempty"`
+	SKU          string `json:"sku,omitempty"`
+	Barcode      string `json:"barcode,omitempty"`
+}
+
+type ReconciliationResolutionCase struct {
+	CaseType             string                           `json:"caseType"`
+	Title                string                           `json:"title"`
+	Severity             string                           `json:"severity"` // "info", "warning", "high", "critical"
+	UnitID               uuid.UUID                        `json:"unitId"`
+	UnitCode             string                           `json:"unitCode"`
+	VariantID            uuid.UUID                        `json:"variantId"`
+	Variant              ReconciliationVariantContext     `json:"variant"`
+	SnapshotStatus       string                           `json:"snapshotStatus,omitempty"`
+	CurrentStatus        string                           `json:"currentStatus,omitempty"`
+	Availability         string                           `json:"availability,omitempty"`
+	CurrentAllocationCtx string                           `json:"currentAllocationCtx,omitempty"`
+	LineageCtx           string                           `json:"lineageCtx,omitempty"`
+	Explanation          string                           `json:"explanation"`
+	AllowedActions       []ReconciliationResolutionAction `json:"allowedActions"`
+	HistoricalContext    *ReconciliationHistoricalContext `json:"historicalContext,omitempty"`
+	BlockedReason        string                           `json:"blockedReason,omitempty"`
+}
+
+type ReconciliationResolutionPlanDTO struct {
+	SessionID uuid.UUID                      `json:"sessionId"`
+	Cases     []ReconciliationResolutionCase `json:"cases"`
+}

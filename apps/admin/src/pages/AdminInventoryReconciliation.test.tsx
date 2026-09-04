@@ -11,7 +11,9 @@ vi.mock("../api/adminInventory", () => ({
   moveInventoryReconciliationToReview: vi.fn(),
   cancelInventoryReconciliation: vi.fn(),
   getInventoryReconciliationReview: vi.fn(),
+  getReconciliationResolutionPlan: vi.fn(),
 }));
+
 
 const mockSession: api.ReconciliationSession = {
   id: "session-1",
@@ -379,5 +381,342 @@ describe("AdminInventoryReconciliation", () => {
 
     expect(screen.getByText("Неожиданно найдено")).toBeDefined();
     expect(screen.getByText("Ошибки сканирования")).toBeDefined();
+  });
+
+  it("renders resolution plan tab with Russian human titles, severities, historical context and actions", async () => {
+    const completedSession: api.ReconciliationSession = {
+      ...mockSession,
+      status: "completed",
+    };
+
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(completedSession);
+    vi.mocked(api.getInventoryReconciliationReview).mockResolvedValue({
+      expectedFound: [],
+      missing: [],
+      unexpectedFound: [],
+      changedDuringCount: [],
+    });
+
+    const mockPlan: api.ReconciliationResolutionPlan = {
+      sessionId: "session-1",
+      cases: [
+        {
+          unitId: "unit-1",
+          unitCode: "ZMU-TEST1",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Шерстяное пальто",
+            size: "M",
+            color: "Графит",
+            sku: "COAT-M-GRP",
+          },
+          caseType: "missing_live_allocated",
+          title: "Не найдена — назначена заказу",
+          severity: "high",
+          explanation: "Единица не найдена, но назначена активному заказу ORD-100192. Заказ не может быть скомплектован.",
+          currentAllocationCtx: "Заказ ORD-100192 (Оплачен)",
+          historicalContext: {
+            orderNumber: "ORD-100192",
+            orderStatus: "paid",
+          },
+          allowedActions: [
+            {
+              id: "open_order",
+              safetyLevel: "WORKFLOW_HANDOFF",
+              label: "Открыть заказ ORD-100192",
+              route: "/orders/order-1",
+              enabled: true,
+            },
+            {
+              id: "confirm_missing",
+              safetyLevel: "MUTATION_REQUIRES_CONFIRMATION",
+              label: "Списать недостачу",
+              blockedReason: "Списание недостачи будет доступно в P2.2B",
+              enabled: false,
+            },
+          ],
+        },
+        {
+          unitId: "unit-2",
+          unitCode: "ZMU-TEST2",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Шерстяное пальто",
+          },
+          caseType: "shipped_found",
+          title: "Найдена, хотя числится отгруженной",
+          severity: "critical",
+          explanation: "Единица числится отгруженной по заказу ORD-100191, однако была физически обнаружена на складе.",
+          allowedActions: [
+            {
+              id: "investigate_shipped_found",
+              safetyLevel: "BLOCKED",
+              label: "Требует ручного расследования",
+              blockedReason: "Требуется служебная проверка",
+              enabled: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    vi.mocked(api.getReconciliationResolutionPlan).mockResolvedValue(mockPlan);
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+          <Route path="/orders/:orderId" element={<div>Order Page</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("РАЗБОР РАСХОЖДЕНИЙ")).toBeDefined();
+    });
+
+    // Click "РАЗБОР РАСХОЖДЕНИЙ"
+    fireEvent.click(screen.getByText("РАЗБОР РАСХОЖДЕНИЙ"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Не найдена — назначена заказу")).toBeDefined();
+      expect(screen.getByText("Найдена, хотя числится отгруженной")).toBeDefined();
+    });
+
+    // Verify raw caseType is NOT rendered as primary visible text
+    expect(screen.queryByText("missing_live_allocated")).toBeNull();
+    expect(screen.queryByText("shipped_found")).toBeNull();
+
+    // Verify Russian severity labels
+    expect(screen.getByText("Высокий риск")).toBeDefined();
+    expect(screen.getByText("Критично")).toBeDefined();
+
+    // Verify historical context chip with humanized status
+    expect(screen.getByText("Заказ ORD-100192 · Оплачен")).toBeDefined();
+
+    // Verify enabled action is rendered as Link with correct target
+    const orderLink = screen.getByRole("link", { name: "Открыть заказ ORD-100192" });
+    expect(orderLink.getAttribute("href")).toBe("/orders/order-1");
+
+    // Verify non-executable mutation action is disabled with blockedReason
+    const writeOffBtn = screen.getByRole("button", { name: "Списать недостачу" });
+    expect(writeOffBtn.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("(Списание недостачи будет доступно в P2.2B)")).toBeDefined();
+
+    // Verify BLOCKED investigation is rendered in informational callout, not as a button
+    expect(screen.getByText("Требует ручного расследования")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Требует ручного расследования" })).toBeNull();
+  });
+
+  it("renders empty resolution plan state when no discrepancies exist", async () => {
+    const completedSession: api.ReconciliationSession = {
+      ...mockSession,
+      status: "completed",
+    };
+
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(completedSession);
+    vi.mocked(api.getInventoryReconciliationReview).mockResolvedValue({
+      expectedFound: [],
+      missing: [],
+      unexpectedFound: [],
+      changedDuringCount: [],
+    });
+
+    vi.mocked(api.getReconciliationResolutionPlan).mockResolvedValue({
+      sessionId: "session-1",
+      cases: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("РАЗБОР РАСХОЖДЕНИЙ")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText("РАЗБОР РАСХОЖДЕНИЙ"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Расхождений не обнаружено")).toBeDefined();
+      expect(screen.getByText(/Все ожидаемые единицы найдены/i)).toBeDefined();
+    });
+  });
+
+  it("humanizes domain statuses, removes warehouse cell fake actions, and presents BLOCKED as informational callout", async () => {
+    const completedSession: api.ReconciliationSession = {
+      ...mockSession,
+      status: "completed",
+    };
+
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(completedSession);
+    vi.mocked(api.getInventoryReconciliationReview).mockResolvedValue({
+      expectedFound: [],
+      missing: [],
+      unexpectedFound: [],
+      changedDuringCount: [],
+    });
+
+    const mockPlan: api.ReconciliationResolutionPlan = {
+      sessionId: "session-1",
+      cases: [
+        {
+          unitId: "unit-101",
+          unitCode: "ZMU-101",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Пальто мужское",
+            size: "L",
+            color: "Чёрный",
+            sku: "COAT-BLK-L",
+          },
+          caseType: "shipped_found",
+          title: "Обнаружена единица со статусом «Отгружен»",
+          severity: "critical",
+          explanation: "Единица числится отгруженной по заказу ORD-100192, однако была физически обнаружена на складе.",
+          historicalContext: {
+            orderId: "order-100192",
+            orderNumber: "ORD-100192",
+            orderStatus: "delivered",
+            shipmentStatus: "delivered",
+            returnStatus: "needs_info",
+            supplyNumber: "SUP-001197",
+          },
+          allowedActions: [
+            {
+              id: "open_order",
+              safetyLevel: "WORKFLOW_HANDOFF",
+              label: "Открыть заказ ORD-100192",
+              route: "/orders/order-100192",
+              enabled: true,
+            },
+            {
+              id: "investigate_shipped_found",
+              safetyLevel: "BLOCKED",
+              label: "Требуется ручная проверка отгрузки",
+              blockedReason: "Автоматическое исправление недоступно.",
+              enabled: false,
+            },
+          ],
+        },
+        {
+          unitId: "unit-102",
+          unitCode: "ZMU-102",
+          variantId: "variant-1",
+          variant: {
+            productTitle: "Пальто мужское",
+            size: "M",
+            color: "Синий",
+            sku: "COAT-BLU-M",
+          },
+          caseType: "stale_allocation",
+          title: "Зависшая аллокация на ненайденной единице",
+          severity: "high",
+          explanation: "Единица не найдена, и на неё числится резерв под заказ ORD-100193.",
+          historicalContext: {
+            orderId: "order-100193",
+            orderNumber: "ORD-100193",
+            orderStatus: "delivered",
+            shipmentStatus: "delivered",
+            returnStatus: "rejected",
+            supplyNumber: "SUP-001197",
+          },
+          allowedActions: [
+            {
+              id: "open_order",
+              safetyLevel: "WORKFLOW_HANDOFF",
+              label: "Открыть заказ ORD-100193",
+              route: "/orders/order-100193",
+              enabled: true,
+            },
+            {
+              id: "recount",
+              safetyLevel: "WORKFLOW_HANDOFF",
+              label: "Перепроверить ZMU",
+              route: "/warehouse/free-scan?unitCode=ZMU-102",
+              enabled: true,
+            },
+            {
+              id: "close_stale_allocation",
+              safetyLevel: "MUTATION_REQUIRES_CONFIRMATION",
+              label: "Освободить зависшее назначение",
+              blockedReason: "Автоматическое освобождение аллокации будет доступно в P2.2B",
+              enabled: false,
+            },
+            {
+              id: "confirm_missing",
+              safetyLevel: "MUTATION_REQUIRES_CONFIRMATION",
+              label: "Списать недостачу",
+              blockedReason: "Списание недостачи будет доступно в P2.2B",
+              enabled: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    vi.mocked(api.getReconciliationResolutionPlan).mockResolvedValue(mockPlan);
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+          <Route path="/orders/:orderId" element={<div>Order Page</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("РАЗБОР РАСХОЖДЕНИЙ")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText("РАЗБОР РАСХОЖДЕНИЙ"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Обнаружена единица со статусом «Отгружен»")).toBeDefined();
+      expect(screen.getByText("Зависшая аллокация на ненайденной единице")).toBeDefined();
+    });
+
+    // 1. Raw domain statuses are NOT visible
+    expect(screen.queryByText(/delivered/i)).toBeNull();
+    expect(screen.queryByText(/needs_info/i)).toBeNull();
+    expect(screen.queryByText(/rejected/i)).toBeNull();
+    expect(screen.queryByText(/\(delivered\)/i)).toBeNull();
+
+    // 2. Human statuses are visible in context chips
+    expect(screen.getByText("Заказ ORD-100192 · Доставлен")).toBeDefined();
+    expect(screen.getByText("Заказ ORD-100193 · Доставлен")).toBeDefined();
+    expect(screen.getAllByText("Отгрузка · Доставлена").length).toBe(2);
+    expect(screen.getByText("Возврат · Требует уточнения")).toBeDefined();
+    expect(screen.getByText("Возврат · Отклонён")).toBeDefined();
+    expect(screen.getAllByText("Поставка SUP-001197").length).toBe(2);
+
+    // 3. Fake warehouse cell terminology is ABSENT, Перепроверить ZMU is present
+    expect(screen.queryByText(/ячейк/i)).toBeNull();
+    const recountLink = screen.getByRole("link", { name: "Перепроверить ZMU" });
+    expect(recountLink).toBeDefined();
+    expect(recountLink.getAttribute("href")).toBe("/warehouse/free-scan?unitCode=ZMU-102");
+
+    // 4. BLOCKED investigation is an informational callout, NOT a clickable or disabled button
+    expect(screen.getByText("Требуется ручная проверка отгрузки")).toBeDefined();
+    expect(screen.getByText("Автоматическое исправление недоступно.")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Требуется ручная проверка отгрузки" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Требует ручного расследования" })).toBeNull();
+
+    // 5. Actual navigation actions remain enabled
+    const order1Link = screen.getByRole("link", { name: "Открыть заказ ORD-100192" });
+    expect(order1Link.getAttribute("href")).toBe("/orders/order-100192");
+    const order2Link = screen.getByRole("link", { name: "Открыть заказ ORD-100193" });
+    expect(order2Link.getAttribute("href")).toBe("/orders/order-100193");
+
+    // 6. Future mutation actions remain disabled buttons
+    const releaseBtn = screen.getByRole("button", { name: "Освободить зависшее назначение" });
+    expect(releaseBtn.hasAttribute("disabled")).toBe(true);
+    const writeOffBtn = screen.getByRole("button", { name: "Списать недостачу" });
+    expect(writeOffBtn.hasAttribute("disabled")).toBe(true);
   });
 });

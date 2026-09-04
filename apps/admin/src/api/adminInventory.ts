@@ -358,6 +358,69 @@ export interface ReconciliationReview {
   changedDuringCount: ReconciliationReviewItem[];
 }
 
+export interface ReconciliationResolutionAction {
+  id: string;
+  label: string;
+  safetyLevel: 'NAVIGATION' | 'WORKFLOW_HANDOFF' | 'MUTATION_REQUIRES_CONFIRMATION' | 'BLOCKED';
+  route?: string;
+  blockedReason?: string;
+  enabled: boolean;
+}
+
+export interface ReconciliationHistoricalContext {
+  orderId?: string;
+  orderNumber?: string;
+  orderStatus?: string;
+  fulfillmentId?: string;
+  fulfillmentStatus?: string;
+  shipmentId?: string;
+  shipmentStatus?: string;
+  returnId?: string;
+  returnStatus?: string;
+  supplyId?: string;
+  supplyNumber?: string;
+  supplyStatus?: string;
+  allocationId?: string;
+  pickedAt?: string;
+  releasedAt?: string;
+  releaseReason?: string;
+}
+
+export interface ReconciliationVariantContext {
+  productTitle: string;
+  size?: string;
+  color?: string;
+  sku?: string;
+  barcode?: string;
+}
+
+export interface ReconciliationResolutionCase {
+  unitId: string;
+  unitCode: string;
+  variantId: string;
+  variant: ReconciliationVariantContext;
+  caseType: string;
+  title: string;
+  severity: 'info' | 'warning' | 'high' | 'critical';
+  explanation: string;
+  allowedActions: ReconciliationResolutionAction[];
+  historicalContext?: ReconciliationHistoricalContext;
+  snapshotStatus?: string;
+  currentStatus?: string;
+  currentAllocationCtx?: string;
+  lineageCtx?: string;
+  blockedReason?: string;
+}
+
+export interface ReconciliationResolutionPlan {
+  sessionId: string;
+  cases: ReconciliationResolutionCase[];
+}
+
+export const getReconciliationResolutionPlan = async (sessionId: string): Promise<ReconciliationResolutionPlan> => {
+  return request('GET', `/admin/inventory/reconciliations/${sessionId}/resolution-plan`);
+};
+
 export const getInventoryReconciliationReview = async (sessionId: string): Promise<ReconciliationReview> => {
   return request('GET', `/admin/inventory/reconciliations/${sessionId}/review`);
 };

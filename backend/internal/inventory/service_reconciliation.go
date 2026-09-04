@@ -49,3 +49,7 @@ func (s *Service) GetReconciliationReview(ctx context.Context, sessionID uuid.UU
 func (s *Service) ListReconciliationSessionsByVariant(ctx context.Context, variantID uuid.UUID, limit int) ([]ReconciliationSessionDTO, error) {
 	return s.repo.ListReconciliationSessionsByVariant(ctx, variantID, limit)
 }
+
+func (s *Service) GetReconciliationResolutionPlan(ctx context.Context, sessionID uuid.UUID) (*ReconciliationResolutionPlanDTO, error) {
+	return s.repo.GetReconciliationResolutionPlan(ctx, sessionID)
+}

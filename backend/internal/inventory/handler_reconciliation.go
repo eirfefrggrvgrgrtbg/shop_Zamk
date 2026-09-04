@@ -244,3 +244,25 @@ func (h *Handler) ListReconciliations(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ListReconciliationSessionsResponse{Items: sessions})
 }
+
+func (h *Handler) GetReconciliationResolutionPlan(w http.ResponseWriter, r *http.Request) {
+	sessionIDParam := chi.URLParam(r, "id")
+	sessionID, err := uuid.Parse(sessionIDParam)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "invalid session id")
+		return
+	}
+
+	plan, err := h.service.GetReconciliationResolutionPlan(r.Context(), sessionID)
+	if err != nil {
+		if errors.Is(err, ErrReconciliationNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "reconciliation session not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(plan)
+}

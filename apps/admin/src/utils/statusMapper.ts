@@ -77,3 +77,88 @@ export function getStatusBadgeClass(status?: string | null): string {
   if (!status) return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
   return STATUS_BADGE_CLASSES[status] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
 }
+
+export const ORDER_STATUS_LABELS: Record<string, string> = {
+  created: 'Создан',
+  awaiting_payment: 'Ожидает оплаты',
+  paid: 'Оплачен',
+  assembling: 'Собирается',
+  packed: 'Упакован',
+  shipped: 'В пути',
+  delivered: 'Доставлен',
+  cancelled: 'Отменён',
+  returned: 'Возвращён',
+  refunded: 'Возвращён',
+  completed: 'Завершён',
+};
+
+export const SHIPMENT_STATUS_LABELS: Record<string, string> = {
+  pending: 'Ожидает',
+  assembling: 'В сборке',
+  packed: 'Упакована',
+  shipped: 'В пути',
+  delivered: 'Доставлена',
+  failed: 'Ошибка',
+  cancelled: 'Отменена',
+};
+
+export const RETURN_STATUS_LABELS: Record<string, string> = {
+  requested: 'Запрошен',
+  needs_info: 'Требует уточнения',
+  approved: 'Одобрен',
+  receiving: 'На приёмке',
+  item_received: 'Товар получен',
+  refunded: 'Возвращён',
+  completed: 'Завершён',
+  rejected: 'Отклонён',
+  cancelled: 'Отменён',
+};
+
+export const SUPPLY_STATUS_LABELS: Record<string, string> = {
+  draft: 'Черновик',
+  ready_to_ship: 'Готова к отправке',
+  shipped_by_seller: 'Отправлена селлером',
+  arrived_at_zamk: 'Прибыла в ZAMK',
+  receiving: 'На приёмке',
+  completed: 'Принята',
+  completed_with_discrepancies: 'Принята с расхождениями',
+  cancelled: 'Отменена',
+};
+
+export const FULFILLMENT_STATUS_LABELS: Record<string, string> = {
+  awaiting_payment: 'Ожидает оплаты',
+  paid: 'Ожидает сборки',
+  pending: 'Не сформирована',
+  assembling: 'В сборке',
+  packed: 'Упакована',
+  accepted: 'Принята на хабе',
+  discrepancy: 'Расхождение',
+  shipped: 'Отгружена',
+  delivered: 'Доставлена',
+  cancelled: 'Отменена',
+};
+
+export function humanizeOrderStatus(status?: string | null): string | undefined {
+  if (!status) return undefined;
+  return ORDER_STATUS_LABELS[status] || 'Статус не определён';
+}
+
+export function humanizeShipmentStatus(status?: string | null): string | undefined {
+  if (!status) return undefined;
+  return SHIPMENT_STATUS_LABELS[status] || 'Статус не определён';
+}
+
+export function humanizeReturnStatus(status?: string | null): string | undefined {
+  if (!status) return undefined;
+  return RETURN_STATUS_LABELS[status] || 'Статус не определён';
+}
+
+export function humanizeSupplyStatus(status?: string | null): string | undefined {
+  if (!status) return undefined;
+  return SUPPLY_STATUS_LABELS[status] || 'Статус не определён';
+}
+
+export function humanizeFulfillmentStatus(status?: string | null): string | undefined {
+  if (!status) return undefined;
+  return FULFILLMENT_STATUS_LABELS[status] || 'Статус не определён';
+}
