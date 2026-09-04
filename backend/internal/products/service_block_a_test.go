@@ -15,6 +15,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 
@@ -38,6 +39,9 @@ func setupBlockATestDB(t *testing.T) (*postgres.Client, *products.Service, uuid.
 	if !strings.Contains(dbName, "zamk_test") {
 		t.Fatalf("Refusing to run tests against non-test database: %s", dbName)
 	}
+
+	testutil.AssertTestDatabase(t, db.Pool)
+	require.NoError(t, testutil.EnsureCanonicalStarterTaxonomy(ctx, db.Pool))
 
 	repo := products.NewRepository(db.Pool)
 	sellerRepo := sellers.NewRepository(db.Pool)

@@ -23,28 +23,20 @@ func setupTestDB(t *testing.T) *postgres.Client {
 
 	testutil.AssertTestDatabase(t, client.Pool)
 
+	// Guarantee that canonical starter taxonomy required by other suites is present
+	require.NoError(t, testutil.EnsureCanonicalStarterTaxonomy(ctx, client.Pool))
+
+	// Truncate only payout financial tables
 	_, err = client.Pool.Exec(ctx, "TRUNCATE seller_ledger_entries CASCADE")
 	require.NoError(t, err)
 	_, err = client.Pool.Exec(ctx, "TRUNCATE payout_batches CASCADE")
 	require.NoError(t, err)
 	_, err = client.Pool.Exec(ctx, "TRUNCATE seller_commission_rules CASCADE")
 	require.NoError(t, err)
-	_, err = client.Pool.Exec(ctx, "TRUNCATE order_items CASCADE")
-	require.NoError(t, err)
-	_, err = client.Pool.Exec(ctx, "TRUNCATE order_fulfillments CASCADE")
-	require.NoError(t, err)
-	_, err = client.Pool.Exec(ctx, "TRUNCATE product_variants CASCADE")
-	require.NoError(t, err)
-	_, err = client.Pool.Exec(ctx, "TRUNCATE products CASCADE")
-	require.NoError(t, err)
-	_, err = client.Pool.Exec(ctx, "TRUNCATE categories CASCADE")
-	require.NoError(t, err)
-	_, err = client.Pool.Exec(ctx, "TRUNCATE orders CASCADE")
-	require.NoError(t, err)
-	_, err = client.Pool.Exec(ctx, "TRUNCATE sellers CASCADE")
-	require.NoError(t, err)
-	_, err = client.Pool.Exec(ctx, "TRUNCATE users CASCADE")
-	require.NoError(t, err)
+
+	// Clean up only hardcoded test fixtures from service_return_deduction_test
+	_, _ = client.Pool.Exec(ctx, "DELETE FROM users WHERE email = 'test@example.com'")
+	_, _ = client.Pool.Exec(ctx, "DELETE FROM categories WHERE slug = 'cat'")
 
 	return client
 }

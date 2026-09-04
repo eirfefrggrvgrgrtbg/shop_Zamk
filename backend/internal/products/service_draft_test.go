@@ -278,9 +278,9 @@ func TestSubmitModeration_DuplicateAndLifecycle(t *testing.T) {
 	pool := dbClient.Pool
 	ctx := context.Background()
 
-	// Get a valid leaf category
+	// Get a valid leaf category that requires size chart/variants
 	var catID uuid.UUID
-	err := pool.QueryRow(ctx, "SELECT id FROM categories WHERE is_active = true AND NOT EXISTS (SELECT 1 FROM categories c2 WHERE c2.parent_id = categories.id) LIMIT 1").Scan(&catID)
+	err := pool.QueryRow(ctx, "SELECT id FROM categories WHERE is_active = true AND size_chart_required = true AND NOT EXISTS (SELECT 1 FROM categories c2 WHERE c2.parent_id = categories.id) LIMIT 1").Scan(&catID)
 	require.NoError(t, err)
 
 	// 1. Create a product draft without variants
@@ -519,9 +519,9 @@ func TestAdminDossierCanonicalFieldsAndPreview(t *testing.T) {
 	pool := dbClient.Pool
 	ctx := context.Background()
 
-	// 1. Fetch category, color, size, material
+	// 1. Fetch category, color, size, material (hoodies has CHEST, LENGTH, SLEEVE)
 	var catID uuid.UUID
-	err := pool.QueryRow(ctx, "SELECT c.id FROM categories c WHERE c.is_active = true AND NOT EXISTS (SELECT 1 FROM categories sub WHERE sub.parent_id = c.id) LIMIT 1").Scan(&catID)
+	err := pool.QueryRow(ctx, "SELECT c.id FROM categories c WHERE c.slug = 'hoodies' AND c.is_active = true LIMIT 1").Scan(&catID)
 	require.NoError(t, err)
 
 	var colorID uuid.UUID

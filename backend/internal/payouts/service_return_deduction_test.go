@@ -2,6 +2,7 @@ package payouts
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -47,11 +48,12 @@ func TestProcessReturnDeduction(t *testing.T) {
 	repo := NewRepository(client.Pool)
 
 	// We need an order and order item
+	suffix := uuid.NewString()[:8]
 	sellerID := uuid.New()
 	userID := uuid.New()
-	_, err = client.Pool.Exec(ctx, "INSERT INTO users (id, name, phone, email, password_hash, role, created_at) VALUES ($1, 'Test', '+123', 'test@example.com', 'hash', 'seller', now())", userID)
+	_, err = client.Pool.Exec(ctx, "INSERT INTO users (id, name, phone, email, password_hash, role, created_at) VALUES ($1, 'Test', '+123', $2, 'hash', 'seller', now())", userID, fmt.Sprintf("test-%s@example.com", suffix))
 	require.NoError(t, err)
-	_, err = client.Pool.Exec(ctx, "INSERT INTO sellers (id, brand_name, slug, contact_email, status, created_at) VALUES ($1, 'test store', 'test-store', 'test@store.com', 'active', now())", sellerID)
+	_, err = client.Pool.Exec(ctx, "INSERT INTO sellers (id, brand_name, slug, contact_email, status, created_at) VALUES ($1, 'test store', $2, $3, 'active', now())", sellerID, fmt.Sprintf("test-store-%s", suffix), fmt.Sprintf("test-%s@store.com", suffix))
 	require.NoError(t, err)
 
 	orderID := uuid.New()
@@ -62,12 +64,12 @@ func TestProcessReturnDeduction(t *testing.T) {
 	// Create a product variant first for the order item foreign key
 	productID := uuid.New()
 	categoryID := uuid.New()
-	_, err = client.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug) VALUES ($1, 'cat', 'cat')", categoryID)
+	_, err = client.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug) VALUES ($1, 'cat', $2)", categoryID, fmt.Sprintf("cat-%s", suffix))
 	require.NoError(t, err)
-	_, err = client.Pool.Exec(ctx, "INSERT INTO products (id, seller_id, category_id, title, slug, description, status, price_cents) VALUES ($1, $2, $3, 'P', 'p', 'desc', 'published', 50000)", productID, sellerID, categoryID)
+	_, err = client.Pool.Exec(ctx, "INSERT INTO products (id, seller_id, category_id, title, slug, description, status, price_cents) VALUES ($1, $2, $3, 'P', $4, 'desc', 'published', 50000)", productID, sellerID, categoryID, fmt.Sprintf("p-%s", suffix))
 	require.NoError(t, err)
 	variantID := uuid.New()
-	_, err = client.Pool.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents) VALUES ($1, $2, 'sku1', 50000)", variantID, productID)
+	_, err = client.Pool.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents) VALUES ($1, $2, $3, 50000)", variantID, productID, fmt.Sprintf("sku-%s", suffix))
 	require.NoError(t, err)
 
 	fulfillmentID := uuid.New()
