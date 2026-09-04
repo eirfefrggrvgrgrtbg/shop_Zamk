@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
@@ -16,6 +17,7 @@ type Service struct {
 	repo       *Repository
 	sellerRepo *sellers.Repository
 	dbPool     *postgres.Client
+	logger     *slog.Logger
 }
 
 func NewService(repo *Repository, sellerRepo *sellers.Repository, dbPool *postgres.Client) *Service {
@@ -23,6 +25,13 @@ func NewService(repo *Repository, sellerRepo *sellers.Repository, dbPool *postgr
 		repo:       repo,
 		sellerRepo: sellerRepo,
 		dbPool:     dbPool,
+		logger:     slog.Default(),
+	}
+}
+
+func (s *Service) SetLogger(l *slog.Logger) {
+	if l != nil {
+		s.logger = l
 	}
 }
 

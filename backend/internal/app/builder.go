@@ -10,7 +10,6 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/addresses"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/dashboard"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/admin/reports"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/search"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/audit"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
@@ -33,6 +32,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/reviews"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/search"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/selleranalytics"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
@@ -69,6 +69,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 
 	inventoryRepo := inventory.NewRepository(pgClient.Pool)
 	inventoryService := inventory.NewService(inventoryRepo, sellersRepo, pgClient)
+	inventoryService.SetLogger(logger)
 	inventoryHandler := inventory.NewHandler(inventoryService)
 
 	cartRepo := cart.NewRepository(pgClient.Pool)
@@ -110,6 +111,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 
 	fulfillmentRepo := fulfillment.NewRepository(pgClient.Pool)
 	fulfillmentService := fulfillment.NewService(fulfillmentRepo, ordersRepo, pgClient, payoutsService, notificationsService)
+	fulfillmentService.SetLogger(logger)
 	fulfillmentHandler := fulfillment.NewHandler(fulfillmentService)
 
 	deliveryRepo := delivery.NewRepository(pgClient)
@@ -118,6 +120,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 
 	suppliesRepo := supplies.NewRepository(pgClient.Pool)
 	suppliesService := supplies.NewService(pgClient.Pool, suppliesRepo)
+	suppliesService.SetLogger(logger)
 	suppliesHandler := supplies.NewHandler(suppliesService, logger)
 
 	// In test mode without S3 configured, this might fail, so check err or configure dummy
@@ -134,7 +137,6 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	cdekProvider := returns.NewCDEKProvider(cfg.CDEK)
 	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, paymentsService, cfg.Worker.ReturnWindowDays, notificationsService, storageProvider, cdekProvider)
 	returnsHandler := returns.NewHandler(returnsService, cfg.App.Env)
-
 
 	// Staff RBAC
 	staffRepo := staff.NewRepository(pgClient.Pool)

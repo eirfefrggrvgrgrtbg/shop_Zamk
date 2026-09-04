@@ -192,6 +192,64 @@
         "enableLogDetails": true,
         "sortOrder": "Descending"
       }
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "Warehouse Operations",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 },
+      "collapsed": false
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Warehouse Reconciliation Resolutions Rate",
+      "description": "Rate of inventory reconciliation decisions by action and result",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 31 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(warehouse_reconciliation_resolutions_total[5m])) by (action, result)", "refId": "A", "legendFormat": "{{action}} ({{result}})" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" }
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Warehouse Picking Scans Rate",
+      "description": "Rate of picking scans by result (ok, already_picked, wrong_variant, not_found)",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 31 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(warehouse_picking_scans_total[5m])) by (result)", "refId": "A", "legendFormat": "{{result}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" }
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Inventory Write-Offs Total",
+      "description": "Cumulative units written off by reason category",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 31 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum by (reason_category) (inventory_writeoffs_total)", "refId": "A", "legendFormat": "{{reason_category}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" }
+        }
+      }
     }
   ]
 }

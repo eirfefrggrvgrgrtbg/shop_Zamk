@@ -19,6 +19,7 @@ import {
   scanPickingCode,
   getCompatibleUnits,
   getPickingErrorMessage,
+  isCanonicalScannerCode,
   PickingOrder,
   PickingScanResult,
   CompatibleUnit,
@@ -153,10 +154,11 @@ export function AdminPickingDetail() {
       await fetchOrder(false);
     } catch (err: any) {
       const msg = getPickingErrorMessage(err);
+      const isCanonical = isCanonicalScannerCode(code);
       setFeedback({
         type: 'error',
         title: msg,
-        detail: `Код: ${code}`,
+        detail: isCanonical ? `Код: ${code}` : undefined,
       });
     } finally {
       setIsScanning(false);

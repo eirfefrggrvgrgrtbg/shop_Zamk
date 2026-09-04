@@ -3,6 +3,7 @@ package fulfillment
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +24,7 @@ type Service struct {
 	db         *postgres.Client
 	payouts    payoutsService
 	notifSvc   *notifications.Service
+	logger     *slog.Logger
 }
 
 func NewService(repo *Repository, ordersRepo *orders.Repository, db *postgres.Client, payouts payoutsService, notifSvc *notifications.Service) *Service {
@@ -32,6 +34,13 @@ func NewService(repo *Repository, ordersRepo *orders.Repository, db *postgres.Cl
 		db:         db,
 		payouts:    payouts,
 		notifSvc:   notifSvc,
+		logger:     slog.Default(),
+	}
+}
+
+func (s *Service) SetLogger(l *slog.Logger) {
+	if l != nil {
+		s.logger = l
 	}
 }
 

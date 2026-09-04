@@ -2,6 +2,8 @@ package fulfillment_test
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -100,7 +102,9 @@ func (f *pickingFixture) createOrderItem(t *testing.T, ctx context.Context, orde
 	_, err = f.db.Exec(ctx, `INSERT INTO products (id, seller_id, category_id, title, slug, price_cents, status, created_at, updated_at) VALUES ($1, $2, $3, 'Prod', $4, 1000, 'published', now(), now())`, prodID, f.sellerID, catID, uuid.New().String())
 	require.NoError(t, err)
 
-	_, err = f.db.Exec(ctx, `INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, 1000, true, now(), now())`, variantID, prodID, uuid.New().String(), uuid.New().String(), uuid.New().String())
+	barcode := fmt.Sprintf("46%011d", rand.Int63n(90000000000)+10000000000)
+	sku := fmt.Sprintf("SKU-%s", uuid.New().String()[:8])
+	_, err = f.db.Exec(ctx, `INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, 1000, true, now(), now())`, variantID, prodID, sku, uuid.New().String(), barcode)
 	require.NoError(t, err)
 
 	_, err = f.db.Exec(ctx, `

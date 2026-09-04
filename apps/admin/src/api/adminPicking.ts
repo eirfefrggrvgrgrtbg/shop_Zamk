@@ -212,6 +212,23 @@ export const getAdminPickingQueue = async (): Promise<PickingQueueItem[]> => {
   });
 };
 
+const CANONICAL_ZMU_REGEX = /^ZMU-[A-Za-z0-9_-]{1,32}$/;
+const CANONICAL_ZMK_REGEX = /^ZMK-[A-Za-z0-9_-]{1,32}$/;
+const CANONICAL_SKU_REGEX = /^(?:[A-Za-z0-9]+-)?SKU-[A-Za-z0-9_-]{1,32}$/;
+const CANONICAL_BARCODE_REGEX = /^BARCODE-[A-Za-z0-9_-]{1,32}$/;
+const CANONICAL_EAN_REGEX = /^(?:[0-9]{8}|[0-9]{12}|[0-9]{13}|[0-9]{14})$/;
+
+export const isCanonicalScannerCode = (code: string): boolean => {
+  if (!code) return false;
+  return (
+    CANONICAL_ZMU_REGEX.test(code) ||
+    CANONICAL_ZMK_REGEX.test(code) ||
+    CANONICAL_SKU_REGEX.test(code) ||
+    CANONICAL_BARCODE_REGEX.test(code) ||
+    CANONICAL_EAN_REGEX.test(code)
+  );
+};
+
 export const getPickingErrorMessage = (error: unknown, fallback = 'Произошла ошибка при сканировании'): string => {
   if (error instanceof ApiError) {
     switch (error.code) {
@@ -237,6 +254,8 @@ export const getPickingErrorMessage = (error: unknown, fallback = 'Произо�
         return 'Штрихкод соответствует нескольким позициям заказа';
       case 'picking_code_not_found':
         return 'Код не найден';
+      case 'malformed_scanner_code':
+        return 'Некорректный код сканирования';
       case 'picking_not_allowed':
         return 'Этот заказ сейчас нельзя собирать';
       default:

@@ -9,6 +9,7 @@ import {
   packFulfillment,
   dispatchFulfillment,
   getAdminPickingQueue,
+  isCanonicalScannerCode,
   PickingOrder,
   PickingScanResult,
   PackResult,
@@ -70,6 +71,10 @@ async function runTests() {
       expected: 'Код не найден',
     },
     {
+      code: 'malformed_scanner_code',
+      expected: 'Некорректный код сканирования',
+    },
+    {
       code: 'picking_not_allowed',
       expected: 'Этот заказ сейчас нельзя собирать',
     },
@@ -80,6 +85,15 @@ async function runTests() {
     const msg = getPickingErrorMessage(err);
     assert.strictEqual(msg, tc.expected, `Error code ${tc.code} did not produce expected Russian message`);
   }
+
+  // Test isCanonicalScannerCode
+  assert.strictEqual(isCanonicalScannerCode('PRIVATE_INTERNAL_VALUE_123'), false, 'Arbitrary string must not be canonical');
+  assert.strictEqual(isCanonicalScannerCode("MALFORMED' OR 1=1; DROP TABLE users;"), false, 'SQL injection must not be canonical');
+  assert.strictEqual(isCanonicalScannerCode('4601234567890'), true, 'EAN-13 must be canonical');
+  assert.strictEqual(isCanonicalScannerCode('ZMU-23456789ABCDEFGH'), true, 'ZMU must be canonical');
+  assert.strictEqual(isCanonicalScannerCode('ZMK-BOX-123'), true, 'ZMK must be canonical');
+  assert.strictEqual(isCanonicalScannerCode('SKU-TSHIRT-BLK-M'), true, 'SKU must be canonical');
+  assert.strictEqual(isCanonicalScannerCode('DEV-SKU-REAL-42'), true, 'Prefixed SKU must be canonical');
 
   // Test 403 Forbidden
   const err403 = new ApiError('Forbidden', 'forbidden', 403);

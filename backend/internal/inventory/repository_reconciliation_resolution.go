@@ -12,8 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-
-
 func (r *Repository) GetReconciliationResolutionPlan(ctx context.Context, sessionID uuid.UUID) (*ReconciliationResolutionPlanDTO, error) {
 	// 1. Verify session exists
 	var sessID uuid.UUID
@@ -46,7 +44,9 @@ func (r *Repository) GetReconciliationResolutionPlan(ctx context.Context, sessio
 			var dto ResolutionAuditDTO
 			var repCode *string
 			if err := resRows.Scan(&uid, &dto.ActionID, &dto.PerformedBy, &dto.PerformedAt, &repCode); err == nil {
-				if repCode != nil { dto.ReplacementUnitCode = *repCode }
+				if repCode != nil {
+					dto.ReplacementUnitCode = *repCode
+				}
 				resolutions[uid] = dto
 			}
 		}
@@ -222,33 +222,47 @@ func (r *Repository) GetReconciliationResolutionPlan(ctx context.Context, sessio
 	return plan, nil
 }
 
+// ReconciliationMutationRecord captures detailed mutation facts to enable durable audit
+// and post-commit business event emission without duplicate events on idempotent retries.
+type ReconciliationMutationRecord struct {
+	Mutated           bool
+	ActionID          string
+	InventoryUnitID   uuid.UUID
+	UnitCode          string
+	AllocationID      *uuid.UUID
+	OrderNumber       string
+	IsLiveReplacement bool
+	ReplacementUnitID *uuid.UUID
+	ReplacementCode   string
+}
+
 // resolveReconciliationCaseTx executes the mutation within an already-open transaction.
 // The caller (Service) is responsible for beginning and committing the transaction.
-func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx, sessionID, adminID uuid.UUID, req ResolveReconciliationCaseRequest) error {
+func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx, sessionID, adminID uuid.UUID, req ResolveReconciliationCaseRequest) (*ReconciliationMutationRecord, error) {
 	// 1. Lock session and verify state
 	var sessStatus string
 	var sessVariantID uuid.UUID
 	err := tx.QueryRow(ctx, "SELECT status, product_variant_id FROM inventory_reconciliation_sessions WHERE id = $1 FOR UPDATE", sessionID).Scan(&sessStatus, &sessVariantID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrReconciliationNotFound
+			return nil, ErrReconciliationNotFound
 		}
-		return err
+		return nil, err
 	}
 	if sessStatus != "completed" && sessStatus != "review" {
-		return fmt.Errorf("%w: session is in status %s (must be completed or review)", ErrInvalidReconciliationState, sessStatus)
+		return nil, fmt.Errorf("%w: session is in status %s (must be completed or review)", ErrInvalidReconciliationState, sessStatus)
 	}
 
 	// 2. Resolve target unit ID if needed
 	targetUnitID := req.UnitID
 	if targetUnitID == nil {
 		if strings.TrimSpace(req.UnitCode) == "" {
-			return errors.New("unitId or unitCode required")
+			return nil, errors.New("unitId or unitCode required")
 		}
 		var resolvedID uuid.UUID
 		err = tx.QueryRow(ctx, "SELECT id FROM inventory_units WHERE LOWER(TRIM(unit_code)) = LOWER(TRIM($1))", req.UnitCode).Scan(&resolvedID)
 		if err != nil {
-			return ErrInventoryUnitNotFound
+			return nil, ErrInventoryUnitNotFound
 		}
 		targetUnitID = &resolvedID
 	}
@@ -261,16 +275,16 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 		*targetUnitID,
 	).Scan(&unitStatus, &unitCode, &variantID)
 	if err != nil {
-		return fmt.Errorf("failed to lock unit: %w", err)
+		return nil, fmt.Errorf("failed to lock unit: %w", err)
 	}
 
 	if variantID != sessVariantID {
-		return fmt.Errorf("%w: unit does not belong to session variant", ErrReconciliationConflict)
+		return nil, fmt.Errorf("%w: unit does not belong to session variant", ErrReconciliationConflict)
 	}
 
 	// 4. Shipped found cannot be mutated
 	if unitStatus == "shipped" {
-		return fmt.Errorf("%w: shipped unit cannot be mutated through reconciliation", ErrReconciliationConflict)
+		return nil, fmt.Errorf("%w: shipped unit cannot be mutated through reconciliation", ErrReconciliationConflict)
 	}
 
 	// 5. Check if unit was scanned as expected_found
@@ -278,7 +292,7 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 		var scanCount int
 		_ = tx.QueryRow(ctx, "SELECT count(*) FROM inventory_reconciliation_scans WHERE session_id = $1 AND inventory_unit_id = $2 AND classification = 'expected_found'", sessionID, *targetUnitID).Scan(&scanCount)
 		if scanCount > 0 {
-			return fmt.Errorf("%w: unit was found during scan, cannot confirm missing", ErrReconciliationConflict)
+			return nil, fmt.Errorf("%w: unit was found during scan, cannot confirm missing", ErrReconciliationConflict)
 		}
 	}
 
@@ -291,14 +305,19 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 	`, sessionID, *targetUnitID).Scan(&existingTerminalAction)
 	if err == nil {
 		if req.ActionID == ActionIDConfirmMissing {
-			// Idempotent duplicate call - already resolved, return success
-			return nil
+			// Idempotent duplicate call - already resolved, return without mutation
+			return &ReconciliationMutationRecord{
+				Mutated:         false,
+				ActionID:        ActionIDConfirmMissing,
+				InventoryUnitID: *targetUnitID,
+				UnitCode:        unitCode,
+			}, nil
 		}
-		return fmt.Errorf("%w: unit is already resolved with %s", ErrReconciliationConflict, existingTerminalAction)
+		return nil, fmt.Errorf("%w: unit is already resolved with %s", ErrReconciliationConflict, existingTerminalAction)
 	}
 
 	if unitStatus == "written_off" {
-		return fmt.Errorf("%w: unit is already written off", ErrReconciliationConflict)
+		return nil, fmt.Errorf("%w: unit is already written off", ErrReconciliationConflict)
 	}
 
 	// 7. Find active allocation if any
@@ -306,14 +325,15 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 	var allocPickedAt *time.Time
 	var ordStatus *string
 	var fulStatus *string
+	var ordNumber string
 	err = tx.QueryRow(ctx, `
-		SELECT a.id, a.picked_at, o.status, f.status
+		SELECT a.id, a.picked_at, o.status, f.status, o.order_number
 		FROM order_item_allocations a
 		JOIN order_items oi ON a.order_item_id = oi.id
 		JOIN orders o ON oi.order_id = o.id
 		LEFT JOIN order_fulfillments f ON oi.order_fulfillment_id = f.id
 		WHERE a.inventory_unit_id = $1 AND a.released_at IS NULL
-	`, *targetUnitID).Scan(&allocID, &allocPickedAt, &ordStatus, &fulStatus)
+	`, *targetUnitID).Scan(&allocID, &allocPickedAt, &ordStatus, &fulStatus, &ordNumber)
 	hasAlloc := err == nil
 
 	allocIsStale := hasAlloc && (isTerminalOrder(ordStatus) || isTerminalFulfillment(fulStatus))
@@ -321,7 +341,7 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 	allocIsPicked := allocIsLive && allocPickedAt != nil
 
 	if allocIsPicked {
-		return fmt.Errorf("%w: unit is already picked for active order, mutation forbidden", ErrReconciliationConflict)
+		return nil, fmt.Errorf("%w: unit is already picked for active order, mutation forbidden", ErrReconciliationConflict)
 	}
 
 	switch req.ActionID {
@@ -334,16 +354,21 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 				WHERE session_id = $1 AND inventory_unit_id = $2 AND action_id = $3
 			`, sessionID, *targetUnitID, ActionIDCloseStaleAllocation).Scan(&count)
 			if count > 0 {
-				return nil
+				return &ReconciliationMutationRecord{
+					Mutated:         false,
+					ActionID:        ActionIDCloseStaleAllocation,
+					InventoryUnitID: *targetUnitID,
+					UnitCode:        unitCode,
+				}, nil
 			}
-			return fmt.Errorf("%w: unit has no active allocation to close", ErrReconciliationConflict)
+			return nil, fmt.Errorf("%w: unit has no active allocation to close", ErrReconciliationConflict)
 		}
 		if !allocIsStale {
 			ordStatStr := "unknown"
 			if ordStatus != nil {
 				ordStatStr = *ordStatus
 			}
-			return fmt.Errorf("%w: allocation belongs to active order (%s), cannot close as stale", ErrReconciliationConflict, ordStatStr)
+			return nil, fmt.Errorf("%w: allocation belongs to active order (%s), cannot close as stale", ErrReconciliationConflict, ordStatStr)
 		}
 
 		// Release the allocation
@@ -352,7 +377,7 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 			allocID,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to release allocation: %w", err)
+			return nil, fmt.Errorf("failed to release allocation: %w", err)
 		}
 		// Adjust reserved_stock safely
 		_, err = tx.Exec(ctx,
@@ -360,7 +385,7 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 			variantID,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to adjust reserved stock: %w", err)
+			return nil, fmt.Errorf("failed to adjust reserved stock: %w", err)
 		}
 		// Write traceability record
 		ordStatStr := ""
@@ -377,12 +402,21 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		`, sessionID, *targetUnitID, CaseTypeStaleAllocation, ActionIDCloseStaleAllocation, adminID, allocID, beforeJSON, afterJSON)
 		if err != nil {
-			return fmt.Errorf("failed to write resolution record: %w", err)
+			return nil, fmt.Errorf("failed to write resolution record: %w", err)
 		}
+
+		return &ReconciliationMutationRecord{
+			Mutated:         true,
+			ActionID:        ActionIDCloseStaleAllocation,
+			InventoryUnitID: *targetUnitID,
+			UnitCode:        unitCode,
+			AllocationID:    &allocID,
+			OrderNumber:     ordNumber,
+		}, nil
 
 	case ActionIDConfirmMissing:
 		if hasAlloc && allocIsStale {
-			return fmt.Errorf("%w: unit has stale allocation, must close allocation before confirming missing", ErrReconciliationConflict)
+			return nil, fmt.Errorf("%w: unit has stale allocation, must close allocation before confirming missing", ErrReconciliationConflict)
 		}
 		caseType := CaseTypeMissingFree
 		var repID *uuid.UUID
@@ -395,12 +429,12 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 				var resolvedRepID uuid.UUID
 				err = tx.QueryRow(ctx, "SELECT id FROM inventory_units WHERE LOWER(TRIM(unit_code)) = LOWER(TRIM($1))", req.ReplacementUnitCode).Scan(&resolvedRepID)
 				if err != nil {
-					return fmt.Errorf("%w: replacement unit not found", ErrReconciliationConflict)
+					return nil, fmt.Errorf("%w: replacement unit not found", ErrReconciliationConflict)
 				}
 				repID = &resolvedRepID
 			}
 			if repID == nil {
-				return fmt.Errorf("%w: replacement unit required when unit has a live allocation", ErrReconciliationConflict)
+				return nil, fmt.Errorf("%w: replacement unit required when unit has a live allocation", ErrReconciliationConflict)
 			}
 			// Lock replacement and verify all safety conditions
 			var repStatus string
@@ -410,25 +444,25 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 				*repID,
 			).Scan(&repStatus, &repCode, &repVariantID)
 			if err != nil {
-				return fmt.Errorf("%w: replacement unit not found", ErrReconciliationConflict)
+				return nil, fmt.Errorf("%w: replacement unit not found", ErrReconciliationConflict)
 			}
 			if repVariantID != variantID {
-				return fmt.Errorf("%w: replacement unit wrong variant", ErrReconciliationConflict)
+				return nil, fmt.Errorf("%w: replacement unit wrong variant", ErrReconciliationConflict)
 			}
 			if repStatus == "damaged" {
-				return fmt.Errorf("%w: replacement unit is damaged", ErrReconciliationConflict)
+				return nil, fmt.Errorf("%w: replacement unit is damaged", ErrReconciliationConflict)
 			}
 			if repStatus == "expected" {
-				return fmt.Errorf("%w: replacement unit is expected (not received)", ErrReconciliationConflict)
+				return nil, fmt.Errorf("%w: replacement unit is expected (not received)", ErrReconciliationConflict)
 			}
 			if repStatus == "shipped" {
-				return fmt.Errorf("%w: replacement unit is shipped", ErrReconciliationConflict)
+				return nil, fmt.Errorf("%w: replacement unit is shipped", ErrReconciliationConflict)
 			}
 			if repStatus == "written_off" {
-				return fmt.Errorf("%w: replacement unit is written off", ErrReconciliationConflict)
+				return nil, fmt.Errorf("%w: replacement unit is written off", ErrReconciliationConflict)
 			}
 			if repStatus != "warehouse" {
-				return fmt.Errorf("%w: replacement unit is not free in warehouse (status=%s)", ErrReconciliationConflict, repStatus)
+				return nil, fmt.Errorf("%w: replacement unit is not free in warehouse (status=%s)", ErrReconciliationConflict, repStatus)
 			}
 			var repAllocCount int
 			_ = tx.QueryRow(ctx,
@@ -436,7 +470,7 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 				*repID,
 			).Scan(&repAllocCount)
 			if repAllocCount > 0 {
-				return fmt.Errorf("%w: replacement unit is already allocated to another order", ErrReconciliationConflict)
+				return nil, fmt.Errorf("%w: replacement unit is already allocated to another order", ErrReconciliationConflict)
 			}
 			// Rebind allocation to replacement
 			_, err = tx.Exec(ctx,
@@ -444,14 +478,14 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 				*repID, allocID,
 			)
 			if err != nil {
-				return fmt.Errorf("failed to rebind allocation: %w", err)
+				return nil, fmt.Errorf("failed to rebind allocation: %w", err)
 			}
 		}
 
 		// Write off the missing unit (do NOT delete)
 		_, err = tx.Exec(ctx, "UPDATE inventory_units SET status = 'written_off' WHERE id = $1", *targetUnitID)
 		if err != nil {
-			return fmt.Errorf("failed to write off unit: %w", err)
+			return nil, fmt.Errorf("failed to write off unit: %w", err)
 		}
 
 		// Decrement aggregate total_stock by 1 (legacy on_hand remains unchanged: legOnHand = aggTotal - phys.Warehouse; phys.Warehouse already decreased by status change)
@@ -463,7 +497,7 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 			RETURNING id, product_id, seller_id
 		`, variantID).Scan(&itemID, &prodID, &sellerID)
 		if err != nil {
-			return fmt.Errorf("failed to decrement aggregate stock: %w", err)
+			return nil, fmt.Errorf("failed to decrement aggregate stock: %w", err)
 		}
 
 		// Write canonical stock movement
@@ -473,7 +507,7 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 			VALUES ($1, $2, $3, $4, $5, 'write_off', 1, 'reconciliation_write_off', $6, 'reconciliation_session', $7)
 		`, uuid.New(), itemID, prodID, variantID, sellerID, adminID, sessionID)
 		if err != nil {
-			return fmt.Errorf("failed to write stock movement: %w", err)
+			return nil, fmt.Errorf("failed to write stock movement: %w", err)
 		}
 
 		var relAlloc *uuid.UUID
@@ -497,12 +531,22 @@ func (r *Repository) resolveReconciliationCaseTx(ctx context.Context, tx pgx.Tx,
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		`, sessionID, *targetUnitID, caseType, ActionIDConfirmMissing, adminID, relAlloc, repID, beforeJSON, afterJSON)
 		if err != nil {
-			return fmt.Errorf("failed to write resolution record: %w", err)
+			return nil, fmt.Errorf("failed to write resolution record: %w", err)
 		}
 
-	default:
-		return fmt.Errorf("unknown or disallowed action: %s", req.ActionID)
-	}
+		return &ReconciliationMutationRecord{
+			Mutated:           true,
+			ActionID:          ActionIDConfirmMissing,
+			InventoryUnitID:   *targetUnitID,
+			UnitCode:          unitCode,
+			AllocationID:      relAlloc,
+			OrderNumber:       ordNumber,
+			IsLiveReplacement: hasAlloc && repID != nil,
+			ReplacementUnitID: repID,
+			ReplacementCode:   repCode,
+		}, nil
 
-	return nil
+	default:
+		return nil, fmt.Errorf("unknown or disallowed action: %s", req.ActionID)
+	}
 }

@@ -1,14 +1,29 @@
 # ZAMK Observability Architecture Contract
 
 ## 1. Categories and Storage Contract
-The observability architecture is strictly divided into five categories:
-1. **Diagnostic Logs:** -> **Loki**
-2. **Traces:** -> **Tempo**
-3. **Operational Metrics:** -> **Prometheus**
-4. **Audit/Business Truth:** -> **PostgreSQL**
-5. **Product Analytics:** -> **ClickHouse**
+The telemetry and data architecture is strictly divided into four distinct categories:
 
-**Grafana** is a visualization/query/alert surface only. Grafana/Loki/Tempo/Prometheus must never become the business source of truth.
+1. **Diagnostic Technical Log**
+   - **Purpose:** Low-level runtime debugging, infrastructure monitoring, and diagnostic error triage.
+   - **Destination:** **Loki** (via structured `slog` / OTLP) & **Tempo** (spans).
+   - **Consistency:** Immediate, best-effort.
+
+2. **Operational Business Event**
+   - **Purpose:** Operational visibility, incident triage, operator activity audits, and distributed business flow tracking across services.
+   - **Destination:** Structured `slog` to **Loki** + Semantic Span Events in **Tempo**.
+   - **Consistency:** **MUST be emitted only after successful commit** of the corresponding business state transaction. Never emit on aborted or rolled-back transactions. Suppress duplicate mutation events on idempotent retries.
+
+3. **Durable Domain / Audit Truth**
+   - **Purpose:** Financial ledger, legal compliance, customer-facing history, and canonical transactional state.
+   - **Destination:** **PostgreSQL** tables (e.g. `inventory_unit_history`, `audit_logs`, `order_events`, `stock_movements`, `inventory_reconciliation_resolutions`, `payment_records`).
+   - **Consistency:** Transactionally atomic; committed inside the exact same DB transaction as the business state transition.
+
+4. **Product Analytics**
+   - **Purpose:** Funnel analysis, conversion metrics, user behavioral analytics, and long-term business intelligence.
+   - **Destination:** **ClickHouse** / event streaming pipeline.
+   - **Consistency:** Asynchronous, non-blocking, non-transactional.
+
+**Grafana** is a visualization, query, and alerting surface only. Grafana/Loki/Tempo/Prometheus must never become the business source of truth.
 
 ### Mandatory Correlation Fields
 - `service_name`
@@ -48,6 +63,13 @@ Keep these as structured fields / structured metadata for logs, and avoid them i
 HTTP metrics must use route templates.
 - **GOOD:** `http.route="/api/admin/orders/{id}"`
 - **BAD:** `http.route="/api/admin/orders/123e4567..."`
+
+**Canonical Warehouse Operational Metrics:**
+| Metric Name | Type | Allowed Low-Cardinality Labels | Valid Label Values |
+|---|---|---|---|
+| `warehouse_reconciliation_resolutions_total` | Counter | `action`, `result` | `action`: `close_stale_allocation`, `confirm_missing`, `replace_live_allocation`<br>`result`: `success`, `rejected`, `error` |
+| `warehouse_picking_scans_total` | Counter | `result` | `ok`, `already_picked`, `not_found`, `wrong_variant`, `allocated_to_other_order`, `not_allocated`, `cannot_pick_serialized_with_barcode` |
+| `inventory_writeoffs_total` | Counter | `reason_category` | `reconciliation_missing`, `damaged`, `lost`, `other` |
 
 ## 3. Security / Redaction Contract
 **Never log the following:**
@@ -116,16 +138,48 @@ Local telemetry state is backed by dedicated Docker named volumes and isolated M
 
 Audit/business records remain governed by PostgreSQL/domain policy. Do not introduce aggressive trace sampling in dev.
 
-## 7. Observability Definition of Done
-Every future milestone must ask:
-1. Does this mutation need a meaningful structured log?
-2. Does it change business state and therefore require durable audit?
-3. Does it need a domain/application trace span?
-4. Does it introduce an operational metric?
-5. Does it represent user/product behavior and therefore require analytics?
+## 7. Observability Definition of Done (DoD)
 
-*Example - Inventory write-off:* Log (YES), Audit (YES), Trace (YES), Metric (YES), Analytics (NO).
-*Example - Product viewed:* Log (NO), Audit (NO), Trace (optional), Metric (optional/RUM), Analytics (YES).
+Every future feature, endpoint, mutation, or milestone MUST evaluate and document observability requirements using this mandatory checklist template:
+
+### Mandatory PR / Feature Checklist Template
+
+```markdown
+### Observability Definition of Done Checklist
+- [ ] **LOG:**
+  - Emits meaningful structured log? [YES/NO]
+  - Level: [INFO for regular transitions / WARN for recoverable anomalies / ERROR for failures]
+  - Bounded context attributes: [e.g. event_name, domain, action, result, actor_id, actor_role, entity IDs]
+  - Redaction verified: [Zero PII, zero credentials, zero raw passwords/tokens/cards]
+- [ ] **TRACE:**
+  - Active span enriched or dedicated span created? [YES/NO]
+  - Span event emitted? [YES/NO: event name, bounded attributes, no high-cardinality leak]
+- [ ] **METRIC:**
+  - Operational counter/histogram updated? [YES/NO]
+  - Metric name: [e.g. warehouse_picking_scans_total]
+  - Metric type: [Counter / Histogram / Gauge]
+  - Low-cardinality labels only: [e.g. action, result, reason_category - NO entity IDs]
+- [ ] **DURABLE AUDIT:**
+  - Requires persistent legal/financial/transactional record? [YES/NO]
+  - Destination table: [e.g. inventory_reconciliation_resolutions, stock_movements]
+  - Consistency: [Committed inside the same DB transaction as the business mutation]
+- [ ] **PRODUCT ANALYTICS:**
+  - Represents user/product behavior for BI funnels? [YES/NO]
+  - Schema / destination: [ClickHouse / async event queue]
+```
+
+### Reference Decision Matrix
+| Scenario | LOG | TRACE | METRIC | DURABLE AUDIT | PRODUCT ANALYTICS |
+|---|---|---|---|---|---|
+| **Inventory write-off** | YES (INFO, post-commit) | YES (span event) | YES (counter by reason) | YES (`stock_movements`, resolutions) | NO |
+| **Picking scan duplicate** | YES (WARN, duplicate scan) | YES (span event) | YES (counter by `already_picked`) | NO | NO |
+| **Product viewed in shop** | NO | Optional | Optional (RUM) | NO | YES (ClickHouse event) |
+| **Payment refunded** | YES (INFO, post-commit) | YES (span) | YES (counter by method) | YES (`refunds`, `audit_logs`) | YES (BI financial event) |
+
+### Transaction Consistency Rules
+1. **Post-Commit Emission:** Business events for database mutations **MUST be emitted only after** the transaction has successfully committed (`tx.Commit` returned `nil`).
+2. **Rollback Silence:** If a transaction fails or rolls back, **NO mutation success business event** may be emitted.
+3. **Idempotency De-duplication:** If an operation is an idempotent repeat that resulted in no state transition, **do NOT emit duplicate mutation success events**.
 
 New HTTP endpoints should have common middleware providing: `request_id`, `trace_id`, route template, status, duration, panic/error correlation.
 

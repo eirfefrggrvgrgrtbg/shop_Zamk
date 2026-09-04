@@ -192,7 +192,7 @@ func TestAdminPickingScanRouter(t *testing.T) {
 
 	// 4. Domain error: unknown code -> 404 picking_code_not_found
 	t.Run("unknown code -> 404 picking_code_not_found", func(t *testing.T) {
-		body, _ := json.Marshal(map[string]string{"code": "NON_EXISTENT_CODE_12345"})
+		body, _ := json.Marshal(map[string]string{"code": "SKU-NON-EXISTENT-CODE"})
 		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking/scan", bytes.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+adminTok)
 		req.Header.Set("Content-Type", "application/json")

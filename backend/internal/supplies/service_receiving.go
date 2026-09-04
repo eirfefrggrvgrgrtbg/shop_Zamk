@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -229,6 +231,8 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 	}
 
 	// Update items and inventory
+	receivedUnitsCount := 0
+	damagedUnitsCount := 0
 	for _, item := range session.Items {
 		if item.SupplyItemID == nil {
 			continue // unexpected item not supported fully yet
@@ -236,6 +240,8 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 
 		accepted := item.ScannedQuantity
 		damaged := item.DamagedQuantity
+		receivedUnitsCount += accepted
+		damagedUnitsCount += damaged
 
 		// Finalize item in supply (accumulates quantities)
 		err = repoTx.FinalizeSupplyItem(ctx, *item.SupplyItemID, accepted, damaged)
@@ -276,6 +282,21 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 	if err != nil {
 		return err
 	}
+
+	observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+		EventName: "warehouse.receiving_finalized",
+		Domain:    "warehouse",
+		Action:    "finalize_receiving",
+		Result:    "success",
+		ActorID:   staffID.String(),
+		ActorRole: "staff",
+		Attributes: []slog.Attr{
+			slog.String("supply_id", session.SupplyID.String()),
+			slog.Int("received_units_count", receivedUnitsCount),
+			slog.Int("damaged_units_count", damagedUnitsCount),
+			slog.String("actor_id", staffID.String()),
+		},
+	})
 
 	return nil
 }
@@ -514,6 +535,19 @@ func (s *Service) ResolvePhysicalUnit(ctx context.Context, unitCode string) (*Re
 func (s *Service) ProcessFoundUnit(ctx context.Context, staffID uuid.UUID, req ProcessFoundUnitRequest) (*ProcessFoundUnitResponse, error) {
 	req.UnitCode = strings.TrimSpace(req.UnitCode)
 	if req.UnitCode == "" {
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName:  "warehouse.zmu_received",
+			Domain:     "warehouse",
+			Action:     "zmu_received",
+			Result:     "rejected",
+			ActorID:    staffID.String(),
+			ActorRole:  "staff",
+			Level:      slog.LevelWarn,
+			Attributes: []slog.Attr{
+				slog.String("result", "rejected"),
+				slog.String("reason", "empty_code"),
+			},
+		})
 		return nil, ErrInvalidUnitCode
 	}
 
@@ -527,11 +561,52 @@ func (s *Service) ProcessFoundUnit(ctx context.Context, staffID uuid.UUID, req P
 	// 1. Resolve unit
 	unit, err := s.ResolvePhysicalUnit(ctx, req.UnitCode)
 	if err != nil {
+		reason := "not_found"
+		if errors.Is(err, ErrInvalidUnitCode) {
+			reason = "invalid_unit_code"
+		}
+		isCanonical := observability.IsCanonicalScannerCode(req.UnitCode)
+		if !isCanonical {
+			reason = "malformed_code"
+		}
+		attrs := []slog.Attr{
+			slog.String("result", "rejected"),
+			slog.String("reason", reason),
+		}
+		if isCanonical {
+			attrs = append(attrs, slog.String("zmu", req.UnitCode))
+		}
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName:  "warehouse.zmu_received",
+			Domain:     "warehouse",
+			Action:     "zmu_received",
+			Result:     "rejected",
+			ActorID:    staffID.String(),
+			ActorRole:  "staff",
+			Level:      slog.LevelWarn,
+			Attributes: attrs,
+		})
 		return nil, err
 	}
 
 	// 2. Handle non-expected units without mutating or starting a session
 	if unit.UnitStatus != "expected" {
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName: "warehouse.zmu_received",
+			Domain:    "warehouse",
+			Action:    "zmu_received",
+			Result:    "rejected",
+			ActorID:   staffID.String(),
+			ActorRole: "staff",
+			Level:     slog.LevelWarn,
+			Attributes: []slog.Attr{
+				slog.String("zmu", unit.UnitCode),
+				slog.String("inventory_unit_id", unit.InventoryUnitID.String()),
+				slog.String("supply_id", unit.Origin.SupplyID.String()),
+				slog.String("result", "rejected"),
+				slog.String("reason", unit.RecommendedAction),
+			},
+		})
 		return &ProcessFoundUnitResponse{
 			UnitCode:              unit.UnitCode,
 			InventoryUnitID:       unit.InventoryUnitID,
@@ -577,8 +652,41 @@ func (s *Service) ProcessFoundUnit(ctx context.Context, staffID uuid.UUID, req P
 		Condition: req.Condition,
 	})
 	if err != nil {
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName: "warehouse.zmu_received",
+			Domain:    "warehouse",
+			Action:    "zmu_received",
+			Result:    "rejected",
+			ActorID:   staffID.String(),
+			ActorRole: "staff",
+			Level:     slog.LevelWarn,
+			Attributes: []slog.Attr{
+				slog.String("zmu", req.UnitCode),
+				slog.String("inventory_unit_id", unit.InventoryUnitID.String()),
+				slog.String("supply_id", unit.Origin.SupplyID.String()),
+				slog.String("result", "rejected"),
+				slog.String("error", err.Error()),
+			},
+		})
 		return nil, err
 	}
+
+	observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+		EventName: "warehouse.zmu_received",
+		Domain:    "warehouse",
+		Action:    "zmu_received",
+		Result:    "success",
+		ActorID:   staffID.String(),
+		ActorRole: "staff",
+		Level:     slog.LevelInfo,
+		Attributes: []slog.Attr{
+			slog.String("zmu", req.UnitCode),
+			slog.String("inventory_unit_id", unit.InventoryUnitID.String()),
+			slog.String("product_variant_id", scanResp.ProductVariantID.String()),
+			slog.String("supply_id", unit.Origin.SupplyID.String()),
+			slog.String("result", "success"),
+		},
+	})
 
 	// 5. Determine recommendedNextAction
 	nextAction := "continue_scanning"

@@ -2,7 +2,9 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -222,4 +224,134 @@ func RegisterPoolMetrics(meter metric.Meter, pool *pgxpool.Pool) (metric.Registr
 		return nil
 	}, gauge)
 	return reg, err
+}
+
+// WarehouseMetrics manages operational metrics for warehouse operations.
+type WarehouseMetrics struct {
+	reconciliationResolutionsTotal metric.Int64Counter
+	pickingScansTotal              metric.Int64Counter
+	inventoryWriteoffsTotal        metric.Int64Counter
+}
+
+// NewWarehouseMetrics initializes warehouse metrics registered with the given meter.
+func NewWarehouseMetrics(meter metric.Meter) (*WarehouseMetrics, error) {
+	if meter == nil {
+		return nil, errors.New("meter is required")
+	}
+
+	reconciliationResolutionsTotal, err := meter.Int64Counter(
+		"warehouse_reconciliation_resolutions_total",
+		metric.WithDescription("Total count of inventory reconciliation resolution decisions"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	pickingScansTotal, err := meter.Int64Counter(
+		"warehouse_picking_scans_total",
+		metric.WithDescription("Total count of warehouse picking barcode/ZMU scans"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	inventoryWriteoffsTotal, err := meter.Int64Counter(
+		"inventory_writeoffs_total",
+		metric.WithDescription("Total count of physical inventory units written off"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &WarehouseMetrics{
+		reconciliationResolutionsTotal: reconciliationResolutionsTotal,
+		pickingScansTotal:              pickingScansTotal,
+		inventoryWriteoffsTotal:        inventoryWriteoffsTotal,
+	}, nil
+}
+
+// RecordReconciliationResolution records a reconciliation resolution decision with low-cardinality labels.
+func (m *WarehouseMetrics) RecordReconciliationResolution(ctx context.Context, action, result string) {
+	if m == nil || m.reconciliationResolutionsTotal == nil {
+		return
+	}
+	if action == "" {
+		action = "unknown"
+	}
+	if result == "" {
+		result = "unknown"
+	}
+	attrs := metric.WithAttributes(
+		attribute.String("action", action),
+		attribute.String("result", result),
+	)
+	m.reconciliationResolutionsTotal.Add(ctx, 1, attrs)
+}
+
+// RecordPickingScan records a picking scan result with low-cardinality label.
+func (m *WarehouseMetrics) RecordPickingScan(ctx context.Context, result string) {
+	if m == nil || m.pickingScansTotal == nil {
+		return
+	}
+	if result == "" {
+		result = "unknown"
+	}
+	attrs := metric.WithAttributes(
+		attribute.String("result", result),
+	)
+	m.pickingScansTotal.Add(ctx, 1, attrs)
+}
+
+// RecordInventoryWriteoff records an inventory write-off with low-cardinality reason category.
+func (m *WarehouseMetrics) RecordInventoryWriteoff(ctx context.Context, reasonCategory string) {
+	if m == nil || m.inventoryWriteoffsTotal == nil {
+		return
+	}
+	if reasonCategory == "" {
+		reasonCategory = "other"
+	}
+	attrs := metric.WithAttributes(
+		attribute.String("reason_category", reasonCategory),
+	)
+	m.inventoryWriteoffsTotal.Add(ctx, 1, attrs)
+}
+
+var (
+	globalWarehouseMetricsMu sync.RWMutex
+	globalWarehouseMetrics   *WarehouseMetrics
+)
+
+// SetGlobalWarehouseMetrics sets the global warehouse metrics instance.
+func SetGlobalWarehouseMetrics(m *WarehouseMetrics) {
+	globalWarehouseMetricsMu.Lock()
+	defer globalWarehouseMetricsMu.Unlock()
+	globalWarehouseMetrics = m
+}
+
+// GetGlobalWarehouseMetrics returns the global warehouse metrics instance.
+func GetGlobalWarehouseMetrics() *WarehouseMetrics {
+	globalWarehouseMetricsMu.RLock()
+	defer globalWarehouseMetricsMu.RUnlock()
+	return globalWarehouseMetrics
+}
+
+// RecordReconciliationResolution records a reconciliation resolution metric globally.
+func RecordReconciliationResolution(ctx context.Context, action, result string) {
+	if m := GetGlobalWarehouseMetrics(); m != nil {
+		m.RecordReconciliationResolution(ctx, action, result)
+	}
+}
+
+// RecordPickingScan records a picking scan metric globally.
+func RecordPickingScan(ctx context.Context, result string) {
+	if m := GetGlobalWarehouseMetrics(); m != nil {
+		m.RecordPickingScan(ctx, result)
+	}
+}
+
+// RecordInventoryWriteoff records an inventory write-off metric globally.
+func RecordInventoryWriteoff(ctx context.Context, reasonCategory string) {
+	if m := GetGlobalWarehouseMetrics(); m != nil {
+		m.RecordInventoryWriteoff(ctx, reasonCategory)
+	}
 }

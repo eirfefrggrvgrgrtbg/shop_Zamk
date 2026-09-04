@@ -24,15 +24,16 @@ import (
 
 // Provider bundles initialized OpenTelemetry providers.
 type Provider struct {
-	TracerProvider *sdktrace.TracerProvider
-	MeterProvider  *sdkmetric.MeterProvider
-	LoggerProvider *sdklog.LoggerProvider
-	Metrics        *HTTPMetrics
-	DBMetrics      *DBMetrics
-	RedisMetrics   *RedisMetrics
-	Tracer         trace.Tracer
-	logger         *slog.Logger
-	cfg            Config
+	TracerProvider   *sdktrace.TracerProvider
+	MeterProvider    *sdkmetric.MeterProvider
+	LoggerProvider   *sdklog.LoggerProvider
+	Metrics          *HTTPMetrics
+	DBMetrics        *DBMetrics
+	RedisMetrics     *RedisMetrics
+	WarehouseMetrics *WarehouseMetrics
+	Tracer           trace.Tracer
+	logger           *slog.Logger
+	cfg              Config
 }
 
 // Init initializes OpenTelemetry traces, metrics, and logs with OTLP exporters.
@@ -143,6 +144,15 @@ func Init(ctx context.Context, cfg Config, logger *slog.Logger) (*Provider, erro
 		}
 	}
 
+	warehouseMetrics, err := NewWarehouseMetrics(meter)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("failed to initialize Warehouse metrics", "error", err)
+		}
+	} else {
+		SetGlobalWarehouseMetrics(warehouseMetrics)
+	}
+
 	// 3. Log Exporter & Provider
 	var logOpts []otlploggrpc.Option
 	logOpts = append(logOpts, otlploggrpc.WithEndpoint(cfg.OTLPEndpoint))
@@ -168,15 +178,16 @@ func Init(ctx context.Context, cfg Config, logger *slog.Logger) (*Provider, erro
 	tracer := otel.GetTracerProvider().Tracer(cfg.ServiceName)
 
 	return &Provider{
-		TracerProvider: tp,
-		MeterProvider:  mp,
-		LoggerProvider: lp,
-		Metrics:        httpMetrics,
-		DBMetrics:      dbMetrics,
-		RedisMetrics:   redisMetrics,
-		Tracer:         tracer,
-		logger:         logger,
-		cfg:            cfg,
+		TracerProvider:   tp,
+		MeterProvider:    mp,
+		LoggerProvider:   lp,
+		Metrics:          httpMetrics,
+		DBMetrics:        dbMetrics,
+		RedisMetrics:     redisMetrics,
+		WarehouseMetrics: warehouseMetrics,
+		Tracer:           tracer,
+		logger:           logger,
+		cfg:              cfg,
 	}, nil
 }
 

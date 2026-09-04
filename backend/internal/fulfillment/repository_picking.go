@@ -263,9 +263,14 @@ func (r *Repository) ScanPickingCodeTx(ctx context.Context, tx pgx.Tx, fulfillme
 		targetItem = &t
 	}
 
+	orderNum := ""
+	if po.OrderNumber != nil {
+		orderNum = *po.OrderNumber
+	}
 	res := &PickingScanResult{
 		FulfillmentID: po.FulfillmentID,
 		OrderID:       po.OrderID,
+		OrderNumber:   orderNum,
 		ScanResult: PickingScanDetail{
 			Code: code,
 		},
@@ -432,9 +437,6 @@ func (r *Repository) ScanPickingCodeTx(ctx context.Context, tx pgx.Tx, fulfillme
 	} else if errors.Is(err, pgx.ErrNoRows) {
 		// 3. Not a ZMU -> Legacy barcode / SKU
 		if targetItem != nil {
-			if targetItem.activeAllocations > 0 {
-				return nil, ErrCannotPickSerializedWithBarcode
-			}
 			var matchesBarcode bool
 			_ = tx.QueryRow(ctx, `
 				SELECT EXISTS(
@@ -444,6 +446,9 @@ func (r *Repository) ScanPickingCodeTx(ctx context.Context, tx pgx.Tx, fulfillme
 			`, targetItem.productVariantID, code).Scan(&matchesBarcode)
 			if !matchesBarcode {
 				return nil, ErrCodeNotFound
+			}
+			if targetItem.activeAllocations > 0 {
+				return nil, ErrCannotPickSerializedWithBarcode
 			}
 
 			res.ScanResult.OrderItemID = targetItem.id

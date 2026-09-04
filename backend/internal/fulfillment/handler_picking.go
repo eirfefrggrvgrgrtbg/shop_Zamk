@@ -89,6 +89,10 @@ func (h *Handler) ScanPickingCode(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusConflict, "ambiguous_picking_code", "Ambiguous picking code")
 			return
 		}
+		if errors.Is(err, ErrMalformedScannerCode) {
+			h.writeError(w, http.StatusBadRequest, "malformed_scanner_code", "Некорректный код сканирования")
+			return
+		}
 		if errors.Is(err, ErrCodeNotFound) {
 			h.writeError(w, http.StatusNotFound, "picking_code_not_found", "Picking code not found")
 			return

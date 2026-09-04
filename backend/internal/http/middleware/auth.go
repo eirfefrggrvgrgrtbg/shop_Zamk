@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/google/uuid"
 )
 
@@ -49,6 +50,7 @@ func AuthMiddleware(tokenService *auth.TokenService) func(http.Handler) http.Han
 			ctx := context.WithValue(r.Context(), "userID", userID)
 			ctx = context.WithValue(ctx, "email", email)
 			ctx = context.WithValue(ctx, "role", role)
+			ctx = observability.WithActor(ctx, userID.String(), role)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

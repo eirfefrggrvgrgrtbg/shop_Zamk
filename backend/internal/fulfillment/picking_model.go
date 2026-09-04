@@ -7,26 +7,26 @@ import (
 )
 
 type PickingOrder struct {
-	OrderID           uuid.UUID      `json:"orderId"`
-	OrderNumber       *string        `json:"orderNumber,omitempty"`
-	OrderStatus       string         `json:"orderStatus"`
-	FulfillmentID     uuid.UUID      `json:"fulfillmentId"`
-	FulfillmentStatus string         `json:"fulfillmentStatus"`
-	Items             []PickingItem  `json:"items"`
+	OrderID           uuid.UUID     `json:"orderId"`
+	OrderNumber       *string       `json:"orderNumber,omitempty"`
+	OrderStatus       string        `json:"orderStatus"`
+	FulfillmentID     uuid.UUID     `json:"fulfillmentId"`
+	FulfillmentStatus string        `json:"fulfillmentStatus"`
+	Items             []PickingItem `json:"items"`
 }
 
 type PickingItem struct {
-	OrderItemID       uuid.UUID              `json:"orderItemId"`
-	Title             string                 `json:"title"`
-	ProductVariantID  uuid.UUID              `json:"productVariantId"`
-	VariantSize       *string                `json:"variantSize,omitempty"`
-	VariantColor      *string                `json:"variantColor,omitempty"`
-	ImageURL          *string                `json:"imageUrl,omitempty"`
-	SKU               *string                `json:"sku,omitempty"`
-	Barcode           *string                `json:"barcode,omitempty"`
-	Quantity          int                    `json:"quantity"`
-	AllocationMode    string                 `json:"allocationMode"` // "serialized" | "legacy"
-	PickedQuantity    int                    `json:"pickedQuantity"`
+	OrderItemID          uuid.UUID              `json:"orderItemId"`
+	Title                string                 `json:"title"`
+	ProductVariantID     uuid.UUID              `json:"productVariantId"`
+	VariantSize          *string                `json:"variantSize,omitempty"`
+	VariantColor         *string                `json:"variantColor,omitempty"`
+	ImageURL             *string                `json:"imageUrl,omitempty"`
+	SKU                  *string                `json:"sku,omitempty"`
+	Barcode              *string                `json:"barcode,omitempty"`
+	Quantity             int                    `json:"quantity"`
+	AllocationMode       string                 `json:"allocationMode"` // "serialized" | "legacy"
+	PickedQuantity       int                    `json:"pickedQuantity"`
 	RemainingQuantity    int                    `json:"remainingQuantity"`
 	AllocatedUnits       []PickingAllocatedUnit `json:"allocatedUnits"`
 	CompatibleUnitsCount int                    `json:"compatibleUnitsCount"`
@@ -39,11 +39,12 @@ type PickingAllocatedUnit struct {
 }
 
 type PickingScanResult struct {
-	FulfillmentID       uuid.UUID           `json:"fulfillmentId"`
-	OrderID             uuid.UUID           `json:"orderId"`
-	ScanResult          PickingScanDetail   `json:"scanResult"`
-	Item                PickingItemState    `json:"item"`
-	FulfillmentProgress PickingProgress     `json:"fulfillmentProgress"`
+	FulfillmentID       uuid.UUID         `json:"fulfillmentId"`
+	OrderID             uuid.UUID         `json:"orderId"`
+	OrderNumber         string            `json:"orderNumber,omitempty"`
+	ScanResult          PickingScanDetail `json:"scanResult"`
+	Item                PickingItemState  `json:"item"`
+	FulfillmentProgress PickingProgress   `json:"fulfillmentProgress"`
 }
 
 type PickingScanDetail struct {
