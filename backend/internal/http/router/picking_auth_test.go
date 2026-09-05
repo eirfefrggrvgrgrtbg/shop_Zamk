@@ -148,11 +148,19 @@ func TestAdminPickingScanRouter(t *testing.T) {
 	adminReadTok := makeToken(adminReadID, "admin")
 
 	adminUpdateID := insertUser("admin")
-	insertAdminWithPerms(adminUpdateID, []string{"orders.update_status"})
+	insertAdminWithPerms(adminUpdateID, []string{"warehouse.picking", "warehouse.receiving"})
 	adminUpdateTok := makeToken(adminUpdateID, "admin")
 
+	adminStatusOnlyID := insertUser("admin")
+	insertAdminWithPerms(adminStatusOnlyID, []string{"orders.update_status"})
+	adminStatusOnlyTok := makeToken(adminStatusOnlyID, "admin")
+
+	adminShipmentCreateID := insertUser("admin")
+	insertAdminWithPerms(adminShipmentCreateID, []string{"shipments.create"})
+	adminShipmentCreateTok := makeToken(adminShipmentCreateID, "admin")
+
 	adminFullID := insertUser("admin")
-	insertAdminWithPerms(adminFullID, []string{"orders.read", "orders.update_status"})
+	insertAdminWithPerms(adminFullID, []string{"orders.read", "warehouse.picking"})
 	adminTok := makeToken(adminFullID, "admin")
 
 	type errResponse struct {
@@ -242,8 +250,8 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, rr.Code)
 	})
 
-	// 3d. Admin with orders.update_status only (mutation permitted, no read needed) -> passes auth
-	t.Run("admin with orders.update_status only -> passes auth to domain", func(t *testing.T) {
+	// 3d. Admin with warehouse.picking only (mutation permitted, no read needed) -> passes auth
+	t.Run("admin with warehouse.picking only -> passes auth to domain", func(t *testing.T) {
 		body, _ := json.Marshal(map[string]string{"code": "SKU-NON-EXISTENT-CODE"})
 		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking/scan", bytes.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+adminUpdateTok)
@@ -556,14 +564,30 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, rr.Code)
 	})
 
-	// 15. Analogous fulfillment receiving mutations require orders.update_status, reject orders.read
-	t.Run("fulfillment receiving mutations require orders.update_status, reject orders.read", func(t *testing.T) {
+	// 15. Analogous fulfillment receiving mutations require warehouse.picking, reject orders.read
+	t.Run("fulfillment receiving mutations require warehouse.receiving, reject orders.read and orders.update_status", func(t *testing.T) {
+		// Read operation allows orders.read
+		codeBody, _ := json.Marshal(map[string]any{"code": "FUL-TEST-123"})
+		reqResolve := httptest.NewRequest("POST", "/api/admin/fulfillments/resolve-receiving-code", bytes.NewReader(codeBody))
+		reqResolve.Header.Set("Authorization", "Bearer "+adminReadTok)
+		reqResolve.Header.Set("Content-Type", "application/json")
+		rrResolve := httptest.NewRecorder()
+		r.ServeHTTP(rrResolve, reqResolve)
+		assert.NotEqual(t, http.StatusForbidden, rrResolve.Code)
+
 		// POST /receiving/start with orders.read -> 403
 		reqStart := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/receiving/start", nil)
 		reqStart.Header.Set("Authorization", "Bearer "+adminReadTok)
 		rrStart := httptest.NewRecorder()
 		r.ServeHTTP(rrStart, reqStart)
 		assert.Equal(t, http.StatusForbidden, rrStart.Code)
+
+		// POST /receiving/start with orders.update_status only -> 403
+		reqStartUpdate := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/receiving/start", nil)
+		reqStartUpdate.Header.Set("Authorization", "Bearer "+adminStatusOnlyTok)
+		rrStartUpdate := httptest.NewRecorder()
+		r.ServeHTTP(rrStartUpdate, reqStartUpdate)
+		assert.Equal(t, http.StatusForbidden, rrStartUpdate.Code)
 
 		// POST /receiving/scan-item with orders.read -> 403
 		scanBody, _ := json.Marshal(map[string]any{"barcode": "1234567890123", "quantity": 1})
@@ -574,6 +598,14 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		r.ServeHTTP(rrScan, reqScan)
 		assert.Equal(t, http.StatusForbidden, rrScan.Code)
 
+		// POST /receiving/scan-item with orders.update_status only -> 403
+		reqScanUpdate := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/receiving/scan-item", bytes.NewReader(scanBody))
+		reqScanUpdate.Header.Set("Authorization", "Bearer "+adminStatusOnlyTok)
+		reqScanUpdate.Header.Set("Content-Type", "application/json")
+		rrScanUpdate := httptest.NewRecorder()
+		r.ServeHTTP(rrScanUpdate, reqScanUpdate)
+		assert.Equal(t, http.StatusForbidden, rrScanUpdate.Code)
+
 		// POST /receiving/discrepancy with orders.read -> 403
 		discBody, _ := json.Marshal(map[string]any{"reason": "missing item"})
 		reqDisc := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/receiving/discrepancy", bytes.NewReader(discBody))
@@ -583,7 +615,33 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		r.ServeHTTP(rrDisc, reqDisc)
 		assert.Equal(t, http.StatusForbidden, rrDisc.Code)
 
-		// With adminUpdateTok (orders.update_status), requests pass auth check (not 401 or 403)
+		// POST /receiving/discrepancy with orders.update_status only -> 403
+		reqDiscUpdate := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/receiving/discrepancy", bytes.NewReader(discBody))
+		reqDiscUpdate.Header.Set("Authorization", "Bearer "+adminStatusOnlyTok)
+		reqDiscUpdate.Header.Set("Content-Type", "application/json")
+		rrDiscUpdate := httptest.NewRecorder()
+		r.ServeHTTP(rrDiscUpdate, reqDiscUpdate)
+		assert.Equal(t, http.StatusForbidden, rrDiscUpdate.Code)
+
+		// POST /receiving/confirm with warehouse.receiving only -> 403 (needs shipments.create)
+		confirmBody, _ := json.Marshal(map[string]any{"sessionId": uuid.New().String(), "expectedVersion": 1})
+		reqConfirmRecv := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/receiving/confirm", bytes.NewReader(confirmBody))
+		reqConfirmRecv.Header.Set("Authorization", "Bearer "+adminUpdateTok)
+		reqConfirmRecv.Header.Set("Content-Type", "application/json")
+		rrConfirmRecv := httptest.NewRecorder()
+		r.ServeHTTP(rrConfirmRecv, reqConfirmRecv)
+		assert.Equal(t, http.StatusForbidden, rrConfirmRecv.Code)
+
+		// POST /receiving/confirm with shipments.create -> passes auth (not 401 or 403)
+		reqConfirmPass := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/receiving/confirm", bytes.NewReader(confirmBody))
+		reqConfirmPass.Header.Set("Authorization", "Bearer "+adminShipmentCreateTok)
+		reqConfirmPass.Header.Set("Content-Type", "application/json")
+		rrConfirmPass := httptest.NewRecorder()
+		r.ServeHTTP(rrConfirmPass, reqConfirmPass)
+		assert.NotEqual(t, http.StatusUnauthorized, rrConfirmPass.Code)
+		assert.NotEqual(t, http.StatusForbidden, rrConfirmPass.Code)
+
+		// With adminUpdateTok (warehouse.receiving), start/scan/discrepancy pass auth check (not 401 or 403)
 		reqStartPass := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/receiving/start", nil)
 		reqStartPass.Header.Set("Authorization", "Bearer "+adminUpdateTok)
 		rrStartPass := httptest.NewRecorder()

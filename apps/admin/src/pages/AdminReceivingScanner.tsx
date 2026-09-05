@@ -24,9 +24,14 @@ interface ReceivingSessionState {
 }
 
 import { playBeepSound } from '../utils/audio';
+import { useAdminAuth } from '../contexts/AdminAuthContext';
 
 export function AdminReceivingScanner() {
   const navigate = useNavigate();
+  const { hasPermission } = useAdminAuth();
+  const canReceive = hasPermission('warehouse.receiving');
+  const canConfirm = hasPermission('shipments.create');
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [scannedCodeInput, setScannedCodeInput] = useState('');
@@ -51,14 +56,19 @@ export function AdminReceivingScanner() {
 
   useEffect(() => {
     if (!activeFulfillment) {
-      inputRef.current?.focus();
+      if (canReceive) {
+        inputRef.current?.focus();
+      }
     } else {
-      itemInputRef.current?.focus();
+      if (canReceive) {
+        itemInputRef.current?.focus();
+      }
     }
-  }, [activeFulfillment, isSuccess]);
+  }, [activeFulfillment, isSuccess, canReceive]);
 
   const handleCodeSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (!canReceive) return;
     const code = scannedCodeInput.trim();
     if (!code) return;
 
@@ -85,7 +95,9 @@ export function AdminReceivingScanner() {
     } finally {
       setIsResolving(false);
       setScannedCodeInput('');
-      setTimeout(() => inputRef.current?.focus(), 50);
+      if (canReceive) {
+        setTimeout(() => inputRef.current?.focus(), 50);
+      }
     }
   };
 
@@ -167,7 +179,9 @@ export function AdminReceivingScanner() {
     setIsAlreadyAccepted(false);
     setScanError(null);
     setScannedCodeInput('');
-    setTimeout(() => inputRef.current?.focus(), 100);
+    if (canReceive) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
   };
 
   return (
@@ -262,20 +276,27 @@ export function AdminReceivingScanner() {
             </div>
 
             <form onSubmit={handleCodeSubmit} className="space-y-4 max-w-xl mx-auto">
+              {!canReceive && (
+                <div className="p-3 bg-amber-950/60 border border-amber-800/80 text-amber-300 rounded-xl flex items-center gap-2 text-xs">
+                  <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+                  <span>Режим только для чтения: у вас нет прав на проведение приёмки сборок (требуется warehouse.receiving).</span>
+                </div>
+              )}
               <div className="relative">
                 <input
                   data-testid="receiving-code-input"
                   ref={inputRef}
                   type="text"
-                  placeholder="FUL-2026-XXXXXX или сканируйте QR..."
+                  disabled={!canReceive}
+                  placeholder={canReceive ? "FUL-2026-XXXXXX или сканируйте QR..." : "Недостаточно прав для приёмки сборок (требуется warehouse.receiving)"}
                   value={scannedCodeInput}
                   onChange={(e) => setScannedCodeInput(e.target.value)}
-                  className="w-full py-4 pl-5 pr-12 text-lg font-mono font-bold bg-slate-950 border-2 border-indigo-500/80 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/20 shadow-inner"
+                  className="w-full py-4 pl-5 pr-12 text-lg font-mono font-bold bg-slate-950 border-2 border-indigo-500/80 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/20 shadow-inner disabled:opacity-50 disabled:cursor-not-allowed disabled:border-slate-800 disabled:placeholder-slate-600"
                 />
                 <button
                   data-testid="receiving-search-submit"
                   type="submit"
-                  disabled={isResolving || !scannedCodeInput.trim()}
+                  disabled={isResolving || !scannedCodeInput.trim() || !canReceive}
                   className="absolute right-2 top-2 bottom-2 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold rounded-xl text-sm transition-colors"
                 >
                   {isResolving ? 'Поиск...' : 'Найти'}
@@ -321,15 +342,17 @@ export function AdminReceivingScanner() {
                 data-testid="receiving-item-barcode-input"
                 ref={itemInputRef}
                 type="text"
+                disabled={!canReceive}
                 placeholder="Сканируйте штрихкод каждой позиции (Barcode / SKU)..."
                 value={itemBarcodeInput}
                 onChange={(e) => setItemBarcodeInput(e.target.value)}
-                className="flex-1 bg-transparent border-none text-white text-sm focus:outline-none placeholder-slate-500 font-mono"
+                className="flex-1 bg-transparent border-none text-white text-sm focus:outline-none placeholder-slate-500 font-mono disabled:opacity-50"
               />
               <button
                 data-testid="receiving-item-scan-submit"
                 type="submit"
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg"
+                disabled={!canReceive || !itemBarcodeInput.trim()}
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold text-xs rounded-lg"
               >
                 Сканировать
               </button>
@@ -382,14 +405,15 @@ export function AdminReceivingScanner() {
             <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
               <button
                 data-testid="receiving-discrepancy"
+                disabled={!canReceive}
                 onClick={() => setIsDiscrepancyModalOpen(true)}
-                className="px-5 py-2.5 bg-amber-950/80 hover:bg-amber-900 border border-amber-800 text-amber-300 font-bold text-sm rounded-xl transition-colors"
+                className="px-5 py-2.5 bg-amber-950/80 hover:bg-amber-900 border border-amber-800 text-amber-300 font-bold text-sm rounded-xl transition-colors disabled:opacity-40"
               >
                 Зафиксировать расхождение
               </button>
               <button
                 data-testid="receiving-confirm"
-                disabled={isSubmitting || !session.canConfirm}
+                disabled={isSubmitting || !session.canConfirm || !canConfirm}
                 onClick={handleConfirmReceiving}
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold text-sm rounded-xl transition-colors shadow-lg"
               >
@@ -442,9 +466,10 @@ export function AdminReceivingScanner() {
                 Отмена
               </button>
               <button
-                disabled={isSubmitting}
+                data-testid="receiving-discrepancy-confirm"
+                disabled={isSubmitting || !canReceive}
                 onClick={handleRecordDiscrepancy}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl"
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl"
               >
                 {isSubmitting ? 'Сохранение...' : 'Подтвердить расхождение'}
               </button>

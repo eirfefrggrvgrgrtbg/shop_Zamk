@@ -131,6 +131,10 @@ func TestAdminDispatchRouter(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create users
+	adminWithDispatchPerm := insertUser("admin")
+	insertAdminWithPerms(adminWithDispatchPerm, []string{"warehouse.dispatch"})
+	adminWithDispatchToken := makeToken(adminWithDispatchPerm, "admin")
+
 	adminWithUpdatePerm := insertUser("admin")
 	insertAdminWithPerms(adminWithUpdatePerm, []string{"orders.update_status"})
 	adminWithUpdateToken := makeToken(adminWithUpdatePerm, "admin")
@@ -180,10 +184,19 @@ func TestAdminDispatchRouter(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, rr.Code)
 	})
 
+	// 4.1 Admin with only orders.update_status -> 403 (does not automatically gain physical capabilities)
+	t.Run("admin with orders.update_status only -> 403", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/dispatch", nil)
+		req.Header.Set("Authorization", "Bearer "+adminWithUpdateToken)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
 	// 5. Invalid UUID -> 400
 	t.Run("invalid uuid -> 400", func(t *testing.T) {
 		req := httptest.NewRequest("POST", "/api/admin/fulfillments/not-a-uuid/dispatch", nil)
-		req.Header.Set("Authorization", "Bearer "+adminWithUpdateToken)
+		req.Header.Set("Authorization", "Bearer "+adminWithDispatchToken)
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
@@ -192,16 +205,16 @@ func TestAdminDispatchRouter(t *testing.T) {
 	// 6. Non-existent fulfillment -> 404
 	t.Run("non-existent fulfillment -> 404", func(t *testing.T) {
 		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+uuid.New().String()+"/dispatch", nil)
-		req.Header.Set("Authorization", "Bearer "+adminWithUpdateToken)
+		req.Header.Set("Authorization", "Bearer "+adminWithDispatchToken)
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusNotFound, rr.Code)
 	})
 
-	// 7. Successful dispatch with orders.update_status -> 200 OK
-	t.Run("dispatch success with orders.update_status -> 200", func(t *testing.T) {
+	// 7. Successful dispatch with warehouse.dispatch -> 200 OK
+	t.Run("dispatch success with warehouse.dispatch -> 200", func(t *testing.T) {
 		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/dispatch", nil)
-		req.Header.Set("Authorization", "Bearer "+adminWithUpdateToken)
+		req.Header.Set("Authorization", "Bearer "+adminWithDispatchToken)
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusOK, rr.Code)
@@ -217,7 +230,7 @@ func TestAdminDispatchRouter(t *testing.T) {
 	// 8. Already shipped -> 409 dispatch_not_allowed
 	t.Run("already shipped -> 409 dispatch_not_allowed", func(t *testing.T) {
 		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/dispatch", nil)
-		req.Header.Set("Authorization", "Bearer "+adminWithUpdateToken)
+		req.Header.Set("Authorization", "Bearer "+adminWithDispatchToken)
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusConflict, rr.Code)

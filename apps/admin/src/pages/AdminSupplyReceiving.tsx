@@ -34,6 +34,7 @@ import type {
 } from '@zamk/api-client/src/types';
 
 import { playBeepSound } from '../utils/audio';
+import { useAdminAuth } from '../contexts/AdminAuthContext';
 
 function mapReceivingError(err: any): string {
   const code = err?.error?.code || err?.code || '';
@@ -145,6 +146,8 @@ function getStatusBadge(status: string) {
 
 export function AdminSupplyReceiving() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { hasPermission } = useAdminAuth();
+  const canReceive = hasPermission('inventory.receipt');
   const [dossier, setDossier] = useState<SellerSupply | null>(null);
   const [session, setSession] = useState<SupplyReceivingSession | null>(null);
   const [qrInput, setQrInput] = useState('');
@@ -590,7 +593,7 @@ export function AdminSupplyReceiving() {
               {dossier?.status === 'completed_with_discrepancies' && remainingExpected > 0 && (
                 <button
                   onClick={handleStartOrResumeSession}
-                  disabled={loading}
+                  disabled={!canReceive || loading}
                   className="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center transition-colors shadow-lg"
                 >
                   {loading ? <RefreshCw className="w-5 h-5 animate-spin mr-2" /> : <ArrowRight className="w-5 h-5 mr-2" />}
@@ -794,7 +797,7 @@ export function AdminSupplyReceiving() {
                 </div>
                 <button
                   onClick={handleMarkArrived}
-                  disabled={arrivalLoading}
+                  disabled={!canReceive || arrivalLoading}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-5 py-3 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-50 shadow-lg"
                 >
                   {arrivalLoading ? (
@@ -819,7 +822,7 @@ export function AdminSupplyReceiving() {
                 </div>
                 <button
                   onClick={handleStartOrResumeSession}
-                  disabled={loading}
+                  disabled={!canReceive || loading}
                   className="bg-blue-600 hover:bg-blue-500 text-white font-medium px-6 py-3 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-50 shadow-lg"
                 >
                   {loading ? (
@@ -846,7 +849,7 @@ export function AdminSupplyReceiving() {
                 </div>
                 <button
                   onClick={handleStartOrResumeSession}
-                  disabled={loading}
+                  disabled={!canReceive || loading}
                   className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-6 py-3 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-50 shadow-lg"
                 >
                   {loading ? (
@@ -872,7 +875,7 @@ export function AdminSupplyReceiving() {
                   </div>
                   <button
                     onClick={handleStartOrResumeSession}
-                    disabled={loading}
+                    disabled={!canReceive || loading}
                     className="bg-amber-600 hover:bg-amber-500 text-white font-medium px-6 py-3 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-50 shadow-lg"
                   >
                     {loading ? (
@@ -974,12 +977,12 @@ export function AdminSupplyReceiving() {
                       ? 'border-rose-500/50 focus:ring-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.1)]'
                       : 'border-blue-500/50 focus:ring-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.1)]'
                   } rounded-lg pl-4 pr-16 py-4 text-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2`}
-                  disabled={loading}
+                  disabled={!canReceive || loading}
                   autoFocus
                 />
                 <button
                   type="submit"
-                  disabled={loading || !barcodeInput.trim()}
+                  disabled={!canReceive || loading || !barcodeInput.trim()}
                   className={`absolute right-2 top-2 bottom-2 ${
                     isDamagedScan ? 'bg-rose-600 hover:bg-rose-500' : 'bg-blue-600 hover:bg-blue-500'
                   } text-white rounded-md px-4 transition-colors disabled:opacity-50`}
@@ -1050,7 +1053,7 @@ export function AdminSupplyReceiving() {
                     </h3>
                     <button
                       onClick={handleUndoLastScan}
-                      disabled={undoLoading || !latestNonVoidedScan}
+                      disabled={!canReceive || undoLoading || !latestNonVoidedScan}
                       className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <RotateCcw className={`w-3.5 h-3.5 mr-1.5 ${undoLoading ? 'animate-spin' : ''}`} />
@@ -1219,7 +1222,7 @@ export function AdminSupplyReceiving() {
               <button
                 type="button"
                 onClick={() => setShowFinalizeModal(true)}
-                disabled={loading}
+                disabled={!canReceive || loading}
                 className={`w-full ${
                   isAdditionalSession
                     ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-900/20'
@@ -1315,7 +1318,7 @@ export function AdminSupplyReceiving() {
               <button
                 type="button"
                 onClick={() => setShowFinalizeModal(false)}
-                disabled={loading}
+                disabled={!canReceive || loading}
                 className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 text-sm"
               >
                 Отмена
@@ -1323,7 +1326,7 @@ export function AdminSupplyReceiving() {
               <button
                 type="button"
                 onClick={handleFinalizeConfirm}
-                disabled={loading}
+                disabled={!canReceive || loading}
                 className={`flex-1 ${
                   totalRemaining > 0
                     ? 'bg-amber-600 hover:bg-amber-500'

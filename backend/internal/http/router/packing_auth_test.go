@@ -144,6 +144,10 @@ func TestAdminPackingRouter(t *testing.T) {
 	insertAdminWithPerms(adminReadID, []string{"orders.read"})
 	adminReadTok := makeToken(adminReadID, "admin")
 
+	adminPackID := insertUser("admin")
+	insertAdminWithPerms(adminPackID, []string{"warehouse.packing"})
+	adminPackTok := makeToken(adminPackID, "admin")
+
 	adminUpdateID := insertUser("admin")
 	insertAdminWithPerms(adminUpdateID, []string{"orders.update_status"})
 	adminUpdateTok := makeToken(adminUpdateID, "admin")
@@ -195,10 +199,19 @@ func TestAdminPackingRouter(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, rr.Code)
 	})
 
+	// 4.1. orders.update_status only -> 403
+	t.Run("orders.update_status only -> 403", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/pack", nil)
+		req.Header.Set("Authorization", "Bearer "+adminUpdateTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
 	// 5. Invalid fulfillment ID -> 400
 	t.Run("invalid fulfillment ID -> 400", func(t *testing.T) {
 		req := httptest.NewRequest("POST", "/api/admin/fulfillments/not-a-uuid/pack", nil)
-		req.Header.Set("Authorization", "Bearer "+adminUpdateTok)
+		req.Header.Set("Authorization", "Bearer "+adminPackTok)
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
@@ -207,7 +220,7 @@ func TestAdminPackingRouter(t *testing.T) {
 	// 6. Non-existent fulfillment ID -> 404
 	t.Run("non-existent fulfillment ID -> 404", func(t *testing.T) {
 		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+uuid.New().String()+"/pack", nil)
-		req.Header.Set("Authorization", "Bearer "+adminUpdateTok)
+		req.Header.Set("Authorization", "Bearer "+adminPackTok)
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusNotFound, rr.Code)
@@ -220,7 +233,7 @@ func TestAdminPackingRouter(t *testing.T) {
 	// 7. Unpicked allocation -> 409 fulfillment_not_fully_picked
 	t.Run("unpicked allocation -> 409 fulfillment_not_fully_picked", func(t *testing.T) {
 		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/pack", nil)
-		req.Header.Set("Authorization", "Bearer "+adminUpdateTok)
+		req.Header.Set("Authorization", "Bearer "+adminPackTok)
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusConflict, rr.Code)
@@ -236,7 +249,7 @@ func TestAdminPackingRouter(t *testing.T) {
 		require.NoError(t, err)
 
 		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/pack", nil)
-		req.Header.Set("Authorization", "Bearer "+adminUpdateTok)
+		req.Header.Set("Authorization", "Bearer "+adminPackTok)
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusOK, rr.Code)
@@ -252,7 +265,7 @@ func TestAdminPackingRouter(t *testing.T) {
 	// 9. Already packed -> 409 packing_not_allowed
 	t.Run("already packed -> 409 packing_not_allowed", func(t *testing.T) {
 		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/pack", nil)
-		req.Header.Set("Authorization", "Bearer "+adminUpdateTok)
+		req.Header.Set("Authorization", "Bearer "+adminPackTok)
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusConflict, rr.Code)

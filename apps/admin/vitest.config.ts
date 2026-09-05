@@ -19,6 +19,8 @@ export default defineConfig({
       'src/pages/AdminGuidedPicking.test.tsx',
       'src/pages/AdminFreeScanner.test.tsx',
       'src/pages/AdminInventoryReconciliation.test.tsx',
+      'src/pages/AdminPickingDetail.test.tsx',
+      'src/pages/AdminReceivingScanner.test.tsx',
     ],
   },
 });

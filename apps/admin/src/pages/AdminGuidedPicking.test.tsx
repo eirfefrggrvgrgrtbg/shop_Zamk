@@ -1,3 +1,15 @@
+vi.mock('../contexts/AdminAuthContext', () => ({
+  useAdminAuth: vi.fn().mockReturnValue({
+    hasPermission: () => true,
+    user: null,
+    isAuthenticated: true,
+    isLoading: false,
+    hasAnyPermission: () => false,
+    staff: null,
+    login: vi.fn(),
+    logout: vi.fn()
+  })
+}));
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';

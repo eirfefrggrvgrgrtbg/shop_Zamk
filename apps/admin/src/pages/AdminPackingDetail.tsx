@@ -23,9 +23,12 @@ import {
 import { getAdminFulfillment } from '../api/adminOrders';
 import { formatOrderNumber } from '../utils/orderFormatters';
 import type { AdminFulfillment } from '@zamk/api-client/src/types';
+import { useAdminAuth } from '../contexts/AdminAuthContext';
 
 export function AdminPackingDetail() {
   const { id } = useParams<{ id: string }>();
+  const { hasPermission } = useAdminAuth();
+  const canPack = hasPermission('warehouse.packing');
 
   const [pickingOrder, setPickingOrder] = useState<PickingOrder | null>(null);
   const [fulfillmentData, setFulfillmentData] = useState<AdminFulfillment | null>(null);
@@ -358,7 +361,7 @@ export function AdminPackingDetail() {
 
             <button
               onClick={handleConfirmPacking}
-              disabled={isPacking || !isPickingComplete}
+              disabled={!canPack || isPacking || !isPickingComplete}
               className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-bold rounded-xl transition-all shadow-sm shrink-0"
             >
               {isPacking ? (

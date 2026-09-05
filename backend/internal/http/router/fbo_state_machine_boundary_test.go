@@ -99,7 +99,7 @@ func TestFBOStateMachine_A_RemovedFulfillmentStatusEndpoint(t *testing.T) {
 	ctx, pgClient, _, r, tokenService, cleanup := setupFBOTestRouter(t)
 	defer cleanup()
 
-	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status"})
+	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status", "warehouse.receiving", "warehouse.picking", "warehouse.packing", "warehouse.dispatch"})
 
 	orderID := uuid.New()
 	reqBody, _ := json.Marshal(map[string]string{
@@ -166,7 +166,7 @@ func TestFBOStateMachine_B_RemovedGenericOrderStatusEndpoint(t *testing.T) {
 	ctx, pgClient, _, r, tokenService, cleanup := setupFBOTestRouter(t)
 	defer cleanup()
 
-	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status"})
+	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status", "warehouse.receiving", "warehouse.picking", "warehouse.packing", "warehouse.dispatch"})
 
 	orderID := uuid.New()
 	body, _ := json.Marshal(map[string]string{
@@ -189,7 +189,7 @@ func TestFBOStateMachine_C_through_G_SemanticAdminCancel_Lifecycle(t *testing.T)
 	ctx, pgClient, _, r, tokenService, cleanup := setupFBOTestRouterWithLogger(t, &logBuf)
 	defer cleanup()
 
-	adminID, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status"})
+	adminID, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status", "warehouse.receiving", "warehouse.picking", "warehouse.packing", "warehouse.dispatch"})
 
 	sellerID := uuid.New()
 	_, err := pgClient.Pool.Exec(ctx, `
@@ -348,7 +348,7 @@ func TestFBOStateMachine_H_RollbackCausesZeroPartialState(t *testing.T) {
 	ctx, pgClient, _, r, tokenService, cleanup := setupFBOTestRouterWithLogger(t, &logBuf)
 	defer cleanup()
 
-	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status"})
+	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status", "warehouse.receiving", "warehouse.picking", "warehouse.packing", "warehouse.dispatch"})
 
 	sellerID := uuid.New()
 	_, err := pgClient.Pool.Exec(ctx, `
@@ -461,7 +461,7 @@ func TestFBOStateMachine_I_DuplicateCancellationRejection(t *testing.T) {
 	ctx, pgClient, _, r, tokenService, cleanup := setupFBOTestRouterWithLogger(t, &logBuf)
 	defer cleanup()
 
-	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status"})
+	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status", "warehouse.receiving", "warehouse.picking", "warehouse.packing", "warehouse.dispatch"})
 
 	sellerID := uuid.New()
 	_, err := pgClient.Pool.Exec(ctx, `
@@ -534,7 +534,7 @@ func TestFBOStateMachine_J_TerminalStatesCannotBeCancelled(t *testing.T) {
 	ctx, pgClient, _, r, tokenService, cleanup := setupFBOTestRouter(t)
 	defer cleanup()
 
-	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status"})
+	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status", "warehouse.receiving", "warehouse.picking", "warehouse.packing", "warehouse.dispatch"})
 
 	sellerID := uuid.New()
 	_, err := pgClient.Pool.Exec(ctx, `
@@ -603,7 +603,7 @@ func TestFBOStateMachine_PackedCancellation_WithAndWithoutShipment(t *testing.T)
 	ctx, pgClient, _, r, tokenService, cleanup := setupFBOTestRouter(t)
 	defer cleanup()
 
-	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status", "shipments.create"})
+	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status", "warehouse.receiving", "warehouse.picking", "warehouse.packing", "warehouse.dispatch", "shipments.create"})
 
 	sellerID := uuid.New()
 	_, err := pgClient.Pool.Exec(ctx, `
@@ -807,7 +807,7 @@ func TestFBOStateMachine_AdminCancellation_EligibilityMatrix(t *testing.T) {
 	ctx, pgClient, _, r, tokenService, cleanup := setupFBOTestRouter(t)
 	defer cleanup()
 
-	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status"})
+	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status", "warehouse.receiving", "warehouse.picking", "warehouse.packing", "warehouse.dispatch"})
 
 	sellerID := uuid.New()
 	_, err := pgClient.Pool.Exec(ctx, `
@@ -902,7 +902,7 @@ func TestFBOStateMachine_L_CanonicalLifecycleEndToEnd(t *testing.T) {
 	ctx, pgClient, _, r, tokenService, cleanup := setupFBOTestRouter(t)
 	defer cleanup()
 
-	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status", "shipments.update_status"})
+	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{"orders.read", "orders.update_status", "warehouse.receiving", "warehouse.picking", "warehouse.packing", "warehouse.dispatch", "shipments.update_status"})
 
 	sellerID := uuid.New()
 	_, err := pgClient.Pool.Exec(ctx, `
@@ -1176,7 +1176,7 @@ func TestFBOStateMachine_Concurrency_CancelVsShipmentAndDispatch(t *testing.T) {
 	defer cleanup()
 
 	_, adminTok := insertAdminWithPermissions(t, ctx, pgClient, tokenService, []string{
-		"orders.read", "orders.update_status", "shipments.create", "shipments.update_status",
+		"orders.read", "orders.update_status", "warehouse.receiving", "warehouse.picking", "warehouse.packing", "warehouse.dispatch", "shipments.create", "shipments.update_status",
 	})
 
 	t.Run("Part 1: 30 iterations concurrent Cancel vs Dispatch", func(t *testing.T) {

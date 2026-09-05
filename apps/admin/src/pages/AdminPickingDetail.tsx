@@ -25,6 +25,7 @@ import {
   CompatibleUnit,
 } from '../api/adminPicking';
 import { formatOrderNumber } from '../utils/orderFormatters';
+import { useAdminAuth } from '../contexts/AdminAuthContext';
 
 interface FeedbackMessage {
   type: 'success' | 'warning' | 'error';
@@ -71,6 +72,8 @@ export const getActionableLegacyTarget = (
 
 export function AdminPickingDetail() {
   const { id } = useParams<{ id: string }>();
+  const { hasPermission } = useAdminAuth();
+  const canPick = hasPermission('warehouse.picking');
 
   const [pickingOrder, setPickingOrder] = useState<PickingOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -401,7 +404,7 @@ export function AdminPickingDetail() {
               type="text"
               value={scanInput}
               onChange={(e) => setScanInput(e.target.value)}
-              disabled={isScanning || (activeItem.allocationMode === 'legacy' && !legacyTarget)}
+              disabled={!canPick || isScanning || (activeItem.allocationMode === 'legacy' && !legacyTarget)}
               placeholder={
                 activeItem.allocationMode === 'serialized'
                   ? 'Отсканируйте ZMU подходящей единицы...'
@@ -417,7 +420,7 @@ export function AdminPickingDetail() {
             <Scan className="w-5 h-5 text-indigo-500 absolute left-4 top-1/2 -translate-y-1/2 mt-0.5" />
             <button
               type="submit"
-              disabled={isScanning || !scanInput.trim() || (activeItem.allocationMode === 'legacy' && !legacyTarget)}
+              disabled={!canPick || isScanning || !scanInput.trim() || (activeItem.allocationMode === 'legacy' && !legacyTarget)}
               className="absolute right-2 top-1/2 -translate-y-1/2 mt-0.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-100 disabled:text-gray-400 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
             >
               {isScanning ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Ввод'}

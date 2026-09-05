@@ -28,6 +28,7 @@ import {
 import { getAdminFulfillment, getAdminOrder, AdminOrderView } from '../api/adminOrders';
 import { formatOrderNumber } from '../utils/orderFormatters';
 import type { AdminFulfillment } from '@zamk/api-client/src/types';
+import { useAdminAuth } from '../contexts/AdminAuthContext';
 
 interface DispatchDisplayItem {
   orderItemId: string;
@@ -43,6 +44,8 @@ interface DispatchDisplayItem {
 
 export function AdminDispatchDetail() {
   const { id } = useParams<{ id: string }>();
+  const { hasPermission } = useAdminAuth();
+  const canDispatch = hasPermission('warehouse.dispatch');
 
   const [pickingOrder, setPickingOrder] = useState<PickingOrder | null>(null);
   const [fulfillmentData, setFulfillmentData] = useState<AdminFulfillment | null>(null);
@@ -537,7 +540,7 @@ export function AdminDispatchDetail() {
 
             <button
               onClick={() => setShowConfirmModal(true)}
-              disabled={isDispatching || !isPacked}
+              disabled={!canDispatch || isDispatching || !isPacked}
               className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-amber-600 hover:bg-amber-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-bold rounded-xl transition-all shadow-sm shrink-0"
             >
               <Truck className="w-4 h-4" />
