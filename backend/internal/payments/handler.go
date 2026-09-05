@@ -63,6 +63,10 @@ func (h *Handler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusBadRequest, "payment_method_unavailable", err.Error())
 			return
 		}
+		if errors.Is(err, ErrInsufficientStock) {
+			h.writeError(w, http.StatusConflict, "insufficient_stock", "Товара больше нет в наличии для завершения оплаты заказа")
+			return
+		}
 		log.Printf("CreatePayment Error: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create payment")
 		return

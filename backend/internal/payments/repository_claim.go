@@ -43,3 +43,13 @@ func (r *Repository) MarkPaymentFailed(ctx context.Context, id uuid.UUID) error 
 	_, err := r.db.Exec(ctx, query, id)
 	return err
 }
+
+func (r *Repository) MarkPaymentFailedTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	query := `
+		UPDATE payments
+		SET status = 'failed', failed_at = NOW(), updated_at = NOW()
+		WHERE id = $1
+	`
+	_, err := tx.Exec(ctx, query, id)
+	return err
+}

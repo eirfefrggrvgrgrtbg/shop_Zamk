@@ -617,6 +617,46 @@ func (r *Repository) GetOrderReservations(ctx context.Context, orderID uuid.UUID
 	return ids, nil
 }
 
+func (r *Repository) GetActiveOrderReservations(ctx context.Context, orderID uuid.UUID) ([]uuid.UUID, error) {
+	query := `
+		SELECT r.id
+		FROM reservations r
+		JOIN order_reservations ord_r ON ord_r.reservation_id = r.id
+		WHERE ord_r.order_id = $1 AND r.status = 'active'
+	`
+	rows, err := r.db.Query(ctx, query, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (r *Repository) ReleaseAllocationsForOrderCountTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, reason string) (int, error) {
+	now := time.Now()
+	tag, err := tx.Exec(ctx, `
+		UPDATE order_item_allocations a
+		SET released_at = $1, release_reason = $2
+		FROM order_items oi
+		WHERE a.order_item_id = oi.id
+		  AND oi.order_id = $3
+		  AND a.released_at IS NULL
+	`, now, reason, orderID)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (r *Repository) GetExpiredAwaitingPaymentOrdersTx(ctx context.Context, tx pgx.Tx, olderThan time.Time, limit int) ([]uuid.UUID, error) {
 	query := `
 		SELECT id

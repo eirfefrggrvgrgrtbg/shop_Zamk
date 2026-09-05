@@ -16,4 +16,5 @@ var (
 	ErrInvalidRefundAmount      = errors.New("invalid refund amount, must be greater than zero")
 	ErrMismatchedOrderAndPayment = errors.New("return and payment orders do not match")
 	ErrAmbiguousFundingPayment  = errors.New("ambiguous funding payment: multiple succeeded payments exist for order")
+	ErrInsufficientStock        = errors.New("insufficient stock to initiate payment for order")
 )

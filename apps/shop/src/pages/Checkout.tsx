@@ -28,9 +28,31 @@ export function Checkout() {
   const [validationError, setValidationError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'tpay' | 'sbp'>('card');
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(() => {
+    return sessionStorage.getItem('zamk_pending_order_id');
+  });
+  const [pendingOrderDetails, setPendingOrderDetails] = useState<any | null>(null);
 
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('new');
+
+  useEffect(() => {
+    if (pendingOrderId && !items.length) {
+      import('@zamk/api-client/src/customer').then(({ getOrder }) => {
+        getOrder(pendingOrderId).then(ord => {
+          if (ord && ord.status === 'awaiting_payment') {
+            setPendingOrderDetails(ord);
+          } else {
+            sessionStorage.removeItem('zamk_pending_order_id');
+            setPendingOrderId(null);
+          }
+        }).catch(() => {
+          sessionStorage.removeItem('zamk_pending_order_id');
+          setPendingOrderId(null);
+        });
+      });
+    }
+  }, [pendingOrderId, items.length]);
 
   useEffect(() => {
     getDeliveryMethods().then(methods => {
@@ -57,10 +79,10 @@ export function Checkout() {
     });
   }, [isAuthenticated]);
 
-  // Regenerate idempotency key when critical checkout parameters change to avoid 409
+  // Regenerate idempotency key when user actively modifies customer checkout details
   useEffect(() => {
     setIdempotencyKey(crypto.randomUUID());
-  }, [items, selectedMethodId, selectedAddressId, firstName, lastName, email, phone, address]);
+  }, [selectedMethodId, selectedAddressId, firstName, lastName, email, phone, address]);
 
   const handleCheckout = async () => {
     if (!isAuthenticated) {
@@ -110,18 +132,25 @@ export function Checkout() {
     try {
       const deliveryAddressText = finalAddress;
 
-      const order = await createOrder({
-        customerName: finalName,
-        customerEmail: trimmedEmail,
-        customerPhone: finalPhone,
-        deliveryAddress: deliveryAddressText,
-        deliveryMethodId: selectedMethodId
-      }, idempotencyKey);
+      let orderId = pendingOrderId;
+      if (!orderId) {
+        const order = await createOrder({
+          customerName: finalName,
+          customerEmail: trimmedEmail,
+          customerPhone: finalPhone,
+          deliveryAddress: deliveryAddressText,
+          deliveryMethodId: selectedMethodId
+        }, idempotencyKey);
+        orderId = order.id;
+        setPendingOrderId(order.id);
+        sessionStorage.setItem('zamk_pending_order_id', order.id);
+      }
 
-      const payment = await createPayment(order.id, paymentMethod);
+      const payment = await createPayment(orderId, paymentMethod);
 
       setValidationError('');
       setDone(true);
+      sessionStorage.removeItem('zamk_pending_order_id');
       await clearCart();
 
       if (payment.integrationMode === 'mock') {
@@ -137,6 +166,14 @@ export function Checkout() {
       if (e.message && e.message.includes('Idempotency key conflict')) {
         setValidationError('Вы изменили данные после отправки заказа. Пожалуйста, проверьте информацию и попробуйте снова.');
         setIdempotencyKey(crypto.randomUUID()); // Reset key for next attempt
+        setPendingOrderId(null);
+        sessionStorage.removeItem('zamk_pending_order_id');
+      } else if (e.message && (e.message.includes('not awaiting payment') || e.message.includes('order not found') || e.message.includes('cancelled'))) {
+        setPendingOrderId(null);
+        sessionStorage.removeItem('zamk_pending_order_id');
+        setValidationError(e.message || 'Заказ не может быть оплачен. Пожалуйста, оформите новый заказ.');
+      } else if (e.message && e.message.includes('insufficient_stock')) {
+        setValidationError('Товара больше нет в наличии для завершения оплаты этого заказа.');
       } else {
         setValidationError(e.message || 'Не удалось сохранить заказ. Попробуйте ещё раз.');
       }
@@ -158,6 +195,92 @@ export function Checkout() {
               <div className='mt-7 flex justify-center gap-3'>
                 <Link to='/'><Button>На главную</Button></Link>
                 <Link to='/catalog'><Button variant='secondary'>В каталог</Button></Link>
+              </div>
+            </div>
+          </CheckoutPanel>
+        </div>
+      </div>
+    );
+  }
+
+  if (!items.length && pendingOrderDetails) {
+    return (
+      <div className='relative z-10 min-h-screen pt-24 md:pt-32 pb-20'>
+        <div className='container mx-auto px-4 sm:px-6 max-w-xl'>
+          <CheckoutPanel>
+            <h1 className='text-2xl font-serif text-graphite dark:text-white mb-2'>
+              Оплата заказа {pendingOrderDetails.orderNumber || pendingOrderDetails.id}
+            </h1>
+            <p className='text-sm text-graphite-light dark:text-white/70 mb-6'>
+              Заказ уже сформирован и ожидает оплаты. Выберите способ и завершите покупку.
+            </p>
+
+            {validationError && (
+              <div className="mb-6 p-4 rounded-xl bg-danger/10 border border-danger/20 text-danger text-sm">
+                {validationError}
+              </div>
+            )}
+
+            <div className="mb-6">
+              <div className='flex flex-wrap gap-2 items-center'>
+                <PillFilter label='Карта онлайн' active={paymentMethod === 'card'} onClick={() => setPaymentMethod('card')} />
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('tpay')}
+                  className={`px-4 py-2 rounded-full text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+                    paymentMethod === 'tpay'
+                      ? 'bg-[#FFDD2D] text-black border-[#FFDD2D]'
+                      : 'bg-white dark:bg-white/5 text-graphite dark:text-white border-border-lighter dark:border-white/10 hover:border-graphite/30'
+                  }`}
+                >
+                  <span>T-Pay</span>
+                  <span className="text-[10px] bg-black/10 dark:bg-white/10 px-1.5 py-0.5 rounded font-medium">Тестовый режим</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Button
+                onClick={async () => {
+                  try {
+                    setIsSubmitting(true);
+                    setValidationError('');
+                    const { createPayment } = await import('@zamk/api-client/src/customer');
+                    const payment = await createPayment(pendingOrderDetails.id, paymentMethod);
+                    sessionStorage.removeItem('zamk_pending_order_id');
+                    if (payment.paymentUrl) {
+                      window.location.href = payment.paymentUrl;
+                    }
+                  } catch (e: any) {
+                    setIsSubmitting(false);
+                    if (e.message && e.message.includes('insufficient_stock')) {
+                      setValidationError('Товара больше нет в наличии для завершения оплаты заказа.');
+                    } else {
+                      setValidationError(e.message || 'Не удалось провести оплату. Попробуйте еще раз.');
+                    }
+                  }
+                }}
+                disabled={isSubmitting}
+                className="w-full"
+              >
+                {isSubmitting ? 'Обработка...' : `Оплатить ${(pendingOrderDetails.totalPriceCents / 100).toLocaleString('ru-RU')} ₽`}
+              </Button>
+
+              <div className="flex justify-between items-center text-xs mt-2">
+                <Link to="/orders" className="text-ash hover:text-graphite dark:hover:text-white underline">
+                  Перейти в мои заказы
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sessionStorage.removeItem('zamk_pending_order_id');
+                    setPendingOrderId(null);
+                    setPendingOrderDetails(null);
+                  }}
+                  className="text-ash hover:text-danger underline"
+                >
+                  Отменить и перейти в каталог
+                </button>
               </div>
             </div>
           </CheckoutPanel>

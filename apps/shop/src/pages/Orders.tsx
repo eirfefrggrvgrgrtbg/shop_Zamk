@@ -13,6 +13,7 @@ import {
   getItemCountWord,
 } from '../components/orders/reviewHelpers';
 import { AccountLayout } from '../components/account/AccountLayout';
+import { useToast } from '../contexts/ToastContext';
 
 export function Orders() {
   return (
@@ -23,11 +24,13 @@ export function Orders() {
 }
 
 function OrdersContent() {
+  const { showToast } = useToast();
   const [orders, setOrders] = useState<any[]>([]);
   const [returnsMap, setReturnsMap] = useState<Record<string, any[]>>({});
   const [reviewsMap, setReviewsMap] = useState<Record<string, any>>({});
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPaying, setIsPaying] = useState(false);
 
   // Modal states
   const [returnModal, setReturnModal] = useState<{ isOpen: boolean; item: any | null }>({ isOpen: false, item: null });
@@ -498,6 +501,33 @@ function OrdersContent() {
                     {selectedOrder.total.toLocaleString('ru-RU')} ₽
                   </span>
                 </div>
+
+                {selectedOrder.rawStatus === 'awaiting_payment' && (
+                  <button
+                    type="button"
+                    disabled={isPaying}
+                    onClick={async () => {
+                      try {
+                        setIsPaying(true);
+                        const { createPayment } = await import('@zamk/api-client/src/customer');
+                        const payment = await createPayment(selectedOrder.rawId, 'card');
+                        if (payment.paymentUrl) {
+                          window.location.href = payment.paymentUrl;
+                        }
+                      } catch (e: any) {
+                        setIsPaying(false);
+                        if (e.message && e.message.includes('insufficient_stock')) {
+                          showToast('Товара больше нет в наличии для завершения оплаты', 'error');
+                        } else {
+                          showToast(e.message || 'Не удалось начать оплату заказа', 'error');
+                        }
+                      }
+                    }}
+                    className="w-full mt-4 py-3 rounded-full bg-graphite dark:bg-white text-white dark:text-graphite hover:opacity-90 font-semibold text-sm text-center transition-all disabled:opacity-50"
+                  >
+                    {isPaying ? 'Подготовка к оплате...' : 'Оплатить заказ'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

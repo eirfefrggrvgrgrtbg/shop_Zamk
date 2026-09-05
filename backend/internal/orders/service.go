@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 )
 
@@ -25,6 +27,7 @@ type Service struct {
 	inventorySvc *inventory.Service
 	db           *postgres.Client
 	cfg          *config.Config
+	logger       *slog.Logger
 }
 
 func NewService(repo *Repository, cartRepo *cart.Repository, inventorySvc *inventory.Service, db *postgres.Client, cfg *config.Config) *Service {
@@ -34,7 +37,16 @@ func NewService(repo *Repository, cartRepo *cart.Repository, inventorySvc *inven
 		inventorySvc: inventorySvc,
 		db:           db,
 		cfg:          cfg,
+		logger:       slog.Default(),
 	}
+}
+
+func (s *Service) SetLogger(l *slog.Logger) *Service {
+	if l == nil {
+		l = slog.Default()
+	}
+	s.logger = l
+	return s
 }
 
 func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateOrderRequest, idempotencyKey *uuid.UUID) (*Order, error) {
@@ -115,11 +127,13 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 				return ErrVariantNotFound
 			}
 
-			// Reserve stock
-			// 1 hour TTL for the reservation just in case checkout abandons? 
-			// Wait, order is awaiting_payment, so the reservation should live until payment or cancellation.
-			// Let's set it to 24 hours.
-			res, err := s.inventorySvc.CreateReservationTx(ctx, tx, userID, item.ProductVariantID, item.Quantity, 24*time.Hour)
+			// Reserve stock with TTL bounded to payment timeout
+			timeoutMinutes := 30
+			if s.cfg != nil && s.cfg.Worker.OrderPaymentTimeoutMinutes > 0 {
+				timeoutMinutes = s.cfg.Worker.OrderPaymentTimeoutMinutes
+			}
+			resTTL := time.Duration(timeoutMinutes) * time.Minute
+			res, err := s.inventorySvc.CreateReservationTx(ctx, tx, userID, item.ProductVariantID, item.Quantity, resTTL)
 			if err != nil {
 				return err
 			}
@@ -294,13 +308,21 @@ func (s *Service) CancelCustomerOrder(ctx context.Context, userID, orderID uuid.
 		return ErrOrderNotCancellable
 	}
 
-	return s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+	var resReleasedCount, allocReleasedCount int
+	err = s.db.RunInTx(ctx, func(tx pgx.Tx) error {
 		if err := s.repo.SetOrderCancelledTx(ctx, tx, orderID); err != nil {
 			return err
 		}
 
+		// Release physical allocations
+		allocCount, err := s.repo.ReleaseAllocationsForOrderCountTx(ctx, tx, orderID, "customer_cancelled")
+		if err != nil {
+			return err
+		}
+		allocReleasedCount = allocCount
+
 		// Release reservations
-		resIDs, err := s.repo.GetOrderReservations(ctx, orderID)
+		resIDs, err := s.repo.GetActiveOrderReservations(ctx, orderID)
 		if err != nil {
 			return err
 		}
@@ -310,6 +332,8 @@ func (s *Service) CancelCustomerOrder(ctx context.Context, userID, orderID uuid.
 				if !errors.Is(err, inventory.ErrReservationNotActive) {
 					return err
 				}
+			} else {
+				resReleasedCount++
 			}
 		}
 
@@ -331,6 +355,36 @@ func (s *Service) CancelCustomerOrder(ctx context.Context, userID, orderID uuid.
 		
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// Post-commit: emit business event if real hold released
+	if resReleasedCount+allocReleasedCount > 0 {
+		attrs := []slog.Attr{
+			slog.String("order_id", orderID.String()),
+		}
+		if order.OrderNumber != nil && *order.OrderNumber != "" {
+			attrs = append(attrs, slog.String("order_number", *order.OrderNumber))
+		}
+		attrs = append(attrs,
+			slog.Int("reservations_released_count", resReleasedCount),
+			slog.Int("allocations_released_count", allocReleasedCount),
+			slog.String("reason", "customer_cancelled"),
+		)
+
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName:  "inventory.order_hold_released",
+			Domain:     "inventory",
+			Action:     "release_order_hold",
+			Result:     "success",
+			ActorID:    userID.String(),
+			ActorRole:  "customer",
+			Attributes: attrs,
+		})
+	}
+
+	return nil
 }
 
 func (s *Service) UpdateOrderStatus(ctx context.Context, adminID, orderID uuid.UUID, req UpdateOrderStatusRequest) error {
@@ -478,6 +532,14 @@ type ExpireAwaitingPaymentOrdersResult struct {
 func (s *Service) ExpireAwaitingPaymentOrders(ctx context.Context, now time.Time, limit int) (*ExpireAwaitingPaymentOrdersResult, error) {
 	result := &ExpireAwaitingPaymentOrdersResult{}
 
+	type expiredOrderEventData struct {
+		orderID       uuid.UUID
+		orderNumber   string
+		resReleased   int
+		allocReleased int
+	}
+	var expiredEvents []expiredOrderEventData
+
 	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
 		// 1. Find orders to expire with FOR UPDATE SKIP LOCKED
 		orderIDs, err := s.repo.GetExpiredAwaitingPaymentOrdersTx(ctx, tx, now, limit)
@@ -518,20 +580,39 @@ func (s *Service) ExpireAwaitingPaymentOrders(ctx context.Context, now time.Time
 
 			result.Expired++
 
-			// Release reservations
-			resIDs, err := s.repo.GetOrderReservations(ctx, orderID)
+			// Release physical allocations
+			allocCount, err := s.repo.ReleaseAllocationsForOrderCountTx(ctx, tx, orderID, "order_expired")
 			if err != nil {
 				return err
 			}
+
+			// Release reservations
+			resIDs, err := s.repo.GetActiveOrderReservations(ctx, orderID)
+			if err != nil {
+				return err
+			}
+			orderResReleased := 0
 			for _, rid := range resIDs {
 				if err := s.inventorySvc.ReleaseReservationTx(ctx, tx, rid); err != nil {
 					if !errors.Is(err, inventory.ErrReservationNotActive) {
 						return err
 					}
 				} else {
+					orderResReleased++
 					result.ReleasedReservations++
 				}
 			}
+
+			orderNum := ""
+			if order.OrderNumber != nil {
+				orderNum = *order.OrderNumber
+			}
+			expiredEvents = append(expiredEvents, expiredOrderEventData{
+				orderID:       orderID,
+				orderNumber:   orderNum,
+				resReleased:   orderResReleased,
+				allocReleased: allocCount,
+			})
 		}
 
 		return nil
@@ -539,6 +620,32 @@ func (s *Service) ExpireAwaitingPaymentOrders(ctx context.Context, now time.Time
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Post-commit: emit events for expired orders with real released holds
+	for _, item := range expiredEvents {
+		if item.resReleased+item.allocReleased > 0 {
+			attrs := []slog.Attr{
+				slog.String("order_id", item.orderID.String()),
+			}
+			if item.orderNumber != "" {
+				attrs = append(attrs, slog.String("order_number", item.orderNumber))
+			}
+			attrs = append(attrs,
+				slog.Int("reservations_released_count", item.resReleased),
+				slog.Int("allocations_released_count", item.allocReleased),
+				slog.String("reason", "order_expired"),
+			)
+
+			observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+				EventName:  "inventory.order_hold_released",
+				Domain:     "inventory",
+				Action:     "release_order_hold",
+				Result:     "success",
+				ActorRole:  "system",
+				Attributes: attrs,
+			})
+		}
 	}
 
 	return result, nil
