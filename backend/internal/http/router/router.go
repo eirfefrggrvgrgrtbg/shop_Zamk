@@ -536,14 +536,14 @@ func New(
 		r.With(perm("orders.read")).Get("/fulfillments/{id}", fulfillmentHandler.GetAdminFulfillment)
 		r.With(perm("shipments.create")).Post("/fulfillments/{id}/shipment", fulfillmentHandler.CreateShipmentForFulfillment)
 		r.With(perm("orders.read")).Post("/fulfillments/resolve-receiving-code", fulfillmentHandler.ResolveReceivingCode)
-		r.With(perm("orders.read")).Post("/fulfillments/{id}/receiving/start", fulfillmentHandler.StartReceiving)
-		r.With(perm("orders.read")).Post("/fulfillments/{id}/receiving/scan-item", fulfillmentHandler.ScanReceivingItem)
+		r.With(perm("orders.update_status")).Post("/fulfillments/{id}/receiving/start", fulfillmentHandler.StartReceiving)
+		r.With(perm("orders.update_status")).Post("/fulfillments/{id}/receiving/scan-item", fulfillmentHandler.ScanReceivingItem)
 		r.With(perm("shipments.create")).Post("/fulfillments/{id}/receiving/confirm", fulfillmentHandler.ConfirmReceiving)
-		r.With(perm("orders.read")).Post("/fulfillments/{id}/receiving/discrepancy", fulfillmentHandler.RecordDiscrepancy)
+		r.With(perm("orders.update_status")).Post("/fulfillments/{id}/receiving/discrepancy", fulfillmentHandler.RecordDiscrepancy)
 
 		r.With(perm("orders.read")).Get("/fulfillments/{id}/picking", fulfillmentHandler.GetPickingOrder)
 		r.With(perm("orders.read")).Get("/fulfillments/{id}/picking/compatible-units", fulfillmentHandler.GetCompatibleUnits)
-		r.With(perm("orders.read")).Post("/fulfillments/{id}/picking/scan", fulfillmentHandler.ScanPickingCode)
+		r.With(perm("orders.update_status")).Post("/fulfillments/{id}/picking/scan", fulfillmentHandler.ScanPickingCode)
 		r.With(perm("orders.update_status")).Post("/fulfillments/{id}/pack", fulfillmentHandler.PackFulfillment)
 		r.With(perm("orders.update_status")).Post("/fulfillments/{id}/dispatch", fulfillmentHandler.DispatchFulfillment)
 

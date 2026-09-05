@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -142,9 +143,17 @@ func TestAdminPickingScanRouter(t *testing.T) {
 	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO order_item_allocations (id, order_item_id, inventory_unit_id, picked_at) VALUES ($1, $2, $3, NULL)`, allocID, itemID, unitID)
 	require.NoError(t, err)
 
-	adminID := insertUser("admin")
-	insertAdminWithPerms(adminID, []string{"orders.read"})
-	adminTok := makeToken(adminID, "admin")
+	adminReadID := insertUser("admin")
+	insertAdminWithPerms(adminReadID, []string{"orders.read"})
+	adminReadTok := makeToken(adminReadID, "admin")
+
+	adminUpdateID := insertUser("admin")
+	insertAdminWithPerms(adminUpdateID, []string{"orders.update_status"})
+	adminUpdateTok := makeToken(adminUpdateID, "admin")
+
+	adminFullID := insertUser("admin")
+	insertAdminWithPerms(adminFullID, []string{"orders.read", "orders.update_status"})
+	adminTok := makeToken(adminFullID, "admin")
 
 	type errResponse struct {
 		Error struct {
@@ -175,8 +184,51 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, rr.Code)
 	})
 
-	// 3. Admin without orders.read -> 403
-	t.Run("admin without orders.read -> 403", func(t *testing.T) {
+	// 3a. Admin with orders.read only (mutation forbidden) -> 403 and zero business mutation
+	t.Run("admin with orders.read only -> 403 forbidden and zero mutation", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]string{"code": unitCode})
+		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking/scan", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+adminReadTok)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+
+		// Verify zero business mutation occurred
+		var pickedAt *time.Time
+		err := pgClient.Pool.QueryRow(ctx, `SELECT picked_at FROM order_item_allocations WHERE id = $1`, allocID).Scan(&pickedAt)
+		require.NoError(t, err)
+		assert.Nil(t, pickedAt, "picked_at must remain NULL after 403 Forbidden")
+
+		var fulfStatus string
+		err = pgClient.Pool.QueryRow(ctx, `SELECT status FROM order_fulfillments WHERE id = $1`, fulfillmentID).Scan(&fulfStatus)
+		require.NoError(t, err)
+		assert.Equal(t, "paid", fulfStatus, "fulfillment status must remain paid after 403 Forbidden")
+	})
+
+	// 3b. Admin with orders.read can still perform read queries -> 200 OK
+	t.Run("admin with orders.read can read picking and order -> 200", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking", nil)
+		req.Header.Set("Authorization", "Bearer "+adminReadTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		req2 := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking/compatible-units?orderItemId="+itemID.String(), nil)
+		req2.Header.Set("Authorization", "Bearer "+adminReadTok)
+		rr2 := httptest.NewRecorder()
+		r.ServeHTTP(rr2, req2)
+		assert.Equal(t, http.StatusOK, rr2.Code)
+
+		req3 := httptest.NewRequest("GET", "/api/admin/orders/"+orderID.String(), nil)
+		req3.Header.Set("Authorization", "Bearer "+adminReadTok)
+		rr3 := httptest.NewRecorder()
+		r.ServeHTTP(rr3, req3)
+		assert.Equal(t, http.StatusOK, rr3.Code)
+	})
+
+	// 3c. Admin without orders permissions -> 403
+	t.Run("admin without orders permissions -> 403", func(t *testing.T) {
 		adminNoPerm := insertUser("admin")
 		insertAdminWithPerms(adminNoPerm, []string{"inventory.read"})
 		noPermTok := makeToken(adminNoPerm, "admin")
@@ -188,6 +240,17 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
+	// 3d. Admin with orders.update_status only (mutation permitted, no read needed) -> passes auth
+	t.Run("admin with orders.update_status only -> passes auth to domain", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]string{"code": "SKU-NON-EXISTENT-CODE"})
+		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking/scan", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+adminUpdateTok)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusNotFound, rr.Code) // Reaches domain handler: 404 picking_code_not_found, not 401 or 403
 	})
 
 	// 4. Domain error: unknown code -> 404 picking_code_not_found
@@ -491,5 +554,41 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusConflict, rr.Code)
+	})
+
+	// 15. Analogous fulfillment receiving mutations require orders.update_status, reject orders.read
+	t.Run("fulfillment receiving mutations require orders.update_status, reject orders.read", func(t *testing.T) {
+		// POST /receiving/start with orders.read -> 403
+		reqStart := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/receiving/start", nil)
+		reqStart.Header.Set("Authorization", "Bearer "+adminReadTok)
+		rrStart := httptest.NewRecorder()
+		r.ServeHTTP(rrStart, reqStart)
+		assert.Equal(t, http.StatusForbidden, rrStart.Code)
+
+		// POST /receiving/scan-item with orders.read -> 403
+		scanBody, _ := json.Marshal(map[string]any{"barcode": "1234567890123", "quantity": 1})
+		reqScan := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/receiving/scan-item", bytes.NewReader(scanBody))
+		reqScan.Header.Set("Authorization", "Bearer "+adminReadTok)
+		reqScan.Header.Set("Content-Type", "application/json")
+		rrScan := httptest.NewRecorder()
+		r.ServeHTTP(rrScan, reqScan)
+		assert.Equal(t, http.StatusForbidden, rrScan.Code)
+
+		// POST /receiving/discrepancy with orders.read -> 403
+		discBody, _ := json.Marshal(map[string]any{"reason": "missing item"})
+		reqDisc := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/receiving/discrepancy", bytes.NewReader(discBody))
+		reqDisc.Header.Set("Authorization", "Bearer "+adminReadTok)
+		reqDisc.Header.Set("Content-Type", "application/json")
+		rrDisc := httptest.NewRecorder()
+		r.ServeHTTP(rrDisc, reqDisc)
+		assert.Equal(t, http.StatusForbidden, rrDisc.Code)
+
+		// With adminUpdateTok (orders.update_status), requests pass auth check (not 401 or 403)
+		reqStartPass := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/receiving/start", nil)
+		reqStartPass.Header.Set("Authorization", "Bearer "+adminUpdateTok)
+		rrStartPass := httptest.NewRecorder()
+		r.ServeHTTP(rrStartPass, reqStartPass)
+		assert.NotEqual(t, http.StatusUnauthorized, rrStartPass.Code)
+		assert.NotEqual(t, http.StatusForbidden, rrStartPass.Code)
 	})
 }
