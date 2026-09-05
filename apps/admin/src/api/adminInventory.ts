@@ -252,11 +252,6 @@ export const getAdminInventoryErrorMessage = (error: unknown, fallback: string):
   return fallback;
 };
 
-
-export const adjustAdminInventory = async (id: string, input: { type: string; quantity: number; reason: string; reference?: string }): Promise<void> => {
-  await request('POST', `/admin/inventory/${id}/adjust`, { body: input });
-};
-
 export const getAdminInventoryReservations = async (id: string): Promise<any[]> => {
   const resp = await request<{ items: any[] }>('GET', `/admin/inventory/${id}/reservations`);
   return resp.items || [];

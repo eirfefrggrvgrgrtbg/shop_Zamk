@@ -496,7 +496,6 @@ func New(
 		r.With(adminDangerousLimit, perm("inventory.receipt")).Post("/inventory/receipts", inventoryHandler.ReceiveStock)
 		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/adjustments", inventoryHandler.AdjustStock)
 		r.With(adminDangerousLimit, perm("inventory.write_off")).Post("/inventory/write-offs", inventoryHandler.WriteOffStock)
-		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/{id}/adjust", inventoryHandler.AdjustStockUnified)
 		r.With(perm("inventory.read")).Get("/inventory/{id}/reservations", inventoryHandler.GetAdminInventoryReservations)
 		r.With(adminDangerousLimit, perm("inventory.adjust")).Post("/inventory/reconciliations", inventoryHandler.StartReconciliation)
 		r.With(perm("inventory.read")).Get("/inventory/reconciliations", inventoryHandler.ListReconciliations)

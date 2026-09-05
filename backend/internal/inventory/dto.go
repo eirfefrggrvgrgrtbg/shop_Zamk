@@ -231,13 +231,6 @@ type StockMovementsListResponse struct {
 	TotalCount int             `json:"totalCount"`
 }
 
-type UnifiedAdjustmentRequest struct {
-	Type      string `json:"type" validate:"required,oneof=receipt adjustment write_off"`
-	Quantity  int    `json:"quantity" validate:"required,gt=0"`
-	Reason    string `json:"reason" validate:"required"`
-	Reference string `json:"reference,omitempty"`
-}
-
 type AdminInventoryReservationResponse struct {
 	Items []interface{} `json:"items"`
 }
