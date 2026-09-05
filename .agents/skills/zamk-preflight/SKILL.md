@@ -1,36 +1,36 @@
 ---
 name: zamk-preflight
-description: Standard safe start before implementation. Use this to verify worktree state before beginning a task.
+description: Run the ZAMK safe-start Git preflight before development or repository edits; verify branch, revisions, status, history, stashes, and any task-supplied baseline without altering existing work.
 ---
 
-# zamk-preflight
+# ZAMK preflight
 
-Purpose: standard safe start before implementation.
+Run this workflow before making changes.
 
-Steps:
+1. Run each command as a separate terminal invocation:
+   - `git branch --show-current`
+   - `git rev-parse HEAD`
+   - `git status --short`
+   - `git log -5 --oneline`
+   - `git stash list`
+2. Resolve `origin/main` with `git rev-parse origin/main` when the task depends on the canonical baseline. If remote freshness is material and network access is available, run `git fetch origin main` separately first.
+3. Compare the branch, HEAD, and relevant `origin/main` value with every expected baseline stated in the task.
+4. Classify every dirty path as expected or unexpected from the task context.
+5. If any baseline mismatches or any dirty path is unexpected, STOP. Report the evidence and do not edit.
 
-1. run `git branch --show-current`
+Never reset, stash, apply, drop, discard, clean, overwrite, or otherwise alter existing work or stashes during preflight. Do not combine terminal commands with `;`, `&&`, or `||`.
 
-   then separately:
-   run `git rev-parse HEAD`
+Return this compact result:
 
-   then separately:
-   run `git status --short`
-
-   then separately:
-   run `git log -5 --oneline`
-
-2. Compare HEAD with the expected HEAD stated in the current task, if any.
-
-3. If worktree is dirty and the task did not explicitly expect those files:
-   STOP and report exact files.
-
-4. Do not edit anything during preflight.
-
-5. Whenever a workflow runs terminal commands, execute EACH command as a separate terminal tool invocation. Do NOT combine commands using: ;, &&, ||.
-
-Return only:
-branch
-HEAD
-worktree clean YES/NO
-expected HEAD match YES/NO/NOT SPECIFIED
+```text
+PREFLIGHT
+BRANCH: <name>
+HEAD: <full hash>
+ORIGIN/MAIN: <full hash|NOT CHECKED>
+EXPECTED BASELINE: MATCH|MISMATCH|NOT SPECIFIED
+WORKTREE CLEAN: YES|NO
+UNEXPECTED DIRTY FILES: <none|exact paths>
+RECENT LOG: <five compact entries>
+STASHES: <none|unchanged entries>
+RESULT: PASS|STOP
+```

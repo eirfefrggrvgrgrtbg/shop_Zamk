@@ -1,53 +1,33 @@
 ---
 name: zamk-manual-ready
-description: Prepare environment for manual Product Owner review without visual acceptance.
+description: Prepare a ZAMK milestone for Product Owner browser acceptance, automate only readiness checks, and return an exact manual verification script without claiming visual or manual PASS.
 ---
 
-# zamk-manual-ready
+# ZAMK manual ready
 
-Purpose: prepare environment for manual Product Owner review without visual acceptance.
+1. Verify HEAD, worktree state, and required automated checks.
+2. Discover service commands and URLs from repository configuration; do not invent them.
+3. Check required services such as PostgreSQL, Redis, backend, the relevant frontend, and MinIO/storage when media is in scope. Start only missing services using existing project conventions and only when in task scope.
+4. Verify readiness with non-destructive automated checks. Do not reset databases or create/modify business state merely to claim readiness.
+5. Stop on the first real mandatory failure and mark later mandatory checks not run.
+6. Prepare exact Product Owner browser steps by URL, role, and action, with the expected result for each step.
 
-Steps:
+Never perform visual acceptance or claim browser/manual PASS. Only Product Owner evidence can establish it. Run terminal commands separately; do not combine them with `;`, `&&`, or `||`.
 
-1. Verify current HEAD/worktree.
-2. Check required local services: PostgreSQL, Redis, MinIO when media is relevant, backend, Seller frontend.
-3. Start only missing services using existing project conventions.
-4. Do not reset databases.
-5. Verify backend responds.
-6. Verify Seller responds on its actual local URL.
-7. If Product media is in scope: verify backend storage provider initialized successfully, not merely that MinIO container is running.
-8. Do NOT create/modify Product business state just to claim readiness.
-9. Do NOT perform visual acceptance.
-10. Whenever a workflow runs terminal commands, execute EACH command as a separate terminal tool invocation. Do NOT combine commands using: ;, &&, ||.
+Return only:
 
-Return:
+```text
+AUTOMATED:
+- <check and evidence>
 
-HEAD:
-...
+MANUAL VERIFICATION:
+- URL: <exact URL>
+  ROLE: <exact role>
+  ACTION: <exact actions>
 
-WORKTREE CLEAN:
-YES/NO
+EXPECTED RESULT:
+- <result corresponding to each manual action>
 
-POSTGRES:
-RUNNING/FAIL
-
-REDIS:
-RUNNING/FAIL
-
-MINIO:
-RUNNING/NOT REQUIRED/FAIL
-
-BACKEND STORAGE:
-INITIALIZED/NOT REQUIRED/FAIL
-
-BACKEND:
-RUNNING/FAIL
-
-SELLER:
-RUNNING/FAIL
-
-SELLER URL:
-...
-
-READY FOR PRODUCT OWNER:
-YES/NO
+STOP RULE:
+- Stop on the first real failure; later mandatory checks are NOT RUN.
+```

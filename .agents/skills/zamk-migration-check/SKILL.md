@@ -1,33 +1,32 @@
 ---
 name: zamk-migration-check
-description: Safe migration verification when backend/migrations changed. Use this when migrations are altered.
+description: Verify changed ZAMK PostgreSQL migrations for numbering, forward-only history, up/down consistency, compatibility, destructive behavior, and exact test-database safety.
 ---
 
-# zamk-migration-check
+# ZAMK migration check
 
-Purpose: safe migration verification when backend/migrations changed.
+1. List changed migration files and inspect the repository naming/numbering convention. Verify unique, ordered numbering with no collision or accidental gap relative to existing migrations.
+2. Determine whether each edited migration already exists on `origin/main`. Treat every pushed migration as immutable and forward-only; require a new migration for corrections.
+3. Review up/down pairs where the repository uses them. Verify object names, order, dependencies, and reversibility are consistent.
+4. Explicitly identify every destructive or irreversible action, including data loss, narrowing conversions, unbackfilled `NOT NULL`, table/column drops, and non-restoring down migrations. Do not silently label such behavior safe.
+5. Reject unrelated broad mutations, direct `schema_migrations` edits, or `migrate force` instructions.
+6. Run schema, migration, build, and relevant test compatibility checks using repository commands. Invoke `zamk-backend-check` for the standard backend gate when applicable.
+7. Run all destructive or integration verification only against exactly:
+   `postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable`
+   Never truncate, drop, or mutate the development database `zamk` from tests. Use read-only `SELECT` against dev only when needed for sanity.
+8. Run down/up verification only when applicable and safe for the exact test database. Stop on the first real mandatory failure.
 
-Steps:
-
-1. Inspect changed migration files first.
-2. Reject immediately if they contain unsafe broad operations such as: blanket category/table mutation, TRUNCATE, DROP of unrelated structures, direct schema_migrations edits, migrate force instructions.
-3. Never reset/drop/truncate the whole zamk_test database.
-4. Never use `migrate force` for acceptance.
-5. Prefer the repository migration check only if it is proven compatible with ZAMK DB safety rules.
-6. If a clean scratch database is required: use an isolated temporary scratch DB, never zamk or zamk_test, and remove only that scratch DB afterward.
-7. Verify normal up chain. If the task specifically requires down/up validation, do it only on scratch.
-8. Whenever a workflow runs terminal commands, execute EACH command as a separate terminal tool invocation. Do NOT combine commands using: ;, &&, ||.
+Run terminal commands separately; do not combine them with `;`, `&&`, or `||`.
 
 Return:
 
-MIGRATION SAFETY:
-PASS/FAIL
-
-CLEAN UP:
-PASS/FAIL/NOT RUN
-
-DOWN/UP:
-PASS/FAIL/NOT REQUIRED
-
-FORCE USED:
-NO/YES
+```text
+MIGRATIONS: <exact files>
+NUMBERING: PASS|FAIL
+FORWARD-ONLY: PASS|FAIL
+UP/DOWN: PASS|FAIL|NOT APPLICABLE|NOT RUN
+SCHEMA/BUILD/TEST COMPATIBILITY: PASS|FAIL|NOT RUN
+TEST DATABASE: EXACT|REFUSED|NOT REQUIRED
+DESTRUCTIVE/IRREVERSIBLE: NONE|<explicit behavior and mitigation>
+MIGRATION GATE: PASS|FAIL
+```

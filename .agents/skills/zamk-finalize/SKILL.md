@@ -1,52 +1,36 @@
 ---
 name: zamk-finalize
-description: Standard git closure after all technical checks already PASS. Use this to commit work.
+description: Finalize an already Product Owner-accepted ZAMK milestone by rerunning requested checks, exact-staging approved files, committing with a supplied short Russian message, and pushing main safely.
 ---
 
-# zamk-finalize
+# ZAMK finalize
 
-Purpose: standard git closure after all technical checks already PASS.
+Use only after Product Owner acceptance and explicit task authorization to commit and push.
 
-Steps:
+1. Verify the current branch is `main`, capture HEAD, `git status --short`, and `git stash list`, and preserve the stash list for the final comparison.
+2. Rerun every final test requested for the milestone as separate commands. Stop on the first real mandatory failure.
+3. Inspect `git diff --name-status`, `git diff --stat`, and `git diff --check`. Stop if the diff includes unapproved or unexpected paths.
+4. Stage each approved file with exact pathspecs, for example `git add -- <approved-file-1> <approved-file-2>`. Do not stage a directory or any unapproved path.
+5. Inspect all staged content and run separately:
+   - `git diff --cached --name-status`
+   - `git diff --cached --stat`
+   - `git diff --cached --check`
+6. Stop if staged scope or content is not exactly approved.
+7. Require a supplied short, human Russian commit message. If absent, STOP with `COMMIT MESSAGE REQUIRED`.
+8. Commit once, then push immediately with `git push origin main`.
+9. Confirm HEAD equals `origin/main`, the worktree is clean, and `git stash list` is byte-for-byte unchanged.
 
-1. run `git diff --check`
-
-   then separately:
-   run `git status --short`
-
-   then separately:
-   run `git diff --stat`
-
-2. Inspect changed files.
-
-3. Stage ONLY exact task files explicitly.
-   NEVER: `git add .` or `git add -A`
-
-4. Use the exact commit message specified in the current task.
-   If the current task does not specify an exact commit message:
-   STOP before commit and report:
-   COMMIT MESSAGE REQUIRED
-
-5. Never amend.
-
-6. Commit.
-
-7. run `git rev-parse HEAD`
-
-   then separately:
-   run `git status --short`
-
-Required final worktree: clean.
-
-Whenever a workflow runs terminal commands, execute EACH command as a separate terminal tool invocation. Do NOT combine commands using: ;, &&, ||.
+Never run `git add .`, `git add -A`, force-push, or amend without explicit Product Owner approval. Never modify, apply, drop, or clear unrelated stashes. Do not combine terminal commands with `;`, `&&`, or `||`.
 
 Return:
 
-DIFF CHECK:
-PASS/FAIL
-
-COMMIT:
-<full hash or NOT CREATED>
-
-WORKTREE CLEAN:
-YES/NO
+```text
+FINAL TESTS: PASS|FAIL
+SCOPE CHECK: PASS|FAIL
+STAGED FILES: <exact paths|none>
+CACHED DIFF CHECK: PASS|FAIL|NOT RUN
+COMMIT: <full hash|NOT CREATED>
+PUSH ORIGIN/MAIN: PASS|FAIL|NOT RUN
+WORKTREE CLEAN: YES|NO
+STASHES UNTOUCHED: YES|NO
+```

@@ -1,39 +1,25 @@
 ---
 name: zamk-seller-check
-description: Standard Seller frontend technical check. Use this to verify seller frontend build and source checks.
+description: Run ZAMK Seller frontend tests, lint/build checks, and a business-boundary regression review using only scripts currently declared in the repository package files.
 ---
 
-# zamk-seller-check
+# ZAMK Seller check
 
-Purpose: standard Seller frontend technical check.
-
-Steps:
-
-run `npm run build --prefix apps/seller`
-
-Then search Product/Seller source when relevant for:
-alert(
-confirm(
-beforeunload
-example.com
-Math.random
-"В разработке"
-
-Use grep/rg.
-Do not treat unrelated historical matches outside the changed feature as failure; report them separately.
-
-Whenever a workflow runs terminal commands, execute EACH command as a separate terminal tool invocation. Do NOT combine commands using: ;, &&, ||.
+1. Inspect root `package.json` and `apps/seller/package.json` before running commands. Use only relevant Seller scripts actually declared there; never invent a command.
+2. Run declared Seller unit/component tests when present, then the declared lint and build scripts. In the current package structure, the declared checks are `npm run lint --workspace=seller` and `npm run build:seller`; rediscover them before each run.
+3. Run each command separately and stop on the first real mandatory failure.
+4. Review the changed Seller UI, routes, API calls, permissions, and relevant tests against the responsibility contract in root `AGENTS.md`.
+5. Fail the boundary check if Seller gains any physical receive, pick, pack, ship, reconcile, write-off, ZMU mutation, or physical customer-return processing action. Preparing supplies and reading operational state remain allowed. Treat read access as distinct from action authority.
+6. Report unit/component mocks only as unit evidence, never as business or E2E acceptance.
 
 Return:
 
-SELLER BUILD:
-PASS/FAIL
-
-TASK-RELATED NATIVE ALERTS:
-<count>
-
-TASK-RELATED NATIVE CONFIRMS:
-<count>
-
-TASK-RELATED FAKE/PLACEHOLDER MATCHES:
-<count>
+```text
+SELLER SCRIPTS DISCOVERED: <exact script names>
+SELLER TESTS: PASS|FAIL|NOT AVAILABLE|NOT RUN
+SELLER LINT: PASS|FAIL|NOT AVAILABLE|NOT RUN
+SELLER BUILD: PASS|FAIL|NOT AVAILABLE|NOT RUN
+RESPONSIBILITY BOUNDARY: PASS|FAIL
+BOUNDARY EVIDENCE: <changed actions/routes/tests inspected>
+SELLER GATE: PASS|FAIL
+```
