@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { UserDTO as User } from '@zamk/api-client/src/types';
 import type { AdminMeResponse } from '@zamk/api-client/src/types';
 import { login as apiLogin, logout as apiLogout, refresh as apiRefresh, changePassword as apiChangePassword } from '@zamk/api-client/src/auth';
@@ -34,6 +34,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const inFlightRefreshRef = useRef<Promise<void> | null>(null);
 
   const loadStaffInfo = useCallback(async () => {
     try {
@@ -47,31 +48,37 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const refreshSession = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const res = await apiRefresh();
-      if (res.user.role !== 'admin') {
-        throw new Error('This account does not have admin access');
-      }
-      setAccessToken(res.accessToken);
-      setUser(res.user);
-      await loadStaffInfo();
-    } catch (err: any) {
-      clearAccessToken();
-      setUser(null);
-      setStaff(null);
-      setPermissions([]);
-    } finally {
-      setIsLoading(false);
+  const refreshSession = useCallback(async () => {
+    if (inFlightRefreshRef.current) {
+      return inFlightRefreshRef.current;
     }
-  };
+    inFlightRefreshRef.current = (async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const res = await apiRefresh();
+        if (res.user.role !== 'admin') {
+          throw new Error('This account does not have admin access');
+        }
+        setAccessToken(res.accessToken);
+        setUser(res.user);
+        await loadStaffInfo();
+      } catch (err: any) {
+        clearAccessToken();
+        setUser(null);
+        setStaff(null);
+        setPermissions([]);
+      } finally {
+        setIsLoading(false);
+        inFlightRefreshRef.current = null;
+      }
+    })();
+    return inFlightRefreshRef.current;
+  }, [loadStaffInfo]);
 
   useEffect(() => {
     refreshSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refreshSession]);
 
   const login = async (credentials: any) => {
     setIsLoading(true);

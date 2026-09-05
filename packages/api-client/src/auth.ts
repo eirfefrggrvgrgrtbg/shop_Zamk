@@ -23,12 +23,24 @@ export const login = async (input: any): Promise<AuthResponse> => {
   return res;
 };
 
+let activeRefreshPromise: Promise<AuthResponse> | null = null;
+
 export const refresh = async (): Promise<AuthResponse> => {
-  const res = await request<AuthResponse>('POST', '/auth/refresh', { skipAuthRefresh: true });
-  if (res.accessToken) {
-    setAccessToken(res.accessToken);
+  if (activeRefreshPromise) {
+    return activeRefreshPromise;
   }
-  return res;
+  activeRefreshPromise = (async () => {
+    try {
+      const res = await request<AuthResponse>('POST', '/auth/refresh', { skipAuthRefresh: true });
+      if (res.accessToken) {
+        setAccessToken(res.accessToken);
+      }
+      return res;
+    } finally {
+      activeRefreshPromise = null;
+    }
+  })();
+  return activeRefreshPromise;
 };
 
 export const logout = async (): Promise<void> => {

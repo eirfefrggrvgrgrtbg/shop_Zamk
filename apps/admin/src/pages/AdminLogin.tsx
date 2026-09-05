@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 
 export function AdminLogin() {
   const { login, isLoading } = useAdminAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,7 +20,10 @@ export function AdminLogin() {
 
     try {
       await login({ email, password });
-      navigate('/dashboard');
+      const from = (location.state as any)?.from?.pathname
+        ? `${(location.state as any).from.pathname}${(location.state as any).from.search || ''}${(location.state as any).from.hash || ''}`
+        : '/dashboard';
+      navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

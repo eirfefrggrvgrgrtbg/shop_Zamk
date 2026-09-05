@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 
 interface AdminProtectedRouteProps {
@@ -9,6 +9,7 @@ interface AdminProtectedRouteProps {
 
 export function AdminProtectedRoute({ children, permission }: AdminProtectedRouteProps) {
   const { user, isAuthenticated, isLoading, hasPermission, hasAnyPermission, staff } = useAdminAuth();
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -19,7 +20,7 @@ export function AdminProtectedRoute({ children, permission }: AdminProtectedRout
   }
 
   if (!isAuthenticated || !user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (user.role !== 'admin') {
