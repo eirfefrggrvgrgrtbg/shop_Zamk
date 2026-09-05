@@ -1,15 +1,17 @@
 package products
 
 import (
-	"math"
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/reviews"
@@ -25,6 +27,7 @@ type Service struct {
 	reviews    *reviews.Service
 	notifs     *notifications.Service
 	rdb        *redis.Client
+	logger     *slog.Logger
 }
 
 func NewService(repo *Repository, sellerRepo *sellers.Repository, dbPool *postgres.Client, reviewsSvc *reviews.Service, notifs *notifications.Service) *Service {
@@ -34,7 +37,15 @@ func NewService(repo *Repository, sellerRepo *sellers.Repository, dbPool *postgr
 		dbPool:     dbPool,
 		reviews:    reviewsSvc,
 		notifs:     notifs,
+		logger:     slog.Default(),
 	}
+}
+
+func (s *Service) SetLogger(l *slog.Logger) *Service {
+	if l != nil {
+		s.logger = l
+	}
+	return s
 }
 
 // ---------------------------------------------------------
@@ -78,6 +89,19 @@ func CanSubmitProduct(sellerStatus sellers.SellerStatus, productStatus string) b
 // ---------------------------------------------------------
 // Seller Operations
 // ---------------------------------------------------------
+
+func IsPlaceholderBarcode(b string) bool {
+	trimmed := strings.TrimSpace(b)
+	if trimmed == "" {
+		return true
+	}
+	for _, r := range trimmed {
+		if r != '0' {
+			return false
+		}
+	}
+	return true
+}
 
 func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid.UUID, req CreateProductRequest) (Product, error) {
 	if err := req.ValidateSKUs(); err != nil {
@@ -139,6 +163,7 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 
 	var variants []ProductVariant
 	var skusToCheck []string
+	var normalizedCount int
 	for _, vr := range req.Variants {
 		v := ProductVariant{
 			ID:           uuid.New(),
@@ -171,11 +196,18 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 			}
 			v.Attributes = vAttrs
 		}
-		if v.Barcode == nil || *v.Barcode == "" {
-				generated := "ZMK-" + uuid.New().String()[:12]
-				v.Barcode = &generated
+		wasPlaceholder := false
+		if vr.Barcode != nil && IsPlaceholderBarcode(*vr.Barcode) {
+			wasPlaceholder = true
+		}
+		if v.Barcode == nil || IsPlaceholderBarcode(*v.Barcode) {
+			generated := "ZMK-" + uuid.New().String()[:12]
+			v.Barcode = &generated
+			if wasPlaceholder {
+				normalizedCount++
 			}
-			if v.SellerSKU != nil && strings.TrimSpace(*v.SellerSKU) != "" {
+		}
+		if v.SellerSKU != nil && strings.TrimSpace(*v.SellerSKU) != "" {
 			trimmed := strings.ToLower(strings.TrimSpace(*v.SellerSKU))
 			skusToCheck = append(skusToCheck, trimmed)
 		}
@@ -314,6 +346,22 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 		return Product{}, err
 	}
 
+	if normalizedCount > 0 {
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName: "product.variant_barcodes_normalized",
+			Domain:    "product",
+			Action:    "variant_barcodes_normalized",
+			Result:    "success",
+			ActorID:   currentUserID.String(),
+			ActorRole: "seller",
+			Attributes: []slog.Attr{
+				slog.String("product_id", p.ID.String()),
+				slog.Int("normalized_count", normalizedCount),
+				slog.String("reason", "placeholder_barcode"),
+			},
+		})
+	}
+
 	p.Variants = variants
 	p.Images = images
 	return *p, nil
@@ -398,6 +446,7 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 
 	var variants []ProductVariant
 	var skusToCheck []string
+	var normalizedCount int
 
 	existingVariants, err := s.repo.GetProductVariants(ctx, p.ID)
 	if err != nil {
@@ -459,9 +508,19 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				UpdatedAt:    now,
 			}
 			
-			if v.Barcode == nil || *v.Barcode == "" {
+			wasPlaceholder := false
+			if v.Barcode != nil && IsPlaceholderBarcode(*v.Barcode) {
+				wasPlaceholder = true
+			} else if vr.Barcode != nil && IsPlaceholderBarcode(*vr.Barcode) {
+				wasPlaceholder = true
+			}
+
+			if v.Barcode == nil || IsPlaceholderBarcode(*v.Barcode) {
 				generated := "ZMK-" + uuid.New().String()[:12]
 				v.Barcode = &generated
+				if wasPlaceholder {
+					normalizedCount++
+				}
 			}
 			if v.SellerSKU != nil && strings.TrimSpace(*v.SellerSKU) != "" {
 				skusToCheck = append(skusToCheck, strings.ToLower(strings.TrimSpace(*v.SellerSKU)))
@@ -876,6 +935,23 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 	if err != nil {
 		return Product{}, err
 	}
+
+	if normalizedCount > 0 {
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName: "product.variant_barcodes_normalized",
+			Domain:    "product",
+			Action:    "variant_barcodes_normalized",
+			Result:    "success",
+			ActorID:   currentUserID.String(),
+			ActorRole: "seller",
+			Attributes: []slog.Attr{
+				slog.String("product_id", p.ID.String()),
+				slog.Int("normalized_count", normalizedCount),
+				slog.String("reason", "placeholder_barcode"),
+			},
+		})
+	}
+
 	return *p, nil
 }
 
