@@ -9,7 +9,6 @@ import {
   getAdminProducts as apiGetAdminProducts,
   type GetAdminProductsParams,
   getModerationProducts as apiGetModerationProducts,
-  uploadAdminProductImage as apiUploadAdminProductImage,
   getAdminProductModerationHistory as apiGetAdminProductModerationHistory,
   createProductPreviewLink,
 } from '@zamk/api-client/src/admin';
@@ -335,11 +334,6 @@ export const hideProduct = async (id: string, comment?: string): Promise<void> =
 
 export const blockProduct = async (id: string, comment?: string): Promise<void> => {
   await adminBlockProduct(id, comment);
-};
-
-
-export const uploadAdminProductImage = async (productId: string, file: File): Promise<void> => {
-  await apiUploadAdminProductImage(productId, file);
 };
 
 export const getAdminProductErrorMessage = (error: unknown, fallback: string): string => {

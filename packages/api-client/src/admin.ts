@@ -622,12 +622,6 @@ export const moderateAdminReview = async (id: string, action: 'approve' | 'rejec
   return request<void>('POST', `/admin/reviews/${id}/${action}`, { body: { comment } });
 };
 
-export const uploadAdminProductImage = async (productId: string, file: File): Promise<{ imageUrl: string }> => {
-  const formData = new FormData();
-  formData.append('image', file);
-  return request<{ imageUrl: string }>('POST', `/admin/products/${productId}/images/upload`, { body: formData });
-};
-
 // ---- Staff Management (Phase C) ----
 
 export const getAdminMe = async (): Promise<AdminMeResponse> =>

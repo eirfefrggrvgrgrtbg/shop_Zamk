@@ -480,7 +480,6 @@ func New(
 		r.With(perm("products.read")).Get("/products/{id}", productsHandler.GetAdminProduct)
 		r.With(perm("products.read")).Post("/products/{id}/preview-link", productsHandler.AdminCreateProductPreviewLink)
 		r.With(perm("products.read")).Get("/products/{id}/moderation-logs", productsHandler.GetAdminModerationHistory)
-		r.With(uploadLimit, perm("products.moderate")).Post("/products/{id}/images/upload", storageHandler.UploadAdminProductImage)
 		r.With(perm("products.moderate")).Get("/moderation/products", productsHandler.ListModerationProducts)
 		r.With(perm("products.moderate")).Post("/moderation/products/{id}/start-review", productsHandler.AdminStartProductReview)
 		r.With(adminDangerousLimit, perm("products.approve")).Post("/moderation/products/{id}/approve", productsHandler.AdminApproveProduct)

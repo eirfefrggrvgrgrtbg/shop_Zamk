@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -47,6 +48,15 @@ func TestAdminProductOwnershipBoundary(t *testing.T) {
 		},
 		Auth: config.AuthConfig{},
 		App:  config.AppConfig{Env: "test"},
+		S3: config.S3Config{
+			Endpoint:        "localhost",
+			Port:            "9000",
+			Bucket:          "zamk-products",
+			AccessKey:       "zamk_minio",
+			SecretKey:       "zamk_minio_password",
+			UseSSL:          false,
+			UploadMaxSizeMB: 10,
+		},
 	}
 
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
@@ -66,13 +76,19 @@ func TestAdminProductOwnershipBoundary(t *testing.T) {
 	draftVarID := uuid.New()
 	pubProdID := uuid.New()
 	pubVarID := uuid.New()
+	pendingProdID := uuid.New()
+	pendingVarID := uuid.New()
+	pubImageID := uuid.New()
 	draftBarcode := fmt.Sprintf("98%011d", (time.Now().UnixNano()%100000000000)+10000000000)
 	pubBarcode := fmt.Sprintf("98%011d", (time.Now().UnixNano()%100000000000)+20000000000)
+	pendingBarcode := fmt.Sprintf("98%011d", (time.Now().UnixNano()%100000000000)+30000000000)
+	pubImageURL := "https://cdn.zamk.local/products/legit_seller_photo.jpg"
 
 	cleanup := func() {
-		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM product_moderation_logs WHERE product_id = ANY($1)", []uuid.UUID{draftProdID, pubProdID})
-		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM product_variants WHERE product_id = ANY($1) OR barcode = ANY($2)", []uuid.UUID{draftProdID, pubProdID}, []string{draftBarcode, pubBarcode})
-		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM products WHERE id = ANY($1) OR seller_id = $2", []uuid.UUID{draftProdID, pubProdID}, sellerID)
+		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM product_images WHERE product_id = ANY($1) OR id = $2", []uuid.UUID{draftProdID, pubProdID, pendingProdID}, pubImageID)
+		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM product_moderation_logs WHERE product_id = ANY($1)", []uuid.UUID{draftProdID, pubProdID, pendingProdID})
+		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM product_variants WHERE product_id = ANY($1) OR barcode = ANY($2)", []uuid.UUID{draftProdID, pubProdID, pendingProdID}, []string{draftBarcode, pubBarcode, pendingBarcode})
+		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM products WHERE id = ANY($1) OR seller_id = $2", []uuid.UUID{draftProdID, pubProdID, pendingProdID}, sellerID)
 		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM categories WHERE id = ANY($1)", []uuid.UUID{catID, otherCatID})
 		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM seller_users WHERE seller_id = $1", sellerID)
 		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM sellers WHERE id = $1", sellerID)
@@ -165,6 +181,28 @@ func TestAdminProductOwnershipBoundary(t *testing.T) {
 	`, pubVarID, pubProdID, "SKU-"+pubVarID.String()[:8], "PUB-SKU", pubBarcode)
 	require.NoError(t, err)
 
+	// Pending product for moderation reject test
+	pendingTitle := "Pending Moderation Title"
+	pendingProdSlug := fmt.Sprintf("prod-pending-%s", pendingProdID.String()[:8])
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO products (id, seller_id, category_id, title, description, slug, price_cents, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, 'Pending Desc', $5, 6000, 'pending_moderation', now(), now())
+	`, pendingProdID, sellerID, catID, pendingTitle, pendingProdSlug)
+	require.NoError(t, err)
+
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, 6000, true, now(), now())
+	`, pendingVarID, pendingProdID, "SKU-"+pendingVarID.String()[:8], "PEND-SKU", pendingBarcode)
+	require.NoError(t, err)
+
+	// Legitimate Seller Image on published product
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO product_images (id, product_id, image_url, object_key, alt_text, sort_order, is_main, created_at)
+		VALUES ($1, $2, $3, 'products/legit_seller_photo.jpg', 'Main Photo', 0, true, now())
+	`, pubImageID, pubProdID, pubImageURL)
+	require.NoError(t, err)
+
 	// Tokens
 	sellerToken, err := tokenService.GenerateAccessToken(sellerUserID, sellerEmail, "seller")
 	require.NoError(t, err)
@@ -183,6 +221,26 @@ func TestAdminProductOwnershipBoundary(t *testing.T) {
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	execMultipartReq := func(method, url, token, fieldName, fileName string, fileContent []byte) *httptest.ResponseRecorder {
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+		part, err := writer.CreateFormFile(fieldName, fileName)
+		require.NoError(t, err)
+		_, err = part.Write(fileContent)
+		require.NoError(t, err)
+		err = writer.Close()
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(method, url, body)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		req.Header.Set("Content-Type", writer.FormDataContentType())
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 		return w
@@ -296,5 +354,115 @@ func TestAdminProductOwnershipBoundary(t *testing.T) {
 		err = pgClient.Pool.QueryRow(ctx, "SELECT status FROM products WHERE id = $1", pubProdID).Scan(&dbStatus)
 		require.NoError(t, err)
 		assert.Equal(t, "hidden", dbStatus)
+	})
+
+	// =========================================================================
+	// Test 6: Admin attempts to upload image via /api/admin/products/{id}/images/upload
+	// Contract: Route is removed/unavailable (404/405). Zero product_images rows created.
+	// =========================================================================
+	t.Run("AdminCannotUploadImageViaAdminEndpoint", func(t *testing.T) {
+		adminUploadURL := fmt.Sprintf("/api/admin/products/%s/images/upload", draftProdID.String())
+		dummyFile := []byte("fake image payload")
+		res := execMultipartReq(http.MethodPost, adminUploadURL, adminToken, "image", "photo.png", dummyFile)
+
+		assert.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, res.Code, "Admin image upload endpoint must not exist")
+
+		// Verify zero images exist in DB for draftProdID
+		var imgCount int
+		err = pgClient.Pool.QueryRow(ctx, "SELECT count(*) FROM product_images WHERE product_id = $1", draftProdID).Scan(&imgCount)
+		require.NoError(t, err)
+		assert.Equal(t, 0, imgCount, "no images must be created in DB")
+	})
+
+	// =========================================================================
+	// Test 7: Admin attempts to upload image via seller's endpoint /api/seller/products/{id}/images/upload
+	// Contract: Rejected with 403 Forbidden. Zero product_images rows created.
+	// =========================================================================
+	t.Run("AdminCannotUploadImageViaSellerEndpoint", func(t *testing.T) {
+		sellerUploadURL := fmt.Sprintf("/api/seller/products/%s/images/upload", draftProdID.String())
+		dummyFile := []byte("fake image payload")
+		res := execMultipartReq(http.MethodPost, sellerUploadURL, adminToken, "image", "photo.png", dummyFile)
+
+		assert.Equal(t, http.StatusForbidden, res.Code, "Admin must be rejected from seller image upload")
+
+		var imgCount int
+		err = pgClient.Pool.QueryRow(ctx, "SELECT count(*) FROM product_images WHERE product_id = $1", draftProdID).Scan(&imgCount)
+		require.NoError(t, err)
+		assert.Equal(t, 0, imgCount, "no images must be created in DB")
+	})
+
+	// =========================================================================
+	// Test 8: Admin cannot delete, reorder, crop, or set main image via Seller routes
+	// Contract: All rejected with 403 Forbidden. Existing seller images remain intact.
+	// =========================================================================
+	t.Run("AdminCannotMutateSellerImagesViaSellerEndpoints", func(t *testing.T) {
+		// 8a. Admin DELETE image
+		delURL := fmt.Sprintf("/api/seller/products/%s/images/%s", pubProdID.String(), pubImageID.String())
+		resDel := execReq(http.MethodDelete, delURL, adminToken, nil)
+		assert.Equal(t, http.StatusForbidden, resDel.Code, "Admin must not be able to delete seller image")
+
+		// 8b. Admin PUT reorder
+		reorderURL := fmt.Sprintf("/api/seller/products/%s/images/reorder", pubProdID.String())
+		reorderBody, _ := json.Marshal(map[string]any{"imageIds": []string{pubImageID.String()}})
+		resReorder := execReq(http.MethodPut, reorderURL, adminToken, reorderBody)
+		assert.Equal(t, http.StatusForbidden, resReorder.Code, "Admin must not be able to reorder seller images")
+
+		// 8c. Admin POST crop
+		cropURL := fmt.Sprintf("/api/seller/products/%s/images/%s/crop", pubProdID.String(), pubImageID.String())
+		cropBody, _ := json.Marshal(map[string]any{"cropX": 0, "cropY": 0, "cropWidth": 100, "cropHeight": 100})
+		resCrop := execReq(http.MethodPost, cropURL, adminToken, cropBody)
+		assert.Equal(t, http.StatusForbidden, resCrop.Code, "Admin must not be able to crop seller image")
+
+		// 8d. Admin POST set main
+		mainURL := fmt.Sprintf("/api/seller/products/%s/images/%s/main", pubProdID.String(), pubImageID.String())
+		resMain := execReq(http.MethodPost, mainURL, adminToken, nil)
+		assert.Equal(t, http.StatusForbidden, resMain.Code, "Admin must not be able to set main seller image")
+
+		// Verify database state of image is intact
+		var dbImgURL string
+		var dbIsMain bool
+		err = pgClient.Pool.QueryRow(ctx, "SELECT image_url, is_main FROM product_images WHERE id = $1", pubImageID).Scan(&dbImgURL, &dbIsMain)
+		require.NoError(t, err)
+		assert.Equal(t, pubImageURL, dbImgURL, "image URL must remain intact")
+		assert.True(t, dbIsMain, "image is_main must remain true")
+	})
+
+	// =========================================================================
+	// Test 9: Admin legitimate inspection includes seller product images
+	// Contract: 200 OK, response payload contains seller product images
+	// =========================================================================
+	t.Run("AdminLegitimateInspectionIncludesProductImages", func(t *testing.T) {
+		adminURL := fmt.Sprintf("/api/admin/products/%s", pubProdID.String())
+		res := execReq(http.MethodGet, adminURL, adminToken, nil)
+
+		assert.Equal(t, http.StatusOK, res.Code, "Admin must be able to inspect product")
+		assert.Contains(t, res.Body.String(), pubImageURL, "Admin inspection response must include product images")
+	})
+
+	// =========================================================================
+	// Test 10: Admin legitimate moderation reject with photo feedback succeeds
+	// Contract: 200 OK, status transitions to rejected, comment saved in audit log
+	// =========================================================================
+	t.Run("AdminModerationRejectWithPhotoFeedbackSucceeds", func(t *testing.T) {
+		rejectURL := fmt.Sprintf("/api/admin/moderation/products/%s/reject", pendingProdID.String())
+		payload := map[string]any{
+			"comment": "Фотографии низкого качества или содержат водяные знаки сторонних ресурсов",
+		}
+		body, _ := json.Marshal(payload)
+
+		res := execReq(http.MethodPost, rejectURL, adminToken, body)
+		assert.Equal(t, http.StatusOK, res.Code, "Admin must be able to reject product with photo reason")
+
+		// Verify product status is rejected
+		var dbStatus string
+		err = pgClient.Pool.QueryRow(ctx, "SELECT status FROM products WHERE id = $1", pendingProdID).Scan(&dbStatus)
+		require.NoError(t, err)
+		assert.Equal(t, "rejected", dbStatus)
+
+		// Verify moderation log
+		var logComment string
+		err = pgClient.Pool.QueryRow(ctx, "SELECT comment FROM product_moderation_logs WHERE product_id = $1 ORDER BY created_at DESC LIMIT 1", pendingProdID).Scan(&logComment)
+		require.NoError(t, err)
+		assert.Equal(t, "Фотографии низкого качества или содержат водяные знаки сторонних ресурсов", logComment)
 	})
 }

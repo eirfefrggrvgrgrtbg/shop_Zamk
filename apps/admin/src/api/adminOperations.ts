@@ -44,8 +44,7 @@ import {
   adminRejectProduct as apiRejectProduct,
   adminPublishProduct as apiPublishProduct,
   adminHideProduct as apiHideProduct,
-  adminBlockProduct as apiBlockProduct,
-  uploadAdminProductImage as apiUploadProductImage
+  adminBlockProduct as apiBlockProduct
 } from '@zamk/api-client/src/admin';
 import type { AdminSeller, Category, Brand, ModerationProduct, PaginatedAdminProductsResponse } from '@zamk/api-client/src/types';
 
@@ -113,8 +112,4 @@ export const hideProduct = async (id: string, comment?: string): Promise<void> =
 
 export const blockProduct = async (id: string, comment?: string): Promise<void> => {
   return await apiBlockProduct(id, comment);
-};
-
-export const uploadAdminProductImage = async (productId: string, file: File): Promise<{ imageUrl: string }> => {
-  return await apiUploadProductImage(productId, file);
 };

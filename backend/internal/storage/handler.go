@@ -120,40 +120,6 @@ func (h *Handler) UploadSellerProductImage(w http.ResponseWriter, r *http.Reques
 	h.writeJSON(w, http.StatusOK, resp)
 }
 
-func (h *Handler) UploadAdminProductImage(w http.ResponseWriter, r *http.Request) {
-	productIDStr := chi.URLParam(r, "id")
-	productID, err := uuid.Parse(productIDStr)
-	if err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid_product_id", "invalid product id")
-		return
-	}
-
-	file, header, opts, err := h.parseUploadRequest(r)
-	if err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid_request", "invalid request: "+err.Error())
-		return
-	}
-	defer file.Close()
-
-	contentType := header.Header.Get("Content-Type")
-
-	resp, err := h.service.UploadAdminProductImage(r.Context(), productID, file, header.Filename, header.Size, contentType, int64(h.cfg.UploadMaxSizeMB), opts)
-	if err != nil {
-		if err == ErrInvalidMimeType || err == ErrInvalidExtension {
-			h.writeError(w, http.StatusBadRequest, "invalid_file_type", err.Error())
-			return
-		}
-		if err == ErrFileTooLarge {
-			h.writeError(w, http.StatusBadRequest, "file_too_large", err.Error())
-			return
-		}
-		h.writeError(w, http.StatusInternalServerError, "internal_error", "upload failed")
-		return
-	}
-
-	h.writeJSON(w, http.StatusOK, resp)
-}
-
 func (h *Handler) UploadAdminBrandLogo(w http.ResponseWriter, r *http.Request) {
 	brandIDStr := chi.URLParam(r, "id")
 	brandID, err := uuid.Parse(brandIDStr)
