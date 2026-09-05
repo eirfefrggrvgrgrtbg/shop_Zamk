@@ -12,12 +12,11 @@ const (
 	RecipientKindStaff    = "staff"
 
 	// Customer types
-	TypeCustomerOrderPaid             = "order_paid"
-	TypeCustomerFulfillmentAssembling = "fulfillment_assembling"
-	TypeCustomerFulfillmentPacked     = "fulfillment_packed"
-	TypeCustomerShipmentCreated       = "shipment_created"
-	TypeCustomerShipmentShipped       = "shipment_shipped"
-	TypeCustomerShipmentDelivered     = "shipment_delivered"
+	TypeCustomerOrderPaid         = "order_paid"
+	TypeCustomerFulfillmentPacked = "fulfillment_packed"
+	TypeCustomerShipmentCreated   = "shipment_created"
+	TypeCustomerShipmentShipped   = "shipment_shipped"
+	TypeCustomerShipmentDelivered = "shipment_delivered"
 
 	// Seller types
 	TypeSellerFulfillmentPaid   = "fulfillment_paid"

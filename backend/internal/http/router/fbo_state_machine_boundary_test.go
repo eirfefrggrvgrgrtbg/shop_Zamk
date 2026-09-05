@@ -115,6 +115,52 @@ func TestFBOStateMachine_A_RemovedFulfillmentStatusEndpoint(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
+func TestFBOStateMachine_SellerFulfillmentContractRemoved_AdminRoutesMounted(t *testing.T) {
+	_, _, _, r, _, cleanup := setupFBOTestRouter(t)
+	defer cleanup()
+
+	fulfillmentID := uuid.New().String()
+	sellerRoutes := []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/api/seller/fulfillments"},
+		{method: http.MethodGet, path: "/api/seller/fulfillments/" + fulfillmentID},
+		{method: http.MethodPost, path: "/api/seller/fulfillments/" + fulfillmentID + "/mark-assembling"},
+		{method: http.MethodPost, path: "/api/seller/fulfillments/" + fulfillmentID + "/mark-packed"},
+	}
+
+	for _, route := range sellerRoutes {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			req := httptest.NewRequest(route.method, route.path, nil)
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusNotFound, rr.Code)
+		})
+	}
+
+	adminRoutes := []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/api/admin/order-fulfillments"},
+		{method: http.MethodPost, path: "/api/admin/fulfillments/" + fulfillmentID + "/picking/scan"},
+		{method: http.MethodPost, path: "/api/admin/fulfillments/" + fulfillmentID + "/pack"},
+		{method: http.MethodPost, path: "/api/admin/fulfillments/" + fulfillmentID + "/dispatch"},
+	}
+
+	for _, route := range adminRoutes {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			req := httptest.NewRequest(route.method, route.path, nil)
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusUnauthorized, rr.Code)
+		})
+	}
+}
+
 // B. Old generic Admin order-status endpoint unavailable (404)
 func TestFBOStateMachine_B_RemovedGenericOrderStatusEndpoint(t *testing.T) {
 	ctx, pgClient, _, r, tokenService, cleanup := setupFBOTestRouter(t)
@@ -1118,9 +1164,10 @@ func TestFBOStateMachine_M_and_N_ShipmentErrorMapping(t *testing.T) {
 // Runs 50 total iterations (30 Cancel vs Dispatch, 20 Cancel vs CreateShipment) under real concurrent execution.
 // Invariants enforced:
 // 1. Exactly one coherent terminal state per iteration:
-//    - CANCELLED: order = cancelled, fulfillments = cancelled, zero active shipments, zero dangling allocations
-//    OR
-//    - SHIPPING: order != cancelled, fulfillments != cancelled, active shipment exists (== 1), allocations retained
+//   - CANCELLED: order = cancelled, fulfillments = cancelled, zero active shipments, zero dangling allocations
+//     OR
+//   - SHIPPING: order != cancelled, fulfillments != cancelled, active shipment exists (== 1), allocations retained
+//
 // 2. FORBIDDEN: order = cancelled AND active shipment exists
 // 3. FORBIDDEN: fulfillment = cancelled AND active shipment exists
 // 4. Zero duplicate shipments, zero deadlocks (SQLSTATE 40P01), zero 500 errors

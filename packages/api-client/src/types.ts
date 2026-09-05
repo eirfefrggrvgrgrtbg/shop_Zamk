@@ -645,39 +645,6 @@ export interface SellerReturnDetailResponse {
   totalCount?: number;
 }
 
-export interface SellerFulfillmentItem {
-  orderItemId: string;
-  productId: string;
-  productTitle: string;
-  variantId?: string | null;
-  variantSize?: string | null;
-  variantColor?: string | null;
-  sku?: string | null;
-  quantity: number;
-  unitPriceCents: number;
-  lineTotalCents: number;
-  imageUrl?: string | null;
-}
-
-export interface SellerFulfillment {
-  id: string;
-  orderId: string;
-  sellerId: string;
-  sellerName?: string | null;
-  status: string;
-  subtotalCents: number;
-  commissionBps: number;
-  sellerAmountCents: number;
-  createdAt: string;
-  updatedAt: string;
-  shipmentStatus?: string | null;
-  shipmentId?: string | null;
-  deliveryAddress?: string | null;
-  customerName?: string | null;
-  customerPhone?: string | null;
-  items: SellerFulfillmentItem[];
-}
-
 export interface SellerReview {
   id: string;
   rating: number;

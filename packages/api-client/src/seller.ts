@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, SellerInventoryItem, SellerOrder, SellerReturn, SellerReturnDetailResponse, SellerReview, SellerBalance, PayoutBatchListResponse, LedgerListResponse, SellerWarning, SellerViolation, SellerFulfillment, SellerSupply, CreateSupplyRequest, SellerSupplyUnitLabelsResponse } from './types';
+import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, SellerInventoryItem, SellerOrder, SellerReturn, SellerReturnDetailResponse, SellerReview, SellerBalance, PayoutBatchListResponse, LedgerListResponse, SellerWarning, SellerViolation, SellerSupply, CreateSupplyRequest, SellerSupplyUnitLabelsResponse } from './types';
 
 export const getSellerMe = async (): Promise<SellerMe> => {
   return request<SellerMe>('GET', '/seller/me');
@@ -62,29 +62,6 @@ export const getSellerOrder = async (id: string): Promise<SellerOrder> => {
 
 export const getSellerShipment = async (orderId: string): Promise<any> => {
   return request<any>('GET', `/seller/orders/${orderId}/shipment`);
-};
-
-export const getSellerFulfillments = async (params?: { limit?: number; offset?: number; status?: string }): Promise<{ items: SellerFulfillment[]; totalCount: number }> => {
-  const query = new URLSearchParams();
-  if (params?.limit) query.append('limit', params.limit.toString());
-  if (params?.offset) query.append('offset', params.offset.toString());
-  if (params?.status) query.append('status', params.status);
-  
-  const qStr = query.toString() ? `?${query.toString()}` : '';
-  const res = await request<any>('GET', `/seller/fulfillments${qStr}`);
-  return { ...res, items: res?.items || [] };
-};
-
-export const getSellerFulfillment = async (id: string): Promise<SellerFulfillment> => {
-  return request<SellerFulfillment>('GET', `/seller/fulfillments/${id}`);
-};
-
-export const markSellerFulfillmentAssembling = async (id: string): Promise<void> => {
-  return request<void>('POST', `/seller/fulfillments/${id}/mark-assembling`);
-};
-
-export const markSellerFulfillmentPacked = async (id: string): Promise<void> => {
-  return request<void>('POST', `/seller/fulfillments/${id}/mark-packed`);
 };
 
 // P0 fix: backend returns { items, totalCount } not bare array

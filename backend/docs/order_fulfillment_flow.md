@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the lifecycle of an order after checkout, including seller fulfillment, shipment, and delivery. It covers the roles of Customer, Seller, and Admin, along with the allowed status transitions, API interactions, and verified inventory behavior.
+This document describes the lifecycle of an order after checkout, including FBO fulfillment, shipment, and delivery. It covers the roles of Customer, Seller, and Admin, along with the allowed status transitions, API interactions, and verified inventory behavior.
 
 ## Status Definitions
 
@@ -15,11 +15,11 @@ This document describes the lifecycle of an order after checkout, including sell
 - **delivered**: All items in the order have been delivered to the customer.
 - **cancelled**: Order was cancelled (by customer, admin, or automatically).
 
-### Fulfillment Statuses (Seller-Level)
+### Fulfillment Statuses (Seller-Scoped FBO Group)
 - **awaiting_payment**: Initial state, waiting for the parent order to be paid.
-- **paid**: Payment successful; seller can begin work.
-- **assembling**: Seller has started picking/assembling the items.
-- **packed**: Seller has packed the items and is ready for shipment.
+- **paid**: Payment successful; the fulfillment is ready for ZAMK warehouse processing.
+- **assembling**: ZAMK has started picking/assembling the items.
+- **packed**: ZAMK has packed the items and is ready for shipment.
 - **ready_to_ship**: Admin/Logistics has acknowledged the package is ready.
 - **shipped**: The package has been handed over to the delivery carrier.
 - **delivered**: The package reached the customer.
@@ -43,20 +43,18 @@ This document describes the lifecycle of an order after checkout, including sell
 - Can see granular fulfillment statuses per seller using `GET /api/customer/orders/{orderId}/fulfillments`.
 
 ### 2. Seller
-**Permissions:** Can view and manage their own fulfillments. `users.RoleSeller` is required.
+**Permissions:** Can read their own order and fulfillment progress where exposed. `users.RoleSeller` is required.
 **Flow:**
-- Uses `GET /api/seller/orders` and `GET /api/seller/fulfillments`.
-- Accepts a new paid order and marks it as assembling:
-  - `POST /api/seller/fulfillments/{id}/mark-assembling`
-- Once packed, marks it as packed:
-  - `POST /api/seller/fulfillments/{id}/mark-packed`
-- After `packed`, the seller waits for the Admin (logistics) to create a shipment and update tracking.
+- Uses the Seller order read APIs currently exposed under `/api/seller/orders`.
+- Does not pick, pack, create shipments, dispatch, or mutate fulfillment status.
+- A dedicated Seller fulfillment read projection may be added later without granting fulfillment commands.
 
 ### 3. Admin
-**Permissions:** Has full overview and control over orders, fulfillments, and shipments.
+**Permissions:** Performs ZAMK warehouse fulfillment and logistics operations.
 **Flow:**
 - Uses `GET /api/admin/orders` and `GET /api/admin/order-fulfillments`.
-- Creates a shipment for a packed fulfillment:
+- Performs receiving, picking, packing, and dispatch through the semantic Admin fulfillment routes.
+- Creates a shipment for a fulfillment:
   - `POST /api/admin/fulfillments/{id}/shipment`
 - Updates the shipment status as it moves through the delivery network:
   - `PATCH /api/admin/shipments/{id}/status` -> `shipped`, `delivered`
@@ -92,6 +90,6 @@ This document describes the lifecycle of an order after checkout, including sell
 
 ## Notifications
 
-- **Seller marks assembling**: Notification sent to Customer (`CustomerFulfillmentAssembling`).
-- **Seller marks packed**: Notification sent to Customer (`CustomerFulfillmentPacked`) and Staff (`StaffFulfillmentPacked`).
+- **ZAMK packs a fulfillment**: Notification sent to Customer (`CustomerFulfillmentPacked`).
+- Seller does not emit assembling or packed fulfillment mutation events.
 - **Status Updates**: Customer is notified on `shipped` and `delivered` events via notification system.

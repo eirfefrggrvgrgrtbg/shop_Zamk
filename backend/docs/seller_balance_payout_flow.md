@@ -86,7 +86,7 @@ available_balance  = SUM(sale_available)
 ```
 1. Order created by customer          → no balance change
 2. Payment confirmed (TBank webhook)  → no balance change
-3. Seller marks assembling/packed     → no balance change
+3. ZAMK performs picking/packing      → no balance change
 4. Shipment delivered                 → sale_pending entry created
                                         (net = gross * (1 - bps/10000))
 5. After ReturnWindowDays (14 days)   → sale_available entry created
@@ -232,8 +232,6 @@ Full E2E verified in `scratch/test_fin1_flow.js`.
 |---|---|
 | customer checkout | 201 |
 | payment webhook | 200 |
-| seller mark-assembling | 200 |
-| seller mark-packed | 200 |
 | admin create shipment | 201 |
 | admin mark shipped | 200 |
 | admin mark delivered | 200 |
