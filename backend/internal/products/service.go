@@ -1163,67 +1163,6 @@ func (s *Service) GetAdminProductDetail(ctx context.Context, productID uuid.UUID
 	return *p, nil
 }
 
-func (s *Service) AdminUpdateProduct(ctx context.Context, adminID uuid.UUID, productID uuid.UUID, req UpdateProductRequest) (Product, error) {
-	p, err := s.repo.GetProductByID(ctx, productID)
-	if err != nil {
-		return Product{}, err
-	}
-
-	if req.Title != nil {
-		p.Title = *req.Title
-	}
-	if req.Description != nil {
-		p.Description = req.Description
-	}
-	if req.CategoryID != nil {
-		p.CategoryID = req.CategoryID
-	}
-	if req.BrandID != nil {
-			p.BrandID = req.BrandID
-		}
-	if req.Gender != nil {
-		p.Gender = req.Gender
-	}
-	if req.Color != nil {
-		p.Color = req.Color
-	}
-	if req.Material != nil {
-		p.Material = req.Material
-	}
-	if req.CareInstructions != nil {
-		p.CareInstructions = req.CareInstructions
-	}
-	if req.PriceCents != nil {
-		p.PriceCents = *req.PriceCents
-	}
-	if req.OldPriceCents != nil {
-		p.OldPriceCents = req.OldPriceCents
-	}
-	if req.MainImageURL != nil {
-		p.MainImageURL = req.MainImageURL
-	}
-
-	p.UpdatedAt = time.Now()
-
-	if err := s.repo.UpdateProduct(ctx, p); err != nil {
-		return Product{}, err
-	}
-
-	// Create moderation log entry
-	comment := "Администратор обновил данные товара"
-	fromSt := p.Status
-	_ = s.repo.AddModerationLog(ctx, &ProductModerationLog{
-		ID:         uuid.New(),
-		ProductID:  productID,
-		FromStatus: &fromSt,
-		ToStatus:   p.Status,
-		Comment:    &comment,
-		CreatedAt:  time.Now(),
-	})
-
-	return *p, nil
-}
-
 func (s *Service) ListProductsForModeration(ctx context.Context, limit, offset int) (ProductListResponse, error) {
 	items, err := s.repo.ListProductsForModeration(ctx, limit, offset)
 	if err != nil {

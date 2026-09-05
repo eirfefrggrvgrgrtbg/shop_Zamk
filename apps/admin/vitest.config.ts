@@ -12,6 +12,7 @@ export default defineConfig({
       'src/pages/AdminReturnReceiving.test.tsx',
       'src/pages/AdminReturns.test.ts',
       'src/pages/AdminModeration.test.tsx',
+      'src/pages/AdminProductDetail.test.tsx',
       'src/components/EntityTimeline.test.tsx',
       'src/api/adminTimeline.test.ts',
       'src/components/inventory/**/*.test.{ts,tsx}',

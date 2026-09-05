@@ -13,7 +13,6 @@ import {
   Eye,
   DollarSign,
   ShieldAlert,
-  Edit3,
   Package,
   Layers,
   Star,
@@ -32,13 +31,8 @@ import {
   publishProduct,
   hideProduct,
   getAdminProductModerationHistory,
-  updateAdminProduct,
   getAdminProductErrorMessage,
 } from '../api/adminProducts';
-import {
-  getAdminCategories,
-  getAdminBrands,
-} from '../api/adminOperations';
 import type { AdminProductView } from '../api/adminProducts';
 import { getProductStatusConfig } from '../utils/productStatusMapper';
 import { formatMoneyRubles } from '../utils/money';
@@ -110,38 +104,10 @@ export function AdminProductDetail() {
   const [previewExpiresAt, setPreviewExpiresAt] = useState<string | null>(null);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
 
-  // Edit Modal State
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editCategory, setEditCategory] = useState('');
-  const [editBrand, setEditBrand] = useState('');
-  const [editPrice, setEditPrice] = useState<number>(0);
-  const [categoriesList, setCategoriesList] = useState<Array<{ id: string; name: string }>>([]);
-  const [brandsList, setBrandsList] = useState<Array<{ id: string; name: string }>>([]);
-  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
-
   // Decision Modals State
   const [reasonModal, setReasonModal] = useState<{ type: 'hide' | 'block' | 'publish'; label: string } | null>(null);
   const [actionReason, setActionReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Load Categories & Brands for editing
-  useEffect(() => {
-    getAdminCategories()
-      .then((res: any) => {
-        const items = Array.isArray(res) ? res : res.items || [];
-        setCategoriesList(items.map((c: any) => ({ id: c.id, name: c.name })));
-      })
-      .catch(() => {});
-
-    getAdminBrands()
-      .then((res: any) => {
-        const items = Array.isArray(res) ? res : res.items || [];
-        setBrandsList(items.map((b: any) => ({ id: b.id, name: b.name })));
-      })
-      .catch(() => {});
-  }, []);
 
   const handleGeneratePreview = async () => {
     if (!product) return;
@@ -181,15 +147,6 @@ export function AdminProductDetail() {
 
       setProduct(pData);
       setLogs((logsData.items || []) as unknown as ModerationLogItem[]);
-
-      // Populate edit fields only on explicit / initial loads to avoid overwriting typed input
-      if (!silent) {
-        setEditTitle(pData.title);
-        setEditDescription(pData.description || '');
-        setEditPrice(pData.price);
-        setEditCategory(pData.categoryId || '');
-        setEditBrand(pData.brandId || '');
-      }
     } catch (err: unknown) {
       if (!silent) {
         console.error('[AdminProductDetail] Failed to load product:', { productId, error: err });
@@ -208,10 +165,10 @@ export function AdminProductDetail() {
 
   useVisibilityPolling(
     useCallback(() => {
-      if (productId && !isSubmitting && !isEditSubmitting && !reasonModal) {
+      if (productId && !isSubmitting && !reasonModal) {
         loadProductData(true);
       }
-    }, [productId, isSubmitting, isEditSubmitting, reasonModal, loadProductData]),
+    }, [productId, isSubmitting, reasonModal, loadProductData]),
     4000,
     Boolean(productId)
   );
@@ -262,31 +219,6 @@ export function AdminProductDetail() {
     stock: product.stock,
     variantsCount: product.variants?.length,
   });
-
-  // Perform Edit Submit
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!product) return;
-    try {
-      setIsEditSubmitting(true);
-      setActionError(null);
-
-      await updateAdminProduct(product.id, {
-        title: editTitle.trim(),
-        description: editDescription.trim(),
-        categoryId: editCategory || undefined,
-        brandId: editBrand || undefined,
-        priceCents: editPrice > 0 ? Math.round(editPrice * 100) : undefined,
-      });
-
-      setIsEditModalOpen(false);
-      await loadProductData();
-    } catch (err: any) {
-      setActionError(getAdminProductErrorMessage(err, 'Не удалось сохранить изменения товара.'));
-    } finally {
-      setIsEditSubmitting(false);
-    }
-  };
 
   // Perform Status Action (Hide / Block / Publish)
   const handleStatusActionSubmit = async () => {
@@ -443,16 +375,6 @@ export function AdminProductDetail() {
                 <span>Досье продавца</span>
               </button>
             )}
-
-            {/* Edit Button */}
-            <button
-              type="button"
-              onClick={() => setIsEditModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl transition-all"
-            >
-              <Edit3 className="h-3.5 w-3.5" />
-              <span>Редактировать</span>
-            </button>
 
             {/* Hide / Block Buttons */}
             {(product.status === 'published' || (product.status === 'approved' && product.actualVisibility)) && (
@@ -851,105 +773,6 @@ export function AdminProductDetail() {
         </div>
       )}
 
-      {/* ADMIN EDIT MODAL */}
-      {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Редактирование товара (Admin)</h3>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleEditSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="font-medium text-slate-700 dark:text-slate-300 block mb-1">Название товара</label>
-                <input
-                  type="text"
-                  required
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-slate-300 block mb-1">Категория</label>
-                  <select
-                    value={editCategory}
-                    onChange={(e) => setEditCategory(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl"
-                  >
-                    <option value="">-- Не выбрана --</option>
-                    {categoriesList.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-slate-300 block mb-1">Бренд</label>
-                  <select
-                    value={editBrand}
-                    onChange={(e) => setEditBrand(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl"
-                  >
-                    <option value="">-- Без бренда --</option>
-                    {brandsList.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="font-medium text-slate-700 dark:text-slate-300 block mb-1">Цена (₽)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={editPrice}
-                  onChange={(e) => setEditPrice(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="font-medium text-slate-700 dark:text-slate-300 block mb-1">Описание товара</label>
-                <textarea
-                  rows={4}
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 rounded-xl"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={isEditSubmitting || !editTitle.trim()}
-                  className="px-4 py-2 font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow"
-                >
-                  {isEditSubmitting ? 'Сохранение...' : 'Сохранить'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* REASON MODAL FOR HIDE / BLOCK / PUBLISH */}
       {reasonModal && (

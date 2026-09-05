@@ -352,9 +352,6 @@ export const adminPublishProduct = async (id: string, comment?: string, expected
   return request<void>('POST', `/admin/moderation/products/${id}/publish`, { body: { comment, expectedUpdatedAt } });
 };
 
-export const updateAdminProduct = async (id: string, data: any): Promise<AdminProduct> => {
-  return request<AdminProduct>('PATCH', `/admin/products/${id}`, { body: data });
-};
 
 export const adminHideProduct = async (id: string, comment?: string, expectedUpdatedAt?: string): Promise<void> => {
   return request<void>('POST', `/admin/moderation/products/${id}/hide`, { body: { comment, expectedUpdatedAt } });

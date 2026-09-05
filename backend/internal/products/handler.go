@@ -521,36 +521,6 @@ func (h *Handler) parseAdminProductFilter(r *http.Request) AdminProductFilter {
 	return filter
 }
 
-func (h *Handler) AdminUpdateProduct(w http.ResponseWriter, r *http.Request) {
-	productID, ok := h.parseUUIDParam(w, r, "id")
-	if !ok {
-		return
-	}
-	adminID, ok := h.getUserID(w, r)
-	if !ok {
-		return
-	}
-
-	var req UpdateProductRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid_json", "Invalid JSON payload")
-		return
-	}
-
-	prod, err := h.service.AdminUpdateProduct(r.Context(), adminID, productID, req)
-	if err != nil {
-		if errors.Is(err, ErrProductNotFound) {
-			h.writeError(w, http.StatusNotFound, "not_found", "Product not found")
-			return
-		}
-		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(prod)
-}
-
 func (h *Handler) ListAdminProducts(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
 	filter := h.parseAdminProductFilter(r)
