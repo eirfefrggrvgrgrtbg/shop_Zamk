@@ -55,7 +55,7 @@ func (h *Handler) CreateShipment(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
-		if errors.Is(err, ErrOrderNotPaid) || errors.Is(err, ErrShipmentExists) {
+		if errors.Is(err, ErrOrderNotPaid) || errors.Is(err, ErrShipmentExists) || errors.Is(err, ErrOrderCancelled) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -94,7 +94,7 @@ func (h *Handler) CreateShipmentForFulfillment(w http.ResponseWriter, r *http.Re
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if errors.Is(err, ErrInvalidFulfillmentStatus) || errors.Is(err, ErrOrderNotPaid) {
+		if errors.Is(err, ErrInvalidFulfillmentStatus) || errors.Is(err, ErrOrderNotPaid) || errors.Is(err, ErrOrderCancelled) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
@@ -158,15 +158,19 @@ func (h *Handler) UpdateShipmentStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.UpdateShipmentStatus(r.Context(), adminID, id, req); err != nil {
-		if errors.Is(err, ErrInvalidStatus) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
 		if errors.Is(err, ErrShipmentNotFound) {
 			http.Error(w, "shipment not found", http.StatusNotFound)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, ErrInvalidStatus) ||
+			errors.Is(err, ErrDispatchNotAllowed) ||
+			errors.Is(err, ErrShipmentDeliveredImmutable) ||
+			errors.Is(err, ErrShipmentCancelledImmutable) ||
+			errors.Is(err, ErrShipmentFailedImmutable) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -257,56 +261,4 @@ func (h *Handler) GetSellerShipment(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:      shipment.UpdatedAt,
 	}
 	json.NewEncoder(w).Encode(resp)
-}
-
-type UpdateOrderFulfillmentStatusRequest struct {
-	Status string `json:"status"`
-	Reason string `json:"reason,omitempty"`
-}
-
-func (h *Handler) UpdateAdminOrderFulfillmentStatus(w http.ResponseWriter, r *http.Request) {
-	val := r.Context().Value("userID")
-	if val == nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	adminID := val.(uuid.UUID)
-
-	orderIDStr := chi.URLParam(r, "id")
-	orderID, err := uuid.Parse(orderIDStr)
-	if err != nil {
-		http.Error(w, "invalid order id", http.StatusBadRequest)
-		return
-	}
-
-	var req UpdateOrderFulfillmentStatusRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := h.svc.UpdateAdminOrderFulfillmentStatus(r.Context(), adminID, orderID, req.Status); err != nil {
-		if errors.Is(err, ErrInvalidStatus) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if h.auditRepo != nil {
-		actorID := adminID
-		newStatus := req.Status
-		go func() {
-			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
-				ActorUserID: actorID,
-				Action:      "order.fulfillment_status_update",
-				EntityType:  "order",
-				EntityID:    &orderID,
-				Metadata:    staff.SanitizeMetadata(map[string]any{"newStatus": newStatus, "reason": req.Reason}),
-			})
-		}()
-	}
-
-	w.WriteHeader(http.StatusOK)
 }

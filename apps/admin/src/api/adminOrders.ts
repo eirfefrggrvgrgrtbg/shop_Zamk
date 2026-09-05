@@ -1,7 +1,7 @@
 import {
   getAdminOrder as apiGetAdminOrder,
   getAdminOrders as apiGetAdminOrders,
-  updateAdminOrderStatus as apiUpdateAdminOrderStatus,
+  cancelAdminOrder as apiCancelAdminOrder,
   getAdminOrderFulfillments as apiGetAdminOrderFulfillments,
 } from '@zamk/api-client/src/admin';
 import { getAccessToken } from '@zamk/api-client/src/tokenStore';
@@ -45,8 +45,8 @@ export interface AdminOrderView {
   updatedAt?: string;
 }
 
-export interface OrderStatusUpdateInput {
-  status: string;
+export interface CancelAdminOrderInput {
+  reason?: string;
   comment?: string;
 }
 
@@ -167,11 +167,8 @@ export const getOrderStatusLabel = (status: string): string => {
   return orderStatusLabels[status] ?? status;
 };
 
-export const updateAdminOrderStatus = async (id: string, input: OrderStatusUpdateInput): Promise<void> => {
-  if (input.status === 'paid') {
-    throw new Error('Администратор не может вручную установить статус оплаты.');
-  }
-  await apiUpdateAdminOrderStatus(id, input);
+export const cancelAdminOrder = async (id: string, input?: CancelAdminOrderInput): Promise<void> => {
+  await apiCancelAdminOrder(id, input);
 };
 
 export const getAdminFulfillments = async (params?: { status?: string }): Promise<AdminFulfillment[]> => {

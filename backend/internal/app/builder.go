@@ -78,6 +78,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 
 	ordersRepo := orders.NewRepository(pgClient.Pool)
 	ordersService := orders.NewService(ordersRepo, cartRepo, inventoryService, pgClient, cfg)
+	ordersService.SetLogger(logger)
 	ordersHandler := orders.NewHandler(ordersService)
 
 	reviewsRepo := reviews.NewRepository(pgClient)

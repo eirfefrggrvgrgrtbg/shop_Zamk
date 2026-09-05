@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -101,6 +102,10 @@ func (h *Handler) CancelCustomerOrder(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.CancelCustomerOrder(r.Context(), userID, orderID); err != nil {
 		if errors.Is(err, ErrOrderNotFound) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Order not found")
+			return
+		}
+		if errors.Is(err, ErrOrderAlreadyCancelled) {
+			h.writeError(w, http.StatusBadRequest, "order_already_cancelled", "Order is already cancelled")
 			return
 		}
 		if errors.Is(err, ErrOrderNotCancellable) {
@@ -218,7 +223,7 @@ func (h *Handler) ListAdminOrders(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (h *Handler) UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CancelAdminOrder(w http.ResponseWriter, r *http.Request) {
 	val := r.Context().Value("userID")
 	if val == nil {
 		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
@@ -233,41 +238,43 @@ func (h *Handler) UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req UpdateOrderStatusRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
-		return
+	var req CancelAdminOrderRequest
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+			return
+		}
 	}
 
-	if err := h.validator.Struct(req); err != nil {
-		h.writeError(w, http.StatusBadRequest, "validation_error", err.Error())
-		return
-	}
-
-	if err := h.service.UpdateOrderStatus(r.Context(), adminID, orderID, req); err != nil {
+	if err := h.service.CancelAdminOrder(r.Context(), adminID, orderID, req); err != nil {
 		if errors.Is(err, ErrOrderNotFound) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Order not found")
 			return
 		}
-		if errors.Is(err, ErrManualPaidNotAllowed) {
-			h.writeError(w, http.StatusBadRequest, "payment_confirmation_required", err.Error())
+		if errors.Is(err, ErrOrderAlreadyCancelled) {
+			h.writeError(w, http.StatusBadRequest, "order_already_cancelled", err.Error())
 			return
 		}
-		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update order status")
+		if errors.Is(err, ErrOrderNotCancellable) {
+			h.writeError(w, http.StatusBadRequest, "not_cancellable", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to cancel order")
 		return
 	}
 
 	if h.auditRepo != nil {
 		oid := orderID
 		actorID := adminID
-		newStatus := req.Status
+		reason := req.Reason
+		comment := req.Comment
 		go func() {
 			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
 				ActorUserID: actorID,
-				Action:      "order.status_update",
+				Action:      "order.cancel",
 				EntityType:  "order",
 				EntityID:    &oid,
-				Metadata:    staff.SanitizeMetadata(map[string]any{"newStatus": newStatus}),
+				Metadata:    staff.SanitizeMetadata(map[string]any{"reason": reason, "comment": comment}),
 			})
 		}()
 	}

@@ -56,6 +56,30 @@ func (r *Repository) MarkOrderFulfillmentsStatusTx(ctx context.Context, tx pgx.T
 	return cmd.RowsAffected(), nil
 }
 
+func (r *Repository) CancelActiveOrderFulfillmentsTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID) (int64, error) {
+	query := `UPDATE order_fulfillments SET status = 'cancelled', updated_at = now() WHERE order_id = $1 AND status NOT IN ('shipped', 'delivered', 'cancelled', 'returned', 'refunded')`
+	cmd, err := tx.Exec(ctx, query, orderID)
+	if err != nil {
+		return 0, err
+	}
+	return cmd.RowsAffected(), nil
+}
+
+func (r *Repository) HasActiveShipmentTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID) (bool, error) {
+	query := `
+		SELECT EXISTS(
+			SELECT 1 FROM shipments
+			WHERE order_id = $1 AND status NOT IN ('cancelled', 'failed')
+		)
+	`
+	var exists bool
+	err := tx.QueryRow(ctx, query, orderID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 func (r *Repository) CreateOrderReservationTx(ctx context.Context, tx pgx.Tx, res *OrderReservation) error {
 	query := `INSERT INTO order_reservations (id, order_id, reservation_id) VALUES ($1, $2, $3) RETURNING created_at`
 	return tx.QueryRow(ctx, query, res.ID, res.OrderID, res.ReservationID).Scan(&res.CreatedAt)

@@ -3,6 +3,7 @@ package fulfillment
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -57,7 +58,7 @@ func (s *Service) CreateShipment(ctx context.Context, adminID, orderID uuid.UUID
 			return ErrOrderNotPaid
 		}
 
-		fulfillments, err := s.repo.GetOrderFulfillments(ctx, orderID)
+		fulfillments, err := s.repo.GetOrderFulfillmentsTx(ctx, tx, orderID)
 		if err != nil {
 			return err
 		}
@@ -71,13 +72,19 @@ func (s *Service) CreateShipment(ctx context.Context, adminID, orderID uuid.UUID
 		id := fulfillments[0].ID
 		fulfillmentID := &id
 
-		// Verify shipment does not exist
-		existing, err := s.repo.GetShipmentByOrderID(ctx, orderID)
-		if err == nil && existing != nil {
-			return ErrShipmentExists
-		}
-		if err != nil && err != ErrShipmentNotFound {
+		// Verify active shipment does not exist
+		var existingShipmentExists bool
+		err = tx.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM shipments
+				WHERE order_id = $1 AND status NOT IN ('cancelled', 'failed')
+			)
+		`, orderID).Scan(&existingShipmentExists)
+		if err != nil {
 			return err
+		}
+		if existingShipmentExists {
+			return ErrShipmentExists
 		}
 
 		shipment = &Shipment{
@@ -115,35 +122,61 @@ func (s *Service) CreateShipmentForFulfillment(ctx context.Context, adminID, ful
 	var shipment *Shipment
 
 	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
-		// Load fulfillment
-		fulfillment, err := s.repo.GetAdminFulfillment(ctx, fulfillmentID)
+		// 1. Resolve parent order ID (plain lookup without locking)
+		var orderID uuid.UUID
+		err := tx.QueryRow(ctx, `SELECT order_id FROM order_fulfillments WHERE id = $1`, fulfillmentID).Scan(&orderID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrFulfillmentNotFound
+			}
+			return fmt.Errorf("failed to lookup fulfillment order: %w", err)
+		}
+
+		// 2. Lock parent order FIRST (authoritative serialization point, prevents deadlocks with cancellation)
+		order, err := s.ordersRepo.GetOrderForUpdateTx(ctx, tx, orderID)
 		if err != nil {
 			return err
 		}
-
-		// Verify order is paid
-		order, err := s.ordersRepo.GetOrderForUpdateTx(ctx, tx, fulfillment.OrderID)
-		if err != nil {
-			return err
+		if order.Status == "cancelled" {
+			return ErrOrderCancelled
 		}
 		if order.Status != "paid" && order.Status != "assembling" && order.Status != "packed" && order.Status != "shipped" && order.Status != "delivered" {
-			return errors.New("order is not paid or in a state that can be fulfilled") // Using a generic error string
+			return ErrOrderNotPaid
 		}
 
-		// Verify fulfillment status
-		if fulfillment.Status == "cancelled" || fulfillment.Status == "returned" || fulfillment.Status == "refunded" || fulfillment.Status == "delivered" {
+		// 3. Lock fulfillment SECOND (consistent lock order: orders -> order_fulfillments)
+		var fulfillmentStatus string
+		err = tx.QueryRow(ctx, `SELECT status FROM order_fulfillments WHERE id = $1 FOR UPDATE`, fulfillmentID).Scan(&fulfillmentStatus)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrFulfillmentNotFound
+			}
+			return fmt.Errorf("failed to lock fulfillment: %w", err)
+		}
+		if fulfillmentStatus == "cancelled" || fulfillmentStatus == "returned" || fulfillmentStatus == "refunded" || fulfillmentStatus == "delivered" {
 			return ErrInvalidFulfillmentStatus
 		}
 
-		// Verify shipment doesn't already exist for this fulfillment
-		if fulfillment.ShipmentID != nil {
+		// 4. Verify active shipment doesn't already exist for this fulfillment or order
+		var existingShipmentExists bool
+		err = tx.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM shipments
+				WHERE (fulfillment_id = $1 OR (order_id = $2 AND fulfillment_id IS NULL))
+				  AND status NOT IN ('cancelled', 'failed')
+			)
+		`, fulfillmentID, orderID).Scan(&existingShipmentExists)
+		if err != nil {
+			return err
+		}
+		if existingShipmentExists {
 			return ErrShipmentExists
 		}
 
 		fid := fulfillmentID
 		shipment = &Shipment{
 			ID:             uuid.New(),
-			OrderID:        fulfillment.OrderID,
+			OrderID:        orderID,
 			FulfillmentID:  &fid,
 			Status:         "pending",
 			Carrier:        req.Carrier,
@@ -200,13 +233,13 @@ func (s *Service) UpdateShipmentStatus(ctx context.Context, adminID, shipmentID 
 
 		oldStatus := shipment.Status
 		if oldStatus == "delivered" || fulfillmentStatus == "delivered" || orderStatus == "delivered" {
-			return errors.New("cannot change status of delivered shipment")
+			return ErrShipmentDeliveredImmutable
 		}
 		if oldStatus == "cancelled" || fulfillmentStatus == "cancelled" || orderStatus == "cancelled" {
-			return errors.New("cannot change status of cancelled shipment")
+			return ErrShipmentCancelledImmutable
 		}
 		if oldStatus == "failed" && req.Status != "failed" {
-			return errors.New("cannot change status of failed shipment")
+			return ErrShipmentFailedImmutable
 		}
 		if req.Status != oldStatus && (req.Status == "shipped" || req.Status == "delivered") {
 			return ErrDispatchNotAllowed
@@ -453,32 +486,4 @@ func (s *Service) GetSellerShipment(ctx context.Context, userID, orderID uuid.UU
 	}
 	// Return limited details (filtering done in handler/dto mapping)
 	return s.repo.GetShipmentByOrderID(ctx, orderID)
-}
-
-func (s *Service) UpdateAdminOrderFulfillmentStatus(ctx context.Context, adminID, orderID uuid.UUID, status string) error {
-	if !IsValidFulfillmentStatus(status) {
-		return ErrInvalidStatus
-	}
-
-	// This is a simplified approach, updating all fulfillments for the order.
-	if err := s.repo.UpdateOrderFulfillmentsStatus(ctx, orderID, status); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func IsValidFulfillmentStatus(status string) bool {
-	validStatuses := map[string]bool{
-		"awaiting_payment": true,
-		"paid":             true,
-		"assembling":       true,
-		"packed":           true,
-		"shipped":          true,
-		"delivered":        true,
-		"cancelled":        true,
-		"returned":         true,
-		"refunded":         true,
-	}
-	return validStatuses[status]
 }

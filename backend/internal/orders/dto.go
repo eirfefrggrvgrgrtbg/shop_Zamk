@@ -14,8 +14,8 @@ type CreateOrderRequest struct {
 	DeliveryMethodID uuid.UUID `json:"deliveryMethodId" validate:"required"`
 }
 
-type UpdateOrderStatusRequest struct {
-	Status  string  `json:"status" validate:"required"`
+type CancelAdminOrderRequest struct {
+	Reason  *string `json:"reason,omitempty"`
 	Comment *string `json:"comment,omitempty"`
 }
 

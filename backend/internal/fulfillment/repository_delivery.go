@@ -42,24 +42,36 @@ func (r *Repository) DeliverShipmentTx(ctx context.Context, tx pgx.Tx, adminID, 
 		return nil, ErrShipmentNotLinkedToFulfillment
 	}
 
-	// 2. Lock parent order and linked fulfillment (matching canonical lifecycle lock order: orders/fulfillments -> shipments)
+	// 2. Lock parent order FIRST (authoritative serialization point, prevents deadlocks with cancellation)
 	var orderStatus string
-	var fulfillmentStatus string
-	var realOrderID uuid.UUID
-
-	queryHeader := `
-		SELECT o.id, o.status, of.status
-		FROM order_fulfillments of
-		JOIN orders o ON o.id = of.order_id
-		WHERE of.id = $1 AND of.order_id = $2
-		FOR UPDATE OF of, o
+	queryOrder := `
+		SELECT status
+		FROM orders
+		WHERE id = $1
+		FOR UPDATE
 	`
-	err = tx.QueryRow(ctx, queryHeader, *preFulfillmentID, preOrderID).Scan(&realOrderID, &orderStatus, &fulfillmentStatus)
+	err = tx.QueryRow(ctx, queryOrder, preOrderID).Scan(&orderStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("order not found")
+		}
+		return nil, fmt.Errorf("failed to lock parent order for delivery: %w", err)
+	}
+
+	// Lock linked fulfillment SECOND (consistent lock order: orders -> order_fulfillments)
+	var fulfillmentStatus string
+	queryFulfillment := `
+		SELECT status
+		FROM order_fulfillments
+		WHERE id = $1 AND order_id = $2
+		FOR UPDATE
+	`
+	err = tx.QueryRow(ctx, queryFulfillment, *preFulfillmentID, preOrderID).Scan(&fulfillmentStatus)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrFulfillmentNotFound
 		}
-		return nil, fmt.Errorf("failed to lock fulfillment and order for delivery: %w", err)
+		return nil, fmt.Errorf("failed to lock fulfillment for delivery: %w", err)
 	}
 
 	// 3. Lock shipment row

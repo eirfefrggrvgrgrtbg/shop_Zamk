@@ -13,9 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
-
-
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 )
 
 func TestCreatePayment_UsesDatabasePaymentNumber(t *testing.T) {
@@ -261,30 +258,6 @@ func TestInvalidWebhookHandler_ReturnsForbiddenWithoutOK(t *testing.T) {
 	p, _ := svc.repo.GetPaymentByID(ctx, resp.PaymentID)
 	if p.Status != "pending" {
 		t.Errorf("expected status 'pending', got %s", p.Status)
-	}
-}
-
-func TestAdminCannotSetOrderPaidWithoutPaymentConfirmation(t *testing.T) {
-	client, _, ordersRepo := setupTestDB(t)
-	if client == nil {
-		return
-	}
-	defer client.Close()
-
-	ctx := context.Background()
-	_, orderID := createTestUserAndOrder(t, client.Pool, 1000)
-
-	// Create orders service and verify we cannot set it to paid manually
-	ordersSvc := orders.NewService(ordersRepo, nil, nil, client, nil)
-
-	adminID := uuid.New()
-
-	err := ordersSvc.UpdateOrderStatus(ctx, adminID, orderID, orders.UpdateOrderStatusRequest{
-		Status: "paid",
-	})
-
-	if err != orders.ErrManualPaidNotAllowed {
-		t.Errorf("expected ErrManualPaidNotAllowed, got %v", err)
 	}
 }
 

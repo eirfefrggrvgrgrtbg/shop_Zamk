@@ -35,4 +35,7 @@ var (
 	ErrDeliveryNotAllowed             = errors.New("delivery_not_allowed")
 	ErrShipmentAlreadyDelivered       = errors.New("shipment_already_delivered")
 	ErrFulfillmentNotShipped          = errors.New("fulfillment_not_shipped")
+	ErrShipmentDeliveredImmutable     = errors.New("cannot change status of delivered shipment")
+	ErrShipmentCancelledImmutable     = errors.New("cannot change status of cancelled shipment")
+	ErrShipmentFailedImmutable        = errors.New("cannot change status of failed shipment")
 )

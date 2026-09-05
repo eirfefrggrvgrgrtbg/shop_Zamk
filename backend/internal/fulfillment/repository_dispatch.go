@@ -22,24 +22,34 @@ type DispatchResult struct {
 }
 
 func (r *Repository) DispatchFulfillmentTx(ctx context.Context, tx pgx.Tx, adminID, fulfillmentID uuid.UUID) (*DispatchResult, error) {
-	// 1. Lock fulfillment and parent order
+	// 1. Resolve parent order ID (plain lookup without locking)
 	var orderID uuid.UUID
-	var orderStatus string
-	var fulfillmentStatus string
-
-	queryHeader := `
-		SELECT o.id, o.status, of.status
-		FROM order_fulfillments of
-		JOIN orders o ON o.id = of.order_id
-		WHERE of.id = $1
-		FOR UPDATE OF of, o
-	`
-	err := tx.QueryRow(ctx, queryHeader, fulfillmentID).Scan(&orderID, &orderStatus, &fulfillmentStatus)
+	err := tx.QueryRow(ctx, `SELECT order_id FROM order_fulfillments WHERE id = $1`, fulfillmentID).Scan(&orderID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrFulfillmentNotFound
 		}
-		return nil, fmt.Errorf("failed to lock fulfillment and order for dispatch: %w", err)
+		return nil, fmt.Errorf("failed to lookup fulfillment order: %w", err)
+	}
+
+	// 2. Lock parent order FIRST (authoritative serialization point, prevents deadlocks with cancellation)
+	var orderStatus string
+	err = tx.QueryRow(ctx, `SELECT status FROM orders WHERE id = $1 FOR UPDATE`, orderID).Scan(&orderStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrFulfillmentNotFound
+		}
+		return nil, fmt.Errorf("failed to lock parent order for dispatch: %w", err)
+	}
+
+	// 3. Lock fulfillment SECOND (consistent lock order: orders -> order_fulfillments)
+	var fulfillmentStatus string
+	err = tx.QueryRow(ctx, `SELECT status FROM order_fulfillments WHERE id = $1 FOR UPDATE`, fulfillmentID).Scan(&fulfillmentStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrFulfillmentNotFound
+		}
+		return nil, fmt.Errorf("failed to lock fulfillment for dispatch: %w", err)
 	}
 
 	// 2. Validate fulfillment status: MUST be "packed"

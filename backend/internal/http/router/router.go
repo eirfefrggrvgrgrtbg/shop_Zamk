@@ -514,8 +514,7 @@ func New(
 		r.With(perm("orders.read")).Get("/orders/{id}", ordersHandler.GetAdminOrder)
 		r.With(perm("orders.read")).Get("/orders/{id}/timeline", ordersHandler.GetAdminOrderTimeline)
 		r.With(perm("orders.read")).Get("/orders/{orderId}/fulfillments", fulfillmentHandler.GetAdminOrderFulfillments)
-		r.With(perm("orders.update_status")).Patch("/orders/{id}/status", ordersHandler.UpdateOrderStatus)
-		r.With(perm("orders.update_status")).Patch("/orders/{id}/fulfillment-status", fulfillmentHandler.UpdateAdminOrderFulfillmentStatus)
+		r.With(perm("orders.update_status")).Post("/orders/{id}/cancel", ordersHandler.CancelAdminOrder)
 		r.With(perm("shipments.create")).Post("/orders/{id}/shipment", fulfillmentHandler.CreateShipment)
 
 		// Payments

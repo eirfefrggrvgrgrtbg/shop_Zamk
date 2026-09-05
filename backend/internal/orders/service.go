@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sort"
 	"time"
@@ -296,45 +297,102 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 	return createdOrder, nil
 }
 
-func (s *Service) CancelCustomerOrder(ctx context.Context, userID, orderID uuid.UUID) error {
-	order, err := s.repo.GetOrder(ctx, orderID)
-	if err != nil {
-		return err
-	}
-	if order.UserID != userID {
-		return ErrOrderNotFound // act as if it doesn't exist
-	}
-	if order.Status != "awaiting_payment" {
-		return ErrOrderNotCancellable
-	}
+type cancelOrderParams struct {
+	ActorID          *uuid.UUID
+	ActorRole        string // "customer", "admin"
+	StableReasonCode string // strictly "customer_cancelled", "admin_cancelled"
+	AuditReason      *string
+	AuditComment     *string
+}
 
-	var resReleasedCount, allocReleasedCount int
-	err = s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+func (s *Service) executeOrderCancellation(ctx context.Context, orderID uuid.UUID, params cancelOrderParams) error {
+	var (
+		resReleasedCount   int
+		allocReleasedCount int
+		cancelledOrder     *Order
+	)
+
+	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		order, err := s.repo.GetOrderForUpdateTx(ctx, tx, orderID)
+		if err != nil {
+			return err
+		}
+
+		if params.ActorRole == "customer" {
+			if params.ActorID == nil || order.UserID != *params.ActorID {
+				return ErrOrderNotFound
+			}
+			if order.Status == "cancelled" {
+				return ErrOrderAlreadyCancelled
+			}
+			if order.Status != "awaiting_payment" {
+				return ErrOrderNotCancellable
+			}
+		} else if params.ActorRole == "admin" {
+			if order.Status == "cancelled" {
+				return ErrOrderAlreadyCancelled
+			}
+			if order.Status == "shipped" || order.Status == "delivered" || order.Status == "returned" || order.Status == "refunded" {
+				return fmt.Errorf("%w: cannot cancel order in '%s' status", ErrOrderNotCancellable, order.Status)
+			}
+			if order.Status != "awaiting_payment" && order.Status != "paid" && order.Status != "assembling" && order.Status != "packed" {
+				return fmt.Errorf("%w: cannot cancel order in '%s' status", ErrOrderNotCancellable, order.Status)
+			}
+
+			// Reject cancellation if an active shipment already exists (FBO shipment consistency rule A)
+			hasActiveShipment, err := s.repo.HasActiveShipmentTx(ctx, tx, orderID)
+			if err != nil {
+				return err
+			}
+			if hasActiveShipment {
+				return fmt.Errorf("%w: order has an active shipment and cannot be cancelled", ErrOrderNotCancellable)
+			}
+		} else {
+			if order.Status == "cancelled" {
+				return ErrOrderAlreadyCancelled
+			}
+		}
+
+		// 1. Mark order cancelled in DB
 		if err := s.repo.SetOrderCancelledTx(ctx, tx, orderID); err != nil {
 			return err
 		}
 
-		// Release physical allocations
-		allocCount, err := s.repo.ReleaseAllocationsForOrderCountTx(ctx, tx, orderID, "customer_cancelled")
+		// 2. Release physical allocations
+		allocCount, err := s.repo.ReleaseAllocationsForOrderCountTx(ctx, tx, orderID, params.StableReasonCode)
 		if err != nil {
 			return err
 		}
 		allocReleasedCount = allocCount
 
-		// Release reservations
+		// 3. Release reservations
 		resIDs, err := s.repo.GetActiveOrderReservations(ctx, orderID)
 		if err != nil {
 			return err
 		}
-		for _, rid := range resIDs {
-			if err := s.inventorySvc.ReleaseReservationTx(ctx, tx, rid); err != nil {
-				// We ignore ErrReservationNotActive since it might have expired
-				if !errors.Is(err, inventory.ErrReservationNotActive) {
-					return err
+		if s.inventorySvc != nil {
+			for _, rid := range resIDs {
+				if err := s.inventorySvc.ReleaseReservationTx(ctx, tx, rid); err != nil {
+					if !errors.Is(err, inventory.ErrReservationNotActive) {
+						return err
+					}
+				} else {
+					resReleasedCount++
 				}
-			} else {
-				resReleasedCount++
 			}
+		}
+
+		// 4. Record durable order status history
+		var histComment *string
+		if params.AuditComment != nil && *params.AuditComment != "" {
+			if params.AuditReason != nil && *params.AuditReason != "" && *params.AuditReason != params.StableReasonCode {
+				c := fmt.Sprintf("[%s] %s", *params.AuditReason, *params.AuditComment)
+				histComment = &c
+			} else {
+				histComment = params.AuditComment
+			}
+		} else if params.AuditReason != nil && *params.AuditReason != "" && *params.AuditReason != params.StableReasonCode {
+			histComment = params.AuditReason
 		}
 
 		history := &OrderStatusHistory{
@@ -342,35 +400,42 @@ func (s *Service) CancelCustomerOrder(ctx context.Context, userID, orderID uuid.
 			OrderID:     orderID,
 			FromStatus:  &order.Status,
 			ToStatus:    "cancelled",
-			ActorUserID: &userID,
+			ActorUserID: params.ActorID,
+			Comment:     histComment,
 		}
 		if err := s.repo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
 			return err
 		}
 
-		// Cascade cancellation to fulfillments
-		if _, err := s.repo.MarkOrderFulfillmentsStatusTx(ctx, tx, orderID, order.Status, "cancelled"); err != nil {
+		// 5. Cascade cancellation to active fulfillments
+		if _, err := s.repo.CancelActiveOrderFulfillmentsTx(ctx, tx, orderID); err != nil {
 			return err
 		}
-		
+
+		cancelledOrder = order
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
-	// Post-commit: emit business event if real hold released
+	actorIDStr := ""
+	if params.ActorID != nil {
+		actorIDStr = params.ActorID.String()
+	}
+
+	// Post-commit: emit inventory.order_hold_released if real holds released
 	if resReleasedCount+allocReleasedCount > 0 {
 		attrs := []slog.Attr{
 			slog.String("order_id", orderID.String()),
 		}
-		if order.OrderNumber != nil && *order.OrderNumber != "" {
-			attrs = append(attrs, slog.String("order_number", *order.OrderNumber))
+		if cancelledOrder != nil && cancelledOrder.OrderNumber != nil && *cancelledOrder.OrderNumber != "" {
+			attrs = append(attrs, slog.String("order_number", *cancelledOrder.OrderNumber))
 		}
 		attrs = append(attrs,
 			slog.Int("reservations_released_count", resReleasedCount),
 			slog.Int("allocations_released_count", allocReleasedCount),
-			slog.String("reason", "customer_cancelled"),
+			slog.String("reason", params.StableReasonCode),
 		)
 
 		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
@@ -378,70 +443,49 @@ func (s *Service) CancelCustomerOrder(ctx context.Context, userID, orderID uuid.
 			Domain:     "inventory",
 			Action:     "release_order_hold",
 			Result:     "success",
-			ActorID:    userID.String(),
-			ActorRole:  "customer",
+			ActorID:    actorIDStr,
+			ActorRole:  params.ActorRole,
 			Attributes: attrs,
 		})
 	}
 
+	// Post-commit: emit canonical order.cancelled business event with stable reason_code
+	cancelAttrs := []slog.Attr{
+		slog.String("order_id", orderID.String()),
+		slog.String("actor_role", params.ActorRole),
+		slog.String("reason_code", params.StableReasonCode),
+	}
+	if cancelledOrder != nil && cancelledOrder.OrderNumber != nil && *cancelledOrder.OrderNumber != "" {
+		cancelAttrs = append(cancelAttrs, slog.String("order_number", *cancelledOrder.OrderNumber))
+	}
+	observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+		EventName:  "order.cancelled",
+		Domain:     "orders",
+		Action:     "cancel_order",
+		Result:     "success",
+		ActorID:    actorIDStr,
+		ActorRole:  params.ActorRole,
+		Attributes: cancelAttrs,
+	})
+
 	return nil
 }
 
-func (s *Service) UpdateOrderStatus(ctx context.Context, adminID, orderID uuid.UUID, req UpdateOrderStatusRequest) error {
-	if req.Status == "paid" {
-		return ErrManualPaidNotAllowed
-	}
+func (s *Service) CancelCustomerOrder(ctx context.Context, userID, orderID uuid.UUID) error {
+	return s.executeOrderCancellation(ctx, orderID, cancelOrderParams{
+		ActorID:          &userID,
+		ActorRole:        "customer",
+		StableReasonCode: "customer_cancelled",
+	})
+}
 
-	order, err := s.repo.GetOrder(ctx, orderID)
-	if err != nil {
-		return err
-	}
-
-	if order.Status == "cancelled" {
-		return errors.New("cannot change status of cancelled order")
-	}
-	if order.Status == "delivered" && req.Status != "returned" && req.Status != "refunded" {
-		return errors.New("cannot change status of delivered order except to return/refund")
-	}
-	if order.Status == "awaiting_payment" && (req.Status == "shipped" || req.Status == "delivered" || req.Status == "packed") {
-		return errors.New("unpaid order cannot skip to packed/shipped/delivered")
-	}
-
-	return s.db.RunInTx(ctx, func(tx pgx.Tx) error {
-		if err := s.repo.UpdateOrderStatusTx(ctx, tx, orderID, req.Status); err != nil {
-			return err
-		}
-
-		history := &OrderStatusHistory{
-			ID:          uuid.New(),
-			OrderID:     orderID,
-			FromStatus:  &order.Status,
-			ToStatus:    req.Status,
-			ActorUserID: &adminID,
-			Comment:     req.Comment,
-		}
-		if err := s.repo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
-			return err
-		}
-
-		if req.Status == "cancelled" {
-			if _, err := s.repo.MarkOrderFulfillmentsStatusTx(ctx, tx, orderID, order.Status, "cancelled"); err != nil {
-				return err
-			}
-			resIDs, err := s.repo.GetOrderReservations(ctx, orderID)
-			if err != nil {
-				return err
-			}
-			for _, rid := range resIDs {
-				if err := s.inventorySvc.ReleaseReservationTx(ctx, tx, rid); err != nil {
-					if !errors.Is(err, inventory.ErrReservationNotActive) {
-						return err
-					}
-				}
-			}
-		}
-
-		return nil
+func (s *Service) CancelAdminOrder(ctx context.Context, adminID, orderID uuid.UUID, req CancelAdminOrderRequest) error {
+	return s.executeOrderCancellation(ctx, orderID, cancelOrderParams{
+		ActorID:          &adminID,
+		ActorRole:        "admin",
+		StableReasonCode: "admin_cancelled",
+		AuditReason:      req.Reason,
+		AuditComment:     req.Comment,
 	})
 }
 

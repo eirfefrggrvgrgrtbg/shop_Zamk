@@ -429,8 +429,8 @@ export const getAdminOrder = async (id: string): Promise<AdminOrderDetail> => {
   return request<AdminOrderDetail>('GET', `/admin/orders/${id}`);
 };
 
-export const updateAdminOrderStatus = async (id: string, data: { status: string; comment?: string }): Promise<void> => {
-  return request<void>('PATCH', `/admin/orders/${id}/status`, { body: data });
+export const cancelAdminOrder = async (id: string, data?: { reason?: string; comment?: string }): Promise<void> => {
+  return request<void>('POST', `/admin/orders/${id}/cancel`, { body: data || {} });
 };
 
 export const getAdminOrderFulfillments = async (orderId: string): Promise<{ items: AdminFulfillment[]; totalCount: number }> => {
@@ -800,10 +800,6 @@ export const getDashboardSummary = async (): Promise<AdminDashboardSummary> => {
 
 export const resetAdminSellerOwnerPassword = async (id: string): Promise<{ temporaryPassword: string }> => {
   return request<{ temporaryPassword: string }>('POST', `/admin/sellers/${id}/reset-owner-password`);
-};
-
-export const updateAdminOrderFulfillmentStatus = async (orderId: string, data: { status: string; reason?: string }): Promise<void> => {
-  return request<void>('PATCH', `/admin/orders/${orderId}/fulfillment-status`, { body: data });
 };
 
 export const getAdminPayoutSummary = async (): Promise<any> => {

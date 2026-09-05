@@ -117,16 +117,6 @@ func (r *Repository) ListShipments(ctx context.Context, limit, offset int) ([]Sh
 	return list, nil
 }
 
-func (r *Repository) UpdateOrderFulfillmentsStatus(ctx context.Context, orderID uuid.UUID, status string) error {
-	query := `
-		UPDATE order_fulfillments
-		SET status = $1, updated_at = now()
-		WHERE order_id = $2
-	`
-	_, err := r.db.Exec(ctx, query, status, orderID)
-	return err
-}
-
 type LockedShipmentContext struct {
 	Shipment          *Shipment
 	OrderStatus       string
@@ -154,37 +144,35 @@ func (r *Repository) LockShipmentForUpdateTx(ctx context.Context, tx pgx.Tx, shi
 	var orderStatus string
 	var fulfillmentStatus string
 
-	// 2. Lock parent order and linked fulfillment (canonical lock order: orders/fulfillments -> shipments)
+	// 2. Lock parent order FIRST (authoritative serialization point, prevents deadlocks with cancellation)
+	queryOrder := `
+		SELECT status
+		FROM orders
+		WHERE id = $1
+		FOR UPDATE
+	`
+	err = tx.QueryRow(ctx, queryOrder, preOrderID).Scan(&orderStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("order not found")
+		}
+		return nil, fmt.Errorf("failed to lock parent order: %w", err)
+	}
+
+	// 3. Lock linked fulfillment SECOND (if present)
 	if preFulfillmentID != nil {
-		var realOrderID uuid.UUID
-		queryHeader := `
-			SELECT o.id, o.status, of.status
-			FROM order_fulfillments of
-			JOIN orders o ON o.id = of.order_id
-			WHERE of.id = $1 AND of.order_id = $2
-			FOR UPDATE OF of, o
+		queryFulfillment := `
+			SELECT status
+			FROM order_fulfillments
+			WHERE id = $1 AND order_id = $2
+			FOR UPDATE
 		`
-		err = tx.QueryRow(ctx, queryHeader, *preFulfillmentID, preOrderID).Scan(&realOrderID, &orderStatus, &fulfillmentStatus)
+		err = tx.QueryRow(ctx, queryFulfillment, *preFulfillmentID, preOrderID).Scan(&fulfillmentStatus)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, ErrFulfillmentNotFound
 			}
-			return nil, fmt.Errorf("failed to lock fulfillment and order: %w", err)
-		}
-	} else {
-		queryOrder := `
-			SELECT o.id, o.status
-			FROM orders o
-			WHERE o.id = $1
-			FOR UPDATE
-		`
-		var realOrderID uuid.UUID
-		err = tx.QueryRow(ctx, queryOrder, preOrderID).Scan(&realOrderID, &orderStatus)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, errors.New("order not found")
-			}
-			return nil, fmt.Errorf("failed to lock order: %w", err)
+			return nil, fmt.Errorf("failed to lock fulfillment: %w", err)
 		}
 	}
 
