@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
@@ -43,6 +45,7 @@ type Service struct {
 	windowDays        int
 	notifs            *notifications.Service
 	logisticsProvider ReturnLogisticsProvider
+	logger            *slog.Logger
 }
 
 func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *inventory.Service, db *postgres.Client, payouts payoutsService, payments paymentsService, windowDays int, notifs *notifications.Service, storageProvider storage.Provider, logisticsProvider ReturnLogisticsProvider) *Service {
@@ -57,7 +60,15 @@ func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *i
 		windowDays:        windowDays,
 		notifs:            notifs,
 		logisticsProvider: logisticsProvider,
+		logger:            slog.Default(),
 	}
+}
+
+func (s *Service) SetLogger(l *slog.Logger) *Service {
+	if l != nil {
+		s.logger = l
+	}
+	return s
 }
 
 func (s *Service) SetStorageProvider(p storage.Provider) {
@@ -791,7 +802,12 @@ func (s *Service) InspectLegacyItem(ctx context.Context, returnID uuid.UUID, ite
 }
 
 func (s *Service) FinalizeReceiving(ctx context.Context, returnID uuid.UUID) error {
-	return s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+	var orderID uuid.UUID
+	var orderNumber string
+	var restockReleasedCount int
+	var damagedReleasedCount int
+
+	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
 		ret, err := s.repo.GetReturnTx(ctx, tx, returnID)
 		if err != nil {
 			return err
@@ -804,6 +820,9 @@ func (s *Service) FinalizeReceiving(ctx context.Context, returnID uuid.UUID) err
 		if ret.Status != "receiving" {
 			return ErrReturnNotInReceiving
 		}
+
+		orderID = ret.OrderID
+		_ = tx.QueryRow(ctx, "SELECT order_number FROM orders WHERE id = $1", ret.OrderID).Scan(&orderNumber)
 
 		items, err := s.repo.GetReturnItemsForUpdateTx(ctx, tx, returnID)
 		if err != nil {
@@ -867,11 +886,25 @@ func (s *Service) FinalizeReceiving(ctx context.Context, returnID uuid.UUID) err
 						if err != nil {
 							return err
 						}
+						tag, err := tx.Exec(ctx, "UPDATE order_item_allocations SET released_at = now(), release_reason = 'returned_restock' WHERE id = $1 AND released_at IS NULL", u.OrderItemAllocationID)
+						if err != nil {
+							return err
+						}
+						if tag.RowsAffected() > 0 {
+							restockReleasedCount += int(tag.RowsAffected())
+						}
 						restockCounts[pvID]++
 					case "damaged":
 						_, err = tx.Exec(ctx, "UPDATE inventory_units SET status = 'damaged', updated_at = now() WHERE id = $1", iuID)
 						if err != nil {
 							return err
+						}
+						tag, err := tx.Exec(ctx, "UPDATE order_item_allocations SET released_at = now(), release_reason = 'returned_damaged' WHERE id = $1 AND released_at IS NULL", u.OrderItemAllocationID)
+						if err != nil {
+							return err
+						}
+						if tag.RowsAffected() > 0 {
+							damagedReleasedCount += int(tag.RowsAffected())
 						}
 					case "reject":
 						// Remains shipped
@@ -947,6 +980,35 @@ func (s *Service) FinalizeReceiving(ctx context.Context, returnID uuid.UUID) err
 		ret.Status = "item_received"
 		return s.repo.UpdateReturnTx(ctx, tx, ret)
 	})
+	if err != nil {
+		return err
+	}
+
+	releasedCount := restockReleasedCount + damagedReleasedCount
+	if releasedCount > 0 {
+		attrs := []slog.Attr{
+			slog.String("return_id", returnID.String()),
+			slog.String("order_id", orderID.String()),
+		}
+		if orderNumber != "" {
+			attrs = append(attrs, slog.String("order_number", orderNumber))
+		}
+		attrs = append(attrs,
+			slog.Int("released_count", releasedCount),
+			slog.Int("restock_released_count", restockReleasedCount),
+			slog.Int("damaged_released_count", damagedReleasedCount),
+		)
+
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName:  "inventory.return_allocations_released",
+			Domain:     "inventory",
+			Action:     "return_allocations_released",
+			Result:     "success",
+			Attributes: attrs,
+		})
+	}
+
+	return nil
 }
 
 // GetCustomerReturnShipment returns the active shipment for a return owned by the customer.

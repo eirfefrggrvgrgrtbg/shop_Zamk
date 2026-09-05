@@ -1,8 +1,12 @@
 package returns_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -513,6 +517,14 @@ func TestM522_InspectionAfterFinalize(t *testing.T) {
 	assert.Equal(t, "restock", dbDisp)
 	assert.Equal(t, "Original Inspection", *dbCond)
 
+	// Verify allocation was cleanly released upon restock finalize (Case D)
+	var allocReleasedAt *time.Time
+	var releaseReason *string
+	err = fix.client.Pool.QueryRow(ctx, "SELECT released_at, release_reason FROM order_item_allocations WHERE id = $1", allocID).Scan(&allocReleasedAt, &releaseReason)
+	require.NoError(t, err)
+	assert.NotNil(t, allocReleasedAt, "allocation must be released upon restock finalize")
+	assert.Equal(t, "returned_restock", *releaseReason)
+
 	// B. Legacy post-finalize inspection test
 	tOrdLeg := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 3)
 
@@ -1021,4 +1033,380 @@ func TestM522_NoFinancialSideEffects(t *testing.T) {
 	var payoutCount int
 	_ = fix.client.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM seller_payouts WHERE seller_id = $1", fix.sellerAID).Scan(&payoutCount)
 	assert.Equal(t, 0, payoutCount)
+}
+
+func TestReturnAllocationCleanup_ObservabilityAndLifecycle(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("Restock_And_UnrelatedAllocation_And_Idempotency_And_Privacy", func(t *testing.T) {
+		fix := setupM51Fixture(t)
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		fix.svc.SetLogger(logger)
+
+		// 1. Setup primary delivered order with serialized item
+		tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+
+		invItemID := uuid.New()
+		_, err := fix.client.Pool.Exec(ctx, `
+			INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock)
+			VALUES ($1, $2, $3, $4, 10, 0)
+		`, invItemID, fix.prodAID, fix.varAID, fix.sellerAID)
+		require.NoError(t, err)
+
+		supplyID := uuid.New()
+		supplyItemID := uuid.New()
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO seller_supplies (id, seller_id, status, supply_number, handoff_method, created_at, updated_at)
+			VALUES ($1, $2, 'completed', $3, 'pickup', now(), now())
+		`, supplyID, fix.sellerAID, "SUP-RESTOCK-"+uuid.New().String()[:8])
+		require.NoError(t, err)
+
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO seller_supply_items (id, supply_id, variant_id, expected_quantity, created_at, updated_at)
+			VALUES ($1, $2, $3, 10, now(), now())
+		`, supplyItemID, supplyID, fix.varAID)
+		require.NoError(t, err)
+
+		zmuCode := "ZMU-RESTOCK-" + uuid.New().String()[:8]
+		invUnitID := uuid.New()
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status)
+			VALUES ($1, $2, $3, $4, $5, 1, 'shipped')
+		`, invUnitID, zmuCode, fix.varAID, supplyID, supplyItemID)
+		require.NoError(t, err)
+
+		resID := uuid.New()
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO reservations (id, inventory_item_id, product_id, product_variant_id, user_id, quantity, status, expires_at, order_id)
+			VALUES ($1, $2, $3, $4, $5, 1, 'converted', now() + interval '1 hour', $6)
+		`, resID, invItemID, fix.prodAID, fix.varAID, fix.userID, tOrd.orderID)
+		require.NoError(t, err)
+
+		allocID := uuid.New()
+		pickedTime := time.Now().Add(-2 * time.Hour)
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO order_item_allocations (id, order_item_id, inventory_unit_id, reservation_id, picked_at, released_at, release_reason)
+			VALUES ($1, $2, $3, $4, $5, NULL, NULL)
+		`, allocID, tOrd.orderItemID, invUnitID, resID, pickedTime)
+		require.NoError(t, err)
+
+		// 2. Setup UNRELATED order and allocation to prove it remains untouched (Requirement E)
+		tOrdUnrelated := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+		invUnitUnrelatedID := uuid.New()
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status)
+			VALUES ($1, $2, $3, $4, $5, 2, 'shipped')
+		`, invUnitUnrelatedID, "ZMU-UNRELATED-"+uuid.New().String()[:8], fix.varAID, supplyID, supplyItemID)
+		require.NoError(t, err)
+
+		allocUnrelatedID := uuid.New()
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO order_item_allocations (id, order_item_id, inventory_unit_id, reservation_id, picked_at, released_at, release_reason)
+			VALUES ($1, $2, $3, $4, $5, NULL, NULL)
+		`, allocUnrelatedID, tOrdUnrelated.orderItemID, invUnitUnrelatedID, resID, pickedTime)
+		require.NoError(t, err)
+
+		// 3. Create return with private customer comment (Requirement F)
+		secretComment := "PRIVATE_SECRET_CUSTOMER_COMMENT_9999"
+		evIDs := fix.createStagedEvidence(t, fix.userID, 2)
+		resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+			Reason:  "defective",
+			Comment: &secretComment,
+			Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDs}},
+		})
+		require.NoError(t, err)
+		retID := resp[0].Return.ID
+
+		require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+		fix.createArrivedReturnShipment(t, retID)
+		require.NoError(t, fix.svc.StartReceiving(ctx, retID))
+
+		scanA, err := fix.svc.ScanReturnUnit(ctx, retID, returns.ScanReturnUnitRequest{Code: zmuCode})
+		require.NoError(t, err)
+		unitID := scanA.ReturnItemUnit.ID
+
+		cond := "Good condition"
+		require.NoError(t, fix.svc.InspectSerializedUnit(ctx, retID, unitID, returns.UpdateSerializedUnitInspectionRequest{
+			InspectedCondition: &cond,
+			Disposition:        "restock",
+		}))
+
+		// Reset log buffer right before FinalizeReceiving
+		logBuf.Reset()
+
+		// A. Finalize Receiving -> RESTOCK
+		require.NoError(t, fix.svc.FinalizeReceiving(ctx, retID))
+
+		// Verify allocation is released with returned_restock
+		var allocReleasedAt *time.Time
+		var releaseReason *string
+		err = fix.client.Pool.QueryRow(ctx, "SELECT released_at, release_reason FROM order_item_allocations WHERE id = $1", allocID).Scan(&allocReleasedAt, &releaseReason)
+		require.NoError(t, err)
+		assert.NotNil(t, allocReleasedAt, "allocation must be released upon restock finalize")
+		assert.Equal(t, "returned_restock", *releaseReason)
+
+		// E. Verify UNRELATED allocation is UNTOUCHED
+		var unrelReleasedAt *time.Time
+		var unrelReason *string
+		err = fix.client.Pool.QueryRow(ctx, "SELECT released_at, release_reason FROM order_item_allocations WHERE id = $1", allocUnrelatedID).Scan(&unrelReleasedAt, &unrelReason)
+		require.NoError(t, err)
+		assert.Nil(t, unrelReleasedAt, "unrelated allocation must remain active/unreleased")
+		assert.Nil(t, unrelReason, "unrelated allocation release_reason must remain NULL")
+
+		// Verify Business Event
+		logs := logBuf.String()
+		require.NotEmpty(t, logs)
+
+		var matchedEvent map[string]interface{}
+		for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+			var entry map[string]interface{}
+			if err := json.Unmarshal([]byte(line), &entry); err == nil {
+				if entry["event_name"] == "inventory.return_allocations_released" {
+					matchedEvent = entry
+					break
+				}
+			}
+		}
+		require.NotNil(t, matchedEvent, "expected inventory.return_allocations_released event in logs: %s", logs)
+		assert.Equal(t, "inventory", matchedEvent["domain"])
+		assert.Equal(t, "return_allocations_released", matchedEvent["action"])
+		assert.Equal(t, "success", matchedEvent["result"])
+		assert.Equal(t, retID.String(), matchedEvent["return_id"])
+		assert.Equal(t, tOrd.orderID.String(), matchedEvent["order_id"])
+		assert.NotEmpty(t, matchedEvent["order_number"])
+		assert.Equal(t, float64(1), matchedEvent["released_count"])
+		assert.Equal(t, float64(1), matchedEvent["restock_released_count"])
+		assert.Equal(t, float64(0), matchedEvent["damaged_released_count"])
+
+		// F. Privacy check
+		assert.NotContains(t, logs, secretComment, "customer comment must not leak into logs")
+
+		// D. IDEMPOTENT REPEAT
+		logBuf.Reset()
+		require.NoError(t, fix.svc.FinalizeReceiving(ctx, retID))
+
+		// Check zero events on repeated finalize
+		for _, line := range strings.Split(strings.TrimSpace(logBuf.String()), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			var entry map[string]interface{}
+			if err := json.Unmarshal([]byte(line), &entry); err == nil {
+				assert.NotEqual(t, "inventory.return_allocations_released", entry["event_name"], "repeated finalize must emit zero release events")
+			}
+		}
+	})
+
+	t.Run("Damaged", func(t *testing.T) {
+		fix := setupM51Fixture(t)
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		fix.svc.SetLogger(logger)
+
+		tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+
+		invItemID := uuid.New()
+		_, err := fix.client.Pool.Exec(ctx, `
+			INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock)
+			VALUES ($1, $2, $3, $4, 10, 0)
+		`, invItemID, fix.prodAID, fix.varAID, fix.sellerAID)
+		require.NoError(t, err)
+
+		supplyID := uuid.New()
+		supplyItemID := uuid.New()
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO seller_supplies (id, seller_id, status, supply_number, handoff_method, created_at, updated_at)
+			VALUES ($1, $2, 'completed', $3, 'pickup', now(), now())
+		`, supplyID, fix.sellerAID, "SUP-DAMAGED-"+uuid.New().String()[:8])
+		require.NoError(t, err)
+
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO seller_supply_items (id, supply_id, variant_id, expected_quantity, created_at, updated_at)
+			VALUES ($1, $2, $3, 10, now(), now())
+		`, supplyItemID, supplyID, fix.varAID)
+		require.NoError(t, err)
+
+		zmuCode := "ZMU-DAMAGED-" + uuid.New().String()[:8]
+		invUnitID := uuid.New()
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status)
+			VALUES ($1, $2, $3, $4, $5, 1, 'shipped')
+		`, invUnitID, zmuCode, fix.varAID, supplyID, supplyItemID)
+		require.NoError(t, err)
+
+		resID := uuid.New()
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO reservations (id, inventory_item_id, product_id, product_variant_id, user_id, quantity, status, expires_at, order_id)
+			VALUES ($1, $2, $3, $4, $5, 1, 'converted', now() + interval '1 hour', $6)
+		`, resID, invItemID, fix.prodAID, fix.varAID, fix.userID, tOrd.orderID)
+		require.NoError(t, err)
+
+		allocID := uuid.New()
+		pickedTime := time.Now().Add(-2 * time.Hour)
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO order_item_allocations (id, order_item_id, inventory_unit_id, reservation_id, picked_at, released_at, release_reason)
+			VALUES ($1, $2, $3, $4, $5, NULL, NULL)
+		`, allocID, tOrd.orderItemID, invUnitID, resID, pickedTime)
+		require.NoError(t, err)
+
+		evIDs := fix.createStagedEvidence(t, fix.userID, 2)
+		resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+			Reason:  "defective",
+			Comment: func() *string { s := "Damaged item"; return &s }(),
+			Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDs}},
+		})
+		require.NoError(t, err)
+		retID := resp[0].Return.ID
+
+		require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+		fix.createArrivedReturnShipment(t, retID)
+		require.NoError(t, fix.svc.StartReceiving(ctx, retID))
+
+		scanA, err := fix.svc.ScanReturnUnit(ctx, retID, returns.ScanReturnUnitRequest{Code: zmuCode})
+		require.NoError(t, err)
+		unitID := scanA.ReturnItemUnit.ID
+
+		cond := "Broken screen"
+		require.NoError(t, fix.svc.InspectSerializedUnit(ctx, retID, unitID, returns.UpdateSerializedUnitInspectionRequest{
+			InspectedCondition: &cond,
+			Disposition:        "damaged",
+		}))
+
+		logBuf.Reset()
+
+		// B. Finalize Receiving -> DAMAGED
+		require.NoError(t, fix.svc.FinalizeReceiving(ctx, retID))
+
+		var allocReleasedAt *time.Time
+		var releaseReason *string
+		err = fix.client.Pool.QueryRow(ctx, "SELECT released_at, release_reason FROM order_item_allocations WHERE id = $1", allocID).Scan(&allocReleasedAt, &releaseReason)
+		require.NoError(t, err)
+		assert.NotNil(t, allocReleasedAt, "allocation must be released upon damaged finalize")
+		assert.Equal(t, "returned_damaged", *releaseReason)
+
+		// Verify event
+		logs := logBuf.String()
+		require.NotEmpty(t, logs)
+
+		var matchedEvent map[string]interface{}
+		for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+			var entry map[string]interface{}
+			if err := json.Unmarshal([]byte(line), &entry); err == nil {
+				if entry["event_name"] == "inventory.return_allocations_released" {
+					matchedEvent = entry
+					break
+				}
+			}
+		}
+		require.NotNil(t, matchedEvent, "expected inventory.return_allocations_released event in logs: %s", logs)
+		assert.Equal(t, float64(1), matchedEvent["released_count"])
+		assert.Equal(t, float64(0), matchedEvent["restock_released_count"])
+		assert.Equal(t, float64(1), matchedEvent["damaged_released_count"])
+	})
+
+	t.Run("Rollback", func(t *testing.T) {
+		fix := setupM51Fixture(t)
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		fix.svc.SetLogger(logger)
+
+		tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+
+		invItemID := uuid.New()
+		_, err := fix.client.Pool.Exec(ctx, `
+			INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock)
+			VALUES ($1, $2, $3, $4, 10, 0)
+		`, invItemID, fix.prodAID, fix.varAID, fix.sellerAID)
+		require.NoError(t, err)
+
+		supplyID := uuid.New()
+		supplyItemID := uuid.New()
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO seller_supplies (id, seller_id, status, supply_number, handoff_method, created_at, updated_at)
+			VALUES ($1, $2, 'completed', $3, 'pickup', now(), now())
+		`, supplyID, fix.sellerAID, "SUP-ROLLBACK-"+uuid.New().String()[:8])
+		require.NoError(t, err)
+
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO seller_supply_items (id, supply_id, variant_id, expected_quantity, created_at, updated_at)
+			VALUES ($1, $2, $3, 10, now(), now())
+		`, supplyItemID, supplyID, fix.varAID)
+		require.NoError(t, err)
+
+		zmuCode := "ZMU-ROLLBACK-" + uuid.New().String()[:8]
+		invUnitID := uuid.New()
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO inventory_units (id, unit_code, product_variant_id, origin_supply_id, origin_supply_item_id, unit_index, status)
+			VALUES ($1, $2, $3, $4, $5, 1, 'shipped')
+		`, invUnitID, zmuCode, fix.varAID, supplyID, supplyItemID)
+		require.NoError(t, err)
+
+		resID := uuid.New()
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO reservations (id, inventory_item_id, product_id, product_variant_id, user_id, quantity, status, expires_at, order_id)
+			VALUES ($1, $2, $3, $4, $5, 1, 'converted', now() + interval '1 hour', $6)
+		`, resID, invItemID, fix.prodAID, fix.varAID, fix.userID, tOrd.orderID)
+		require.NoError(t, err)
+
+		allocID := uuid.New()
+		pickedTime := time.Now().Add(-2 * time.Hour)
+		_, err = fix.client.Pool.Exec(ctx, `
+			INSERT INTO order_item_allocations (id, order_item_id, inventory_unit_id, reservation_id, picked_at, released_at, release_reason)
+			VALUES ($1, $2, $3, $4, $5, NULL, NULL)
+		`, allocID, tOrd.orderItemID, invUnitID, resID, pickedTime)
+		require.NoError(t, err)
+
+		evIDs := fix.createStagedEvidence(t, fix.userID, 2)
+		resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+			Reason:  "defective",
+			Comment: func() *string { s := "Rollback test"; return &s }(),
+			Items:   []returns.CreateReturnItemRequest{{OrderItemID: tOrd.orderItemID, Quantity: 1, EvidenceIDs: evIDs}},
+		})
+		require.NoError(t, err)
+		retID := resp[0].Return.ID
+
+		require.NoError(t, fix.svc.UpdateReturnStatus(ctx, fix.userID, retID, returns.UpdateReturnStatusRequest{Status: "approved"}))
+		fix.createArrivedReturnShipment(t, retID)
+		require.NoError(t, fix.svc.StartReceiving(ctx, retID))
+
+		scanA, err := fix.svc.ScanReturnUnit(ctx, retID, returns.ScanReturnUnitRequest{Code: zmuCode})
+		require.NoError(t, err)
+		unitID := scanA.ReturnItemUnit.ID
+
+		cond := "Good condition"
+		require.NoError(t, fix.svc.InspectSerializedUnit(ctx, retID, unitID, returns.UpdateSerializedUnitInspectionRequest{
+			InspectedCondition: &cond,
+			Disposition:        "restock",
+		}))
+
+		// Delete inventory_items row to cause tx.QueryRow in FinalizeReceiving to fail on restock stock increment
+		_, err = fix.client.Pool.Exec(ctx, "DELETE FROM inventory_items WHERE id = $1", invItemID)
+		require.NoError(t, err)
+
+		logBuf.Reset()
+
+		// C. Attempt FinalizeReceiving -> fails in transaction
+		err = fix.svc.FinalizeReceiving(ctx, retID)
+		require.Error(t, err, "expected FinalizeReceiving to fail due to missing inventory item")
+
+		// Verify allocation released_at rolled back to NULL
+		var allocReleasedAt *time.Time
+		var releaseReason *string
+		err = fix.client.Pool.QueryRow(ctx, "SELECT released_at, release_reason FROM order_item_allocations WHERE id = $1", allocID).Scan(&allocReleasedAt, &releaseReason)
+		require.NoError(t, err)
+		assert.Nil(t, allocReleasedAt, "allocation released_at must rollback to NULL on transaction failure")
+		assert.Nil(t, releaseReason, "allocation release_reason must rollback to NULL on transaction failure")
+
+		// Verify zero events emitted
+		for _, line := range strings.Split(strings.TrimSpace(logBuf.String()), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			var entry map[string]interface{}
+			if err := json.Unmarshal([]byte(line), &entry); err == nil {
+				assert.NotEqual(t, "inventory.return_allocations_released", entry["event_name"], "failed transaction must emit zero release events")
+			}
+		}
+	})
 }
