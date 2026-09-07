@@ -24,10 +24,15 @@ type Supply struct {
 	CompletedAt         *time.Time   `json:"completedAt,omitempty"`
 	UpdatedAt           time.Time    `json:"updatedAt"`
 
-	TotalExpectedItems int `json:"totalExpectedItems"`
-	TotalAcceptedItems int `json:"totalAcceptedItems"`
-	TotalExpectedBoxes int `json:"totalExpectedBoxes"`
-	SKUCount           int `json:"skuCount"`
+	TotalExpectedItems          int  `json:"totalExpectedItems"`
+	TotalAcceptedItems          int  `json:"totalAcceptedItems"`
+	TotalRemainingItems         int  `json:"totalRemainingItems"`
+	TotalExpectedBoxes          int  `json:"totalExpectedBoxes"`
+	SKUCount                    int  `json:"skuCount"`
+	DiscrepancyQuantity         int  `json:"discrepancyQuantity"`
+	DiscrepancyCount            int  `json:"discrepancyCount"`
+	IsReceivingComplete         bool `json:"isReceivingComplete"`
+	AdditionalReceivingHappened bool `json:"additionalReceivingHappened"`
 
 	Items []SupplyItem `json:"items,omitempty"`
 	Boxes []SupplyBox  `json:"boxes,omitempty"`
@@ -43,7 +48,8 @@ type SupplyItem struct {
 	DamagedQuantity  int       `json:"damagedQuantity"`
 	MissingQuantity  int       `json:"missingQuantity"`
 	ExtraQuantity    int       `json:"extraQuantity"`
-	ReceivingComment *string   `json:"receivingComment,omitempty"`
+	RemainingQuantity int      `json:"remainingQuantity"`
+	ReceivingComment *string   `json:"receivingComment,omitempty"` // preserved on shared model for Admin operations
 	CreatedAt        time.Time `json:"createdAt"`
 	UpdatedAt        time.Time `json:"updatedAt"`
 

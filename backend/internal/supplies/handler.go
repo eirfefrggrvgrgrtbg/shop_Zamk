@@ -63,7 +63,7 @@ func (h *Handler) ListSupplies(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(supplies)
+	json.NewEncoder(w).Encode(ToSellerSupplyListResponse(supplies))
 }
 
 func (h *Handler) GetSupply(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +103,7 @@ func (h *Handler) GetSupply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(supply)
+	json.NewEncoder(w).Encode(ToSellerSupplyResponse(supply))
 }
 
 func (h *Handler) GetUnitLabels(w http.ResponseWriter, r *http.Request) {
@@ -240,7 +240,7 @@ func (h *Handler) CreateSupply(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(supply)
+	json.NewEncoder(w).Encode(ToSellerSupplyResponse(supply))
 }
 
 func (h *Handler) MarkShipped(w http.ResponseWriter, r *http.Request) {
@@ -314,5 +314,5 @@ func (h *Handler) MarkShipped(w http.ResponseWriter, r *http.Request) {
 	)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(updatedSupply)
+	json.NewEncoder(w).Encode(ToSellerSupplyResponse(updatedSupply))
 }

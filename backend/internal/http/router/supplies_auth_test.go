@@ -1176,4 +1176,227 @@ func TestSuppliesAuth(t *testing.T) {
 			t.Fatalf("unexpected undo totals: %+v", undoResp)
 		}
 	})
+
+	// ====================================================================
+	// P. SA.2 Seller Supply Receiving Visibility HTTP read contract and mutation rejection
+	// ====================================================================
+	t.Run("P. SA.2 seller receiving outcome visibility and warehouse mutation HTTP rejection", func(t *testing.T) {
+		sellerUID := insertUser(t, "seller")
+		sellerID := insertSeller(t, sellerUID)
+		sellerTok := makeToken(t, sellerUID, "seller")
+
+		_, variantID := insertProductAndVariant(t, sellerID)
+
+		adminUID := insertUser(t, "admin")
+		insertAdminWithPerms(t, adminUID, []string{"inventory.receipt"})
+		adminTok := makeToken(t, adminUID, "admin")
+		_ = adminTok
+
+		repo := supplies.NewRepository(pgClient.Pool)
+		svc := supplies.NewService(pgClient.Pool, repo)
+
+		carrier := "СДЭК"
+		tracking := "TRK-SA2-HTTP"
+		supply, err := svc.CreateSupply(ctx, sellerID, supplies.CreateSupplyRequest{
+			HandoffMethod:  "carrier_delivery",
+			CarrierName:    &carrier,
+			TrackingNumber: &tracking,
+			Items: []supplies.CreateSupplyItemRequest{
+				{VariantID: variantID, ExpectedQuantity: 5},
+			},
+		})
+		if err != nil {
+			t.Fatalf("CreateSupply: %v", err)
+		}
+
+		if _, err = svc.MarkShipped(ctx, sellerID, supply.ID); err != nil {
+			t.Fatalf("MarkShipped: %v", err)
+		}
+		if err = svc.MarkSupplyArrived(ctx, adminUID, supply.ID); err != nil {
+			t.Fatalf("MarkSupplyArrived: %v", err)
+		}
+
+		// Admin starts session
+		session, err := svc.StartReceivingSession(ctx, adminUID, supply.SupplyNumber)
+		if err != nil {
+			t.Fatalf("StartReceivingSession: %v", err)
+		}
+
+		units, err := repo.ListUnitsBySupplyID(ctx, supply.ID)
+		if err != nil || len(units) != 5 {
+			t.Fatalf("ListUnitsBySupplyID: %v, count=%d", err, len(units))
+		}
+
+		// Scan 3 ok, 1 damaged
+		for i := 0; i < 3; i++ {
+			_, err = svc.RecordSerializedScan(ctx, adminUID, session.ID, supplies.RecordSerializedScanRequest{
+				UnitCode:  units[i].UnitCode,
+				Condition: "ok",
+			})
+			if err != nil {
+				t.Fatalf("RecordSerializedScan ok: %v", err)
+			}
+		}
+		_, err = svc.RecordSerializedScan(ctx, adminUID, session.ID, supplies.RecordSerializedScanRequest{
+			UnitCode:  units[3].UnitCode,
+			Condition: "damaged",
+		})
+		if err != nil {
+			t.Fatalf("RecordSerializedScan damaged: %v", err)
+		}
+
+		// Finalize
+		err = svc.FinalizeReceiving(ctx, adminUID, session.ID, supplies.FinalizeReceivingRequest{})
+		if err != nil {
+			t.Fatalf("FinalizeReceiving: %v", err)
+		}
+
+		// Inject an internal receiving comment directly in DB to verify Seller vs Admin segregation
+		testComment := "damaged during warehouse unloading"
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE seller_supply_items SET receiving_comment = $1 WHERE supply_id = $2", testComment, supply.ID)
+		if err != nil {
+			t.Fatalf("update receiving_comment: %v", err)
+		}
+
+		// 1. Seller GET /api/seller/supplies/{id}
+		reqGet := httptest.NewRequest("GET", "/api/seller/supplies/"+supply.ID.String(), nil)
+		reqGet.Header.Set("Authorization", "Bearer "+sellerTok)
+		rrGet := httptest.NewRecorder()
+		r.ServeHTTP(rrGet, reqGet)
+		if rrGet.Code != http.StatusOK {
+			t.Fatalf("GET /api/seller/supplies/{id} expected 200, got %d body=%s", rrGet.Code, rrGet.Body.String())
+		}
+
+		var rawMap map[string]interface{}
+		if err := json.Unmarshal(rrGet.Body.Bytes(), &rawMap); err != nil {
+			t.Fatalf("failed to unmarshal supply JSON: %v", err)
+		}
+
+		if rawMap["status"] != "completed_with_discrepancies" {
+			t.Errorf("expected status completed_with_discrepancies, got %v", rawMap["status"])
+		}
+		if rawMap["totalExpectedItems"] != float64(5) {
+			t.Errorf("expected totalExpectedItems 5, got %v", rawMap["totalExpectedItems"])
+		}
+		if rawMap["totalAcceptedItems"] != float64(3) {
+			t.Errorf("expected totalAcceptedItems 3, got %v", rawMap["totalAcceptedItems"])
+		}
+		if rawMap["totalRemainingItems"] != float64(1) {
+			t.Errorf("expected totalRemainingItems 1, got %v", rawMap["totalRemainingItems"])
+		}
+		if rawMap["discrepancyCount"] != float64(2) {
+			t.Errorf("expected discrepancyCount 2, got %v", rawMap["discrepancyCount"])
+		}
+		if rawMap["isReceivingComplete"] != true {
+			t.Errorf("expected isReceivingComplete true, got %v", rawMap["isReceivingComplete"])
+		}
+		if rawMap["additionalReceivingHappened"] != false {
+			t.Errorf("expected additionalReceivingHappened false, got %v", rawMap["additionalReceivingHappened"])
+		}
+
+		itemsList, ok := rawMap["items"].([]interface{})
+		if !ok || len(itemsList) != 1 {
+			t.Fatalf("expected 1 item, got %v", itemsList)
+		}
+		item0 := itemsList[0].(map[string]interface{})
+		if item0["expectedQuantity"] != float64(5) {
+			t.Errorf("expected expectedQuantity 5, got %v", item0["expectedQuantity"])
+		}
+		if item0["acceptedQuantity"] != float64(3) {
+			t.Errorf("expected acceptedQuantity 3, got %v", item0["acceptedQuantity"])
+		}
+		if item0["damagedQuantity"] != float64(1) {
+			t.Errorf("expected damagedQuantity 1, got %v", item0["damagedQuantity"])
+		}
+		if item0["missingQuantity"] != float64(1) {
+			t.Errorf("expected missingQuantity 1, got %v", item0["missingQuantity"])
+		}
+		if item0["remainingQuantity"] != float64(1) {
+			t.Errorf("expected remainingQuantity 1, got %v", item0["remainingQuantity"])
+		}
+
+		// Audit requirement: receivingComment must NOT leak to Seller
+		if _, exists := item0["receivingComment"]; exists {
+			t.Errorf("security boundary violation: receivingComment leaked to seller in item JSON: %v", item0["receivingComment"])
+		}
+
+		// Admin GET /api/admin/receiving/lookup?qr_token=... preserves receivingComment
+		reqAdminLookup := httptest.NewRequest("GET", "/api/admin/receiving/lookup?qr_token="+supply.SupplyNumber, nil)
+		reqAdminLookup.Header.Set("Authorization", "Bearer "+adminTok)
+		rrAdminLookup := httptest.NewRecorder()
+		r.ServeHTTP(rrAdminLookup, reqAdminLookup)
+		if rrAdminLookup.Code != http.StatusOK {
+			t.Fatalf("GET /api/admin/receiving/lookup expected 200, got %d body=%s", rrAdminLookup.Code, rrAdminLookup.Body.String())
+		}
+		var adminRawMap map[string]interface{}
+		if err := json.Unmarshal(rrAdminLookup.Body.Bytes(), &adminRawMap); err != nil {
+			t.Fatalf("failed to unmarshal admin lookup JSON: %v", err)
+		}
+		adminItemsList := adminRawMap["items"].([]interface{})
+		adminItem0 := adminItemsList[0].(map[string]interface{})
+		if adminItem0["receivingComment"] != testComment {
+			t.Errorf("expected admin lookup to include receivingComment %q, got %v", testComment, adminItem0["receivingComment"])
+		}
+
+		// 2. Seller GET /api/seller/supplies (listing)
+		reqList := httptest.NewRequest("GET", "/api/seller/supplies", nil)
+		reqList.Header.Set("Authorization", "Bearer "+sellerTok)
+		rrList := httptest.NewRecorder()
+		r.ServeHTTP(rrList, reqList)
+		if rrList.Code != http.StatusOK {
+			t.Fatalf("GET /api/seller/supplies expected 200, got %d", rrList.Code)
+		}
+
+		// 3. Negative Action Matrix: Seller cannot execute warehouse actions over HTTP
+		// 3a. POST /arrive -> 403
+		reqArrive := httptest.NewRequest("POST", "/api/admin/receiving/"+supply.ID.String()+"/arrive", nil)
+		reqArrive.Header.Set("Authorization", "Bearer "+sellerTok)
+		rrArrive := httptest.NewRecorder()
+		r.ServeHTTP(rrArrive, reqArrive)
+		if rrArrive.Code != http.StatusForbidden {
+			t.Errorf("expected 403 for seller POST arrive, got %d", rrArrive.Code)
+		}
+
+		// 3b. POST /sessions (start) -> 403
+		reqStart := httptest.NewRequest("POST", "/api/admin/receiving/sessions?qr_token="+supply.SupplyNumber, nil)
+		reqStart.Header.Set("Authorization", "Bearer "+sellerTok)
+		rrStart := httptest.NewRecorder()
+		r.ServeHTTP(rrStart, reqStart)
+		if rrStart.Code != http.StatusForbidden {
+			t.Errorf("expected 403 for seller POST sessions, got %d", rrStart.Code)
+		}
+
+		// 3c. POST /sessions/{id}/scan-unit -> 403
+		scanBody, _ := json.Marshal(map[string]string{"unitCode": units[0].UnitCode, "condition": "ok"})
+		reqScan := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+session.ID.String()+"/scan-unit", bytes.NewReader(scanBody))
+		reqScan.Header.Set("Authorization", "Bearer "+sellerTok)
+		reqScan.Header.Set("Content-Type", "application/json")
+		rrScan := httptest.NewRecorder()
+		r.ServeHTTP(rrScan, reqScan)
+		if rrScan.Code != http.StatusForbidden {
+			t.Errorf("expected 403 for seller POST scan-unit, got %d", rrScan.Code)
+		}
+
+		// 3d. POST /sessions/{id}/finalize -> 403
+		finBody, _ := json.Marshal(map[string]interface{}{})
+		reqFin := httptest.NewRequest("POST", "/api/admin/receiving/sessions/"+session.ID.String()+"/finalize", bytes.NewReader(finBody))
+		reqFin.Header.Set("Authorization", "Bearer "+sellerTok)
+		reqFin.Header.Set("Content-Type", "application/json")
+		rrFin := httptest.NewRecorder()
+		r.ServeHTTP(rrFin, reqFin)
+		if rrFin.Code != http.StatusForbidden {
+			t.Errorf("expected 403 for seller POST finalize, got %d", rrFin.Code)
+		}
+
+		// 3e. POST /free-scan/process -> 403
+		procBody, _ := json.Marshal(map[string]string{"unitCode": units[4].UnitCode, "condition": "ok"})
+		reqProc := httptest.NewRequest("POST", "/api/admin/receiving/free-scan/process", bytes.NewReader(procBody))
+		reqProc.Header.Set("Authorization", "Bearer "+sellerTok)
+		reqProc.Header.Set("Content-Type", "application/json")
+		rrProc := httptest.NewRecorder()
+		r.ServeHTTP(rrProc, reqProc)
+		if rrProc.Code != http.StatusForbidden {
+			t.Errorf("expected 403 for seller POST free-scan/process, got %d", rrProc.Code)
+		}
+	})
 }

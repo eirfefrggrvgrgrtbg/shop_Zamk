@@ -424,7 +424,7 @@ export interface SellerSupplyItem {
   damagedQuantity: number;
   missingQuantity: number;
   extraQuantity: number;
-  receivingComment?: string;
+  remainingQuantity?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -444,8 +444,12 @@ export interface SellerSupply {
   totalExpectedBoxes: number;
   totalExpectedItems: number;
   totalAcceptedItems: number;
+  totalRemainingItems?: number;
   skuCount?: number;
-  receivingComment?: string;
+  discrepancyCount?: number;
+  discrepancyQuantity?: number;
+  isReceivingComplete?: boolean;
+  additionalReceivingHappened?: boolean;
   createdAt: string;
   shippedAt?: string;
   arrivedAt?: string;

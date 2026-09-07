@@ -307,6 +307,7 @@ func (r *Repository) GetSupplyByID(ctx context.Context, id uuid.UUID) (*Supply, 
 	}
 	defer rows.Close()
 
+	var totalDamaged int
 	for rows.Next() {
 		var i SupplyItem
 		err := rows.Scan(
@@ -316,11 +317,32 @@ func (r *Repository) GetSupplyByID(ctx context.Context, id uuid.UUID) (*Supply, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan item: %w", err)
 		}
+		rem := i.ExpectedQuantity - i.AcceptedQuantity - i.DamagedQuantity
+		if rem < 0 {
+			rem = 0
+		}
+		i.RemainingQuantity = rem
+
 		s.TotalExpectedItems += i.ExpectedQuantity
 		s.TotalAcceptedItems += i.AcceptedQuantity
+		totalDamaged += i.DamagedQuantity
+		s.DiscrepancyCount += i.DamagedQuantity + i.MissingQuantity + i.ExtraQuantity
 		s.Items = append(s.Items, i)
 	}
 	s.SKUCount = len(s.Items)
+	totalRem := s.TotalExpectedItems - s.TotalAcceptedItems - totalDamaged
+	if totalRem < 0 {
+		totalRem = 0
+	}
+	s.TotalRemainingItems = totalRem
+	s.DiscrepancyQuantity = s.DiscrepancyCount
+	s.IsReceivingComplete = s.Status == "completed" || s.Status == "completed_with_discrepancies"
+
+	var completedSessions int
+	sessErr := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM supply_receiving_sessions WHERE supply_id = $1 AND status = 'completed'", id).Scan(&completedSessions)
+	if sessErr == nil && completedSessions > 1 {
+		s.AdditionalReceivingHappened = true
+	}
 
 	// Fetch boxes
 	boxesQuery := `
@@ -379,7 +401,10 @@ func (r *Repository) GetSuppliesBySeller(ctx context.Context, sellerID uuid.UUID
 			COALESCE(SUM(i.expected_quantity), 0)::int AS total_expected_items,
 			COALESCE(SUM(i.accepted_quantity), 0)::int AS total_accepted_items,
 			COUNT(DISTINCT i.variant_id)::int AS total_sku_count,
-			COALESCE((SELECT COUNT(*) FROM seller_supply_boxes b WHERE b.supply_id = s.id), 0)::int AS total_expected_boxes
+			COALESCE((SELECT COUNT(*) FROM seller_supply_boxes b WHERE b.supply_id = s.id), 0)::int AS total_expected_boxes,
+			COALESCE(SUM(i.damaged_quantity + i.missing_quantity + i.extra_quantity), 0)::int AS discrepancy_count,
+			COALESCE((SELECT COUNT(*) FROM supply_receiving_sessions sess WHERE sess.supply_id = s.id AND sess.status = 'completed'), 0)::int AS completed_sessions_count,
+			COALESCE(SUM(i.damaged_quantity), 0)::int AS total_damaged_items
 		FROM seller_supplies s
 		LEFT JOIN seller_supply_items i ON i.supply_id = s.id
 		WHERE s.seller_id = $1
@@ -395,14 +420,25 @@ func (r *Repository) GetSuppliesBySeller(ctx context.Context, sellerID uuid.UUID
 	var supplies []Supply
 	for rows.Next() {
 		var s Supply
+		var completedSessions int
+		var totalDamaged int
 		err := rows.Scan(
 			&s.ID, &s.SupplyNumber, &s.SellerID, &s.Status, &s.HandoffMethod, &s.CarrierName, &s.TrackingNumber, &s.ExpectedArrivalDate,
 			&s.QRToken, &s.CreatedAt, &s.ShippedAt, &s.ArrivedAt, &s.ReceivingStartedAt, &s.CompletedAt, &s.UpdatedAt,
 			&s.TotalExpectedItems, &s.TotalAcceptedItems, &s.SKUCount, &s.TotalExpectedBoxes,
+			&s.DiscrepancyCount, &completedSessions, &totalDamaged,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan supply: %w", err)
 		}
+		rem := s.TotalExpectedItems - s.TotalAcceptedItems - totalDamaged
+		if rem < 0 {
+			rem = 0
+		}
+		s.TotalRemainingItems = rem
+		s.DiscrepancyQuantity = s.DiscrepancyCount
+		s.IsReceivingComplete = s.Status == "completed" || s.Status == "completed_with_discrepancies"
+		s.AdditionalReceivingHappened = completedSessions > 1
 		supplies = append(supplies, s)
 	}
 
