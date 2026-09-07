@@ -763,13 +763,13 @@ func (r *Repository) ListAdminReturns(ctx context.Context, limit, offset int, wa
 	return list, totalCount, nil
 }
 
-func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerReturnItem, error) {
-	query := `
+func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause string, args ...interface{}) ([]SellerReturnItem, error) {
+	query := fmt.Sprintf(`
 		SELECT
 			ri.id, ri.return_id, r.order_id, o.order_number, ri.order_item_id,
 			r.status, ri.quantity, ri.reason, ri.condition,
 			oi.title, oi.variant_size, oi.variant_color, oi.sku, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity),
-			ri.restock, r.admin_comment,
+			ri.restock,
 			(SELECT amount_cents FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
 			(SELECT CASE
 				WHEN sle.metadata->>'reason' = 'return_post_payout' THEN 'debt'
@@ -777,74 +777,237 @@ func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUI
 				WHEN sle.available_at > now() THEN 'frozen'
 				ELSE 'available' END
 			FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
-			r.created_at, r.updated_at
+			r.created_at, r.updated_at,
+			r.receiving_started_at, r.completed_at,
+			rs.status, rs.tracking_number, rs.method,
+			ri.accepted_quantity, ri.damaged_quantity, ri.rejected_quantity,
+			EXISTS (SELECT 1 FROM order_item_allocations oia WHERE oia.order_item_id = ri.order_item_id)
 		FROM return_items ri
 		JOIN returns r ON r.id = ri.return_id
 		JOIN order_items oi ON oi.id = ri.order_item_id
 		JOIN orders o ON o.id = r.order_id
-		WHERE oi.seller_id = $1
-		ORDER BY r.created_at DESC
-		LIMIT $2 OFFSET $3
-	`
-	rows, err := r.db.Query(ctx, query, sellerID, limit, offset)
+		LEFT JOIN LATERAL (
+			SELECT status, tracking_number, method
+			FROM return_shipments
+			WHERE return_id = r.id
+			ORDER BY
+				CASE WHEN status != 'cancelled' THEN 0 ELSE 1 END ASC,
+				created_at DESC,
+				id DESC
+			LIMIT 1
+		) rs ON true
+		WHERE %s
+	`, whereClause)
+
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var list []SellerReturnItem
+	type rawItem struct {
+		item               SellerReturnItem
+		rawRestock         bool
+		receivingStartedAt *time.Time
+		completedAt        *time.Time
+		shipmentStatus     *string
+		trackingNumber     *string
+		shipmentMethod     *string
+		legacyAccepted     int
+		legacyDamaged      int
+		legacyRejected     int
+		isSerialized       bool
+	}
+
+	var rawItems []rawItem
+	var returnItemIDs []uuid.UUID
+
 	for rows.Next() {
-		var item SellerReturnItem
-		if err := rows.Scan(&item.ReturnItemID, &item.ReturnID, &item.OrderID, &item.OrderNumber, &item.OrderItemID, &item.Status, &item.Quantity, &item.Reason, &item.Condition, &item.ProductTitle, &item.VariantSize, &item.VariantColor, &item.SKU, &item.ImageURL, &item.PriceCents, &item.SubtotalPriceCents, &item.Restock, &item.AdminComment, &item.FinancialAdjustmentCents, &item.FinancialImpactType, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		var ri rawItem
+		if err := rows.Scan(
+			&ri.item.ReturnItemID, &ri.item.ReturnID, &ri.item.OrderID, &ri.item.OrderNumber, &ri.item.OrderItemID,
+			&ri.item.Status, &ri.item.Quantity, &ri.item.Reason, &ri.item.Condition,
+			&ri.item.ProductTitle, &ri.item.VariantSize, &ri.item.VariantColor, &ri.item.SKU, &ri.item.ImageURL, &ri.item.PriceCents, &ri.item.SubtotalPriceCents,
+			&ri.rawRestock,
+			&ri.item.FinancialAdjustmentCents, &ri.item.FinancialImpactType,
+			&ri.item.CreatedAt, &ri.item.UpdatedAt,
+			&ri.receivingStartedAt, &ri.completedAt,
+			&ri.shipmentStatus, &ri.trackingNumber, &ri.shipmentMethod,
+			&ri.legacyAccepted, &ri.legacyDamaged, &ri.legacyRejected,
+			&ri.isSerialized,
+		); err != nil {
 			return nil, err
 		}
-		list = append(list, item)
+		rawItems = append(rawItems, ri)
+		returnItemIDs = append(returnItemIDs, ri.item.ReturnItemID)
 	}
-	if list == nil {
-		list = make([]SellerReturnItem, 0)
+	if len(rawItems) == 0 {
+		return make([]SellerReturnItem, 0), nil
 	}
-	return list, nil
+
+	// Batch query return_item_units
+	unitsByItem := make(map[uuid.UUID][]SellerReturnUnitDetail)
+	unitQuery := `
+		SELECT riu.return_item_id, iu.unit_code, riu.disposition, riu.scanned_at
+		FROM return_item_units riu
+		JOIN order_item_allocations oia ON oia.id = riu.order_item_allocation_id
+		JOIN inventory_units iu ON iu.id = oia.inventory_unit_id
+		WHERE riu.return_item_id = ANY($1)
+		ORDER BY riu.created_at ASC
+	`
+	uRows, err := r.db.Query(ctx, unitQuery, returnItemIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer uRows.Close()
+	for uRows.Next() {
+		var rItemID uuid.UUID
+		var u SellerReturnUnitDetail
+		if err := uRows.Scan(&rItemID, &u.UnitCode, &u.Disposition, &u.ScannedAt); err != nil {
+			return nil, err
+		}
+		unitsByItem[rItemID] = append(unitsByItem[rItemID], u)
+	}
+	if err := uRows.Err(); err != nil {
+		return nil, err
+	}
+
+	result := make([]SellerReturnItem, 0, len(rawItems))
+	for _, raw := range rawItems {
+		item := raw.item
+		item.ReceivingStartedAt = raw.receivingStartedAt
+		item.CompletedAt = raw.completedAt
+		item.LogisticsStatus = raw.shipmentStatus
+		item.TrackingNumber = raw.trackingNumber
+		item.ShipmentMethod = raw.shipmentMethod
+
+		units := unitsByItem[item.ReturnItemID]
+		if units == nil {
+			units = make([]SellerReturnUnitDetail, 0)
+		}
+		item.Units = units
+
+		if raw.isSerialized {
+			var restocked, damaged, rejected int
+			for _, u := range units {
+				if u.Disposition != nil {
+					switch *u.Disposition {
+					case "restock":
+						restocked++
+					case "damaged":
+						damaged++
+					case "reject":
+						rejected++
+					}
+				}
+			}
+			item.RestockedQuantity = restocked
+			item.DamagedQuantity = damaged
+			item.RejectedQuantity = rejected
+			notRec := item.Quantity - len(units)
+			if notRec < 0 {
+				notRec = 0
+			}
+			item.NotReceivedQuantity = notRec
+		} else {
+			item.RestockedQuantity = raw.legacyAccepted
+			item.DamagedQuantity = raw.legacyDamaged
+			item.RejectedQuantity = raw.legacyRejected
+			notRec := item.Quantity - (raw.legacyAccepted + raw.legacyDamaged + raw.legacyRejected)
+			if notRec < 0 {
+				notRec = 0
+			}
+			item.NotReceivedQuantity = notRec
+		}
+
+		// Arrival determination
+		arrived := false
+		if raw.shipmentStatus != nil && *raw.shipmentStatus == "arrived_at_zamk" {
+			arrived = true
+		}
+		if item.Status == "receiving" || item.Status == "item_received" || item.Status == "completed" || item.Status == "refunded" || item.ReceivingStartedAt != nil {
+			arrived = true
+		}
+		item.ArrivedAtZamk = arrived
+
+		// Inspection completion determination
+		item.InspectionCompleted = (item.Status == "item_received" || item.Status == "completed" || item.Status == "refunded")
+
+		// Processing status & Physical outcome determination
+		switch item.Status {
+		case "cancelled":
+			item.ProcessingStatus = "cancelled"
+			item.PhysicalOutcome = "cancelled"
+		case "rejected":
+			item.ProcessingStatus = "rejected"
+			item.PhysicalOutcome = "rejected_by_support"
+		case "needs_info":
+			item.ProcessingStatus = "needs_info"
+			item.PhysicalOutcome = "needs_info"
+		case "requested":
+			item.ProcessingStatus = "requested"
+			item.PhysicalOutcome = "requested"
+		case "receiving":
+			item.ProcessingStatus = "receiving"
+			item.PhysicalOutcome = "in_inspection"
+		case "item_received", "completed", "refunded":
+			item.ProcessingStatus = "completed"
+			if item.RestockedQuantity == item.Quantity {
+				item.PhysicalOutcome = "restocked"
+			} else if item.DamagedQuantity == item.Quantity {
+				item.PhysicalOutcome = "damaged"
+			} else if item.RejectedQuantity == item.Quantity {
+				item.PhysicalOutcome = "rejected"
+			} else if item.NotReceivedQuantity == item.Quantity {
+				item.PhysicalOutcome = "not_received"
+			} else if item.RestockedQuantity > 0 {
+				item.PhysicalOutcome = "partial_restock"
+			} else if item.DamagedQuantity > 0 {
+				item.PhysicalOutcome = "damaged"
+			} else if item.RejectedQuantity > 0 {
+				item.PhysicalOutcome = "rejected"
+			} else {
+				item.PhysicalOutcome = "completed"
+			}
+		default: // "approved" and active pre-receiving states
+			if item.ArrivedAtZamk {
+				item.ProcessingStatus = "arrived_at_zamk"
+				item.PhysicalOutcome = "arrived_at_zamk"
+			} else if raw.shipmentStatus != nil {
+				switch *raw.shipmentStatus {
+				case "in_transit", "handed_over":
+					item.ProcessingStatus = "in_transit"
+					item.PhysicalOutcome = "in_transit"
+				case "awaiting_handover":
+					item.ProcessingStatus = "awaiting_handover"
+					item.PhysicalOutcome = "awaiting_handover"
+				default:
+					item.ProcessingStatus = "awaiting_shipment"
+					item.PhysicalOutcome = "awaiting_shipment"
+				}
+			} else {
+				item.ProcessingStatus = "awaiting_shipment"
+				item.PhysicalOutcome = "awaiting_shipment"
+			}
+		}
+
+		// Restock flag for backward compatibility
+		item.Restock = item.RestockedQuantity > 0
+
+		result = append(result, item)
+	}
+
+	return result, nil
+}
+
+func (r *Repository) GetSellerReturnItems(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerReturnItem, error) {
+	where := "oi.seller_id = $1 ORDER BY r.created_at DESC LIMIT $2 OFFSET $3"
+	return r.fetchSellerReturnItems(ctx, where, sellerID, limit, offset)
 }
 
 func (r *Repository) GetSellerReturnItemsForReturn(ctx context.Context, sellerID, returnID uuid.UUID) ([]SellerReturnItem, error) {
-	query := `
-		SELECT
-			ri.id, ri.return_id, r.order_id, o.order_number, ri.order_item_id,
-			r.status, ri.quantity, ri.reason, ri.condition,
-			oi.title, oi.variant_size, oi.variant_color, oi.sku, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity),
-			ri.restock, r.admin_comment,
-			(SELECT amount_cents FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
-			(SELECT CASE
-				WHEN sle.metadata->>'reason' = 'return_post_payout' THEN 'debt'
-				WHEN sle.available_at IS NULL THEN 'debt'
-				WHEN sle.available_at > now() THEN 'frozen'
-				ELSE 'available' END
-			FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
-			r.created_at, r.updated_at
-		FROM return_items ri
-		JOIN returns r ON r.id = ri.return_id
-		JOIN order_items oi ON oi.id = ri.order_item_id
-		JOIN orders o ON o.id = r.order_id
-		WHERE oi.seller_id = $1 AND r.id = $2
-	`
-	rows, err := r.db.Query(ctx, query, sellerID, returnID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var list []SellerReturnItem
-	for rows.Next() {
-		var item SellerReturnItem
-		if err := rows.Scan(&item.ReturnItemID, &item.ReturnID, &item.OrderID, &item.OrderNumber, &item.OrderItemID, &item.Status, &item.Quantity, &item.Reason, &item.Condition, &item.ProductTitle, &item.VariantSize, &item.VariantColor, &item.SKU, &item.ImageURL, &item.PriceCents, &item.SubtotalPriceCents, &item.Restock, &item.AdminComment, &item.FinancialAdjustmentCents, &item.FinancialImpactType, &item.CreatedAt, &item.UpdatedAt); err != nil {
-			return nil, err
-		}
-		list = append(list, item)
-	}
-	if list == nil {
-		list = make([]SellerReturnItem, 0)
-	}
-	return list, nil
+	where := "oi.seller_id = $1 AND r.id = $2 ORDER BY ri.created_at ASC"
+	return r.fetchSellerReturnItems(ctx, where, sellerID, returnID)
 }
 
 func (r *Repository) GetTotalRefundedAmountForOrder(ctx context.Context, orderID uuid.UUID) (int64, error) {

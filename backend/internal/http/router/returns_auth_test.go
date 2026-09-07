@@ -916,5 +916,36 @@ func TestAdminReturnsReceivingRouter_RBAC(t *testing.T) {
 				assert.Equal(t, http.StatusForbidden, rr.Code, "Warehouse must not access %s", endpoint)
 			}
 		})
+
+		// E. Seller strictly forbidden from all real mounted warehouse receiving and admin return mutation endpoints
+		t.Run("Seller is forbidden from all real mounted warehouse receiving and mutation endpoints", func(t *testing.T) {
+			dummyUUID := uuid.New().String()
+			mutations := []struct {
+				method string
+				path   string
+			}{
+				{"POST", "/api/admin/returns/" + retAppArrivedID.String() + "/receiving/start"},
+				{"POST", "/api/admin/returns/" + retAppArrivedID.String() + "/receiving/scan"},
+				{"PATCH", "/api/admin/returns/" + retAppArrivedID.String() + "/receiving/units/" + dummyUUID},
+				{"PATCH", "/api/admin/returns/" + retAppArrivedID.String() + "/receiving/items/" + dummyUUID + "/legacy-inspection"},
+				{"POST", "/api/admin/returns/" + retAppArrivedID.String() + "/receiving/finalize"},
+				{"PATCH", "/api/admin/returns/" + retAppArrivedID.String() + "/status"},
+				{"POST", "/api/admin/returns/" + retAppArrivedID.String() + "/refund"},
+			}
+			for _, m := range mutations {
+				// 1. Unauthenticated request must return 401 (proves route is mounted and reaches auth)
+				unauthReq := httptest.NewRequest(m.method, m.path, nil)
+				unauthRR := httptest.NewRecorder()
+				r.ServeHTTP(unauthRR, unauthReq)
+				assert.Equal(t, http.StatusUnauthorized, unauthRR.Code, "Unauthenticated request on mounted %s %s must be 401", m.method, m.path)
+
+				// 2. Seller request must return 403 (proves authorization rejection, not 404)
+				req := httptest.NewRequest(m.method, m.path, nil)
+				req.Header.Set("Authorization", "Bearer "+sellerToken)
+				rr := httptest.NewRecorder()
+				r.ServeHTTP(rr, req)
+				assert.Equal(t, http.StatusForbidden, rr.Code, "Seller must receive 403 on real mounted %s %s", m.method, m.path)
+			}
+		})
 	})
 }

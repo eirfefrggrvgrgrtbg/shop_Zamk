@@ -4,6 +4,7 @@ import { getSellerReturns } from '@zamk/api-client/src/seller';
 import type { SellerReturn } from '@zamk/api-client/src/types';
 import { adaptReturns } from '../api/sellerOperations';
 import { Package, AlertCircle } from 'lucide-react';
+import { RETURN_REASON_LABELS } from './SellerReturnDetail';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
   style: 'currency',
@@ -13,12 +14,31 @@ const currencyFormatter = new Intl.NumberFormat('ru-RU', {
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   requested: { label: 'Запрошен', color: 'bg-yellow-100 text-yellow-800' },
+  needs_info: { label: 'Требуется информация', color: 'bg-yellow-100 text-yellow-800' },
   approved: { label: 'Одобрен', color: 'bg-blue-100 text-blue-800' },
   rejected: { label: 'Отклонён', color: 'bg-red-100 text-red-800' },
   item_received: { label: 'Получен', color: 'bg-indigo-100 text-indigo-800' },
   completed: { label: 'Завершён', color: 'bg-emerald-100 text-emerald-800' },
   refunded: { label: 'Возмещён', color: 'bg-gray-100 text-gray-800' },
   cancelled: { label: 'Отменён', color: 'bg-gray-100 text-gray-600' },
+};
+
+const OUTCOME_LABELS: Record<string, { label: string; color: string }> = {
+  restocked: { label: 'Возвращён в продажу', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  damaged: { label: 'Повреждён (брак)', color: 'bg-rose-50 text-rose-700 border-rose-200' },
+  rejected: { label: 'Отклонён складом', color: 'bg-red-50 text-red-700 border-red-200' },
+  partial_restock: { label: 'Частично в продажу', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  in_inspection: { label: 'Проверяется', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  arrived_at_zamk: { label: 'На складе ZAMK', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  in_transit: { label: 'В пути на склад', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  awaiting_handover: { label: 'Ожидает передачи', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  awaiting_shipment: { label: 'Ожидает отправки', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  awaiting_arrival: { label: 'В пути на склад', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  needs_info: { label: 'Требуется информация', color: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
+  requested: { label: 'На рассмотрении', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  not_received: { label: 'Не поступил', color: 'bg-gray-50 text-gray-700 border-gray-200' },
+  rejected_by_support: { label: 'Отклонён поддержкой', color: 'bg-red-50 text-red-700 border-red-200' },
+  cancelled: { label: 'Отменён', color: 'bg-gray-50 text-gray-600 border-gray-200' },
 };
 
 export function SellerReturns() {
@@ -129,9 +149,14 @@ export function SellerReturns() {
                           <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${statusConfig.color}`}>
                             {statusConfig.label}
                           </span>
+                          {ret.physicalOutcome && OUTCOME_LABELS[ret.physicalOutcome] && (
+                            <span className={`px-2 py-0.5 text-[11px] font-medium rounded-md border ${OUTCOME_LABELS[ret.physicalOutcome].color}`}>
+                              {OUTCOME_LABELS[ret.physicalOutcome].label}
+                            </span>
+                          )}
                           {ret.reason && (
-                            <span className="text-xs text-ash mt-1 italic max-w-[200px] truncate" title={ret.reason}>
-                              Причина: {ret.reason}
+                            <span className="text-xs text-ash mt-1 italic max-w-[200px] truncate" title={RETURN_REASON_LABELS[ret.reason] || ret.reason}>
+                              Причина: {RETURN_REASON_LABELS[ret.reason] || ret.reason}
                             </span>
                           )}
                         </div>

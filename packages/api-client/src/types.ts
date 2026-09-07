@@ -618,6 +618,12 @@ export interface SellerOrder {
   items?: OrderItem[];
 }
 
+export interface SellerReturnUnitDetail {
+  unitCode: string;
+  disposition?: string;
+  scannedAt?: string;
+}
+
 export interface SellerReturn {
   returnItemId: string;
   returnId: string;
@@ -637,11 +643,26 @@ export interface SellerReturn {
   priceCents: number;
   subtotalPriceCents: number;
   restock: boolean;
-  adminComment?: string;
   financialAdjustmentCents?: number;
   financialImpactType?: string;
   createdAt: string;
   updatedAt: string;
+
+  // Physical outcome & logistics visibility (SA.3)
+  arrivedAtZamk: boolean;
+  inspectionCompleted: boolean;
+  receivingStartedAt?: string;
+  completedAt?: string;
+  logisticsStatus?: string;
+  trackingNumber?: string;
+  shipmentMethod?: string;
+  physicalOutcome: string;
+  restockedQuantity: number;
+  damagedQuantity: number;
+  rejectedQuantity: number;
+  notReceivedQuantity: number;
+  processingStatus: string;
+  units?: SellerReturnUnitDetail[];
 }
 
 export interface SellerReturnDetailResponse {

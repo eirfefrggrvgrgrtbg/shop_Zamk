@@ -146,28 +146,49 @@ type AdminReturnListResponse struct {
 }
 
 type SellerReturnItem struct {
-	ReturnItemID             uuid.UUID `json:"returnItemId"`
-	ReturnID                 uuid.UUID `json:"returnId"`
-	OrderID                  uuid.UUID `json:"orderId"`
-	OrderNumber              *string   `json:"orderNumber"`
-	OrderItemID              uuid.UUID `json:"orderItemId"`
-	Status                   string    `json:"status"` // return status
-	Quantity                 int       `json:"quantity"`
-	Reason                   *string   `json:"reason"`
-	Condition                *string   `json:"condition"`
-	ProductTitle             string    `json:"productTitle"`
-	VariantSize              *string   `json:"variantSize"`
-	VariantColor             *string   `json:"variantColor"`
-	SKU                      *string   `json:"sku"`
-	ImageURL                 *string   `json:"imageUrl"`
-	PriceCents               int64     `json:"priceCents"`
-	SubtotalPriceCents       int64     `json:"subtotalPriceCents"`
-	Restock                  bool      `json:"restock"`
-	AdminComment             *string   `json:"adminComment"`
-	FinancialAdjustmentCents *int64    `json:"financialAdjustmentCents"`
-	FinancialImpactType      *string   `json:"financialImpactType"`
-	CreatedAt                time.Time `json:"createdAt"`
-	UpdatedAt                time.Time `json:"updatedAt"`
+	ReturnItemID             uuid.UUID                `json:"returnItemId"`
+	ReturnID                 uuid.UUID                `json:"returnId"`
+	OrderID                  uuid.UUID                `json:"orderId"`
+	OrderNumber              *string                  `json:"orderNumber"`
+	OrderItemID              uuid.UUID                `json:"orderItemId"`
+	Status                   string                   `json:"status"` // return status
+	Quantity                 int                      `json:"quantity"`
+	Reason                   *string                  `json:"reason"`
+	Condition                *string                  `json:"condition"`
+	ProductTitle             string                   `json:"productTitle"`
+	VariantSize              *string                  `json:"variantSize"`
+	VariantColor             *string                  `json:"variantColor"`
+	SKU                      *string                  `json:"sku"`
+	ImageURL                 *string                  `json:"imageUrl"`
+	PriceCents               int64                    `json:"priceCents"`
+	SubtotalPriceCents       int64                    `json:"subtotalPriceCents"`
+	Restock                  bool                     `json:"restock"`
+	FinancialAdjustmentCents *int64                   `json:"financialAdjustmentCents"`
+	FinancialImpactType      *string                  `json:"financialImpactType"`
+	CreatedAt                time.Time                `json:"createdAt"`
+	UpdatedAt                time.Time                `json:"updatedAt"`
+
+	// SA.3 Seller-Safe Physical Outcome & Logistics Fields
+	ArrivedAtZamk            bool                     `json:"arrivedAtZamk"`
+	InspectionCompleted      bool                     `json:"inspectionCompleted"`
+	ReceivingStartedAt       *time.Time               `json:"receivingStartedAt,omitempty"`
+	CompletedAt              *time.Time               `json:"completedAt,omitempty"`
+	LogisticsStatus          *string                  `json:"logisticsStatus,omitempty"`
+	TrackingNumber           *string                  `json:"trackingNumber,omitempty"`
+	ShipmentMethod           *string                  `json:"shipmentMethod,omitempty"`
+	PhysicalOutcome          string                   `json:"physicalOutcome"`
+	RestockedQuantity        int                      `json:"restockedQuantity"`
+	DamagedQuantity          int                      `json:"damagedQuantity"`
+	RejectedQuantity         int                      `json:"rejectedQuantity"`
+	NotReceivedQuantity      int                      `json:"notReceivedQuantity"`
+	ProcessingStatus         string                   `json:"processingStatus"`
+	Units                    []SellerReturnUnitDetail `json:"units,omitempty"`
+}
+
+type SellerReturnUnitDetail struct {
+	UnitCode    string     `json:"unitCode"`
+	Disposition *string    `json:"disposition,omitempty"`
+	ScannedAt   *time.Time `json:"scannedAt,omitempty"`
 }
 
 type SellerReturnListResponse struct {
