@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { changePassword } from '@zamk/api-client/src/auth';
 import { Eye, EyeOff, Check } from 'lucide-react';
+import { SellerAuthGate } from './SellerAuthGate';
 
 export function SellerProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isInitializing, user, logout } = useAuth();
-  const location = useLocation();
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -24,7 +23,7 @@ export function SellerProtectedRoute({ children }: { children: React.ReactNode }
   }
 
   if (!isAuthenticated || user?.role !== 'seller') {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <SellerAuthGate />;
   }
 
   if (user?.mustChangePassword) {

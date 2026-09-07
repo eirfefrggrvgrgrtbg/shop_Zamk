@@ -14,6 +14,14 @@ import {
 } from '@zamk/api-client/src/types';
 
 export function ReturnDetail() {
+  return (
+    <AccountLayout title="Детали возврата">
+      <ReturnDetailContent />
+    </AccountLayout>
+  );
+}
+
+function ReturnDetailContent() {
   const { returnId } = useParams<{ returnId: string }>();
   const [returnData, setReturnData] = useState<CustomerReturnRecord | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -42,34 +50,30 @@ export function ReturnDetail() {
 
   if (isLoading) {
     return (
-      <AccountLayout title="Детали возврата">
-        <div className="py-20 flex justify-center">
-          <div className="animate-spin w-8 h-8 border-2 border-black border-t-transparent rounded-full dark:border-white dark:border-t-transparent" />
-        </div>
-      </AccountLayout>
+      <div className="py-20 flex justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-black border-t-transparent rounded-full dark:border-white dark:border-t-transparent" />
+      </div>
     );
   }
 
   if (error || !returnData) {
     return (
-      <AccountLayout title="Детали возврата">
-        <div className="p-8 rounded-[1.5rem] bg-white/50 dark:bg-white/5 backdrop-blur-xl border border-white/60 dark:border-white/10 text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-medium text-graphite dark:text-white mb-2">
-            {error || 'Возврат не найден'}
-          </h2>
-          <p className="text-sm text-ash dark:text-white/60 mb-6">
-            Проверьте правильность адреса или вернитесь к списку ваших возвратов.
-          </p>
-          <Link
-            to="/returns"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-black text-white dark:bg-white dark:text-black text-xs font-medium hover:opacity-90 transition-opacity"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Ко всем возвратам
-          </Link>
-        </div>
-      </AccountLayout>
+      <div className="p-8 rounded-[1.5rem] bg-white/50 dark:bg-white/5 backdrop-blur-xl border border-white/60 dark:border-white/10 text-center">
+        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <h2 className="text-xl font-medium text-graphite dark:text-white mb-2">
+          {error || 'Возврат не найден'}
+        </h2>
+        <p className="text-sm text-ash dark:text-white/60 mb-6">
+          Проверьте правильность адреса или вернитесь к списку ваших возвратов.
+        </p>
+        <Link
+          to="/returns"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-black text-white dark:bg-white dark:text-black text-xs font-medium hover:opacity-90 transition-opacity"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Ко всем возвратам
+        </Link>
+      </div>
     );
   }
 
@@ -89,7 +93,7 @@ export function ReturnDetail() {
   const allEvidence = (returnData.items || []).flatMap((it) => it.evidence || []);
 
   return (
-    <AccountLayout title="Детали возврата">
+    <>
       <div className="space-y-4 md:space-y-5">
         {/* Navigation & Header */}
         <div>
@@ -279,6 +283,6 @@ export function ReturnDetail() {
           </div>
         </div>
       )}
-    </AccountLayout>
+    </>
   );
 }

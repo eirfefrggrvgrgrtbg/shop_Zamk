@@ -3,8 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { getAuctionWins, createOrderForLot, createPayment } from '@zamk/api-client';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { CustomerProtectedRoute } from '../components/account/CustomerProtectedRoute';
 
 export function AuctionWins() {
+  return (
+    <CustomerProtectedRoute title="Победы в аукционах">
+      <AuctionWinsContent />
+    </CustomerProtectedRoute>
+  );
+}
+
+function AuctionWinsContent() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -14,12 +23,8 @@ export function AuctionWins() {
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) {
-      navigate('/');
-      return;
-    }
     loadWins();
-  }, [user]);
+  }, []);
 
   const loadWins = async () => {
     try {

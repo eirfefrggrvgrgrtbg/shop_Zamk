@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { me, refresh, logout as apiLogout } from '@zamk/api-client/src/auth';
 import type { UserDTO } from '@zamk/api-client/src/types';
 
+import '../lib/api'; // Ensure API URL is initialized
+
 interface AuthContextType {
   isAuthenticated: boolean;
   isInitializing: boolean;
@@ -37,13 +39,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const initAuth = useCallback(async () => {
     setIsInitializing(true);
     try {
-      await refresh();
+      const res = await refresh();
+      let userData = res?.user;
+      if (!userData && res?.accessToken) {
+        try {
+          const meRes = await me();
+          userData = meRes.user;
+        } catch {
+          userData = null;
+        }
+      }
+      if (userData && userData.role === 'seller') {
+        setUser(userData);
+        setIsAuthenticated(true);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
     } catch (e) {
-      // Refresh might fail if no cookie, that's fine, me() will also fail
+      setUser(null);
+      setIsAuthenticated(false);
+    } finally {
+      setIsInitializing(false);
     }
-    await refreshUser();
-    setIsInitializing(false);
-  }, [refreshUser]);
+  }, []);
 
   useEffect(() => {
     initAuth();

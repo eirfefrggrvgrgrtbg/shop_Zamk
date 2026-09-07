@@ -6,6 +6,22 @@ import { Button } from '../ui/Button';
 
 const RETURN_PATH_KEY = 'zamk_auth_return_path';
 
+export function getSafeCustomerReturnPath(path: string | null): string | null {
+  if (!path) return null;
+  const trimmed = path.trim();
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//') || trimmed.startsWith('/\\')) {
+    return null;
+  }
+  if (/[\r\n\t\\]/.test(trimmed)) {
+    return null;
+  }
+  const pathPart = trimmed.split(/[?#]/)[0];
+  if (pathPart.includes(':')) {
+    return null;
+  }
+  return trimmed;
+}
+
 export function setAuthReturnPath(path: string) {
   sessionStorage.setItem(RETURN_PATH_KEY, path);
 }
@@ -13,7 +29,7 @@ export function setAuthReturnPath(path: string) {
 export function consumeAuthReturnPath(): string | null {
   const path = sessionStorage.getItem(RETURN_PATH_KEY);
   if (path) sessionStorage.removeItem(RETURN_PATH_KEY);
-  return path;
+  return getSafeCustomerReturnPath(path);
 }
 
 interface CustomerProtectedRouteProps {
@@ -32,9 +48,9 @@ export function CustomerProtectedRoute({
 
   useEffect(() => {
     if (!isInitializing && !user) {
-      setAuthReturnPath(location.pathname + location.search);
+      setAuthReturnPath(location.pathname + location.search + location.hash);
     }
-  }, [isInitializing, user, location.pathname, location.search]);
+  }, [isInitializing, user, location.pathname, location.search, location.hash]);
 
   if (isInitializing) {
     return (
