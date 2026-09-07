@@ -116,6 +116,9 @@ func New(
 	perm := func(p string) func(http.Handler) http.Handler {
 		return appMiddleware.RequirePermission(staffSvc, p)
 	}
+	permAny := func(perms ...string) func(http.Handler) http.Handler {
+		return appMiddleware.RequireAnyPermission(staffSvc, perms...)
+	}
 
 	r.Use(observability.Middleware(obsProvider, logger))
 	r.Use(middleware.RealIP)
@@ -545,18 +548,18 @@ func New(
 		r.With(perm("warehouse.dispatch")).Post("/fulfillments/{id}/dispatch", fulfillmentHandler.DispatchFulfillment)
 
 		// Returns
-		r.With(perm("returns.read")).Get("/returns", returnsHandler.ListAdminReturns)
-		r.With(perm("returns.read")).Get("/returns/{id}", returnsHandler.GetAdminReturn)
+		r.With(permAny("returns.read", "warehouse.returns")).Get("/returns", returnsHandler.ListAdminReturns)
+		r.With(permAny("returns.read", "warehouse.returns")).Get("/returns/{id}", returnsHandler.GetAdminReturn)
 		r.With(perm("returns.read")).Get("/returns/{id}/timeline", returnsHandler.GetAdminReturnTimeline)
 		r.With(perm("returns.read")).Get("/returns/{id}/messages", returnsHandler.GetAdminReturnMessages)
 		r.With(perm("returns.update_status")).Post("/returns/{id}/messages", returnsHandler.SendAdminReturnMessage)
 		r.With(perm("returns.update_status")).With(uploadLimit).Post("/returns/{id}/messages/attachments", returnsHandler.UploadAdminReturnMessageAttachment)
-		r.With(perm("returns.read")).Get("/returns/{id}/receiving", returnsHandler.GetAdminReturnReceivingState)
-		r.With(perm("returns.update_status")).Post("/returns/{id}/receiving/start", returnsHandler.StartReceiving)
-		r.With(perm("returns.update_status")).Post("/returns/{id}/receiving/scan", returnsHandler.ScanReturnUnit)
-		r.With(perm("returns.update_status")).Patch("/returns/{id}/receiving/units/{unitId}", returnsHandler.InspectSerializedUnit)
-		r.With(perm("returns.update_status")).Patch("/returns/{id}/receiving/items/{itemId}/legacy-inspection", returnsHandler.InspectLegacyItem)
-		r.With(perm("returns.update_status")).Post("/returns/{id}/receiving/finalize", returnsHandler.FinalizeReceiving)
+		r.With(permAny("returns.read", "warehouse.returns")).Get("/returns/{id}/receiving", returnsHandler.GetAdminReturnReceivingState)
+		r.With(perm("warehouse.returns")).Post("/returns/{id}/receiving/start", returnsHandler.StartReceiving)
+		r.With(perm("warehouse.returns")).Post("/returns/{id}/receiving/scan", returnsHandler.ScanReturnUnit)
+		r.With(perm("warehouse.returns")).Patch("/returns/{id}/receiving/units/{unitId}", returnsHandler.InspectSerializedUnit)
+		r.With(perm("warehouse.returns")).Patch("/returns/{id}/receiving/items/{itemId}/legacy-inspection", returnsHandler.InspectLegacyItem)
+		r.With(perm("warehouse.returns")).Post("/returns/{id}/receiving/finalize", returnsHandler.FinalizeReceiving)
 		r.With(perm("returns.update_status")).Patch("/returns/{id}/status", returnsHandler.UpdateAdminReturnStatus)
 		r.With(perm("returns.read")).Get("/returns/{id}/refund-quote", returnsHandler.GetAdminRefundQuote)
 		r.With(adminDangerousLimit, perm("refunds.create")).Post("/returns/{id}/refund", returnsHandler.CreateAdminRefund)

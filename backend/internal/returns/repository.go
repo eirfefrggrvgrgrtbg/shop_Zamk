@@ -2,6 +2,7 @@ package returns
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -578,6 +579,13 @@ func (r *Repository) GetAdminReturn(ctx context.Context, returnID uuid.UUID, bui
 		return nil, err
 	}
 	if shipment != nil {
+		var pickupDTO *PickupAddressDTO
+		if len(shipment.PickupAddress) > 0 {
+			var p PickupAddressDTO
+			if err := json.Unmarshal(shipment.PickupAddress, &p); err == nil {
+				pickupDTO = &p
+			}
+		}
 		res.Shipment = &ReturnShipmentResponse{
 			ID:                     shipment.ID,
 			Provider:               shipment.Provider,
@@ -586,6 +594,10 @@ func (r *Repository) GetAdminReturn(ctx context.Context, returnID uuid.UUID, bui
 			ProviderShipmentID:     shipment.ProviderShipmentID,
 			Status:                 shipment.Status,
 			SelectedCDEKOfficeCode: shipment.SelectedCDEKOfficeCode,
+			CustomerName:           shipment.CustomerName,
+			CustomerPhone:          shipment.CustomerPhone,
+			PickupAddress:          pickupDTO,
+			CDEKOfficeAddress:      shipment.CDEKOfficeAddress,
 		}
 		res.ShipmentStatus = &shipment.Status
 		res.ShipmentMethod = &shipment.Method
@@ -593,13 +605,11 @@ func (r *Repository) GetAdminReturn(ctx context.Context, returnID uuid.UUID, bui
 	return &res, nil
 }
 
-func (r *Repository) ListAdminReturns(ctx context.Context, limit, offset int, buildURL func(key string) string) ([]AdminReturnResponse, int, error) {
+func (r *Repository) ListAdminReturns(ctx context.Context, limit, offset int, warehouseOnly bool, buildURL func(key string) string) ([]AdminReturnResponse, int, error) {
 	var totalCount int
-	if err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM returns").Scan(&totalCount); err != nil {
-		return nil, 0, err
-	}
 
-	query := `
+	countQuery := "SELECT COUNT(*) FROM returns r"
+	listQuery := `
 		SELECT
 			r.id, r.order_id, o.order_number, r.fulfillment_id, r.user_id,
 			o.customer_name, o.customer_email, o.customer_phone,
@@ -613,10 +623,35 @@ func (r *Repository) ListAdminReturns(ctx context.Context, limit, offset int, bu
 		LEFT JOIN order_fulfillments of ON of.id = r.fulfillment_id
 		LEFT JOIN sellers s ON s.id = of.seller_id
 		LEFT JOIN shipments sh ON sh.fulfillment_id = r.fulfillment_id
-		ORDER BY r.created_at DESC
-		LIMIT $1 OFFSET $2
 	`
-	rows, err := r.db.Query(ctx, query, limit, offset)
+
+	if warehouseOnly {
+		lateralJoin := `
+		LEFT JOIN LATERAL (
+			SELECT status
+			FROM return_shipments rs
+			WHERE rs.return_id = r.id
+			ORDER BY
+				CASE WHEN rs.status != 'cancelled' THEN 0 ELSE 1 END ASC,
+				rs.created_at DESC,
+				rs.id DESC
+			LIMIT 1
+		) latest_rs ON true
+		`
+		whereClause := `
+		WHERE (r.status = 'approved' AND latest_rs.status = 'arrived_at_zamk')
+		   OR r.status IN ('receiving', 'item_received')
+		`
+		countQuery += lateralJoin + whereClause
+		listQuery += lateralJoin + whereClause
+	}
+
+	if err := r.db.QueryRow(ctx, countQuery).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
+	listQuery += " ORDER BY r.created_at DESC LIMIT $1 OFFSET $2"
+	rows, err := r.db.Query(ctx, listQuery, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}

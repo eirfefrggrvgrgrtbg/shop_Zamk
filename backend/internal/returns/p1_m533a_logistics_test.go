@@ -553,7 +553,7 @@ func TestM532_AdminReturnLogisticsVisibility(t *testing.T) {
 	assert.Equal(t, "arrived_at_zamk", *detF.ShipmentStatus, "Case F: arrived_at_zamk active wins over older cancelled")
 
 	// ── Verify ListAdminReturns for all cases ──
-	list, _, err := fix.svc.ListAdminReturns(ctx, 20, 0)
+	list, _, err := fix.svc.ListAdminReturns(ctx, 20, 0, false)
 	require.NoError(t, err)
 
 	statusMap := make(map[uuid.UUID]*string)

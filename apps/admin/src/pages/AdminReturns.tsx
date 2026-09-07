@@ -40,11 +40,15 @@ import {
 import { ReturnConversationDrawer } from '../components/returns/ReturnConversationDrawer';
 import type { AdminReturn, AdminReturnItem, AdminReturnRefundQuote } from '../api/adminReturns';
 import { PermissionGuard } from '../components/PermissionGuard';
+import { useAdminAuth } from '../contexts/AdminAuthContext';
 import { getAdminReturnTimeline } from '../api/adminTimeline';
 import { EntityTimeline } from '../components/EntityTimeline';
 
 
 export function AdminReturns() {
+  const { hasPermission } = useAdminAuth();
+  const canReceiveWarehouse = hasPermission('warehouse.returns');
+
   const [returns, setReturns] = useState<AdminReturn[]>([]);
   const [selectedReturn, setSelectedReturn] = useState<AdminReturn | null>(null);
   const [refundQuote, setRefundQuote] = useState<AdminReturnRefundQuote | null>(null);
@@ -304,7 +308,7 @@ export function AdminReturns() {
   const allEvidence = (selectedReturn?.items || []).flatMap((item) => item.evidence || []);
 
   return (
-    <PermissionGuard permission="returns.read">
+    <PermissionGuard permission={['returns.read', 'warehouse.returns']}>
       <div className="space-y-6">
         <SellerContextBanner />
 
@@ -472,7 +476,7 @@ export function AdminReturns() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                            {refundQuote.items.map((item) => (
+                            {(refundQuote.items || []).map((item) => (
                               <tr key={item.orderItemId} className="text-gray-900">
                                 <td className="py-2.5 pr-3">
                                   <div className="font-medium text-gray-900">{item.productTitle}</div>
@@ -848,7 +852,7 @@ export function AdminReturns() {
                             )}
                           </div>
 
-                          {selectedReturn.shipment.status === 'arrived_at_zamk' && (
+                          {selectedReturn.shipment.status === 'arrived_at_zamk' && canReceiveWarehouse && (
                             <div className="pt-2">
                               <Link
                                 to={`/returns/${selectedReturn.id}/receiving`}
@@ -952,13 +956,23 @@ export function AdminReturns() {
                     <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-900 space-y-2">
                       <div className="font-semibold">Идёт приёмка на складе</div>
                       <p className="text-xs text-purple-700">Товары сканируются на складе.</p>
-                      <Link
-                        to={`/returns/${selectedReturn.id}/receiving`}
-                        className="mt-2 w-full inline-flex items-center justify-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
-                      >
-                        <Package className="h-4 w-4 mr-2" />
-                        Продолжить приёмку
-                      </Link>
+                      {canReceiveWarehouse ? (
+                        <Link
+                          to={`/returns/${selectedReturn.id}/receiving`}
+                          className="mt-2 w-full inline-flex items-center justify-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                        >
+                          <Package className="h-4 w-4 mr-2" />
+                          Продолжить приёмку
+                        </Link>
+                      ) : (
+                        <Link
+                          to={`/returns/${selectedReturn.id}/receiving`}
+                          className="mt-2 w-full inline-flex items-center justify-center px-4 py-2 bg-white hover:bg-gray-50 text-purple-800 text-xs font-semibold rounded-lg border border-purple-300 shadow-sm transition-colors"
+                        >
+                          <Package className="h-4 w-4 mr-2" />
+                          Посмотреть ход приёмки
+                        </Link>
+                      )}
                     </div>
                   )}
 
@@ -1174,7 +1188,7 @@ export function AdminReturns() {
 
                             {/* Action column */}
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              {isWarehouseReady ? (
+                              {isWarehouseReady && canReceiveWarehouse ? (
                                 <Link
                                   to={`/returns/${req.id}/receiving`}
                                   className="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"

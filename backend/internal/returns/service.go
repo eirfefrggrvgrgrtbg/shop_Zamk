@@ -437,8 +437,8 @@ func (s *Service) GetAdminReturn(ctx context.Context, returnID uuid.UUID) (*Admi
 	return s.repo.GetAdminReturn(ctx, returnID, s.buildEvidenceURL)
 }
 
-func (s *Service) ListAdminReturns(ctx context.Context, limit, offset int) ([]AdminReturnResponse, int, error) {
-	return s.repo.ListAdminReturns(ctx, limit, offset, s.buildEvidenceURL)
+func (s *Service) ListAdminReturns(ctx context.Context, limit, offset int, warehouseOnly bool) ([]AdminReturnResponse, int, error) {
+	return s.repo.ListAdminReturns(ctx, limit, offset, warehouseOnly, s.buildEvidenceURL)
 }
 
 func (s *Service) UpdateReturnStatus(ctx context.Context, adminID, returnID uuid.UUID, req UpdateReturnStatusRequest) error {

@@ -45,6 +45,48 @@ func RequirePermission(staffSvc *staff.Service, permission string) func(http.Han
 	}
 }
 
+// RequireAnyPermission checks that the authenticated admin user has at least one of the given permissions.
+// It also injects a "grantedPermissions" map into the context so handlers can know which specific permissions the user holds.
+func RequireAnyPermission(staffSvc *staff.Service, permissions ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			val := r.Context().Value("userID")
+			if val == nil {
+				writePermError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+				return
+			}
+			userID, ok := val.(uuid.UUID)
+			if !ok {
+				writePermError(w, http.StatusUnauthorized, "unauthorized", "Invalid user context")
+				return
+			}
+
+			granted := make(map[string]bool)
+			hasAny := false
+
+			for _, perm := range permissions {
+				allowed, err := staffSvc.HasPermission(r.Context(), userID, perm)
+				if err != nil {
+					writePermError(w, http.StatusInternalServerError, "internal_error", "Permission check failed")
+					return
+				}
+				if allowed {
+					granted[perm] = true
+					hasAny = true
+				}
+			}
+
+			if !hasAny {
+				writePermError(w, http.StatusForbidden, "insufficient_permissions", "Недостаточно прав")
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), "grantedPermissions", granted)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 func writePermError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

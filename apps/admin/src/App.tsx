@@ -98,8 +98,8 @@ export default function App() {
             <Route path="/shipments" element={<AdminProtectedRoute permission="shipments.read"><AdminShipments /></AdminProtectedRoute>} />
             <Route path="/inventory" element={<AdminProtectedRoute permission="inventory.read"><AdminInventory /></AdminProtectedRoute>} />
             <Route path="/inventory/reconciliation/:id" element={<AdminProtectedRoute permission="inventory.adjust"><AdminInventoryReconciliation /></AdminProtectedRoute>} />
-            <Route path="/returns" element={<AdminProtectedRoute permission="returns.read"><AdminReturns /></AdminProtectedRoute>} />
-            <Route path="/returns/:id/receiving" element={<AdminProtectedRoute permission="returns.read"><AdminReturnReceiving /></AdminProtectedRoute>} />
+            <Route path="/returns" element={<AdminProtectedRoute permission={['returns.read', 'warehouse.returns']}><AdminReturns /></AdminProtectedRoute>} />
+            <Route path="/returns/:id/receiving" element={<AdminProtectedRoute permission={['returns.read', 'warehouse.returns']}><AdminReturnReceiving /></AdminProtectedRoute>} />
             <Route path="/refunds" element={<AdminProtectedRoute permission="refunds.read"><AdminRefunds /></AdminProtectedRoute>} />
             <Route path="/payouts" element={<AdminProtectedRoute permission="payouts.read"><AdminPayouts /></AdminProtectedRoute>} />
             <Route path="/audit-logs" element={<AdminProtectedRoute permission="audit.read"><AdminAuditLogs /></AdminProtectedRoute>} />

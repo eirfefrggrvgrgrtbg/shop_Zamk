@@ -12,6 +12,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { PermissionGuard } from '../components/PermissionGuard';
+import { useAdminAuth } from '../contexts/AdminAuthContext';
 import {
   getAdminReturnReceivingState,
   startAdminReturnReceiving,
@@ -31,6 +32,9 @@ import { playBeepSound } from '../utils/audio';
 
 export function AdminReturnReceiving() {
   const { id } = useParams<{ id: string }>();
+  const { hasPermission } = useAdminAuth();
+  const canReceive = hasPermission('warehouse.returns');
+  const canViewCustomerComment = hasPermission('returns.read');
 
   const [state, setState] = useState<AdminReturnReceivingState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -104,10 +108,10 @@ export function AdminReturnReceiving() {
   }, [id]);
 
   useEffect(() => {
-    if (state?.return.status === 'receiving') {
+    if (state?.return.status === 'receiving' && canReceive) {
       scannerInputRef.current?.focus();
     }
-  }, [state?.return.status]);
+  }, [state?.return.status, canReceive]);
 
   const handleStartReceiving = async () => {
     if (!id) return;
@@ -130,7 +134,7 @@ export function AdminReturnReceiving() {
   const handleScanSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const code = barcodeInput.trim();
-    if (!code || !id || isScanning) return;
+    if (!code || !id || isScanning || !canReceive) return;
 
     try {
       setIsScanning(true);
@@ -329,8 +333,18 @@ export function AdminReturnReceiving() {
     }
   });
 
+  const totalScannedUnits = state.items.reduce((acc, item) => {
+    if (item.allocationMode === 'serialized') {
+      return acc + item.scannedUnits.length;
+    }
+    return acc + (item.acceptedQuantity + item.damagedQuantity + item.rejectedQuantity);
+  }, 0);
+
+  const isZeroScanned = totalScannedUnits === 0 && state.totalRequested > 0;
+  const isPartialScanned = totalScannedUnits > 0 && totalScannedUnits < state.totalRequested;
+
   return (
-    <PermissionGuard permission="returns.read">
+    <PermissionGuard permission={['returns.read', 'warehouse.returns']}>
       <div className="space-y-6 max-w-7xl mx-auto pb-16">
         {/* Navigation & Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-200 pb-4">
@@ -358,7 +372,7 @@ export function AdminReturnReceiving() {
 
           {/* Start Receiving CTA in Header */}
           {isApproved && (
-            <PermissionGuard permission="returns.update_status">
+            <PermissionGuard permission="warehouse.returns">
               <button
                 type="button"
                 onClick={handleStartReceiving}
@@ -432,15 +446,17 @@ export function AdminReturnReceiving() {
               </div>
             )}
           </div>
-          {state.return.comment ? (
-            <div>
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Комментарий покупателя</span>
-              <div className="p-3.5 bg-gray-50 rounded-lg border border-gray-200 text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                {state.return.comment}
+          {canViewCustomerComment && (
+            state.return.comment ? (
+              <div>
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">Комментарий покупателя</span>
+                <div className="p-3.5 bg-gray-50 rounded-lg border border-gray-200 text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                  {state.return.comment}
+                </div>
               </div>
-            </div>
-          ) : (
-            <p className="text-xs text-gray-400 italic">Комментарий покупателя не указан</p>
+            ) : (
+              <p className="text-xs text-gray-400 italic">Комментарий покупателя не указан</p>
+            )
           )}
         </div>
 
@@ -464,9 +480,9 @@ export function AdminReturnReceiving() {
                     value={barcodeInput}
                     onChange={(e) => setBarcodeInput(e.target.value)}
                     placeholder="Например: ZMU-XUJBQQ5ADSW4BWTX"
-                    disabled={isScanning}
+                    disabled={isScanning || !canReceive}
                     className="block w-full pl-4 pr-10 py-3 text-base rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono"
-                    autoFocus
+                    autoFocus={canReceive}
                   />
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                     <Barcode className="h-5 w-5 text-gray-400" />
@@ -474,12 +490,17 @@ export function AdminReturnReceiving() {
                 </div>
                 <button
                   type="submit"
-                  disabled={isScanning || !barcodeInput.trim()}
+                  disabled={isScanning || !barcodeInput.trim() || !canReceive}
                   className="px-5 py-3 border border-transparent text-sm font-semibold rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 flex items-center transition-colors"
                 >
                   {isScanning ? 'Поиск...' : 'Сканировать'}
                 </button>
               </form>
+              {!canReceive && (
+                <div className="mt-3 text-sm text-amber-600 font-medium bg-amber-50 py-2 px-3 rounded-lg border border-amber-200">
+                  Режим только для чтения: у вас нет прав на физическое сканирование на складе.
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -628,7 +649,7 @@ export function AdminReturnReceiving() {
 
                                   {/* Inspection / Disposition Controls */}
                                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                                    {isReceiving ? (
+                                    {isReceiving && canReceive ? (
                                       <>
                                         {/* 3 Canonical Disposition Buttons */}
                                         <div className="inline-flex rounded-md shadow-sm" role="group">
@@ -750,7 +771,7 @@ export function AdminReturnReceiving() {
                   {/* LEGACY SECTION */}
                   {!isSerialized && (
                     <div className="space-y-4">
-                      {isReceiving ? (
+                      {isReceiving && canReceive ? (
                         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3">
                           <h4 className="text-sm font-semibold text-gray-900">
                             Количественная приёмка (Legacy)
@@ -876,26 +897,77 @@ export function AdminReturnReceiving() {
 
         {/* Finalize Receiving Action Bar (Active Receiving) */}
         {isReceiving && (
-          <div className="sticky bottom-4 bg-white border border-gray-300 rounded-xl p-4 shadow-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 z-10">
+          <div
+            className={`sticky bottom-4 border rounded-xl p-4 shadow-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 z-10 ${
+              isZeroScanned
+                ? 'bg-amber-50/70 border-amber-300'
+                : isPartialScanned
+                ? 'bg-amber-50/50 border-amber-300'
+                : 'bg-white border-gray-300'
+            }`}
+          >
             <div>
-              <h3 className="text-sm font-bold text-gray-900">Готовность к завершению приёмки</h3>
+              <h3 className="text-sm font-bold text-gray-900">
+                {!state.canFinalize
+                  ? 'Ожидается решение по отсканированным единицам'
+                  : isZeroScanned
+                  ? 'Товары ещё не отсканированы'
+                  : isPartialScanned
+                  ? `Приёмка с расхождением (${totalScannedUnits} из ${state.totalRequested} шт.)`
+                  : `Все единицы проверены (${state.totalRequested} из ${state.totalRequested} шт.)`}
+              </h3>
               <p className="text-xs text-gray-500">
-                {state.canFinalize
-                  ? 'Все отсканированные единицы проверены. Вы можете завершить приёмку.'
-                  : 'Для завершения укажите решение (диспозицию) для всех отсканированных единиц и сохраните количества.'}
+                {!state.canFinalize
+                  ? 'Для завершения укажите решение (диспозицию) для всех отсканированных единиц и сохраните количества.'
+                  : isZeroScanned
+                  ? 'Отсканируйте ZMU-код единицы для приёмки. Если посылка пустая или товар утерян, можно зафиксировать недовоз.'
+                  : isPartialScanned
+                  ? `Отсканировано и проверено: ${totalScannedUnits} шт. Не получено: ${totalNotReceived} шт. Неполученные единицы не оприходуются и возврат средств за них блокируется.`
+                  : 'Все запрашиваемые единицы отсканированы и проверены. Вы можете завершить приёмку.'}
               </p>
             </div>
 
-            <PermissionGuard permission="returns.update_status">
-              <button
-                type="button"
-                onClick={() => setIsFinalizeModalOpen(true)}
-                disabled={!state.canFinalize || isFinalizing}
-                className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-sm font-bold rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              >
-                <CheckCircle2 className="h-5 w-5 mr-2" />
-                Завершить приёмку
-              </button>
+            <PermissionGuard permission="warehouse.returns">
+              {!state.canFinalize ? (
+                <button
+                  type="button"
+                  disabled={true}
+                  className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-sm font-bold rounded-lg shadow-sm text-white bg-gray-300 cursor-not-allowed transition-colors"
+                >
+                  <CheckCircle2 className="h-5 w-5 mr-2" />
+                  Завершить приёмку
+                </button>
+              ) : isZeroScanned ? (
+                <button
+                  type="button"
+                  onClick={() => setIsFinalizeModalOpen(true)}
+                  disabled={isFinalizing}
+                  className="inline-flex items-center justify-center px-5 py-2.5 border border-amber-300 text-sm font-semibold rounded-lg shadow-sm text-amber-900 bg-amber-100 hover:bg-amber-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <AlertTriangle className="h-4 w-4 mr-2 text-amber-700" />
+                  Завершить без товара (0 из {state.totalRequested})
+                </button>
+              ) : isPartialScanned ? (
+                <button
+                  type="button"
+                  onClick={() => setIsFinalizeModalOpen(true)}
+                  disabled={isFinalizing}
+                  className="inline-flex items-center justify-center px-5 py-2.5 border border-amber-500 text-sm font-bold rounded-lg shadow-sm text-white bg-amber-600 hover:bg-amber-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  <AlertTriangle className="h-4 w-4 mr-2" />
+                  Завершить с расхождением ({totalScannedUnits} из {state.totalRequested})
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsFinalizeModalOpen(true)}
+                  disabled={isFinalizing}
+                  className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-sm font-bold rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  <CheckCircle2 className="h-5 w-5 mr-2" />
+                  Завершить приёмку
+                </button>
+              )}
             </PermissionGuard>
           </div>
         )}
@@ -905,15 +977,43 @@ export function AdminReturnReceiving() {
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
               <div className="flex items-center space-x-3 text-gray-900 border-b pb-3">
-                <div className="p-2 bg-green-100 text-green-700 rounded-full">
-                  <CheckCircle2 className="h-6 w-6" />
+                <div
+                  className={`p-2 rounded-full ${
+                    isZeroScanned
+                      ? 'bg-red-100 text-red-700'
+                      : isPartialScanned
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-green-100 text-green-700'
+                  }`}
+                >
+                  {isZeroScanned || isPartialScanned ? (
+                    <AlertTriangle className="h-6 w-6" />
+                  ) : (
+                    <CheckCircle2 className="h-6 w-6" />
+                  )}
                 </div>
-                <h3 className="text-lg font-bold">Подтверждение завершения приёмки</h3>
+                <h3 className="text-lg font-bold">
+                  {isZeroScanned
+                    ? 'Подтверждение приёмки без товара (0 получено)'
+                    : isPartialScanned
+                    ? 'Подтверждение приёмки с расхождением'
+                    : 'Подтверждение завершения приёмки'}
+                </h3>
               </div>
 
               <p className="text-sm text-gray-600">
-                Вы собираетесь окончательно завершить складскую приёмку для заказа{' '}
-                <strong className="text-gray-900">{state.orderNumber || state.return.id}</strong>.
+                {isZeroScanned ? (
+                  <>
+                    Вы подтверждаете завершение складской приёмки для заказа{' '}
+                    <strong className="text-gray-900">{state.orderNumber || state.return.id}</strong> без фактически
+                    полученного товара.
+                  </>
+                ) : (
+                  <>
+                    Вы собираетесь окончательно завершить складскую приёмку для заказа{' '}
+                    <strong className="text-gray-900">{state.orderNumber || state.return.id}</strong>.
+                  </>
+                )}
               </p>
 
               {/* Summary Breakdown */}
@@ -936,13 +1036,39 @@ export function AdminReturnReceiving() {
                 </div>
               </div>
 
-              <div className="p-3 bg-amber-50 text-amber-800 rounded-lg text-xs flex items-start space-x-2">
-                <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                <span>
-                  Это действие необратимо. Статус возврата перейдёт в «Товар принят на складе». Физические остатки на складе
-                  будут обновлены. Неполученные товары не оприходуются и не подлежат возврату средств. Возврат средств покупателю выполняется отдельным шагом.
-                </span>
-              </div>
+              {isZeroScanned ? (
+                <div className="p-3 bg-red-50 text-red-800 rounded-lg text-xs flex items-start space-x-2 border border-red-200">
+                  <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block font-semibold mb-0.5">Внимание: ни один товар не был принят!</strong>
+                    <span>
+                      Все запрашиваемые единицы ({state.totalRequested} шт.) будут зафиксированы как не полученные на склад.
+                      Товары не поступят на склад, а возврат денежных средств покупателю будет полностью заблокирован.
+                      Используйте это действие только в случае утери отправления или пустой посылки.
+                    </span>
+                  </div>
+                </div>
+              ) : isPartialScanned ? (
+                <div className="p-3 bg-amber-50 text-amber-800 rounded-lg text-xs flex items-start space-x-2 border border-amber-200">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block font-semibold mb-0.5">Внимание: приёмка с неполным количеством!</strong>
+                    <span>
+                      Принято {totalScannedUnits} из {state.totalRequested} шт. Неполученные единицы ({totalNotReceived} шт.)
+                      не будут оприходованы на склад. Возврат средств за неполученные товары производиться не будет.
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 text-amber-800 rounded-lg text-xs flex items-start space-x-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <span>
+                    Это действие необратимо. Статус возврата перейдёт в «Товар принят на складе». Физические остатки на
+                    складе будут обновлены. Неполученные товары не оприходуются и не подлежат возврату средств. Возврат
+                    средств покупателю выполняется отдельным шагом.
+                  </span>
+                </div>
+              )}
 
               <div className="flex justify-end space-x-3 pt-3 border-t">
                 <button
@@ -957,9 +1083,21 @@ export function AdminReturnReceiving() {
                   type="button"
                   onClick={handleFinalize}
                   disabled={isFinalizing}
-                  className="px-4 py-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg shadow-sm disabled:opacity-50 flex items-center"
+                  className={`px-4 py-2 text-sm font-bold text-white rounded-lg shadow-sm disabled:opacity-50 flex items-center ${
+                    isZeroScanned
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : isPartialScanned
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : 'bg-green-600 hover:bg-green-700'
+                  }`}
                 >
-                  {isFinalizing ? 'Завершение...' : 'Подтвердить и завершить'}
+                  {isFinalizing
+                    ? 'Завершение...'
+                    : isZeroScanned
+                    ? 'Подтвердить отсутствие товара и завершить'
+                    : isPartialScanned
+                    ? 'Подтвердить расхождение и завершить'
+                    : 'Подтвердить и завершить'}
                 </button>
               </div>
             </div>

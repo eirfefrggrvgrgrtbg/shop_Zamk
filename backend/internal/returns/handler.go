@@ -170,12 +170,34 @@ func (h *Handler) ListCustomerReturns(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListAdminReturns(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	returnsList, total, err := h.service.ListAdminReturns(r.Context(), page.Limit, page.Offset)
+
+	grantedRaw := r.Context().Value("grantedPermissions")
+	hasReturnsRead := false
+	if granted, ok := grantedRaw.(map[string]bool); ok {
+		hasReturnsRead = granted["returns.read"]
+	}
+	warehouseOnly := !hasReturnsRead
+
+	returnsList, total, err := h.service.ListAdminReturns(r.Context(), page.Limit, page.Offset, warehouseOnly)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list returns")
 		return
 	}
 
+	if !hasReturnsRead {
+		for i := range returnsList {
+			returnsList[i].CustomerName = nil
+			returnsList[i].CustomerEmail = nil
+			returnsList[i].CustomerPhone = nil
+			returnsList[i].Comment = nil
+			returnsList[i].AdminComment = nil
+			if returnsList[i].Shipment != nil {
+				returnsList[i].Shipment.CustomerName = nil
+				returnsList[i].Shipment.CustomerPhone = nil
+				returnsList[i].Shipment.PickupAddress = nil
+			}
+		}
+	}
 	resp := AdminReturnListResponse{Items: returnsList, TotalCount: total}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
@@ -197,6 +219,22 @@ func (h *Handler) GetAdminReturn(w http.ResponseWriter, r *http.Request) {
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get return")
 		return
+	}
+
+	grantedRaw := r.Context().Value("grantedPermissions")
+	if granted, ok := grantedRaw.(map[string]bool); ok {
+		if !granted["returns.read"] {
+			resp.CustomerName = nil
+			resp.CustomerEmail = nil
+			resp.CustomerPhone = nil
+			resp.Comment = nil
+			resp.AdminComment = nil
+			if resp.Shipment != nil {
+				resp.Shipment.CustomerName = nil
+				resp.Shipment.CustomerPhone = nil
+				resp.Shipment.PickupAddress = nil
+			}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -442,6 +480,14 @@ func (h *Handler) GetAdminReturnReceivingState(w http.ResponseWriter, r *http.Re
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get receiving state")
 		return
+	}
+
+	grantedRaw := r.Context().Value("grantedPermissions")
+	if granted, ok := grantedRaw.(map[string]bool); ok {
+		if !granted["returns.read"] {
+			state.Return.Comment = nil
+			state.Return.AdminComment = nil
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

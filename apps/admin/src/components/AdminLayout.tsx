@@ -157,7 +157,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     { name: 'Остатки / Склад', path: '/inventory', icon: Boxes, permission: 'inventory.read' },
     { name: 'Приемка поставок', path: '/supplies/receiving', icon: Truck, permission: 'inventory.read' },
     { name: 'Платежи покупателей', path: '/payments', icon: CreditCard, permission: 'payments.read' },
-    { name: 'Возвраты', path: '/returns', icon: RotateCcw, permission: 'returns.read' },
+    { name: 'Возвраты', path: '/returns', icon: RotateCcw, permission: ['returns.read', 'warehouse.returns'] },
     { name: 'Возмещения', path: '/refunds', icon: ReceiptText, permission: 'refunds.read' },
     { name: 'Выплаты продавцам', path: '/payouts', icon: Wallet, permission: 'payouts.read' },
   ];

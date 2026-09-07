@@ -126,7 +126,7 @@ func TestM531B_AdminClaimReadModelAndEvidence(t *testing.T) {
 	assert.Contains(t, it.Evidence[0].URL, "photo.jpg")
 
 	// 3. Assert ListAdminReturns includes return with items and evidence count
-	list, total, err := fix.svc.ListAdminReturns(ctx, 10, 0)
+	list, total, err := fix.svc.ListAdminReturns(ctx, 10, 0, false)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, total, 1)
 	require.NotEmpty(t, list)

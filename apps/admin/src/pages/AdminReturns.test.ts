@@ -1,4 +1,10 @@
-import { describe, it } from 'vitest';
+import React from 'react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { AdminReturns } from './AdminReturns';
+import * as AdminAuthContext from '../contexts/AdminAuthContext';
+import * as adminReturnsApi from '../api/adminReturns';
 import {
   getReturnReasonLabel,
   getReturnStatusLabel,
@@ -470,7 +476,12 @@ async function runAdminReturnsTests() {
   );
 
   // 17. Warehouse Receiving CTA Availability Matrix
-  const getWarehouseReceivingCTA = (status: string, shipmentStatus?: string) => {
+  const getWarehouseReceivingCTA = (status: string, shipmentStatus?: string, canReceiveWarehouse: boolean = true) => {
+    if (!canReceiveWarehouse) {
+      if (status === 'item_received') return 'Открыть результат приёмки';
+      if (status === 'receiving') return 'Посмотреть ход приёмки';
+      return null;
+    }
     if (status === 'approved') {
       if (shipmentStatus === 'arrived_at_zamk') return 'Начать приёмку на складе';
       return null;
@@ -488,7 +499,9 @@ async function runAdminReturnsTests() {
   assert(getWarehouseReceivingCTA('approved', 'in_transit') === null, 'approved with in_transit shipment must NOT have warehouse CTA');
   assert(getWarehouseReceivingCTA('approved', 'delivered_cdek_office') === null, 'approved with delivered_cdek_office must NOT have warehouse CTA');
   assert(getWarehouseReceivingCTA('approved', 'arrived_at_zamk') === 'Начать приёмку на складе', 'approved with arrived_at_zamk MUST offer Начать приёмку на складе');
+  assert(getWarehouseReceivingCTA('approved', 'arrived_at_zamk', false) === null, 'Support role without warehouse.returns MUST NOT have Начать приёмку CTA');
   assert(getWarehouseReceivingCTA('receiving') === 'Продолжить приёмку', 'receiving status MUST offer Продолжить приёмку');
+  assert(getWarehouseReceivingCTA('receiving', undefined, false) === 'Посмотреть ход приёмки', 'Support role must see read-only progress link for receiving');
   assert(getWarehouseReceivingCTA('item_received') === 'Открыть результат приёмки', 'item_received status MUST offer Открыть результат приёмки');
   assert(getWarehouseReceivingCTA('rejected') === null, 'rejected status must NOT have warehouse CTA');
   assert(getWarehouseReceivingCTA('refunded') === null, 'refunded status must NOT have warehouse CTA');
@@ -661,10 +674,10 @@ async function runAdminReturnsTests() {
   assert(getReturnLogisticsBadgeClass('arrived_at_zamk').includes('blue'), 'Arrived badge must use blue emphasis');
   assert(getReturnLogisticsBadgeClass(null).includes('gray'), 'Null logistics badge must use muted styling');
 
-  const getListRowAction = (r: AdminReturn) => {
+  const getListRowAction = (r: AdminReturn, canReceiveWarehouse: boolean = true) => {
     const effectiveShipmentStatus = r.shipmentStatus || r.shipment?.status || null;
     const isWarehouseReady = r.status === 'approved' && effectiveShipmentStatus === 'arrived_at_zamk';
-    return isWarehouseReady ? 'Принять на складе' : 'Рассмотреть';
+    return isWarehouseReady && canReceiveWarehouse ? 'Принять на складе' : 'Рассмотреть';
   };
 
   // Matrix Case 1: approved + no shipment
@@ -682,10 +695,13 @@ async function runAdminReturnsTests() {
   assert(getReturnLogisticsLabel(appInTransit.shipmentStatus) === 'В пути', 'In transit must render В пути');
   assert(getListRowAction(appInTransit) === 'Рассмотреть', 'Approved in transit is not warehouse-ready');
 
-  // Matrix Case 4: approved + arrived_at_zamk (Warehouse Ready!)
+  // Matrix Case 4: approved + arrived_at_zamk
   const appArrived: AdminReturn = { ...sampleReturnWithEvidence, status: 'approved', shipmentStatus: 'arrived_at_zamk' };
   assert(getReturnLogisticsLabel(appArrived.shipmentStatus) === 'Прибыл на склад', 'Arrived at ZAMK must render Прибыл на склад');
-  assert(getListRowAction(appArrived) === 'Принять на складе', 'Approved + arrived_at_zamk MUST show Принять на складе action');
+  // 4A: Warehouse operator sees active warehouse action
+  assert(getListRowAction(appArrived, true) === 'Принять на складе', 'Approved + arrived_at_zamk MUST show Принять на складе action for Warehouse');
+  // 4B: Support staff without warehouse.returns sees neutral review action
+  assert(getListRowAction(appArrived, false) === 'Рассмотреть', 'Approved + arrived_at_zamk MUST show Рассмотреть and NOT Принять на складе for Support');
 
   // Matrix Case 5: rejected + arrived_at_zamk (Must NOT be warehouse-ready)
   const rejArrived: AdminReturn = { ...sampleReturnWithEvidence, status: 'rejected', shipmentStatus: 'arrived_at_zamk' };
@@ -799,5 +815,186 @@ async function runAdminReturnsTests() {
 describe('Admin Returns Contract & State Logic', () => {
   it('passes all canonical logic, receiving matrix, and refund mapping assertions', async () => {
     await runAdminReturnsTests();
+  });
+});
+
+describe('AdminReturns Component RBAC — Support vs Warehouse Boundary', () => {
+  const mockArrivedReturn: AdminReturn = {
+    id: 'ret-100196-id',
+    orderId: 'ord-100196-id',
+    orderNumber: 'ORD-100196',
+    status: 'approved',
+    reason: 'defective',
+    customerName: 'Ekaterina Petrova',
+    customerEmail: 'support-test@zamk.local',
+    createdAt: '2026-09-01T10:00:00Z',
+    shipmentStatus: 'arrived_at_zamk',
+    shipment: {
+      id: 'ship-100196',
+      provider: 'cdek',
+      method: 'cdek_office',
+      status: 'arrived_at_zamk',
+      trackingNumber: 'TRK-100196',
+    },
+    items: [
+      {
+        id: 'ri-1',
+        orderItemId: 'oi-1',
+        productTitle: 'Dev Silk Dress',
+        quantity: 1,
+        priceCents: 850000,
+        subtotalPriceCents: 850000,
+      },
+    ],
+  };
+
+  const mockInTransitReturn: AdminReturn = {
+    id: 'ret-100199-transit-id',
+    orderId: 'ord-uuid-transit',
+    orderNumber: 'ORD-100199-TRANSIT',
+    fulfillmentId: 'ful-transit-id',
+    status: 'approved',
+    reason: 'size_fit',
+    comment: 'Too small',
+    customerName: 'Ekaterina Transit',
+    customerEmail: 'ekaterina@zamk.local',
+    customerPhone: '+79998887766',
+    shipmentStatus: 'in_transit',
+    shipmentMethod: 'cdek_office',
+    shipment: {
+      id: 'ship-100199',
+      provider: 'cdek',
+      method: 'cdek_office',
+      status: 'in_transit',
+      trackingNumber: 'TRK-100199',
+    },
+    items: [
+      {
+        id: 'ri-transit',
+        orderItemId: 'oi-transit',
+        productTitle: 'In Transit Jacket',
+        quantity: 1,
+        priceCents: 500000,
+        subtotalPriceCents: 500000,
+      },
+    ],
+  };
+
+  it('SUPPORT (returns.read + returns.update_status, NO warehouse.returns): full support list visible (arrived + in_transit), PII present, no warehouse CTA', async () => {
+    vi.spyOn(AdminAuthContext, 'useAdminAuth').mockReturnValue({
+      user: { id: 'support-user-id', email: 'support@test.local', role: 'admin', name: 'Support Test', status: 'active' },
+      staff: null,
+      permissions: ['returns.read', 'returns.update_status'],
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+      hasPermission: (p: string) => p === 'returns.read' || p === 'returns.update_status',
+      hasAnyPermission: (ps: string[]) => ps.some((p) => p === 'returns.read' || p === 'returns.update_status'),
+      isOwner: () => false,
+      isCoOwner: () => false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshSession: vi.fn(),
+      changePassword: vi.fn(),
+      reloadStaff: vi.fn(),
+    });
+
+    vi.spyOn(adminReturnsApi, 'getAdminReturns').mockResolvedValue([mockArrivedReturn, mockInTransitReturn]);
+    const getDetailSpy = vi.spyOn(adminReturnsApi, 'getAdminReturn').mockResolvedValue(mockArrivedReturn);
+    vi.spyOn(adminReturnsApi, 'getAdminReturnRefundQuote').mockRejectedValue(new Error('No quote'));
+
+    render(React.createElement(MemoryRouter, null, React.createElement(AdminReturns)));
+
+    await waitFor(() => {
+      // Both arrived and non-arrived returns must be visible to Support:
+      expect(screen.getByText('ORD-100196')).toBeDefined();
+      expect(screen.getByText('Dev Silk Dress')).toBeDefined();
+      expect(screen.getByText('Прибыл на склад')).toBeDefined();
+
+      expect(screen.getByText('ORD-100199-TRANSIT')).toBeDefined();
+      expect(screen.getByText('In Transit Jacket')).toBeDefined();
+      expect(screen.getByText('В пути')).toBeDefined();
+
+      // Support sees customer identities:
+      expect(screen.getByText('Ekaterina Petrova')).toBeDefined();
+      expect(screen.getByText('Ekaterina Transit')).toBeDefined();
+    });
+
+    // CRITICAL RBAC PROOF: Active warehouse receiving CTA "Принять на складе" is NOT rendered for Support on any row
+    expect(screen.queryByRole('link', { name: /Принять на складе/i })).toBeNull();
+
+    // Instead, neutral review buttons "Рассмотреть" ARE rendered
+    const reviewButtons = screen.getAllByRole('button', { name: /Рассмотреть/i });
+    expect(reviewButtons.length).toBe(2);
+
+    // Support can click "Рассмотреть" to open detail drawer and review return
+    fireEvent.click(reviewButtons[0]);
+
+    await waitFor(() => {
+      expect(getDetailSpy).toHaveBeenCalledWith('ret-100196-id');
+    });
+
+    // In detail drawer, warehouse CTA "Начать приёмку на складе" must ALSO be absent for Support
+    expect(screen.queryByRole('link', { name: /Начать приёмку на складе/i })).toBeNull();
+  });
+
+  it('WAREHOUSE (warehouse.returns ONLY): arrived return visible with active CTA, customer PII absent, non-arrived approved return filtered out', async () => {
+    vi.spyOn(AdminAuthContext, 'useAdminAuth').mockReturnValue({
+      user: { id: 'wh-user-id', email: 'warehouse@test.local', role: 'admin', name: 'Warehouse Test', status: 'active' },
+      staff: null,
+      permissions: ['warehouse.returns'],
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+      hasPermission: (p: string) => p === 'warehouse.returns',
+      hasAnyPermission: (ps: string[]) => ps.some((p) => p === 'warehouse.returns'),
+      isOwner: () => false,
+      isCoOwner: () => false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshSession: vi.fn(),
+      changePassword: vi.fn(),
+      reloadStaff: vi.fn(),
+    });
+
+    // Backend mock represents the server-side filtered warehouse list:
+    // Only approved+arrived_at_zamk is returned; non-arrived returns are excluded at backend.
+    const sanitizedArrivedReturn: AdminReturn = {
+      ...mockArrivedReturn,
+      customerName: undefined,
+      customerEmail: undefined,
+      customerPhone: undefined,
+      comment: undefined,
+      adminComment: undefined,
+      shipment: {
+        ...mockArrivedReturn.shipment!,
+        customerName: undefined,
+        customerPhone: undefined,
+        pickupAddress: undefined,
+      },
+    };
+
+    vi.spyOn(adminReturnsApi, 'getAdminReturns').mockResolvedValue([sanitizedArrivedReturn]);
+
+    render(React.createElement(MemoryRouter, null, React.createElement(AdminReturns)));
+
+    await waitFor(() => {
+      expect(screen.getByText('ORD-100196')).toBeDefined();
+      expect(screen.getByText('Dev Silk Dress')).toBeDefined();
+      expect(screen.getByText('Прибыл на склад')).toBeDefined();
+    });
+
+    // 1. Non-arrived return is NOT rendered (server-side filtered):
+    expect(screen.queryByText('ORD-100199-TRANSIT')).toBeNull();
+    expect(screen.queryByText('In Transit Jacket')).toBeNull();
+
+    // 2. Customer PII is completely absent from DOM:
+    expect(screen.queryByText('Ekaterina Petrova')).toBeNull();
+    expect(screen.queryByText('support-test@zamk.local')).toBeNull();
+
+    // 3. Warehouse operator sees active "Принять на складе" CTA linking to receiving:
+    const warehouseCta = screen.getByRole('link', { name: /Принять на складе/i });
+    expect(warehouseCta).toBeDefined();
+    expect(warehouseCta.getAttribute('href')).toBe('/returns/ret-100196-id/receiving');
   });
 });
