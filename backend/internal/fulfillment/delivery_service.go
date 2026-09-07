@@ -2,6 +2,7 @@ package fulfillment
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -28,6 +29,13 @@ func (s *Service) DeliverShipment(ctx context.Context, adminID, shipmentID uuid.
 		}
 		res.OrderStatus = orderStatus
 		result = res
+
+		if s.payouts != nil {
+			if err := s.payouts.CreatePendingSalesForFulfillmentTx(ctx, tx, res.FulfillmentID); err != nil {
+				return fmt.Errorf("payouts.CreatePendingSalesForFulfillmentTx: %w", err)
+			}
+		}
+
 
 		if s.notifSvc != nil {
 			// Customer notification

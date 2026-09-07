@@ -2,6 +2,7 @@ package payouts
 
 import (
 	"context"
+	"fmt"
 	"errors"
 	"log"
 	"time"
@@ -76,6 +77,59 @@ func (s *Service) ListCommissionHistory(ctx context.Context, sellerID uuid.UUID)
 }
 
 // --- Orders & Finances ---
+
+func (s *Service) CreatePendingSalesForFulfillmentTx(ctx context.Context, tx pgx.Tx, fulfillmentID uuid.UUID) error {
+	query := `
+		SELECT id, order_id, seller_id, price_cents, quantity
+		FROM order_items
+		WHERE order_fulfillment_id = $1
+	`
+	rows, err := tx.Query(ctx, query, fulfillmentID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch order items for fulfillment: %w", err)
+	}
+	defer rows.Close()
+
+	type itemData struct {
+		ID         uuid.UUID
+		OrderID    uuid.UUID
+		SellerID   uuid.UUID
+		PriceCents int64
+		Quantity   int
+	}
+	var items []itemData
+	for rows.Next() {
+		var i itemData
+		if err := rows.Scan(&i.ID, &i.OrderID, &i.SellerID, &i.PriceCents, &i.Quantity); err != nil {
+			return fmt.Errorf("failed to scan order item: %w", err)
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("order items rows err: %w", err)
+	}
+
+	nowTime := time.Now()
+	for _, item := range items {
+		rateBPS, err := s.GetActiveCommissionRateBPS(ctx, item.SellerID)
+		if err != nil {
+			return fmt.Errorf("failed to get commission rate: %w", err)
+		}
+
+		grossCents := int64(item.PriceCents) * int64(item.Quantity)
+		commCents := (grossCents * int64(rateBPS)) / 10000
+		netCents := grossCents - commCents
+
+		// 1. Gross Sale
+		if err := s.repo.CreateLedgerEntryTx(ctx, tx, &SellerLedgerEntry{ID: uuid.New(), SellerID: item.SellerID, OrderID: &item.OrderID, OrderItemID: &item.ID, Type: "sale_gross", AmountCents: grossCents, Currency: "RUB", CreatedAt: nowTime}); err != nil { return err }
+		// 2. Commission
+		if err := s.repo.CreateLedgerEntryTx(ctx, tx, &SellerLedgerEntry{ID: uuid.New(), SellerID: item.SellerID, OrderID: &item.OrderID, OrderItemID: &item.ID, Type: "zamk_commission", AmountCents: -commCents, Currency: "RUB", CreatedAt: nowTime}); err != nil { return err }
+		// 3. Seller Net Earning
+		if err := s.repo.CreateLedgerEntryTx(ctx, tx, &SellerLedgerEntry{ID: uuid.New(), SellerID: item.SellerID, OrderID: &item.OrderID, OrderItemID: &item.ID, Type: "seller_earning", AmountCents: netCents, Currency: "RUB", CreatedAt: nowTime}); err != nil { return err }
+	}
+	return nil
+}
+
 func (s *Service) CreatePendingSalesForOrder(ctx context.Context, orderID uuid.UUID) error {
 	// Called when order is fulfilled. We snapshot the order items into ledger.
 	order, err := s.orders.GetOrder(ctx, orderID)

@@ -2,6 +2,7 @@ package fulfillment_test
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5"
 	"os"
 	"testing"
 	"time"
@@ -14,6 +15,10 @@ import (
 
 // mockPayoutsService implements payoutsService for testing
 type mockPayoutsService struct{}
+
+func (m *mockPayoutsService) CreatePendingSalesForFulfillmentTx(ctx context.Context, tx pgx.Tx, fulfillmentID uuid.UUID) error {
+	return nil
+}
 func (m *mockPayoutsService) CreatePendingSalesForOrder(ctx context.Context, orderID uuid.UUID) error {
 	return nil
 }
