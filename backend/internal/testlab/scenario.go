@@ -96,7 +96,7 @@ func (e *ScenarioEngine) Run(ctx context.Context, adminUserID uuid.UUID, cfg Sce
 		}
 
 		// 1. Create a basic product
-		product, err := e.createCanonicalProduct(ctx, adminUserID, ownerUserID, runID, 150000, 10)
+		product, err := e.createCanonicalProduct(ctx, adminUserID, ownerUserID, runID, 150000)
 		if err != nil {
 			return nil, err
 		}
@@ -176,7 +176,7 @@ func (e *ScenarioEngine) Run(ctx context.Context, adminUserID uuid.UUID, cfg Sce
 
 	case PresetZeroCurrentPeriod:
 		// 1. Create a product with 0 stock (we don't need stock for historical orders if we just simulate it, but we can use 2)
-		product, err := e.createCanonicalProduct(ctx, adminUserID, ownerUserID, runID, 250000, 2)
+		product, err := e.createCanonicalProduct(ctx, adminUserID, ownerUserID, runID, 250000)
 		if err != nil {
 			return nil, err
 		}
@@ -252,7 +252,7 @@ func (e *ScenarioEngine) Run(ctx context.Context, adminUserID uuid.UUID, cfg Sce
 
 	case PresetInventoryAndInbound:
 		// Required: onHand=20, reserved=4, available=16, inbound=10
-		product, err := e.createCanonicalProduct(ctx, adminUserID, ownerUserID, runID, 150000, 20)
+		product, err := e.createCanonicalProduct(ctx, adminUserID, ownerUserID, runID, 150000)
 		if err != nil {
 			return nil, err
 		}
@@ -371,7 +371,7 @@ func (e *ScenarioEngine) createCanonicalBuyer(ctx context.Context, runID string)
 	return buyerUser.ID, err
 }
 
-func (e *ScenarioEngine) createCanonicalProduct(ctx context.Context, adminUserID, ownerUserID uuid.UUID, runID string, priceCents int64, initStock int) (products.Product, error) {
+func (e *ScenarioEngine) createCanonicalProduct(ctx context.Context, adminUserID, ownerUserID uuid.UUID, runID string, priceCents int64) (products.Product, error) {
 	sku := uuid.New().String()[:8]
 	size := "M"
 
@@ -381,10 +381,9 @@ func (e *ScenarioEngine) createCanonicalProduct(ctx context.Context, adminUserID
 		Currency:   "RUB",
 		Variants: []products.ProductVariantRequest{
 			{
-				SKU:          &sku,
-				Size:         &size,
-				PriceCents:   &priceCents,
-				InitialStock: &initStock,
+				SKU:        &sku,
+				Size:       &size,
+				PriceCents: &priceCents,
 			},
 		},
 	}

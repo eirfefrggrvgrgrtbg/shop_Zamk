@@ -106,7 +106,6 @@ type ProductVariant struct {
 	PriceCents         *int64    `json:"priceCents,omitempty"`
 	IsActive           bool      `json:"isActive"`
 	InStock            *bool     `json:"inStock,omitempty"`
-	InitialStock       *int      `json:"initialStock,omitempty"`
 	HasInventoryRecord bool      `json:"hasInventoryRecord"`
 	TotalStock         int       `json:"totalStock"`
 	ReservedStock      int       `json:"reservedStock"`

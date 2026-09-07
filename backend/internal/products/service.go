@@ -178,7 +178,6 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 			ShadeName:    vr.ShadeName,
 			Barcode:      nil, // Seller cannot provide barcode
 			PriceCents:   vr.PriceCents,
-			InitialStock: vr.InitialStock,
 			IsActive:     true,
 			CreatedAt:    now,
 			UpdatedAt:    now,
@@ -502,7 +501,6 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				ShadeName:    vr.ShadeName,
 				Barcode:      barcode,
 				PriceCents:   vr.PriceCents,
-				InitialStock: vr.InitialStock,
 				IsActive:     true,
 				CreatedAt:    now,
 				UpdatedAt:    now,

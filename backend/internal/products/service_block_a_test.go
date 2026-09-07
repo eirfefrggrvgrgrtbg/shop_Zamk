@@ -1,9 +1,9 @@
 package products_test
 
 import (
-	"fmt"
-
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -124,23 +124,77 @@ require.Error(t, err)
 }
 
 func TestBlockAProductCreationNoInitialStock(t *testing.T) {
-    db, svc, userID := setupBlockATestDB(t)
+	db, svc, userID := setupBlockATestDB(t)
 	defer db.Close()
 	ctx := context.Background()
 
-    req := products.CreateProductRequest{
+	// 1. Seller creates product normally without InitialStock
+	req := products.CreateProductRequest{
 		Title: "Test Stock Product " + uuid.New().String(),
-        Variants: []products.ProductVariantRequest{
-            { SKU: ptr("STK-1"), PriceCents: func() *int64 { v := int64(1000); return &v }(), InitialStock: func() *int { v := 100; return &v }() },
-        },
+		Variants: []products.ProductVariantRequest{
+			{SKU: ptr("STK-1"), PriceCents: ptr(int64(1000))},
+		},
 	}
-    p, err := svc.CreateProductForSeller(ctx, userID, req)
-    require.NoError(t, err)
-    
-    var count int
-    err = db.Pool.QueryRow(ctx, "SELECT count(*) FROM inventory_items WHERE product_id = $1", p.ID).Scan(&count)
-    require.NoError(t, err)
-    assert.Equal(t, 0, count, "Product creation must NOT seed stock in V1")
+	p, err := svc.CreateProductForSeller(ctx, userID, req)
+	require.NoError(t, err)
+
+	// 2. No inventory_items stock is created
+	var invCount int
+	err = db.Pool.QueryRow(ctx, "SELECT count(*) FROM inventory_items WHERE product_id = $1", p.ID).Scan(&invCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, invCount, "Product creation must NOT seed inventory_items")
+
+	// 3. No inventory_units / ZMU is created
+	var unitCount int
+	err = db.Pool.QueryRow(ctx, "SELECT count(*) FROM inventory_units iu JOIN product_variants pv ON iu.product_variant_id = pv.id WHERE pv.product_id = $1", p.ID).Scan(&unitCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, unitCount, "Product creation must NOT create inventory_units")
+
+	// 4. Seller updates commercial product normally without InitialStock
+	newTitle := "Updated Title " + uuid.New().String()
+	updateReq := products.UpdateProductRequest{
+		Title: &newTitle,
+		Variants: []products.ProductVariantRequest{
+			{ID: ptr(p.Variants[0].ID), SKU: ptr("STK-1-UPDATED"), PriceCents: ptr(int64(1200))},
+		},
+	}
+	updated, err := svc.UpdateProductForSeller(ctx, userID, p.ID, updateReq)
+	require.NoError(t, err)
+	assert.Equal(t, newTitle, updated.Title)
+
+	// Verify stock remains 0 after update
+	err = db.Pool.QueryRow(ctx, "SELECT count(*) FROM inventory_items WHERE product_id = $1", p.ID).Scan(&invCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, invCount, "Product update must NOT seed inventory_items")
+
+	// 5. Raw JSON request containing legacy initialStock is safely ignored without creating stock
+	rawJSON := fmt.Sprintf(`{
+		"title": "Raw Legacy Product %s",
+		"variants": [
+			{
+				"sku": "RAW-LEGACY-1",
+				"priceCents": 2000,
+				"initialStock": 500
+			}
+		]
+	}`, uuid.New().String())
+
+	var rawReq products.CreateProductRequest
+	err = json.Unmarshal([]byte(rawJSON), &rawReq)
+	require.NoError(t, err, "Raw JSON with initialStock must be parsed without error (ignored unknown field)")
+
+	rawProd, err := svc.CreateProductForSeller(ctx, userID, rawReq)
+	require.NoError(t, err)
+
+	var rawInvCount int
+	err = db.Pool.QueryRow(ctx, "SELECT count(*) FROM inventory_items WHERE product_id = $1", rawProd.ID).Scan(&rawInvCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rawInvCount, "Raw initialStock in JSON must have zero effect on inventory_items")
+
+	var rawUnitCount int
+	err = db.Pool.QueryRow(ctx, "SELECT count(*) FROM inventory_units iu JOIN product_variants pv ON iu.product_variant_id = pv.id WHERE pv.product_id = $1", rawProd.ID).Scan(&rawUnitCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, rawUnitCount, "Raw initialStock in JSON must have zero effect on inventory_units")
 }
 
 func TestBlockAMaterialCompositionValidation(t *testing.T) {

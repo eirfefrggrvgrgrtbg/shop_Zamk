@@ -102,7 +102,6 @@ type ProductVariantRequest struct {
 	Barcode      *string `json:"barcode,omitempty"`
 	Attributes   []VariantAttributeValueRequest `json:"attributes,omitempty"`
 	PriceCents   *int64  `json:"priceCents,omitempty" validate:"omitempty,min=0"`
-	InitialStock *int    `json:"initialStock,omitempty" validate:"omitempty,min=0"`
 }
 
 type ProductImageRequest struct {
