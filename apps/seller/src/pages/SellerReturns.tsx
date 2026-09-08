@@ -102,7 +102,7 @@ export function SellerReturns() {
                   <th className="p-4 font-medium">Заказ</th>
                   <th className="p-4 font-medium">Дата возврата</th>
                   <th className="p-4 font-medium">Статус</th>
-                  <th className="p-4 font-medium text-right">Сумма возврата</th>
+                  <th className="p-4 font-medium text-right">Финансовая корректировка</th>
                 </tr>
               </thead>
               <tbody>
@@ -162,7 +162,13 @@ export function SellerReturns() {
                         </div>
                       </td>
                       <td className="p-4 font-semibold text-graphite dark:text-white text-right">
-                        {currencyFormatter.format(ret.subtotalPriceCents / 100)}
+                        {ret.financialAdjustment ? (
+                          <span className="text-red-600 dark:text-red-400">
+                            −{currencyFormatter.format(ret.financialAdjustment.deductionCents / 100)}
+                          </span>
+                        ) : (
+                          <span className="text-ash font-normal">—</span>
+                        )}
                       </td>
                     </tr>
                   );

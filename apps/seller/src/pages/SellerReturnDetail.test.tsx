@@ -34,8 +34,11 @@ describe('SellerReturnDetail Component (SA.3)', () => {
       priceCents: 1500000,
       subtotalPriceCents: 1500000,
       restock: true,
-      financialAdjustmentCents: 1500000,
-      financialImpactType: 'available',
+      financialAdjustment: {
+        deductionCents: 1500000,
+        context: 'available',
+        adjustedAt: '2026-09-01T14:00:00Z',
+      },
       createdAt: '2026-09-01T10:00:00Z',
       updatedAt: '2026-09-01T14:00:00Z',
       arrivedAtZamk: true,
@@ -96,7 +99,8 @@ describe('SellerReturnDetail Component (SA.3)', () => {
     expect(screen.getByTestId('seller-outcome-meaning').textContent).not.toMatch(/удержан|списан|потеряли/i);
 
     // Financial adjustment assertion
-    expect(screen.getByText('Удержание из доступного баланса')).toBeTruthy();
+    expect(screen.getByText('Корректировка доступного баланса')).toBeTruthy();
+    expect(screen.getByText(/−15\s?000/)).toBeTruthy();
   });
 
   it('2. damaged physical outcome renders with defective breakdown', async () => {
@@ -114,8 +118,11 @@ describe('SellerReturnDetail Component (SA.3)', () => {
       priceCents: 500000,
       subtotalPriceCents: 500000,
       restock: false,
-      financialAdjustmentCents: 500000,
-      financialImpactType: 'debt',
+      financialAdjustment: {
+        deductionCents: 500000,
+        context: 'post_payout',
+        adjustedAt: '2026-09-02T14:00:00Z',
+      },
       createdAt: '2026-09-02T10:00:00Z',
       updatedAt: '2026-09-02T14:00:00Z',
       arrivedAtZamk: true,
@@ -153,7 +160,10 @@ describe('SellerReturnDetail Component (SA.3)', () => {
     expect(screen.getByText('Повреждён (брак)')).toBeTruthy();
     expect(screen.getByText('Брак / повреждён')).toBeTruthy();
     expect(screen.getByText('ZMU-DAMAGED99999')).toBeTruthy();
-    expect(screen.getByText('Сумма будет удержана из будущих выплат.')).toBeTruthy();
+    expect(screen.getByText('Корректировка после выплаты')).toBeTruthy();
+    expect(screen.getByText(/−5\s?000/)).toBeTruthy();
+    expect(screen.queryByText(/будет удержана из будущих выплат/i)).toBeNull();
+    expect(screen.queryByText(/долг/i)).toBeNull();
 
     // Human-readable reason mapping check
     expect(screen.getByText('Товар повреждён')).toBeTruthy();
@@ -216,7 +226,7 @@ describe('SellerReturnDetail Component (SA.3)', () => {
 
     expect(screen.getByText('Проверяется на складе ZAMK')).toBeTruthy();
     expect(screen.getByText(/Начало приёмки:/)).toBeTruthy();
-    expect(screen.getByText('Удержание пока не сформировано')).toBeTruthy();
+    expect(screen.getByText('Финансовая корректировка не сформирована')).toBeTruthy();
 
     // High-priority Seller Business Outcome Meaning (SA.3 UX gap)
     expect(screen.getByTestId('seller-outcome-meaning')).toBeTruthy();
@@ -249,8 +259,11 @@ describe('SellerReturnDetail Component (SA.3)', () => {
       priceCents: 300000,
       subtotalPriceCents: 600000,
       restock: true,
-      financialAdjustmentCents: 600000,
-      financialImpactType: 'frozen',
+      financialAdjustment: {
+        deductionCents: 600000,
+        context: 'hold',
+        adjustedAt: '2026-09-04T11:05:00Z',
+      },
       createdAt: '2026-09-04T10:00:00Z',
       updatedAt: '2026-09-04T14:00:00Z',
       arrivedAtZamk: true,
@@ -295,7 +308,8 @@ describe('SellerReturnDetail Component (SA.3)', () => {
     expect(screen.getByText('ZMU-SCARF-DMG-2')).toBeTruthy();
     expect(screen.getAllByText('В продажу').length).toBeGreaterThan(0);
     expect(screen.getByText('Брак / повреждён')).toBeTruthy();
-    expect(screen.getByText('Удержание из замороженных средств')).toBeTruthy();
+    expect(screen.getByText('Корректировка замороженных средств')).toBeTruthy();
+    expect(screen.getByText(/−6\s?000/)).toBeTruthy();
 
     // High-priority Seller Business Outcome Meaning (SA.3 UX gap)
     expect(screen.getByTestId('seller-outcome-meaning')).toBeTruthy();
@@ -700,5 +714,49 @@ describe('SellerReturnDetail Component (SA.3)', () => {
     expect(getReturnPresentationMode({ status: 'completed', physicalOutcome: 'rejected', inspectionCompleted: true })).toBe('FINAL_OUTCOME');
     expect(getReturnPresentationMode({ status: 'completed', physicalOutcome: 'not_received', inspectionCompleted: true })).toBe('FINAL_OUTCOME');
     expect(getReturnPresentationMode({ status: 'completed', physicalOutcome: 'partial_restock', inspectionCompleted: true })).toBe('FINAL_OUTCOME');
+  });
+
+  it('13. absent financialAdjustment renders truthful absence state without fake 0 ₽', async () => {
+    const mockReturn: SellerReturn = {
+      returnItemId: 'item-113',
+      returnId: 'ret-113',
+      orderId: 'ord-113',
+      orderNumber: 'ORD-100113',
+      orderItemId: 'oi-113',
+      status: 'needs_info',
+      quantity: 1,
+      productTitle: 'Dev Silk Scarf',
+      priceCents: 800000,
+      subtotalPriceCents: 800000,
+      restock: false,
+      financialAdjustment: null,
+      createdAt: '2026-09-07T14:00:00Z',
+      updatedAt: '2026-09-07T15:00:00Z',
+      arrivedAtZamk: false,
+      inspectionCompleted: false,
+      physicalOutcome: 'needs_info',
+      restockedQuantity: 0,
+      damagedQuantity: 0,
+      rejectedQuantity: 0,
+      notReceivedQuantity: 0,
+      processingStatus: 'needs_info',
+    };
+
+    vi.mocked(sellerApi.getSellerReturn).mockResolvedValue({ items: [mockReturn] } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/returns/ret-113']}>
+        <Routes>
+          <Route path="/returns/:id" element={<SellerReturnDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/ORD-100113/)).toBeTruthy();
+    });
+
+    expect(screen.getByText('Финансовая корректировка не сформирована')).toBeTruthy();
+    expect(screen.queryByText(/(?:^|\s)0\s?₽/)).toBeNull();
   });
 });

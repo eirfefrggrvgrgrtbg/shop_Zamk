@@ -644,22 +644,22 @@ export function SellerReturnDetail() {
                 {/* Section 3: Financial adjustment */}
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-ash mb-3">Финансовый результат</h4>
-                  {item.financialAdjustmentCents != null ? (
-                    <div className="flex items-start gap-3 bg-red-50/50 p-4 rounded-xl border border-red-100">
+                  {item.financialAdjustment ? (
+                    <div className="flex items-start gap-3 bg-red-50/50 dark:bg-red-950/20 p-4 rounded-xl border border-red-100 dark:border-red-900/30">
                       <div className="text-sm">
-                        <p className="font-bold text-red-600">
-                          {currencyFormatter.format(item.financialAdjustmentCents / 100)}
+                        <p className="font-bold text-red-600 dark:text-red-400">
+                          −{currencyFormatter.format(item.financialAdjustment.deductionCents / 100)}
                         </p>
-                        <p className="text-red-800/80 mt-1 text-xs font-medium">
-                          {item.financialImpactType === 'frozen' && 'Удержание из замороженных средств'}
-                          {item.financialImpactType === 'available' && 'Удержание из доступного баланса'}
-                          {item.financialImpactType === 'debt' && 'Сумма будет удержана из будущих выплат.'}
+                        <p className="text-red-800/80 dark:text-red-300/80 mt-1 text-xs font-medium">
+                          {item.financialAdjustment.context === 'hold' && 'Корректировка замороженных средств'}
+                          {item.financialAdjustment.context === 'available' && 'Корректировка доступного баланса'}
+                          {item.financialAdjustment.context === 'post_payout' && 'Корректировка после выплаты'}
                         </p>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-sm text-graphite-light italic bg-gray-50/50 p-4 rounded-xl border border-gray-100">
-                      Удержание пока не сформировано
+                    <div className="text-sm text-graphite-light dark:text-white/60 italic bg-gray-50/50 dark:bg-white/5 p-4 rounded-xl border border-gray-100 dark:border-white/10">
+                      Финансовая корректировка не сформирована
                     </div>
                   )}
                 </div>

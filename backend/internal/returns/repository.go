@@ -770,13 +770,15 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 			r.status, ri.quantity, ri.reason, ri.condition,
 			oi.title, oi.variant_size, oi.variant_color, oi.sku, oi.image_url, oi.price_cents, (oi.price_cents * ri.quantity),
 			ri.restock,
-			(SELECT amount_cents FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
-			(SELECT CASE
-				WHEN sle.metadata->>'reason' = 'return_post_payout' THEN 'debt'
-				WHEN sle.available_at IS NULL THEN 'debt'
-				WHEN sle.available_at > now() THEN 'frozen'
-				ELSE 'available' END
-			FROM seller_ledger_entries sle WHERE sle.order_item_id = oi.id AND sle.type = 'adjustment' AND sle.metadata->>'return_id' = r.id::text LIMIT 1),
+			adj.amount_cents,
+			CASE
+				WHEN adj.amount_cents IS NULL THEN NULL
+				WHEN adj.reason = 'return_post_payout' THEN 'post_payout'
+				WHEN COALESCE(adj.adjustment_available_at, se.available_at) IS NOT NULL
+				     AND adj.adjusted_at < COALESCE(adj.adjustment_available_at, se.available_at) THEN 'hold'
+				ELSE 'available'
+			END,
+			adj.adjusted_at,
 			r.created_at, r.updated_at,
 			r.receiving_started_at, r.completed_at,
 			rs.status, rs.tracking_number, rs.method,
@@ -786,6 +788,28 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 		JOIN returns r ON r.id = ri.return_id
 		JOIN order_items oi ON oi.id = ri.order_item_id
 		JOIN orders o ON o.id = r.order_id
+		LEFT JOIN LATERAL (
+			SELECT available_at, payout_batch_id
+			FROM seller_ledger_entries
+			WHERE order_item_id = oi.id AND type = 'seller_earning'
+			ORDER BY created_at DESC, id DESC
+			LIMIT 1
+		) se ON true
+		LEFT JOIN LATERAL (
+			SELECT
+				sle.amount_cents,
+				sle.created_at AS adjusted_at,
+				sle.metadata->>'reason' AS reason,
+				sle.available_at AS adjustment_available_at
+			FROM seller_ledger_entries sle
+			WHERE sle.order_item_id = oi.id
+			  AND sle.type = 'adjustment'
+			  AND sle.metadata->>'return_id' = r.id::text
+			  AND sle.metadata->>'reason' IN ('return_deduction', 'return_post_payout')
+			  AND sle.amount_cents < 0
+			ORDER BY sle.created_at DESC, sle.id DESC
+			LIMIT 1
+		) adj ON true
 		LEFT JOIN LATERAL (
 			SELECT status, tracking_number, method
 			FROM return_shipments
@@ -808,6 +832,9 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 	type rawItem struct {
 		item               SellerReturnItem
 		rawRestock         bool
+		adjAmountCents     *int64
+		adjContext         *string
+		adjAdjustedAt      *time.Time
 		receivingStartedAt *time.Time
 		completedAt        *time.Time
 		shipmentStatus     *string
@@ -829,7 +856,7 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 			&ri.item.Status, &ri.item.Quantity, &ri.item.Reason, &ri.item.Condition,
 			&ri.item.ProductTitle, &ri.item.VariantSize, &ri.item.VariantColor, &ri.item.SKU, &ri.item.ImageURL, &ri.item.PriceCents, &ri.item.SubtotalPriceCents,
 			&ri.rawRestock,
-			&ri.item.FinancialAdjustmentCents, &ri.item.FinancialImpactType,
+			&ri.adjAmountCents, &ri.adjContext, &ri.adjAdjustedAt,
 			&ri.item.CreatedAt, &ri.item.UpdatedAt,
 			&ri.receivingStartedAt, &ri.completedAt,
 			&ri.shipmentStatus, &ri.trackingNumber, &ri.shipmentMethod,
@@ -837,6 +864,17 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 			&ri.isSerialized,
 		); err != nil {
 			return nil, err
+		}
+		if ri.adjAmountCents != nil && ri.adjContext != nil && ri.adjAdjustedAt != nil {
+			deduction := -(*ri.adjAmountCents)
+			if deduction < 0 {
+				deduction = -deduction
+			}
+			ri.item.FinancialAdjustment = &SellerReturnFinancialAdjustment{
+				DeductionCents: deduction,
+				Context:        *ri.adjContext,
+				AdjustedAt:     *ri.adjAdjustedAt,
+			}
 		}
 		rawItems = append(rawItems, ri)
 		returnItemIDs = append(returnItemIDs, ri.item.ReturnItemID)

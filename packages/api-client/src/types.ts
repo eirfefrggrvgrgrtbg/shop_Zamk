@@ -624,6 +624,12 @@ export interface SellerReturnUnitDetail {
   scannedAt?: string;
 }
 
+export interface SellerReturnFinancialAdjustment {
+  deductionCents: number;
+  context: 'hold' | 'available' | 'post_payout';
+  adjustedAt: string;
+}
+
 export interface SellerReturn {
   returnItemId: string;
   returnId: string;
@@ -643,8 +649,7 @@ export interface SellerReturn {
   priceCents: number;
   subtotalPriceCents: number;
   restock: boolean;
-  financialAdjustmentCents?: number;
-  financialImpactType?: string;
+  financialAdjustment?: SellerReturnFinancialAdjustment | null;
   createdAt: string;
   updatedAt: string;
 

@@ -600,3 +600,393 @@ func TestSellerReturn_DatabaseSafety(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "zamk_test", dbName, "Destructive/integration tests MUST run exclusively against zamk_test")
 }
+
+// ----------------------------------------------------------------------------
+// SA.4.2A: Canonical Seller Return Finance Read Model Integration Tests
+// ----------------------------------------------------------------------------
+
+// Case A: Return without seller ledger adjustment -> financialAdjustment is nil (serializes to null in JSON)
+func TestSellerReturn_FinancialAdjustment_CaseA_NoAdjustment(t *testing.T) {
+	fix := setupM51Fixture(t)
+	ctx := context.Background()
+
+	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+	createReturnTestAllocations(t, fix, tOrd.orderID, tOrd.orderItemID, fix.varAID, fix.prodAID, fix.sellerAID, 1)
+
+	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+		Reason:  "size_mismatch",
+		Comment: func() *string { s := "Case A test"; return &s }(),
+		Items: []returns.CreateReturnItemRequest{
+			{OrderItemID: tOrd.orderItemID, Quantity: 1},
+		},
+	})
+	require.NoError(t, err)
+	retID := resp[0].Return.ID
+
+	// No seller ledger adjustment exists
+	items, err := fix.returnsRepo.GetSellerReturnItemsForReturn(ctx, fix.sellerAID, retID)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	assert.Nil(t, items[0].FinancialAdjustment, "financialAdjustment must be nil when no adjustment entry exists")
+
+	// Verify JSON serialization includes "financialAdjustment":null
+	jsonBytes, err := json.Marshal(items[0])
+	require.NoError(t, err)
+	var rawMap map[string]interface{}
+	err = json.Unmarshal(jsonBytes, &rawMap)
+	require.NoError(t, err)
+	val, exists := rawMap["financialAdjustment"]
+	assert.True(t, exists, "financialAdjustment field must be present in JSON")
+	assert.Nil(t, val, "financialAdjustment must serialize to null in JSON")
+}
+
+// Case B: Return with HOLD adjustment -> exact deduction amount, context = "hold", historically stable even after available_at has passed
+func TestSellerReturn_FinancialAdjustment_CaseB_HoldContext_HistoricallyStable(t *testing.T) {
+	fix := setupM51Fixture(t)
+	ctx := context.Background()
+
+	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+	createReturnTestAllocations(t, fix, tOrd.orderID, tOrd.orderItemID, fix.varAID, fix.prodAID, fix.sellerAID, 1)
+
+	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+		Reason:  "size_mismatch",
+		Comment: func() *string { s := "Case B test comment"; return &s }(),
+		Items: []returns.CreateReturnItemRequest{
+			{OrderItemID: tOrd.orderItemID, Quantity: 1},
+		},
+	})
+	require.NoError(t, err)
+	retID := resp[0].Return.ID
+
+	// Create seller earning where available_at was 10 days ago (in the past relative to now)
+	earningAvailableAt := time.Now().Add(-10 * 24 * time.Hour)
+	earningCreatedAt := time.Now().Add(-24 * 24 * time.Hour)
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO seller_ledger_entries (id, seller_id, order_id, order_item_id, type, amount_cents, currency, available_at, created_at)
+		VALUES ($1, $2, $3, $4, 'seller_earning', 10000, 'RUB', $5, $6)
+	`, uuid.New(), fix.sellerAID, tOrd.orderID, tOrd.orderItemID, earningAvailableAt, earningCreatedAt)
+	require.NoError(t, err)
+
+	// Adjustment occurred 15 days ago, which is BEFORE earningAvailableAt (10 days ago)
+	// Even though now() is past available_at, the adjustment happened during HOLD!
+	adjustedAt := time.Now().Add(-15 * 24 * time.Hour)
+	meta := fmt.Sprintf(`{"return_id": "%s", "reason": "return_deduction"}`, retID)
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO seller_ledger_entries (id, seller_id, order_id, order_item_id, type, amount_cents, currency, available_at, metadata, created_at)
+		VALUES ($1, $2, $3, $4, 'adjustment', -8500, 'RUB', $5, $6::jsonb, $7)
+	`, uuid.New(), fix.sellerAID, tOrd.orderID, tOrd.orderItemID, earningAvailableAt, meta, adjustedAt)
+	require.NoError(t, err)
+
+	items, err := fix.returnsRepo.GetSellerReturnItemsForReturn(ctx, fix.sellerAID, retID)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	require.NotNil(t, items[0].FinancialAdjustment)
+	assert.Equal(t, int64(8500), items[0].FinancialAdjustment.DeductionCents)
+	assert.Equal(t, "hold", items[0].FinancialAdjustment.Context, "Context must remain 'hold' historically even when now() > available_at")
+	assert.Equal(t, adjustedAt.Unix(), items[0].FinancialAdjustment.AdjustedAt.Unix())
+}
+
+// Case C: Return with AVAILABLE adjustment -> exact deduction amount, context = "available"
+func TestSellerReturn_FinancialAdjustment_CaseC_AvailableContext(t *testing.T) {
+	fix := setupM51Fixture(t)
+	ctx := context.Background()
+
+	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+	createReturnTestAllocations(t, fix, tOrd.orderID, tOrd.orderItemID, fix.varAID, fix.prodAID, fix.sellerAID, 1)
+
+	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+		Reason:  "size_mismatch",
+		Comment: func() *string { s := "Case C test comment"; return &s }(),
+		Items: []returns.CreateReturnItemRequest{
+			{OrderItemID: tOrd.orderItemID, Quantity: 1},
+		},
+	})
+	require.NoError(t, err)
+	retID := resp[0].Return.ID
+
+	// Earning became available 20 days ago
+	earningAvailableAt := time.Now().Add(-20 * 24 * time.Hour)
+	earningCreatedAt := time.Now().Add(-34 * 24 * time.Hour)
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO seller_ledger_entries (id, seller_id, order_id, order_item_id, type, amount_cents, currency, available_at, created_at)
+		VALUES ($1, $2, $3, $4, 'seller_earning', 10000, 'RUB', $5, $6)
+	`, uuid.New(), fix.sellerAID, tOrd.orderID, tOrd.orderItemID, earningAvailableAt, earningCreatedAt)
+	require.NoError(t, err)
+
+	// Adjustment occurred 5 days ago (AFTER available_at)
+	adjustedAt := time.Now().Add(-5 * 24 * time.Hour)
+	meta := fmt.Sprintf(`{"return_id": "%s", "reason": "return_deduction"}`, retID)
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO seller_ledger_entries (id, seller_id, order_item_id, type, amount_cents, currency, available_at, metadata, created_at)
+		VALUES ($1, $2, $3, 'adjustment', -8500, 'RUB', $4, $5::jsonb, $6)
+	`, uuid.New(), fix.sellerAID, tOrd.orderItemID, earningAvailableAt, meta, adjustedAt)
+	require.NoError(t, err)
+
+	items, err := fix.returnsRepo.GetSellerReturnItemsForReturn(ctx, fix.sellerAID, retID)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	require.NotNil(t, items[0].FinancialAdjustment)
+	assert.Equal(t, int64(8500), items[0].FinancialAdjustment.DeductionCents)
+	assert.Equal(t, "available", items[0].FinancialAdjustment.Context)
+}
+
+// Case D: Return with POST_PAYOUT adjustment -> exact deduction amount, context = "post_payout", no debt claim
+func TestSellerReturn_FinancialAdjustment_CaseD_PostPayoutContext_NoDebtClaim(t *testing.T) {
+	fix := setupM51Fixture(t)
+	ctx := context.Background()
+
+	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+	createReturnTestAllocations(t, fix, tOrd.orderID, tOrd.orderItemID, fix.varAID, fix.prodAID, fix.sellerAID, 1)
+
+	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+		Reason:  "size_mismatch",
+		Comment: func() *string { s := "Case D test comment"; return &s }(),
+		Items: []returns.CreateReturnItemRequest{
+			{OrderItemID: tOrd.orderItemID, Quantity: 1},
+		},
+	})
+	require.NoError(t, err)
+	retID := resp[0].Return.ID
+
+	adjustedAt := time.Now().Add(-2 * time.Hour)
+	meta := fmt.Sprintf(`{"return_id": "%s", "reason": "return_post_payout"}`, retID)
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO seller_ledger_entries (id, seller_id, order_item_id, type, amount_cents, currency, metadata, created_at)
+		VALUES ($1, $2, $3, 'adjustment', -8500, 'RUB', $4::jsonb, $5)
+	`, uuid.New(), fix.sellerAID, tOrd.orderItemID, meta, adjustedAt)
+	require.NoError(t, err)
+
+	items, err := fix.returnsRepo.GetSellerReturnItemsForReturn(ctx, fix.sellerAID, retID)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	require.NotNil(t, items[0].FinancialAdjustment)
+	assert.Equal(t, int64(8500), items[0].FinancialAdjustment.DeductionCents)
+	assert.Equal(t, "post_payout", items[0].FinancialAdjustment.Context)
+
+	// Ensure no debt claim exists in serialized JSON
+	jsonBytes, err := json.Marshal(items[0])
+	require.NoError(t, err)
+	assert.NotContains(t, string(jsonBytes), "debt")
+	assert.NotContains(t, string(jsonBytes), "deficit")
+}
+
+// Case E: Negative DB amount -> positive display magnitude in DTO
+func TestSellerReturn_FinancialAdjustment_CaseE_NegativeDbToPositiveMagnitude(t *testing.T) {
+	fix := setupM51Fixture(t)
+	ctx := context.Background()
+
+	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+	createReturnTestAllocations(t, fix, tOrd.orderID, tOrd.orderItemID, fix.varAID, fix.prodAID, fix.sellerAID, 1)
+
+	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+		Reason:  "size_mismatch",
+		Comment: func() *string { s := "Case E test comment"; return &s }(),
+		Items: []returns.CreateReturnItemRequest{
+			{OrderItemID: tOrd.orderItemID, Quantity: 1},
+		},
+	})
+	require.NoError(t, err)
+	retID := resp[0].Return.ID
+
+	// Database stores -13500 cents
+	meta := fmt.Sprintf(`{"return_id": "%s", "reason": "return_deduction"}`, retID)
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO seller_ledger_entries (id, seller_id, order_item_id, type, amount_cents, currency, metadata, created_at)
+		VALUES ($1, $2, $3, 'adjustment', -13500, 'RUB', $4::jsonb, now())
+	`, uuid.New(), fix.sellerAID, tOrd.orderItemID, meta)
+	require.NoError(t, err)
+
+	items, err := fix.returnsRepo.GetSellerReturnItemsForReturn(ctx, fix.sellerAID, retID)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	require.NotNil(t, items[0].FinancialAdjustment)
+	assert.Equal(t, int64(13500), items[0].FinancialAdjustment.DeductionCents, "DTO must expose positive magnitude (13500 cents for DB -13500)")
+}
+
+// Case F: Customer refund amount != Seller earning deduction -> DTO exposes seller deduction
+func TestSellerReturn_FinancialAdjustment_CaseF_SellerDeductionNotCustomerRefund(t *testing.T) {
+	fix := setupM51Fixture(t)
+	ctx := context.Background()
+
+	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+	createReturnTestAllocations(t, fix, tOrd.orderID, tOrd.orderItemID, fix.varAID, fix.prodAID, fix.sellerAID, 1)
+
+	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+		Reason:  "size_mismatch",
+		Comment: func() *string { s := "Case F test comment"; return &s }(),
+		Items: []returns.CreateReturnItemRequest{
+			{OrderItemID: tOrd.orderItemID, Quantity: 1},
+		},
+	})
+	require.NoError(t, err)
+	retID := resp[0].Return.ID
+
+	// Customer paid 10000 cents (order_items.subtotal_price_cents = 10000)
+	// But seller earning deduction is 8500 cents
+	meta := fmt.Sprintf(`{"return_id": "%s", "reason": "return_deduction"}`, retID)
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO seller_ledger_entries (id, seller_id, order_item_id, type, amount_cents, currency, metadata, created_at)
+		VALUES ($1, $2, $3, 'adjustment', -8500, 'RUB', $4::jsonb, now())
+	`, uuid.New(), fix.sellerAID, tOrd.orderItemID, meta)
+	require.NoError(t, err)
+
+	items, err := fix.returnsRepo.GetSellerReturnItemsForReturn(ctx, fix.sellerAID, retID)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	require.NotNil(t, items[0].FinancialAdjustment)
+	assert.Equal(t, int64(8500), items[0].FinancialAdjustment.DeductionCents, "Must expose seller earning deduction (8500), not order subtotal (10000)")
+	assert.NotEqual(t, items[0].SubtotalPriceCents, items[0].FinancialAdjustment.DeductionCents)
+}
+
+// Case G: Changing active seller commission does not alter return deduction calculation
+func TestSellerReturn_FinancialAdjustment_CaseG_CommissionChangeDoesNotAlterRecordedDeduction(t *testing.T) {
+	fix := setupM51Fixture(t)
+	ctx := context.Background()
+
+	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+	createReturnTestAllocations(t, fix, tOrd.orderID, tOrd.orderItemID, fix.varAID, fix.prodAID, fix.sellerAID, 1)
+
+	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+		Reason:  "size_mismatch",
+		Comment: func() *string { s := "Case G test comment"; return &s }(),
+		Items: []returns.CreateReturnItemRequest{
+			{OrderItemID: tOrd.orderItemID, Quantity: 1},
+		},
+	})
+	require.NoError(t, err)
+	retID := resp[0].Return.ID
+
+	// Initial deduction recorded at 8500 cents
+	meta := fmt.Sprintf(`{"return_id": "%s", "reason": "return_deduction"}`, retID)
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO seller_ledger_entries (id, seller_id, order_item_id, type, amount_cents, currency, metadata, created_at)
+		VALUES ($1, $2, $3, 'adjustment', -8500, 'RUB', $4::jsonb, now())
+	`, uuid.New(), fix.sellerAID, tOrd.orderItemID, meta)
+	require.NoError(t, err)
+
+	// Simulate platform-wide or seller commission rate update
+	_, err = fix.client.Pool.Exec(ctx, `UPDATE sellers SET updated_at = now() WHERE id = $1`, fix.sellerAID)
+	require.NoError(t, err)
+
+	items, err := fix.returnsRepo.GetSellerReturnItemsForReturn(ctx, fix.sellerAID, retID)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	require.NotNil(t, items[0].FinancialAdjustment)
+	assert.Equal(t, int64(8500), items[0].FinancialAdjustment.DeductionCents, "Adjustment must be read directly from immutable ledger entry")
+}
+
+// Case H: Deterministic authoritative adjustment selection (excludes batch_race_offset)
+func TestSellerReturn_FinancialAdjustment_CaseH_DeterministicSelectionExcludesOffset(t *testing.T) {
+	fix := setupM51Fixture(t)
+	ctx := context.Background()
+
+	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+	createReturnTestAllocations(t, fix, tOrd.orderID, tOrd.orderItemID, fix.varAID, fix.prodAID, fix.sellerAID, 1)
+
+	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+		Reason:  "size_mismatch",
+		Comment: func() *string { s := "Case H test comment"; return &s }(),
+		Items: []returns.CreateReturnItemRequest{
+			{OrderItemID: tOrd.orderItemID, Quantity: 1},
+		},
+	})
+	require.NoError(t, err)
+	retID := resp[0].Return.ID
+
+	// Older authoritative deduction: 8500 cents, created 2 hours ago
+	metaOld := fmt.Sprintf(`{"return_id": "%s", "reason": "return_deduction"}`, retID)
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO seller_ledger_entries (id, seller_id, order_item_id, type, amount_cents, currency, metadata, created_at)
+		VALUES ($1, $2, $3, 'adjustment', -8500, 'RUB', $4::jsonb, now() - interval '2 hour')
+	`, uuid.New(), fix.sellerAID, tOrd.orderItemID, metaOld)
+	require.NoError(t, err)
+
+	// Newer non-authoritative offset entry: 5000 cents, reason 'batch_race_offset', created 1 hour ago
+	metaOffset := fmt.Sprintf(`{"return_id": "%s", "reason": "batch_race_offset"}`, retID)
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO seller_ledger_entries (id, seller_id, order_item_id, type, amount_cents, currency, metadata, created_at)
+		VALUES ($1, $2, $3, 'adjustment', -5000, 'RUB', $4::jsonb, now() - interval '1 hour')
+	`, uuid.New(), fix.sellerAID, tOrd.orderItemID, metaOffset)
+	require.NoError(t, err)
+
+	// Authoritative adjustment: 8500 cents (ignores batch_race_offset even though it is newer)
+	items, err := fix.returnsRepo.GetSellerReturnItemsForReturn(ctx, fix.sellerAID, retID)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	require.NotNil(t, items[0].FinancialAdjustment)
+	assert.Equal(t, int64(8500), items[0].FinancialAdjustment.DeductionCents, "Must select authoritative return_deduction, ignoring batch_race_offset")
+}
+
+// Case I: Cross-seller isolation
+func TestSellerReturn_FinancialAdjustment_CaseI_CrossSellerIsolation(t *testing.T) {
+	fix := setupM51Fixture(t)
+	ctx := context.Background()
+
+	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+	createReturnTestAllocations(t, fix, tOrd.orderID, tOrd.orderItemID, fix.varAID, fix.prodAID, fix.sellerAID, 1)
+
+	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+		Reason:  "size_mismatch",
+		Comment: func() *string { s := "Case I test comment"; return &s }(),
+		Items: []returns.CreateReturnItemRequest{
+			{OrderItemID: tOrd.orderItemID, Quantity: 1},
+		},
+	})
+	require.NoError(t, err)
+	retID := resp[0].Return.ID
+
+	meta := fmt.Sprintf(`{"return_id": "%s", "reason": "return_deduction"}`, retID)
+	_, err = fix.client.Pool.Exec(ctx, `
+		INSERT INTO seller_ledger_entries (id, seller_id, order_item_id, type, amount_cents, currency, metadata, created_at)
+		VALUES ($1, $2, $3, 'adjustment', -8500, 'RUB', $4::jsonb, now())
+	`, uuid.New(), fix.sellerAID, tOrd.orderItemID, meta)
+	require.NoError(t, err)
+
+	// Seller B queries for this return ID -> empty result
+	itemsB, err := fix.returnsRepo.GetSellerReturnItemsForReturn(ctx, fix.sellerBID, retID)
+	require.NoError(t, err)
+	assert.Empty(t, itemsB, "Seller B must NOT see Seller A's return items or financial adjustments")
+
+	// Seller B queries list -> empty
+	listB, err := fix.returnsRepo.GetSellerReturnItems(ctx, fix.sellerBID, 10, 0)
+	require.NoError(t, err)
+	assert.Empty(t, listB)
+}
+
+// Case J: Seeded/legacy refunded return without seller ledger -> financialAdjustment is nil
+func TestSellerReturn_FinancialAdjustment_CaseJ_SeededRefundWithoutLedger(t *testing.T) {
+	fix := setupM51Fixture(t)
+	ctx := context.Background()
+
+	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 1)
+	createReturnTestAllocations(t, fix, tOrd.orderID, tOrd.orderItemID, fix.varAID, fix.prodAID, fix.sellerAID, 1)
+
+	resp, err := fix.svc.CreateReturn(ctx, fix.userID, tOrd.orderID, returns.CreateReturnRequest{
+		Reason:  "size_mismatch",
+		Comment: func() *string { s := "Case J test comment"; return &s }(),
+		Items: []returns.CreateReturnItemRequest{
+			{OrderItemID: tOrd.orderItemID, Quantity: 1},
+		},
+	})
+	require.NoError(t, err)
+	retID := resp[0].Return.ID
+
+	// Mark return as completed / refunded in DB without any seller_ledger_entries adjustment
+	_, err = fix.client.Pool.Exec(ctx, `UPDATE returns SET status = 'completed', completed_at = now() WHERE id = $1`, retID)
+	require.NoError(t, err)
+
+	items, err := fix.returnsRepo.GetSellerReturnItemsForReturn(ctx, fix.sellerAID, retID)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	assert.Equal(t, "completed", items[0].Status)
+	assert.Nil(t, items[0].FinancialAdjustment, "Seeded/legacy return without ledger adjustment must have financialAdjustment == nil (never fake 0 ₽)")
+}
