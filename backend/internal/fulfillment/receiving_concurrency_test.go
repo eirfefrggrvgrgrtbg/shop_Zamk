@@ -26,6 +26,9 @@ func (m *receivingTestMockPayoutsService) CreatePendingSalesForFulfillmentTx(ctx
 func (m *receivingTestMockPayoutsService) CreatePendingSalesForOrder(ctx context.Context, orderID uuid.UUID) error {
 	return nil
 }
+func (m *receivingTestMockPayoutsService) MarkOrderDeliveredTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, deliveredAt time.Time) error {
+	return nil
+}
 
 func seedTestFulfillment(ctx context.Context, db *postgres.Client) (uuid.UUID, uuid.UUID, string, error) {
 	staffID := uuid.MustParse("99999999-9999-4999-8999-999999999999")

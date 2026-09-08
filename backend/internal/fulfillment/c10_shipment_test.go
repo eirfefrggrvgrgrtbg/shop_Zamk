@@ -22,6 +22,9 @@ func (m *mockPayoutsService) CreatePendingSalesForFulfillmentTx(ctx context.Cont
 func (m *mockPayoutsService) CreatePendingSalesForOrder(ctx context.Context, orderID uuid.UUID) error {
 	return nil
 }
+func (m *mockPayoutsService) MarkOrderDeliveredTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, deliveredAt time.Time) error {
+	return nil
+}
 
 func TestC10ShipmentGuardrails(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_URL")

@@ -18,6 +18,7 @@ import (
 type payoutsService interface {
 	CreatePendingSalesForOrder(ctx context.Context, orderID uuid.UUID) error
 	CreatePendingSalesForFulfillmentTx(ctx context.Context, tx pgx.Tx, fulfillmentID uuid.UUID) error
+	MarkOrderDeliveredTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, deliveredAt time.Time) error
 }
 
 type Service struct {

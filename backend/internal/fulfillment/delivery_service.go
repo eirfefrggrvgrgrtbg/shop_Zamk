@@ -34,6 +34,9 @@ func (s *Service) DeliverShipment(ctx context.Context, adminID, shipmentID uuid.
 			if err := s.payouts.CreatePendingSalesForFulfillmentTx(ctx, tx, res.FulfillmentID); err != nil {
 				return fmt.Errorf("payouts.CreatePendingSalesForFulfillmentTx: %w", err)
 			}
+			if err := s.payouts.MarkOrderDeliveredTx(ctx, tx, res.OrderID, res.DeliveredAt); err != nil {
+				return fmt.Errorf("payouts.MarkOrderDeliveredTx: %w", err)
+			}
 		}
 
 
