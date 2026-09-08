@@ -158,3 +158,123 @@ func TestProcessReturnDeduction(t *testing.T) {
 	// Assert AvailableAt is exactly the same
 	assert.Equal(t, availableAt.Unix(), availableAts[deductionIdx].Unix())
 }
+
+func TestProcessReturnDeduction_PostPayout(t *testing.T) {
+	client := setupTestDB(t)
+	defer client.Close()
+
+	ctx := context.Background()
+	tx, err := client.Pool.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	repo := NewRepository(client.Pool)
+
+	suffix := uuid.NewString()[:8]
+	sellerID := uuid.New()
+	userID := uuid.New()
+	_, err = client.Pool.Exec(ctx, "INSERT INTO users (id, name, phone, email, password_hash, role, created_at) VALUES ($1, 'Test', '+123', $2, 'hash', 'seller', now())", userID, fmt.Sprintf("test-%s@example.com", suffix))
+	require.NoError(t, err)
+	_, err = client.Pool.Exec(ctx, "INSERT INTO sellers (id, brand_name, slug, contact_email, status, created_at) VALUES ($1, 'test store', $2, $3, 'active', now())", sellerID, fmt.Sprintf("test-store-%s", suffix), fmt.Sprintf("test-%s@store.com", suffix))
+	require.NoError(t, err)
+
+	orderID := uuid.New()
+	_, err = client.Pool.Exec(ctx, "INSERT INTO orders (id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, created_at) VALUES ($1, $2, 'delivered', 100000, 'RUB', 'Test', '+1', 'a@b.c', 'Addr', now())", orderID, userID)
+	require.NoError(t, err)
+	orderItemID := uuid.New()
+
+	productID := uuid.New()
+	categoryID := uuid.New()
+	_, err = client.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug) VALUES ($1, 'cat', $2)", categoryID, fmt.Sprintf("cat-%s", suffix))
+	require.NoError(t, err)
+	_, err = client.Pool.Exec(ctx, "INSERT INTO products (id, seller_id, category_id, title, slug, description, status, price_cents) VALUES ($1, $2, $3, 'P', $4, 'desc', 'published', 50000)", productID, sellerID, categoryID, fmt.Sprintf("p-%s", suffix))
+	require.NoError(t, err)
+	variantID := uuid.New()
+	_, err = client.Pool.Exec(ctx, "INSERT INTO product_variants (id, product_id, sku, price_cents) VALUES ($1, $2, $3, 50000)", variantID, productID, fmt.Sprintf("sku-%s", suffix))
+	require.NoError(t, err)
+
+	fulfillmentID := uuid.New()
+	_, err = client.Pool.Exec(ctx, "INSERT INTO order_fulfillments (id, order_id, seller_id, status) VALUES ($1, $2, $3, 'delivered')", fulfillmentID, orderID, sellerID)
+	require.NoError(t, err)
+
+	_, err = client.Pool.Exec(ctx, "INSERT INTO order_items (id, order_id, order_fulfillment_id, product_id, product_variant_id, seller_id, title, product_slug, quantity, price_cents, subtotal_price_cents) VALUES ($1, $2, $3, $4, $5, $6, 'Title', 'slug', 2, 50000, 100000)", orderItemID, orderID, fulfillmentID, productID, variantID, sellerID)
+	require.NoError(t, err)
+
+	// 1. Create a historical payout batch that was already paid
+	batchID := uuid.New()
+	nowTime := time.Now()
+	err = repo.CreatePayoutBatchTx(ctx, tx, &PayoutBatch{
+		ID:           batchID,
+		SellerID:     sellerID,
+		AmountCents:  100000,
+		Status:       "paid",
+		ScheduledFor: nowTime.Add(-2 * time.Hour),
+		ProcessedAt:  &nowTime,
+	})
+	require.NoError(t, err)
+
+	// 2. Insert seller earning linked to that paid payout batch
+	earningAvailableAt := nowTime.Add(-24 * time.Hour)
+	earningID := uuid.New()
+	err = repo.CreateLedgerEntryTx(ctx, tx, &SellerLedgerEntry{
+		ID:            earningID,
+		SellerID:      sellerID,
+		OrderID:       &orderID,
+		OrderItemID:   &orderItemID,
+		PayoutBatchID: &batchID, // Linked to paid payout batch
+		Type:          "seller_earning",
+		AmountCents:   100000,
+		Currency:      "RUB",
+		AvailableAt:   &earningAvailableAt,
+		CreatedAt:     nowTime.Add(-48 * time.Hour),
+	})
+	require.NoError(t, err)
+
+	mockOrders := &mockOrdersRepo{
+		items: []orders.OrderItem{
+			{
+				ID:       orderItemID,
+				OrderID:  orderID,
+				SellerID: sellerID,
+				Quantity: 2,
+			},
+		},
+	}
+	svc := NewService(repo, client, nil, mockOrders, nil, nil)
+
+	// 3. Customer returns 1 unit AFTER the payout was executed
+	returnID := uuid.New()
+	deductionItems := []ReturnItemDeduction{
+		{
+			OrderItemID: orderItemID,
+			Quantity:    1,
+		},
+	}
+
+	err = svc.ProcessReturnDeduction(ctx, tx, returnID, orderID, deductionItems)
+	require.NoError(t, err)
+
+	// 4. Verify the adjustment: reason MUST be return_post_payout, amount negative (-50000)
+	var adjAmount int64
+	var adjType string
+	var adjMetadata []byte
+	err = tx.QueryRow(ctx, `
+		SELECT amount_cents, type, metadata
+		FROM seller_ledger_entries
+		WHERE seller_id = $1 AND type = 'adjustment'
+	`, sellerID).Scan(&adjAmount, &adjType, &adjMetadata)
+	require.NoError(t, err)
+
+	assert.Equal(t, "adjustment", adjType)
+	assert.Equal(t, int64(-50000), adjAmount)
+	assert.Contains(t, string(adjMetadata), "return_post_payout")
+	assert.Contains(t, string(adjMetadata), returnID.String())
+
+	// 5. Verify historical payout remains immutable
+	var batchStatus string
+	var batchAmount int64
+	err = tx.QueryRow(ctx, "SELECT status, amount_cents FROM payout_batches WHERE id = $1", batchID).Scan(&batchStatus, &batchAmount)
+	require.NoError(t, err)
+	assert.Equal(t, "paid", batchStatus)
+	assert.Equal(t, int64(100000), batchAmount)
+}

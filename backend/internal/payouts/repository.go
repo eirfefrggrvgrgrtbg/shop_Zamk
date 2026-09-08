@@ -120,10 +120,10 @@ func (r *Repository) ListSellerLedger(ctx context.Context, sellerID uuid.UUID, l
 
 func (r *Repository) GetSellerBalanceSummary(ctx context.Context, sellerID uuid.UUID) (*BalanceResponse, error) {
 	query := `
-		SELECT type, available_at <= now(), payout_batch_id IS NOT NULL, SUM(amount_cents)
+		SELECT type, (available_at <= now() OR (type = 'adjustment' AND available_at IS NULL)), payout_batch_id IS NOT NULL, SUM(amount_cents)
 		FROM seller_ledger_entries
 		WHERE seller_id = $1
-		GROUP BY type, available_at <= now(), payout_batch_id IS NOT NULL
+		GROUP BY type, (available_at <= now() OR (type = 'adjustment' AND available_at IS NULL)), payout_batch_id IS NOT NULL
 	`
 	rows, err := r.db.Query(ctx, query, sellerID)
 	if err != nil {
@@ -168,13 +168,18 @@ func (r *Repository) GetSellerBalanceSummary(ctx context.Context, sellerID uuid.
 				}
 			}
 		case "payout":
-			summary.PaidCents += total
+			if total < 0 {
+				summary.PaidCents += -total
+			} else {
+				summary.PaidCents += total
+			}
 		}
 	}
 	
-	// Payouts are paid. The total Available is the sum of (sellerEarningAvailable + adjustments + payouts (which are negative)).
-	// Because when a payout happens, we append a negative `payout` entry to ledger.
-	summary.AvailableCents = sellerEarningAvailable + summary.AdjustmentsCents + summary.PaidCents
+	// Available balance is the sum of unbatched available earnings and unbatched adjustments.
+	// Batched earnings/adjustments are already excluded via !hasBatch (payout_batch_id IS NULL).
+	// PaidCents tracks historical disbursed payouts and is not deducted again.
+	summary.AvailableCents = sellerEarningAvailable + summary.AdjustmentsCents
 	summary.FrozenCents = sellerEarningFrozen
 
 	return summary, nil
@@ -182,10 +187,10 @@ func (r *Repository) GetSellerBalanceSummary(ctx context.Context, sellerID uuid.
 
 func (r *Repository) GetSellerBalanceSummaryTx(ctx context.Context, tx pgx.Tx, sellerID uuid.UUID) (*BalanceResponse, error) {
 	query := `
-		SELECT type, available_at <= now(), payout_batch_id IS NOT NULL, SUM(amount_cents)
+		SELECT type, (available_at <= now() OR (type = 'adjustment' AND available_at IS NULL)), payout_batch_id IS NOT NULL, SUM(amount_cents)
 		FROM seller_ledger_entries
 		WHERE seller_id = $1
-		GROUP BY type, available_at <= now(), payout_batch_id IS NOT NULL
+		GROUP BY type, (available_at <= now() OR (type = 'adjustment' AND available_at IS NULL)), payout_batch_id IS NOT NULL
 	`
 	rows, err := tx.Query(ctx, query, sellerID)
 	if err != nil {
@@ -228,11 +233,18 @@ func (r *Repository) GetSellerBalanceSummaryTx(ctx context.Context, tx pgx.Tx, s
 				}
 			}
 		case "payout":
-			summary.PaidCents += total
+			if total < 0 {
+				summary.PaidCents += -total
+			} else {
+				summary.PaidCents += total
+			}
 		}
 	}
 
-	summary.AvailableCents = sellerEarningAvailable + summary.AdjustmentsCents + summary.PaidCents
+	// Available balance is the sum of unbatched available earnings and unbatched adjustments.
+	// Batched earnings/adjustments are already excluded via !hasBatch (payout_batch_id IS NULL).
+	// PaidCents tracks historical disbursed payouts and is not deducted again.
+	summary.AvailableCents = sellerEarningAvailable + summary.AdjustmentsCents
 	summary.FrozenCents = sellerEarningFrozen
 
 	return summary, nil
@@ -345,9 +357,9 @@ func (r *Repository) UpdateAvailableAtByOrderIdTx(ctx context.Context, tx pgx.Tx
 func (r *Repository) GetAdminPayoutSummary(ctx context.Context) (*AdminPayoutSummary, error) {
 	// A simple aggregated view for admin
 	query := `
-		SELECT type, available_at <= now(), SUM(amount_cents)
+		SELECT type, (available_at <= now() OR (type = 'adjustment' AND available_at IS NULL)), SUM(amount_cents)
 		FROM seller_ledger_entries
-		GROUP BY type, available_at <= now()
+		GROUP BY type, (available_at <= now() OR (type = 'adjustment' AND available_at IS NULL))
 	`
 	rows, err := r.db.Query(ctx, query)
 	if err != nil {

@@ -52,6 +52,8 @@ export function GlobalMoneyStrip() {
     ? format(new Date(balance.nextPayoutAt), 'd MMMM', { locale: ru })
     : null;
 
+  const availableLabel = (balance.availableCents ?? 0) < 0 ? 'Баланс' : 'Доступно к выплате';
+
   return (
     <div className="hidden lg:flex relative mr-4" ref={popoverRef}>
       <button 
@@ -67,7 +69,7 @@ export function GlobalMoneyStrip() {
             <Wallet className="w-4 h-4 text-green-700" />
           </div>
           <div className="flex flex-col text-left">
-            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider leading-none mb-1">Доступно к выплате</span>
+            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider leading-none mb-1">{availableLabel}</span>
             <span className="text-sm font-bold text-gray-900 leading-none">
               {formatCents(balance.availableCents ?? 0)}
             </span>
@@ -104,7 +106,7 @@ export function GlobalMoneyStrip() {
           <div className="p-5 border-b border-gray-100">
             <div className="flex justify-between items-end mb-4">
               <div>
-                <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Доступно к выплате</p>
+                <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">{availableLabel}</p>
                 <p className="text-2xl font-bold text-gray-900">{formatCents(balance.availableCents ?? 0)}</p>
               </div>
             </div>

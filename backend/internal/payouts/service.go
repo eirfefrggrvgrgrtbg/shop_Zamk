@@ -242,7 +242,7 @@ func (s *Service) ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnI
 		if earningEntry.PayoutBatchID != nil {
 			// POST-PAYOUT RETURN RECOVERY: DEFERRED logic.
 			// The funds were already paid. We insert an adjustment to offset future payouts.
-			nowTime := time.Now()
+			// No hold applies to this post-payout adjustment (available_at = NULL means immediately available).
 			err = s.repo.CreateLedgerEntryTx(ctx, tx, &SellerLedgerEntry{
 				ID:          uuid.New(),
 				SellerID:    earningEntry.SellerID,
@@ -251,7 +251,7 @@ func (s *Service) ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnI
 				Type:        "adjustment",
 				AmountCents: -deductionCents,
 				Currency:    "RUB",
-				AvailableAt: &nowTime,
+				AvailableAt: nil,
 				Metadata:    []byte(`{"reason":"return_post_payout","return_id":"` + returnID.String() + `"}`),
 				CreatedAt:   time.Now(),
 			})
