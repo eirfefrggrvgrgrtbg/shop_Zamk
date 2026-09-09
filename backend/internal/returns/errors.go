@@ -64,4 +64,16 @@ var (
 	ErrDevToolDisabled        = errors.New("dev_tool_disabled")
 	ErrNoPendingRefund        = errors.New("no_pending_refund")
 	ErrMultiplePendingRefunds = errors.New("multiple_pending_refunds")
+
+	// Return financial responsibility errors
+	ErrInvalidResponsibilityStatus         = errors.New("invalid responsibility status")
+	ErrInvalidResponsibleParty             = errors.New("invalid responsible party")
+	ErrInvalidResponsibilityReason         = errors.New("invalid responsibility reason code")
+	ErrInvalidResponsibilityDecisionSource = errors.New("invalid responsibility decision source")
+	ErrResponsibilityActorRequired         = errors.New("responsibility employee actor required")
+	ErrResponsibilityActorForbidden        = errors.New("responsibility system actor forbidden")
+	ErrResponsibilityReasonPartyMismatch   = errors.New("responsibility reason and party mismatch")
+	ErrResponsibilityInvariants            = errors.New("invalid responsibility invariants")
+	ErrPhysicalBindingImmutable            = errors.New("responsibility allocation physical binding cannot be modified or cleared")
+	ErrResponsibilityCoverageInvariant     = errors.New("responsibility allocation coverage invariant violated")
 )

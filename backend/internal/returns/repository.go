@@ -41,7 +41,25 @@ func (r *Repository) CreateReturnTx(ctx context.Context, tx pgx.Tx, ret *Return,
 		if err != nil {
 			return err
 		}
+
+		allocID := uuid.New()
+		allocQuery := `
+			INSERT INTO return_responsibility_allocations (id, return_item_id, quantity, status)
+			VALUES ($1, $2, $3, 'pending')
+		`
+		if _, err := tx.Exec(ctx, allocQuery, allocID, items[i].ID, items[i].Quantity); err != nil {
+			return err
+		}
+
+		histQuery := `
+			INSERT INTO return_responsibility_allocation_history (id, allocation_id, return_item_id, quantity, status)
+			VALUES ($1, $2, $3, $4, 'pending')
+		`
+		if _, err := tx.Exec(ctx, histQuery, uuid.New(), allocID, items[i].ID, items[i].Quantity); err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
@@ -1965,4 +1983,184 @@ func (r *Repository) BindMessageAttachmentsTx(ctx context.Context, tx pgx.Tx, me
 		}
 	}
 	return nil
+}
+
+func (r *Repository) GetReturnResponsibilityAllocationsByReturnID(ctx context.Context, returnID uuid.UUID) ([]ReturnResponsibilityAllocation, error) {
+	query := `
+		SELECT a.id, a.return_item_id, a.order_item_allocation_id, a.quantity, a.status, a.responsible_party, a.reason_code, a.decision_source, a.internal_note, a.decided_at, a.actor_id, a.created_at, a.updated_at
+		FROM return_responsibility_allocations a
+		JOIN return_items ri ON ri.id = a.return_item_id
+		WHERE ri.return_id = $1
+		ORDER BY a.created_at ASC
+	`
+	rows, err := r.db.Query(ctx, query, returnID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var allocs []ReturnResponsibilityAllocation
+	for rows.Next() {
+		var a ReturnResponsibilityAllocation
+		if err := rows.Scan(
+			&a.ID, &a.ReturnItemID, &a.OrderItemAllocationID, &a.Quantity, &a.Status, &a.ResponsibleParty, &a.ReasonCode, &a.DecisionSource, &a.InternalNote, &a.DecidedAt, &a.ActorID, &a.CreatedAt, &a.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		allocs = append(allocs, a)
+	}
+	return allocs, nil
+}
+
+func (r *Repository) GetReturnResponsibilityAllocationTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*ReturnResponsibilityAllocation, error) {
+	query := `
+		SELECT id, return_item_id, order_item_allocation_id, quantity, status, responsible_party, reason_code, decision_source, internal_note, decided_at, actor_id, created_at, updated_at
+		FROM return_responsibility_allocations
+		WHERE id = $1 FOR UPDATE
+	`
+	var a ReturnResponsibilityAllocation
+	err := tx.QueryRow(ctx, query, id).Scan(
+		&a.ID, &a.ReturnItemID, &a.OrderItemAllocationID, &a.Quantity, &a.Status, &a.ResponsibleParty, &a.ReasonCode, &a.DecisionSource, &a.InternalNote, &a.DecidedAt, &a.ActorID, &a.CreatedAt, &a.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+func (r *Repository) GetAllocationReturnItemIDTx(ctx context.Context, tx pgx.Tx, allocationID uuid.UUID) (uuid.UUID, error) {
+	var returnItemID uuid.UUID
+	err := tx.QueryRow(ctx, `SELECT return_item_id FROM return_responsibility_allocations WHERE id = $1`, allocationID).Scan(&returnItemID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, ErrReturnNotFound
+		}
+		return uuid.Nil, err
+	}
+	return returnItemID, nil
+}
+
+func (r *Repository) LockReturnItemTx(ctx context.Context, tx pgx.Tx, returnItemID uuid.UUID) (*ReturnItem, error) {
+	var ri ReturnItem
+	err := tx.QueryRow(ctx, `
+		SELECT id, return_id, order_item_id, quantity, reason, condition, restock, accepted_quantity, damaged_quantity, rejected_quantity, created_at
+		FROM return_items
+		WHERE id = $1
+		FOR UPDATE
+	`, returnItemID).Scan(
+		&ri.ID, &ri.ReturnID, &ri.OrderItemID, &ri.Quantity, &ri.Reason, &ri.Condition, &ri.Restock, &ri.AcceptedQuantity, &ri.DamagedQuantity, &ri.RejectedQuantity, &ri.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrReturnNotFound
+		}
+		return nil, err
+	}
+	return &ri, nil
+}
+
+func (r *Repository) GetTotalAllocationsQuantityTx(ctx context.Context, tx pgx.Tx, returnItemID uuid.UUID) (int, error) {
+	var total int
+	err := tx.QueryRow(ctx, `
+		SELECT COALESCE(SUM(quantity), 0)
+		FROM return_responsibility_allocations
+		WHERE return_item_id = $1
+	`, returnItemID).Scan(&total)
+	return total, err
+}
+
+func (r *Repository) ValidateOrderItemAllocationForReturnItemTx(ctx context.Context, tx pgx.Tx, returnItemID, orderItemAllocID, currentAllocID uuid.UUID) error {
+	var matchesOrderItem bool
+	var alreadyBound bool
+
+	query := `
+		SELECT
+			(oia.order_item_id = ri.order_item_id) AS matches_order_item,
+			EXISTS (
+				SELECT 1 FROM return_responsibility_allocations rra
+				WHERE rra.order_item_allocation_id = $2 AND rra.id != $3
+			) AS already_bound
+		FROM return_items ri
+		JOIN order_item_allocations oia ON oia.id = $2
+		WHERE ri.id = $1
+	`
+	err := tx.QueryRow(ctx, query, returnItemID, orderItemAllocID, currentAllocID).Scan(&matchesOrderItem, &alreadyBound)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrResponsibilityInvariants
+		}
+		return err
+	}
+
+	if !matchesOrderItem {
+		return ErrResponsibilityInvariants
+	}
+	if alreadyBound {
+		return ErrAllocationAlreadyBound
+	}
+	return nil
+}
+
+func (r *Repository) UpdateReturnResponsibilityAllocationTx(ctx context.Context, tx pgx.Tx, alloc *ReturnResponsibilityAllocation) error {
+	query := `
+		UPDATE return_responsibility_allocations
+		SET order_item_allocation_id = $2, quantity = $3, status = $4, responsible_party = $5, reason_code = $6, decision_source = $7, internal_note = $8, decided_at = $9, actor_id = $10, updated_at = now()
+		WHERE id = $1
+		RETURNING updated_at
+	`
+	err := tx.QueryRow(ctx, query, alloc.ID, alloc.OrderItemAllocationID, alloc.Quantity, alloc.Status, alloc.ResponsibleParty, alloc.ReasonCode, alloc.DecisionSource, alloc.InternalNote, alloc.DecidedAt, alloc.ActorID).Scan(&alloc.UpdatedAt)
+	if err != nil {
+		return err
+	}
+
+	return r.insertAllocationHistoryTx(ctx, tx, alloc)
+}
+
+func (r *Repository) InsertReturnResponsibilityAllocationTx(ctx context.Context, tx pgx.Tx, alloc *ReturnResponsibilityAllocation) error {
+	query := `
+		INSERT INTO return_responsibility_allocations (id, return_item_id, order_item_allocation_id, quantity, status, responsible_party, reason_code, decision_source, internal_note, decided_at, actor_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now())
+		RETURNING created_at, updated_at
+	`
+	err := tx.QueryRow(ctx, query, alloc.ID, alloc.ReturnItemID, alloc.OrderItemAllocationID, alloc.Quantity, alloc.Status, alloc.ResponsibleParty, alloc.ReasonCode, alloc.DecisionSource, alloc.InternalNote, alloc.DecidedAt, alloc.ActorID).Scan(&alloc.CreatedAt, &alloc.UpdatedAt)
+	if err != nil {
+		return err
+	}
+
+	return r.insertAllocationHistoryTx(ctx, tx, alloc)
+}
+
+func (r *Repository) insertAllocationHistoryTx(ctx context.Context, tx pgx.Tx, alloc *ReturnResponsibilityAllocation) error {
+	query := `
+		INSERT INTO return_responsibility_allocation_history (id, allocation_id, return_item_id, quantity, order_item_allocation_id, status, responsible_party, reason_code, decision_source, internal_note, actor_id, decided_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+	`
+	_, err := tx.Exec(ctx, query, uuid.New(), alloc.ID, alloc.ReturnItemID, alloc.Quantity, alloc.OrderItemAllocationID, alloc.Status, alloc.ResponsibleParty, alloc.ReasonCode, alloc.DecisionSource, alloc.InternalNote, alloc.ActorID, alloc.DecidedAt)
+	return err
+}
+
+func (r *Repository) GetReturnResponsibilityAllocationHistory(ctx context.Context, allocationID uuid.UUID) ([]ReturnResponsibilityAllocationHistory, error) {
+	query := `
+		SELECT id, allocation_id, return_item_id, quantity, order_item_allocation_id, status, responsible_party, reason_code, decision_source, internal_note, actor_id, decided_at, created_at
+		FROM return_responsibility_allocation_history
+		WHERE allocation_id = $1
+		ORDER BY created_at ASC, id ASC
+	`
+	rows, err := r.db.Query(ctx, query, allocationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var history []ReturnResponsibilityAllocationHistory
+	for rows.Next() {
+		var h ReturnResponsibilityAllocationHistory
+		if err := rows.Scan(
+			&h.ID, &h.AllocationID, &h.ReturnItemID, &h.Quantity, &h.OrderItemAllocationID, &h.Status, &h.ResponsibleParty, &h.ReasonCode, &h.DecisionSource, &h.InternalNote, &h.ActorID, &h.DecidedAt, &h.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		history = append(history, h)
+	}
+	return history, nil
 }

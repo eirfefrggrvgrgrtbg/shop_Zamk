@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS return_responsibility_allocation_history;
+DROP TABLE IF EXISTS return_responsibility_allocations;

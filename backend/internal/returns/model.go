@@ -125,3 +125,58 @@ func IsValidShipmentTransition(from, to string) bool {
 	}
 	return nextMap[to]
 }
+
+const (
+	ReturnResponsibilityStatusPending     = "pending"
+	ReturnResponsibilityStatusNotRequired = "not_required"
+	ReturnResponsibilityStatusResolved    = "resolved"
+
+	ReturnResponsibilityDecisionSourceSystem   = "system"
+	ReturnResponsibilityDecisionSourceEmployee = "employee"
+
+	ReturnResponsiblePartySeller   = "seller"
+	ReturnResponsiblePartyZamk     = "zamk"
+	ReturnResponsiblePartyCarrier  = "carrier"
+	ReturnResponsiblePartyCustomer = "customer"
+
+	ReturnResponsibilityReasonCustomerChangeOfMind = "customer_change_of_mind"
+	ReturnResponsibilityReasonSellerProductDefect  = "seller_product_defect"
+	ReturnResponsibilityReasonZamkWarehouseDamage  = "zamk_warehouse_damage"
+	ReturnResponsibilityReasonZamkFulfillmentError = "zamk_fulfillment_error"
+	ReturnResponsibilityReasonCarrierDamage        = "carrier_damage"
+	ReturnResponsibilityReasonCustomerDamage       = "customer_damage"
+	ReturnResponsibilityReasonFraudOrSubstitution  = "fraud_or_substitution"
+	ReturnResponsibilityReasonUnknown              = "unknown"
+)
+
+type ReturnResponsibilityAllocation struct {
+	ID                    uuid.UUID  `json:"id"`
+	ReturnItemID          uuid.UUID  `json:"returnItemId"`
+	OrderItemAllocationID *uuid.UUID `json:"orderItemAllocationId"`
+	Quantity              int        `json:"quantity"`
+	Status                string     `json:"status"`
+	ResponsibleParty      *string    `json:"responsibleParty"`
+	ReasonCode            *string    `json:"reasonCode"`
+	DecisionSource        *string    `json:"decisionSource"`
+	InternalNote          *string    `json:"internalNote"`
+	DecidedAt             *time.Time `json:"decidedAt"`
+	ActorID               *uuid.UUID `json:"actorId"`
+	CreatedAt             time.Time  `json:"createdAt"`
+	UpdatedAt             time.Time  `json:"updatedAt"`
+}
+
+type ReturnResponsibilityAllocationHistory struct {
+	ID                    uuid.UUID  `json:"id"`
+	AllocationID          uuid.UUID  `json:"allocationId"`
+	ReturnItemID          uuid.UUID  `json:"returnItemId"`
+	Quantity              int        `json:"quantity"`
+	OrderItemAllocationID *uuid.UUID `json:"orderItemAllocationId"`
+	Status                string     `json:"status"`
+	ResponsibleParty      *string    `json:"responsibleParty"`
+	ReasonCode            *string    `json:"reasonCode"`
+	DecisionSource        *string    `json:"decisionSource"`
+	InternalNote          *string    `json:"internalNote"`
+	ActorID               *uuid.UUID `json:"actorId"`
+	DecidedAt             *time.Time `json:"decidedAt"`
+	CreatedAt             time.Time  `json:"createdAt"`
+}
