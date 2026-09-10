@@ -73,6 +73,7 @@ func (r *Repository) GetSellerEarningEntryTx(ctx context.Context, tx pgx.Tx, ord
 		SELECT id, seller_id, order_id, order_item_id, payout_batch_id, type, amount_cents, currency, available_at, metadata, created_at
 		FROM seller_ledger_entries
 		WHERE order_item_id = $1 AND type = 'seller_earning'
+		FOR UPDATE
 		LIMIT 1
 	`
 	var e SellerLedgerEntry
@@ -81,6 +82,47 @@ func (r *Repository) GetSellerEarningEntryTx(ctx context.Context, tx pgx.Tx, ord
 		return nil, nil
 	}
 	return &e, err
+}
+
+func (r *Repository) HasReturnAdjustmentTx(ctx context.Context, tx pgx.Tx, orderItemID uuid.UUID, returnID uuid.UUID) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM seller_ledger_entries
+			WHERE order_item_id = $1
+			  AND type = 'adjustment'
+			  AND (metadata->>'return_id') = $2
+			  AND (metadata->>'reason') IN ('return_deduction', 'return_post_payout')
+		)
+	`
+	var exists bool
+	err := tx.QueryRow(ctx, query, orderItemID, returnID.String()).Scan(&exists)
+	return exists, err
+}
+
+func (r *Repository) GetPriorReturnDeductionsTx(ctx context.Context, tx pgx.Tx, orderItemID uuid.UUID, excludeReturnID uuid.UUID) (int64, int64, error) {
+	query := `
+		SELECT
+			COALESCE(SUM(ABS(sle.amount_cents)), 0) AS total_prior_deduction,
+			COALESCE(SUM(
+				CASE
+					WHEN (sle.metadata->>'quantity') ~ '^[0-9]+$' THEN (sle.metadata->>'quantity')::bigint
+					WHEN ri.quantity IS NOT NULL THEN ri.quantity::bigint
+					ELSE 1
+				END
+			), 0) AS total_prior_qty
+		FROM seller_ledger_entries sle
+		LEFT JOIN return_items ri
+			ON ri.return_id::text = (sle.metadata->>'return_id')
+		   AND ri.order_item_id = sle.order_item_id
+		WHERE sle.order_item_id = $1
+		  AND sle.type = 'adjustment'
+		  AND (sle.metadata->>'reason') IN ('return_deduction', 'return_post_payout')
+		  AND (sle.metadata->>'return_id') IS NOT NULL
+		  AND (sle.metadata->>'return_id') != $2
+	`
+	var totalDeduction, totalQty int64
+	err := tx.QueryRow(ctx, query, orderItemID, excludeReturnID.String()).Scan(&totalDeduction, &totalQty)
+	return totalDeduction, totalQty, err
 }
 
 func (r *Repository) ListSellerLedger(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]SellerLedgerEntry, int, error) {

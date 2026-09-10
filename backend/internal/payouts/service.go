@@ -2,9 +2,10 @@ package payouts
 
 import (
 	"context"
-	"fmt"
 	"errors"
+	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
@@ -212,7 +213,14 @@ func (s *Service) ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnI
 		orderItemMap[oi.ID] = oi
 	}
 
-	for _, item := range items {
+	// Deterministic ordering by OrderItemID to prevent deadlocks under concurrent execution
+	sortedItems := make([]ReturnItemDeduction, len(items))
+	copy(sortedItems, items)
+	sort.Slice(sortedItems, func(i, j int) bool {
+		return sortedItems[i].OrderItemID.String() < sortedItems[j].OrderItemID.String()
+	})
+
+	for _, item := range sortedItems {
 		log.Printf("ProcessReturnDeduction: processing item: %+v", item)
 		oi, ok := orderItemMap[item.OrderItemID]
 		if !ok {
@@ -220,6 +228,21 @@ func (s *Service) ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnI
 			continue
 		}
 
+		if oi.Quantity <= 0 || item.Quantity <= 0 {
+			continue
+		}
+
+		// Idempotency: skip if an authoritative return adjustment for this return_id already exists
+		alreadyApplied, err := s.repo.HasReturnAdjustmentTx(ctx, tx, item.OrderItemID, returnID)
+		if err != nil {
+			return err
+		}
+		if alreadyApplied {
+			log.Printf("ProcessReturnDeduction: adjustment for return %s on item %s already exists, skipping", returnID, item.OrderItemID)
+			continue
+		}
+
+		// Acquire row-level lock on seller_earning entry to serialize concurrent return processing
 		earningEntry, err := s.repo.GetSellerEarningEntryTx(ctx, tx, item.OrderItemID)
 		if err != nil {
 			log.Printf("ProcessReturnDeduction: error getting earning entry: %v", err)
@@ -229,15 +252,57 @@ func (s *Service) ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnI
 			log.Printf("ProcessReturnDeduction: earningEntry is nil for order item %s", item.OrderItemID)
 			continue // Should not happen for fulfilled orders
 		}
-		log.Printf("ProcessReturnDeduction: found earningEntry: %+v", earningEntry)
-
-		// Calculate proportional deduction
-		// Wait, earningEntry.AmountCents is the net earning for the entire quantity in oi.
-		// Net deduction per unit = earningEntry.AmountCents / int64(oi.Quantity)
-		if oi.Quantity <= 0 {
+		if earningEntry.AmountCents <= 0 {
 			continue
 		}
-		deductionCents := (earningEntry.AmountCents / int64(oi.Quantity)) * int64(item.Quantity)
+		log.Printf("ProcessReturnDeduction: found earningEntry: %+v", earningEntry)
+
+		// Authoritative prior deductions and returned quantity for this order_item_id
+		priorDeductions, priorQty, err := s.repo.GetPriorReturnDeductionsTx(ctx, tx, item.OrderItemID, returnID)
+		if err != nil {
+			return err
+		}
+
+		// Cumulative target allocation:
+		// Let E = earningEntry.AmountCents, Q = int64(oi.Quantity)
+		// previousReturnedQty = priorQty
+		// newReturnedQty = priorQty + item.Quantity
+		// previousTarget = floor(E * previousReturnedQty / Q)
+		// newTarget = floor(E * newReturnedQty / Q)
+		// currentDeduction = newTarget - priorDeductions
+		totalEarning := earningEntry.AmountCents
+		totalOrderQty := int64(oi.Quantity)
+
+		newReturnedQty := priorQty + int64(item.Quantity)
+		if newReturnedQty > totalOrderQty {
+			newReturnedQty = totalOrderQty
+		}
+
+		newTarget := (totalEarning * newReturnedQty) / totalOrderQty
+		deductionCents := newTarget - priorDeductions
+
+		// Safe boundary checks
+		if deductionCents < 0 {
+			deductionCents = 0
+		}
+		remainingEarning := totalEarning - priorDeductions
+		if deductionCents > remainingEarning {
+			deductionCents = remainingEarning
+		}
+		if deductionCents <= 0 {
+			continue
+		}
+
+		reason := "return_deduction"
+		if earningEntry.PayoutBatchID != nil {
+			reason = "return_post_payout"
+		}
+
+		metaJSON := fmt.Sprintf(`{"reason":"%s","return_id":"%s","quantity":%d}`,
+			reason,
+			returnID.String(),
+			item.Quantity,
+		)
 
 		if earningEntry.PayoutBatchID != nil {
 			// POST-PAYOUT RETURN RECOVERY: DEFERRED logic.
@@ -252,7 +317,7 @@ func (s *Service) ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnI
 				AmountCents: -deductionCents,
 				Currency:    "RUB",
 				AvailableAt: nil,
-				Metadata:    []byte(`{"reason":"return_post_payout","return_id":"` + returnID.String() + `"}`),
+				Metadata:    []byte(metaJSON),
 				CreatedAt:   time.Now(),
 			})
 			if err != nil {
@@ -270,7 +335,7 @@ func (s *Service) ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnI
 				AmountCents: -deductionCents,
 				Currency:    "RUB",
 				AvailableAt: earningEntry.AvailableAt,
-				Metadata:    []byte(`{"reason":"return_deduction","return_id":"` + returnID.String() + `"}`),
+				Metadata:    []byte(metaJSON),
 				CreatedAt:   time.Now(),
 			})
 			if err != nil {
