@@ -65,4 +65,5 @@ func TestCORSPreflightAllowsIdempotencyKey(t *testing.T) {
 	allowHeaders := rec.Header().Get("Access-Control-Allow-Headers")
 	require.NotEmpty(t, allowHeaders)
 	assert.True(t, strings.Contains(allowHeaders, "Idempotency-Key"), "Access-Control-Allow-Headers should contain Idempotency-Key, got: %s", allowHeaders)
+	assert.True(t, strings.Contains(allowHeaders, "X-Zamk-App"), "Access-Control-Allow-Headers should contain X-Zamk-App, got: %s", allowHeaders)
 }

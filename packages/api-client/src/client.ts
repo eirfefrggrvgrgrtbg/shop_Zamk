@@ -3,6 +3,7 @@ import { getAccessToken, setAccessToken, clearAccessToken } from './tokenStore';
 
 export interface ApiClientConfig {
   baseURL: string;
+  appScope?: 'shop' | 'seller' | 'admin';
 }
 
 let config: ApiClientConfig = {
@@ -13,6 +14,10 @@ export const createApiClient = (newConfig: ApiClientConfig) => {
   config = { ...config, ...newConfig };
 };
 
+export const getAppScope = (): 'shop' | 'seller' | 'admin' | undefined => {
+  return config.appScope;
+};
+
 export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: any;
   params?: Record<string, string | number | boolean | undefined>;
@@ -20,6 +25,16 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
 }
 
 let refreshPromise: Promise<string | null> | null = null;
+
+const isAuthSessionPath = (path: string): boolean => {
+  return (
+    path === '/auth/login' ||
+    path === '/auth/register' ||
+    path === '/auth/refresh' ||
+    path === '/auth/logout' ||
+    path === '/auth/change-password'
+  );
+};
 
 export const request = async <T>(
   method: string,
@@ -57,6 +72,10 @@ export const request = async <T>(
     const accessToken = getAccessToken();
     if (accessToken) {
       headers.set('Authorization', `Bearer ${accessToken}`);
+    }
+
+    if (config.appScope && isAuthSessionPath(path) && !headers.has('X-Zamk-App')) {
+      headers.set('X-Zamk-App', config.appScope);
     }
 
     const controller = new AbortController();

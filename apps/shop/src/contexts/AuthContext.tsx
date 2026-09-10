@@ -65,6 +65,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const res = await refresh();
         if (res.user) {
+          if (res.user.role && res.user.role !== 'customer') {
+            setUser(null);
+            return;
+          }
           if (res.user.mustChangePassword) {
             setAuthView('change_password');
             setIsAuthModalOpen(true);
@@ -90,7 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, pass: string) => {
     try {
       const res = await apiLogin({ email, password: pass });
-      
+
+      if (res.user && res.user.role && res.user.role !== 'customer') {
+        throw new Error('Для входа в магазин используйте аккаунт покупателя');
+      }
+
       if (res.user.mustChangePassword) {
         setAuthView('change_password');
         setIsAuthModalOpen(true);
@@ -108,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (firstName: string, lastName: string, middleName: string, phone: string, email: string, pass: string, passConfirm: string) => {
     try {
       const res = await apiRegister({ firstName, lastName, middleName, phone, email, password: pass, passwordConfirm: passConfirm });
-      
+
       setUser(mapApiUser(res.user));
       closeAuthModal();
       redirectAfterAuth();

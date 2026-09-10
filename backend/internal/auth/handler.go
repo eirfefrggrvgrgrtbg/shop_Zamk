@@ -27,6 +27,59 @@ type CookieConfig struct {
 	SameSite string
 }
 
+const (
+	CookieShopSession   = "zamk_shop_session"
+	CookieSellerSession = "zamk_seller_session"
+	CookieAdminSession  = "zamk_admin_session"
+	CookieLegacySession = "zamk_refresh_token"
+
+	ScopeShop   = "shop"
+	ScopeSeller = "seller"
+	ScopeAdmin  = "admin"
+)
+
+var ErrInvalidAppScope = errors.New("invalid application scope")
+
+func ResolveAppScope(r *http.Request) (string, error) {
+	val := r.Header.Get("X-Zamk-App")
+	trimmed := strings.TrimSpace(val)
+	if trimmed == "" {
+		return "", nil
+	}
+	switch strings.ToLower(trimmed) {
+	case ScopeShop:
+		return ScopeShop, nil
+	case ScopeSeller:
+		return ScopeSeller, nil
+	case ScopeAdmin:
+		return ScopeAdmin, nil
+	default:
+		return "", ErrInvalidAppScope
+	}
+}
+
+func CookieNameForScope(scope string) string {
+	switch scope {
+	case ScopeShop:
+		return CookieShopSession
+	case ScopeSeller:
+		return CookieSellerSession
+	case ScopeAdmin:
+		return CookieAdminSession
+	default:
+		return CookieLegacySession
+	}
+}
+
+func getRefreshCookie(r *http.Request, scope string) (*http.Cookie, error) {
+	targetName := CookieNameForScope(scope)
+	cookie, err := r.Cookie(targetName)
+	if err == nil && cookie.Value != "" {
+		return cookie, nil
+	}
+	return nil, http.ErrNoCookie
+}
+
 func NewHandler(service *Service, refreshTTLDays int, cookieConfig CookieConfig) *Handler {
 	return &Handler{
 		service:        service,
@@ -103,7 +156,16 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.setRefreshCookie(w, rawRefresh)
+	scope, err := ResolveAppScope(r)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_app_scope", "Invalid application scope")
+		return
+	}
+	if scope != "" && scope != ScopeShop {
+		h.writeError(w, http.StatusForbidden, "forbidden", "Customer registration is only allowed in shop scope")
+		return
+	}
+	h.setRefreshCookie(w, rawRefresh, scope)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -111,6 +173,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	scope, err := ResolveAppScope(r)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_app_scope", "Invalid application scope")
+		return
+	}
+
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
@@ -139,14 +207,34 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.setRefreshCookie(w, rawRefresh)
+	// Validate role against application scope
+	if scope == ScopeAdmin && resp.User.Role != "admin" {
+		h.writeError(w, http.StatusForbidden, "forbidden", "This account does not have admin access")
+		return
+	}
+	if scope == ScopeSeller && resp.User.Role != "seller" {
+		h.writeError(w, http.StatusForbidden, "forbidden", "This account does not have seller access")
+		return
+	}
+	if scope == ScopeShop && resp.User.Role != "customer" {
+		h.writeError(w, http.StatusForbidden, "forbidden", "This account does not have customer access")
+		return
+	}
+
+	h.setRefreshCookie(w, rawRefresh, scope)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
 
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("zamk_refresh_token")
+	scope, err := ResolveAppScope(r)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_app_scope", "Invalid application scope")
+		return
+	}
+
+	cookie, err := getRefreshCookie(r, scope)
 	if err != nil {
 		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing refresh token")
 		return
@@ -157,24 +245,47 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	resp, newRawRefresh, err := h.service.Refresh(r.Context(), cookie.Value, userAgent, ip)
 	if err != nil {
-		h.clearRefreshCookie(w)
+		h.clearRefreshCookie(w, scope)
 		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Invalid or expired session")
 		return
 	}
 
-	h.setRefreshCookie(w, newRawRefresh)
+	// Ensure the session role matches the requested app scope
+	if scope == ScopeAdmin && resp.User.Role != "admin" {
+		h.clearRefreshCookie(w, scope)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "This session does not have admin access")
+		return
+	}
+	if scope == ScopeSeller && resp.User.Role != "seller" {
+		h.clearRefreshCookie(w, scope)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "This session does not have seller access")
+		return
+	}
+	if scope == ScopeShop && resp.User.Role != "customer" {
+		h.clearRefreshCookie(w, scope)
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "This session does not have customer access")
+		return
+	}
+
+	h.setRefreshCookie(w, newRawRefresh, scope)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("zamk_refresh_token")
+	scope, err := ResolveAppScope(r)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_app_scope", "Invalid application scope")
+		return
+	}
+
+	cookie, err := getRefreshCookie(r, scope)
 	if err == nil {
 		_ = h.service.Logout(r.Context(), cookie.Value)
 	}
 
-	h.clearRefreshCookie(w)
+	h.clearRefreshCookie(w, scope)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -205,6 +316,12 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	scope, err := ResolveAppScope(r)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_app_scope", "Invalid application scope")
+		return
+	}
+
 	val := r.Context().Value("userID")
 	if val == nil {
 		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
@@ -233,7 +350,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.clearRefreshCookie(w)
+	h.clearRefreshCookie(w, scope)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -259,9 +376,10 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) setRefreshCookie(w http.ResponseWriter, token string) {
+func (h *Handler) setRefreshCookie(w http.ResponseWriter, token string, scope string) {
+	targetName := CookieNameForScope(scope)
 	http.SetCookie(w, &http.Cookie{
-		Name:     "zamk_refresh_token",
+		Name:     targetName,
 		Value:    token,
 		Path:     h.cookiePath,
 		Domain:   h.cookieDomain,
@@ -272,9 +390,10 @@ func (h *Handler) setRefreshCookie(w http.ResponseWriter, token string) {
 	})
 }
 
-func (h *Handler) clearRefreshCookie(w http.ResponseWriter) {
+func (h *Handler) clearRefreshCookie(w http.ResponseWriter, scope string) {
+	targetName := CookieNameForScope(scope)
 	http.SetCookie(w, &http.Cookie{
-		Name:     "zamk_refresh_token",
+		Name:     targetName,
 		Value:    "",
 		Path:     h.cookiePath,
 		Domain:   h.cookieDomain,
@@ -283,6 +402,18 @@ func (h *Handler) clearRefreshCookie(w http.ResponseWriter) {
 		Secure:   h.cookieSecure,
 		SameSite: h.cookieSameSite,
 	})
+	if scope == "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     CookieLegacySession,
+			Value:    "",
+			Path:     h.cookiePath,
+			Domain:   h.cookieDomain,
+			MaxAge:   -1,
+			HttpOnly: true,
+			Secure:   h.cookieSecure,
+			SameSite: h.cookieSameSite,
+		})
+	}
 }
 
 func parseSameSite(value string) http.SameSite {

@@ -21,4 +21,4 @@ export const resolveApiUrl = (): string => {
 
 export const API_URL = resolveApiUrl();
 
-createApiClient({ baseURL: API_URL });
+createApiClient({ baseURL: API_URL, appScope: 'seller' });
