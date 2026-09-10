@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -458,6 +459,25 @@ func (s *Service) ProcessRefundSuccessTx(ctx context.Context, tx pgx.Tx, refundI
 		if s.payouts != nil && len(deductionItems) > 0 {
 			if err := s.payouts.ProcessReturnDeduction(ctx, tx, ret.ID, ret.OrderID, deductionItems); err != nil {
 				return err
+			}
+
+			// Trigger A: Reconcile compensation for all distinct affected order_items in deterministic order
+			distinctOrderItemIDs := make(map[uuid.UUID]struct{})
+			for _, it := range deductionItems {
+				distinctOrderItemIDs[it.OrderItemID] = struct{}{}
+			}
+			sortedOrderItemIDs := make([]uuid.UUID, 0, len(distinctOrderItemIDs))
+			for id := range distinctOrderItemIDs {
+				sortedOrderItemIDs = append(sortedOrderItemIDs, id)
+			}
+			sort.Slice(sortedOrderItemIDs, func(i, j int) bool {
+				return sortedOrderItemIDs[i].String() < sortedOrderItemIDs[j].String()
+			})
+
+			for _, orderItemID := range sortedOrderItemIDs {
+				if err := s.payouts.ReconcileReturnCompensationTx(ctx, tx, orderItemID); err != nil {
+					return err
+				}
 			}
 		}
 	}

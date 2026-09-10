@@ -26,6 +26,7 @@ import (
 
 type payoutsService interface {
 	ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnID uuid.UUID, orderID uuid.UUID, items []payouts.ReturnItemDeduction) error
+	ReconcileReturnCompensationTx(ctx context.Context, tx pgx.Tx, orderItemID uuid.UUID) error
 }
 
 type paymentsService interface {

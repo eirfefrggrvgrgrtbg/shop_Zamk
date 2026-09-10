@@ -76,4 +76,8 @@ var (
 	ErrResponsibilityInvariants            = errors.New("invalid responsibility invariants")
 	ErrPhysicalBindingImmutable            = errors.New("responsibility allocation physical binding cannot be modified or cleared")
 	ErrResponsibilityCoverageInvariant     = errors.New("responsibility allocation coverage invariant violated")
+	ErrInvalidLegacyDisposition            = errors.New("invalid legacy disposition")
+	ErrSerializedLegacyDispositionForbidden = errors.New("legacy disposition forbidden for serialized allocation")
+	ErrResponsibilityBucketCapacityExceeded = errors.New("responsibility bucket capacity exceeded")
+	ErrPhysicalAttributionNotReady          = errors.New("physical attribution not ready")
 )

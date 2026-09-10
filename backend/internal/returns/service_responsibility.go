@@ -19,6 +19,14 @@ type SetReturnResponsibilityAllocationRequest struct {
 	InternalNote          *string    `json:"internalNote"`
 	DecidedAt             *time.Time `json:"decidedAt"`
 	ActorID               *uuid.UUID `json:"actorId"`
+	LegacyDisposition     *string    `json:"legacyDisposition"`
+}
+
+var validLegacyDispositions = map[string]bool{
+	LegacyDispositionAccepted:   true,
+	LegacyDispositionDamaged:    true,
+	LegacyDispositionRejected:   true,
+	LegacyDispositionUnreceived: true,
 }
 
 var validResponsibilityStatuses = map[string]bool{
@@ -56,6 +64,15 @@ func ValidateResponsibilityAllocationParams(req SetReturnResponsibilityAllocatio
 	}
 	if req.OrderItemAllocationID != nil && req.Quantity != 1 {
 		return ErrInvalidQuantity
+	}
+
+	if req.LegacyDisposition != nil {
+		if req.OrderItemAllocationID != nil {
+			return ErrSerializedLegacyDispositionForbidden
+		}
+		if !validLegacyDispositions[*req.LegacyDisposition] {
+			return ErrInvalidLegacyDisposition
+		}
 	}
 
 	if !validResponsibilityStatuses[req.Status] {
@@ -171,6 +188,9 @@ func isSameAllocation(current *ReturnResponsibilityAllocation, req SetReturnResp
 	if !equalTimePtr(current.DecidedAt, req.DecidedAt) {
 		return false
 	}
+	if !equalStringPtr(current.LegacyDisposition, req.LegacyDisposition) {
+		return false
+	}
 	return true
 }
 
@@ -260,6 +280,25 @@ func (s *Service) SetReturnResponsibilityAllocation(ctx context.Context, req Set
 			}
 		}
 
+		// 4b. Legacy disposition checks
+		if req.LegacyDisposition != nil {
+			if sourceAlloc.OrderItemAllocationID != nil {
+				return ErrSerializedLegacyDispositionForbidden
+			}
+			ret, err := s.repo.GetReturnTx(ctx, tx, returnItem.ReturnID)
+			if err != nil {
+				return err
+			}
+			isAuthoritative := ret.Status == "item_received" || ret.Status == "refunded" || ret.Status == "completed" ||
+				(returnItem.AcceptedQuantity > 0 || returnItem.DamagedQuantity > 0 || returnItem.RejectedQuantity > 0)
+			if !isAuthoritative {
+				return ErrPhysicalAttributionNotReady
+			}
+		}
+		if req.OrderItemAllocationID != nil && (sourceAlloc.LegacyDisposition != nil || req.LegacyDisposition != nil) {
+			return ErrSerializedLegacyDispositionForbidden
+		}
+
 		// 5. Semantic idempotency check:
 		// If exact same quantity and decision, no-op (no update, no history, updated_at unchanged).
 		// A split (req.Quantity < sourceAlloc.Quantity) is never identical.
@@ -294,6 +333,7 @@ func (s *Service) SetReturnResponsibilityAllocation(ctx context.Context, req Set
 				InternalNote:          req.InternalNote,
 				DecidedAt:             req.DecidedAt,
 				ActorID:               req.ActorID,
+				LegacyDisposition:     req.LegacyDisposition,
 			}
 			if err := s.repo.InsertReturnResponsibilityAllocationTx(ctx, tx, newAlloc); err != nil {
 				return err
@@ -309,6 +349,7 @@ func (s *Service) SetReturnResponsibilityAllocation(ctx context.Context, req Set
 			sourceAlloc.InternalNote = req.InternalNote
 			sourceAlloc.DecidedAt = req.DecidedAt
 			sourceAlloc.ActorID = req.ActorID
+			sourceAlloc.LegacyDisposition = req.LegacyDisposition
 			if err := s.repo.UpdateReturnResponsibilityAllocationTx(ctx, tx, sourceAlloc); err != nil {
 				return err
 			}
@@ -324,10 +365,58 @@ func (s *Service) SetReturnResponsibilityAllocation(ctx context.Context, req Set
 			return ErrResponsibilityCoverageInvariant
 		}
 
+		// 7b. Verify physical bucket capacity invariant
+		if err := s.validateBucketCapacitiesTx(ctx, tx, returnItem); err != nil {
+			return err
+		}
+
+		// 8. Trigger B: Reconcile compensation for the canonical order item
+		if s.payouts != nil {
+			if err := s.payouts.ReconcileReturnCompensationTx(ctx, tx, returnItem.OrderItemID); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	return resultAlloc, nil
+}
+
+func (s *Service) validateBucketCapacitiesTx(ctx context.Context, tx pgx.Tx, returnItem *ReturnItem) error {
+	attributedMap, err := s.repo.GetAttributedQuantitiesByReturnItemIDTx(ctx, tx, returnItem.ID)
+	if err != nil {
+		return err
+	}
+
+	capAccepted := returnItem.AcceptedQuantity
+	capDamaged := returnItem.DamagedQuantity
+	capRejected := returnItem.RejectedQuantity
+	capUnreceived := returnItem.Quantity - returnItem.AcceptedQuantity - returnItem.DamagedQuantity - returnItem.RejectedQuantity
+
+	for disp, totalQty := range attributedMap {
+		switch disp {
+		case LegacyDispositionAccepted:
+			if totalQty > capAccepted {
+				return ErrResponsibilityBucketCapacityExceeded
+			}
+		case LegacyDispositionDamaged:
+			if totalQty > capDamaged {
+				return ErrResponsibilityBucketCapacityExceeded
+			}
+		case LegacyDispositionRejected:
+			if totalQty > capRejected {
+				return ErrResponsibilityBucketCapacityExceeded
+			}
+		case LegacyDispositionUnreceived:
+			if totalQty > capUnreceived {
+				return ErrResponsibilityBucketCapacityExceeded
+			}
+		default:
+			return ErrInvalidLegacyDisposition
+		}
+	}
+	return nil
 }

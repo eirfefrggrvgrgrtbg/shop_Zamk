@@ -147,6 +147,11 @@ const (
 	ReturnResponsibilityReasonCustomerDamage       = "customer_damage"
 	ReturnResponsibilityReasonFraudOrSubstitution  = "fraud_or_substitution"
 	ReturnResponsibilityReasonUnknown              = "unknown"
+
+	LegacyDispositionAccepted   = "accepted"
+	LegacyDispositionDamaged    = "damaged"
+	LegacyDispositionRejected   = "rejected"
+	LegacyDispositionUnreceived = "unreceived"
 )
 
 type ReturnResponsibilityAllocation struct {
@@ -161,6 +166,7 @@ type ReturnResponsibilityAllocation struct {
 	InternalNote          *string    `json:"internalNote"`
 	DecidedAt             *time.Time `json:"decidedAt"`
 	ActorID               *uuid.UUID `json:"actorId"`
+	LegacyDisposition     *string    `json:"legacyDisposition"`
 	CreatedAt             time.Time  `json:"createdAt"`
 	UpdatedAt             time.Time  `json:"updatedAt"`
 }
@@ -178,5 +184,6 @@ type ReturnResponsibilityAllocationHistory struct {
 	InternalNote          *string    `json:"internalNote"`
 	ActorID               *uuid.UUID `json:"actorId"`
 	DecidedAt             *time.Time `json:"decidedAt"`
+	LegacyDisposition     *string    `json:"legacyDisposition"`
 	CreatedAt             time.Time  `json:"createdAt"`
 }
