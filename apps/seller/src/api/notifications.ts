@@ -12,6 +12,7 @@ export interface Notification {
   entityId: string;
   actionUrl?: string;
   dedupeKey?: string;
+  metadata?: Record<string, unknown> | null;
   readAt: string | null;
   resolvedAt?: string | null;
   createdAt: string;

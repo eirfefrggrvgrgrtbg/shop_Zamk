@@ -4,6 +4,73 @@ import { useNavigate } from 'react-router-dom';
 import { notificationsApi, type Notification } from '../../api/notifications';
 import { useAuth } from '../../contexts/AuthContext';
 
+interface ForecastVariantMeta {
+  variantId?: string;
+  sellerSku?: string;
+  color?: string;
+  size?: string;
+  freeSellableStock?: number;
+  paidDemandUnits?: number;
+  observedDays?: number;
+  dailySalesVelocity?: number;
+  daysOfCover?: number;
+  severity?: string;
+}
+
+export function formatDaysRussian(days: number): string {
+  if (days < 0) days = 0;
+  const mod100 = days % 100;
+  const mod10 = days % 10;
+  if (mod100 >= 11 && mod100 <= 19) {
+    return `${days} дней`;
+  }
+  switch (mod10) {
+    case 1:
+      return `${days} день`;
+    case 2:
+    case 3:
+    case 4:
+      return `${days} дня`;
+    default:
+      return `${days} дней`;
+  }
+}
+
+export function formatVariantDisplayLabel(color?: string | null, size?: string | null): string {
+  const c = (color || '').trim();
+  const s = (size || '').trim();
+  if (c && s) return `${c} · ${s}`;
+  if (c) return c;
+  if (s) return s;
+  return '';
+}
+
+function parseForecastVariants(metadata?: Record<string, unknown> | null): ForecastVariantMeta[] | null {
+  if (!metadata || !Array.isArray(metadata.variants)) {
+    return null;
+  }
+  const result: ForecastVariantMeta[] = [];
+  for (const item of metadata.variants) {
+    if (item && typeof item === 'object') {
+      const v = item as Record<string, unknown>;
+      const daysOfCover = typeof v.daysOfCover === 'number' ? v.daysOfCover : undefined;
+      result.push({
+        variantId: typeof v.variantId === 'string' ? v.variantId : undefined,
+        sellerSku: typeof v.sellerSku === 'string' ? v.sellerSku : undefined,
+        color: typeof v.color === 'string' ? v.color : undefined,
+        size: typeof v.size === 'string' ? v.size : undefined,
+        freeSellableStock: typeof v.freeSellableStock === 'number' ? v.freeSellableStock : undefined,
+        paidDemandUnits: typeof v.paidDemandUnits === 'number' ? v.paidDemandUnits : undefined,
+        observedDays: typeof v.observedDays === 'number' ? v.observedDays : undefined,
+        dailySalesVelocity: typeof v.dailySalesVelocity === 'number' ? v.dailySalesVelocity : undefined,
+        daysOfCover,
+        severity: typeof v.severity === 'string' ? v.severity : undefined,
+      });
+    }
+  }
+  return result.length > 0 ? result : null;
+}
+
 export function NotificationBell() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
@@ -127,10 +194,13 @@ export function NotificationBell() {
                 const isWarning = n.severity === 'warning';
                 const isAlert = n.kind === 'alert';
                 const isResolved = n.status === 'resolved';
+                const isForecastRisk = n.type === 'stock_forecast_risk';
 
-                let icon = <Info className="w-4 h-4 text-blue-500" />;
-                if (isCritical) icon = <AlertCircle className="w-4 h-4 text-red-500" />;
-                if (isWarning) icon = <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+                let icon = <Info className="w-4 h-4 text-blue-500 shrink-0" />;
+                if (isCritical) icon = <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />;
+                if (isWarning) icon = <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0" />;
+
+                const forecastVariants = isForecastRisk ? parseForecastVariants(n.metadata) : null;
 
                 const handleAction = () => {
                   if (n.actionUrl) {
@@ -146,18 +216,52 @@ export function NotificationBell() {
                     onClick={n.actionUrl ? handleAction : undefined}
                   >
                     <div className="flex justify-between items-start gap-2">
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                            {icon}
-                           <h4 className="text-sm font-medium text-gray-900 dark:text-white leading-tight">{n.title}</h4>
+                           <h4 className="text-sm font-medium text-gray-900 dark:text-white leading-tight truncate">{n.title}</h4>
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{n.body}</p>
+
+                        {/* Forecast diagnostic details or standard body */}
+                        {isForecastRisk && forecastVariants ? (
+                          <div className="mt-2 space-y-1.5">
+                            {forecastVariants.slice(0, 3).map((v, idx) => {
+                              const label = formatVariantDisplayLabel(v.color, v.size);
+                              const roundedDays = typeof v.daysOfCover === 'number' ? Math.round(v.daysOfCover) : null;
+                              const baseCoverText = roundedDays !== null ? `≈ ${formatDaysRussian(roundedDays)} запаса` : null;
+                              const coverText = baseCoverText ? (isResolved ? `Было: ${baseCoverText}` : baseCoverText) : null;
+
+                              return (
+                                <div key={v.variantId || idx} className="text-xs bg-gray-50 dark:bg-gray-800/60 p-1.5 rounded flex items-center justify-between gap-2 border border-gray-100 dark:border-gray-800">
+                                  {label ? (
+                                    <span className="font-medium text-gray-800 dark:text-gray-200 truncate">{label}</span>
+                                  ) : (
+                                    <span className="font-medium text-gray-800 dark:text-gray-200 truncate">Основной</span>
+                                  )}
+                                  {coverText && (
+                                    <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-normal">
+                                      {coverText}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {forecastVariants.length > 3 && (
+                              <p className="text-[11px] text-gray-400 dark:text-gray-500 italic pl-1">
+                                Ещё {forecastVariants.length - 3} {formatDaysRussian(forecastVariants.length - 3).replace(/^\d+\s*/, '') === 'день' ? 'вариант' : (formatDaysRussian(forecastVariants.length - 3).replace(/^\d+\s*/, '') === 'дня' ? 'варианта' : 'вариантов')}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{n.body}</p>
+                        )}
+
                         <div className="flex items-center gap-2 mt-2">
                           <span className="text-[10px] text-gray-400 dark:text-gray-500 block">
                             {new Date(n.createdAt).toLocaleString('ru-RU')}
                           </span>
                           {isAlert && (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${isResolved ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-medium ${isResolved ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
                               {isResolved ? 'Решено' : 'Активно'}
                             </span>
                           )}
