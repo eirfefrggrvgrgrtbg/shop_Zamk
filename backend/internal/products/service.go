@@ -648,7 +648,7 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 	var modLog *ProductModerationLog
 	var revision *ProductRevision
 
-	if p.Status == StatusPublished || p.Status == StatusApproved {
+	if p.Status == StatusPublished {
 		now := time.Now()
 		revID := uuid.New()
 				// Construct full target state for snapshot
@@ -1235,7 +1235,7 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 		}
 		if s.notifs != nil {
 			var notifType, title, body string
-			if toStatus == StatusApproved || toStatus == StatusPublished {
+			if toStatus == StatusPublished {
 				notifType = notifications.TypeProductApproved
 				title = "Товар одобрен"
 				body = "Ваш товар " + p.Title + " прошел модерацию и опубликован."
@@ -1259,6 +1259,7 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 				})
 			}
 		}
+
 		return nil
 	})
 }
@@ -1319,7 +1320,7 @@ func (s *Service) PublishProduct(ctx context.Context, adminUserID, productID uui
 }
 
 func (s *Service) HideProduct(ctx context.Context, adminUserID, productID uuid.UUID, comment *string) error {
-	return s.applyModerationTransition(ctx, adminUserID, productID, StatusHidden, comment, []string{StatusPublished, StatusApproved}, nil)
+	return s.applyModerationTransition(ctx, adminUserID, productID, StatusHidden, comment, []string{StatusPublished}, nil)
 }
 
 func (s *Service) BlockProduct(ctx context.Context, adminUserID, productID uuid.UUID, comment *string) error {
@@ -1371,18 +1372,22 @@ func mapToPublicProduct(p Product) PublicProduct {
 
 	for _, v := range p.Variants {
 		pub.Variants = append(pub.Variants, PublicProductVariant{
-			ID:         v.ID,
-			ProductID:  v.ProductID,
-			Size:       v.Size,
-			Color:      v.Color,
-			SellerSKU:   v.SellerSKU,
-			ColorID:     v.ColorID,
-			SizeValueID: v.SizeValueID,
-			ShadeName:   v.ShadeName,
+			ID:           v.ID,
+			ProductID:    v.ProductID,
+			SKU:          v.SKU,
+			Size:         v.Size,
+			Color:        v.Color,
 			OptionValues: v.OptionValues,
-			PriceCents: v.PriceCents,
-			IsActive:   v.IsActive,
-			InStock:    v.InStock,
+			SellerSKU:    v.SellerSKU,
+			ColorID:      v.ColorID,
+			SizeValueID:  v.SizeValueID,
+			ColorName:    v.ColorName,
+			ColorHex:     v.ColorHex,
+			ShadeName:    v.ShadeName,
+			Barcode:      v.Barcode,
+			PriceCents:   v.PriceCents,
+			IsActive:     v.IsActive,
+			InStock:      v.InStock,
 		})
 	}
 

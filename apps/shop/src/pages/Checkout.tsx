@@ -10,6 +10,7 @@ import { createOrder, createPayment } from '@zamk/api-client/src/customer';
 import { getDeliveryMethods } from '@zamk/api-client/src/public';
 import type { PublicDeliveryMethod } from '@zamk/api-client/src/types';
 import { useAuth } from '../contexts/AuthContext';
+import { formatVariantDetails } from '../lib/variantSelection';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -91,6 +92,11 @@ export function Checkout() {
     }
 
     if (isSubmitting || done) {
+      return;
+    }
+
+    if (items.some(i => i.inStock === false)) {
+      setValidationError('В заказе есть недоступные товары. Вернитесь в корзину и удалите их.');
       return;
     }
 
@@ -454,12 +460,31 @@ export function Checkout() {
                 {items.map((item) => {
                   const productName = item.title || item.product?.name || 'Неизвестный товар';
                   const itemPrice = item.price ? item.price * item.quantity : 0;
+                  const variantDetails = formatVariantDetails(item.color, item.size);
+                  const isUnavailable = item.inStock === false;
                   return (
-                  <div key={item.id} className='flex justify-between text-graphite-light dark:text-white/68'>
-                    <span>
-                      {productName} × {item.quantity}
+                  <div key={item.id} className='flex justify-between items-start text-graphite-light dark:text-white/68'>
+                    <div className='flex flex-col pr-2'>
+                      <span className='font-medium text-graphite dark:text-white'>
+                        {productName}
+                      </span>
+                      {variantDetails && (
+                        <span className='text-xs text-ash'>
+                          {variantDetails}
+                        </span>
+                      )}
+                      <span className='text-xs text-ash mt-0.5'>
+                        × {item.quantity}
+                      </span>
+                      {isUnavailable && (
+                        <span className='text-xs text-error font-medium mt-0.5'>
+                          (нет в наличии)
+                        </span>
+                      )}
+                    </div>
+                    <span className='whitespace-nowrap font-medium text-graphite dark:text-white'>
+                      {formatPrice(itemPrice)}
                     </span>
-                    <span>{formatPrice(itemPrice)}</span>
                   </div>
                 )})}
                 <div className='border-t border-border-lighter dark:border-white/10 pt-3 mt-3 space-y-2'>
@@ -469,7 +494,18 @@ export function Checkout() {
                 </div>
               </div>
 
-              <Button type='button' className='w-full mt-5' onClick={handleCheckout} disabled={isSubmitting}>
+              {items.some(i => i.inStock === false) && (
+                <p className='mt-3 text-xs text-error'>
+                  В заказе есть недоступные товары. Пожалуйста, вернитесь в корзину и удалите их.
+                </p>
+              )}
+
+              <Button
+                type='button'
+                className='w-full mt-5'
+                onClick={handleCheckout}
+                disabled={isSubmitting || items.some(i => i.inStock === false)}
+              >
                 Оформить заказ
               </Button>
             </CheckoutPanel>

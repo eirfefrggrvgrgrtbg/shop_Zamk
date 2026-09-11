@@ -10,6 +10,7 @@ import { useToast } from '../contexts/ToastContext';
 import { PreviewPageMetadata } from '../components/PreviewPageMetadata';
 import { formatPrice, cn } from '../lib/utils';
 import { fetchProductById, fetchProductReviews, fetchProductPreviewByToken } from '../api/publicCatalog';
+import { useVariantSelection } from '../lib/variantSelection';
 import type { Product, Review } from '../types/catalog';
 
 export interface MeasurementMeta {
@@ -314,8 +315,6 @@ export function ProductDetail() {
   const [error, setError] = useState<string | null>(null);
 
   const [activeImage, setActiveImage] = useState(0);
-  const [activeSize, setActiveSize] = useState<string | null>(null);
-  const [activeColor, setActiveColor] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [showSizeChart, setShowSizeChart] = useState(false);
   const [sizeError, setSizeError] = useState('');
@@ -370,70 +369,29 @@ export function ProductDetail() {
   const { toggleFavorite, isFavorite } = useFavorites();
   const { showToast } = useToast();
 
-  const colorMap = new Map<string, { id: string, name: string, hex: string, shadeName?: string }>();
-  product?.variants?.forEach(v => {
-    if (v.colorId && v.colorName) {
-      if (!colorMap.has(v.colorId)) {
-        colorMap.set(v.colorId, {
-          id: v.colorId,
-          name: v.colorName,
-          hex: v.colorHex || '#71717a',
-          shadeName: (v as any).colorShadeName || undefined
-        });
-      }
-    }
-  });
-  const colors = Array.from(colorMap.values());
-  const activeColorObj = colors[activeColor] || null;
+  const {
+    dimensionType,
+    colors,
+    sizes,
+    selectedColorId,
+    selectedSizeId,
+    selectedColor,
+    selectedSize,
+    selectedVariant,
+    isResolved,
+    canAddToCart,
+    requiresColor,
+    requiresSize,
+    ctaText,
+    selectColor,
+    selectSize,
+  } = useVariantSelection(product?.variants, product?.sizeChart);
 
-  const handleColorChange = (newIndex: number) => {
-    setActiveColor(newIndex);
+  const handleColorChange = (colorId: string) => {
+    selectColor(colorId);
     setActiveImage(0);
-    const newColorObj = colors[newIndex];
-    if (activeSize && newColorObj) {
-      const sizeStillValid = product?.variants?.some(
-        v => v.isActive && v.colorId === newColorObj.id && v.size === activeSize
-      );
-      if (!sizeStillValid) {
-        setActiveSize(null);
-      }
-    }
+    if (sizeError) setSizeError('');
   };
-
-  const sizeMap = new Map<string, { id: string, label: string }>();
-  product?.variants?.forEach(v => {
-    if (!v.size || !v.isActive) return;
-    if (colors.length > 0) {
-      if (activeColorObj && v.colorId === activeColorObj.id) {
-        if (!sizeMap.has(v.size)) {
-           sizeMap.set(v.size, { id: v.sizeValueId || v.size, label: v.size });
-        }
-      }
-    } else {
-      if (!sizeMap.has(v.size)) {
-         sizeMap.set(v.size, { id: v.sizeValueId || v.size, label: v.size });
-      }
-    }
-  });
-
-  const selectableSizes = Array.from(sizeMap.values());
-  if (product?.sizeChart?.rows) {
-    const sortOrder = product.sizeChart.rows.map((r: any) => r.sizeValueName);
-    selectableSizes.sort((a, b) => {
-      const idxA = sortOrder.indexOf(a.label);
-      const idxB = sortOrder.indexOf(b.label);
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-      return 0;
-    });
-  }
-
-  useEffect(() => {
-    if (selectableSizes.length === 1 && !activeSize) {
-      setActiveSize(selectableSizes[0].label);
-    }
-  }, [selectableSizes, activeSize]);
 
   if (isLoading) {
     return (
@@ -466,21 +424,9 @@ export function ProductDetail() {
 
   const liked = isFavorite(product.id);
 
-  const requiresSizeSelection = selectableSizes.length > 0 && !selectableSizes.some(s => s.label === 'Единый');
-
-  let selectedVariant = product.variants?.[0];
-  if (requiresSizeSelection) {
-    selectedVariant = product.variants?.find(v =>
-      v.size === activeSize && v.isActive &&
-      (colors.length === 0 || v.colorId === activeColorObj?.id)
-    );
-  } else if (colors.length > 0) {
-    selectedVariant = product.variants?.find(v => v.isActive && v.colorId === activeColorObj?.id);
-  }
-
   const specs = getProductSpecs(product, selectedVariant);
 
-  const visibleImages = allImages.filter((img: any) => !img.colorId || (activeColorObj && img.colorId === activeColorObj.id));
+  const visibleImages = allImages.filter((img: any) => !img.colorId || (selectedColor?.id && img.colorId === selectedColor.id));
   if (visibleImages.length === 0 && allImages.length > 0) visibleImages.push(allImages[0]);
   const currentActiveImage = activeImage < visibleImages.length ? activeImage : 0;
   const currentImageUrl = visibleImages[currentActiveImage]?.url || defaultImage.url;
@@ -491,7 +437,7 @@ export function ProductDetail() {
 
   const handleAddToCart = async () => {
     if (product.isPreview) return;
-    if (requiresSizeSelection && !activeSize) {
+    if (requiresSize && !selectedSizeId) {
       setSizeError('Выберите размер перед добавлением в корзину');
       return;
     }
@@ -502,7 +448,7 @@ export function ProductDetail() {
       return;
     }
 
-    if (!(selectedVariant.inStock ?? true)) {
+    if (!canAddToCart) {
       showToast('Выбранный вариант товара закончился.');
       return;
     }
@@ -655,14 +601,15 @@ export function ProductDetail() {
                   <p className="text-sm font-medium text-graphite dark:text-white">
                     Цвет:{' '}
                     <span className="text-ash font-normal">
-                      {activeColorObj?.name || 'Не выбран'}
-                      {activeColorObj?.shadeName ? ` (${activeColorObj.shadeName})` : ''}
+                      {selectedColor?.name || 'Не выбран'}
+                      {selectedColor?.shadeName ? ` (${selectedColor.shadeName})` : ''}
+                      {selectedColor && !selectedColor.hasInStock ? ' (нет в наличии)' : ''}
                     </span>
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3 items-center" role="radiogroup" aria-label="Выбор цвета">
-                  {colors.map((color, index) => {
-                    const isSelected = activeColor === index;
+                  {colors.map((color) => {
+                    const isSelected = selectedColorId === color.id;
                     const isWhiteOrLight = isLightColor(color.hex);
                     return (
                       <button
@@ -670,9 +617,9 @@ export function ProductDetail() {
                         type="button"
                         role="radio"
                         aria-checked={isSelected}
-                        aria-label={color.name + (color.shadeName ? ` (${color.shadeName})` : '')}
-                        title={color.name + (color.shadeName ? ` (${color.shadeName})` : '')}
-                        onClick={() => handleColorChange(index)}
+                        aria-label={color.name + (color.shadeName ? ` (${color.shadeName})` : '') + (!color.hasInStock ? ' (нет в наличии)' : '')}
+                        title={color.name + (color.shadeName ? ` (${color.shadeName})` : '') + (!color.hasInStock ? ' (нет в наличии)' : '')}
+                        onClick={() => handleColorChange(color.id)}
                         className={cn(
                           "relative w-9 h-9 rounded-full transition-all duration-150 flex items-center justify-center",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
@@ -681,16 +628,29 @@ export function ProductDetail() {
                             : "hover:scale-105 hover:ring-1 hover:ring-black/20 dark:hover:ring-white/30 opacity-90 hover:opacity-100"
                         )}
                       >
-                        {/* Swatch circle with crisp border ensuring light/white colors are clearly visible */}
-                        <span
-                          style={{ backgroundColor: color.hex || '#71717a' }}
-                          className={cn(
-                            "w-full h-full rounded-full border shadow-inner",
-                            isWhiteOrLight
-                              ? "border-black/25 dark:border-white/30"
-                              : "border-black/10 dark:border-white/15"
-                          )}
-                        />
+                        {color.hex ? (
+                          <span
+                            style={{ backgroundColor: color.hex }}
+                            className={cn(
+                              "w-full h-full rounded-full border shadow-inner",
+                              isWhiteOrLight
+                                ? "border-black/25 dark:border-white/30"
+                                : "border-black/10 dark:border-white/15"
+                            )}
+                          />
+                        ) : (
+                          <span className="w-full h-full rounded-full border border-black/20 dark:border-white/20 bg-ice dark:bg-white/10 flex items-center justify-center text-[10px] font-semibold text-graphite dark:text-white uppercase">
+                            {color.name.slice(0, 2)}
+                          </span>
+                        )}
+                        {!color.hasInStock && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                          >
+                            <span className="w-[120%] h-[1.5px] bg-red-500/70 rotate-45 transform" />
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -699,11 +659,11 @@ export function ProductDetail() {
             )}
 
             {/* Sizes */}
-            {requiresSizeSelection && (
+            {requiresSize && (
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm font-medium text-graphite dark:text-white">
-                    Размер: <span className="text-ash font-normal">{activeSize || 'Не выбран'}</span>
+                    Размер: <span className="text-ash font-normal">{selectedSize?.label || 'Не выбран'}</span>
                   </p>
                   <button
                     type="button"
@@ -715,24 +675,32 @@ export function ProductDetail() {
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {selectableSizes.map((sizeObj) => (
-                    <button
-                      key={sizeObj.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveSize(sizeObj.label);
-                        if (sizeError) setSizeError('');
-                      }}
-                      className={cn(
-                        "h-10 min-w-[48px] px-4 rounded-lg border text-sm font-medium transition-all",
-                        activeSize === sizeObj.label
+                  {sizes.map((sizeObj) => {
+                    const isSelected = selectedSizeId === sizeObj.id;
+                    return (
+                      <button
+                        key={sizeObj.id}
+                        type="button"
+                        disabled={sizeObj.disabled}
+                        onClick={() => {
+                          if (!sizeObj.disabled) {
+                            selectSize(sizeObj.id);
+                            if (sizeError) setSizeError('');
+                          }
+                        }}
+                        className={cn(
+                          "h-10 min-w-[48px] px-4 rounded-lg border text-sm font-medium transition-all relative",
+                          isSelected
                             ? "bg-graphite text-white border-graphite dark:bg-white dark:text-black dark:border-white shadow-sm"
-                          : "bg-white dark:bg-transparent border-border-lighter dark:border-white/20 text-graphite dark:text-white hover:border-graphite dark:hover:border-white"
-                      )}
-                    >
-                      {sizeObj.label}
-                    </button>
-                  ))}
+                            : sizeObj.disabled
+                              ? "border-border-lighter/60 dark:border-white/10 text-ash/60 dark:text-white/30 cursor-not-allowed line-through bg-ice/30 dark:bg-white/[0.02]"
+                              : "bg-white dark:bg-transparent border-border-lighter dark:border-white/20 text-graphite dark:text-white hover:border-graphite dark:hover:border-white"
+                        )}
+                      >
+                        {sizeObj.label}
+                      </button>
+                    );
+                  })}
                 </div>
                 {sizeError && (
                   <p className="mt-2 text-sm text-error" role="alert">
@@ -749,7 +717,7 @@ export function ProductDetail() {
                 <div className="flex items-center border border-border-lighter dark:border-white/20 rounded-lg">
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    disabled={product.isPreview}
+                    disabled={product.isPreview || !isResolved || !canAddToCart}
                     className="w-10 h-10 flex items-center justify-center text-graphite dark:text-white hover:bg-ice dark:hover:bg-white/5 transition-colors disabled:opacity-50"
                   >
                     <Minus className="w-4 h-4" />
@@ -757,7 +725,7 @@ export function ProductDetail() {
                   <span className="w-12 text-center text-sm font-medium text-graphite dark:text-white">{quantity}</span>
                   <button
                     onClick={() => setQuantity(quantity + 1)}
-                    disabled={product.isPreview}
+                    disabled={product.isPreview || !isResolved || !canAddToCart}
                     className="w-10 h-10 flex items-center justify-center text-graphite dark:text-white hover:bg-ice dark:hover:bg-white/5 transition-colors disabled:opacity-50"
                   >
                     <Plus className="w-4 h-4" />
@@ -773,18 +741,12 @@ export function ProductDetail() {
                 variant="primary"
                 className="flex-1 h-12 gap-2"
                 onClick={handleAddToCart}
-                disabled={product.isPreview || !selectedVariant || !(selectedVariant.inStock ?? true)}
+                disabled={product.isPreview || !isResolved || !canAddToCart}
               >
                 <ShoppingBag className="w-5 h-5" />
                 {product.isPreview
                   ? 'Покупка недоступна в режиме предпросмотра'
-                  : (() => {
-                      if (!selectedVariant) {
-                        const hasAnyInStock = product.variants?.some(v => v.inStock && v.isActive);
-                        return hasAnyInStock ? 'Выберите размер' : 'Нет в наличии';
-                      }
-                      return (selectedVariant.inStock ?? true) ? 'Добавить в корзину' : 'Нет в наличии';
-                    })()}
+                  : ctaText}
               </Button>
               <Button
                 type="button"

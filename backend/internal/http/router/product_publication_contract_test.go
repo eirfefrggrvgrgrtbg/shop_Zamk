@@ -663,4 +663,196 @@ func TestProductPublicationContract(t *testing.T) {
 		r.ServeHTTP(pdpRec, pdpReq)
 		assert.Equal(t, http.StatusNotFound, pdpRec.Code, "Inactive seller product must be 404")
 	})
+
+	t.Run("J. legacy approved normalization and buyability contract", func(t *testing.T) {
+		// A. legacy approved product is normalized to published by migration (or normalization UPDATE)
+		legacyID := uuid.New()
+		legacyVariantID := uuid.New()
+		legacyNow := time.Now().Add(-24 * time.Hour)
+
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO products (
+				id, seller_id, category_id, title, slug, price_cents, currency, status,
+				submitted_at, approved_at, published_at, created_at, updated_at
+			) VALUES ($1, $2, $3, 'Legacy Approved Product', $4, 500000, 'RUB', 'approved', $5, $5, NULL, $5, $5)
+		`, legacyID, sellerID, catID, "legacy-approved-"+legacyID.String()[:8], legacyNow)
+		require.NoError(t, err)
+
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO product_variants (
+				id, product_id, sku, seller_sku, barcode, price_cents, is_active, created_at, updated_at
+			) VALUES ($1, $2, $3, $3, $4, 500000, true, $5, $5)
+		`, legacyVariantID, legacyID, "SKU-"+legacyVariantID.String()[:8], "BC-"+legacyVariantID.String()[:8], legacyNow)
+		require.NoError(t, err)
+
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, 2, 0, now(), now())
+		`, uuid.New(), legacyID, legacyVariantID, sellerID)
+		require.NoError(t, err)
+
+		// Before normalization:
+		// Product with status='approved' is NOT public and CANNOT be added to cart or checked out
+		catReq := httptest.NewRequest(http.MethodGet, "/api/public/products", nil)
+		catRec := httptest.NewRecorder()
+		r.ServeHTTP(catRec, catReq)
+		var catResp struct {
+			Items []struct {
+				ID uuid.UUID `json:"id"`
+			} `json:"items"`
+		}
+		json.NewDecoder(catRec.Body).Decode(&catResp)
+		for _, item := range catResp.Items {
+			assert.NotEqual(t, legacyID, item.ID, "Un-normalized approved product must NOT appear in public catalog")
+		}
+
+		pdpReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/public/products/%s", legacyID), nil)
+		pdpRec := httptest.NewRecorder()
+		r.ServeHTTP(pdpRec, pdpReq)
+		assert.Equal(t, http.StatusNotFound, pdpRec.Code, "Un-normalized approved product must return 404 on PDP")
+
+		cartBody, _ := json.Marshal(map[string]any{
+			"productId":        legacyID.String(),
+			"productVariantId": legacyVariantID.String(),
+			"quantity":         1,
+		})
+		cartReq := httptest.NewRequest(http.MethodPost, "/api/customer/cart/items", bytes.NewReader(cartBody))
+		cartReq.Header.Set("Authorization", "Bearer "+customerToken)
+		cartReq.Header.Set("Content-Type", "application/json")
+		cartRec := httptest.NewRecorder()
+		r.ServeHTTP(cartRec, cartReq)
+		assert.Equal(t, http.StatusBadRequest, cartRec.Code, "Un-normalized approved product must be rejected by cart")
+
+		// Now execute the canonical normalization (migration 82)
+		tag, err := pgClient.Pool.Exec(ctx, `
+			UPDATE products
+			SET
+				status = 'published',
+				published_at = COALESCE(published_at, approved_at, updated_at, created_at, now()),
+				updated_at = now()
+			WHERE status = 'approved' AND id = $1;
+		`, legacyID)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), tag.RowsAffected())
+
+		var normStatus string
+		var normPublishedAt *time.Time
+		err = pgClient.Pool.QueryRow(ctx, "SELECT status, published_at FROM products WHERE id = $1", legacyID).Scan(&normStatus, &normPublishedAt)
+		require.NoError(t, err)
+		assert.Equal(t, "published", normStatus)
+		require.NotNil(t, normPublishedAt)
+
+		// B. published + free=2:
+		// - appears in public catalog
+		// - PDP = 200
+		// - add to cart succeeds
+		// - checkout/order creation succeeds
+		catReq2 := httptest.NewRequest(http.MethodGet, "/api/public/products?limit=100", nil)
+		catRec2 := httptest.NewRecorder()
+		r.ServeHTTP(catRec2, catReq2)
+		var catResp2 struct {
+			Items []struct {
+				ID uuid.UUID `json:"id"`
+			} `json:"items"`
+		}
+		json.NewDecoder(catRec2.Body).Decode(&catResp2)
+		foundNorm := false
+		for _, item := range catResp2.Items {
+			if item.ID == legacyID {
+				foundNorm = true
+				break
+			}
+		}
+		assert.True(t, foundNorm, "Normalized product must appear in public catalog")
+
+		pdpReq2 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/public/products/%s", legacyID), nil)
+		pdpRec2 := httptest.NewRecorder()
+		r.ServeHTTP(pdpRec2, pdpReq2)
+		assert.Equal(t, http.StatusOK, pdpRec2.Code, "Normalized product PDP must return 200")
+
+		cartReq2 := httptest.NewRequest(http.MethodPost, "/api/customer/cart/items", bytes.NewReader(cartBody))
+		cartReq2.Header.Set("Authorization", "Bearer "+customerToken)
+		cartReq2.Header.Set("Content-Type", "application/json")
+		cartRec2 := httptest.NewRecorder()
+		r.ServeHTTP(cartRec2, cartReq2)
+		assert.Equal(t, http.StatusCreated, cartRec2.Code, "Normalized product must be addable to cart")
+
+		orderBody, _ := json.Marshal(map[string]any{
+			"customerName":     "Norm Customer",
+			"customerPhone":    "+79981234568",
+			"customerEmail":    customerEmail,
+			"deliveryAddress":  "Norm St 1",
+			"deliveryMethodId": deliveryMethodID,
+		})
+		orderReq := httptest.NewRequest(http.MethodPost, "/api/customer/orders", bytes.NewReader(orderBody))
+		orderReq.Header.Set("Authorization", "Bearer "+customerToken)
+		orderReq.Header.Set("Content-Type", "application/json")
+		orderRec := httptest.NewRecorder()
+		r.ServeHTTP(orderRec, orderReq)
+		assert.Equal(t, http.StatusCreated, orderRec.Code, "Normalized product checkout must succeed")
+
+		// C. published + free=1 (now stock was decremented by reservation from 2 to 1):
+		// - hidden from public Shop
+		// - cannot start a new purchase
+		pdpReq3 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/public/products/%s", legacyID), nil)
+		pdpRec3 := httptest.NewRecorder()
+		r.ServeHTTP(pdpRec3, pdpReq3)
+		assert.Equal(t, http.StatusNotFound, pdpRec3.Code, "Product with free=1 must be hidden from PDP")
+
+		catReq3 := httptest.NewRequest(http.MethodGet, "/api/public/products?limit=100", nil)
+		catRec3 := httptest.NewRecorder()
+		r.ServeHTTP(catRec3, catReq3)
+		var catResp3 struct {
+			Items []struct {
+				ID uuid.UUID `json:"id"`
+			} `json:"items"`
+		}
+		json.NewDecoder(catRec3.Body).Decode(&catResp3)
+		for _, item := range catResp3.Items {
+			assert.NotEqual(t, legacyID, item.ID, "Product with free=1 must be hidden from catalog; user cannot start purchase in Shop")
+		}
+
+		// D. draft / pending / rejected / hidden cannot checkout
+		nonPublicStatuses := []string{"draft", "pending_moderation", "rejected", "hidden"}
+		for _, st := range nonPublicStatuses {
+			npProdID, npVarID := createPendingProduct("NP Product "+st, "np-"+st+"-"+uuid.New().String()[:8], sellerID)
+			_, err = pgClient.Pool.Exec(ctx, "UPDATE products SET status = $1 WHERE id = $2", st, npProdID)
+			require.NoError(t, err)
+			_, err = pgClient.Pool.Exec(ctx, "INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at) VALUES ($1, $2, $3, $4, 5, 0, now(), now())", uuid.New(), npProdID, npVarID, sellerID)
+			require.NoError(t, err)
+
+			// 1. Not in catalog
+			catReq := httptest.NewRequest(http.MethodGet, "/api/public/products", nil)
+			catRec := httptest.NewRecorder()
+			r.ServeHTTP(catRec, catReq)
+			var cr struct {
+				Items []struct {
+					ID uuid.UUID `json:"id"`
+				} `json:"items"`
+			}
+			json.NewDecoder(catRec.Body).Decode(&cr)
+			for _, it := range cr.Items {
+				assert.NotEqual(t, npProdID, it.ID, "Non-public status "+st+" must NOT appear in catalog")
+			}
+
+			// 2. Not in PDP
+			pdpReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/public/products/%s", npProdID), nil)
+			pdpRec := httptest.NewRecorder()
+			r.ServeHTTP(pdpRec, pdpReq)
+			assert.Equal(t, http.StatusNotFound, pdpRec.Code, "Non-public status "+st+" must be 404 on PDP")
+
+			// 3. Cannot add to cart
+			cb, _ := json.Marshal(map[string]any{
+				"productId":        npProdID.String(),
+				"productVariantId": npVarID.String(),
+				"quantity":         1,
+			})
+			cReq := httptest.NewRequest(http.MethodPost, "/api/customer/cart/items", bytes.NewReader(cb))
+			cReq.Header.Set("Authorization", "Bearer "+customerToken)
+			cReq.Header.Set("Content-Type", "application/json")
+			cRec := httptest.NewRecorder()
+			r.ServeHTTP(cRec, cReq)
+			assert.Equal(t, http.StatusBadRequest, cRec.Code, "Non-public status "+st+" must fail cart add")
+		}
+	})
 }

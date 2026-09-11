@@ -422,10 +422,14 @@ func PopulateProductAggregates(p *Product) {
 func (r *Repository) GetProductVariants(ctx context.Context, productID uuid.UUID) ([]ProductVariant, error) {
 	query := `
 		SELECT pv.id, pv.product_id,
-		       COALESCE(pv.sku, pv.seller_sku) AS sku,
-		       COALESCE(pv.size, sv.value) AS size,
-		       COALESCE(pv.color, c.name_ru) AS color,
-		       pv.option_values, pv.seller_sku, pv.color_id, pv.size_value_id, c.name_ru AS color_name, c.hex AS color_hex, pv.shade_name, pv.barcode, pv.price_cents, pv.is_active, pv.created_at, pv.updated_at,
+		       COALESCE(pv.seller_sku, pv.sku) AS sku,
+		       COALESCE(sv.value, pv.size) AS size,
+		       COALESCE(c.name_ru, pv.color) AS color,
+		       pv.option_values,
+		       COALESCE(pv.seller_sku, pv.sku) AS seller_sku,
+		       pv.color_id, pv.size_value_id,
+		       COALESCE(c.name_ru, pv.color) AS color_name,
+		       c.hex AS color_hex, pv.shade_name, pv.barcode, pv.price_cents, pv.is_active, pv.created_at, pv.updated_at,
 		       (ii.id IS NOT NULL) AS has_inventory,
 		       COALESCE(ii.total_stock, 0) AS total_stock,
 		       COALESCE(ii.reserved_stock, 0) AS reserved_stock
@@ -895,7 +899,7 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 		`)
 	}
 
-	queryBuilder.WriteString(fmt.Sprintf(" WHERE (p.status = 'published' OR p.status = 'approved') AND s.status = 'active' AND %s >= %d", CanonicalProductFreeStockSQL("p.id"), MinStorefrontFreeSellableUnits))
+	queryBuilder.WriteString(fmt.Sprintf(" WHERE p.status = 'published' AND s.status = 'active' AND %s >= %d", CanonicalProductFreeStockSQL("p.id"), MinStorefrontFreeSellableUnits))
 
 	if filter.Query != nil && *filter.Query != "" {
 		queryBuilder.WriteString(fmt.Sprintf(" AND (p.title ILIKE $%d OR p.description ILIKE $%d OR b.name ILIKE $%d OR c.name ILIKE $%d OR s.brand_name ILIKE $%d)", argID, argID, argID, argID, argID))
@@ -1022,7 +1026,7 @@ func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug
 			s.slug, s.brand_name
 		FROM products p
 		INNER JOIN sellers s ON p.seller_id = s.id
-		WHERE (p.slug = $1 OR p.id::text = $1) AND (p.status = 'published' OR p.status = 'approved') AND s.status = 'active' AND %s >= %d
+		WHERE (p.slug = $1 OR p.id::text = $1) AND p.status = 'published' AND s.status = 'active' AND %s >= %d
 	`, CanonicalProductFreeStockSQL("p.id"), MinStorefrontFreeSellableUnits)
 	var p Product
 	err := r.db.QueryRow(ctx, query, idOrSlug).Scan(

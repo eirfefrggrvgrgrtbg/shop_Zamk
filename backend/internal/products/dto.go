@@ -165,20 +165,22 @@ type PublicProduct struct {
 }
 
 type PublicProductVariant struct {
-	ID           uuid.UUID `json:"id"`
-	ProductID    uuid.UUID `json:"productId"`
-	Size         *string   `json:"size,omitempty"`
-	Color        *string   `json:"color,omitempty"`
+	ID           uuid.UUID              `json:"id"`
+	ProductID    uuid.UUID              `json:"productId"`
+	SKU          *string                `json:"sku,omitempty"`
+	Size         *string                `json:"size,omitempty"`
+	Color        *string                `json:"color,omitempty"`
 	OptionValues map[string]interface{} `json:"optionValues,omitempty"`
-	SellerSKU          *string `json:"sellerSku,omitempty"`
-	ColorID            *uuid.UUID `json:"colorId,omitempty"`
-	SizeValueID        *uuid.UUID `json:"sizeValueId,omitempty"`
-	ColorName          *string `json:"colorName,omitempty"`
-	ColorHex           *string `json:"colorHex,omitempty"`
-	ShadeName          *string `json:"shadeName,omitempty"`
-	PriceCents   *int64    `json:"priceCents,omitempty"`
-	IsActive     bool      `json:"isActive"`
-	InStock      *bool     `json:"inStock,omitempty"`
+	SellerSKU    *string                `json:"sellerSku,omitempty"`
+	ColorID      *uuid.UUID             `json:"colorId,omitempty"`
+	SizeValueID  *uuid.UUID             `json:"sizeValueId,omitempty"`
+	ColorName    *string                `json:"colorName,omitempty"`
+	ColorHex     *string                `json:"colorHex,omitempty"`
+	ShadeName    *string                `json:"shadeName,omitempty"`
+	Barcode      *string                `json:"barcode,omitempty"`
+	PriceCents   *int64                 `json:"priceCents,omitempty"`
+	IsActive     bool                   `json:"isActive"`
+	InStock      *bool                  `json:"inStock,omitempty"`
 }
 
 type PublicProductImage struct {

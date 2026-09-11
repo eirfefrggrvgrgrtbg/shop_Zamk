@@ -31,14 +31,39 @@ func (r *Repository) GetCartByUserID(ctx context.Context, userID uuid.UUID) (*Ca
 
 	// Fetch items
 	itemsQuery := `
-		SELECT 
+		SELECT
 			ci.id, ci.cart_id, ci.product_id, ci.product_variant_id, ci.quantity, ci.created_at, ci.updated_at,
-			p.title, COALESCE(pv.price_cents, p.price_cents), 
-			COALESCE(ii.total_stock - ii.reserved_stock, 0) > 0 AS in_stock
+			p.title, COALESCE(pv.price_cents, p.price_cents),
+			COALESCE(ii.total_stock - ii.reserved_stock, 0) > 0 AS in_stock,
+			COALESCE(sv.value, pv.size) AS size,
+			COALESCE(c.name_ru, pv.color) AS color,
+			COALESCE(pv.seller_sku, pv.sku) AS seller_sku,
+			img.image_url
 		FROM cart_items ci
 		JOIN products p ON ci.product_id = p.id
 		JOIN product_variants pv ON ci.product_variant_id = pv.id
+		LEFT JOIN size_values sv ON pv.size_value_id = sv.id
+		LEFT JOIN colors c ON pv.color_id = c.id
 		LEFT JOIN inventory_items ii ON pv.id = ii.product_variant_id
+		LEFT JOIN LATERAL (
+			SELECT pi.image_url
+			FROM product_images pi
+			WHERE pi.product_id = p.id
+			  AND (
+				(pv.color_id IS NOT NULL AND pi.color_id = pv.color_id)
+				OR pi.color_id IS NULL
+			  )
+			ORDER BY
+			  CASE
+				WHEN pv.color_id IS NOT NULL AND pi.color_id = pv.color_id THEN 1
+				WHEN pi.color_id IS NULL THEN 2
+				ELSE 3
+			  END ASC,
+			  pi.is_main DESC,
+			  pi.sort_order ASC,
+			  pi.created_at ASC
+			LIMIT 1
+		) img ON true
 		WHERE ci.cart_id = $1
 		ORDER BY ci.created_at ASC
 	`
@@ -53,6 +78,7 @@ func (r *Repository) GetCartByUserID(ctx context.Context, userID uuid.UUID) (*Ca
 		if err := rows.Scan(
 			&item.ID, &item.CartID, &item.ProductID, &item.ProductVariantID, &item.Quantity, &item.CreatedAt, &item.UpdatedAt,
 			&item.Title, &item.PriceCents, &item.InStock,
+			&item.Size, &item.Color, &item.SellerSKU, &item.ImageURL,
 		); err != nil {
 			return nil, err
 		}

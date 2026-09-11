@@ -37,7 +37,7 @@ func (s *Service) AddItem(ctx context.Context, userID uuid.UUID, req AddItemRequ
 	if err != nil {
 		return nil, err
 	}
-	if info.Status != "published" && info.Status != "approved" {
+	if info.Status != "published" {
 		return nil, ErrProductNotPublished
 	}
 	if !info.VariantActive {

@@ -3,10 +3,11 @@ import { Minus, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useCart } from '../contexts/CartContext';
-import { formatPrice } from '../lib/utils';
+import { formatPrice, cn } from '../lib/utils';
 import { getProductEffectivePrice } from '../lib/orders';
 import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
-import { InfoPanel, SectionHeader } from '../components/editorial/StudioKit';
+import { formatVariantDetails } from '../lib/variantSelection';
+import { InfoPanel } from '../components/editorial/StudioKit';
 
 export function Cart() {
   const { items, updateQuantity, removeItem, totalPrice, isLoadingCart } = useCart();
@@ -77,27 +78,66 @@ export function Cart() {
           <div className='lg:col-span-8 space-y-4'>
             {items.map((item) => {
               const productName = item.title || item.product?.name || 'Неизвестный товар';
-              const productImage = item.product?.image || PRODUCT_PLACEHOLDER_IMAGE;
+              const productImage = item.imageUrl || item.product?.image || PRODUCT_PLACEHOLDER_IMAGE;
               const productBrand = item.product?.brand || 'Бренд не указан';
               const productPrice = item.price || (item.product ? getProductEffectivePrice(item.product) : 0);
-              
+              const variantDetails = formatVariantDetails(item.color, item.size);
+              const isUnavailable = item.inStock === false;
+
               return (
-              <article key={item.id} className='bg-white/60 dark:bg-white/5 border border-border-soft dark:border-white/10 rounded-2xl p-4 md:p-5 flex gap-4 backdrop-blur-md shadow-sm'>
-                <Link to={`/product/${item.productId}`} className='h-full w-28 md:w-32 overflow-hidden rounded-[0.45rem] border border-border-lighter dark:border-white/10 shrink-0'>
-                  <img src={productImage} alt={productName} className='h-full w-full object-cover' />
+              <article
+                key={item.id}
+                className={cn(
+                  'border rounded-2xl p-4 md:p-5 flex gap-4 backdrop-blur-md shadow-sm transition-all',
+                  isUnavailable
+                    ? 'border-error/30 bg-error/5 dark:border-error/20 dark:bg-error/5'
+                    : 'bg-white/60 dark:bg-white/5 border-border-soft dark:border-white/10'
+                )}
+              >
+                <Link to={`/product/${item.productId}`} className='h-full w-28 md:w-32 overflow-hidden rounded-[0.45rem] border border-border-lighter dark:border-white/10 shrink-0 relative'>
+                  <img src={productImage} alt={productName} className={cn('h-full w-full object-cover', isUnavailable && 'opacity-60 grayscale')} />
+                  {isUnavailable && (
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-[11px] font-medium text-white px-1 text-center">
+                      Нет в наличии
+                    </span>
+                  )}
                 </Link>
                 <div className='flex-1 flex flex-col'>
-                  <p className='text-xs uppercase tracking-[0.14em] text-ash'>{productBrand}</p>
-                  <h3 className='text-lg font-medium text-graphite dark:text-gray-200 leading-tight mt-1'>{productName}</h3>
+                  <div className="flex items-center justify-between">
+                    <p className='text-xs uppercase tracking-[0.14em] text-ash'>{productBrand}</p>
+                    {isUnavailable && (
+                      <span className='text-xs font-medium text-error bg-error/10 dark:bg-error/20 px-2 py-0.5 rounded-full'>
+                        Товар закончился
+                      </span>
+                    )}
+                  </div>
+                  <Link to={`/product/${item.productId}`}>
+                    <h3 className='text-lg font-medium text-graphite dark:text-gray-200 leading-tight mt-1 hover:underline'>{productName}</h3>
+                  </Link>
+                  {variantDetails && (
+                    <p className='mt-1 text-sm text-ash font-medium'>{variantDetails}</p>
+                  )}
                   <p className='mt-2 text-sm text-graphite-light dark:text-gray-400'>{formatPrice(productPrice)}</p>
 
                   <div className='mt-auto pt-4 flex items-center justify-between'>
                     <div className='flex items-center gap-2'>
-                      <button type='button' aria-label={`Уменьшить количество ${productName}`} className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10' onClick={() => updateQuantity(item.id, item.quantity - 1)}>
+                      <button
+                        type='button'
+                        aria-label={`Уменьшить количество ${productName}`}
+                        className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed'
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        disabled={isUnavailable}
+                      >
                         <Minus className='w-3.5 h-3.5' />
                       </button>
                       <span className='w-7 text-center text-sm font-medium text-graphite dark:text-gray-200'>{item.quantity}</span>
-                      <button type='button' aria-label={`Увеличить количество ${productName}`} className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10' onClick={() => updateQuantity(item.id, item.quantity + 1)}>
+                      <button
+                        type='button'
+                        aria-label={`Увеличить количество ${productName}`}
+                        className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed'
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        disabled={isUnavailable}
+                      >
                         <Plus className='w-3.5 h-3.5' />
                       </button>
                     </div>
@@ -125,11 +165,22 @@ export function Cart() {
                   <span>Итого</span>
                   <span>{formatPrice(finalTotal)}</span>
                 </div>
-                <Link to='/checkout' className='block mt-4'>
-                  <Button className='w-full gap-2'>
+                {items.some(i => i.inStock === false) && (
+                  <p className="text-xs text-error mt-2">
+                    В корзине есть недоступные товары. Удалите их для оформления заказа.
+                  </p>
+                )}
+                {items.some(i => i.inStock === false) ? (
+                  <Button className='w-full gap-2 mt-4' disabled={true}>
                     Оформить заказ <ArrowRight className='w-4 h-4' />
                   </Button>
-                </Link>
+                ) : (
+                  <Link to='/checkout' className='block mt-4'>
+                    <Button className='w-full gap-2'>
+                      Оформить заказ <ArrowRight className='w-4 h-4' />
+                    </Button>
+                  </Link>
+                )}
               </div>
             </InfoPanel>
           </aside>

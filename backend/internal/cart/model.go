@@ -24,7 +24,11 @@ type CartItem struct {
 	UpdatedAt        time.Time `json:"updatedAt" db:"updated_at"`
 
 	// These fields are populated dynamically
-	PriceCents int64  `json:"priceCents" db:"-"`
-	InStock    bool   `json:"inStock" db:"-"`
-	Title      string `json:"title" db:"-"`
+	PriceCents int64   `json:"priceCents" db:"-"`
+	InStock    bool    `json:"inStock" db:"-"`
+	Title      string  `json:"title" db:"-"`
+	Size       *string `json:"size" db:"-"`
+	Color      *string `json:"color" db:"-"`
+	SellerSKU  *string `json:"sellerSku" db:"-"`
+	ImageURL   *string `json:"imageUrl" db:"-"`
 }

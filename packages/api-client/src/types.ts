@@ -149,6 +149,7 @@ export interface ProductVariant {
   sizeName?: string;
   color?: string;
   colorName?: string;
+  colorHex?: string;
   sellerSku?: string;
   colorId?: string;
   sizeValueId?: string;
@@ -217,6 +218,10 @@ export interface CartItem {
   quantity: number;
   product?: ProductSummary;
   title?: string;
+  size?: string;
+  color?: string;
+  sellerSku?: string;
+  imageUrl?: string;
   priceCents?: number;
   inStock?: boolean;
 }

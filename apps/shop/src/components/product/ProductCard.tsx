@@ -10,6 +10,7 @@ import { useCart } from '../../contexts/CartContext';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { fetchProductById } from '../../api/publicCatalog';
+import { useVariantSelection, isLightColor, type ProductVariantItem } from '../../lib/variantSelection';
 
 interface ProductCardProps {
   product: Product;
@@ -26,8 +27,7 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
 
   const [isQuickBuyOpen, setIsQuickBuyOpen] = useState(false);
   const [isLoadingVariants, setIsLoadingVariants] = useState(false);
-  const [productVariants, setProductVariants] = useState<Product['variants']>(undefined);
-  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  const [loadedProduct, setLoadedProduct] = useState<Product | null>(null);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
 
   const discountPercent = product.discountPrice
@@ -43,16 +43,11 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
     if (product.isPreview) return;
     setIsQuickBuyOpen(true);
 
-    if (!productVariants) {
+    if (!loadedProduct) {
       setIsLoadingVariants(true);
       try {
         const fullProduct = await fetchProductById(product.id);
-        setProductVariants(fullProduct.variants || []);
-        // Auto-select first in-stock variant if available
-        const firstInStock = fullProduct.variants?.find(v => v.inStock && v.isActive);
-        if (firstInStock) {
-          setSelectedVariant(firstInStock.id);
-        }
+        setLoadedProduct(fullProduct);
       } catch (e) {
         showToast('Ошибка загрузки вариантов товара', 'error');
         setIsQuickBuyOpen(false);
@@ -62,14 +57,9 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
     }
   };
 
-  const handleAddToCart = async () => {
+  const handleAddToCart = async (variant: ProductVariantItem) => {
     if (product.isPreview) return;
-    if (!selectedVariant) {
-      showToast('Выберите вариант товара', 'error');
-      return;
-    }
 
-    const variant = productVariants?.find(v => v.id === selectedVariant);
     if (!variant || !variant.inStock || !variant.isActive) {
       showToast('Выбранный вариант недоступен', 'error');
       setIsQuickBuyOpen(false);
@@ -84,7 +74,7 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
 
     try {
       setIsAddingToCart(true);
-      await addItem(product.id, selectedVariant, 1);
+      await addItem(product.id, variant.id, 1);
       showToast('Товар добавлен в корзину', 'success');
       setIsQuickBuyOpen(false);
     } catch (error: any) {
@@ -234,59 +224,16 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
       </div>
 
       <Modal isOpen={isQuickBuyOpen} onClose={() => setIsQuickBuyOpen(false)} title="Быстрая покупка">
-        <div className="flex gap-4 mb-6">
-          <img
-            src={product.image || product.images?.[0]?.url || 'https://placehold.co/400x500'}
-            alt={product.name}
-            className="w-24 h-32 object-cover rounded-lg"
-          />
-          <div>
-            <h3 className="font-serif text-lg leading-tight text-graphite dark:text-white mb-2">{product.name}</h3>
-            {product.discountPrice ? (
-              <div className="flex gap-2 items-baseline">
-                <span className="font-mono text-red-500">{formatPrice(product.discountPrice)}</span>
-                <span className="line-through text-gray-500 text-sm font-mono">{formatPrice(product.price)}</span>
-              </div>
-            ) : (
-              <span className="font-mono text-graphite dark:text-white">{formatPrice(product.price)}</span>
-            )}
-          </div>
-        </div>
-
         {isLoadingVariants ? (
           <div className="py-8 flex justify-center">
             <div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin dark:border-white dark:border-t-transparent" />
           </div>
-        ) : productVariants && productVariants.length > 0 ? (
-          <div className="flex flex-col gap-6">
-            <div>
-              <h4 className="text-sm font-mono uppercase tracking-widest text-ash mb-3">Выберите вариант</h4>
-              <div className="flex flex-wrap gap-2">
-                {productVariants.map((variant) => (
-                  <button
-                    key={variant.id}
-                    onClick={() => setSelectedVariant(variant.id)}
-                    disabled={!variant.inStock || !variant.isActive}
-                    className={`h-10 px-4 rounded-md border font-mono text-sm transition-all flex flex-col items-center justify-center ${
-                      selectedVariant === variant.id
-                        ? 'border-black bg-black text-white dark:border-white dark:bg-white dark:text-black'
-                        : 'border-border-lighter dark:border-white/20 text-graphite dark:text-white hover:border-black/50 dark:hover:border-white/50'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    <span>{variant.size || variant.color || 'Стандарт'}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <Button
-              onClick={handleAddToCart}
-              disabled={!selectedVariant || isAddingToCart}
-              className="w-full h-12 text-sm uppercase tracking-widest font-mono"
-            >
-              {isAddingToCart ? 'Добавление...' : 'В корзину'}
-            </Button>
-          </div>
+        ) : loadedProduct && loadedProduct.variants && loadedProduct.variants.length > 0 ? (
+          <QuickBuyModalBody
+            product={loadedProduct}
+            onAddToCart={handleAddToCart}
+            isAddingToCart={isAddingToCart}
+          />
         ) : (
           <div className="py-8 text-center">
             <p className="text-ash mb-4">Варианты недоступны</p>
@@ -294,5 +241,190 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
         )}
       </Modal>
     </>
+  );
+}
+
+interface QuickBuyModalBodyProps {
+  product: Product;
+  onAddToCart: (variant: ProductVariantItem) => Promise<void>;
+  isAddingToCart: boolean;
+}
+
+function QuickBuyModalBody({
+  product,
+  onAddToCart,
+  isAddingToCart,
+}: QuickBuyModalBodyProps) {
+  const {
+    dimensionType,
+    colors,
+    selectedColorId,
+    selectedColor,
+    sizes,
+    selectedSizeId,
+    selectedSize,
+    selectedVariant,
+    isResolved,
+    canAddToCart,
+    requiresColor,
+    requiresSize,
+    ctaText,
+    selectColor,
+    selectSize,
+  } = useVariantSelection(product.variants, product.sizeChart);
+
+  const colorImage = selectedColorId && product.images
+    ? product.images.find(img => img.colorId === selectedColorId)?.url
+    : undefined;
+
+  const displayImage = colorImage || product.image || product.images?.[0]?.url || 'https://placehold.co/400x500';
+  const displayPrice = selectedVariant?.priceCents ? selectedVariant.priceCents / 100 : product.price;
+
+  return (
+    <div>
+      <div className="flex gap-4 mb-6">
+        <img
+          src={displayImage}
+          alt={product.name}
+          className="w-24 h-32 object-cover rounded-lg"
+        />
+        <div>
+          <h3 className="font-serif text-lg leading-tight text-graphite dark:text-white mb-2">{product.name}</h3>
+          {product.discountPrice ? (
+            <div className="flex gap-2 items-baseline">
+              <span className="font-mono text-red-500">{formatPrice(product.discountPrice)}</span>
+              <span className="line-through text-gray-500 text-sm font-mono">{formatPrice(displayPrice)}</span>
+            </div>
+          ) : (
+            <span className="font-mono text-graphite dark:text-white">{formatPrice(displayPrice)}</span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-5">
+        {/* Colors */}
+        {requiresColor && colors.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-mono uppercase tracking-widest text-ash">
+                Цвет:{' '}
+                <span className="text-graphite dark:text-white font-medium">
+                  {selectedColor?.name || 'Не выбран'}
+                  {selectedColor && !selectedColor.hasInStock ? ' (нет в наличии)' : ''}
+                </span>
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2.5 items-center" role="radiogroup" aria-label="Выбор цвета">
+              {colors.map((color) => {
+                const isSelected = selectedColorId === color.id;
+                const isLight = isLightColor(color.hex);
+                return (
+                  <button
+                    key={color.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    aria-label={color.name + (!color.hasInStock ? ' (нет в наличии)' : '')}
+                    title={color.name + (!color.hasInStock ? ' (нет в наличии)' : '')}
+                    onClick={() => selectColor(color.id)}
+                    className={cn(
+                      "relative w-8 h-8 rounded-full transition-all duration-150 flex items-center justify-center",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                      isSelected
+                        ? "ring-2 ring-graphite dark:ring-white ring-offset-2 ring-offset-white dark:ring-offset-zinc-900 scale-105"
+                        : "hover:scale-105 hover:ring-1 hover:ring-black/20 dark:hover:ring-white/30 opacity-90 hover:opacity-100"
+                    )}
+                  >
+                    {color.hex ? (
+                      <span
+                        style={{ backgroundColor: color.hex }}
+                        className={cn(
+                          "w-full h-full rounded-full border shadow-inner",
+                          isLight
+                            ? "border-black/25 dark:border-white/30"
+                            : "border-black/10 dark:border-white/15"
+                        )}
+                      />
+                    ) : (
+                      <span className="w-full h-full rounded-full border border-black/20 dark:border-white/20 bg-ice dark:bg-white/10 flex items-center justify-center text-[9px] font-semibold text-graphite dark:text-white uppercase">
+                        {color.name.slice(0, 2)}
+                      </span>
+                    )}
+                    {!color.hasInStock && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                      >
+                        <span className="w-[120%] h-[1.5px] bg-red-500/70 rotate-45 transform" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Sizes */}
+        {requiresSize && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-mono uppercase tracking-widest text-ash">
+                Размер: <span className="text-graphite dark:text-white font-medium">{selectedSize?.label || 'Не выбран'}</span>
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {sizes.map((sizeObj) => {
+                const isSelected = selectedSizeId === sizeObj.id;
+                return (
+                  <button
+                    key={sizeObj.id}
+                    type="button"
+                    disabled={sizeObj.disabled}
+                    onClick={() => {
+                      if (!sizeObj.disabled) {
+                        selectSize(sizeObj.id);
+                      }
+                    }}
+                    className={cn(
+                      "h-9 min-w-[40px] px-3 rounded-md border font-mono text-xs transition-all relative flex items-center justify-center",
+                      isSelected
+                        ? "bg-graphite text-white border-graphite dark:bg-white dark:text-black dark:border-white shadow-sm"
+                        : sizeObj.disabled
+                          ? "border-border-lighter/60 dark:border-white/10 text-ash/60 dark:text-white/30 cursor-not-allowed line-through bg-ice/30 dark:bg-white/[0.02]"
+                          : "bg-white dark:bg-transparent border-border-lighter dark:border-white/20 text-graphite dark:text-white hover:border-black/50 dark:hover:border-white/50"
+                    )}
+                  >
+                    {sizeObj.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {dimensionType === 'SINGLE_VARIANT' && (
+          <p className="text-xs text-ash font-mono">Стандартный размер</p>
+        )}
+
+        <Button
+          onClick={() => {
+            if (selectedVariant && canAddToCart) {
+              onAddToCart(selectedVariant);
+            }
+          }}
+          disabled={!isResolved || !canAddToCart || isAddingToCart}
+          className="w-full h-12 text-sm uppercase tracking-widest font-mono"
+        >
+          {isAddingToCart
+            ? 'Добавление...'
+            : !isResolved
+              ? ctaText
+              : !canAddToCart
+                ? 'Нет в наличии'
+                : 'В корзину'}
+        </Button>
+      </div>
+    </div>
   );
 }

@@ -26,9 +26,10 @@ export interface Product {
   careInstructions?: string;
   sizeChart?: any;
   sizes?: string[];
-  colors?: { name: string; hex: string }[];
+  colors?: { name: string; hex?: string }[];
   variants?: {
     id: string;
+    productId?: string;
     size?: string;
     color?: string;
     inStock?: boolean;

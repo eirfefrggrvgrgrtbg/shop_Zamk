@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Package, ChevronRight, MapPin, Star, CheckCircle2, Circle, X } from 'lucide-react';
 import { Drawer } from '../components/ui/Drawer';
 import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
+import { formatVariantDetails, getCartItemImageUrl } from '../lib/variantSelection';
 import { ReturnModal } from '../components/orders/ReturnModal';
 import { ReviewModal } from '../components/orders/ReviewModal';
 import {
@@ -117,11 +118,15 @@ function OrdersContent() {
           productVariantId: i.productVariantId,
           name: i.productTitle || i.title || 'Товар ZAMK',
           price: (i.priceCents || i.unitPriceCents || 0) / 100,
-          size: i.size,
-          color: i.color,
+          size: i.variantSize || i.size,
+          color: i.variantColor || i.color,
+          variantSize: i.variantSize || i.size,
+          variantColor: i.variantColor || i.color,
+          sku: i.sku || i.sellerSku,
           quantity: i.quantity || 1,
           sellerName: i.sellerName || 'ZAMK Store',
-          image: i.imageUrl || PRODUCT_PLACEHOLDER_IMAGE,
+          image: getCartItemImageUrl(i.imageUrl, i.image, PRODUCT_PLACEHOLDER_IMAGE),
+          imageUrl: i.imageUrl,
         })),
       }));
 
@@ -190,6 +195,9 @@ function OrdersContent() {
                 <div className="pt-5 space-y-4">
                   {order.items.map((item: any) => {
                     const rev = reviewsMap[item.orderItemId];
+                    const variantDetails = formatVariantDetails(item.variantColor || item.color, item.variantSize || item.size);
+                    const qtySuffix = (item.quantity ?? 1) > 1 ? `${item.quantity} шт.` : '';
+                    const subtitle = [variantDetails, qtySuffix].filter(Boolean).join(' · ');
                     return (
                       <div key={item.orderItemId || item.productId} className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-4 min-w-0">
@@ -204,10 +212,11 @@ function OrdersContent() {
                             <h4 className="text-[15px] font-medium text-graphite dark:text-white truncate group-hover:text-primary transition-colors">
                               {item.name}
                             </h4>
-                            <p className="text-[13px] text-graphite/70 dark:text-white/70 mt-0.5 font-normal">
-                              {[item.size, item.color].filter(Boolean).join(' · ') || 'Единый размер'}
-                              {(item.quantity ?? 1) > 1 ? ` · ${item.quantity} шт.` : ''}
-                            </p>
+                            {subtitle && (
+                              <p className="text-[13px] text-graphite/70 dark:text-white/70 mt-0.5 font-normal">
+                                {subtitle}
+                              </p>
+                            )}
 
                             {/* Статус отзыва прямо под товаром при наличии */}
                             {rev && (
@@ -336,6 +345,9 @@ function OrdersContent() {
                   const isDelivered = selectedOrder.status === 'Доставлен' || selectedOrder.rawStatus === 'delivered';
                   const returnRecords = returnsMap[selectedOrder.rawId] || [];
                   const activeReturn = returnRecords.find((r: any) => r.status !== 'cancelled');
+                  const variantDetails = formatVariantDetails(item.variantColor || item.color, item.variantSize || item.size);
+                  const qtySuffix = (item.quantity ?? 1) > 1 ? `${item.quantity} шт.` : '';
+                  const subtitle = [variantDetails, qtySuffix].filter(Boolean).join(' · ');
 
                   return (
                     <div key={item.orderItemId || item.productId} className="space-y-4">
@@ -356,10 +368,11 @@ function OrdersContent() {
                             >
                               {item.name}
                             </Link>
-                            <p className="text-[13.5px] text-graphite/75 dark:text-white/75 mt-1 font-normal">
-                              {[item.size, item.color].filter(Boolean).join(' · ') || 'Единый размер'}
-                              {(item.quantity ?? 1) > 1 ? ` · ${item.quantity} шт.` : ''}
-                            </p>
+                            {subtitle && (
+                              <p className="text-[13.5px] text-graphite/75 dark:text-white/75 mt-1 font-normal">
+                                {subtitle}
+                              </p>
+                            )}
                             <p className="text-[13px] text-graphite/60 dark:text-white/50 mt-0.5">
                               Продавец: {item.sellerName || 'ZAMK Store'}
                             </p>

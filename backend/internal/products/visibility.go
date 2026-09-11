@@ -63,7 +63,7 @@ func CalculateActualVisibility(p *Product) VisibilityResult {
 		reasonsMap["product_hidden"] = true
 	} else if p.Status == StatusBlocked {
 		reasonsMap["product_blocked"] = true
-	} else if p.Status != StatusPublished && p.Status != StatusApproved {
+	} else if p.Status != StatusPublished {
 		reasonsMap["moderation_required"] = true
 	}
 
@@ -107,7 +107,7 @@ func CalculateActualVisibility(p *Product) VisibilityResult {
 		reasons = []string{}
 	}
 
-	actualVisibility := len(reasons) == 0 && (p.Status == StatusPublished || p.Status == StatusApproved)
+	actualVisibility := len(reasons) == 0 && p.Status == StatusPublished
 
 	return VisibilityResult{
 		ActualVisibility:  actualVisibility,
@@ -123,7 +123,7 @@ func ValidatePublishEligibility(p *Product) PublishEligibilityResult {
 	// 1. Status transition check
 	if p.Status == StatusBlocked {
 		reasonsMap["product_blocked"] = true
-	} else if p.Status != StatusApproved && p.Status != StatusHidden && p.Status != StatusPublished {
+	} else if p.Status != StatusHidden && p.Status != StatusPublished {
 		reasonsMap["moderation_required"] = true
 	}
 

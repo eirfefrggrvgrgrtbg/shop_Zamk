@@ -13,6 +13,10 @@ export interface UIContextCartItem {
   title?: string;
   price?: number;
   inStock?: boolean;
+  size?: string;
+  color?: string;
+  sellerSku?: string;
+  imageUrl?: string;
 }
 
 interface CartContextType {
@@ -45,7 +49,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     try {
       setIsLoadingCart(true);
       const cart = await getCart();
-      
+
       const mappedItems = cart.items.map(item => ({
         id: item.id,
         productId: item.productId,
@@ -53,12 +57,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         quantity: item.quantity,
         title: item.title,
         price: item.priceCents ? item.priceCents / 100 : 0,
-        inStock: item.inStock,
+        inStock: item.inStock ?? true,
+        size: item.size,
+        color: item.color,
+        sellerSku: item.sellerSku,
+        imageUrl: item.imageUrl,
         product: item.product ? {
           id: item.product.id,
           name: item.product.title,
           price: item.product.priceCents / 100,
-          image: item.product.mainImageUrl || '',
+          image: item.imageUrl || item.product.mainImageUrl || '',
           brand: 'Бренд не указан',
           category: 'Категория не указана'
         } as Product : undefined

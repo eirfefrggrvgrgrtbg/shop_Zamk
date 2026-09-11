@@ -178,16 +178,20 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
     rating: p.rating?.average,
     reviewsCount: p.rating?.count,
     sizes: p.variants?.map(v => v.size).filter(Boolean) as string[] || [],
+    colors: p.variants?.filter(v => v.colorName || v.color).map(v => ({
+      name: (v.colorName || v.color)!,
+      hex: v.colorHex || undefined,
+    })) || [],
     variants: p.variants?.map(v => ({
       id: v.id,
       size: v.size,
-      color: v.color,
+      color: v.colorName || v.color,
       inStock: v.inStock ?? v.isActive,
       isActive: v.isActive,
       sellerSku: v.sellerSku,
       price: v.priceCents ? v.priceCents / 100 : undefined,
-      colorName: (v as any).colorName,
-      colorHex: (v as any).colorHex,
+      colorName: v.colorName || v.color,
+      colorHex: v.colorHex || undefined,
       colorId: v.colorId,
       sizeValueId: v.sizeValueId
     }))
@@ -230,17 +234,20 @@ export async function fetchProductPreviewByToken(token: string): Promise<UIProdu
     rating: p.rating,
     reviewsCount: p.reviewsCount,
     sizes: p.variants?.map((v: any) => v.size).filter(Boolean) || [],
-    colors: p.variants?.filter((v: any) => v.color).map((v: any) => ({ name: v.color, hex: '#000000' })) || [],
+    colors: p.variants?.filter((v: any) => v.colorName || v.color).map((v: any) => ({
+      name: v.colorName || v.color,
+      hex: v.colorHex || undefined,
+    })) || [],
     variants: p.variants?.map((v: any) => ({
       id: v.id,
       size: v.size,
-      color: v.color,
+      color: v.colorName || v.color,
       inStock: v.inStock ?? v.isActive,
       isActive: v.isActive,
       sellerSku: v.sellerSku,
       price: v.priceCents ? v.priceCents / 100 : undefined,
-      colorName: (v as any).colorName,
-      colorHex: (v as any).colorHex,
+      colorName: v.colorName || v.color,
+      colorHex: v.colorHex || undefined,
       colorId: v.colorId,
       sizeValueId: v.sizeValueId
     })) || [],

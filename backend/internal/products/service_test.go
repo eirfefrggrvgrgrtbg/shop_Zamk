@@ -148,3 +148,113 @@ func TestPublicVisibility_GetProduct(t *testing.T) {
 		})
 	}
 }
+
+func TestMapToPublicProduct_VariantTruth(t *testing.T) {
+	colorName := "Красный"
+	colorHex := "#FF0000"
+	sizeL := "L"
+	sizeXL := "XL"
+	skuL := "SKU-RED-L"
+	skuXL := "SKU-RED-XL"
+	barcodeL := "BC-RED-L"
+	shade := "Bright"
+	optValues := map[string]interface{}{"fit": "oversized"}
+	inStockTrue := true
+	inStockFalse := false
+	colorID := uuid.New()
+	sizeLID := uuid.New()
+	sizeXLID := uuid.New()
+
+	prod := Product{
+		ID:    uuid.New(),
+		Title: "Test Hoodie",
+		Variants: []ProductVariant{
+			{
+				ID:           uuid.New(),
+				SKU:          &skuL,
+				ColorName:    &colorName,
+				ColorHex:     &colorHex,
+				Color:        &colorName,
+				Size:         &sizeL,
+				SellerSKU:    &skuL,
+				ColorID:      &colorID,
+				SizeValueID:  &sizeLID,
+				ShadeName:    &shade,
+				Barcode:      &barcodeL,
+				OptionValues: optValues,
+				InStock:      &inStockTrue,
+				IsActive:     true,
+			},
+			{
+				ID:          uuid.New(),
+				SKU:         &skuXL,
+				ColorName:   &colorName,
+				ColorHex:    &colorHex,
+				Color:       &colorName,
+				Size:        &sizeXL,
+				SellerSKU:   &skuXL,
+				ColorID:     &colorID,
+				SizeValueID: &sizeXLID,
+				InStock:     &inStockFalse,
+				IsActive:    true,
+			},
+		},
+	}
+
+	pub := mapToPublicProduct(prod)
+	if len(pub.Variants) != 2 {
+		t.Fatalf("expected 2 variants, got %d", len(pub.Variants))
+	}
+
+	v1 := pub.Variants[0]
+	if v1.SKU == nil || *v1.SKU != "SKU-RED-L" {
+		t.Errorf("expected SKU 'SKU-RED-L', got %v", v1.SKU)
+	}
+	if v1.SellerSKU == nil || *v1.SellerSKU != "SKU-RED-L" {
+		t.Errorf("expected sellerSku 'SKU-RED-L', got %v", v1.SellerSKU)
+	}
+	if v1.ColorName == nil || *v1.ColorName != "Красный" {
+		t.Errorf("expected colorName 'Красный', got %v", v1.ColorName)
+	}
+	if v1.ColorHex == nil || *v1.ColorHex != "#FF0000" {
+		t.Errorf("expected colorHex '#FF0000', got %v", v1.ColorHex)
+	}
+	if v1.Size == nil || *v1.Size != "L" {
+		t.Errorf("expected size 'L', got %v", v1.Size)
+	}
+	if v1.ColorID == nil || *v1.ColorID != colorID {
+		t.Errorf("expected colorId %v, got %v", colorID, v1.ColorID)
+	}
+	if v1.SizeValueID == nil || *v1.SizeValueID != sizeLID {
+		t.Errorf("expected sizeValueId %v, got %v", sizeLID, v1.SizeValueID)
+	}
+	if v1.Barcode == nil || *v1.Barcode != "BC-RED-L" {
+		t.Errorf("expected barcode 'BC-RED-L', got %v", v1.Barcode)
+	}
+	if v1.ShadeName == nil || *v1.ShadeName != "Bright" {
+		t.Errorf("expected shadeName 'Bright', got %v", v1.ShadeName)
+	}
+	if v1.OptionValues == nil || v1.OptionValues["fit"] != "oversized" {
+		t.Errorf("expected optionValues with fit=oversized, got %v", v1.OptionValues)
+	}
+	if !v1.IsActive {
+		t.Errorf("expected isActive true, got %v", v1.IsActive)
+	}
+	if v1.InStock == nil || !*v1.InStock {
+		t.Errorf("expected inStock true, got %v", v1.InStock)
+	}
+
+	v2 := pub.Variants[1]
+	if v2.ColorName == nil || *v2.ColorName != "Красный" {
+		t.Errorf("expected colorName 'Красный', got %v", v2.ColorName)
+	}
+	if v2.ColorHex == nil || *v2.ColorHex != "#FF0000" {
+		t.Errorf("expected colorHex '#FF0000', got %v", v2.ColorHex)
+	}
+	if v2.Size == nil || *v2.Size != "XL" {
+		t.Errorf("expected size 'XL', got %v", v2.Size)
+	}
+	if v2.InStock == nil || *v2.InStock {
+		t.Errorf("expected inStock false, got %v", v2.InStock)
+	}
+}

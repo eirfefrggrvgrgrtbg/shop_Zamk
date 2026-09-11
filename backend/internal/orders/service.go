@@ -709,25 +709,45 @@ type snapshotData struct {
 
 func (s *Service) getSnapshot(ctx context.Context, tx pgx.Tx, productID, variantID uuid.UUID) (*snapshotData, error) {
 	query := `
-		SELECT p.seller_id, p.title, p.slug, pv.size, pv.color, pv.sku, COALESCE(pv.price_cents, p.price_cents)
+		SELECT
+			p.seller_id,
+			p.title,
+			p.slug,
+			COALESCE(sv.value, pv.size) AS variant_size,
+			COALESCE(c.name_ru, pv.color) AS variant_color,
+			COALESCE(pv.seller_sku, pv.sku) AS sku,
+			COALESCE(pv.price_cents, p.price_cents),
+			img.image_url
 		FROM products p
 		JOIN product_variants pv ON p.id = pv.product_id
+		LEFT JOIN size_values sv ON pv.size_value_id = sv.id
+		LEFT JOIN colors c ON pv.color_id = c.id
+		LEFT JOIN LATERAL (
+			SELECT pi.image_url
+			FROM product_images pi
+			WHERE pi.product_id = p.id
+			  AND (
+				(pv.color_id IS NOT NULL AND pi.color_id = pv.color_id)
+				OR pi.color_id IS NULL
+			  )
+			ORDER BY
+			  CASE
+				WHEN pv.color_id IS NOT NULL AND pi.color_id = pv.color_id THEN 1
+				WHEN pi.color_id IS NULL THEN 2
+				ELSE 3
+			  END ASC,
+			  pi.is_main DESC,
+			  pi.sort_order ASC,
+			  pi.created_at ASC
+			LIMIT 1
+		) img ON true
 		WHERE p.id = $1 AND pv.id = $2
 	`
 	var snap snapshotData
 	err := tx.QueryRow(ctx, query, productID, variantID).Scan(
-		&snap.SellerID, &snap.Title, &snap.ProductSlug, &snap.VariantSize, &snap.VariantColor, &snap.Sku, &snap.PriceCents,
+		&snap.SellerID, &snap.Title, &snap.ProductSlug, &snap.VariantSize, &snap.VariantColor, &snap.Sku, &snap.PriceCents, &snap.ImageURL,
 	)
 	if err != nil {
-		return nil, err
-	}
-
-	imgQuery := `SELECT image_url FROM product_images WHERE product_id = $1 ORDER BY sort_order ASC LIMIT 1`
-	var url string
-	err = tx.QueryRow(ctx, imgQuery, productID).Scan(&url)
-	if err == nil {
-		snap.ImageURL = &url
-	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
 

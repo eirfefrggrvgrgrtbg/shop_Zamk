@@ -165,20 +165,22 @@ func (s *Service) GetProductPreviewByToken(ctx context.Context, token string) (*
 	if err == nil {
 		for _, v := range variants {
 			pub.Variants = append(pub.Variants, PublicProductVariant{
-				ID:         v.ID,
-				ProductID:  v.ProductID,
-				Size:       v.Size,
-				Color:      v.Color,
-				SellerSKU:   v.SellerSKU,
-				ColorID:     v.ColorID,
-				SizeValueID: v.SizeValueID,
-				ColorName: v.ColorName,
-				ColorHex: v.ColorHex,
-				ShadeName:   v.ShadeName,
+				ID:           v.ID,
+				ProductID:    v.ProductID,
+				SKU:          v.SKU,
+				Size:         v.Size,
+				Color:        v.Color,
 				OptionValues: v.OptionValues,
-				PriceCents: v.PriceCents,
-				IsActive:   v.IsActive,
-				InStock:    v.InStock,
+				SellerSKU:    v.SellerSKU,
+				ColorID:      v.ColorID,
+				SizeValueID:  v.SizeValueID,
+				ColorName:    v.ColorName,
+				ColorHex:     v.ColorHex,
+				ShadeName:    v.ShadeName,
+				Barcode:      v.Barcode,
+				PriceCents:   v.PriceCents,
+				IsActive:     v.IsActive,
+				InStock:      v.InStock,
 			})
 		}
 	}

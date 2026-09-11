@@ -1,0 +1,2 @@
+-- Normalization of legacy approved products to published is forward-only.
+-- Products previously in 'approved' status remain in 'published' status under canonical contract.
