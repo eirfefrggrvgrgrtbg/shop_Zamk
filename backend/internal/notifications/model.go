@@ -64,6 +64,7 @@ const (
 
 	// Stock alert types (to seller)
 	TypeStockCriticalHidden = "stock_critical_hidden"
+	TypeStockForecastRisk   = "stock_forecast_risk"
 )
 
 type Notification struct {

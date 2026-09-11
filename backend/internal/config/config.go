@@ -101,6 +101,7 @@ type WorkerConfig struct {
 	AuctionMaintenanceEnabled      bool
 	AuctionMaintenanceIntervalSecs int
 	AuctionMaintenanceBatchLimit   int
+	StockForecastIntervalSeconds   int
 }
 
 type RateLimitConfig struct {
@@ -195,6 +196,7 @@ func Load() (*Config, error) {
 			AuctionMaintenanceEnabled:      getEnvAsBool("AUCTION_MAINTENANCE_ENABLED", true),
 			AuctionMaintenanceIntervalSecs: getEnvAsInt("AUCTION_MAINTENANCE_INTERVAL_SECONDS", 300),
 			AuctionMaintenanceBatchLimit:   getEnvAsInt("AUCTION_MAINTENANCE_BATCH_LIMIT", 100),
+			StockForecastIntervalSeconds:   getEnvAsInt("WORKER_STOCK_FORECAST_INTERVAL_SECONDS", 21600),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:                        getEnvAsBool("RATE_LIMIT_ENABLED", true),
@@ -228,6 +230,10 @@ func Load() (*Config, error) {
 	cfg.Postgres.DSN = getEnvNonEmpty("POSTGRES_DSN", "postgres://"+cfg.Postgres.User+":"+cfg.Postgres.Password+"@"+cfg.Postgres.Host+":"+cfg.Postgres.Port+"/"+cfg.Postgres.Database+"?sslmode="+cfg.Postgres.SSLMode)
 	cfg.Redis.Addr = getEnvNonEmpty("REDIS_ADDR", cfg.Redis.Host+":"+cfg.Redis.Port)
 	cfg.RateLimit.FailOpenOnRedisError = cfg.App.Env == "local" && cfg.RateLimit.FailOpenLocal
+
+	if cfg.Worker.StockForecastIntervalSeconds <= 0 {
+		cfg.Worker.StockForecastIntervalSeconds = 21600
+	}
 
 	if cfg.App.Env == "production" && cfg.TBank.TPayMode == "mock" {
 		panic("Cannot use mock TBank mode in production environment")

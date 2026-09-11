@@ -126,6 +126,35 @@ func main() {
 		}
 	}()
 
+	forecastIntervalSecs := cfg.Worker.StockForecastIntervalSeconds
+	if forecastIntervalSecs <= 0 {
+		forecastIntervalSecs = 21600
+	}
+	stockForecastTicker := time.NewTicker(time.Duration(forecastIntervalSecs) * time.Second)
+	defer stockForecastTicker.Stop()
+
+	runStockForecast := func() {
+		if err := productsService.ReconcileStockForecastAlerts(ctx); err != nil {
+			logger.Error("failed to reconcile stock forecast alerts", "error", err)
+		} else {
+			logger.Info("stock forecast alerts reconciliation completed")
+		}
+	}
+
+	go func() {
+		// Run once on worker startup
+		runStockForecast()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-stockForecastTicker.C:
+				runStockForecast()
+			}
+		}
+	}()
+
 	sig := <-shutdown
 	logger.Info("shutting down worker", "signal", sig)
 }
