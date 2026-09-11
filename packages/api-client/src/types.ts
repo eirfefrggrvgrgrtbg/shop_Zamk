@@ -601,6 +601,11 @@ export interface SellerInventoryItem {
   available: number;
   inbound: number;
   availabilityStatus: string;
+  forecast?: {
+    state: 'insufficient_data' | 'no_sales' | 'healthy' | 'warning' | 'critical';
+    daysOfCover: number | null;
+    calculatedAt: string;
+  };
 }
 
 export interface SellerInventoryListResponse {

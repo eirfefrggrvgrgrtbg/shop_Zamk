@@ -207,6 +207,12 @@ type InventoryListResponse struct {
 	TotalCount int    `json:"totalCount"`
 }
 
+type VariantForecastSnapshot struct {
+	State        string     `json:"state"`
+	DaysOfCover  *float64   `json:"daysOfCover"`
+	CalculatedAt time.Time  `json:"calculatedAt"`
+}
+
 type SellerInventoryItem struct {
 	VariantID          uuid.UUID              `json:"variantId"`
 	ProductID          uuid.UUID              `json:"productId"`
@@ -219,6 +225,7 @@ type SellerInventoryItem struct {
 	Available          int                    `json:"available"`
 	Inbound            int                    `json:"inbound"`
 	AvailabilityStatus string                 `json:"availabilityStatus"`
+	Forecast           *VariantForecastSnapshot `json:"forecast,omitempty"`
 }
 
 type SellerInventoryListResponse struct {

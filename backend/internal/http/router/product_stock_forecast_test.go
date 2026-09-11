@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -83,6 +84,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM seller_users WHERE seller_id = ANY($1)", createdSellerIDs)
 			}
 			if len(createdVariantIDs) > 0 {
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM variant_stock_forecasts WHERE product_variant_id = ANY($1)", createdVariantIDs)
 				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM inventory_items WHERE product_variant_id = ANY($1)", createdVariantIDs)
 				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM product_variants WHERE id = ANY($1)", createdVariantIDs)
 			}
@@ -615,4 +617,491 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, getActiveAlert(pID), "Draft product must cause alert to resolve")
 	})
+}
+
+func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
+	ctx, pgClient, productsService, _, cleanup := setupForecastTestEnvironment(t)
+	defer cleanup()
+
+	var (
+		createdUserIDs     []uuid.UUID
+		createdSellerIDs   []uuid.UUID
+		createdCategoryIDs []uuid.UUID
+		createdProductIDs  []uuid.UUID
+		createdVariantIDs  []uuid.UUID
+		createdOrderIDs    []uuid.UUID
+	)
+
+	t.Cleanup(func() {
+		var dbName string
+		if err := pgClient.Pool.QueryRow(ctx, "SELECT current_database()").Scan(&dbName); err == nil && dbName == "zamk_test" {
+			if len(createdOrderIDs) > 0 {
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM payments WHERE order_id = ANY($1)", createdOrderIDs)
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM order_items WHERE order_id = ANY($1)", createdOrderIDs)
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM order_fulfillments WHERE order_id = ANY($1)", createdOrderIDs)
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM orders WHERE id = ANY($1)", createdOrderIDs)
+			}
+			if len(createdSellerIDs) > 0 {
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM notifications WHERE recipient_seller_id = ANY($1)", createdSellerIDs)
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM seller_users WHERE seller_id = ANY($1)", createdSellerIDs)
+			}
+			if len(createdVariantIDs) > 0 {
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM variant_stock_forecasts WHERE product_variant_id = ANY($1)", createdVariantIDs)
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM inventory_items WHERE product_variant_id = ANY($1)", createdVariantIDs)
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM product_variants WHERE id = ANY($1)", createdVariantIDs)
+			}
+			if len(createdProductIDs) > 0 {
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM products WHERE id = ANY($1)", createdProductIDs)
+			}
+			if len(createdSellerIDs) > 0 {
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM sellers WHERE id = ANY($1)", createdSellerIDs)
+			}
+			if len(createdCategoryIDs) > 0 {
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM categories WHERE id = ANY($1)", createdCategoryIDs)
+			}
+			if len(createdUserIDs) > 0 {
+				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM users WHERE id = ANY($1)", createdUserIDs)
+			}
+		}
+	})
+
+	sellerOwnerID := uuid.New()
+	createdUserIDs = append(createdUserIDs, sellerOwnerID)
+	_, err := pgClient.Pool.Exec(ctx, `
+		INSERT INTO users (id, email, phone, name, password_hash, role, status, created_at, updated_at)
+		VALUES ($1, $2, $3, 'Forecast Snap Owner', 'hash', 'seller', 'active', now(), now())
+	`, sellerOwnerID, "snap-owner-"+sellerOwnerID.String()[:8]+"@test.com", "+7996"+sellerOwnerID.String()[:7])
+	require.NoError(t, err)
+
+	sellerID := uuid.New()
+	createdSellerIDs = append(createdSellerIDs, sellerID)
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO sellers (id, brand_name, slug, contact_email, status, created_at, updated_at)
+		VALUES ($1, 'Forecast Snap Brand', $2, $3, 'active', now(), now())
+	`, sellerID, "snap-seller-"+sellerID.String()[:8], "snap-"+sellerID.String()[:8]+"@test.com")
+	require.NoError(t, err)
+
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO seller_users (id, seller_id, user_id, role, created_at)
+		VALUES ($1, $2, $3, 'owner', now())
+	`, uuid.New(), sellerID, sellerOwnerID)
+	require.NoError(t, err)
+
+	customerID := uuid.New()
+	createdUserIDs = append(createdUserIDs, customerID)
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO users (id, email, phone, name, password_hash, role, status, created_at, updated_at)
+		VALUES ($1, $2, $3, 'Snap Customer', 'hash', 'customer', 'active', now(), now())
+	`, customerID, "snap-cust-"+customerID.String()[:8]+"@test.com", "+7997"+customerID.String()[:7])
+	require.NoError(t, err)
+
+	catID := uuid.New()
+	createdCategoryIDs = append(createdCategoryIDs, catID)
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO categories (id, name, slug, is_active, created_at, updated_at)
+		VALUES ($1, 'Snap Category', $2, true, now(), now())
+	`, catID, "snap-cat-"+catID.String()[:8])
+	require.NoError(t, err)
+
+	createProductAndVariant := func(title string, publishedAt, variantCreatedAt time.Time, color, size string) (uuid.UUID, uuid.UUID) {
+		pID := uuid.New()
+		vID := uuid.New()
+		createdProductIDs = append(createdProductIDs, pID)
+		createdVariantIDs = append(createdVariantIDs, vID)
+
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO products (
+				id, seller_id, category_id, title, slug, price_cents, currency, status,
+				published_at, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, 250000, 'RUB', 'published', $6, $6, $6)
+		`, pID, sellerID, catID, title, "slug-"+pID.String()[:8], publishedAt)
+		require.NoError(t, err)
+
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO product_variants (
+				id, product_id, sku, seller_sku, color, size, price_cents, is_active, created_at, updated_at
+			) VALUES ($1, $2, $3, $3, $4, $5, 250000, true, $6, $6)
+		`, vID, pID, "SKU-"+vID.String()[:8], color, size, variantCreatedAt)
+		require.NoError(t, err)
+
+		return pID, vID
+	}
+
+	setVariantStock := func(pID, vID uuid.UUID, totalStock, reservedStock int) {
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, now(), now())
+			ON CONFLICT (product_variant_id) DO UPDATE SET total_stock = EXCLUDED.total_stock, reserved_stock = EXCLUDED.reserved_stock
+		`, uuid.New(), pID, vID, sellerID, totalStock, reservedStock)
+		require.NoError(t, err)
+	}
+
+	createOrderWithPaidUnits := func(pID, vID uuid.UUID, qty int, paidTime time.Time) uuid.UUID {
+		orderID := uuid.New()
+		fulfillmentID := uuid.New()
+		createdOrderIDs = append(createdOrderIDs, orderID)
+
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO orders (
+				id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address, created_at, updated_at
+			) VALUES ($1, $2, 'paid', 250000, 'RUB', 'Buyer', '+79991112233', 'b@t.com', 'Moscow', $3, $3)
+		`, orderID, customerID, paidTime)
+		require.NoError(t, err)
+
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO order_fulfillments (
+				id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents, created_at, updated_at
+			) VALUES ($1, $2, $3, 'paid', 250000, 1500, 212500, $4, $4)
+		`, fulfillmentID, orderID, sellerID, paidTime)
+		require.NoError(t, err)
+
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO order_items (
+				id, order_id, order_fulfillment_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents, created_at
+			) VALUES ($1, $2, $3, $4, $5, $6, 'Item', 'slug', 250000, $7, $7 * 250000, $8)
+		`, uuid.New(), orderID, fulfillmentID, pID, vID, sellerID, qty, paidTime)
+		require.NoError(t, err)
+
+		pPayID := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO payments (
+				id, order_id, provider, status, amount_cents, currency, idempotency_key, payment_number, payment_method, integration_mode, created_at, updated_at, paid_at
+			) VALUES ($1, $2, 'tbank', 'succeeded', 250000, 'RUB', $3, $4, 'card', 'mock', $5, $5, $5)
+		`, pPayID, orderID, fmt.Sprintf("idem-%s", pPayID.String()[:8]), fmt.Sprintf("PAY-%s", pPayID.String()[:8]), paidTime)
+		require.NoError(t, err)
+
+		return orderID
+	}
+
+	type snapshotRow struct {
+		VariantID    uuid.UUID
+		State        string
+		DaysOfCover  *float64
+		CalculatedAt time.Time
+	}
+
+	getSnapshot := func(vID uuid.UUID) *snapshotRow {
+		var row snapshotRow
+		err := pgClient.Pool.QueryRow(ctx, `
+			SELECT product_variant_id, state, days_of_cover, calculated_at
+			FROM variant_stock_forecasts
+			WHERE product_variant_id = $1
+		`, vID).Scan(&row.VariantID, &row.State, &row.DaysOfCover, &row.CalculatedAt)
+		if err != nil {
+			return nil
+		}
+		return &row
+	}
+
+	now := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+
+	// -------------------------------------------------------------
+	// 1. Snapshot Persistence Integration (A-G)
+	// -------------------------------------------------------------
+	t.Run("A. Insufficient data variant -> snapshot state = insufficient_data, cover = NULL", func(t *testing.T) {
+		pID, vID := createProductAndVariant("Мало данных товар", now.AddDate(0, 0, -2), now.AddDate(0, 0, -2), "Белый", "S")
+		setVariantStock(pID, vID, 10, 0)
+		createOrderWithPaidUnits(pID, vID, 1, now.AddDate(0, 0, -1)) // paidDemandUnits < 2 and observedDays < 7
+
+		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		require.NoError(t, err)
+
+		snap := getSnapshot(vID)
+		require.NotNil(t, snap)
+		assert.Equal(t, "insufficient_data", snap.State)
+		assert.Nil(t, snap.DaysOfCover)
+	})
+
+	t.Run("B. Zero demand with sufficient observation -> snapshot state = no_sales, cover = NULL", func(t *testing.T) {
+		pID, vID := createProductAndVariant("Нет продаж товар", now.AddDate(0, 0, -30), now.AddDate(0, 0, -30), "Черный", "M")
+		setVariantStock(pID, vID, 10, 0)
+		// 0 orders
+
+		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		require.NoError(t, err)
+
+		snap := getSnapshot(vID)
+		require.NotNil(t, snap)
+		assert.Equal(t, "no_sales", snap.State)
+		assert.Nil(t, snap.DaysOfCover)
+	})
+
+	t.Run("C. Healthy calculated -> snapshot state = healthy, cover persisted", func(t *testing.T) {
+		pID, vID := createProductAndVariant("Здоровый товар", now.AddDate(0, 0, -30), now.AddDate(0, 0, -30), "Синий", "L")
+		setVariantStock(pID, vID, 50, 0)
+		createOrderWithPaidUnits(pID, vID, 3, now.AddDate(0, 0, -10)) // DSV = 0.1, cover = 500
+
+		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		require.NoError(t, err)
+
+		snap := getSnapshot(vID)
+		require.NotNil(t, snap)
+		assert.Equal(t, "healthy", snap.State)
+		require.NotNil(t, snap.DaysOfCover)
+		assert.InDelta(t, 500.0, *snap.DaysOfCover, 0.01)
+	})
+
+	t.Run("D. Warning -> snapshot state = warning, cover persisted", func(t *testing.T) {
+		pID, vID := createProductAndVariant("Предупреждение товар", now.AddDate(0, 0, -30), now.AddDate(0, 0, -30), "Желтый", "XL")
+		setVariantStock(pID, vID, 2, 0)
+		createOrderWithPaidUnits(pID, vID, 6, now.AddDate(0, 0, -10)) // DSV = 0.2, cover = 10 (<=14)
+
+		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		require.NoError(t, err)
+
+		snap := getSnapshot(vID)
+		require.NotNil(t, snap)
+		assert.Equal(t, "warning", snap.State)
+		require.NotNil(t, snap.DaysOfCover)
+		assert.InDelta(t, 10.0, *snap.DaysOfCover, 0.01)
+	})
+
+	t.Run("E. Critical -> snapshot state = critical, cover persisted", func(t *testing.T) {
+		pID, vID := createProductAndVariant("Критический товар", now.AddDate(0, 0, -30), now.AddDate(0, 0, -30), "Красный", "XXL")
+		setVariantStock(pID, vID, 2, 0)
+		createOrderWithPaidUnits(pID, vID, 10, now.AddDate(0, 0, -10)) // DSV = 10/30, cover = 6 (<=7)
+
+		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		require.NoError(t, err)
+
+		snap := getSnapshot(vID)
+		require.NotNil(t, snap)
+		assert.Equal(t, "critical", snap.State)
+		require.NotNil(t, snap.DaysOfCover)
+		assert.InDelta(t, 6.0, *snap.DaysOfCover, 0.01)
+	})
+
+	t.Run("F. Reconciled again -> exactly one row updated, not duplicated", func(t *testing.T) {
+		pID, vID := createProductAndVariant("Повторный товар", now.AddDate(0, 0, -30), now.AddDate(0, 0, -30), "Серый", "M")
+		setVariantStock(pID, vID, 2, 0)
+		createOrderWithPaidUnits(pID, vID, 6, now.AddDate(0, 0, -10))
+
+		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		require.NoError(t, err)
+
+		var count int
+		err = pgClient.Pool.QueryRow(ctx, "SELECT count(*) FROM variant_stock_forecasts WHERE product_variant_id = $1", vID).Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 1, count)
+
+		// Reconcile again with new stock
+		setVariantStock(pID, vID, 50, 0)
+		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		require.NoError(t, err)
+
+		err = pgClient.Pool.QueryRow(ctx, "SELECT count(*) FROM variant_stock_forecasts WHERE product_variant_id = $1", vID).Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 1, count, "Must remain exactly 1 row after update")
+
+		snap := getSnapshot(vID)
+		require.NotNil(t, snap)
+		assert.Equal(t, "healthy", snap.State)
+	})
+
+	t.Run("G. Hysteresis: warning cover 13 -> 16 remains warning; cover >= 18 becomes healthy", func(t *testing.T) {
+		pID, vID := createProductAndVariant("Гистерезис товар", now.AddDate(0, 0, -10), now.AddDate(0, 0, -10), "Зеленый", "S")
+		// 10 units in 10 days -> DSV = 1.0/day
+		createOrderWithPaidUnits(pID, vID, 10, now.AddDate(0, 0, -5))
+
+		// 1. Cover = 10 -> enters warning
+		setVariantStock(pID, vID, 10, 0)
+		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		require.NoError(t, err)
+		snap := getSnapshot(vID)
+		require.NotNil(t, snap)
+		assert.Equal(t, "warning", snap.State)
+
+		// 2. Cover becomes 16 (between 14 and 18): under hysteresis, remains warning!
+		setVariantStock(pID, vID, 16, 0)
+		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		require.NoError(t, err)
+		snap = getSnapshot(vID)
+		require.NotNil(t, snap)
+		assert.Equal(t, "warning", snap.State, "Cover 16 under hysteresis must remain warning")
+		require.NotNil(t, snap.DaysOfCover)
+		assert.InDelta(t, 16.0, *snap.DaysOfCover, 0.01)
+
+		// 3. Cover becomes 18 (>= 18): resolves hysteresis -> becomes healthy!
+		setVariantStock(pID, vID, 18, 0)
+		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		require.NoError(t, err)
+		snap = getSnapshot(vID)
+		require.NotNil(t, snap)
+		assert.Equal(t, "healthy", snap.State, "Cover 18 must resolve to healthy")
+		require.NotNil(t, snap.DaysOfCover)
+		assert.InDelta(t, 18.0, *snap.DaysOfCover, 0.01)
+	})
+
+	// -------------------------------------------------------------
+	// 2. Product-Scoped Reconciliation Safety (Unrelated Products Untouched)
+	// -------------------------------------------------------------
+	t.Run("H. Product-scoped reconcile never deletes snapshots of other products", func(t *testing.T) {
+		pID1, vID1 := createProductAndVariant("Товар 1", now.AddDate(0, 0, -30), now.AddDate(0, 0, -30), "Белый", "S")
+		setVariantStock(pID1, vID1, 20, 0)
+		createOrderWithPaidUnits(pID1, vID1, 3, now.AddDate(0, 0, -10))
+
+		pID2, vID2 := createProductAndVariant("Товар 2 Несвязанный", now.AddDate(0, 0, -30), now.AddDate(0, 0, -30), "Черный", "M")
+		setVariantStock(pID2, vID2, 20, 0)
+		createOrderWithPaidUnits(pID2, vID2, 3, now.AddDate(0, 0, -10))
+
+		// Reconcile Product 2 first
+		err := productsService.ReconcileStockForecastForProduct(ctx, pID2)
+		require.NoError(t, err)
+		require.NotNil(t, getSnapshot(vID2), "Product 2 must have a snapshot")
+
+		// Reconcile Product 1
+		err = productsService.ReconcileStockForecastForProduct(ctx, pID1)
+		require.NoError(t, err)
+		require.NotNil(t, getSnapshot(vID1), "Product 1 must have a snapshot")
+
+		// CRITICAL ASSERTION: Product 2 snapshot MUST still exist!
+		require.NotNil(t, getSnapshot(vID2), "Product-scoped reconcile of Product 1 must NOT delete Product 2 snapshot!")
+	})
+
+	// -------------------------------------------------------------
+	// 3. Failure Preserves Last Valid Snapshot
+	// -------------------------------------------------------------
+	t.Run("I. Failure preserves last valid snapshot on transaction rollback", func(t *testing.T) {
+		pID, vID := createProductAndVariant("Откат Товар", now.AddDate(0, 0, -30), now.AddDate(0, 0, -30), "Фиолетовый", "S")
+		setVariantStock(pID, vID, 2, 0)
+		createOrderWithPaidUnits(pID, vID, 6, now.AddDate(0, 0, -10)) // warning, cover = 10
+
+		// Establish valid existing snapshot
+		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		require.NoError(t, err)
+		initialSnap := getSnapshot(vID)
+		require.NotNil(t, initialSnap)
+		assert.Equal(t, "warning", initialSnap.State)
+		initialCalcAt := initialSnap.CalculatedAt
+
+		// Force failure inside a transaction attempting to refresh the snapshot to healthy
+		simulatedErr := pgClient.RunInTx(ctx, func(tx pgx.Tx) error {
+			// Update stock in transaction
+			_, txErr := tx.Exec(ctx, "UPDATE inventory_items SET total_stock = 100 WHERE product_variant_id = $1", vID)
+			if txErr != nil {
+				return txErr
+			}
+			if err := productsService.ReconcileStockForecastForProductTx(ctx, tx, pID, now.Add(1*time.Hour)); err != nil {
+				return err
+			}
+			return fmt.Errorf("simulated error forcing rollback")
+		})
+		require.Error(t, simulatedErr)
+
+		// Assert: previous snapshot remains present and completely unchanged
+		afterSnap := getSnapshot(vID)
+		require.NotNil(t, afterSnap, "Snapshot must still exist after rollback")
+		assert.Equal(t, "warning", afterSnap.State, "State must not have changed to healthy")
+		assert.Equal(t, initialCalcAt, afterSnap.CalculatedAt, "CalculatedAt must remain from the original valid run")
+	})
+
+	// -------------------------------------------------------------
+	// 4. Ineligibility Cleanup & Isolation
+	// -------------------------------------------------------------
+	t.Run("J. Ineligibility removes snapshot while preserving unrelated product snapshots", func(t *testing.T) {
+		pIDTarget, vIDTarget := createProductAndVariant("Целевой Товар", now.AddDate(0, 0, -30), now.AddDate(0, 0, -30), "Оранжевый", "S")
+		setVariantStock(pIDTarget, vIDTarget, 20, 0)
+		createOrderWithPaidUnits(pIDTarget, vIDTarget, 3, now.AddDate(0, 0, -10))
+
+		pIDOther, vIDOther := createProductAndVariant("Другой Товар", now.AddDate(0, 0, -30), now.AddDate(0, 0, -30), "Коричневый", "M")
+		setVariantStock(pIDOther, vIDOther, 20, 0)
+		createOrderWithPaidUnits(pIDOther, vIDOther, 3, now.AddDate(0, 0, -10))
+
+		// Establish snapshots for both
+		err := productsService.ReconcileStockForecastForProduct(ctx, pIDTarget)
+		require.NoError(t, err)
+		err = productsService.ReconcileStockForecastForProduct(ctx, pIDOther)
+		require.NoError(t, err)
+		require.NotNil(t, getSnapshot(vIDTarget))
+		require.NotNil(t, getSnapshot(vIDOther))
+
+		// 1. Variant becomes inactive -> its snapshot removed
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE product_variants SET is_active = false WHERE id = $1", vIDTarget)
+		require.NoError(t, err)
+		err = productsService.ReconcileStockForecastForProduct(ctx, pIDTarget)
+		require.NoError(t, err)
+		assert.Nil(t, getSnapshot(vIDTarget), "Inactive variant snapshot must be deleted")
+		assert.NotNil(t, getSnapshot(vIDOther), "Unrelated variant snapshot must remain intact")
+
+		// Reactivate variant -> snapshot restored
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE product_variants SET is_active = true WHERE id = $1", vIDTarget)
+		require.NoError(t, err)
+		err = productsService.ReconcileStockForecastForProduct(ctx, pIDTarget)
+		require.NoError(t, err)
+		assert.NotNil(t, getSnapshot(vIDTarget))
+
+		// 2. Product becomes draft (non-published) -> snapshot removed
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE products SET status = 'draft' WHERE id = $1", pIDTarget)
+		require.NoError(t, err)
+		err = productsService.ReconcileStockForecastForProduct(ctx, pIDTarget)
+		require.NoError(t, err)
+		assert.Nil(t, getSnapshot(vIDTarget), "Draft product snapshot must be deleted")
+		assert.NotNil(t, getSnapshot(vIDOther), "Unrelated variant snapshot must remain intact")
+
+		// Reactivate product -> snapshot restored
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE products SET status = 'published' WHERE id = $1", pIDTarget)
+		require.NoError(t, err)
+		err = productsService.ReconcileStockForecastForProduct(ctx, pIDTarget)
+		require.NoError(t, err)
+		assert.NotNil(t, getSnapshot(vIDTarget))
+
+		// 3. Seller becomes inactive -> snapshot removed
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE sellers SET status = 'blocked' WHERE id = $1", sellerID)
+		require.NoError(t, err)
+		err = productsService.ReconcileStockForecastForProduct(ctx, pIDTarget)
+		require.NoError(t, err)
+		assert.Nil(t, getSnapshot(vIDTarget), "Snapshot for non-active seller must be deleted")
+	})
+}
+
+func TestNTF3_ForecastReconciliationAdvisoryLock(t *testing.T) {
+	ctx, pgClient, productsService, _, cleanup := setupForecastTestEnvironment(t)
+	defer cleanup()
+
+	var dbName string
+	err := pgClient.Pool.QueryRow(ctx, "SELECT current_database()").Scan(&dbName)
+	require.NoError(t, err)
+	require.Equal(t, "zamk_test", dbName, "tests must strictly run against zamk_test")
+
+	connA, err := pgClient.Pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer connA.Release()
+
+	connB, err := pgClient.Pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer connB.Release()
+
+	// 1. Transaction A acquires the forecast advisory lock through reconciliation
+	txA, err := connA.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = txA.Rollback(ctx) }()
+
+	// Calling ReconcileStockForecastAlertsTx on txA acquires the lock
+	err = productsService.ReconcileStockForecastAlertsTx(ctx, txA, time.Now().UTC())
+	require.NoError(t, err)
+
+	// 2. Transaction B verifies through non-blocking pg_try_advisory_xact_lock that
+	// the lock CANNOT be acquired while Transaction A is open
+	txB, err := connB.Begin(ctx)
+	require.NoError(t, err)
+
+	var canAcquire bool
+	err = txB.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock($1)`, products.ForecastReconciliationAdvisoryLockKey).Scan(&canAcquire)
+	require.NoError(t, err)
+	assert.False(t, canAcquire, "Transaction B must NOT be able to acquire forecast reconciliation advisory lock while Transaction A holds it")
+	_ = txB.Rollback(ctx)
+
+	// 3. Rollback Transaction A -> lock is released automatically
+	err = txA.Rollback(ctx)
+	require.NoError(t, err)
+
+	// 4. Verify Transaction C on connB can now acquire the lock
+	txC, err := connB.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = txC.Rollback(ctx) }()
+
+	err = txC.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock($1)`, products.ForecastReconciliationAdvisoryLockKey).Scan(&canAcquire)
+	require.NoError(t, err)
+	assert.True(t, canAcquire, "Transaction C must be able to acquire the forecast reconciliation advisory lock after Transaction A rolled back")
+	_ = txC.Rollback(ctx)
 }

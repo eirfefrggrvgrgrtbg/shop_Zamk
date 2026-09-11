@@ -14,6 +14,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// ForecastReconciliationAdvisoryLockKey is the canonical PostgreSQL transaction-level
+// advisory lock key for synchronizing stock forecast reconciliations.
+// Value corresponds to 64-bit ASCII "ZAMKSFRC" (0x5a414d4b53465243).
+const ForecastReconciliationAdvisoryLockKey int64 = 0x5a414d4b53465243
+
 // StockForecastDedupeKey returns the canonical dedupe key for a product's stock forecast alert.
 func StockForecastDedupeKey(productID uuid.UUID) string {
 	return fmt.Sprintf("stock:forecast:product:%s", productID.String())
@@ -243,6 +248,14 @@ func (s *Service) ReconcileStockForecastForProductTx(ctx context.Context, tx pgx
 }
 
 func (s *Service) reconcileStockForecastInternal(ctx context.Context, tx pgx.Tx, targetProductID uuid.UUID, now time.Time) error {
+	// Step 0: Acquire transaction-scoped advisory lock to serialize forecast reconciliation.
+	// Both full and product-scoped reconciliations acquire this same lock so that
+	// concurrent executions never race on snapshot persistence, active alerts, or stale cleanup.
+	// The lock releases automatically when tx commits or rolls back.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, ForecastReconciliationAdvisoryLockKey); err != nil {
+		return fmt.Errorf("failed to acquire forecast reconciliation advisory lock: %w", err)
+	}
+
 	// Step 1: Load active forecast alerts
 	activeAlertsQuery := `
 		SELECT id, recipient_seller_id, dedupe_key, metadata
@@ -423,6 +436,7 @@ func (s *Service) reconcileStockForecastInternal(ctx context.Context, tx pgx.Tx,
 	}
 
 	handledProducts := make(map[uuid.UUID]bool)
+	var evaluatedVariantIDs []uuid.UUID
 
 	// Step 3: Compute forecasts and reconcile per product
 	for _, pID := range productOrder {
@@ -433,12 +447,47 @@ func (s *Service) reconcileStockForecastInternal(ctx context.Context, tx pgx.Tx,
 
 		var atRiskVariants []VariantForecastMetrics
 		for _, v := range g.variants {
+			evaluatedVariantIDs = append(evaluatedVariantIDs, v.VariantID)
 			wasInActive := false
 			if activeAlert != nil && activeAlert.variants != nil {
 				wasInActive = activeAlert.variants[v.VariantID]
 			}
 
 			metrics := ComputeVariantForecast(v, now, wasInActive)
+
+			// Determine persistent snapshot state
+			var state string
+			var cover *float64
+			if !metrics.EligibleForForecast {
+				state = "insufficient_data"
+			} else if metrics.PaidDemandUnits == 0 {
+				state = "no_sales"
+			} else if !metrics.IsAtRisk {
+				state = "healthy"
+				c := metrics.DaysOfCover
+				cover = &c
+			} else if metrics.Severity == notifications.SeverityWarning {
+				state = "warning"
+				c := metrics.DaysOfCover
+				cover = &c
+			} else if metrics.Severity == notifications.SeverityCritical {
+				state = "critical"
+				c := metrics.DaysOfCover
+				cover = &c
+			}
+
+			upsertQuery := `
+				INSERT INTO variant_stock_forecasts (product_variant_id, state, days_of_cover, calculated_at)
+				VALUES ($1, $2, $3, $4)
+				ON CONFLICT (product_variant_id) DO UPDATE SET
+					state = EXCLUDED.state,
+					days_of_cover = EXCLUDED.days_of_cover,
+					calculated_at = EXCLUDED.calculated_at
+			`
+			if _, err := tx.Exec(ctx, upsertQuery, metrics.VariantID, state, cover, now); err != nil {
+				return fmt.Errorf("failed to upsert variant forecast snapshot: %w", err)
+			}
+
 			if metrics.IsAtRisk {
 				atRiskVariants = append(atRiskVariants, metrics)
 			}
@@ -535,6 +584,45 @@ func (s *Service) reconcileStockForecastInternal(ctx context.Context, tx pgx.Tx,
 				if err := s.notifs.ResolveActiveSellerAlertTx(ctx, tx, alert.sellerID, alert.dedupeKey); err != nil {
 					return fmt.Errorf("failed to resolve orphaned forecast alert for product %s: %w", targetProductID, err)
 				}
+			}
+		}
+	}
+
+	// Step 5: Clean up stale snapshots
+	if targetProductID == uuid.Nil {
+		// Full reconciliation: delete snapshots not evaluated in this full run
+		if len(evaluatedVariantIDs) > 0 {
+			if _, err := tx.Exec(ctx, `DELETE FROM variant_stock_forecasts WHERE NOT (product_variant_id = ANY($1))`, evaluatedVariantIDs); err != nil {
+				return fmt.Errorf("failed to clean up stale variant forecasts: %w", err)
+			}
+		} else {
+			if _, err := tx.Exec(ctx, `DELETE FROM variant_stock_forecasts`); err != nil {
+				return fmt.Errorf("failed to clean up stale variant forecasts: %w", err)
+			}
+		}
+	} else {
+		// Product-scoped reconciliation: NEVER delete other products' snapshots!
+		// Delete only snapshots for variants belonging to targetProductID that were not evaluated in this run
+		if len(evaluatedVariantIDs) > 0 {
+			cleanupQuery := `
+				DELETE FROM variant_stock_forecasts
+				WHERE product_variant_id IN (
+					SELECT id FROM product_variants WHERE product_id = $1
+				)
+				AND NOT (product_variant_id = ANY($2))
+			`
+			if _, err := tx.Exec(ctx, cleanupQuery, targetProductID, evaluatedVariantIDs); err != nil {
+				return fmt.Errorf("failed to clean up stale variant forecasts for product %s: %w", targetProductID, err)
+			}
+		} else {
+			cleanupQuery := `
+				DELETE FROM variant_stock_forecasts
+				WHERE product_variant_id IN (
+					SELECT id FROM product_variants WHERE product_id = $1
+				)
+			`
+			if _, err := tx.Exec(ctx, cleanupQuery, targetProductID); err != nil {
+				return fmt.Errorf("failed to clean up stale variant forecasts for product %s: %w", targetProductID, err)
 			}
 		}
 	}

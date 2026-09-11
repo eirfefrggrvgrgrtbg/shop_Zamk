@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { getSellerInventory } from '@zamk/api-client/src/seller';
 import type { SellerInventoryItem } from '@zamk/api-client/src/types';
 import { Package, Search, Filter, AlertCircle, TrendingUp, CheckCircle } from 'lucide-react';
+import { formatApproximateDaysOfCover, formatVariantDisplayLabel } from '../lib/stockForecastPresentation';
 
 type FilterType = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | 'inbound';
 
@@ -190,6 +191,7 @@ export function SellerInventory() {
                 <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Доступно</th>
                 <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">В пути</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Статус</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Прогноз</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 bg-white">
@@ -207,17 +209,36 @@ export function SellerInventory() {
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
                       <span className="text-sm font-medium text-gray-900 line-clamp-1">{item.productTitle}</span>
-                      {item.optionValues && Object.keys(item.optionValues).length > 0 && (
-                        <span className="text-xs text-gray-500 mt-0.5">
-                          {Object.entries(item.optionValues).map(([k, v]) => `${k}: ${v}`).join(' • ')}
-                        </span>
-                      )}
+                      {(() => {
+                        const color = item.optionValues?.['Цвет'] || item.optionValues?.['color'] || '';
+                        const size = item.optionValues?.['Размер'] || item.optionValues?.['size'] || '';
+                        const variantLabel = formatVariantDisplayLabel(String(color || ''), String(size || ''));
+                        if (variantLabel) {
+                          return (
+                            <span className="text-xs text-gray-500 mt-0.5">
+                              {variantLabel}
+                            </span>
+                          );
+                        }
+                        if (item.optionValues && Object.keys(item.optionValues).length > 0) {
+                          return (
+                            <span className="text-xs text-gray-500 mt-0.5">
+                              {Object.entries(item.optionValues).map(([k, v]) => `${k}: ${v}`).join(' • ')}
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-gray-100 text-gray-800">
-                      {item.sku}
-                    </span>
+                    {item.sku ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-gray-100 text-gray-800">
+                        {item.sku}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400 font-mono">—</span>
+                    )}
                   </td>
                   <td data-testid="onhand-value" className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{item.onHand}</td>
                   <td data-testid="reserved-value" className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{item.reserved}</td>
@@ -236,11 +257,14 @@ export function SellerInventory() {
                   <td data-testid="status-badge" className="px-6 py-4 whitespace-nowrap">
                     <StatusBadge status={item.availabilityStatus} />
                   </td>
+                  <td data-testid="forecast-value" className="px-6 py-4 whitespace-nowrap">
+                    <ForecastDisplay item={item} />
+                  </td>
                 </tr>
               ))}
               {filteredInventory.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center">
+                  <td colSpan={9} className="px-6 py-12 text-center">
                     <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                     <h3 className="text-sm font-medium text-gray-900">Ничего не найдено</h3>
                     <p className="text-sm text-gray-500 mt-1">Попробуйте изменить параметры поиска или фильтрации</p>
@@ -278,4 +302,50 @@ function StatusBadge({ status }: { status: string }) {
       {status}
     </span>
   );
+}
+
+function ForecastDisplay({ item }: { item: SellerInventoryItem }) {
+  if (!item.forecast) {
+    return <span className="text-sm text-gray-300">-</span>;
+  }
+
+  const { state, daysOfCover } = item.forecast;
+
+  if (state === 'insufficient_data') {
+    return <span className="text-sm text-gray-500">Мало данных</span>;
+  }
+
+  if (state === 'no_sales') {
+    return <span className="text-sm text-gray-500">Нет продаж</span>;
+  }
+
+  if (daysOfCover === null || daysOfCover === undefined) {
+    return <span className="text-sm text-gray-300">-</span>;
+  }
+
+  const daysText = formatApproximateDaysOfCover(daysOfCover);
+
+  if (state === 'healthy') {
+    return <span className="text-sm text-gray-500">{daysText}</span>;
+  }
+
+  if (state === 'warning') {
+    return (
+      <Link to="/supplies/new" className="inline-flex items-center gap-1 text-sm text-amber-600 hover:text-amber-700 hover:underline">
+        <AlertCircle className="w-4 h-4" />
+        {daysText}
+      </Link>
+    );
+  }
+
+  if (state === 'critical') {
+    return (
+      <Link to="/supplies/new" className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700 hover:underline">
+        <AlertCircle className="w-4 h-4" />
+        {daysText}
+      </Link>
+    );
+  }
+
+  return <span className="text-sm text-gray-500">{daysText}</span>;
 }

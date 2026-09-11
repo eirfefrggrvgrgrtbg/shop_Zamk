@@ -52,6 +52,7 @@ export default function App() {
           <Route path="/warnings" element={<SellerProtectedRoute><SellerLayout><SellerWarnings /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/supplies" element={<SellerProtectedRoute><SellerLayout><SellerSupplies /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/supplies/new" element={<SellerProtectedRoute><SellerLayout><SellerSupplyNew /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/supplies/inventory" element={<Navigate to="/inventory" replace />} />
           <Route path="/supplies/:id" element={<SellerProtectedRoute><SellerLayout><SellerSupplyDetail /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/supplies/:id/label" element={<SellerProtectedRoute><SellerSupplyBoxLabel /></SellerProtectedRoute>} />
           <Route path="/supplies/:id/boxes/:boxId/label" element={<SellerProtectedRoute><SellerSupplyBoxLabel /></SellerProtectedRoute>} />

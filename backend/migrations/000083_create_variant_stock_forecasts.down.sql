@@ -1,0 +1,2 @@
+-- Creation of variant_stock_forecasts table is forward-only.
+-- Down migration is a NO-OP to preserve forward-only project invariants.

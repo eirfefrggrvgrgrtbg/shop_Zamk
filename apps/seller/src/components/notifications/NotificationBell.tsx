@@ -17,33 +17,8 @@ interface ForecastVariantMeta {
   severity?: string;
 }
 
-export function formatDaysRussian(days: number): string {
-  if (days < 0) days = 0;
-  const mod100 = days % 100;
-  const mod10 = days % 10;
-  if (mod100 >= 11 && mod100 <= 19) {
-    return `${days} дней`;
-  }
-  switch (mod10) {
-    case 1:
-      return `${days} день`;
-    case 2:
-    case 3:
-    case 4:
-      return `${days} дня`;
-    default:
-      return `${days} дней`;
-  }
-}
-
-export function formatVariantDisplayLabel(color?: string | null, size?: string | null): string {
-  const c = (color || '').trim();
-  const s = (size || '').trim();
-  if (c && s) return `${c} · ${s}`;
-  if (c) return c;
-  if (s) return s;
-  return '';
-}
+export { formatDaysRussian, formatVariantDisplayLabel, formatApproximateDaysOfCover } from '../../lib/stockForecastPresentation';
+import { formatDaysRussian, formatVariantDisplayLabel, formatApproximateDaysOfCover } from '../../lib/stockForecastPresentation';
 
 function parseForecastVariants(metadata?: Record<string, unknown> | null): ForecastVariantMeta[] | null {
   if (!metadata || !Array.isArray(metadata.variants)) {
@@ -227,8 +202,7 @@ export function NotificationBell() {
                           <div className="mt-2 space-y-1.5">
                             {forecastVariants.slice(0, 3).map((v, idx) => {
                               const label = formatVariantDisplayLabel(v.color, v.size);
-                              const roundedDays = typeof v.daysOfCover === 'number' ? Math.round(v.daysOfCover) : null;
-                              const baseCoverText = roundedDays !== null ? `≈ ${formatDaysRussian(roundedDays)} запаса` : null;
+                              const baseCoverText = typeof v.daysOfCover === 'number' ? formatApproximateDaysOfCover(v.daysOfCover) : null;
                               const coverText = baseCoverText ? (isResolved ? `Было: ${baseCoverText}` : baseCoverText) : null;
 
                               return (

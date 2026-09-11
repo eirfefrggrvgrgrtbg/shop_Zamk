@@ -209,6 +209,9 @@ func (r *Repository) ListSellerInventoryRich(ctx context.Context, sellerID uuid.
 		FROM inventory_items i
 		JOIN products p ON i.product_id = p.id
 		JOIN product_variants pv ON i.product_variant_id = pv.id
+		LEFT JOIN size_values sv ON pv.size_value_id = sv.id
+		LEFT JOIN colors c ON pv.color_id = c.id
+		LEFT JOIN variant_stock_forecasts vsf ON vsf.product_variant_id = pv.id
 		WHERE i.seller_id = $1
 	`
 	args := []interface{}{sellerID}
@@ -224,7 +227,10 @@ func (r *Repository) ListSellerInventoryRich(ctx context.Context, sellerID uuid.
 		SELECT
 			i.product_variant_id, i.product_id, p.title,
 			(SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY sort_order ASC, created_at ASC LIMIT 1) as image_url,
-			pv.option_values, pv.size, pv.color, pv.sku,
+			pv.option_values,
+			COALESCE(sv.value, pv.size) as size,
+			COALESCE(c.name_ru, pv.color) as color,
+			COALESCE(pv.seller_sku, pv.sku) as sku,
 			i.total_stock, i.reserved_stock,
 			COALESCE((
 				SELECT SUM(ssi.expected_quantity - ssi.accepted_quantity)
@@ -232,9 +238,10 @@ func (r *Repository) ListSellerInventoryRich(ctx context.Context, sellerID uuid.
 				JOIN seller_supplies ss ON ssi.supply_id = ss.id
 				WHERE ssi.variant_id = i.product_variant_id
 				  AND ss.status IN ('ready_to_ship', 'shipped_by_seller', 'arrived_at_zamk', 'receiving')
-			), 0) as inbound
+			), 0) as inbound,
+			vsf.state as forecast_state, vsf.days_of_cover as forecast_days, vsf.calculated_at as forecast_calc
 	` + baseQuery + `
-		ORDER BY p.title ASC, pv.sku ASC
+		ORDER BY p.title ASC, COALESCE(pv.seller_sku, pv.sku) ASC
 		LIMIT $2 OFFSET $3
 	`
 	args = append(args, limit, offset)
@@ -251,11 +258,15 @@ func (r *Repository) ListSellerInventoryRich(ctx context.Context, sellerID uuid.
 		var imageUrl *string
 		var optionValues map[string]interface{}
 		var size, color, sku *string
+		var fState *string
+		var fDays *float64
+		var fCalc *time.Time
 
 		err := rows.Scan(
 			&item.VariantID, &item.ProductID, &item.ProductTitle,
 			&imageUrl, &optionValues, &size, &color, &sku,
 			&item.OnHand, &item.Reserved, &item.Inbound,
+			&fState, &fDays, &fCalc,
 		)
 		if err != nil {
 			return nil, 0, err
@@ -263,6 +274,14 @@ func (r *Repository) ListSellerInventoryRich(ctx context.Context, sellerID uuid.
 
 		item.Image = imageUrl
 		item.Available = item.OnHand - item.Reserved
+
+		if fState != nil && fCalc != nil {
+			item.Forecast = &VariantForecastSnapshot{
+				State:        *fState,
+				DaysOfCover:  fDays,
+				CalculatedAt: *fCalc,
+			}
+		}
 
 		if sku != nil {
 			item.SKU = *sku
