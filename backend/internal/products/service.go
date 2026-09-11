@@ -1260,6 +1260,10 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 			}
 		}
 
+		if err := s.SyncCriticalStockAlertForProductTx(ctx, tx, p.ID); err != nil {
+			return fmt.Errorf("failed to sync critical stock alert: %w", err)
+		}
+
 		return nil
 	})
 }
@@ -1302,21 +1306,26 @@ func (s *Service) PublishProduct(ctx context.Context, adminUserID, productID uui
 	p.UpdatedAt = now
 	p.ModerationComment = comment
 
-	if err := s.repo.UpdateProductStatus(ctx, p); err != nil {
-		return err
-	}
+	return s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.repo.WithTx(tx)
+		if err := txRepo.UpdateProductStatus(ctx, p); err != nil {
+			return err
+		}
 
-	_ = s.repo.AddModerationLog(ctx, &ProductModerationLog{
-		ID:          uuid.New(),
-		ProductID:   p.ID,
-		AdminUserID: &adminUserID,
-		FromStatus:  &fromStatus,
-		ToStatus:    StatusPublished,
-		Comment:     comment,
-		CreatedAt:   now,
+		if err := txRepo.AddModerationLog(ctx, &ProductModerationLog{
+			ID:          uuid.New(),
+			ProductID:   p.ID,
+			AdminUserID: &adminUserID,
+			FromStatus:  &fromStatus,
+			ToStatus:    StatusPublished,
+			Comment:     comment,
+			CreatedAt:   now,
+		}); err != nil {
+			return err
+		}
+
+		return s.SyncCriticalStockAlertForProductTx(ctx, tx, p.ID)
 	})
-
-	return nil
 }
 
 func (s *Service) HideProduct(ctx context.Context, adminUserID, productID uuid.UUID, comment *string) error {

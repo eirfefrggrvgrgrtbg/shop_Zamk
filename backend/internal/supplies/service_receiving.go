@@ -233,6 +233,7 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 	// Update items and inventory
 	receivedUnitsCount := 0
 	damagedUnitsCount := 0
+	reconciledProducts := make(map[uuid.UUID]bool)
 	for _, item := range session.Items {
 		if item.SupplyItemID == nil {
 			continue // unexpected item not supported fully yet
@@ -254,6 +255,21 @@ func (s *Service) FinalizeReceiving(ctx context.Context, staffID uuid.UUID, sess
 			err = repoTx.UpdateInventoryStock(ctx, *item.VariantID, accepted, "receiving_session", session.ID)
 			if err != nil {
 				return fmt.Errorf("failed to update inventory: %w", err)
+			}
+			if s.stockAlertReconciler != nil {
+				var prodID uuid.UUID
+				err = tx.QueryRow(ctx, "SELECT product_id FROM product_variants WHERE id = $1", *item.VariantID).Scan(&prodID)
+				if err == nil {
+					reconciledProducts[prodID] = true
+				}
+			}
+		}
+	}
+
+	if s.stockAlertReconciler != nil {
+		for prodID := range reconciledProducts {
+			if err := s.stockAlertReconciler.SyncCriticalStockAlertForProductTx(ctx, tx, prodID); err != nil {
+				return fmt.Errorf("failed to sync stock alert for product %s: %w", prodID, err)
 			}
 		}
 	}

@@ -88,6 +88,8 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	productsRepo := products.NewRepository(pgClient.Pool)
 	productsService := products.NewService(productsRepo, sellersRepo, pgClient, reviewsService, notificationsService).WithRedis(redisClient)
 	productsHandler := products.NewHandler(productsService, sellersService)
+	inventoryService.SetStockAlertReconciler(productsService)
+	sellersService.SetStockAlertReconciler(productsService)
 
 	tbankProvider := payments.NewTBankProvider(
 		cfg.TBank.TerminalKey,
@@ -122,6 +124,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	suppliesRepo := supplies.NewRepository(pgClient.Pool)
 	suppliesService := supplies.NewService(pgClient.Pool, suppliesRepo)
 	suppliesService.SetLogger(logger)
+	suppliesService.SetStockAlertReconciler(productsService)
 	suppliesHandler := supplies.NewHandler(suppliesService, logger)
 
 	// In test mode without S3 configured, this might fail, so check err or configure dummy

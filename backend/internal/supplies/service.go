@@ -12,14 +12,20 @@ import (
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type StockAlertReconciler interface {
+	SyncCriticalStockAlertForProductTx(ctx context.Context, tx pgx.Tx, productID uuid.UUID) error
+}
+
 type Service struct {
-	repo              *Repository
-	db                postgres.DBTX
-	logger            *slog.Logger
-	unitCodeGenerator func() (string, error)
+	repo                 *Repository
+	db                   postgres.DBTX
+	logger               *slog.Logger
+	unitCodeGenerator    func() (string, error)
+	stockAlertReconciler StockAlertReconciler
 }
 
 func NewService(db postgres.DBTX, repo *Repository) *Service {
@@ -29,6 +35,10 @@ func NewService(db postgres.DBTX, repo *Repository) *Service {
 		logger:            slog.Default(),
 		unitCodeGenerator: GenerateUnitCode,
 	}
+}
+
+func (s *Service) SetStockAlertReconciler(r StockAlertReconciler) {
+	s.stockAlertReconciler = r
 }
 
 func (s *Service) SetLogger(logger *slog.Logger) {

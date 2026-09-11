@@ -19,11 +19,16 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type StockAlertReconciler interface {
+	SyncCriticalStockAlertsForSellerTx(ctx context.Context, tx pgx.Tx, sellerID uuid.UUID) error
+}
+
 type Service struct {
-	repo     *Repository
-	userRepo *users.Repository
-	dbClient *postgres.Client
-	notifs   *notifications.Service
+	repo                 *Repository
+	userRepo             *users.Repository
+	dbClient             *postgres.Client
+	notifs               *notifications.Service
+	stockAlertReconciler StockAlertReconciler
 }
 
 func NewService(repo *Repository, userRepo *users.Repository, dbClient *postgres.Client, notifs *notifications.Service) *Service {
@@ -34,6 +39,11 @@ func NewService(repo *Repository, userRepo *users.Repository, dbClient *postgres
 		notifs:   notifs,
 	}
 }
+
+func (s *Service) SetStockAlertReconciler(r StockAlertReconciler) {
+	s.stockAlertReconciler = r
+}
+
 
 func (s *Service) CreateSellerByAdmin(ctx context.Context, req *CreateSellerRequest) (*CreateSellerResponse, error) {
 	// 1. Check if user exists
@@ -384,8 +394,30 @@ func (s *Service) UpdateSellerStatus(ctx context.Context, id uuid.UUID, req *Upd
 		return errors.New("invalid status")
 	}
 
-	return s.repo.UpdateSellerStatus(ctx, id, req.Status)
+	seller, err := s.repo.GetSellerByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	oldStatus := string(seller.Status)
+
+	if s.dbClient == nil {
+		return s.repo.UpdateSellerStatus(ctx, id, req.Status)
+	}
+
+	return s.dbClient.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.repo.WithTx(tx)
+		if err := txRepo.UpdateSellerStatus(ctx, id, req.Status); err != nil {
+			return err
+		}
+		if s.stockAlertReconciler != nil && oldStatus != string(req.Status) && (oldStatus == string(StatusActive) || req.Status == StatusActive) {
+			if err := s.stockAlertReconciler.SyncCriticalStockAlertsForSellerTx(ctx, tx, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
+
 
 func (s *Service) UpdateSellerProfile(ctx context.Context, currentUserID uuid.UUID, req *UpdateSellerProfileRequest) (*SellerMeResponse, error) {
 	seller, _, err := s.repo.GetSellerByUserID(ctx, currentUserID)
@@ -544,12 +576,33 @@ func (s *Service) UpdateSellerStatusWithHistory(ctx context.Context, sellerID uu
 
 	oldStatus := string(seller.Status)
 
-	if err := s.repo.UpdateSellerStatus(ctx, sellerID, SellerStatus(newStatus)); err != nil {
-		return err
+	if s.dbClient == nil {
+		if err := s.repo.UpdateSellerStatus(ctx, sellerID, SellerStatus(newStatus)); err != nil {
+			return err
+		}
+		actor := actorUserID
+		return s.repo.WriteStatusHistory(ctx, sellerID, &oldStatus, newStatus, reason, &actor)
 	}
 
-	actor := actorUserID
-	return s.repo.WriteStatusHistory(ctx, sellerID, &oldStatus, newStatus, reason, &actor)
+	return s.dbClient.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.repo.WithTx(tx)
+		if err := txRepo.UpdateSellerStatus(ctx, sellerID, SellerStatus(newStatus)); err != nil {
+			return err
+		}
+
+		actor := actorUserID
+		if err := txRepo.WriteStatusHistory(ctx, sellerID, &oldStatus, newStatus, reason, &actor); err != nil {
+			return err
+		}
+
+		if s.stockAlertReconciler != nil && oldStatus != newStatus && (oldStatus == string(StatusActive) || newStatus == string(StatusActive)) {
+			if err := s.stockAlertReconciler.SyncCriticalStockAlertsForSellerTx(ctx, tx, sellerID); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 // VerifySeller verifies a pending seller.
@@ -582,18 +635,48 @@ func (s *Service) VerifySeller(ctx context.Context, sellerID uuid.UUID, actorUse
 	}
 
 	oldStatus := string(seller.Status)
-	if err := s.repo.UpdateSellerStatus(ctx, sellerID, StatusActive); err != nil {
-		return nil, err
+
+	if s.dbClient == nil {
+		if err := s.repo.UpdateSellerStatus(ctx, sellerID, StatusActive); err != nil {
+			return nil, err
+		}
+		actor := actorUserID
+		_ = s.repo.WriteStatusHistory(ctx, sellerID, &oldStatus, string(StatusActive), nil, &actor)
+		return &VerifySellerResponse{
+			SellerID: sellerID,
+			Status:   string(StatusActive),
+		}, nil
 	}
 
-	actor := actorUserID
-	_ = s.repo.WriteStatusHistory(ctx, sellerID, &oldStatus, string(StatusActive), nil, &actor)
+	err = s.dbClient.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.repo.WithTx(tx)
+		if err := txRepo.UpdateSellerStatus(ctx, sellerID, StatusActive); err != nil {
+			return err
+		}
+
+		actor := actorUserID
+		if err := txRepo.WriteStatusHistory(ctx, sellerID, &oldStatus, string(StatusActive), nil, &actor); err != nil {
+			return err
+		}
+
+		if s.stockAlertReconciler != nil && oldStatus != string(StatusActive) {
+			if err := s.stockAlertReconciler.SyncCriticalStockAlertsForSellerTx(ctx, tx, sellerID); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	return &VerifySellerResponse{
 		SellerID: sellerID,
 		Status:   string(StatusActive),
 	}, nil
 }
+
 
 // GetStatusHistory returns seller status timeline.
 func (s *Service) GetStatusHistory(ctx context.Context, sellerID uuid.UUID) ([]SellerStatusHistoryItem, error) {

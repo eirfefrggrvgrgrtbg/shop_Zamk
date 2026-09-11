@@ -13,11 +13,16 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type StockAlertReconciler interface {
+	SyncCriticalStockAlertForProductTx(ctx context.Context, tx pgx.Tx, productID uuid.UUID) error
+}
+
 type Service struct {
-	repo       *Repository
-	sellerRepo *sellers.Repository
-	dbPool     *postgres.Client
-	logger     *slog.Logger
+	repo                 *Repository
+	sellerRepo           *sellers.Repository
+	dbPool               *postgres.Client
+	logger               *slog.Logger
+	stockAlertReconciler StockAlertReconciler
 }
 
 func NewService(repo *Repository, sellerRepo *sellers.Repository, dbPool *postgres.Client) *Service {
@@ -33,6 +38,10 @@ func (s *Service) SetLogger(l *slog.Logger) {
 	if l != nil {
 		s.logger = l
 	}
+}
+
+func (s *Service) SetStockAlertReconciler(r StockAlertReconciler) {
+	s.stockAlertReconciler = r
 }
 
 // ---------------------------------------------------------
@@ -183,6 +192,12 @@ func (s *Service) ReceiveStock(ctx context.Context, adminUserID uuid.UUID, req R
 			return err
 		}
 
+		if s.stockAlertReconciler != nil {
+			if err := s.stockAlertReconciler.SyncCriticalStockAlertForProductTx(ctx, tx, item.ProductID); err != nil {
+				return fmt.Errorf("failed to sync stock alert: %w", err)
+			}
+		}
+
 		item.ComputeAvailable()
 		resultingItem = *item
 		return nil
@@ -245,6 +260,12 @@ func (s *Service) AdjustStock(ctx context.Context, adminUserID uuid.UUID, req Ad
 			return err
 		}
 
+		if s.stockAlertReconciler != nil {
+			if err := s.stockAlertReconciler.SyncCriticalStockAlertForProductTx(ctx, tx, item.ProductID); err != nil {
+				return fmt.Errorf("failed to sync stock alert: %w", err)
+			}
+		}
+
 		item.ComputeAvailable()
 		resultingItem = *item
 		return nil
@@ -296,6 +317,12 @@ func (s *Service) WriteOffStock(ctx context.Context, adminUserID uuid.UUID, req 
 		}
 		if err := txRepo.RecordMovement(ctx, mov); err != nil {
 			return err
+		}
+
+		if s.stockAlertReconciler != nil {
+			if err := s.stockAlertReconciler.SyncCriticalStockAlertForProductTx(ctx, tx, item.ProductID); err != nil {
+				return fmt.Errorf("failed to sync stock alert: %w", err)
+			}
 		}
 
 		item.ComputeAvailable()
@@ -393,59 +420,11 @@ func (s *Service) CreateReservation(ctx context.Context, userID uuid.UUID, varia
 	var resultingRes Reservation
 
 	err := s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
-		txRepo := s.repo.WithTx(tx)
-
-		item, err := txRepo.GetItemForUpdateByVariant(ctx, variantID)
+		res, err := s.CreateReservationTx(ctx, tx, userID, variantID, quantity, ttl)
 		if err != nil {
 			return err
 		}
-
-		if item.TotalStock-item.ReservedStock < quantity {
-			return ErrInsufficientStock
-		}
-
-		item.ReservedStock += quantity
-		item.UpdatedAt = time.Now()
-
-		if err := txRepo.UpdateItemStock(ctx, item); err != nil {
-			return err
-		}
-
-		now := time.Now()
-		res := &Reservation{
-			ID:               uuid.New(),
-			InventoryItemID:  item.ID,
-			ProductID:        item.ProductID,
-			ProductVariantID: item.ProductVariantID,
-			UserID:           &userID,
-			Quantity:         quantity,
-			Status:           ReservationStatusActive,
-			ExpiresAt:        now.Add(ttl),
-			CreatedAt:        now,
-		}
-
-		if err := txRepo.CreateReservation(ctx, res); err != nil {
-			return err
-		}
-
-		mov := &StockMovement{
-			ID:               uuid.New(),
-			InventoryItemID:  item.ID,
-			ProductID:        item.ProductID,
-			ProductVariantID: item.ProductVariantID,
-			SellerID:         item.SellerID,
-			Type:             MovementTypeReservationCreated,
-			Quantity:         quantity,
-			ActorUserID:      &userID,
-			ReferenceType:    func(s string) *string { return &s }("reservation"),
-			ReferenceID:      &res.ID,
-			CreatedAt:        now,
-		}
-		if err := txRepo.RecordMovement(ctx, mov); err != nil {
-			return err
-		}
-
-		resultingRes = *res
+		resultingRes = res
 		return nil
 	})
 
@@ -454,6 +433,7 @@ func (s *Service) CreateReservation(ctx context.Context, userID uuid.UUID, varia
 	}
 	return resultingRes, nil
 }
+
 
 func (s *Service) CreateReservationTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID, variantID uuid.UUID, quantity int, ttl time.Duration) (Reservation, error) {
 	txRepo := s.repo.WithTx(tx)
@@ -506,6 +486,12 @@ func (s *Service) CreateReservationTx(ctx context.Context, tx pgx.Tx, userID uui
 	}
 	if err := txRepo.RecordMovement(ctx, mov); err != nil {
 		return Reservation{}, err
+	}
+
+	if s.stockAlertReconciler != nil {
+		if err := s.stockAlertReconciler.SyncCriticalStockAlertForProductTx(ctx, tx, item.ProductID); err != nil {
+			return Reservation{}, fmt.Errorf("failed to sync stock alert: %w", err)
+		}
 	}
 
 	return *res, nil
@@ -616,7 +602,17 @@ func (s *Service) ReleaseReservationTx(ctx context.Context, tx pgx.Tx, reservati
 		ReferenceID:      &res.ID,
 		CreatedAt:        now,
 	}
-	return txRepo.RecordMovement(ctx, mov)
+	if err := txRepo.RecordMovement(ctx, mov); err != nil {
+		return err
+	}
+
+	if s.stockAlertReconciler != nil {
+		if err := s.stockAlertReconciler.SyncCriticalStockAlertForProductTx(ctx, tx, item.ProductID); err != nil {
+			return fmt.Errorf("failed to sync stock alert: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (s *Service) ProcessRestockTx(ctx context.Context, tx pgx.Tx, variantID uuid.UUID, quantity int, returnID *uuid.UUID) error {
@@ -646,5 +642,15 @@ func (s *Service) ProcessRestockTx(ctx context.Context, tx pgx.Tx, variantID uui
 		ReferenceID:      returnID,
 		CreatedAt:        time.Now(),
 	}
-	return txRepo.RecordMovement(ctx, mov)
+	if err := txRepo.RecordMovement(ctx, mov); err != nil {
+		return err
+	}
+
+	if s.stockAlertReconciler != nil {
+		if err := s.stockAlertReconciler.SyncCriticalStockAlertForProductTx(ctx, tx, item.ProductID); err != nil {
+			return fmt.Errorf("failed to sync stock alert: %w", err)
+		}
+	}
+
+	return nil
 }

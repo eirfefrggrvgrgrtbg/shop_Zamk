@@ -328,9 +328,17 @@ func (s *Service) ApproveOnboarding(ctx context.Context, adminID uuid.UUID, id u
 		app.ReviewedBy = &adminID
 		app.UpdatedAt = now
 
+		if s.stockAlertReconciler != nil {
+			if err := s.stockAlertReconciler.SyncCriticalStockAlertsForSellerTx(ctx, tx, seller.ID); err != nil {
+				return err
+			}
+		}
+
 		return txRepo.UpdateOnboardingApplication(ctx, app)
+
 	})
 }
+
 
 func (s *Service) ListOnboardingApplications(ctx context.Context, status string) ([]SellerOnboardingApplication, error) {
 	return s.repo.ListOnboardingApplications(ctx, status)

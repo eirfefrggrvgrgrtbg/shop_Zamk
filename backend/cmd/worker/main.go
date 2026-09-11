@@ -18,6 +18,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
@@ -70,6 +71,10 @@ func main() {
 
 	payoutsRepo := payouts.NewRepository(pgClient.Pool)
 	payoutsService := payouts.NewService(payoutsRepo, pgClient, returnsRepo, ordersRepo, cfg, notificationsService)
+
+	productsRepo := products.NewRepository(pgClient.Pool)
+	productsService := products.NewService(productsRepo, sellersRepo, pgClient, nil, notificationsService)
+	inventoryService.SetStockAlertReconciler(productsService)
 
 	logger.Info("worker started successfully")
 

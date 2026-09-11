@@ -61,6 +61,9 @@ const (
 	TypeReturnApproved  = "return_approved"
 	TypeReturnRejected  = "return_rejected"
 	TypeRefundCreated   = "refund_created"
+
+	// Stock alert types (to seller)
+	TypeStockCriticalHidden = "stock_critical_hidden"
 )
 
 type Notification struct {
