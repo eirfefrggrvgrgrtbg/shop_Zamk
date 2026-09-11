@@ -145,26 +145,27 @@ func TestModerationFirstAttemptPersistsAndExposesStatus(t *testing.T) {
 	// Verify state immediately reflects server truth on subsequent GETs
 	pAdminApproved, err := svc.GetAdminProductDetail(ctx, p.ID)
 	require.NoError(t, err)
-	assert.Equal(t, products.StatusApproved, pAdminApproved.Status, "Product status must be approved in admin detail")
+	assert.Equal(t, products.StatusPublished, pAdminApproved.Status, "Product status must be published in admin detail upon approval")
 	assert.NotNil(t, pAdminApproved.ApprovedAt, "ApprovedAt must be populated")
+	assert.NotNil(t, pAdminApproved.PublishedAt, "PublishedAt must be populated")
 
 	pSellerApproved, err := svc.GetSellerProduct(ctx, sellerUserID, p.ID)
 	require.NoError(t, err)
-	assert.Equal(t, products.StatusApproved, pSellerApproved.Status, "Product status must be approved in seller detail")
+	assert.Equal(t, products.StatusPublished, pSellerApproved.Status, "Product status must be published in seller detail")
 
-	// Verify ListSellerProducts reflects approved status
+	// Verify ListSellerProducts reflects published status
 	sellerList, err := svc.ListSellerProducts(ctx, sellerUserID, 50, 0)
 	require.NoError(t, err)
 	for _, item := range sellerList.Items {
 		if item.ID == p.ID {
-			assert.Equal(t, products.StatusApproved, item.Status, "Seller list must reflect approved status")
+			assert.Equal(t, products.StatusPublished, item.Status, "Seller list must reflect published status")
 		}
 	}
 
-	// Verify ListAdminProducts with status=approved contains the product
-	approvedFilterStatus := "approved"
+	// Verify ListAdminProducts with status=published contains the product
+	publishedFilterStatus := "published"
 	adminApprovedList, err := svc.ListAdminProducts(ctx, products.AdminProductFilter{
-		Status:   &approvedFilterStatus,
+		Status:   &publishedFilterStatus,
 		SellerID: &p.SellerID,
 	}, 50, 0)
 	require.NoError(t, err)
@@ -172,14 +173,14 @@ func TestModerationFirstAttemptPersistsAndExposesStatus(t *testing.T) {
 	for _, item := range adminApprovedList.Items {
 		if item.ID == p.ID {
 			foundApproved = true
-			assert.Equal(t, products.StatusApproved, item.Status)
+			assert.Equal(t, products.StatusPublished, item.Status)
 		}
 	}
-	assert.True(t, foundApproved, "Approved product must be in ListAdminProducts with status=approved")
+	assert.True(t, foundApproved, "Approved product must be in ListAdminProducts with status=published")
 
 	// Verify moderation history has the log entry
 	logs, err := svc.GetAdminProductModerationHistory(ctx, p.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, logs)
-	assert.Equal(t, products.StatusApproved, logs[len(logs)-1].ToStatus)
+	assert.Equal(t, products.StatusPublished, logs[len(logs)-1].ToStatus)
 }

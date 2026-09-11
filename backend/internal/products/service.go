@@ -1235,10 +1235,10 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 		}
 		if s.notifs != nil {
 			var notifType, title, body string
-			if toStatus == StatusApproved {
+			if toStatus == StatusApproved || toStatus == StatusPublished {
 				notifType = notifications.TypeProductApproved
 				title = "Товар одобрен"
-				body = "Ваш товар " + p.Title + " прошел модерацию и одобрен."
+				body = "Ваш товар " + p.Title + " прошел модерацию и опубликован."
 			} else if toStatus == StatusRejected {
 				notifType = notifications.TypeProductRejected
 				title = "Товар отклонен"
@@ -1264,8 +1264,9 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 }
 
 func (s *Service) ApproveProduct(ctx context.Context, adminUserID, productID uuid.UUID, comment *string) error {
-	return s.applyModerationTransition(ctx, adminUserID, productID, StatusApproved, comment, []string{StatusPendingModeration, StatusInReview}, func(p *Product, t time.Time) {
+	return s.applyModerationTransition(ctx, adminUserID, productID, StatusPublished, comment, []string{StatusPendingModeration, StatusInReview}, func(p *Product, t time.Time) {
 		p.ApprovedAt = &t
+		p.PublishedAt = &t
 	})
 }
 

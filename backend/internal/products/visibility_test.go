@@ -44,29 +44,29 @@ func TestValidatePublishEligibility(t *testing.T) {
 		}
 	})
 
-	t.Run("3. hidden + no inventory => no_inventory", func(t *testing.T) {
+	t.Run("3. hidden + no inventory => still eligible (inventory decoupled from publication)", func(t *testing.T) {
 		p := baseValidProduct()
 		p.HasInventoryRecord = false
 		p.AvailableStock = 0
 		res := ValidatePublishEligibility(p)
-		if res.IsEligible {
-			t.Fatalf("Expected ineligible")
+		if !res.IsEligible {
+			t.Fatalf("Expected eligible regardless of inventory record, got reasons: %v", res.EligibilityReasons)
 		}
-		if len(res.EligibilityReasons) != 1 || res.EligibilityReasons[0] != "no_inventory" {
-			t.Fatalf("Expected [no_inventory], got: %v", res.EligibilityReasons)
+		if len(res.EligibilityReasons) != 0 {
+			t.Fatalf("Expected 0 reasons, got: %v", res.EligibilityReasons)
 		}
 	})
 
-	t.Run("4. hidden + zero stock => out_of_stock", func(t *testing.T) {
+	t.Run("4. hidden + zero stock => still eligible (stock decoupled from publication)", func(t *testing.T) {
 		p := baseValidProduct()
 		p.HasInventoryRecord = true
 		p.AvailableStock = 0
 		res := ValidatePublishEligibility(p)
-		if res.IsEligible {
-			t.Fatalf("Expected ineligible")
+		if !res.IsEligible {
+			t.Fatalf("Expected eligible regardless of stock, got reasons: %v", res.EligibilityReasons)
 		}
-		if len(res.EligibilityReasons) != 1 || res.EligibilityReasons[0] != "out_of_stock" {
-			t.Fatalf("Expected [out_of_stock], got: %v", res.EligibilityReasons)
+		if len(res.EligibilityReasons) != 0 {
+			t.Fatalf("Expected 0 reasons, got: %v", res.EligibilityReasons)
 		}
 	})
 

@@ -374,12 +374,14 @@ func PopulateProductAggregates(p *Product) {
 					maxPrice = &pVal
 				}
 			}
+			if v.HasInventoryRecord {
+				availableStock += CanonicalVariantFreeStock(v.TotalStock, v.ReservedStock)
+			}
 		}
 		if v.HasInventoryRecord {
 			hasInvRecord = true
 			totalStock += v.TotalStock
 			reservedStock += v.ReservedStock
-			availableStock += v.AvailableStock
 		}
 	}
 
@@ -893,7 +895,7 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 		`)
 	}
 
-	queryBuilder.WriteString(" WHERE p.status = 'published' AND s.status = 'active'")
+	queryBuilder.WriteString(fmt.Sprintf(" WHERE (p.status = 'published' OR p.status = 'approved') AND s.status = 'active' AND %s >= %d", CanonicalProductFreeStockSQL("p.id"), MinStorefrontFreeSellableUnits))
 
 	if filter.Query != nil && *filter.Query != "" {
 		queryBuilder.WriteString(fmt.Sprintf(" AND (p.title ILIKE $%d OR p.description ILIKE $%d OR b.name ILIKE $%d OR c.name ILIKE $%d OR s.brand_name ILIKE $%d)", argID, argID, argID, argID, argID))
@@ -965,12 +967,12 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 		case "price_desc":
 			queryBuilder.WriteString(" ORDER BY p.price_cents DESC")
 		case "newest":
-			queryBuilder.WriteString(" ORDER BY p.published_at DESC")
+			queryBuilder.WriteString(" ORDER BY p.published_at DESC NULLS LAST, p.created_at DESC")
 		default:
-			queryBuilder.WriteString(" ORDER BY p.published_at DESC")
+			queryBuilder.WriteString(" ORDER BY p.published_at DESC NULLS LAST, p.created_at DESC")
 		}
 	} else {
-		queryBuilder.WriteString(" ORDER BY p.published_at DESC")
+		queryBuilder.WriteString(" ORDER BY p.published_at DESC NULLS LAST, p.created_at DESC")
 	}
 
 	queryBuilder.WriteString(fmt.Sprintf(" LIMIT $%d OFFSET $%d", argID, argID+1))
@@ -1011,7 +1013,7 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 }
 
 func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug string) (*Product, error) {
-	query := `
+	query := fmt.Sprintf(`
 		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
 			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
 			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
@@ -1020,8 +1022,8 @@ func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug
 			s.slug, s.brand_name
 		FROM products p
 		INNER JOIN sellers s ON p.seller_id = s.id
-		WHERE (p.slug = $1 OR p.id::text = $1) AND p.status = 'published' AND s.status = 'active'
-	`
+		WHERE (p.slug = $1 OR p.id::text = $1) AND (p.status = 'published' OR p.status = 'approved') AND s.status = 'active' AND %s >= %d
+	`, CanonicalProductFreeStockSQL("p.id"), MinStorefrontFreeSellableUnits)
 	var p Product
 	err := r.db.QueryRow(ctx, query, idOrSlug).Scan(
 		&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,

@@ -626,7 +626,7 @@ func TestAdminDossierCanonicalFieldsAndPreview(t *testing.T) {
 		require.NotEqual(t, p.ID, item.ID, "Pending product must NOT appear in public catalog")
 	}
 
-	// E. Zero-stock approved Product remains excluded from public catalog
+	// E. Zero-stock approved Product is published and visible in public catalog
 	injectValidMainImage(t, ctx, products.NewRepository(dbClient.Pool), p.ID)
 
 	err = svc.SubmitProductToModeration(ctx, sellerID, p.ID, products.SubmitProductModerationRequest{})
@@ -637,12 +637,17 @@ func TestAdminDossierCanonicalFieldsAndPreview(t *testing.T) {
 
 	pApproved, err := svc.GetAdminProductDetail(ctx, p.ID)
 	require.NoError(t, err)
-	require.Equal(t, products.StatusApproved, pApproved.Status)
+	require.Equal(t, products.StatusPublished, pApproved.Status)
 	require.Equal(t, 0, pApproved.AvailableStock)
 
 	publicListAfterApprove, err := svc.ListPublicProducts(ctx, products.PublicProductFilter{}, 100, 0)
 	require.NoError(t, err)
+	foundApproved := false
 	for _, item := range publicListAfterApprove.Items {
-		require.NotEqual(t, p.ID, item.ID, "Approved zero-stock product must NOT appear in public catalog")
+		if item.ID == p.ID {
+			foundApproved = true
+			break
+		}
 	}
+	require.False(t, foundApproved, "Approved zero-stock product MUST NOT appear in public catalog")
 }
