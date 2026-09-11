@@ -2,6 +2,8 @@ package notifications
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
@@ -29,8 +31,16 @@ func (s *Service) SendSellerInvitationEmail(email, temporaryPassword string) err
 
 // CreateNotificationTx creates a single notification, skipping if deduplication rule applies.
 func (s *Service) CreateNotificationTx(ctx context.Context, tx pgx.Tx, n Notification) error {
+	// Defaults for events
+	if n.Kind == "" {
+		n.Kind = KindEvent
+	}
+	if n.Severity == "" {
+		n.Severity = SeverityInfo
+	}
+
 	// Deduplication: Prevent duplicate notification of the same type for the same entity + recipientKind
-	exists, err := s.repo.CheckExistsTx(ctx, tx, n.RecipientKind, n.Type, n.EntityType, n.EntityID, n.RecipientUserID)
+	exists, err := s.repo.CheckExistsTx(ctx, tx, n.RecipientKind, n.Type, n.EntityType, n.EntityID, n.RecipientUserID, n.RecipientSellerID)
 	if err != nil {
 		return err
 	}
@@ -138,4 +148,42 @@ func (s *Service) CountUnreadSeller(ctx context.Context, userID uuid.UUID) (int,
 
 func (s *Service) CountUnreadStaff(ctx context.Context, userID uuid.UUID) (int, error) {
 	return s.repo.CountUnread(ctx, &userID, nil, RecipientKindStaff)
+}
+
+func (s *Service) CreateOrUpdateActiveSellerAlertTx(ctx context.Context, tx pgx.Tx, n Notification) (uuid.UUID, error) {
+	if n.RecipientKind != RecipientKindSeller {
+		return uuid.Nil, fmt.Errorf("%w: recipient_kind must be seller", ErrMalformedAlert)
+	}
+	if n.RecipientSellerID == nil || *n.RecipientSellerID == uuid.Nil {
+		return uuid.Nil, fmt.Errorf("%w: recipient_seller_id is required", ErrMalformedAlert)
+	}
+	if n.DedupeKey == nil || strings.TrimSpace(*n.DedupeKey) == "" {
+		return uuid.Nil, fmt.Errorf("%w: dedupe_key is required", ErrMalformedAlert)
+	}
+	if n.Kind != KindAlert {
+		return uuid.Nil, fmt.Errorf("%w: kind must be alert", ErrMalformedAlert)
+	}
+	if n.Severity != SeverityInfo && n.Severity != SeverityWarning && n.Severity != SeverityCritical {
+		return uuid.Nil, fmt.Errorf("%w: invalid severity %q", ErrMalformedAlert, n.Severity)
+	}
+
+	active := StatusActive
+	n.Status = &active
+	n.ResolvedAt = nil
+
+	if n.ID == uuid.Nil {
+		n.ID = uuid.New()
+	}
+	if n.CreatedAt.IsZero() {
+		n.CreatedAt = time.Now()
+	}
+	if n.Metadata == nil {
+		n.Metadata = map[string]interface{}{}
+	}
+
+	return s.repo.UpsertActiveSellerAlertTx(ctx, tx, &n)
+}
+
+func (s *Service) ResolveActiveSellerAlertTx(ctx context.Context, tx pgx.Tx, sellerID uuid.UUID, dedupeKey string) error {
+	return s.repo.ResolveSellerAlertTx(ctx, tx, sellerID, dedupeKey)
 }

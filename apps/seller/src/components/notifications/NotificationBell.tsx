@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, Check, CheckCheck } from 'lucide-react';
+import { Bell, Check, CheckCheck, AlertTriangle, AlertCircle, Info } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { notificationsApi, type Notification } from '../../api/notifications';
 import { useAuth } from '../../contexts/AuthContext';
 
 export function NotificationBell() {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -120,33 +122,60 @@ export function NotificationBell() {
             ) : notifications.length === 0 ? (
               <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">Уведомлений пока нет.</div>
             ) : (
-              notifications.map((n) => (
-                <div
-                  key={n.id}
-                  className={`p-3 rounded-lg transition-colors cursor-default ${
-                    !n.readAt ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
-                  }`}
-                >
-                  <div className="flex justify-between items-start gap-2">
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-900 dark:text-white leading-tight">{n.title}</h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{n.body}</p>
-                      <span className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 block">
-                        {new Date(n.createdAt).toLocaleString('ru-RU')}
-                      </span>
+              notifications.map((n) => {
+                const isCritical = n.severity === 'critical';
+                const isWarning = n.severity === 'warning';
+                const isAlert = n.kind === 'alert';
+                const isResolved = n.status === 'resolved';
+
+                let icon = <Info className="w-4 h-4 text-blue-500" />;
+                if (isCritical) icon = <AlertCircle className="w-4 h-4 text-red-500" />;
+                if (isWarning) icon = <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+
+                const handleAction = () => {
+                  if (n.actionUrl) {
+                    setIsOpen(false);
+                    navigate(n.actionUrl);
+                  }
+                };
+
+                return (
+                  <div
+                    key={n.id}
+                    className={`p-3 rounded-lg transition-colors ${n.actionUrl ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800' : 'cursor-default hover:bg-gray-50 dark:hover:bg-gray-800'} ${!n.readAt ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
+                    onClick={n.actionUrl ? handleAction : undefined}
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1.5">
+                           {icon}
+                           <h4 className="text-sm font-medium text-gray-900 dark:text-white leading-tight">{n.title}</h4>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{n.body}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 block">
+                            {new Date(n.createdAt).toLocaleString('ru-RU')}
+                          </span>
+                          {isAlert && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${isResolved ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {isResolved ? 'Решено' : 'Активно'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {!n.readAt && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleMarkRead(n.id); }}
+                          className="text-blue-600 hover:text-blue-700 p-1 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors shrink-0"
+                          title="Отметить как прочитанное"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
-                    {!n.readAt && (
-                      <button
-                        onClick={() => handleMarkRead(n.id)}
-                        className="text-blue-600 hover:text-blue-700 p-1 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-                        title="Отметить как прочитанное"
-                      >
-                        <Check className="w-4 h-4" />
-                      </button>
-                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

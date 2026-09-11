@@ -3,11 +3,17 @@ import { request } from '@zamk/api-client/src/client';
 export interface Notification {
   id: string;
   type: string;
+  kind?: string;
+  severity?: string;
+  status?: string;
   title: string;
   body: string;
   entityType: string;
   entityId: string;
+  actionUrl?: string;
+  dedupeKey?: string;
   readAt: string | null;
+  resolvedAt?: string | null;
   createdAt: string;
 }
 

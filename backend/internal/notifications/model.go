@@ -1,15 +1,30 @@
 package notifications
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+)
+
+var (
+	ErrMalformedAlert = errors.New("malformed seller alert")
 )
 
 const (
 	RecipientKindCustomer = "customer"
 	RecipientKindSeller   = "seller"
 	RecipientKindStaff    = "staff"
+
+	KindEvent = "event"
+	KindAlert = "alert"
+
+	SeverityInfo     = "info"
+	SeverityWarning  = "warning"
+	SeverityCritical = "critical"
+
+	StatusActive   = "active"
+	StatusResolved = "resolved"
 
 	// Customer types
 	TypeCustomerOrderPaid         = "order_paid"
@@ -53,13 +68,19 @@ type Notification struct {
 	RecipientUserID   *uuid.UUID             `json:"recipientUserId,omitempty"`
 	RecipientSellerID *uuid.UUID             `json:"recipientSellerId,omitempty"`
 	RecipientKind     string                 `json:"recipientKind"`
+	Kind              string                 `json:"kind"`
+	Severity          string                 `json:"severity"`
+	Status            *string                `json:"status,omitempty"`
 	Type              string                 `json:"type"`
 	Title             string                 `json:"title"`
 	Body              string                 `json:"body"`
 	EntityType        string                 `json:"entityType"`
 	EntityID          uuid.UUID              `json:"entityId"`
+	DedupeKey         *string                `json:"dedupeKey,omitempty"`
+	ActionURL         *string                `json:"actionUrl,omitempty"`
 	Metadata          map[string]interface{} `json:"metadata"`
 	ReadAt            *time.Time             `json:"readAt,omitempty"`
+	ResolvedAt        *time.Time             `json:"resolvedAt,omitempty"`
 	CreatedAt         time.Time              `json:"createdAt"`
 }
 
