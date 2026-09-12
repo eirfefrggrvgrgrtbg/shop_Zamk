@@ -146,9 +146,18 @@ type AdminReturnListResponse struct {
 }
 
 type SellerReturnFinancialAdjustment struct {
-	DeductionCents int64     `json:"deductionCents"`
-	Context        string    `json:"context"` // "hold" | "available" | "post_payout"
-	AdjustedAt     time.Time `json:"adjustedAt"`
+	DeductionCents     int64     `json:"deductionCents"`
+	Context            string    `json:"context"` // "hold" | "available" | "post_payout"
+	AdjustedAt         time.Time `json:"adjustedAt"`
+	GrossCents         int64     `json:"grossCents"`
+	CommissionCents    int64     `json:"commissionCents"`
+	SellerEarningCents int64     `json:"sellerEarningCents"`
+}
+
+type SellerReturnCompensation struct {
+	Status           string  `json:"status"` // "pending" | "credited"
+	ResponsibleParty *string `json:"responsibleParty,omitempty"`
+	ReasonCode       *string `json:"reasonCode,omitempty"`
 }
 
 type SellerReturnItem struct {
@@ -170,6 +179,7 @@ type SellerReturnItem struct {
 	SubtotalPriceCents       int64                            `json:"subtotalPriceCents"`
 	Restock                  bool                             `json:"restock"`
 	FinancialAdjustment      *SellerReturnFinancialAdjustment `json:"financialAdjustment"`
+	Compensation             *SellerReturnCompensation        `json:"compensation"`
 	CreatedAt                time.Time                        `json:"createdAt"`
 	UpdatedAt                time.Time                        `json:"updatedAt"`
 

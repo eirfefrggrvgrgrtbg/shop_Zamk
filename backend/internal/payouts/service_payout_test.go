@@ -196,7 +196,7 @@ func TestFourteenDayHold(t *testing.T) {
 	orderD, _ := setupTestOrderWithItem(t, client, sellerID, 4000)
 	_ = svc.CreatePendingSalesForOrder(ctx, orderD)
 
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	tx, _ := client.Pool.Begin(ctx)
 	_ = svc.MarkOrderDeliveredTx(ctx, tx, orderB, now)
 	_ = svc.MarkOrderDeliveredTx(ctx, tx, orderC, now.Add(-14*24*time.Hour).Add(1*time.Minute))

@@ -102,7 +102,7 @@ export function SellerReturns() {
                   <th className="p-4 font-medium">Заказ</th>
                   <th className="p-4 font-medium">Дата возврата</th>
                   <th className="p-4 font-medium">Статус</th>
-                  <th className="p-4 font-medium text-right">Финансовая корректировка</th>
+                  <th className="p-4 font-medium text-right">Финансы</th>
                 </tr>
               </thead>
               <tbody>
@@ -163,9 +163,22 @@ export function SellerReturns() {
                       </td>
                       <td className="p-4 font-semibold text-graphite dark:text-white text-right">
                         {ret.financialAdjustment ? (
-                          <span className="text-red-600 dark:text-red-400">
-                            −{currencyFormatter.format(ret.financialAdjustment.deductionCents / 100)}
-                          </span>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="text-red-600 dark:text-red-400">
+                              −{currencyFormatter.format(ret.financialAdjustment.deductionCents / 100)}
+                            </span>
+                            <span className="text-[10px] text-ash font-normal">Отмена дохода</span>
+                            {ret.compensation?.status === 'credited' && (
+                              <span className="px-1.5 py-0.2 text-[10px] font-medium rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40 mt-0.5">
+                                Компенсация ZAMK
+                              </span>
+                            )}
+                            {ret.compensation?.status === 'pending' && (
+                              <span className="px-1.5 py-0.2 text-[10px] font-medium rounded bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40 mt-0.5">
+                                Ответственность определяется
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-ash font-normal">—</span>
                         )}

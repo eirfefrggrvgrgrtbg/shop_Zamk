@@ -14,6 +14,7 @@ import {
   QrCode,
   Check,
   AlertTriangle,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -88,6 +89,13 @@ const currencyFormatter = new Intl.NumberFormat('ru-RU', {
   style: 'currency',
   currency: 'RUB',
   maximumFractionDigits: 0,
+});
+
+const exactCurrencyFormatter = new Intl.NumberFormat('ru-RU', {
+  style: 'currency',
+  currency: 'RUB',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
 const STATUS_LABELS: Record<string, { label: string; color: string; dot: string }> = {
@@ -298,6 +306,14 @@ export function SellerReturnDetail() {
   const [returnItems, setReturnItems] = useState<SellerReturn[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [expandedExplanations, setExpandedExplanations] = useState<Record<string, boolean>>({});
+
+  const toggleExplanation = (returnItemId: string) => {
+    setExpandedExplanations((prev) => ({
+      ...prev,
+      [returnItemId]: !prev[returnItemId],
+    }));
+  };
 
   useEffect(() => {
     async function fetchReturn() {
@@ -641,25 +657,113 @@ export function SellerReturnDetail() {
                   )}
                 </div>
 
-                {/* Section 3: Financial adjustment */}
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-ash mb-3">Финансовый результат</h4>
+                {/* Section 3: Financial outcome */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-ash">Финансовый результат</h4>
                   {item.financialAdjustment ? (
-                    <div className="flex items-start gap-3 bg-red-50/50 dark:bg-red-950/20 p-4 rounded-xl border border-red-100 dark:border-red-900/30">
-                      <div className="text-sm">
-                        <p className="font-bold text-red-600 dark:text-red-400">
-                          −{currencyFormatter.format(item.financialAdjustment.deductionCents / 100)}
-                        </p>
-                        <p className="text-red-800/80 dark:text-red-300/80 mt-1 text-xs font-medium">
-                          {item.financialAdjustment.context === 'hold' && 'Корректировка замороженных средств'}
-                          {item.financialAdjustment.context === 'available' && 'Корректировка доступного баланса'}
-                          {item.financialAdjustment.context === 'post_payout' && 'Корректировка после выплаты'}
-                        </p>
+                    <div className="bg-red-50/50 dark:bg-red-950/20 p-4 rounded-xl border border-red-100 dark:border-red-900/30">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-xs font-medium text-red-800/70 dark:text-red-300/70 block mb-0.5">Отмена дохода по продаже</span>
+                          <p className="font-bold text-lg text-graphite dark:text-white">
+                            −{currencyFormatter.format(Math.round(item.financialAdjustment.deductionCents / 100))}
+                          </p>
+                        </div>
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300">
+                          {item.financialAdjustment.context === 'hold' && 'Из замороженной суммы'}
+                          {item.financialAdjustment.context === 'available' && 'Из доступного баланса'}
+                          {item.financialAdjustment.context === 'post_payout' && 'После выплаты'}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 pt-3 border-t border-red-100/60 dark:border-red-900/20">
+                        <button
+                          type="button"
+                          aria-expanded={!!expandedExplanations[item.returnItemId]}
+                          aria-controls={`finance-explanation-${item.returnItemId}`}
+                          onClick={() => toggleExplanation(item.returnItemId)}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-red-700/90 dark:text-red-300/90 hover:text-red-800 dark:hover:text-red-200 transition-colors cursor-pointer"
+                        >
+                          <span>Почему изменилась сумма?</span>
+                          <ChevronDown
+                            className={cn(
+                              "w-3.5 h-3.5 transition-transform duration-200",
+                              expandedExplanations[item.returnItemId] && "rotate-180"
+                            )}
+                          />
+                        </button>
+
+                        {expandedExplanations[item.returnItemId] && (
+                          <div
+                            id={`finance-explanation-${item.returnItemId}`}
+                            className="mt-3 pt-3 border-t border-dashed border-red-200 dark:border-red-800/30 text-xs space-y-2"
+                          >
+                            <div className="flex justify-between items-center text-graphite dark:text-white/80">
+                              <span className="text-graphite-light dark:text-white/60">Стоимость возвращённого товара</span>
+                              <span className="font-medium font-mono">{exactCurrencyFormatter.format(item.financialAdjustment.grossCents / 100)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-graphite dark:text-white/80">
+                              <span className="text-graphite-light dark:text-white/60">Комиссия ZAMK по исходной продаже</span>
+                              <span className="font-medium font-mono text-red-600 dark:text-red-400">
+                                −{exactCurrencyFormatter.format(item.financialAdjustment.commissionCents / 100)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-graphite dark:text-white/80">
+                              <span className="text-graphite-light dark:text-white/60">Доход продавца по исходной продаже</span>
+                              <span className="font-medium font-mono">{exactCurrencyFormatter.format(item.financialAdjustment.sellerEarningCents / 100)}</span>
+                            </div>
+                            <div className="border-t border-dashed border-red-200 dark:border-red-800/30 pt-2 flex justify-between items-center font-bold">
+                              <span className="text-red-700 dark:text-red-300">Отмена дохода по продаже</span>
+                              <span className="font-mono text-red-600 dark:text-red-400">
+                                −{exactCurrencyFormatter.format(item.financialAdjustment.deductionCents / 100)}
+                              </span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-red-800/70 dark:text-red-300/70 pt-1">
+                              {item.financialAdjustment.context === 'hold' &&
+                                'Доход по этой продаже ещё находился на удержании, поэтому отмена уменьшила замороженную сумму.'}
+                              {item.financialAdjustment.context === 'available' &&
+                                'Отмена уменьшила текущий доступный баланс продавца.'}
+                              {item.financialAdjustment.context === 'post_payout' &&
+                                'Доход по этой продаже уже был выплачен. Отмена отражена в текущем балансе и будет учтена при последующих расчётах.'}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : (
                     <div className="text-sm text-graphite-light dark:text-white/60 italic bg-gray-50/50 dark:bg-white/5 p-4 rounded-xl border border-gray-100 dark:border-white/10">
                       Финансовая корректировка не сформирована
+                    </div>
+                  )}
+
+                  {/* Compensation card (SA.5.3B) */}
+                  {item.compensation?.status === 'credited' && (
+                    <div className="bg-emerald-50/50 dark:bg-emerald-950/20 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="font-bold text-sm text-emerald-800 dark:text-emerald-300">Компенсация ZAMK</span>
+                        <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200">
+                          Учтено при расчёте компенсации
+                        </span>
+                      </div>
+                      <p className="text-xs text-emerald-900/80 dark:text-emerald-300/80 leading-relaxed">
+                        {item.compensation.responsibleParty === 'carrier'
+                          ? 'По этому возврату зафиксировано повреждение при доставке. Этот возврат учтён в общем расчёте компенсации продавцу.'
+                          : 'По этому возврату зафиксирована потеря товара по ответственности ZAMK. Этот возврат учтён в общем расчёте компенсации продавцу.'}
+                      </p>
+                    </div>
+                  )}
+
+                  {item.compensation?.status === 'pending' && (
+                    <div className="bg-amber-50/50 dark:bg-amber-950/20 p-4 rounded-xl border border-amber-100 dark:border-amber-900/30">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="font-bold text-sm text-amber-800 dark:text-amber-300">Финансовая ответственность определяется</span>
+                        <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200">
+                          На рассмотрении
+                        </span>
+                      </div>
+                      <p className="text-xs text-amber-900/80 dark:text-amber-300/80 leading-relaxed">
+                        Возврат обработан, но ответственность за повреждение ещё определяется. Если будет подтверждена ответственность ZAMK или перевозчика, общий баланс обновится автоматически.
+                      </p>
                     </div>
                   )}
                 </div>

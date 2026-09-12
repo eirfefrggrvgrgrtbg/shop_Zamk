@@ -638,6 +638,15 @@ export interface SellerReturnFinancialAdjustment {
   deductionCents: number;
   context: 'hold' | 'available' | 'post_payout';
   adjustedAt: string;
+  grossCents: number;
+  commissionCents: number;
+  sellerEarningCents: number;
+}
+
+export interface SellerReturnCompensation {
+  status: 'pending' | 'credited';
+  responsibleParty?: 'zamk' | 'carrier';
+  reasonCode?: 'zamk_warehouse_damage' | 'zamk_fulfillment_error' | 'carrier_damage';
 }
 
 export interface SellerReturn {
@@ -660,6 +669,7 @@ export interface SellerReturn {
   subtotalPriceCents: number;
   restock: boolean;
   financialAdjustment?: SellerReturnFinancialAdjustment | null;
+  compensation?: SellerReturnCompensation | null;
   createdAt: string;
   updatedAt: string;
 

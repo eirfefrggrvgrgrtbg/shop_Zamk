@@ -792,11 +792,12 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 			CASE
 				WHEN adj.amount_cents IS NULL THEN NULL
 				WHEN adj.reason = 'return_post_payout' THEN 'post_payout'
-				WHEN COALESCE(adj.adjustment_available_at, se.available_at) IS NOT NULL
-				     AND adj.adjusted_at < COALESCE(adj.adjustment_available_at, se.available_at) THEN 'hold'
+				WHEN COALESCE(adj.adjustment_available_at, se.available_at) IS NULL
+				     OR adj.adjusted_at < COALESCE(adj.adjustment_available_at, se.available_at) THEN 'hold'
 				ELSE 'available'
 			END,
 			adj.adjusted_at,
+			adj.reversed_quantity,
 			r.created_at, r.updated_at,
 			r.receiving_started_at, r.completed_at,
 			rs.status, rs.tracking_number, rs.method,
@@ -818,7 +819,14 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 				sle.amount_cents,
 				sle.created_at AS adjusted_at,
 				sle.metadata->>'reason' AS reason,
-				sle.available_at AS adjustment_available_at
+				sle.available_at AS adjustment_available_at,
+				COALESCE(
+					CASE
+						WHEN (sle.metadata->>'quantity') ~ '^[0-9]+$' THEN (sle.metadata->>'quantity')::int
+						ELSE NULL
+					END,
+					ri.quantity
+				) AS reversed_quantity
 			FROM seller_ledger_entries sle
 			WHERE sle.order_item_id = oi.id
 			  AND sle.type = 'adjustment'
@@ -853,6 +861,7 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 		adjAmountCents     *int64
 		adjContext         *string
 		adjAdjustedAt      *time.Time
+		adjReversedQty     *int
 		receivingStartedAt *time.Time
 		completedAt        *time.Time
 		shipmentStatus     *string
@@ -874,7 +883,7 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 			&ri.item.Status, &ri.item.Quantity, &ri.item.Reason, &ri.item.Condition,
 			&ri.item.ProductTitle, &ri.item.VariantSize, &ri.item.VariantColor, &ri.item.SKU, &ri.item.ImageURL, &ri.item.PriceCents, &ri.item.SubtotalPriceCents,
 			&ri.rawRestock,
-			&ri.adjAmountCents, &ri.adjContext, &ri.adjAdjustedAt,
+			&ri.adjAmountCents, &ri.adjContext, &ri.adjAdjustedAt, &ri.adjReversedQty,
 			&ri.item.CreatedAt, &ri.item.UpdatedAt,
 			&ri.receivingStartedAt, &ri.completedAt,
 			&ri.shipmentStatus, &ri.trackingNumber, &ri.shipmentMethod,
@@ -888,10 +897,20 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 			if deduction < 0 {
 				deduction = -deduction
 			}
+			revQty := ri.item.Quantity
+			if ri.adjReversedQty != nil && *ri.adjReversedQty > 0 {
+				revQty = *ri.adjReversedQty
+			}
+			gross := ri.item.PriceCents * int64(revQty)
+			earning := deduction
+			commission := gross - earning
 			ri.item.FinancialAdjustment = &SellerReturnFinancialAdjustment{
-				DeductionCents: deduction,
-				Context:        *ri.adjContext,
-				AdjustedAt:     *ri.adjAdjustedAt,
+				DeductionCents:     deduction,
+				Context:            *ri.adjContext,
+				AdjustedAt:         *ri.adjAdjustedAt,
+				GrossCents:         gross,
+				CommissionCents:    commission,
+				SellerEarningCents: earning,
 			}
 		}
 		rawItems = append(rawItems, ri)
@@ -903,8 +922,9 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 
 	// Batch query return_item_units
 	unitsByItem := make(map[uuid.UUID][]SellerReturnUnitDetail)
+	unitAllocMap := make(map[uuid.UUID]map[uuid.UUID]string)
 	unitQuery := `
-		SELECT riu.return_item_id, iu.unit_code, riu.disposition, riu.scanned_at
+		SELECT riu.return_item_id, iu.unit_code, riu.disposition, riu.scanned_at, riu.order_item_allocation_id
 		FROM return_item_units riu
 		JOIN order_item_allocations oia ON oia.id = riu.order_item_allocation_id
 		JOIN inventory_units iu ON iu.id = oia.inventory_unit_id
@@ -919,12 +939,51 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 	for uRows.Next() {
 		var rItemID uuid.UUID
 		var u SellerReturnUnitDetail
-		if err := uRows.Scan(&rItemID, &u.UnitCode, &u.Disposition, &u.ScannedAt); err != nil {
+		var oiaID uuid.UUID
+		if err := uRows.Scan(&rItemID, &u.UnitCode, &u.Disposition, &u.ScannedAt, &oiaID); err != nil {
 			return nil, err
 		}
 		unitsByItem[rItemID] = append(unitsByItem[rItemID], u)
+		if u.Disposition != nil {
+			if unitAllocMap[rItemID] == nil {
+				unitAllocMap[rItemID] = make(map[uuid.UUID]string)
+			}
+			unitAllocMap[rItemID][oiaID] = *u.Disposition
+		}
 	}
 	if err := uRows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Batch query responsibility allocations
+	type allocData struct {
+		orderItemAllocID *uuid.UUID
+		quantity         int
+		status           string
+		responsibleParty *string
+		reasonCode       *string
+		legacyDisp       *string
+	}
+	allocsByItem := make(map[uuid.UUID][]allocData)
+	allocQuery := `
+		SELECT return_item_id, order_item_allocation_id, quantity, status, responsible_party, reason_code, legacy_disposition
+		FROM return_responsibility_allocations
+		WHERE return_item_id = ANY($1)
+	`
+	aRows, err := r.db.Query(ctx, allocQuery, returnItemIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer aRows.Close()
+	for aRows.Next() {
+		var rItemID uuid.UUID
+		var a allocData
+		if err := aRows.Scan(&rItemID, &a.orderItemAllocID, &a.quantity, &a.status, &a.responsibleParty, &a.reasonCode, &a.legacyDisp); err != nil {
+			return nil, err
+		}
+		allocsByItem[rItemID] = append(allocsByItem[rItemID], a)
+	}
+	if err := aRows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -1049,6 +1108,117 @@ func (r *Repository) fetchSellerReturnItems(ctx context.Context, whereClause str
 
 		// Restock flag for backward compatibility
 		item.Restock = item.RestockedQuantity > 0
+
+		// Derive Compensation Status (SA.5.3B)
+		reversedQty := 0
+		if raw.adjAmountCents != nil {
+			reversedQty = item.Quantity
+			if raw.adjReversedQty != nil && *raw.adjReversedQty > 0 {
+				reversedQty = *raw.adjReversedQty
+			}
+		}
+
+		physicalCompensableQty := 0
+		var creditedParty, creditedReason string
+		hasPendingDamage := false
+		resolvedNonCompensableDamagedQty := 0
+
+		allocs := allocsByItem[item.ReturnItemID]
+		itemUnitDisp := unitAllocMap[item.ReturnItemID]
+
+		if raw.isSerialized {
+			allocByOIA := make(map[uuid.UUID]allocData)
+			for _, a := range allocs {
+				if a.orderItemAllocID != nil {
+					allocByOIA[*a.orderItemAllocID] = a
+				}
+			}
+			for oiaID, disp := range itemUnitDisp {
+				if disp == "damaged" {
+					a, found := allocByOIA[oiaID]
+					if !found || a.status != "resolved" {
+						hasPendingDamage = true
+					} else {
+						isCompensable := false
+						if a.responsibleParty != nil && a.reasonCode != nil {
+							p := *a.responsibleParty
+							r := *a.reasonCode
+							isCompensable = ((p == "zamk" && (r == "zamk_warehouse_damage" || r == "zamk_fulfillment_error")) ||
+								(p == "carrier" && r == "carrier_damage"))
+						}
+						if isCompensable {
+							physicalCompensableQty++
+							if creditedParty == "" && a.responsibleParty != nil {
+								creditedParty = *a.responsibleParty
+								if a.reasonCode != nil {
+									creditedReason = *a.reasonCode
+								}
+							}
+						} else {
+							resolvedNonCompensableDamagedQty++
+						}
+					}
+				}
+			}
+		} else {
+			// Legacy non-serialized
+			for _, a := range allocs {
+				if a.orderItemAllocID == nil {
+					isDamaged := a.legacyDisp != nil && *a.legacyDisp == "damaged"
+					if a.status == "resolved" {
+						if isDamaged {
+							isCompensable := false
+							if a.responsibleParty != nil && a.reasonCode != nil {
+								p := *a.responsibleParty
+								r := *a.reasonCode
+								isCompensable = ((p == "zamk" && (r == "zamk_warehouse_damage" || r == "zamk_fulfillment_error")) ||
+									(p == "carrier" && r == "carrier_damage"))
+							}
+							if isCompensable {
+								physicalCompensableQty += a.quantity
+								if creditedParty == "" && a.responsibleParty != nil {
+									creditedParty = *a.responsibleParty
+									if a.reasonCode != nil {
+										creditedReason = *a.reasonCode
+									}
+								}
+							} else {
+								resolvedNonCompensableDamagedQty += a.quantity
+							}
+						}
+					} else {
+						if isDamaged || (a.legacyDisp == nil && item.DamagedQuantity > 0) {
+							hasPendingDamage = true
+						}
+					}
+				}
+			}
+			if len(allocs) == 0 && item.DamagedQuantity > 0 {
+				hasPendingDamage = true
+			}
+			if item.DamagedQuantity > (physicalCompensableQty + resolvedNonCompensableDamagedQty) {
+				hasPendingDamage = true
+			}
+		}
+
+		eligibleQty := reversedQty
+		if physicalCompensableQty < eligibleQty {
+			eligibleQty = physicalCompensableQty
+		}
+
+		if eligibleQty > 0 {
+			item.Compensation = &SellerReturnCompensation{
+				Status:           "credited",
+				ResponsibleParty: &creditedParty,
+				ReasonCode:       &creditedReason,
+			}
+		} else if reversedQty > 0 && item.DamagedQuantity > 0 && hasPendingDamage {
+			item.Compensation = &SellerReturnCompensation{
+				Status: "pending",
+			}
+		} else {
+			item.Compensation = nil
+		}
 
 		result = append(result, item)
 	}

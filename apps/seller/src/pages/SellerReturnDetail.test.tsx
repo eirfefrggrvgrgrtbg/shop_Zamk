@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { SellerReturnDetail, getReturnPresentationMode } from './SellerReturnDetail';
 import * as sellerApi from '@zamk/api-client/src/seller';
@@ -38,6 +38,9 @@ describe('SellerReturnDetail Component (SA.3)', () => {
         deductionCents: 1500000,
         context: 'available',
         adjustedAt: '2026-09-01T14:00:00Z',
+        grossCents: 1500000,
+        commissionCents: 0,
+        sellerEarningCents: 1500000,
       },
       createdAt: '2026-09-01T10:00:00Z',
       updatedAt: '2026-09-01T14:00:00Z',
@@ -99,8 +102,9 @@ describe('SellerReturnDetail Component (SA.3)', () => {
     expect(screen.getByTestId('seller-outcome-meaning').textContent).not.toMatch(/удержан|списан|потеряли/i);
 
     // Financial adjustment assertion
-    expect(screen.getByText('Корректировка доступного баланса')).toBeTruthy();
+    expect(screen.getByText('Из доступного баланса')).toBeTruthy();
     expect(screen.getByText(/−15\s?000/)).toBeTruthy();
+    expect(screen.queryByText(/Сторно/i)).toBeNull();
   });
 
   it('2. damaged physical outcome renders with defective breakdown', async () => {
@@ -122,6 +126,9 @@ describe('SellerReturnDetail Component (SA.3)', () => {
         deductionCents: 500000,
         context: 'post_payout',
         adjustedAt: '2026-09-02T14:00:00Z',
+        grossCents: 500000,
+        commissionCents: 0,
+        sellerEarningCents: 500000,
       },
       createdAt: '2026-09-02T10:00:00Z',
       updatedAt: '2026-09-02T14:00:00Z',
@@ -160,8 +167,9 @@ describe('SellerReturnDetail Component (SA.3)', () => {
     expect(screen.getByText('Повреждён (брак)')).toBeTruthy();
     expect(screen.getByText('Брак / повреждён')).toBeTruthy();
     expect(screen.getByText('ZMU-DAMAGED99999')).toBeTruthy();
-    expect(screen.getByText('Корректировка после выплаты')).toBeTruthy();
+    expect(screen.getByText('После выплаты')).toBeTruthy();
     expect(screen.getByText(/−5\s?000/)).toBeTruthy();
+    expect(screen.queryByText(/Сторно/i)).toBeNull();
     expect(screen.queryByText(/будет удержана из будущих выплат/i)).toBeNull();
     expect(screen.queryByText(/долг/i)).toBeNull();
 
@@ -263,6 +271,9 @@ describe('SellerReturnDetail Component (SA.3)', () => {
         deductionCents: 600000,
         context: 'hold',
         adjustedAt: '2026-09-04T11:05:00Z',
+        grossCents: 600000,
+        commissionCents: 0,
+        sellerEarningCents: 600000,
       },
       createdAt: '2026-09-04T10:00:00Z',
       updatedAt: '2026-09-04T14:00:00Z',
@@ -308,8 +319,9 @@ describe('SellerReturnDetail Component (SA.3)', () => {
     expect(screen.getByText('ZMU-SCARF-DMG-2')).toBeTruthy();
     expect(screen.getAllByText('В продажу').length).toBeGreaterThan(0);
     expect(screen.getByText('Брак / повреждён')).toBeTruthy();
-    expect(screen.getByText('Корректировка замороженных средств')).toBeTruthy();
+    expect(screen.getByText('Из замороженной суммы')).toBeTruthy();
     expect(screen.getByText(/−6\s?000/)).toBeTruthy();
+    expect(screen.queryByText(/Сторно/i)).toBeNull();
 
     // High-priority Seller Business Outcome Meaning (SA.3 UX gap)
     expect(screen.getByTestId('seller-outcome-meaning')).toBeTruthy();
@@ -758,5 +770,584 @@ describe('SellerReturnDetail Component (SA.3)', () => {
 
     expect(screen.getByText('Финансовая корректировка не сформирована')).toBeTruthy();
     expect(screen.queryByText(/(?:^|\s)0\s?₽/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /почему такая сумма\?/i })).toBeNull();
+  });
+});
+
+describe('Seller Return Finance Explanation (SA.5.2B)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('Case A: Formed HOLD — toggle collapsed by default, expands with exact kopecks, hold copy, collapses on re-click', async () => {
+    const mockReturn: SellerReturn = {
+      returnItemId: 'item-hold-1',
+      returnId: 'ret-hold-1',
+      orderId: 'ord-hold-1',
+      orderNumber: 'ORD-900201',
+      orderItemId: 'oi-hold-1',
+      status: 'completed',
+      quantity: 1,
+      productTitle: 'Evening Dress',
+      priceCents: 1299000,
+      subtotalPriceCents: 1299000,
+      restock: true,
+      financialAdjustment: {
+        deductionCents: 1182090,
+        context: 'hold',
+        adjustedAt: '2026-09-08T10:00:00Z',
+        grossCents: 1299000,
+        commissionCents: 116910,
+        sellerEarningCents: 1182090,
+      },
+      createdAt: '2026-09-08T09:00:00Z',
+      updatedAt: '2026-09-08T10:00:00Z',
+      arrivedAtZamk: true,
+      inspectionCompleted: true,
+      physicalOutcome: 'restocked',
+      restockedQuantity: 1,
+      damagedQuantity: 0,
+      rejectedQuantity: 0,
+      notReceivedQuantity: 0,
+      processingStatus: 'completed',
+    };
+
+    vi.mocked(sellerApi.getSellerReturn).mockResolvedValue({ items: [mockReturn] } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/returns/ret-hold-1']}>
+        <Routes>
+          <Route path="/returns/:id" element={<SellerReturnDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/ORD-900201/)).toBeTruthy();
+    });
+
+    // Headline and context label
+    expect(screen.getByText(/−11\s?821/)).toBeTruthy();
+    expect(screen.getByText('Из замороженной суммы')).toBeTruthy();
+
+    // Toggle button is present and collapsed by default
+    const toggleButton = screen.getByRole('button', { name: /почему изменилась сумма\?/i });
+    expect(toggleButton).toBeTruthy();
+    expect(toggleButton.getAttribute('aria-expanded')).toBe('false');
+    expect(toggleButton.getAttribute('aria-controls')).toBe('finance-explanation-item-hold-1');
+
+    // Explanation details NOT visible initially
+    expect(screen.queryByText('Стоимость возвращённого товара')).toBeNull();
+
+    // Click to expand
+    fireEvent.click(toggleButton);
+    expect(toggleButton.getAttribute('aria-expanded')).toBe('true');
+
+    // Explanation details visible with exact kopecks
+    expect(screen.getByText('Стоимость возвращённого товара')).toBeTruthy();
+    expect(screen.getByText(/12\s?990,00\s?₽/)).toBeTruthy();
+
+    expect(screen.getByText('Комиссия ZAMK по исходной продаже')).toBeTruthy();
+    expect(screen.getByText(/−1\s?169,10\s?₽/)).toBeTruthy();
+
+    expect(screen.getByText('Доход продавца по исходной продаже')).toBeTruthy();
+    expect(screen.getAllByText(/11\s?820,90\s?₽/).length).toBe(2);
+
+    expect(screen.getAllByText('Отмена дохода по продаже').length).toBe(2);
+    expect(screen.getByText(/−\s*11\s?820,90\s?₽/)).toBeTruthy();
+
+    // Hold context copy
+    expect(
+      screen.getByText(/Доход по этой продаже ещё находился на удержании, поэтому отмена уменьшила замороженную сумму\./)
+    ).toBeTruthy();
+
+    // Ensure NO visible Сторно
+    expect(screen.queryByText(/Сторно/i)).toBeNull();
+
+    // Click to collapse
+    fireEvent.click(toggleButton);
+    expect(toggleButton.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('Стоимость возвращённого товара')).toBeNull();
+  });
+
+  it('Case B: Formed AVAILABLE — expands with available copy and no hold/post_payout copy', async () => {
+    const mockReturn: SellerReturn = {
+      returnItemId: 'item-avail-1',
+      returnId: 'ret-avail-1',
+      orderId: 'ord-avail-1',
+      orderNumber: 'ORD-900301',
+      orderItemId: 'oi-avail-1',
+      status: 'completed',
+      quantity: 1,
+      productTitle: 'Available Dress',
+      priceCents: 1299000,
+      subtotalPriceCents: 1299000,
+      restock: true,
+      financialAdjustment: {
+        deductionCents: 1182090,
+        context: 'available',
+        adjustedAt: '2026-09-08T10:00:00Z',
+        grossCents: 1299000,
+        commissionCents: 116910,
+        sellerEarningCents: 1182090,
+      },
+      createdAt: '2026-09-08T09:00:00Z',
+      updatedAt: '2026-09-08T10:00:00Z',
+      arrivedAtZamk: true,
+      inspectionCompleted: true,
+      physicalOutcome: 'restocked',
+      restockedQuantity: 1,
+      damagedQuantity: 0,
+      rejectedQuantity: 0,
+      notReceivedQuantity: 0,
+      processingStatus: 'completed',
+    };
+
+    vi.mocked(sellerApi.getSellerReturn).mockResolvedValue({ items: [mockReturn] } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/returns/ret-avail-1']}>
+        <Routes>
+          <Route path="/returns/:id" element={<SellerReturnDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/ORD-900301/)).toBeTruthy();
+    });
+
+    const toggleButton = screen.getByRole('button', { name: /почему изменилась сумма\?/i });
+    fireEvent.click(toggleButton);
+
+    expect(screen.getByText('Отмена уменьшила текущий доступный баланс продавца.')).toBeTruthy();
+    expect(screen.queryByText(/14-дневном удержании/)).toBeNull();
+    expect(screen.queryByText(/выплачен на ваш расчётный счёт/)).toBeNull();
+    expect(screen.queryByText(/Сторно/i)).toBeNull();
+  });
+
+  it('Case C: Formed POST_PAYOUT — expands with post_payout copy and strictly no debt words', async () => {
+    const mockReturn: SellerReturn = {
+      returnItemId: 'item-post-1',
+      returnId: 'ret-post-1',
+      orderId: 'ord-post-1',
+      orderNumber: 'ORD-900401',
+      orderItemId: 'oi-post-1',
+      status: 'completed',
+      quantity: 1,
+      productTitle: 'Post Payout Dress',
+      priceCents: 1299000,
+      subtotalPriceCents: 1299000,
+      restock: true,
+      financialAdjustment: {
+        deductionCents: 1182090,
+        context: 'post_payout',
+        adjustedAt: '2026-09-08T10:00:00Z',
+        grossCents: 1299000,
+        commissionCents: 116910,
+        sellerEarningCents: 1182090,
+      },
+      createdAt: '2026-09-08T09:00:00Z',
+      updatedAt: '2026-09-08T10:00:00Z',
+      arrivedAtZamk: true,
+      inspectionCompleted: true,
+      physicalOutcome: 'restocked',
+      restockedQuantity: 1,
+      damagedQuantity: 0,
+      rejectedQuantity: 0,
+      notReceivedQuantity: 0,
+      processingStatus: 'completed',
+    };
+
+    vi.mocked(sellerApi.getSellerReturn).mockResolvedValue({ items: [mockReturn] } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/returns/ret-post-1']}>
+        <Routes>
+          <Route path="/returns/:id" element={<SellerReturnDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/ORD-900401/)).toBeTruthy();
+    });
+
+    const toggleButton = screen.getByRole('button', { name: /почему изменилась сумма\?/i });
+    fireEvent.click(toggleButton);
+
+    const postPayoutNote = screen.getByText(
+      'Доход по этой продаже уже был выплачен. Отмена отражена в текущем балансе и будет учтена при последующих расчётах.'
+    );
+    expect(postPayoutNote).toBeTruthy();
+    expect(screen.getByText(/Отмена отражена в текущем балансе/)).toBeTruthy();
+    expect(screen.queryByText(/Сторно/i)).toBeNull();
+
+    // Verify absence of debt words
+    const explanationEl = document.getElementById('finance-explanation-item-post-1');
+    expect(explanationEl?.textContent).not.toMatch(/долг|задолженност|к погашению/i);
+
+  });
+
+  it('Case D: Absence state — no disclosure toggle button rendered', async () => {
+    const mockReturn: SellerReturn = {
+      returnItemId: 'item-absent-1',
+      returnId: 'ret-absent-1',
+      orderId: 'ord-absent-1',
+      orderNumber: 'ORD-900501',
+      orderItemId: 'oi-absent-1',
+      status: 'requested',
+      quantity: 1,
+      productTitle: 'Pending Dress',
+      priceCents: 1000000,
+      subtotalPriceCents: 1000000,
+      restock: false,
+      financialAdjustment: null,
+      createdAt: '2026-09-08T09:00:00Z',
+      updatedAt: '2026-09-08T10:00:00Z',
+      arrivedAtZamk: false,
+      inspectionCompleted: false,
+      physicalOutcome: 'requested',
+      restockedQuantity: 0,
+      damagedQuantity: 0,
+      rejectedQuantity: 0,
+      notReceivedQuantity: 0,
+      processingStatus: 'requested',
+    };
+
+    vi.mocked(sellerApi.getSellerReturn).mockResolvedValue({ items: [mockReturn] } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/returns/ret-absent-1']}>
+        <Routes>
+          <Route path="/returns/:id" element={<SellerReturnDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/ORD-900501/)).toBeTruthy();
+    });
+
+    expect(screen.getByText('Финансовая корректировка не сформирована')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /почему такая сумма\?/i })).toBeNull();
+  });
+
+  it('Case E: Exact kopecks formatting — preserves 2 decimals on all breakdown rows', async () => {
+    const mockReturn: SellerReturn = {
+      returnItemId: 'item-kopecks-1',
+      returnId: 'ret-kopecks-1',
+      orderId: 'ord-kopecks-1',
+      orderNumber: 'ORD-900601',
+      orderItemId: 'oi-kopecks-1',
+      status: 'completed',
+      quantity: 1,
+      productTitle: 'Kopecks Dress',
+      priceCents: 1299050,
+      subtotalPriceCents: 1299050,
+      restock: true,
+      financialAdjustment: {
+        deductionCents: 1182136,
+        context: 'available',
+        adjustedAt: '2026-09-08T10:00:00Z',
+        grossCents: 1299050,
+        commissionCents: 116914,
+        sellerEarningCents: 1182136,
+      },
+      createdAt: '2026-09-08T09:00:00Z',
+      updatedAt: '2026-09-08T10:00:00Z',
+      arrivedAtZamk: true,
+      inspectionCompleted: true,
+      physicalOutcome: 'restocked',
+      restockedQuantity: 1,
+      damagedQuantity: 0,
+      rejectedQuantity: 0,
+      notReceivedQuantity: 0,
+      processingStatus: 'completed',
+    };
+
+    vi.mocked(sellerApi.getSellerReturn).mockResolvedValue({ items: [mockReturn] } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/returns/ret-kopecks-1']}>
+        <Routes>
+          <Route path="/returns/:id" element={<SellerReturnDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/ORD-900601/)).toBeTruthy();
+    });
+
+    const toggleButton = screen.getByRole('button', { name: /почему изменилась сумма\?/i });
+    fireEvent.click(toggleButton);
+
+    expect(screen.getByText(/12\s?990,50\s?₽/)).toBeTruthy();
+    expect(screen.getByText(/−1\s?169,14\s?₽/)).toBeTruthy();
+    expect(screen.getAllByText(/11\s?821,36\s?₽/).length).toBe(2);
+    expect(screen.getByText(/−\s*11\s?821,36\s?₽/)).toBeTruthy();
+    expect(screen.queryByText(/Сторно/i)).toBeNull();
+  });
+
+  it('Case F: Awkward partial-return values — renders backend-provided cents directly without frontend recalculation', async () => {
+    const mockReturn: SellerReturn = {
+      returnItemId: 'item-partial-1',
+      returnId: 'ret-partial-1',
+      orderId: 'ord-partial-1',
+      orderNumber: 'ORD-900701',
+      orderItemId: 'oi-partial-1',
+      status: 'completed',
+      quantity: 1,
+      productTitle: 'Partial Item 3 of 3',
+      priceCents: 233334,
+      subtotalPriceCents: 233334,
+      restock: true,
+      financialAdjustment: {
+        deductionCents: 233334,
+        context: 'post_payout',
+        adjustedAt: '2026-09-08T10:00:00Z',
+        grossCents: 233334,
+        commissionCents: 0,
+        sellerEarningCents: 233334,
+      },
+      createdAt: '2026-09-08T09:00:00Z',
+      updatedAt: '2026-09-08T10:00:00Z',
+      arrivedAtZamk: true,
+      inspectionCompleted: true,
+      physicalOutcome: 'restocked',
+      restockedQuantity: 1,
+      damagedQuantity: 0,
+      rejectedQuantity: 0,
+      notReceivedQuantity: 0,
+      processingStatus: 'completed',
+    };
+
+    vi.mocked(sellerApi.getSellerReturn).mockResolvedValue({ items: [mockReturn] } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/returns/ret-partial-1']}>
+        <Routes>
+          <Route path="/returns/:id" element={<SellerReturnDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/ORD-900701/)).toBeTruthy();
+    });
+
+    const toggleButton = screen.getByRole('button', { name: /почему изменилась сумма\?/i });
+    fireEvent.click(toggleButton);
+
+    // Exact 2 333,34 ₽ rendered directly
+    expect(screen.getAllByText(/2\s?333,34\s?₽/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/−2\s?333,34\s?₽/)).toBeTruthy();
+    expect(screen.queryByText(/Сторно/i)).toBeNull();
+  });
+
+  it('Case G: Contract — strictly requires grossCents, commissionCents, and sellerEarningCents in financialAdjustment type', () => {
+    const adj: SellerReturn['financialAdjustment'] = {
+      deductionCents: 1000,
+      context: 'hold',
+      adjustedAt: '2026-09-08T00:00:00Z',
+      grossCents: 1200,
+      commissionCents: 200,
+      sellerEarningCents: 1000,
+    };
+    expect(adj?.grossCents).toBe(1200);
+    expect(adj?.commissionCents).toBe(200);
+    expect(adj?.sellerEarningCents).toBe(1000);
+  });
+
+  it('Case H: Credited ZAMK Compensation — renders status badge and explanation without invented amount cents or net cents', async () => {
+    const mockReturn: SellerReturn = {
+      returnItemId: 'item-zamk-comp-1',
+      returnId: 'ret-zamk-comp-1',
+      orderId: 'ord-zamk-comp-1',
+      orderNumber: 'ORD-900801',
+      orderItemId: 'oi-zamk-comp-1',
+      status: 'completed',
+      quantity: 1,
+      productTitle: 'Damaged Dress',
+      priceCents: 1000000,
+      subtotalPriceCents: 1000000,
+      restock: false,
+      financialAdjustment: {
+        deductionCents: 900000,
+        context: 'available',
+        adjustedAt: '2026-09-08T10:00:00Z',
+        grossCents: 1000000,
+        commissionCents: 100000,
+        sellerEarningCents: 900000,
+      },
+      compensation: {
+        status: 'credited',
+        responsibleParty: 'zamk',
+        reasonCode: 'zamk_warehouse_damage',
+      },
+      createdAt: '2026-09-08T09:00:00Z',
+      updatedAt: '2026-09-08T10:00:00Z',
+      arrivedAtZamk: true,
+      inspectionCompleted: true,
+      physicalOutcome: 'damaged',
+      restockedQuantity: 0,
+      damagedQuantity: 1,
+      rejectedQuantity: 0,
+      notReceivedQuantity: 0,
+      processingStatus: 'completed',
+    };
+
+    vi.mocked(sellerApi.getSellerReturn).mockResolvedValue({ items: [mockReturn] } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/returns/ret-zamk-comp-1']}>
+        <Routes>
+          <Route path="/returns/:id" element={<SellerReturnDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/ORD-900801/)).toBeTruthy();
+    });
+
+    // Compensation status card
+    expect(screen.getByText('Компенсация ZAMK')).toBeTruthy();
+    expect(screen.getByText('Учтено при расчёте компенсации')).toBeTruthy();
+    expect(
+      screen.getByText(/По этому возврату зафиксирована потеря товара по ответственности ZAMK\. Этот возврат учтён в общем расчёте компенсации продавцу\./)
+    ).toBeTruthy();
+    expect(screen.getByText(/Этот возврат учтён в общем расчёте компенсации продавцу\./)).toBeTruthy();
+    expect(screen.queryByText(/Компенсация начислена на ваш баланс/i)).toBeNull();
+    expect(screen.queryByText(/возмещено в полном объёме/i)).toBeNull();
+
+    // Truth invariant: No invented compensation money cents or net cents
+    expect(screen.queryByText(/Итого к выплате/i)).toBeNull();
+    expect(screen.queryByText(/Чистый результат/i)).toBeNull();
+    expect(screen.queryByText(/\+9\s?000/)).toBeNull();
+    expect(screen.queryByText(/\+10\s?000/)).toBeNull();
+    expect(screen.queryByText(/Сторно/i)).toBeNull();
+  });
+
+  it('Case I: Credited Carrier Compensation — renders carrier explanation', async () => {
+    const mockReturn: SellerReturn = {
+      returnItemId: 'item-carrier-comp-1',
+      returnId: 'ret-carrier-comp-1',
+      orderId: 'ord-carrier-comp-1',
+      orderNumber: 'ORD-900802',
+      orderItemId: 'oi-carrier-comp-1',
+      status: 'completed',
+      quantity: 1,
+      productTitle: 'Carrier Damaged Shoes',
+      priceCents: 500000,
+      subtotalPriceCents: 500000,
+      restock: false,
+      financialAdjustment: {
+        deductionCents: 450000,
+        context: 'hold',
+        adjustedAt: '2026-09-08T10:00:00Z',
+        grossCents: 500000,
+        commissionCents: 50000,
+        sellerEarningCents: 450000,
+      },
+      compensation: {
+        status: 'credited',
+        responsibleParty: 'carrier',
+        reasonCode: 'carrier_damage',
+      },
+      createdAt: '2026-09-08T09:00:00Z',
+      updatedAt: '2026-09-08T10:00:00Z',
+      arrivedAtZamk: true,
+      inspectionCompleted: true,
+      physicalOutcome: 'damaged',
+      restockedQuantity: 0,
+      damagedQuantity: 1,
+      rejectedQuantity: 0,
+      notReceivedQuantity: 0,
+      processingStatus: 'completed',
+    };
+
+    vi.mocked(sellerApi.getSellerReturn).mockResolvedValue({ items: [mockReturn] } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/returns/ret-carrier-comp-1']}>
+        <Routes>
+          <Route path="/returns/:id" element={<SellerReturnDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/ORD-900802/)).toBeTruthy();
+    });
+
+    expect(screen.getByText('Компенсация ZAMK')).toBeTruthy();
+    expect(screen.getByText('Учтено при расчёте компенсации')).toBeTruthy();
+    expect(
+      screen.getByText(/По этому возврату зафиксировано повреждение при доставке\. Этот возврат учтён в общем расчёте компенсации продавцу\./)
+    ).toBeTruthy();
+    expect(screen.getByText(/Этот возврат учтён в общем расчёте компенсации продавцу\./)).toBeTruthy();
+    expect(screen.queryByText(/Компенсация начислена на ваш баланс/i)).toBeNull();
+    expect(screen.queryByText(/возмещено в полном объёме/i)).toBeNull();
+    expect(screen.queryByText(/Сторно/i)).toBeNull();
+  });
+
+  it('Case J: Pending Responsibility — renders pending banner without financial promises', async () => {
+    const mockReturn: SellerReturn = {
+      returnItemId: 'item-pending-comp-1',
+      returnId: 'ret-pending-comp-1',
+      orderId: 'ord-pending-comp-1',
+      orderNumber: 'ORD-900803',
+      orderItemId: 'oi-pending-comp-1',
+      status: 'completed',
+      quantity: 1,
+      productTitle: 'Pending Investigation Jacket',
+      priceCents: 800000,
+      subtotalPriceCents: 800000,
+      restock: false,
+      financialAdjustment: {
+        deductionCents: 720000,
+        context: 'available',
+        adjustedAt: '2026-09-08T10:00:00Z',
+        grossCents: 800000,
+        commissionCents: 80000,
+        sellerEarningCents: 720000,
+      },
+      compensation: {
+        status: 'pending',
+      },
+      createdAt: '2026-09-08T09:00:00Z',
+      updatedAt: '2026-09-08T10:00:00Z',
+      arrivedAtZamk: true,
+      inspectionCompleted: true,
+      physicalOutcome: 'damaged',
+      restockedQuantity: 0,
+      damagedQuantity: 1,
+      rejectedQuantity: 0,
+      notReceivedQuantity: 0,
+      processingStatus: 'completed',
+    };
+
+    vi.mocked(sellerApi.getSellerReturn).mockResolvedValue({ items: [mockReturn] } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/returns/ret-pending-comp-1']}>
+        <Routes>
+          <Route path="/returns/:id" element={<SellerReturnDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/ORD-900803/)).toBeTruthy();
+    });
+
+    expect(screen.getByText('Финансовая ответственность определяется')).toBeTruthy();
+    expect(screen.getByText('На рассмотрении')).toBeTruthy();
+    expect(
+      screen.getByText(/Возврат обработан, но ответственность за повреждение ещё определяется\./)
+    ).toBeTruthy();
+    expect(screen.queryByText(/Сторно/i)).toBeNull();
   });
 });
