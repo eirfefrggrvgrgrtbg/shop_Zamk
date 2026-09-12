@@ -16,6 +16,8 @@ import {
   simulateAdvanceAdminReturnShipment as apiSimulateAdvanceAdminReturnShipment,
   simulateRefundSuccessForReturn as apiSimulateRefundSuccessForReturn,
   simulateRefundFailureForReturn as apiSimulateRefundFailureForReturn,
+  updateReturnResponsibility as apiUpdateReturnResponsibility,
+  getAdminReturnResponsibilityAllocations as apiGetAdminReturnResponsibilityAllocations,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
 import type {
@@ -35,6 +37,8 @@ import type {
   UpdateLegacyItemInspectionInput,
   OutboundAllocationDetail,
   ScannedUnitDetail,
+  ReturnResponsibilityAllocation,
+  UpdateReturnResponsibilityRequest,
 } from '@zamk/api-client/src/types';
 import { formatReturnShipmentStatus, formatReturnShipmentMethod } from '@zamk/api-client/src/types';
 
@@ -55,6 +59,8 @@ export type {
   UpdateLegacyItemInspectionInput,
   OutboundAllocationDetail,
   ScannedUnitDetail,
+  ReturnResponsibilityAllocation,
+  UpdateReturnResponsibilityRequest,
 };
 export { formatReturnShipmentStatus, formatReturnShipmentMethod };
 
@@ -310,4 +316,45 @@ export const simulateRefundSuccessForReturn = async (returnId: string): Promise<
 
 export const simulateRefundFailureForReturn = async (returnId: string): Promise<AdminRefund> => {
   return await apiSimulateRefundFailureForReturn(returnId);
+};
+
+export const updateReturnResponsibility = async (
+  returnId: string,
+  allocationId: string,
+  data: UpdateReturnResponsibilityRequest
+): Promise<ReturnResponsibilityAllocation> => {
+  return await apiUpdateReturnResponsibility(returnId, allocationId, data);
+};
+
+export const getAdminReturnResponsibilityAllocations = async (
+  returnId: string
+): Promise<ReturnResponsibilityAllocation[]> => {
+  return await apiGetAdminReturnResponsibilityAllocations(returnId);
+};
+
+export const RESPONSIBILITY_PARTY_LABELS: Record<string, string> = {
+  zamk: 'ZAMK',
+  carrier: 'Перевозчик',
+  seller: 'Продавец',
+  customer: 'Покупатель',
+};
+
+export const RESPONSIBILITY_REASON_LABELS: Record<string, string> = {
+  zamk_warehouse_damage: 'Повреждение на стороне ZAMK',
+  carrier_damage: 'Повреждение при перевозке',
+  seller_product_defect: 'Дефект/ответственность продавца',
+  customer_change_of_mind: 'Отказ покупателя',
+  customer_damage: 'Повреждение покупателем',
+  fraud_or_substitution: 'Подмена / мошенничество',
+  unknown: 'Не определено',
+};
+
+export const getResponsibilityPartyLabel = (party?: string | null): string => {
+  if (!party) return '—';
+  return RESPONSIBILITY_PARTY_LABELS[party] || party;
+};
+
+export const getResponsibilityReasonLabel = (reason?: string | null): string => {
+  if (!reason) return '—';
+  return RESPONSIBILITY_REASON_LABELS[reason] || reason;
 };

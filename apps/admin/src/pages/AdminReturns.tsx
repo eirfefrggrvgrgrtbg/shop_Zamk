@@ -36,8 +36,10 @@ import {
   simulateAdvanceAdminReturnShipment,
   simulateRefundSuccessForReturn,
   simulateRefundFailureForReturn,
+  getAdminReturnResponsibilityAllocations,
 } from '../api/adminReturns';
 import { ReturnConversationDrawer } from '../components/returns/ReturnConversationDrawer';
+import { ReturnResponsibilityCard } from '../components/returns/ReturnResponsibilityCard';
 import type { AdminReturn, AdminReturnItem, AdminReturnRefundQuote } from '../api/adminReturns';
 import { PermissionGuard } from '../components/PermissionGuard';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
@@ -106,6 +108,14 @@ export function AdminReturns() {
       setIsDetailLoading(true);
       setError(null);
       const detail = await getAdminReturn(id);
+      if (!detail.responsibilityAllocations) {
+        try {
+          const allocs = await getAdminReturnResponsibilityAllocations(id);
+          detail.responsibilityAllocations = allocs;
+        } catch {
+          // ignore if not available
+        }
+      }
       setSelectedReturn(detail);
       await fetchRefundQuote(id);
     } catch (err: unknown) {
@@ -420,6 +430,16 @@ export function AdminReturns() {
                     </div>
                   )}
                 </div>
+
+                {/* B0. Financial Responsibility Card — Финансовая ответственность */}
+                {selectedReturn.responsibilityAllocations && selectedReturn.responsibilityAllocations.length > 0 && (
+                  <ReturnResponsibilityCard
+                    returnId={selectedReturn.id}
+                    allocations={selectedReturn.responsibilityAllocations}
+                    returnStatus={selectedReturn.status}
+                    onUpdated={() => fetchReturnDetail(selectedReturn.id)}
+                  />
+                )}
 
                 {/* B. Financial Refund Card — Возврат средств */}
                 <div data-testid="return-refund-card" className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
