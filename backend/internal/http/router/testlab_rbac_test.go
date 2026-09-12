@@ -70,32 +70,13 @@ func TestTestLabRBAC(t *testing.T) {
 
 	insertAdminWithPerms := func(t *testing.T, userID uuid.UUID, perms []string) {
 		t.Helper()
-		roleID := uuid.New()
-		code := roleID.String()[:8]
-		_, err := pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'TestLabRole')`, roleID, code)
+		roleID, err := setupRouterStaffWithPermissions(ctx, pgClient.Pool, userID, "TestLabRole", perms)
 		if err != nil {
-			t.Fatalf("insertAdminRole: %v", err)
+			t.Fatalf("setupRouterStaffWithPermissions: %v", err)
 		}
 		t.Cleanup(func() {
 			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_roles WHERE id = $1`, roleID)
-		})
-
-		for _, p := range perms {
-			_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, $2)`, roleID, p)
-			if err != nil {
-				t.Fatalf("insertPerm %s: %v", p, err)
-			}
-		}
-		t.Cleanup(func() {
-			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_role_permissions WHERE role_id = $1`, roleID)
-		})
-
-		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')`, userID, roleID)
-		if err != nil {
-			t.Fatalf("insertStaffMember: %v", err)
-		}
-		t.Cleanup(func() {
-			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_members WHERE user_id = $1 AND staff_role_id = $2`, userID, roleID)
+			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_members WHERE user_id = $1`, userID)
 		})
 	}
 
@@ -188,32 +169,13 @@ func TestTestLabProductionGuard(t *testing.T) {
 
 	insertAdminWithPerms := func(t *testing.T, userID uuid.UUID, perms []string) {
 		t.Helper()
-		roleID := uuid.New()
-		code := roleID.String()[:8]
-		_, err := pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'TestLabRoleProd')`, roleID, code)
+		roleID, err := setupRouterStaffWithPermissions(ctx, pgClient.Pool, userID, "TestLabRoleProd", perms)
 		if err != nil {
-			t.Fatalf("insertAdminRole: %v", err)
+			t.Fatalf("setupRouterStaffWithPermissions: %v", err)
 		}
 		t.Cleanup(func() {
 			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_roles WHERE id = $1`, roleID)
-		})
-
-		for _, p := range perms {
-			_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, $2)`, roleID, p)
-			if err != nil {
-				t.Fatalf("insertPerm %s: %v", p, err)
-			}
-		}
-		t.Cleanup(func() {
-			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_role_permissions WHERE role_id = $1`, roleID)
-		})
-
-		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')`, userID, roleID)
-		if err != nil {
-			t.Fatalf("insertStaffMember: %v", err)
-		}
-		t.Cleanup(func() {
-			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_members WHERE user_id = $1 AND staff_role_id = $2`, userID, roleID)
+			_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_members WHERE user_id = $1`, userID)
 		})
 	}
 

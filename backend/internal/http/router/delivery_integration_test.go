@@ -233,15 +233,7 @@ func TestDeliveryPayoutsIntegration(t *testing.T) {
 	tokenService := auth.NewTokenService("test-secret", "test-secret-refresh", 60)
 
 	insertAdminWithPerms := func(userID uuid.UUID, perms []string) uuid.UUID {
-		roleID := uuid.New()
-		code := roleID.String()[:8]
-		_, err := pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'DeliveryRole')`, roleID, code)
-		require.NoError(t, err)
-		for _, p := range perms {
-			_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, $2)`, roleID, p)
-			require.NoError(t, err)
-		}
-		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')`, userID, roleID)
+		roleID, err := setupRouterStaffWithPermissions(ctx, pgClient.Pool, userID, "DeliveryRole", perms)
 		require.NoError(t, err)
 		cleaner.roleIDs = append(cleaner.roleIDs, roleID)
 		return roleID

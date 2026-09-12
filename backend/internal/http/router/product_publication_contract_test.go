@@ -78,18 +78,7 @@ func TestProductPublicationContract(t *testing.T) {
 	`, adminID, adminEmail, "+7999"+adminID.String()[:7])
 	require.NoError(t, err)
 
-	roleID := uuid.New()
-	code := roleID.String()[:8]
-	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'PubRole')`, roleID, code)
-	require.NoError(t, err)
-
-	_, err = pgClient.Pool.Exec(ctx, `
-		INSERT INTO staff_role_permissions (role_id, permission)
-		VALUES ($1, 'products.approve'), ($1, 'products.reject'), ($1, 'inventory.receipt')
-	`, roleID)
-	require.NoError(t, err)
-
-	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')`, adminID, roleID)
+	_, err = setupRouterStaffWithPermissions(ctx, pgClient.Pool, adminID, "PubRole", []string{"products.approve", "products.reject", "inventory.receipt"})
 	require.NoError(t, err)
 
 	adminToken, err := tokenService.GenerateAccessToken(adminID, adminEmail, "admin")

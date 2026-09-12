@@ -83,13 +83,11 @@ func TestReconciliationEndpoints_RoutingAndRBAC(t *testing.T) {
 
 	// Roles
 	insertRoleWithPerm := func(roleID uuid.UUID, code string, userID uuid.UUID, perm string) {
-		_, err := pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'Role')`, roleID, code)
-		require.NoError(t, err)
+		var perms []string
 		if perm != "" {
-			_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, $2)`, roleID, perm)
-			require.NoError(t, err)
+			perms = []string{perm}
 		}
-		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')`, userID, roleID)
+		err := setupRouterStaffMember(ctx, pgClient.Pool, userID, roleID, code, "Role", perms)
 		require.NoError(t, err)
 	}
 

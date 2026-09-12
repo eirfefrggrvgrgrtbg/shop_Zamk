@@ -139,16 +139,9 @@ func TestNTF2_ProductStockAlerts(t *testing.T) {
 
 	roleID := uuid.New()
 	createdStaffRoleIDs = append(createdStaffRoleIDs, roleID)
-	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'AlertRole')`, roleID, roleID.String()[:8])
-	require.NoError(t, err)
-
-	_, err = pgClient.Pool.Exec(ctx, `
-		INSERT INTO staff_role_permissions (role_id, permission)
-		VALUES ($1, 'products.approve'), ($1, 'products.reject'), ($1, 'inventory.receipt'), ($1, 'inventory.manage'), ($1, 'sellers.update_status'), ($1, 'sellers.read')
-	`, roleID)
-	require.NoError(t, err)
-
-	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')`, adminID, roleID)
+	err = setupRouterStaffMember(ctx, pgClient.Pool, adminID, roleID, roleID.String()[:8], "AlertRole", []string{
+		"products.approve", "products.reject", "inventory.receipt", "inventory.manage", "sellers.update_status", "sellers.read",
+	})
 	require.NoError(t, err)
 
 	adminToken, err := tokenService.GenerateAccessToken(adminID, adminEmail, "admin")

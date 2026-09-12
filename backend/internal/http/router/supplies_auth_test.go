@@ -98,21 +98,9 @@ func TestSuppliesAuth(t *testing.T) {
 
 	insertAdminWithPerms := func(t *testing.T, userID uuid.UUID, perms []string) {
 		t.Helper()
-		roleID := uuid.New()
-		code := roleID.String()[:8]
-		_, err := pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'TestRole')`, roleID, code)
+		_, err := setupRouterStaffWithPermissions(ctx, pgClient.Pool, userID, "TestRole", perms)
 		if err != nil {
-			t.Fatalf("insertAdminRole: %v", err)
-		}
-		for _, p := range perms {
-			_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, $2)`, roleID, p)
-			if err != nil {
-				t.Fatalf("insertPerm %s: %v", p, err)
-			}
-		}
-		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')`, userID, roleID)
-		if err != nil {
-			t.Fatalf("insertStaffMember: %v", err)
+			t.Fatalf("setupRouterStaffWithPermissions: %v", err)
 		}
 	}
 

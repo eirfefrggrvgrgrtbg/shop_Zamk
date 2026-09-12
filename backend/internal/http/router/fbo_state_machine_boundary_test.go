@@ -76,17 +76,7 @@ func insertAdminWithPermissions(t *testing.T, ctx context.Context, pgClient *pos
 	`, userID, userID.String()+"@test.com", phone)
 	require.NoError(t, err)
 
-	roleID := uuid.New()
-	code := roleID.String()[:8]
-	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'FBORole')`, roleID, code)
-	require.NoError(t, err)
-
-	for _, p := range perms {
-		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, $2)`, roleID, p)
-		require.NoError(t, err)
-	}
-
-	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')`, userID, roleID)
+	_, err = setupRouterStaffWithPermissions(ctx, pgClient.Pool, userID, "FBORole", perms)
 	require.NoError(t, err)
 
 	tok, err := tokenService.GenerateAccessToken(userID, userID.String()+"@test.com", "admin")

@@ -119,15 +119,8 @@ func TestAdminProductOwnershipBoundary(t *testing.T) {
 	insertUser(adminUserID, adminEmail, "admin")
 
 	// 2. Insert Staff Role with full permissions for Admin
-	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'SuperAdmin')`, staffRoleID, "super_admin_"+staffRoleID.String()[:8])
-	require.NoError(t, err)
-
-	for _, perm := range []string{"*", "products.read", "products.moderate", "products.hide", "products.approve", "products.reject", "products.publish", "products.block"} {
-		_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, $2)`, staffRoleID, perm)
-		require.NoError(t, err)
-	}
-
-	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')`, adminUserID, staffRoleID)
+	adminPerms := []string{"*", "products.read", "products.moderate", "products.hide", "products.approve", "products.reject", "products.publish", "products.block"}
+	err = setupRouterStaffMember(ctx, pgClient.Pool, adminUserID, staffRoleID, "super_admin_"+staffRoleID.String()[:8], "SuperAdmin", adminPerms)
 	require.NoError(t, err)
 
 	// 3. Insert Seller and link to seller user
