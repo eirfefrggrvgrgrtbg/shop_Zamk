@@ -25,7 +25,7 @@ func TestReturnTimeline_ComprehensiveMatrix(t *testing.T) {
 	dsn := testutil.GetTestDatabaseURL()
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 
 	// Strict DB Safety Guard
 	testutil.AssertTestDatabase(t, pool)
@@ -341,7 +341,7 @@ func TestReturnTimeline_CDEKOfficeLogistics(t *testing.T) {
 	dsn := testutil.GetTestDatabaseURL()
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 
 	testutil.AssertTestDatabase(t, pool)
 
@@ -418,7 +418,7 @@ func TestReturnTimeline_RejectedFixture(t *testing.T) {
 	dsn := testutil.GetTestDatabaseURL()
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 
 	testutil.AssertTestDatabase(t, pool)
 
@@ -493,7 +493,7 @@ func TestReturnTimeline_EqualTimestampTieBreak(t *testing.T) {
 	dsn := testutil.GetTestDatabaseURL()
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 
 	testutil.AssertTestDatabase(t, pool)
 
@@ -564,7 +564,7 @@ func TestReturnTimeline_RefundMatrix(t *testing.T) {
 	dsn := testutil.GetTestDatabaseURL()
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 
 	testutil.AssertTestDatabase(t, pool)
 
