@@ -69,6 +69,7 @@ func TestM61A_RouterRBAC(t *testing.T) {
 		_, _ = pgClient.Pool.Exec(ctx, `DELETE FROM orders WHERE order_number LIKE 'ORD-98%'`)
 		_, _ = pgClient.Pool.Exec(ctx, `DELETE FROM product_variants WHERE product_id IN (SELECT id FROM products WHERE slug LIKE 'm61a-rtr-%') OR barcode LIKE 'ZMK-98%'`)
 		_, _ = pgClient.Pool.Exec(ctx, `DELETE FROM products WHERE slug LIKE 'm61a-rtr-%'`)
+		_, _ = pgClient.Pool.Exec(ctx, `DELETE FROM staff_member_permissions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'm61a_rtr_%')`)
 		_, _ = pgClient.Pool.Exec(ctx, `DELETE FROM staff_members WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'm61a_rtr_%')`)
 		_, _ = pgClient.Pool.Exec(ctx, `DELETE FROM staff_role_permissions WHERE role_id IN (SELECT id FROM staff_roles WHERE code LIKE 'm61a_rtr_%')`)
 		_, _ = pgClient.Pool.Exec(ctx, `DELETE FROM staff_roles WHERE code LIKE 'm61a_rtr_%'`)
@@ -208,6 +209,7 @@ func TestM61A_RouterRBAC(t *testing.T) {
 		VALUES ($1, $2, 'blocked', NOW(), NOW())
 	`, suspendedAdminID, ownerRoleID)
 	require.NoError(t, err)
+	require.NoError(t, testutil.SyncStaffMemberRolePermissions(ctx, pgClient.Pool, suspendedAdminID, ownerRoleID))
 	suspendedToken, err := tokenService.GenerateAccessToken(suspendedAdminID, "m61a_rtr_suspended@test.com", users.RoleAdmin)
 	require.NoError(t, err)
 
@@ -231,6 +233,7 @@ func TestM61A_RouterRBAC(t *testing.T) {
 		VALUES ($1, $2, 'active', NOW(), NOW())
 	`, zeroPermsAdminID, zeroPermsRoleID)
 	require.NoError(t, err)
+	require.NoError(t, testutil.GrantStaffAuthorizationState(ctx, pgClient.Pool, zeroPermsAdminID, zeroPermsRoleID))
 	zeroPermsToken, err := tokenService.GenerateAccessToken(zeroPermsAdminID, "m61a_rtr_zero@test.com", users.RoleAdmin)
 	require.NoError(t, err)
 
@@ -239,12 +242,6 @@ func TestM61A_RouterRBAC(t *testing.T) {
 	_, err = pgClient.Pool.Exec(ctx, `
 		INSERT INTO staff_roles (id, code, name, description, is_system, created_at, updated_at)
 		VALUES ($1, 'm61a_rtr_orders', 'Orders Only', 'Testing', false, NOW(), NOW())
-	`, ordersOnlyRoleID)
-	require.NoError(t, err)
-
-	_, err = pgClient.Pool.Exec(ctx, `
-		INSERT INTO staff_role_permissions (role_id, permission)
-		VALUES ($1, 'orders.read')
 	`, ordersOnlyRoleID)
 	require.NoError(t, err)
 
@@ -260,6 +257,7 @@ func TestM61A_RouterRBAC(t *testing.T) {
 		VALUES ($1, $2, 'active', NOW(), NOW())
 	`, ordersOnlyAdminID, ordersOnlyRoleID)
 	require.NoError(t, err)
+	require.NoError(t, testutil.GrantStaffAuthorizationState(ctx, pgClient.Pool, ordersOnlyAdminID, ordersOnlyRoleID, "orders.read"))
 	ordersOnlyToken, err := tokenService.GenerateAccessToken(ordersOnlyAdminID, "m61a_rtr_orders@test.com", users.RoleAdmin)
 	require.NoError(t, err)
 
@@ -268,12 +266,6 @@ func TestM61A_RouterRBAC(t *testing.T) {
 	_, err = pgClient.Pool.Exec(ctx, `
 		INSERT INTO staff_roles (id, code, name, description, is_system, created_at, updated_at)
 		VALUES ($1, 'm61a_rtr_returns', 'Returns Only', 'Testing', false, NOW(), NOW())
-	`, returnsOnlyRoleID)
-	require.NoError(t, err)
-
-	_, err = pgClient.Pool.Exec(ctx, `
-		INSERT INTO staff_role_permissions (role_id, permission)
-		VALUES ($1, 'returns.read')
 	`, returnsOnlyRoleID)
 	require.NoError(t, err)
 
@@ -289,6 +281,7 @@ func TestM61A_RouterRBAC(t *testing.T) {
 		VALUES ($1, $2, 'active', NOW(), NOW())
 	`, returnsOnlyAdminID, returnsOnlyRoleID)
 	require.NoError(t, err)
+	require.NoError(t, testutil.GrantStaffAuthorizationState(ctx, pgClient.Pool, returnsOnlyAdminID, returnsOnlyRoleID, "returns.read"))
 	returnsOnlyToken, err := tokenService.GenerateAccessToken(returnsOnlyAdminID, "m61a_rtr_returns@test.com", users.RoleAdmin)
 	require.NoError(t, err)
 
@@ -297,12 +290,6 @@ func TestM61A_RouterRBAC(t *testing.T) {
 	_, err = pgClient.Pool.Exec(ctx, `
 		INSERT INTO staff_roles (id, code, name, description, is_system, created_at, updated_at)
 		VALUES ($1, 'm61a_rtr_inventory', 'Inventory Only', 'Testing', false, NOW(), NOW())
-	`, inventoryOnlyRoleID)
-	require.NoError(t, err)
-
-	_, err = pgClient.Pool.Exec(ctx, `
-		INSERT INTO staff_role_permissions (role_id, permission)
-		VALUES ($1, 'inventory.read')
 	`, inventoryOnlyRoleID)
 	require.NoError(t, err)
 
@@ -318,6 +305,7 @@ func TestM61A_RouterRBAC(t *testing.T) {
 		VALUES ($1, $2, 'active', NOW(), NOW())
 	`, inventoryOnlyAdminID, inventoryOnlyRoleID)
 	require.NoError(t, err)
+	require.NoError(t, testutil.GrantStaffAuthorizationState(ctx, pgClient.Pool, inventoryOnlyAdminID, inventoryOnlyRoleID, "inventory.read"))
 	inventoryOnlyToken, err := tokenService.GenerateAccessToken(inventoryOnlyAdminID, "m61a_rtr_inv@test.com", users.RoleAdmin)
 	require.NoError(t, err)
 
@@ -334,8 +322,30 @@ func TestM61A_RouterRBAC(t *testing.T) {
 		VALUES ($1, $2, 'active', NOW(), NOW())
 	`, ownerAdminID, ownerRoleID)
 	require.NoError(t, err)
+	require.NoError(t, testutil.SyncStaffMemberRolePermissions(ctx, pgClient.Pool, ownerAdminID, ownerRoleID))
 	ownerToken, err := tokenService.GenerateAccessToken(ownerAdminID, "m61a_rtr_owner@test.com", users.RoleAdmin)
 	require.NoError(t, err)
+
+	// Verify dual-state parity for each admin fixture:
+	for _, af := range []struct {
+		name   string
+		userID uuid.UUID
+		roleID uuid.UUID
+	}{
+		{"suspended", suspendedAdminID, ownerRoleID},
+		{"zero_perms", zeroPermsAdminID, zeroPermsRoleID},
+		{"orders_only", ordersOnlyAdminID, ordersOnlyRoleID},
+		{"returns_only", returnsOnlyAdminID, returnsOnlyRoleID},
+		{"inventory_only", inventoryOnlyAdminID, inventoryOnlyRoleID},
+		{"owner", ownerAdminID, ownerRoleID},
+	} {
+		var roleCount, memberCount int
+		err = pgClient.Pool.QueryRow(ctx, `SELECT count(*) FROM staff_role_permissions WHERE role_id = $1`, af.roleID).Scan(&roleCount)
+		require.NoError(t, err)
+		err = pgClient.Pool.QueryRow(ctx, `SELECT count(*) FROM staff_member_permissions WHERE user_id = $1`, af.userID).Scan(&memberCount)
+		require.NoError(t, err)
+		require.Equal(t, roleCount, memberCount, "parity mismatch for %s", af.name)
+	}
 
 	// 4. Test Scenarios
 

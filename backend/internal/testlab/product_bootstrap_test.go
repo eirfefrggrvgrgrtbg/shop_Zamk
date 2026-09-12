@@ -16,6 +16,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -51,6 +52,7 @@ func setupIntegration(t *testing.T) (*pgxpool.Pool, *postgres.Client, *redis.Cli
 	t.Cleanup(func() {
 		pgClient.Close()
 	})
+	testutil.AssertTestDatabase(t, pgClient.Pool)
 
 	redisClient, err := redis.NewClient(ctx, "localhost:6379", "", 1)
 	if err != nil {
@@ -71,30 +73,31 @@ func setupIntegration(t *testing.T) (*pgxpool.Pool, *postgres.Client, *redis.Cli
 }
 
 func createAdminToken(t *testing.T, db *pgxpool.Pool, cfg *config.Config) (string, uuid.UUID) {
+	ctx := context.Background()
 	adminID := uuid.New()
-	_, err := db.Exec(context.Background(), "INSERT INTO users (id, name, email, password_hash, role, status) VALUES ($1, 'Test Lab Bootstrap Admin', $2, 'hash', 'admin', 'active')", adminID, adminID.String()+"@testlabbootstrap.zamk.ru")
+	_, err := db.Exec(ctx, "INSERT INTO users (id, name, email, password_hash, role, status) VALUES ($1, 'Test Lab Bootstrap Admin', $2, 'hash', 'admin', 'active')", adminID, adminID.String()+"@testlabbootstrap.zamk.ru")
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, _ = db.Exec(context.Background(), "DELETE FROM users WHERE id = $1", adminID)
 	})
 
 	roleID := uuid.New()
-	_, err = db.Exec(context.Background(), "INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'TestLabBootstrapRole')", roleID, roleID.String()[:8])
+	_, err = db.Exec(ctx, "INSERT INTO staff_roles (id, code, name) VALUES ($1, $2, 'TestLabBootstrapRole')", roleID, roleID.String()[:8])
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, _ = db.Exec(context.Background(), "DELETE FROM staff_roles WHERE id = $1", roleID)
 	})
 
-	_, err = db.Exec(context.Background(), "INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, 'testing.manage')", roleID)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_, _ = db.Exec(context.Background(), "DELETE FROM staff_role_permissions WHERE role_id = $1", roleID)
-	})
-
-	_, err = db.Exec(context.Background(), "INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')", adminID, roleID)
+	_, err = db.Exec(ctx, "INSERT INTO staff_members (user_id, staff_role_id, status) VALUES ($1, $2, 'active')", adminID, roleID)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, _ = db.Exec(context.Background(), "DELETE FROM staff_members WHERE user_id = $1 AND staff_role_id = $2", adminID, roleID)
+	})
+
+	require.NoError(t, testutil.GrantStaffAuthorizationState(ctx, db, adminID, roleID, "testing.manage"))
+	t.Cleanup(func() {
+		_, _ = db.Exec(context.Background(), "DELETE FROM staff_member_permissions WHERE user_id = $1", adminID)
+		_, _ = db.Exec(context.Background(), "DELETE FROM staff_role_permissions WHERE role_id = $1", roleID)
 	})
 
 	ts := auth.NewTokenService(cfg.JWT.AccessTokenSecret, cfg.JWT.RefreshTokenSecret, 15)

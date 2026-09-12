@@ -105,14 +105,14 @@ func SetupRealRouterAuthFixture(t *testing.T) *SetupData {
 	_, err = pool.Exec(ctx, "INSERT INTO staff_roles (id, code, name, description, is_system) VALUES ($1, $2, 'With Perm', '', false)", data.RoleWithPermID, "with_perm_"+uuid.New().String()[:8])
 	require.NoError(t, err)
 
-	_, err = pool.Exec(ctx, "INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, 'payments.read')", data.RoleWithPermID)
-	require.NoError(t, err)
-
 	_, err = pool.Exec(ctx, "INSERT INTO staff_members (user_id, staff_role_id, status, created_at, updated_at) VALUES ($1, $2, 'active', $3, $3)", data.AdminNoPermID, data.RoleNoPermID, now)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, "INSERT INTO staff_members (user_id, staff_role_id, status, created_at, updated_at) VALUES ($1, $2, 'active', $3, $3)", data.AdminWithPermID, data.RoleWithPermID, now)
 	require.NoError(t, err)
+
+	require.NoError(t, testutil.GrantStaffAuthorizationState(ctx, pool, data.AdminNoPermID, data.RoleNoPermID))
+	require.NoError(t, testutil.GrantStaffAuthorizationState(ctx, pool, data.AdminWithPermID, data.RoleWithPermID, "payments.read"))
 
 	// 3. Create Orders
 	_, err = pool.Exec(ctx, "INSERT INTO orders (id, user_id, order_number, status, total_price_cents, currency, delivery_address, delivery_method_name, delivery_price_cents, customer_name, customer_email, customer_phone, created_at, updated_at) VALUES ($1, $2, $3, 'paid', 100000, 'RUB', 'test', 'Delivery', 0, 'test', 'test', 'test', $4, $4)", data.OrderID, data.CustomerID, "ORD-"+data.OrderID.String()[:8], now)
@@ -134,6 +134,7 @@ func SetupRealRouterAuthFixture(t *testing.T) *SetupData {
 		ctx := context.Background()
 		pool.Exec(ctx, "DELETE FROM payments WHERE id IN ($1, $2)", data.PaymentID, data.PaymentCleanID)
 		pool.Exec(ctx, "DELETE FROM orders WHERE id IN ($1, $2)", data.OrderID, data.CleanOrderID)
+		pool.Exec(ctx, "DELETE FROM staff_member_permissions WHERE user_id = $1 OR user_id = $2", data.AdminNoPermID, data.AdminWithPermID)
 		pool.Exec(ctx, "DELETE FROM staff_members WHERE user_id = $1 OR user_id = $2", data.AdminNoPermID, data.AdminWithPermID)
 		pool.Exec(ctx, "DELETE FROM staff_role_permissions WHERE role_id = $1 OR role_id = $2", data.RoleNoPermID, data.RoleWithPermID)
 		pool.Exec(ctx, "DELETE FROM staff_roles WHERE id = $1 OR id = $2", data.RoleNoPermID, data.RoleWithPermID)

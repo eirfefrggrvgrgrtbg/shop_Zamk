@@ -11,10 +11,11 @@ import (
 
 // stubRepo implements a minimal in-memory stub for testing Service.
 type stubRepo struct {
-	member *StaffMember
-	role   *StaffRole
-	perms  []string
-	err    error
+	member      *StaffMember
+	role        *StaffRole
+	perms       []string
+	memberPerms []string
+	err         error
 }
 
 func (s *stubRepo) GetStaffMemberByUserID(_ context.Context, _ uuid.UUID) (*StaffMember, *StaffRole, error) {
@@ -29,6 +30,32 @@ func (s *stubRepo) GetStaffMemberByUserID(_ context.Context, _ uuid.UUID) (*Staf
 
 func (s *stubRepo) GetRolePermissions(_ context.Context, _ uuid.UUID) ([]string, error) {
 	return s.perms, nil
+}
+
+func (s *stubRepo) GetMemberPermissions(_ context.Context, _ uuid.UUID) ([]string, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if len(s.memberPerms) > 0 {
+		return s.memberPerms, nil
+	}
+	return s.perms, nil
+}
+
+func (s *stubRepo) HasMemberPermission(_ context.Context, _ uuid.UUID, permission string) (bool, error) {
+	if s.err != nil {
+		return false, s.err
+	}
+	target := s.memberPerms
+	if len(target) == 0 && len(s.perms) > 0 {
+		target = s.perms
+	}
+	for _, p := range target {
+		if p == permission {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *stubRepo) ListRoles(_ context.Context) ([]StaffRole, error) {
@@ -55,6 +82,8 @@ func (s *stubRepo) EnsureOwnerForSeed(_ context.Context, _ uuid.UUID) error {
 type repoAdapter interface {
 	GetStaffMemberByUserID(ctx context.Context, userID uuid.UUID) (*StaffMember, *StaffRole, error)
 	GetRolePermissions(ctx context.Context, roleID uuid.UUID) ([]string, error)
+	GetMemberPermissions(ctx context.Context, userID uuid.UUID) ([]string, error)
+	HasMemberPermission(ctx context.Context, userID uuid.UUID, permission string) (bool, error)
 	ListRoles(ctx context.Context) ([]StaffRole, error)
 	ListRolePermissions(ctx context.Context) (map[string][]string, error)
 	EnsureOwnerForSeed(ctx context.Context, userID uuid.UUID) error

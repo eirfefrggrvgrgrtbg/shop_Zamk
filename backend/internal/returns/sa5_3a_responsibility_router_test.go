@@ -115,9 +115,6 @@ func TestSA5_3A_ResponsibilityRouter(t *testing.T) {
 		roleWithPermID, roleNoPermID, "custom_with_perm_"+roleWithPermID.String(), "custom_no_perm_"+roleNoPermID.String())
 	require.NoError(t, err)
 
-	_, err = fix.client.Pool.Exec(ctx, `INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, 'returns.update_status')`, roleWithPermID)
-	require.NoError(t, err)
-
 	_, err = fix.client.Pool.Exec(ctx, `INSERT INTO users (id, name, email, password_hash, role, status) VALUES 
 		($1, 'Admin1', $3, 'hash', 'admin', 'active'),
 		($2, 'Admin2', $4, 'hash', 'admin', 'active')`, adminWithPermID, adminNoPermID, email1, email2)
@@ -127,6 +124,17 @@ func TestSA5_3A_ResponsibilityRouter(t *testing.T) {
 		($1, $2, 'active'),
 		($3, $4, 'active')`, adminWithPermID, roleWithPermID, adminNoPermID, roleNoPermID)
 	require.NoError(t, err)
+
+	require.NoError(t, testutil.GrantStaffAuthorizationState(ctx, fix.client.Pool, adminWithPermID, roleWithPermID, "returns.update_status"))
+	require.NoError(t, testutil.GrantStaffAuthorizationState(ctx, fix.client.Pool, adminNoPermID, roleNoPermID))
+
+	t.Cleanup(func() {
+		fix.client.Pool.Exec(ctx, "DELETE FROM staff_member_permissions WHERE user_id IN ($1, $2)", adminWithPermID, adminNoPermID)
+		fix.client.Pool.Exec(ctx, "DELETE FROM staff_members WHERE user_id IN ($1, $2)", adminWithPermID, adminNoPermID)
+		fix.client.Pool.Exec(ctx, "DELETE FROM staff_role_permissions WHERE role_id IN ($1, $2)", roleWithPermID, roleNoPermID)
+		fix.client.Pool.Exec(ctx, "DELETE FROM staff_roles WHERE id IN ($1, $2)", roleWithPermID, roleNoPermID)
+		fix.client.Pool.Exec(ctx, "DELETE FROM users WHERE id IN ($1, $2)", adminWithPermID, adminNoPermID)
+	})
 
 	adminToken, _ := tokenService.GenerateAccessToken(adminWithPermID, email1, "admin")
 	noPermToken, _ := tokenService.GenerateAccessToken(adminNoPermID, email2, "admin")

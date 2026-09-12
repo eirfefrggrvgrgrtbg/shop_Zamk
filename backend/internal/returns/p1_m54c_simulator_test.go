@@ -512,13 +512,13 @@ func TestM54C_RealRouterRBAC_ProductionGuardComposition(t *testing.T) {
 	require.NoError(t, err)
 	defer pool.Exec(ctx, "DELETE FROM staff_roles WHERE id = $1", roleID)
 
-	_, err = pool.Exec(ctx, "INSERT INTO staff_role_permissions (role_id, permission) VALUES ($1, 'refunds.create')", roleID)
-	require.NoError(t, err)
-	defer pool.Exec(ctx, "DELETE FROM staff_role_permissions WHERE role_id = $1", roleID)
-
 	_, err = pool.Exec(ctx, "INSERT INTO staff_members (user_id, staff_role_id, status, created_at, updated_at) VALUES ($1, $2, 'active', $3, $3)", adminID, roleID, now)
 	require.NoError(t, err)
 	defer pool.Exec(ctx, "DELETE FROM staff_members WHERE user_id = $1", adminID)
+
+	require.NoError(t, testutil.GrantStaffAuthorizationState(ctx, pool, adminID, roleID, "refunds.create"))
+	defer pool.Exec(ctx, "DELETE FROM staff_member_permissions WHERE user_id = $1", adminID)
+	defer pool.Exec(ctx, "DELETE FROM staff_role_permissions WHERE role_id = $1", roleID)
 
 	// Create test Return and pending refund
 	orderID := uuid.New()
