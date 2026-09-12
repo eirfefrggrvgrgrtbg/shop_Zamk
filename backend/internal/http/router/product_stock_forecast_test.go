@@ -899,13 +899,20 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 	})
 
 	t.Run("G. Hysteresis: warning cover 13 -> 16 remains warning; cover >= 18 becomes healthy", func(t *testing.T) {
-		pID, vID := createProductAndVariant("Гистерезис товар", now.AddDate(0, 0, -10), now.AddDate(0, 0, -10), "Зеленый", "S")
+		testNow := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+		pID, vID := createProductAndVariant("Гистерезис товар", testNow.AddDate(0, 0, -10), testNow.AddDate(0, 0, -10), "Зеленый", "S")
 		// 10 units in 10 days -> DSV = 1.0/day
-		createOrderWithPaidUnits(pID, vID, 10, now.AddDate(0, 0, -5))
+		createOrderWithPaidUnits(pID, vID, 10, testNow.AddDate(0, 0, -5))
+
+		reconcileProduct := func(targetID uuid.UUID) error {
+			return pgClient.RunInTx(ctx, func(tx pgx.Tx) error {
+				return productsService.ReconcileStockForecastForProductTx(ctx, tx, targetID, testNow)
+			})
+		}
 
 		// 1. Cover = 10 -> enters warning
 		setVariantStock(pID, vID, 10, 0)
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 		snap := getSnapshot(vID)
 		require.NotNil(t, snap)
@@ -913,7 +920,7 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 
 		// 2. Cover becomes 16 (between 14 and 18): under hysteresis, remains warning!
 		setVariantStock(pID, vID, 16, 0)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 		snap = getSnapshot(vID)
 		require.NotNil(t, snap)
@@ -923,7 +930,7 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 
 		// 3. Cover becomes 18 (>= 18): resolves hysteresis -> becomes healthy!
 		setVariantStock(pID, vID, 18, 0)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 		snap = getSnapshot(vID)
 		require.NotNil(t, snap)
