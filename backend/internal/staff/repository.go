@@ -220,6 +220,16 @@ func (r *Repository) UpdateStaffStatus(ctx context.Context, userID uuid.UUID, st
 	return nil
 }
 
+// LockOwnerRole locks the 'owner' staff_role row FOR UPDATE to serialize owner count checks.
+func (r *Repository) LockOwnerRole(ctx context.Context) error {
+	var id uuid.UUID
+	err := r.db.QueryRow(ctx, `SELECT id FROM staff_roles WHERE code = 'owner' FOR UPDATE`).Scan(&id)
+	if err != nil {
+		return fmt.Errorf("lock owner role: %w", err)
+	}
+	return nil
+}
+
 // CountActiveOwners counts active staff members that have the 'owner' role.
 func (r *Repository) CountActiveOwners(ctx context.Context) (int, error) {
 	var count int

@@ -15,11 +15,12 @@ import (
 )
 
 var (
-	ErrDuplicateEmail       = errors.New("email already in use")
-	ErrCannotBlockLastOwner = errors.New("cannot block or archive the last active owner")
-	ErrCannotDemoteOwner    = errors.New("only an owner can change the owner role")
-	ErrCannotPromoteToOwner = errors.New("only an owner can assign the owner role")
-	ErrTargetNotStaff       = errors.New("target user is not a staff member")
+	ErrDuplicateEmail        = errors.New("email already in use")
+	ErrCannotBlockLastOwner  = errors.New("cannot block or archive the last active owner")
+	ErrCannotRemoveLastOwner = errors.New("cannot remove or demote the last active owner")
+	ErrCannotDemoteOwner     = errors.New("only an owner can change the owner role")
+	ErrCannotPromoteToOwner  = errors.New("only an owner can assign the owner role")
+	ErrTargetNotStaff        = errors.New("target user is not a staff member")
 )
 
 type Service struct {
@@ -214,30 +215,7 @@ type UpdateStaffRoleInput struct {
 // UpdateStaffRole validates business rules and atomically updates the staff member's role
 // and replaces direct member permissions with the selected role preset permissions.
 func (s *Service) UpdateStaffRole(ctx context.Context, input UpdateStaffRoleInput) error {
-	// Get target's current role
-	_, targetRole, err := s.repo.GetStaffMemberByUserID(ctx, input.TargetUserID)
-	if err != nil {
-		if errors.Is(err, ErrStaffMemberNotFound) {
-			return ErrTargetNotStaff
-		}
-		return err
-	}
-
-	// Get actor's role to check privileges
-	_, actorRole, err := s.repo.GetStaffMemberByUserID(ctx, input.ActorUserID)
-	actorIsOwner := err == nil && actorRole != nil && actorRole.Code == "owner"
-
-	// Cannot change the owner role unless actor is owner
-	if targetRole.Code == "owner" && !actorIsOwner {
-		return ErrCannotDemoteOwner
-	}
-
-	// Cannot set role to 'owner' unless actor is owner
-	if input.NewRoleCode == "owner" && !actorIsOwner {
-		return ErrCannotPromoteToOwner
-	}
-
-	// Resolve new role
+	// Pre-resolve new role to validate role code early
 	newRole, err := s.repo.GetRoleByCode(ctx, input.NewRoleCode)
 	if err != nil {
 		if errors.Is(err, ErrRoleNotFound) {
@@ -253,6 +231,60 @@ func (s *Service) UpdateStaffRole(ctx context.Context, input UpdateStaffRoleInpu
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	txRepo := s.repo.WithTx(tx)
+
+	// Lock owner role row to serialize owner count checks across role and status updates
+	if err := txRepo.LockOwnerRole(ctx); err != nil {
+		return err
+	}
+
+	// Re-read target state inside transaction under the lock
+	targetMember, targetRole, err := txRepo.GetStaffMemberByUserID(ctx, input.TargetUserID)
+	if err != nil {
+		if errors.Is(err, ErrStaffMemberNotFound) {
+			return ErrTargetNotStaff
+		}
+		return err
+	}
+
+	// Re-read actor state inside transaction under the lock
+	var actorMember *StaffMember
+	var actorRole *StaffRole
+	if input.ActorUserID == input.TargetUserID {
+		actorMember = targetMember
+		actorRole = targetRole
+	} else {
+		actorMember, actorRole, err = txRepo.GetStaffMemberByUserID(ctx, input.ActorUserID)
+		if err != nil && !errors.Is(err, ErrStaffMemberNotFound) {
+			return err
+		}
+	}
+
+	actorIsActiveOwner := actorMember != nil &&
+		actorMember.Status == string(StatusActive) &&
+		actorRole != nil &&
+		actorRole.Code == "owner"
+
+	// Cannot change the owner role unless actor is an active owner
+	if targetRole.Code == "owner" && !actorIsActiveOwner {
+		return ErrCannotDemoteOwner
+	}
+
+	// Cannot set role to 'owner' unless actor is an active owner
+	if input.NewRoleCode == "owner" && !actorIsActiveOwner {
+		return ErrCannotPromoteToOwner
+	}
+
+	// Invariant: cannot remove the last active owner via role change
+	if targetRole.Code == "owner" && targetMember.Status == string(StatusActive) && input.NewRoleCode != "owner" {
+		count, err := txRepo.CountActiveOwners(ctx)
+		if err != nil {
+			return err
+		}
+		if count <= 1 {
+			return ErrCannotRemoveLastOwner
+		}
+	}
+
 	if err := txRepo.UpdateStaffRole(ctx, input.TargetUserID, newRole.ID); err != nil {
 		return fmt.Errorf("update staff role: %w", err)
 	}
@@ -272,8 +304,23 @@ type UpdateStaffStatusInput struct {
 
 // UpdateStaffStatus validates business rules and updates the staff member's status.
 func (s *Service) UpdateStaffStatus(ctx context.Context, input UpdateStaffStatusInput) error {
-	// Get target's current role
-	_, targetRole, err := s.repo.GetStaffMemberByUserID(ctx, input.TargetUserID)
+	isBlocking := input.NewStatus == string(StatusBlocked) || input.NewStatus == string(StatusArchived)
+
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := s.repo.WithTx(tx)
+
+	// Lock owner role row to serialize owner count checks across role and status updates
+	if err := txRepo.LockOwnerRole(ctx); err != nil {
+		return err
+	}
+
+	// Re-read target state inside transaction under the lock
+	targetMember, targetRole, err := txRepo.GetStaffMemberByUserID(ctx, input.TargetUserID)
 	if err != nil {
 		if errors.Is(err, ErrStaffMemberNotFound) {
 			return ErrTargetNotStaff
@@ -281,20 +328,32 @@ func (s *Service) UpdateStaffStatus(ctx context.Context, input UpdateStaffStatus
 		return err
 	}
 
-	// Get actor's role to check privileges
-	_, actorRole, err := s.repo.GetStaffMemberByUserID(ctx, input.ActorUserID)
-	actorIsOwner := err == nil && actorRole != nil && actorRole.Code == "owner"
+	// Re-read actor state inside transaction under the lock
+	var actorMember *StaffMember
+	var actorRole *StaffRole
+	if input.ActorUserID == input.TargetUserID {
+		actorMember = targetMember
+		actorRole = targetRole
+	} else {
+		actorMember, actorRole, err = txRepo.GetStaffMemberByUserID(ctx, input.ActorUserID)
+		if err != nil && !errors.Is(err, ErrStaffMemberNotFound) {
+			return err
+		}
+	}
 
-	isBlocking := input.NewStatus == string(StatusBlocked) || input.NewStatus == string(StatusArchived)
+	actorIsActiveOwner := actorMember != nil &&
+		actorMember.Status == string(StatusActive) &&
+		actorRole != nil &&
+		actorRole.Code == "owner"
 
-	// Cannot block/archive owner unless actor is owner
-	if targetRole.Code == "owner" && isBlocking && !actorIsOwner {
+	// Cannot block/archive owner unless actor is an active owner
+	if targetRole.Code == "owner" && isBlocking && !actorIsActiveOwner {
 		return ErrCannotDemoteOwner
 	}
 
-	// Cannot block last active owner
-	if targetRole.Code == "owner" && isBlocking {
-		count, err := s.repo.CountActiveOwners(ctx)
+	// Invariant: cannot block/archive the last active owner
+	if targetRole.Code == "owner" && isBlocking && targetMember.Status == string(StatusActive) {
+		count, err := txRepo.CountActiveOwners(ctx)
 		if err != nil {
 			return err
 		}
@@ -303,9 +362,13 @@ func (s *Service) UpdateStaffStatus(ctx context.Context, input UpdateStaffStatus
 		}
 	}
 
-	// Update staff_members status
-	if err := s.repo.UpdateStaffStatus(ctx, input.TargetUserID, input.NewStatus); err != nil {
+	// Update staff_members status inside transaction
+	if err := txRepo.UpdateStaffStatus(ctx, input.TargetUserID, input.NewStatus); err != nil {
 		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
 	}
 
 	// Sync users.status so blocked staff cannot login

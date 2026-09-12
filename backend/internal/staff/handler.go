@@ -234,6 +234,8 @@ func (h *Handler) UpdateStaffRole(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Staff member not found")
 		case errors.Is(err, ErrCannotDemoteOwner):
 			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
+		case errors.Is(err, ErrCannotRemoveLastOwner), errors.Is(err, ErrCannotBlockLastOwner):
+			h.writeError(w, http.StatusConflict, "last_owner", err.Error())
 		case errors.Is(err, ErrCannotPromoteToOwner):
 			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
 		case errors.Is(err, ErrRoleNotFound):
@@ -291,7 +293,7 @@ func (h *Handler) UpdateStaffStatus(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, ErrTargetNotStaff):
 			h.writeError(w, http.StatusNotFound, "not_found", "Staff member not found")
-		case errors.Is(err, ErrCannotBlockLastOwner):
+		case errors.Is(err, ErrCannotBlockLastOwner), errors.Is(err, ErrCannotRemoveLastOwner):
 			h.writeError(w, http.StatusConflict, "last_owner", err.Error())
 		case errors.Is(err, ErrCannotDemoteOwner):
 			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())

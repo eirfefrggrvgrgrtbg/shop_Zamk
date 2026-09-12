@@ -202,12 +202,19 @@ type extendedStubRepo struct {
 	roleByCode       map[string]*StaffRole
 	actorMember      *StaffMember
 	actorRole        *StaffRole
+	membersByUserID  map[uuid.UUID]*StaffMember
+	rolesByUserID    map[uuid.UUID]*StaffRole
 }
 
 func (s *extendedStubRepo) GetStaffMemberByUserID(ctx context.Context, userID uuid.UUID) (*StaffMember, *StaffRole, error) {
 	// Return actor data when querying specifically for the actor's user ID
 	if s.actorMember != nil && userID == s.actorMember.UserID {
 		return s.actorMember, s.actorRole, nil
+	}
+	if s.membersByUserID != nil {
+		if m, ok := s.membersByUserID[userID]; ok {
+			return m, s.rolesByUserID[userID], nil
+		}
 	}
 	return s.stubRepo.GetStaffMemberByUserID(ctx, userID)
 }
@@ -254,16 +261,26 @@ func (s *testServiceExtended) UpdateStaffStatus(ctx context.Context, input Updat
 		return err
 	}
 
-	_, actorRole, err := s.repo.GetStaffMemberByUserID(ctx, input.ActorUserID)
-	actorIsOwner := err == nil && actorRole != nil && actorRole.Code == "owner"
+	var actorMember *StaffMember
+	var actorRole *StaffRole
+	if input.ActorUserID == input.TargetUserID {
+		actorMember, actorRole, _ = s.repo.GetStaffMemberByUserID(ctx, input.TargetUserID)
+	} else {
+		actorMember, actorRole, err = s.repo.GetStaffMemberByUserID(ctx, input.ActorUserID)
+		if err != nil && !errors.Is(err, ErrStaffMemberNotFound) {
+			return err
+		}
+	}
+	actorIsActiveOwner := actorMember != nil && actorMember.Status == string(StatusActive) && actorRole != nil && actorRole.Code == "owner"
 
 	isBlocking := input.NewStatus == string(StatusBlocked) || input.NewStatus == string(StatusArchived)
 
-	if targetRole.Code == "owner" && isBlocking && !actorIsOwner {
+	if targetRole.Code == "owner" && isBlocking && !actorIsActiveOwner {
 		return ErrCannotDemoteOwner
 	}
 
-	if targetRole.Code == "owner" && isBlocking {
+	targetMember, _, _ := s.repo.GetStaffMemberByUserID(ctx, input.TargetUserID)
+	if targetRole.Code == "owner" && isBlocking && targetMember != nil && targetMember.Status == string(StatusActive) {
 		count, err := s.repo.CountActiveOwners(ctx)
 		if err != nil {
 			return err
@@ -284,14 +301,33 @@ func (s *testServiceExtended) UpdateStaffRole(ctx context.Context, input UpdateS
 		return err
 	}
 
-	_, actorRole, err := s.repo.GetStaffMemberByUserID(ctx, input.ActorUserID)
-	actorIsOwner := err == nil && actorRole != nil && actorRole.Code == "owner"
+	var actorMember *StaffMember
+	var actorRole *StaffRole
+	if input.ActorUserID == input.TargetUserID {
+		actorMember, actorRole, _ = s.repo.GetStaffMemberByUserID(ctx, input.TargetUserID)
+	} else {
+		actorMember, actorRole, err = s.repo.GetStaffMemberByUserID(ctx, input.ActorUserID)
+		if err != nil && !errors.Is(err, ErrStaffMemberNotFound) {
+			return err
+		}
+	}
+	actorIsActiveOwner := actorMember != nil && actorMember.Status == string(StatusActive) && actorRole != nil && actorRole.Code == "owner"
 
-	if targetRole.Code == "owner" && !actorIsOwner {
+	if targetRole.Code == "owner" && !actorIsActiveOwner {
 		return ErrCannotDemoteOwner
 	}
-	if input.NewRoleCode == "owner" && !actorIsOwner {
+	if input.NewRoleCode == "owner" && !actorIsActiveOwner {
 		return ErrCannotPromoteToOwner
+	}
+	targetMember, _, err := s.repo.GetStaffMemberByUserID(ctx, input.TargetUserID)
+	if err == nil && targetRole.Code == "owner" && targetMember.Status == string(StatusActive) && input.NewRoleCode != "owner" {
+		count, err := s.repo.CountActiveOwners(ctx)
+		if err != nil {
+			return err
+		}
+		if count <= 1 {
+			return ErrCannotRemoveLastOwner
+		}
 	}
 	return nil
 }
@@ -334,6 +370,7 @@ func TestUpdateStaffRole_CannotDemoteOwnerByNonOwner(t *testing.T) {
 			role:   &StaffRole{ID: ownerRoleID, Code: "owner", Name: "Владелец", IsSystem: true, CreatedAt: now, UpdatedAt: now},
 			perms:  makeOwnerPerms(),
 		},
+		activeOwnerCount: 2,
 		actorMember: &StaffMember{UserID: nonOwnerUserID, StaffRoleID: moderatorRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
 		actorRole:   &StaffRole{ID: moderatorRoleID, Code: "moderator", Name: "Модератор", IsSystem: true, CreatedAt: now, UpdatedAt: now},
 	}
@@ -343,6 +380,82 @@ func TestUpdateStaffRole_CannotDemoteOwnerByNonOwner(t *testing.T) {
 		TargetUserID: testUserID,
 		NewRoleCode:  "moderator",
 		ActorUserID:  nonOwnerUserID,
+	})
+	if !errors.Is(err, ErrCannotDemoteOwner) {
+		t.Errorf("expected ErrCannotDemoteOwner, got %v", err)
+	}
+}
+
+func TestUpdateStaffRole_CannotDemoteLastOwner(t *testing.T) {
+	now := time.Now()
+	repo := &extendedStubRepo{
+		stubRepo: stubRepo{
+			member: &StaffMember{UserID: testUserID, StaffRoleID: ownerRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+			role:   &StaffRole{ID: ownerRoleID, Code: "owner", Name: "Владелец", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+			perms:  makeOwnerPerms(),
+		},
+		activeOwnerCount: 1,
+		actorMember:      &StaffMember{UserID: testUserID, StaffRoleID: ownerRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+		actorRole:        &StaffRole{ID: ownerRoleID, Code: "owner", Name: "Владелец", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+	}
+	svc := &testServiceExtended{repo: repo}
+
+	err := svc.UpdateStaffRole(context.Background(), UpdateStaffRoleInput{
+		TargetUserID: testUserID,
+		NewRoleCode:  "moderator",
+		ActorUserID:  testUserID, // Self-demotion attempt
+	})
+	if !errors.Is(err, ErrCannotRemoveLastOwner) {
+		t.Errorf("expected ErrCannotRemoveLastOwner, got %v", err)
+	}
+}
+
+func TestUpdateStaffRole_CannotActWhenActorIsBlockedOwner(t *testing.T) {
+	now := time.Now()
+	// Actor has staff_role_id pointing to owner, but status is 'blocked'
+	repo := &extendedStubRepo{
+		stubRepo: stubRepo{
+			member: &StaffMember{UserID: testUserID, StaffRoleID: ownerRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+			role:   &StaffRole{ID: ownerRoleID, Code: "owner", Name: "Владелец", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+			perms:  makeOwnerPerms(),
+		},
+		activeOwnerCount: 2,
+		actorMember:      &StaffMember{UserID: ownerActorID, StaffRoleID: ownerRoleID, Status: "blocked", CreatedAt: now, UpdatedAt: now},
+		actorRole:        &StaffRole{ID: ownerRoleID, Code: "owner", Name: "Владелец", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+		membersByUserID: map[uuid.UUID]*StaffMember{
+			nonOwnerUserID: {UserID: nonOwnerUserID, StaffRoleID: moderatorRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+		},
+		rolesByUserID: map[uuid.UUID]*StaffRole{
+			nonOwnerUserID: {ID: moderatorRoleID, Code: "moderator", Name: "Модератор", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+		},
+	}
+	svc := &testServiceExtended{repo: repo}
+
+	// 1. Attempt to demote owner -> ErrCannotDemoteOwner
+	err := svc.UpdateStaffRole(context.Background(), UpdateStaffRoleInput{
+		TargetUserID: testUserID,
+		NewRoleCode:  "moderator",
+		ActorUserID:  ownerActorID,
+	})
+	if !errors.Is(err, ErrCannotDemoteOwner) {
+		t.Errorf("expected ErrCannotDemoteOwner, got %v", err)
+	}
+
+	// 2. Attempt to promote to owner -> ErrCannotPromoteToOwner
+	err = svc.UpdateStaffRole(context.Background(), UpdateStaffRoleInput{
+		TargetUserID: nonOwnerUserID,
+		NewRoleCode:  "owner",
+		ActorUserID:  ownerActorID,
+	})
+	if !errors.Is(err, ErrCannotPromoteToOwner) {
+		t.Errorf("expected ErrCannotPromoteToOwner, got %v", err)
+	}
+
+	// 3. Attempt to block owner in UpdateStaffStatus -> ErrCannotDemoteOwner
+	err = svc.UpdateStaffStatus(context.Background(), UpdateStaffStatusInput{
+		TargetUserID: testUserID,
+		NewStatus:    "blocked",
+		ActorUserID:  ownerActorID,
 	})
 	if !errors.Is(err, ErrCannotDemoteOwner) {
 		t.Errorf("expected ErrCannotDemoteOwner, got %v", err)
