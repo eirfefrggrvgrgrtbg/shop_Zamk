@@ -275,6 +275,7 @@ func (r *Repository) GetMemberPermissions(ctx context.Context, userID uuid.UUID)
 	query := `
 		SELECT permission FROM staff_member_permissions
 		WHERE user_id = $1
+		ORDER BY permission
 	`
 	rows, err := r.db.Query(ctx, query, userID)
 	if err != nil {
@@ -294,4 +295,38 @@ func (r *Repository) GetMemberPermissions(ctx context.Context, userID uuid.UUID)
 		return nil, fmt.Errorf("member permissions rows error: %w", err)
 	}
 	return perms, nil
+}
+
+// CopyRolePermissionsToMember copies permissions from staff_role_permissions into staff_member_permissions for a given user.
+func (r *Repository) CopyRolePermissionsToMember(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) error {
+	query := `
+		INSERT INTO staff_member_permissions (user_id, permission, created_at)
+		SELECT $1, srp.permission, now()
+		FROM staff_role_permissions srp
+		WHERE srp.role_id = $2
+		ON CONFLICT (user_id, permission) DO NOTHING
+	`
+	_, err := r.db.Exec(ctx, query, userID, roleID)
+	if err != nil {
+		return fmt.Errorf("copy role permissions to member: %w", err)
+	}
+	return nil
+}
+
+// DeleteMemberPermissions deletes all direct permissions for a staff member.
+func (r *Repository) DeleteMemberPermissions(ctx context.Context, userID uuid.UUID) error {
+	query := `DELETE FROM staff_member_permissions WHERE user_id = $1`
+	_, err := r.db.Exec(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("delete member permissions: %w", err)
+	}
+	return nil
+}
+
+// ReplaceMemberPermissionsFromRole deletes existing member permissions and copies the role preset permissions.
+func (r *Repository) ReplaceMemberPermissionsFromRole(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) error {
+	if err := r.DeleteMemberPermissions(ctx, userID); err != nil {
+		return err
+	}
+	return r.CopyRolePermissionsToMember(ctx, userID, roleID)
 }

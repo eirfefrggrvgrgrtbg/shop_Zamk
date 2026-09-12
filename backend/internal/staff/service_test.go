@@ -47,7 +47,7 @@ func (s *stubRepo) HasMemberPermission(_ context.Context, _ uuid.UUID, permissio
 		return false, s.err
 	}
 	target := s.memberPerms
-	if len(target) == 0 && len(s.perms) > 0 {
+	if target == nil {
 		target = s.perms
 	}
 	for _, p := range target {
@@ -95,7 +95,7 @@ type testService struct {
 }
 
 func (s *testService) HasPermission(ctx context.Context, userID uuid.UUID, permission string) (bool, error) {
-	member, role, err := s.repo.GetStaffMemberByUserID(ctx, userID)
+	member, _, err := s.repo.GetStaffMemberByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, ErrStaffMemberNotFound) {
 			return false, nil
@@ -105,16 +105,7 @@ func (s *testService) HasPermission(ctx context.Context, userID uuid.UUID, permi
 	if member.Status != string(StatusActive) {
 		return false, nil
 	}
-	perms, err := s.repo.GetRolePermissions(ctx, role.ID)
-	if err != nil {
-		return false, err
-	}
-	for _, p := range perms {
-		if p == permission {
-			return true, nil
-		}
-	}
-	return false, nil
+	return s.repo.HasMemberPermission(ctx, userID, permission)
 }
 
 var (
@@ -439,6 +430,28 @@ func TestHasPermission(t *testing.T) {
 			permission: "audit.read",
 			want:       false,
 			wantErr:    true,
+		},
+		{
+			name: "memberPerms empty, role has perms → false (no role fallback)",
+			stub: &stubRepo{
+				member:      &StaffMember{UserID: testUserID, StaffRoleID: ownerRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+				role:        &StaffRole{ID: ownerRoleID, Code: "owner", Name: "Владелец", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+				perms:       []string{"audit.read"},
+				memberPerms: []string{}, // explicit empty direct permissions
+			},
+			permission: "audit.read",
+			want:       false,
+		},
+		{
+			name: "memberPerms has perm, role does not → true",
+			stub: &stubRepo{
+				member:      &StaffMember{UserID: testUserID, StaffRoleID: ownerRoleID, Status: "active", CreatedAt: now, UpdatedAt: now},
+				role:        &StaffRole{ID: ownerRoleID, Code: "owner", Name: "Владелец", IsSystem: true, CreatedAt: now, UpdatedAt: now},
+				perms:       []string{},
+				memberPerms: []string{"audit.read"},
+			},
+			permission: "audit.read",
+			want:       true,
 		},
 		// Phase D: Finance role
 		{

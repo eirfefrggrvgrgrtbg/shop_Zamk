@@ -43,9 +43,12 @@ func (s *Service) GetStaffAccess(ctx context.Context, userID uuid.UUID) (*StaffA
 		return nil, err
 	}
 
-	perms, err := s.repo.GetRolePermissions(ctx, role.ID)
+	perms, err := s.repo.GetMemberPermissions(ctx, userID)
 	if err != nil {
 		return nil, err
+	}
+	if perms == nil {
+		perms = []string{}
 	}
 
 	return &StaffAccess{
@@ -55,9 +58,9 @@ func (s *Service) GetStaffAccess(ctx context.Context, userID uuid.UUID) (*StaffA
 	}, nil
 }
 
-// HasPermission returns true if the user is an active staff member with the given permission.
+// HasPermission returns true if the user is an active staff member with the given permission directly assigned.
 func (s *Service) HasPermission(ctx context.Context, userID uuid.UUID, permission string) (bool, error) {
-	member, role, err := s.repo.GetStaffMemberByUserID(ctx, userID)
+	member, _, err := s.repo.GetStaffMemberByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, ErrStaffMemberNotFound) {
 			return false, nil
@@ -69,17 +72,7 @@ func (s *Service) HasPermission(ctx context.Context, userID uuid.UUID, permissio
 		return false, nil
 	}
 
-	perms, err := s.repo.GetRolePermissions(ctx, role.ID)
-	if err != nil {
-		return false, err
-	}
-
-	for _, p := range perms {
-		if p == permission {
-			return true, nil
-		}
-	}
-	return false, nil
+	return s.repo.HasMemberPermission(ctx, userID, permission)
 }
 
 // ListRoles returns all staff roles.
@@ -92,14 +85,14 @@ func (s *Service) ListRolesWithPermissions(ctx context.Context) (map[string][]st
 	return s.repo.ListRolePermissions(ctx)
 }
 
-// ListStaffMembers returns all staff members with their role permissions.
+// ListStaffMembers returns all staff members with their direct permissions.
 func (s *Service) ListStaffMembers(ctx context.Context) ([]StaffMemberView, error) {
 	members, err := s.repo.ListStaffMembers(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for i := range members {
-		perms, err := s.repo.GetRolePermissions(ctx, members[i].RoleID)
+		perms, err := s.repo.GetMemberPermissions(ctx, members[i].UserID)
 		if err != nil {
 			return nil, err
 		}
@@ -190,7 +183,7 @@ func (s *Service) CreateStaffMember(ctx context.Context, input CreateStaffMember
 	}, nil
 }
 
-// runCreateStaffTx runs user + staff_member creation in a single transaction.
+// runCreateStaffTx runs user + staff_member creation and preset permission initialization in a single transaction.
 func (s *Service) runCreateStaffTx(ctx context.Context, user *users.User, roleID uuid.UUID, createdBy *uuid.UUID) error {
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
@@ -201,8 +194,12 @@ func (s *Service) runCreateStaffTx(ctx context.Context, user *users.User, roleID
 	if err := s.userRepo.WithTx(tx).CreateUser(ctx, user); err != nil {
 		return fmt.Errorf("create user: %w", err)
 	}
-	if err := s.repo.WithTx(tx).InsertStaffMember(ctx, user.ID, roleID, createdBy); err != nil {
+	txRepo := s.repo.WithTx(tx)
+	if err := txRepo.InsertStaffMember(ctx, user.ID, roleID, createdBy); err != nil {
 		return fmt.Errorf("create staff member: %w", err)
+	}
+	if err := txRepo.CopyRolePermissionsToMember(ctx, user.ID, roleID); err != nil {
+		return fmt.Errorf("copy role permissions: %w", err)
 	}
 	return tx.Commit(ctx)
 }
@@ -214,7 +211,8 @@ type UpdateStaffRoleInput struct {
 	ActorUserID  uuid.UUID
 }
 
-// UpdateStaffRole validates business rules and updates the staff member's role.
+// UpdateStaffRole validates business rules and atomically updates the staff member's role
+// and replaces direct member permissions with the selected role preset permissions.
 func (s *Service) UpdateStaffRole(ctx context.Context, input UpdateStaffRoleInput) error {
 	// Get target's current role
 	_, targetRole, err := s.repo.GetStaffMemberByUserID(ctx, input.TargetUserID)
@@ -248,7 +246,21 @@ func (s *Service) UpdateStaffRole(ctx context.Context, input UpdateStaffRoleInpu
 		return err
 	}
 
-	return s.repo.UpdateStaffRole(ctx, input.TargetUserID, newRole.ID)
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := s.repo.WithTx(tx)
+	if err := txRepo.UpdateStaffRole(ctx, input.TargetUserID, newRole.ID); err != nil {
+		return fmt.Errorf("update staff role: %w", err)
+	}
+	if err := txRepo.ReplaceMemberPermissionsFromRole(ctx, input.TargetUserID, newRole.ID); err != nil {
+		return fmt.Errorf("replace member permissions: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }
 
 // UpdateStaffStatusInput holds parameters for updating a staff member's status.
