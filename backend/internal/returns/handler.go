@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Handler struct {
@@ -1154,4 +1155,119 @@ func (h *Handler) SimulateRefundFailure(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(ref)
+}
+
+func (h *Handler) UpdateAdminReturnResponsibility(w http.ResponseWriter, r *http.Request) {
+	adminID := auth.GetUserID(r.Context())
+	if adminID == uuid.Nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	allocIDStr := chi.URLParam(r, "allocationId")
+	allocID, err := uuid.Parse(allocIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid allocation ID")
+		return
+	}
+
+	var req UpdateReturnResponsibilityRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+	if err := h.validator.Struct(req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	if req.ResponsibleParty == "" || req.ReasonCode == "" {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "responsibleParty and reasonCode are required")
+		return
+	}
+
+	// Fetch existing allocation to populate quantities/bindings correctly
+	allocations, err := h.service.GetReturnResponsibilityAllocations(r.Context(), returnID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to fetch allocations")
+		return
+	}
+
+	var targetAlloc *ReturnResponsibilityAllocation
+	for i := range allocations {
+		if allocations[i].ID == allocID {
+			targetAlloc = &allocations[i]
+			break
+		}
+	}
+	if targetAlloc == nil {
+		h.writeError(w, http.StatusNotFound, "not_found", "Allocation not found on return")
+		return
+	}
+
+	decSource := ReturnResponsibilityDecisionSourceEmployee
+	now := time.Now()
+
+	svcReq := SetReturnResponsibilityAllocationRequest{
+		AllocationID:          targetAlloc.ID,
+		Quantity:              targetAlloc.Quantity,
+		OrderItemAllocationID: targetAlloc.OrderItemAllocationID,
+		Status:                ReturnResponsibilityStatusResolved,
+		ResponsibleParty:      &req.ResponsibleParty,
+		ReasonCode:            &req.ReasonCode,
+		DecisionSource:        &decSource,
+		InternalNote:          req.InternalNote,
+		DecidedAt:             &now,
+		ActorID:               &adminID,
+		LegacyDisposition:     nil,
+	}
+
+	updatedAlloc, err := h.service.SetReturnResponsibilityAllocation(r.Context(), svcReq)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "domain_error", err.Error())
+		return
+	}
+
+	if h.auditRepo != nil {
+		go func() {
+			_ = h.auditRepo.RecordAudit(context.Background(), staff.AuditEvent{
+				ActorUserID: adminID,
+				Action:      "return.responsibility_update",
+				EntityType:  "return_responsibility_allocation",
+				EntityID:    &allocID,
+				Metadata:    staff.SanitizeMetadata(map[string]any{"responsible_party": req.ResponsibleParty, "reason_code": req.ReasonCode}),
+			})
+		}()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updatedAlloc)
+}
+
+func (h *Handler) GetAdminReturnResponsibilityAllocations(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	returnID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid return ID")
+		return
+	}
+
+	allocs, err := h.service.GetReturnResponsibilityAllocations(r.Context(), returnID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get allocations")
+		return
+	}
+	if allocs == nil {
+		allocs = make([]ReturnResponsibilityAllocation, 0)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(allocs)
 }

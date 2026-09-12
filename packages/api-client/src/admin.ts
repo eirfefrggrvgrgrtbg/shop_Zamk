@@ -916,3 +916,19 @@ export const uploadAdminReturnMessageAttachment = async (returnId: string, file:
 export const getAdminGlobalSearch = async (query: string): Promise<import('./types').GlobalSearchResponse> => {
   return request<import('./types').GlobalSearchResponse>('GET', `/admin/search?q=${encodeURIComponent(query)}`);
 };
+
+export const updateReturnResponsibility = async (
+  returnId: string,
+  allocationId: string,
+  data: import('./types').UpdateReturnResponsibilityRequest
+): Promise<import('./types').ReturnResponsibilityAllocation> => {
+  return request<import('./types').ReturnResponsibilityAllocation>('PATCH', `/admin/returns/${returnId}/responsibility/${allocationId}`, {
+    body: data,
+  });
+};
+
+export const getAdminReturnResponsibilityAllocations = async (
+  returnId: string
+): Promise<import('./types').ReturnResponsibilityAllocation[]> => {
+  return request<import('./types').ReturnResponsibilityAllocation[]>('GET', `/admin/returns/${returnId}/responsibility`);
+};

@@ -978,6 +978,10 @@ func (s *Service) FinalizeReceiving(ctx context.Context, returnID uuid.UUID) err
 			}
 		}
 
+		if err := s.RebuildLegacyResponsibilityAllocationsTx(ctx, tx, returnID); err != nil {
+			return err
+		}
+
 		ret.Status = "item_received"
 		return s.repo.UpdateReturnTx(ctx, tx, ret)
 	})

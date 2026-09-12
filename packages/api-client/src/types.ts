@@ -1415,6 +1415,7 @@ export interface AdminReturn {
   shipment?: ReturnShipment;
   shipmentStatus?: string | null;
   shipmentMethod?: string | null;
+  responsibilityAllocations?: ReturnResponsibilityAllocation[];
 }
 
 export interface OutboundAllocationDetail {
@@ -2389,4 +2390,27 @@ export interface GlobalSearchResult {
 
 export interface GlobalSearchResponse {
   results: GlobalSearchResult[];
+}
+
+export interface ReturnResponsibilityAllocation {
+  id: string;
+  returnItemId: string;
+  orderItemAllocationId?: string | null;
+  quantity: number;
+  status: string;
+  responsibleParty?: string | null;
+  reasonCode?: string | null;
+  decisionSource?: string | null;
+  internalNote?: string | null;
+  decidedAt?: string | null;
+  actorId?: string | null;
+  legacyDisposition?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateReturnResponsibilityRequest {
+  responsibleParty: string;
+  reasonCode: string;
+  internalNote?: string;
 }

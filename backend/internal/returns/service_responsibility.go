@@ -280,19 +280,70 @@ func (s *Service) SetReturnResponsibilityAllocation(ctx context.Context, req Set
 			}
 		}
 
-		// 4b. Legacy disposition checks
-		if req.LegacyDisposition != nil {
-			if sourceAlloc.OrderItemAllocationID != nil {
-				return ErrSerializedLegacyDispositionForbidden
+		// 4b. Legacy disposition checks and backend resolution
+		if sourceAlloc.OrderItemAllocationID == nil {
+			if req.LegacyDisposition == nil {
+				if sourceAlloc.LegacyDisposition != nil {
+					req.LegacyDisposition = sourceAlloc.LegacyDisposition
+				} else {
+					attributedMap, err := s.repo.GetAttributedQuantitiesByReturnItemIDTx(ctx, tx, returnItem.ID)
+					if err != nil {
+						return err
+					}
+					capDamaged := returnItem.DamagedQuantity - attributedMap[LegacyDispositionDamaged]
+					capAccepted := returnItem.AcceptedQuantity - attributedMap[LegacyDispositionAccepted]
+					capRejected := returnItem.RejectedQuantity - attributedMap[LegacyDispositionRejected]
+
+					if req.ReasonCode != nil {
+						switch *req.ReasonCode {
+						case ReturnResponsibilityReasonZamkWarehouseDamage, ReturnResponsibilityReasonCarrierDamage:
+							if capDamaged >= req.Quantity {
+								disp := LegacyDispositionDamaged
+								req.LegacyDisposition = &disp
+							}
+						case ReturnResponsibilityReasonCustomerChangeOfMind:
+							if capAccepted >= req.Quantity {
+								disp := LegacyDispositionAccepted
+								req.LegacyDisposition = &disp
+							}
+						case ReturnResponsibilityReasonSellerProductDefect:
+							if capDamaged >= req.Quantity {
+								disp := LegacyDispositionDamaged
+								req.LegacyDisposition = &disp
+							} else if capAccepted >= req.Quantity {
+								disp := LegacyDispositionAccepted
+								req.LegacyDisposition = &disp
+							} else if capRejected >= req.Quantity {
+								disp := LegacyDispositionRejected
+								req.LegacyDisposition = &disp
+							}
+						}
+					}
+					if req.LegacyDisposition == nil {
+						if capDamaged >= req.Quantity && capAccepted == 0 && capRejected == 0 {
+							disp := LegacyDispositionDamaged
+							req.LegacyDisposition = &disp
+						} else if capAccepted >= req.Quantity && capDamaged == 0 && capRejected == 0 {
+							disp := LegacyDispositionAccepted
+							req.LegacyDisposition = &disp
+						} else if capRejected >= req.Quantity && capDamaged == 0 && capAccepted == 0 {
+							disp := LegacyDispositionRejected
+							req.LegacyDisposition = &disp
+						}
+					}
+				}
 			}
-			ret, err := s.repo.GetReturnTx(ctx, tx, returnItem.ReturnID)
-			if err != nil {
-				return err
-			}
-			isAuthoritative := ret.Status == "item_received" || ret.Status == "refunded" || ret.Status == "completed" ||
-				(returnItem.AcceptedQuantity > 0 || returnItem.DamagedQuantity > 0 || returnItem.RejectedQuantity > 0)
-			if !isAuthoritative {
-				return ErrPhysicalAttributionNotReady
+
+			if req.LegacyDisposition != nil {
+				ret, err := s.repo.GetReturnTx(ctx, tx, returnItem.ReturnID)
+				if err != nil {
+					return err
+				}
+				isAuthoritative := ret.Status == "item_received" || ret.Status == "refunded" || ret.Status == "completed" ||
+					(returnItem.AcceptedQuantity > 0 || returnItem.DamagedQuantity > 0 || returnItem.RejectedQuantity > 0)
+				if !isAuthoritative {
+					return ErrPhysicalAttributionNotReady
+				}
 			}
 		}
 		if req.OrderItemAllocationID != nil && (sourceAlloc.LegacyDisposition != nil || req.LegacyDisposition != nil) {
@@ -416,6 +467,53 @@ func (s *Service) validateBucketCapacitiesTx(ctx context.Context, tx pgx.Tx, ret
 			}
 		default:
 			return ErrInvalidLegacyDisposition
+		}
+	}
+	return nil
+}
+
+func (s *Service) RebuildLegacyResponsibilityAllocationsTx(ctx context.Context, tx pgx.Tx, returnID uuid.UUID) error {
+	items, err := s.repo.GetReturnItemsForUpdateTx(ctx, tx, returnID)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range items {
+		allocs, err := s.repo.GetAllocationsForOrderItemTx(ctx, tx, item.OrderItemID)
+		if err != nil {
+			return err
+		}
+		if len(allocs) > 0 {
+			// Serialized item: physical unit disposition is stored in return_item_units.
+			continue
+		}
+
+		rAllocs, err := s.repo.GetReturnResponsibilityAllocationsByReturnItemIDTx(ctx, tx, item.ID)
+		if err != nil {
+			return err
+		}
+
+		// If single pending allocation with NULL legacy_disposition:
+		if len(rAllocs) == 1 && rAllocs[0].Status == ReturnResponsibilityStatusPending && rAllocs[0].LegacyDisposition == nil {
+			if item.DamagedQuantity == item.Quantity {
+				disp := LegacyDispositionDamaged
+				rAllocs[0].LegacyDisposition = &disp
+				if err := s.repo.UpdateReturnResponsibilityAllocationTx(ctx, tx, &rAllocs[0]); err != nil {
+					return err
+				}
+			} else if item.AcceptedQuantity == item.Quantity {
+				disp := LegacyDispositionAccepted
+				rAllocs[0].LegacyDisposition = &disp
+				if err := s.repo.UpdateReturnResponsibilityAllocationTx(ctx, tx, &rAllocs[0]); err != nil {
+					return err
+				}
+			} else if item.RejectedQuantity == item.Quantity {
+				disp := LegacyDispositionRejected
+				rAllocs[0].LegacyDisposition = &disp
+				if err := s.repo.UpdateReturnResponsibilityAllocationTx(ctx, tx, &rAllocs[0]); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil

@@ -138,6 +138,7 @@ type AdminReturnResponse struct {
 	Shipment       *ReturnShipmentResponse `json:"shipment,omitempty"`
 	ShipmentStatus *string                 `json:"shipmentStatus"`
 	ShipmentMethod *string                 `json:"shipmentMethod,omitempty"`
+	ResponsibilityAllocations []ReturnResponsibilityAllocation `json:"responsibilityAllocations"`
 }
 
 type AdminReturnListResponse struct {
@@ -412,4 +413,10 @@ type TimelineResponse struct {
 	EntityID            uuid.UUID       `json:"entityId"`
 	CanonicalIdentifier string          `json:"canonicalIdentifier"`
 	Events              []TimelineEvent `json:"events"`
+}
+
+type UpdateReturnResponsibilityRequest struct {
+	ResponsibleParty string  `json:"responsibleParty"`
+	ReasonCode       string  `json:"reasonCode"`
+	InternalNote     *string `json:"internalNote,omitempty"`
 }

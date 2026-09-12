@@ -620,6 +620,16 @@ func (r *Repository) GetAdminReturn(ctx context.Context, returnID uuid.UUID, bui
 		res.ShipmentStatus = &shipment.Status
 		res.ShipmentMethod = &shipment.Method
 	}
+
+	allocs, err := r.GetReturnResponsibilityAllocationsByReturnID(ctx, returnID)
+	if err != nil {
+		return nil, err
+	}
+	if allocs == nil {
+		allocs = make([]ReturnResponsibilityAllocation, 0)
+	}
+	res.ResponsibilityAllocations = allocs
+
 	return &res, nil
 }
 
@@ -691,6 +701,7 @@ func (r *Repository) ListAdminReturns(ctx context.Context, limit, offset int, wa
 			return nil, 0, err
 		}
 		res.Items = make([]AdminReturnItemDetail, 0)
+		res.ResponsibilityAllocations = make([]ReturnResponsibilityAllocation, 0)
 		list = append(list, res)
 		returnIDs = append(returnIDs, res.ID)
 	}
@@ -2196,6 +2207,33 @@ func (r *Repository) GetReturnResponsibilityAllocationTx(ctx context.Context, tx
 		return nil, err
 	}
 	return &a, nil
+}
+
+func (r *Repository) GetReturnResponsibilityAllocationsByReturnItemIDTx(ctx context.Context, tx pgx.Tx, returnItemID uuid.UUID) ([]ReturnResponsibilityAllocation, error) {
+	query := `
+		SELECT id, return_item_id, order_item_allocation_id, quantity, status, responsible_party, reason_code, decision_source, internal_note, decided_at, actor_id, legacy_disposition, created_at, updated_at
+		FROM return_responsibility_allocations
+		WHERE return_item_id = $1
+		ORDER BY created_at ASC
+		FOR UPDATE
+	`
+	rows, err := tx.Query(ctx, query, returnItemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var allocs []ReturnResponsibilityAllocation
+	for rows.Next() {
+		var a ReturnResponsibilityAllocation
+		if err := rows.Scan(
+			&a.ID, &a.ReturnItemID, &a.OrderItemAllocationID, &a.Quantity, &a.Status, &a.ResponsibleParty, &a.ReasonCode, &a.DecisionSource, &a.InternalNote, &a.DecidedAt, &a.ActorID, &a.LegacyDisposition, &a.CreatedAt, &a.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		allocs = append(allocs, a)
+	}
+	return allocs, nil
 }
 
 func (r *Repository) GetAllocationReturnItemIDTx(ctx context.Context, tx pgx.Tx, allocationID uuid.UUID) (uuid.UUID, error) {
