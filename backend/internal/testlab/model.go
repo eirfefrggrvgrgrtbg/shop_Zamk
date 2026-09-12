@@ -23,6 +23,7 @@ type ScenarioConfig struct {
 type ScenarioRun struct {
 	RunID          string                           `json:"runId"`
 	SellerID       uuid.UUID                        `json:"sellerId"`
+	BrandID        *uuid.UUID                       `json:"brandId,omitempty"`
 	Period         selleranalytics.TimePeriod       `json:"period"`
 	ExpectedResult selleranalytics.OverviewResponse `json:"expectedResult"`
 	// AuxUserIDs holds the exact UUIDs of all auxiliary Test Lab users created

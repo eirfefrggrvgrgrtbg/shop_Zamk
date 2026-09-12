@@ -90,6 +90,19 @@ func (r *Repository) CleanupRun(ctx context.Context, runID string) error {
 		return fmt.Errorf("safety violation: seller %s (%s) does not belong to test lab", sellerID, brandName)
 	}
 
+	// Collect brand IDs linked to this seller before deleting
+	var brandIDs []uuid.UUID
+	bRows, err := tx.Query(ctx, "SELECT brand_id FROM seller_brands WHERE seller_id = $1", sellerID)
+	if err == nil {
+		for bRows.Next() {
+			var bid uuid.UUID
+			if err := bRows.Scan(&bid); err == nil {
+				brandIDs = append(brandIDs, bid)
+			}
+		}
+		bRows.Close()
+	}
+
 	// --- Collect auxiliary buyer user IDs by their canonical deterministic email ---
 	// The buyer email is: buyer-testlab-{runId}@zamk.ru
 	// This is restart-safe: the email is durable in the DB.
@@ -225,6 +238,15 @@ func (r *Repository) CleanupRun(ctx context.Context, runID string) error {
 		return err
 	}
 
+	// Delete root brand rows created for this testlab seller
+	for _, bid := range brandIDs {
+		_, err = tx.Exec(ctx, "DELETE FROM brands WHERE id = $1", bid)
+		if err != nil {
+			return err
+		}
+	}
+	_, _ = tx.Exec(ctx, "DELETE FROM brands WHERE slug = $1", fmt.Sprintf("testlab-%s", runID))
+
 	// Delete seller-linked users (owner) using exact email match for safety
 	ownerEmail := strings.ToLower(fmt.Sprintf("owner-testlab-%s@zamk.ru", runID))
 	for _, uid := range sellerUserIDs {
@@ -314,5 +336,75 @@ func (r *Repository) CreateInboundSupply(ctx context.Context, sellerID, variantI
 	}
 
 	return tx.Commit(ctx)
+}
+
+// EnsureScenarioPrimaryBrand ensures that an isolated seller has an active primary brand.
+func (r *Repository) EnsureScenarioPrimaryBrand(ctx context.Context, sellerID uuid.UUID, runID string) (uuid.UUID, error) {
+	brandID := uuid.New()
+	brandName := fmt.Sprintf("TESTLAB %s", runID)
+	brandSlug := fmt.Sprintf("testlab-%s", runID)
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO brands (id, name, slug, is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, true, now(), now())
+	`, brandID, brandName, brandSlug)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("insert brand: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO seller_brands (id, seller_id, brand_id, is_primary, relationship_type, status, created_at, updated_at)
+		VALUES ($1, $2, $3, true, 'owner', 'active', now(), now())
+	`, uuid.New(), sellerID, brandID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("insert seller_brand: %w", err)
+	}
+
+	return brandID, tx.Commit(ctx)
+}
+
+// ResolveScenarioCategoryAndColor resolves the canonical leaf category (bags) and default active color (BLACK).
+func (r *Repository) ResolveScenarioCategoryAndColor(ctx context.Context) (uuid.UUID, uuid.UUID, error) {
+	var catID uuid.UUID
+	err := r.db.QueryRow(ctx, "SELECT id FROM categories WHERE slug = 'bags' AND is_active = true").Scan(&catID)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("resolve canonical bags category: %w", err)
+	}
+
+	var colorID uuid.UUID
+	err = r.db.QueryRow(ctx, "SELECT id FROM colors WHERE code = 'BLACK' AND is_active = true LIMIT 1").Scan(&colorID)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("resolve canonical color: %w", err)
+	}
+
+	return catID, colorID, nil
+}
+
+// CreateProductMediaFixture inserts a minimal valid main product image with renditions and crop coordinates to satisfy moderation.
+func (r *Repository) CreateProductMediaFixture(ctx context.Context, productID uuid.UUID) error {
+	imageID := uuid.New()
+	origURL := "https://cdn.zamk.test/testlab/orig.jpg"
+	rendURL := "https://cdn.zamk.test/testlab/rend.jpg"
+	objKey := "testlab/orig.jpg"
+	rendKey := "testlab/rend.jpg"
+
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO product_images (
+			id, product_id, image_url, object_key, sort_order,
+			width, height, crop_x, crop_y, crop_width, crop_height,
+			rendition_url, rendition_object_key, is_main, created_at
+		) VALUES (
+			$1, $2, $3, $4, 0,
+			800, 1000, 0.0, 0.0, 0.8, 1.0,
+			$5, $6, true, now()
+		)`,
+		imageID, productID, origURL, objKey, rendURL, rendKey)
+	return err
 }
 

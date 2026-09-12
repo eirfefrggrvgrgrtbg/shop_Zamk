@@ -51,6 +51,11 @@ func (e *ScenarioEngine) Run(ctx context.Context, adminUserID uuid.UUID, cfg Sce
 		return nil, fmt.Errorf("failed to create isolated seller: %w", err)
 	}
 
+	brandID, err := e.deps.TestRepo.EnsureScenarioPrimaryBrand(ctx, sellerID, runID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ensure scenario primary brand: %w", err)
+	}
+
 	now := time.Now().UTC()
 	var tz string
 	if cfg.Timezone != "" {
@@ -77,6 +82,7 @@ func (e *ScenarioEngine) Run(ctx context.Context, adminUserID uuid.UUID, cfg Sce
 	run := &ScenarioRun{
 		RunID:    runID,
 		SellerID: sellerID,
+		BrandID:  &brandID,
 		Period:   period,
 	}
 
@@ -175,12 +181,21 @@ func (e *ScenarioEngine) Run(ctx context.Context, adminUserID uuid.UUID, cfg Sce
 		)
 
 	case PresetZeroCurrentPeriod:
-		// 1. Create a product with 0 stock (we don't need stock for historical orders if we just simulate it, but we can use 2)
+		// 1. Create a product with stock 2 so that cart checkout can reserve 2 items
 		product, err := e.createCanonicalProduct(ctx, adminUserID, ownerUserID, runID, 250000)
 		if err != nil {
 			return nil, err
 		}
 		variantID := product.Variants[0].ID
+
+		// Receive stock for the historical orders
+		_, err = e.deps.InvSvc.ReceiveStock(ctx, adminUserID, inventory.ReceiptRequest{
+			ProductVariantID: variantID,
+			Quantity:         2,
+		})
+		if err != nil {
+			return nil, err
+		}
 
 		// 2. Create isolated buyer
 		buyerUserID, err := e.createCanonicalBuyer(ctx, runID)
@@ -257,6 +272,15 @@ func (e *ScenarioEngine) Run(ctx context.Context, adminUserID uuid.UUID, cfg Sce
 			return nil, err
 		}
 		variantID := product.Variants[0].ID
+
+		// Receive 20 stock to reach onHand=20
+		_, err = e.deps.InvSvc.ReceiveStock(ctx, adminUserID, inventory.ReceiptRequest{
+			ProductVariantID: variantID,
+			Quantity:         20,
+		})
+		if err != nil {
+			return nil, err
+		}
 
 		// Buyer
 		buyerUserID, err := e.createCanonicalBuyer(ctx, runID)
@@ -372,40 +396,53 @@ func (e *ScenarioEngine) createCanonicalBuyer(ctx context.Context, runID string)
 }
 
 func (e *ScenarioEngine) createCanonicalProduct(ctx context.Context, adminUserID, ownerUserID uuid.UUID, runID string, priceCents int64) (products.Product, error) {
+	catID, colorID, err := e.deps.TestRepo.ResolveScenarioCategoryAndColor(ctx)
+	if err != nil {
+		return products.Product{}, fmt.Errorf("resolve category and color: %w", err)
+	}
+
 	sku := uuid.New().String()[:8]
-	size := "M"
+	size := "ONE SIZE"
 
 	req := products.CreateProductRequest{
 		Title:      fmt.Sprintf("TestLab Canonical Product %s", runID),
+		CategoryID: &catID,
 		PriceCents: priceCents,
 		Currency:   "RUB",
 		Variants: []products.ProductVariantRequest{
 			{
 				SKU:        &sku,
+				SellerSKU:  &sku,
 				Size:       &size,
 				PriceCents: &priceCents,
+				ColorID:    &colorID,
 			},
 		},
 	}
 
 	product, err := e.deps.ProductSvc.CreateProductForSeller(ctx, ownerUserID, req)
 	if err != nil {
-		return product, err
+		return product, fmt.Errorf("create product for seller: %w", err)
+	}
+
+	// Create required product media fixture
+	err = e.deps.TestRepo.CreateProductMediaFixture(ctx, product.ID)
+	if err != nil {
+		return product, fmt.Errorf("create product media fixture: %w", err)
 	}
 
 	// 1. Submit for moderation (draft -> pending_moderation)
 	err = e.deps.ProductSvc.SubmitProductToModeration(ctx, ownerUserID, product.ID, products.SubmitProductModerationRequest{})
 	if err != nil {
-		return product, err
+		return product, fmt.Errorf("submit product moderation: %w", err)
 	}
 
-	// 2. Approve the product (pending_moderation -> approved)
+	// 2. Approve the product (pending_moderation -> published)
 	err = e.deps.ProductSvc.ApproveProduct(ctx, adminUserID, product.ID, nil)
 	if err != nil {
-		return product, err
+		return product, fmt.Errorf("approve product: %w", err)
 	}
-	
-	// 3. Publish the product (approved -> published/active)
-	err = e.deps.ProductSvc.PublishProduct(ctx, adminUserID, product.ID, nil)
-	return product, err
+
+	product.Status = products.StatusPublished
+	return product, nil
 }
