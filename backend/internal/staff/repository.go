@@ -253,3 +253,45 @@ func (r *Repository) EnsureOwnerForSeed(ctx context.Context, userID uuid.UUID) e
 	}
 	return nil
 }
+
+
+// HasMemberPermission checks if a staff member has a specific permission directly assigned.
+func (r *Repository) HasMemberPermission(ctx context.Context, userID uuid.UUID, permission string) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM staff_member_permissions
+			WHERE user_id = $1 AND permission = $2
+		)`
+	var exists bool
+	err := r.db.QueryRow(ctx, query, userID, permission).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check member permission: %w", err)
+	}
+	return exists, nil
+}
+
+// GetMemberPermissions retrieves all directly assigned permissions for a staff member.
+func (r *Repository) GetMemberPermissions(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	query := `
+		SELECT permission FROM staff_member_permissions
+		WHERE user_id = $1
+	`
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query member permissions: %w", err)
+	}
+	defer rows.Close()
+
+	var perms []string
+	for rows.Next() {
+		var perm string
+		if err := rows.Scan(&perm); err != nil {
+			return nil, fmt.Errorf("failed to scan member permission: %w", err)
+		}
+		perms = append(perms, perm)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("member permissions rows error: %w", err)
+	}
+	return perms, nil
+}
