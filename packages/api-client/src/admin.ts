@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, ReturnShipment, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, AdminInventoryUnitTraceability, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse, AdminReturnReceivingState, ScanReturnUnitResponse, UpdateSerializedUnitInspectionInput, UpdateLegacyItemInspectionInput } from './types';
+import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, ReturnShipment, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, AdminInventoryUnitTraceability, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, StaffMemberPermissionsResponse, UpdateStaffMemberPermissionsRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse, AdminReturnReceivingState, ScanReturnUnitResponse, UpdateSerializedUnitInspectionInput, UpdateLegacyItemInspectionInput } from './types';
 
 export const getAdminSellers = async (params?: {
   search?: string;
@@ -644,6 +644,12 @@ export const updateStaffStatus = async (userId: string, data: UpdateStaffStatusR
 
 export const resetStaffPassword = async (userId: string, data: ResetStaffPasswordRequest): Promise<void> =>
   request<void>('POST', `/admin/staff/members/${userId}/reset-password`, { body: data });
+
+export const getStaffMemberPermissions = async (userId: string): Promise<StaffMemberPermissionsResponse> =>
+  request<StaffMemberPermissionsResponse>('GET', `/admin/staff/members/${userId}/permissions`);
+
+export const updateStaffMemberPermissions = async (userId: string, data: UpdateStaffMemberPermissionsRequest): Promise<StaffMemberPermissionsResponse> =>
+  request<StaffMemberPermissionsResponse>('PUT', `/admin/staff/members/${userId}/permissions`, { body: data });
 
 export const listAuditLogs = async (params?: { limit?: number; offset?: number; q?: string; action?: string; entityType?: string; actorUserId?: string; entityId?: string; dateFrom?: string; dateTo?: string }): Promise<{ items: any[]; totalCount: number }> => {
   const query = new URLSearchParams();

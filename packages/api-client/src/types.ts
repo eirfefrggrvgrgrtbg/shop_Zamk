@@ -1637,6 +1637,15 @@ export interface ResetStaffPasswordRequest {
   temporaryPassword: string;
 }
 
+export interface StaffMemberPermissionsResponse {
+  userId: string;
+  permissions: string[];
+}
+
+export interface UpdateStaffMemberPermissionsRequest {
+  permissions: string[];
+}
+
 export interface AdminReview {
   id: string;
   productId: string;
