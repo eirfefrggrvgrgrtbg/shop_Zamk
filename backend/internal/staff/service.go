@@ -20,6 +20,8 @@ var (
 	ErrCannotRemoveLastOwner = errors.New("cannot remove or demote the last active owner")
 	ErrCannotDemoteOwner     = errors.New("only an owner can change the owner role")
 	ErrCannotPromoteToOwner  = errors.New("only an owner can assign the owner role")
+	ErrCannotRemoveLastPermissionManager = errors.New("cannot remove the last active permission manager")
+	ErrPermissionManagementForbidden     = errors.New("actor is not allowed to manage staff permissions")
 	ErrTargetNotStaff        = errors.New("target user is not a staff member")
 )
 
@@ -173,7 +175,7 @@ func (s *Service) CreateStaffMember(ctx context.Context, input CreateStaffMember
 		UpdatedAt:          now,
 	}
 
-	if err := s.runCreateStaffTx(ctx, userRecord, role.ID, createdByPtr); err != nil {
+	if err := s.runCreateStaffTx(ctx, userRecord, role, createdByPtr); err != nil {
 		return nil, err
 	}
 
@@ -185,21 +187,68 @@ func (s *Service) CreateStaffMember(ctx context.Context, input CreateStaffMember
 }
 
 // runCreateStaffTx runs user + staff_member creation and preset permission initialization in a single transaction.
-func (s *Service) runCreateStaffTx(ctx context.Context, user *users.User, roleID uuid.UUID, createdBy *uuid.UUID) error {
+func (s *Service) runCreateStaffTx(ctx context.Context, user *users.User, role *StaffRole, createdBy *uuid.UUID) error {
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	txRepo := s.repo.WithTx(tx)
+
+	// Check if the selected preset contains staff.permissions.manage
+	roleHasManage, err := txRepo.HasRolePermission(ctx, role.ID, PermissionStaffPermissionsManage)
+	if err != nil {
+		return fmt.Errorf("check role permissions: %w", err)
+	}
+
+	isOwnerCreation := role.Code == "owner"
+
+	if roleHasManage || isOwnerCreation {
+		// Serialize under shared lock domain
+		if err := txRepo.LockOwnerRole(ctx); err != nil {
+			return err
+		}
+
+		// When creating an employee whose preset grants staff.permissions.manage or owner role,
+		// creator MUST NOT be nil (fail closed)
+		if createdBy == nil {
+			return ErrPermissionManagementForbidden
+		}
+
+		actorMember, actorRole, err := txRepo.GetStaffMemberByUserID(ctx, *createdBy)
+		if err != nil {
+			if errors.Is(err, ErrStaffMemberNotFound) {
+				return ErrPermissionManagementForbidden
+			}
+			return err
+		}
+		if actorMember.Status != string(StatusActive) {
+			return ErrPermissionManagementForbidden
+		}
+		actorHasManage, err := txRepo.HasMemberPermission(ctx, *createdBy, PermissionStaffPermissionsManage)
+		if err != nil {
+			return err
+		}
+		if !actorHasManage {
+			return ErrPermissionManagementForbidden
+		}
+
+		// If target role is owner, creator must also be an active owner
+		if isOwnerCreation {
+			if actorRole == nil || actorRole.Code != "owner" {
+				return ErrCannotPromoteToOwner
+			}
+		}
+	}
+
 	if err := s.userRepo.WithTx(tx).CreateUser(ctx, user); err != nil {
 		return fmt.Errorf("create user: %w", err)
 	}
-	txRepo := s.repo.WithTx(tx)
-	if err := txRepo.InsertStaffMember(ctx, user.ID, roleID, createdBy); err != nil {
+	if err := txRepo.InsertStaffMember(ctx, user.ID, role.ID, createdBy); err != nil {
 		return fmt.Errorf("create staff member: %w", err)
 	}
-	if err := txRepo.CopyRolePermissionsToMember(ctx, user.ID, roleID); err != nil {
+	if err := txRepo.CopyRolePermissionsToMember(ctx, user.ID, role.ID); err != nil {
 		return fmt.Errorf("copy role permissions: %w", err)
 	}
 	return tx.Commit(ctx)
@@ -274,6 +323,18 @@ func (s *Service) UpdateStaffRole(ctx context.Context, input UpdateStaffRoleInpu
 		return ErrCannotPromoteToOwner
 	}
 
+	if actorMember == nil || actorMember.Status != string(StatusActive) {
+		return ErrPermissionManagementForbidden
+	}
+
+	actorHasManage, err := txRepo.HasMemberPermission(ctx, input.ActorUserID, PermissionStaffPermissionsManage)
+	if err != nil {
+		return err
+	}
+	if !actorHasManage {
+		return ErrPermissionManagementForbidden
+	}
+
 	// Invariant: cannot remove the last active owner via role change
 	if targetRole.Code == "owner" && targetMember.Status == string(StatusActive) && input.NewRoleCode != "owner" {
 		count, err := txRepo.CountActiveOwners(ctx)
@@ -284,6 +345,30 @@ func (s *Service) UpdateStaffRole(ctx context.Context, input UpdateStaffRoleInpu
 			return ErrCannotRemoveLastOwner
 		}
 	}
+
+	// Invariant: cannot remove the last active permission manager via role change
+	if targetMember.Status == string(StatusActive) {
+		hasPerm, err := txRepo.HasMemberPermission(ctx, input.TargetUserID, PermissionStaffPermissionsManage)
+		if err != nil {
+			return err
+		}
+		if hasPerm {
+			newRoleHasPerm, err := txRepo.HasRolePermission(ctx, newRole.ID, PermissionStaffPermissionsManage)
+			if err != nil {
+				return err
+			}
+			if !newRoleHasPerm {
+				count, err := txRepo.CountActivePermissionManagers(ctx)
+				if err != nil {
+					return err
+				}
+				if count <= 1 {
+					return ErrCannotRemoveLastPermissionManager
+				}
+			}
+		}
+	}
+
 
 	if err := txRepo.UpdateStaffRole(ctx, input.TargetUserID, newRole.ID); err != nil {
 		return fmt.Errorf("update staff role: %w", err)
@@ -361,6 +446,24 @@ func (s *Service) UpdateStaffStatus(ctx context.Context, input UpdateStaffStatus
 			return ErrCannotBlockLastOwner
 		}
 	}
+
+	// Invariant: cannot remove the last active permission manager via status change
+	if isBlocking && targetMember.Status == string(StatusActive) {
+		hasPerm, err := txRepo.HasMemberPermission(ctx, input.TargetUserID, PermissionStaffPermissionsManage)
+		if err != nil {
+			return err
+		}
+		if hasPerm {
+			count, err := txRepo.CountActivePermissionManagers(ctx)
+			if err != nil {
+				return err
+			}
+			if count <= 1 {
+				return ErrCannotRemoveLastPermissionManager
+			}
+		}
+	}
+
 
 	// Update staff_members status inside transaction
 	if err := txRepo.UpdateStaffStatus(ctx, input.TargetUserID, input.NewStatus); err != nil {

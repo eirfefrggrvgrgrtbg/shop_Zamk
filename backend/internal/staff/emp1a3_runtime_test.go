@@ -40,6 +40,8 @@ func setupEMP1A3TestHarness(t *testing.T) (context.Context, *postgres.Client, *s
 	`, ownerID, fmt.Sprintf("owner_%s@test.com", ownerID.String()[:8]))
 	require.NoError(t, err)
 	t.Cleanup(func() {
+		_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_member_permissions WHERE user_id = $1`, ownerID)
+		_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM staff_members WHERE user_id = $1`, ownerID)
 		_, _ = pgClient.Pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, ownerID)
 	})
 
@@ -47,6 +49,13 @@ func setupEMP1A3TestHarness(t *testing.T) (context.Context, *postgres.Client, *s
 		INSERT INTO staff_members (user_id, staff_role_id, status, created_at, updated_at)
 		VALUES ($1, $2, 'active', NOW(), NOW())
 	`, ownerID, ownerRoleID)
+	require.NoError(t, err)
+
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO staff_member_permissions (user_id, permission, created_at)
+		VALUES ($1, 'staff.permissions.manage', NOW())
+		ON CONFLICT DO NOTHING
+	`, ownerID)
 	require.NoError(t, err)
 
 	return ctx, pgClient, svc, staffRepo, userRepo, ownerID

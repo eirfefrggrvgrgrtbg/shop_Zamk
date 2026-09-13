@@ -173,6 +173,10 @@ func (h *Handler) CreateStaffMember(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusConflict, "duplicate_email", "Email already in use")
 		case errors.Is(err, ErrRoleNotFound):
 			h.writeError(w, http.StatusBadRequest, "role_not_found", "Unknown role code")
+		case errors.Is(err, ErrPermissionManagementForbidden):
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
+		case errors.Is(err, ErrCannotPromoteToOwner):
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
 		default:
 			h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create staff member")
 		}
@@ -232,10 +236,14 @@ func (h *Handler) UpdateStaffRole(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, ErrTargetNotStaff):
 			h.writeError(w, http.StatusNotFound, "not_found", "Staff member not found")
+		case errors.Is(err, ErrPermissionManagementForbidden):
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
 		case errors.Is(err, ErrCannotDemoteOwner):
 			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
 		case errors.Is(err, ErrCannotRemoveLastOwner), errors.Is(err, ErrCannotBlockLastOwner):
 			h.writeError(w, http.StatusConflict, "last_owner", err.Error())
+		case errors.Is(err, ErrCannotRemoveLastPermissionManager):
+			h.writeError(w, http.StatusConflict, "last_permission_manager", err.Error())
 		case errors.Is(err, ErrCannotPromoteToOwner):
 			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
 		case errors.Is(err, ErrRoleNotFound):
@@ -295,6 +303,8 @@ func (h *Handler) UpdateStaffStatus(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Staff member not found")
 		case errors.Is(err, ErrCannotBlockLastOwner), errors.Is(err, ErrCannotRemoveLastOwner):
 			h.writeError(w, http.StatusConflict, "last_owner", err.Error())
+		case errors.Is(err, ErrCannotRemoveLastPermissionManager):
+			h.writeError(w, http.StatusConflict, "last_permission_manager", err.Error())
 		case errors.Is(err, ErrCannotDemoteOwner):
 			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
 		default:

@@ -245,6 +245,36 @@ func (r *Repository) CountActiveOwners(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// CountActivePermissionManagers counts active staff members that have the direct 'staff.permissions.manage' permission.
+func (r *Repository) CountActivePermissionManagers(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM staff_members sm
+		JOIN staff_member_permissions smp ON smp.user_id = sm.user_id
+		WHERE sm.status = 'active' AND smp.permission = $1
+	`, PermissionStaffPermissionsManage).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count active permission managers: %w", err)
+	}
+	return count, nil
+}
+
+// HasRolePermission checks if a role template includes a specific permission.
+func (r *Repository) HasRolePermission(ctx context.Context, roleID uuid.UUID, permission string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM staff_role_permissions
+			WHERE role_id = $1 AND permission = $2
+		)`, roleID, permission).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check role permission: %w", err)
+	}
+	return exists, nil
+}
+
+
 // EnsureOwnerForSeed upserts the given user as owner — used only by dev-seed.
 func (r *Repository) EnsureOwnerForSeed(ctx context.Context, userID uuid.UUID) error {
 	query := `

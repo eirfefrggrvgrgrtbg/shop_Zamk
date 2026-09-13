@@ -42,18 +42,37 @@ func setupOwnerLockoutHarness(t *testing.T) (context.Context, *postgres.Client, 
 
 func createTestOwner(t *testing.T, ctx context.Context, client *postgres.Client, svc *staff.Service, ownerRoleID uuid.UUID) uuid.UUID {
 	t.Helper()
-	email := fmt.Sprintf("owner_%s@test.com", uuid.New().String()[:8])
-	res, err := svc.CreateStaffMember(ctx, staff.CreateStaffMemberInput{
-		Name:              "Owner Member",
-		Email:             email,
-		RoleCode:          "owner",
-		TemporaryPassword: "temporaryPassword123!",
-	})
-	require.NoError(t, err)
+	userID := uuid.New()
+	email := fmt.Sprintf("owner_%s@test.com", userID.String()[:8])
+	now := time.Now().UTC()
+
 	t.Cleanup(func() {
-		_, _ = client.Pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, res.UserID)
+		_, _ = client.Pool.Exec(context.Background(), `DELETE FROM staff_member_permissions WHERE user_id = $1`, userID)
+		_, _ = client.Pool.Exec(context.Background(), `DELETE FROM staff_members WHERE user_id = $1`, userID)
+		_, _ = client.Pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID)
 	})
-	return res.UserID
+
+	_, err := client.Pool.Exec(ctx, `
+		INSERT INTO users (id, name, email, password_hash, role, status, must_change_password, created_at, updated_at)
+		VALUES ($1, 'Owner Member', $2, 'dummy_hash', 'admin', 'active', false, $3, $3)
+	`, userID, email, now)
+	require.NoError(t, err)
+
+	_, err = client.Pool.Exec(ctx, `
+		INSERT INTO staff_members (user_id, staff_role_id, status, created_at, updated_at)
+		VALUES ($1, $2, 'active', $3, $3)
+	`, userID, ownerRoleID, now)
+	require.NoError(t, err)
+
+	_, err = client.Pool.Exec(ctx, `
+		INSERT INTO staff_member_permissions (user_id, permission, created_at)
+		SELECT $1, permission, $2
+		FROM staff_role_permissions
+		WHERE role_id = $3
+	`, userID, now, ownerRoleID)
+	require.NoError(t, err)
+
+	return userID
 }
 
 func createTestNonOwner(t *testing.T, ctx context.Context, client *postgres.Client, svc *staff.Service, roleCode string) uuid.UUID {
@@ -67,6 +86,8 @@ func createTestNonOwner(t *testing.T, ctx context.Context, client *postgres.Clie
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() {
+		_, _ = client.Pool.Exec(context.Background(), `DELETE FROM staff_member_permissions WHERE user_id = $1`, res.UserID)
+		_, _ = client.Pool.Exec(context.Background(), `DELETE FROM staff_members WHERE user_id = $1`, res.UserID)
 		_, _ = client.Pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, res.UserID)
 	})
 	return res.UserID
