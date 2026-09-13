@@ -370,3 +370,33 @@ func (r *Repository) ReplaceMemberPermissionsFromRole(ctx context.Context, userI
 	}
 	return r.CopyRolePermissionsToMember(ctx, userID, roleID)
 }
+
+// ReplaceMemberPermissions deletes existing member permissions and inserts the provided permissions list.
+func (r *Repository) ReplaceMemberPermissions(ctx context.Context, userID uuid.UUID, permissions []string) error {
+	if err := r.DeleteMemberPermissions(ctx, userID); err != nil {
+		return err
+	}
+	if len(permissions) == 0 {
+		return nil
+	}
+
+	// Deduplicate preserving order
+	seen := make(map[string]struct{}, len(permissions))
+	var uniquePerms []string
+	for _, p := range permissions {
+		if _, ok := seen[p]; !ok {
+			seen[p] = struct{}{}
+			uniquePerms = append(uniquePerms, p)
+		}
+	}
+
+	query := `
+		INSERT INTO staff_member_permissions (user_id, permission, created_at)
+		SELECT $1, unnest($2::text[]), now()
+		ON CONFLICT (user_id, permission) DO NOTHING
+	`
+	if _, err := r.db.Exec(ctx, query, userID, uniquePerms); err != nil {
+		return fmt.Errorf("replace member permissions: %w", err)
+	}
+	return nil
+}

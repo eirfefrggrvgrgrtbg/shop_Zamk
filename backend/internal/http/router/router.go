@@ -456,6 +456,8 @@ func New(
 		r.With(perm("staff.update")).Patch("/staff/members/{userId}/role", staffHandler.UpdateStaffRole)
 		r.With(perm("staff.block")).Patch("/staff/members/{userId}/status", staffHandler.UpdateStaffStatus)
 		r.With(perm("staff.update")).Post("/staff/members/{userId}/reset-password", staffHandler.ResetStaffPassword)
+		r.With(perm("staff.permissions.manage")).Get("/staff/members/{userId}/permissions", staffHandler.GetStaffMemberPermissions)
+		r.With(perm("staff.permissions.manage")).Put("/staff/members/{userId}/permissions", staffHandler.UpdateStaffMemberPermissions)
 
 		r.Route("/receiving", func(r chi.Router) {
 			r.Use(perm("inventory.receipt"))

@@ -373,6 +373,105 @@ func (h *Handler) ResetStaffPassword(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
+// GetStaffMemberPermissions returns the directly assigned permissions for a staff member.
+// GET /api/admin/staff/members/{userId}/permissions
+func (h *Handler) GetStaffMemberPermissions(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := userIDFromCtx(r)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+
+	targetID, err := uuid.Parse(chi.URLParam(r, "userId"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid userId")
+		return
+	}
+
+	perms, err := h.service.GetStaffMemberPermissions(r.Context(), targetID, actorID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrTargetNotStaff), errors.Is(err, ErrStaffMemberNotFound):
+			h.writeError(w, http.StatusNotFound, "not_found", "Staff member not found")
+		case errors.Is(err, ErrPermissionManagementForbidden):
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get staff permissions")
+		}
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]any{
+		"userId":      targetID,
+		"permissions": perms,
+	})
+}
+
+// UpdateStaffMemberPermissions replaces the directly assigned permissions for a staff member.
+// PUT /api/admin/staff/members/{userId}/permissions
+func (h *Handler) UpdateStaffMemberPermissions(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := userIDFromCtx(r)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+
+	targetID, err := uuid.Parse(chi.URLParam(r, "userId"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid userId")
+		return
+	}
+
+	var req struct {
+		Permissions *[]string `json:"permissions"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+	if req.Permissions == nil {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "permissions array is required")
+		return
+	}
+
+	updatedPerms, err := h.service.UpdateStaffMemberPermissions(r.Context(), UpdateStaffMemberPermissionsInput{
+		TargetUserID: targetID,
+		ActorUserID:  actorID,
+		Permissions:  *req.Permissions,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidPermission):
+			h.writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		case errors.Is(err, ErrTargetNotStaff), errors.Is(err, ErrStaffMemberNotFound):
+			h.writeError(w, http.StatusNotFound, "not_found", "Staff member not found")
+		case errors.Is(err, ErrPermissionManagementForbidden):
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
+		case errors.Is(err, ErrCannotRemoveLastPermissionManager):
+			h.writeError(w, http.StatusConflict, "last_permission_manager", err.Error())
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update staff permissions")
+		}
+		return
+	}
+
+	_ = h.auditRepo.RecordAudit(r.Context(), AuditEvent{
+		ActorUserID: actorID,
+		Action:      "staff.permissions_update",
+		EntityType:  "staff_member",
+		EntityID:    &targetID,
+		IP:          r.RemoteAddr,
+		Metadata: map[string]any{
+			"permissionsCount": len(updatedPerms),
+		},
+	})
+
+	h.writeJSON(w, http.StatusOK, map[string]any{
+		"userId":      targetID,
+		"permissions": updatedPerms,
+	})
+}
+
 func userIDFromCtx(r *http.Request) (uuid.UUID, bool) {
 	val := r.Context().Value("userID")
 	if val == nil {

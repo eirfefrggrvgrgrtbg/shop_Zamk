@@ -22,7 +22,8 @@ var (
 	ErrCannotPromoteToOwner  = errors.New("only an owner can assign the owner role")
 	ErrCannotRemoveLastPermissionManager = errors.New("cannot remove the last active permission manager")
 	ErrPermissionManagementForbidden     = errors.New("actor is not allowed to manage staff permissions")
-	ErrTargetNotStaff        = errors.New("target user is not a staff member")
+	ErrInvalidPermission                 = errors.New("invalid permission capability")
+	ErrTargetNotStaff                    = errors.New("target user is not a staff member")
 )
 
 type Service struct {
@@ -502,4 +503,153 @@ func (s *Service) ResetStaffPassword(ctx context.Context, input ResetStaffPasswo
 		return fmt.Errorf("hash password: %w", err)
 	}
 	return s.userRepo.UpdatePasswordAndMustChange(ctx, input.TargetUserID, string(hash), true)
+}
+
+// GetStaffMemberPermissions retrieves the directly assigned permissions for a staff member.
+// Caller must be an active staff member with direct staff.permissions.manage.
+func (s *Service) GetStaffMemberPermissions(ctx context.Context, targetUserID, actorUserID uuid.UUID) ([]string, error) {
+	// Revalidate actor
+	actorMember, _, err := s.repo.GetStaffMemberByUserID(ctx, actorUserID)
+	if err != nil {
+		if errors.Is(err, ErrStaffMemberNotFound) {
+			return nil, ErrPermissionManagementForbidden
+		}
+		return nil, err
+	}
+	if actorMember.Status != string(StatusActive) {
+		return nil, ErrPermissionManagementForbidden
+	}
+	actorHasManage, err := s.repo.HasMemberPermission(ctx, actorUserID, PermissionStaffPermissionsManage)
+	if err != nil {
+		return nil, err
+	}
+	if !actorHasManage {
+		return nil, ErrPermissionManagementForbidden
+	}
+
+	// Verify target exists as a staff member
+	_, _, err = s.repo.GetStaffMemberByUserID(ctx, targetUserID)
+	if err != nil {
+		if errors.Is(err, ErrStaffMemberNotFound) {
+			return nil, ErrTargetNotStaff
+		}
+		return nil, err
+	}
+
+	perms, err := s.repo.GetMemberPermissions(ctx, targetUserID)
+	if err != nil {
+		return nil, err
+	}
+	if perms == nil {
+		perms = []string{}
+	}
+	return perms, nil
+}
+
+// UpdateStaffMemberPermissionsInput holds parameters for updating a staff member's direct permissions.
+type UpdateStaffMemberPermissionsInput struct {
+	TargetUserID uuid.UUID
+	ActorUserID  uuid.UUID
+	Permissions  []string
+}
+
+// UpdateStaffMemberPermissions completely replaces the direct permissions of a staff member.
+// Evaluates authorization, capability validity, and the last active manager invariant under LockOwnerRole.
+func (s *Service) UpdateStaffMemberPermissions(ctx context.Context, input UpdateStaffMemberPermissionsInput) ([]string, error) {
+	// 1. Validate all permissions against known registry
+	for _, p := range input.Permissions {
+		if !IsKnownPermission(p) {
+			return nil, fmt.Errorf("%w: %s", ErrInvalidPermission, p)
+		}
+	}
+
+	// 2. Begin transaction
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := s.repo.WithTx(tx)
+
+	// 3. Acquire shared lock domain
+	if err := txRepo.LockOwnerRole(ctx); err != nil {
+		return nil, err
+	}
+
+	// 4. Revalidate actor under transaction lock
+	actorMember, _, err := txRepo.GetStaffMemberByUserID(ctx, input.ActorUserID)
+	if err != nil {
+		if errors.Is(err, ErrStaffMemberNotFound) {
+			return nil, ErrPermissionManagementForbidden
+		}
+		return nil, err
+	}
+	if actorMember.Status != string(StatusActive) {
+		return nil, ErrPermissionManagementForbidden
+	}
+	actorHasManage, err := txRepo.HasMemberPermission(ctx, input.ActorUserID, PermissionStaffPermissionsManage)
+	if err != nil {
+		return nil, err
+	}
+	if !actorHasManage {
+		return nil, ErrPermissionManagementForbidden
+	}
+
+	// 5. Verify target exists as staff member
+	targetMember, _, err := txRepo.GetStaffMemberByUserID(ctx, input.TargetUserID)
+	if err != nil {
+		if errors.Is(err, ErrStaffMemberNotFound) {
+			return nil, ErrTargetNotStaff
+		}
+		return nil, err
+	}
+
+	// 6. Last active permission manager invariant check:
+	// If target is active and currently has staff.permissions.manage,
+	// and the new permissions list omits staff.permissions.manage,
+	// ensure at least one other active permission manager survives.
+	if targetMember.Status == string(StatusActive) {
+		targetHasManageBefore, err := txRepo.HasMemberPermission(ctx, input.TargetUserID, PermissionStaffPermissionsManage)
+		if err != nil {
+			return nil, err
+		}
+		if targetHasManageBefore {
+			newHasManage := false
+			for _, p := range input.Permissions {
+				if p == PermissionStaffPermissionsManage {
+					newHasManage = true
+					break
+				}
+			}
+			if !newHasManage {
+				count, err := txRepo.CountActivePermissionManagers(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if count <= 1 {
+					return nil, ErrCannotRemoveLastPermissionManager
+				}
+			}
+		}
+	}
+
+	// 7. Replace direct permissions in DB (does not touch staff_role_id or preset)
+	if err := txRepo.ReplaceMemberPermissions(ctx, input.TargetUserID, input.Permissions); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+
+	// Return canonical sorted permissions
+	perms, err := s.repo.GetMemberPermissions(ctx, input.TargetUserID)
+	if err != nil {
+		return nil, err
+	}
+	if perms == nil {
+		perms = []string{}
+	}
+	return perms, nil
 }
