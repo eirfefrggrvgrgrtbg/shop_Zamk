@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
   listStaffMembers,
   listStaffRoles,
@@ -310,7 +311,14 @@ export function AdminStaff() {
                 return (
                   <tr key={m.userId}>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{m.name}</div>
+                      <div>
+                        <Link
+                          to={`/staff/${m.userId}`}
+                          className="text-sm font-medium text-indigo-600 hover:text-indigo-900 hover:underline"
+                        >
+                          {m.name}
+                        </Link>
+                      </div>
                       <div className="text-xs text-gray-500">{m.email}</div>
                       {m.mustChangePassword && (
                         <span className="inline-block mt-1 text-xs text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">смена пароля</span>

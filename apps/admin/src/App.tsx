@@ -44,6 +44,7 @@ import { AdminCatalog } from './pages/AdminCatalog';
 import { AdminChangePassword } from './pages/AdminChangePassword';
 import { AdminRoles } from './pages/AdminRoles';
 import { AdminStaff } from './pages/AdminStaff';
+import { AdminStaffDetail } from './pages/AdminStaffDetail';
 import { AdminAuthProvider } from './contexts/AdminAuthContext';
 import { AdminProtectedRoute } from './components/AdminProtectedRoute';
 
@@ -107,6 +108,8 @@ export default function App() {
             <Route path="/reports" element={<AdminProtectedRoute permission="reports.read"><AdminReports /></AdminProtectedRoute>} />
             <Route path="/roles" element={<AdminProtectedRoute permission="roles.read"><AdminRoles /></AdminProtectedRoute>} />
             <Route path="/staff" element={<AdminProtectedRoute permission="staff.read"><AdminStaff /></AdminProtectedRoute>} />
+            <Route path="/staff/:userId" element={<AdminProtectedRoute permission="staff.read"><AdminStaffDetail /></AdminProtectedRoute>} />
+            <Route path="/admin/staff/:userId" element={<AdminProtectedRoute permission="staff.read"><AdminStaffDetail /></AdminProtectedRoute>} />
             <Route path="/settings" element={<AdminSettings />} />
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

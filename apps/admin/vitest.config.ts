@@ -22,6 +22,7 @@ export default defineConfig({
       'src/pages/AdminInventoryReconciliation.test.tsx',
       'src/pages/AdminPickingDetail.test.tsx',
       'src/pages/AdminReceivingScanner.test.tsx',
+      'src/pages/AdminStaffDetail.test.tsx',
       'src/config/**/*.test.{ts,tsx}',
     ],
   },
