@@ -6,6 +6,7 @@ import {
   listStaffRoles,
   getStaffMemberPermissions,
   updateStaffMemberPermissions,
+  updateStaffRole,
   updateStaffStatus,
   resetStaffPassword,
 } from '@zamk/api-client/src/admin';
@@ -142,6 +143,29 @@ function humanizeAccountError(err: any): string {
   return 'Не удалось выполнить действие. Попробуйте ещё раз.';
 }
 
+function humanizeTemplateError(err: any): string {
+  if (!err) return 'Не удалось применить шаблон доступа. Попробуйте ещё раз.';
+  const status = err.status || err.statusCode;
+  const code = err.code || err.error?.code || err.data?.error?.code;
+
+  if (code === 'last_owner') {
+    return 'Невозможно изменить шаблон: это последний владелец платформы.';
+  }
+  if (code === 'last_permission_manager') {
+    return 'Невозможно изменить шаблон: это последний сотрудник с правом управления доступом.';
+  }
+  if (status === 403 || code === 'forbidden') {
+    return 'У вас нет права изменять шаблон доступа сотрудника.';
+  }
+  if (status === 404 || code === 'not_found') {
+    return 'Сотрудник не найден.';
+  }
+  if (err.message && typeof err.message === 'string' && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
+    return err.message;
+  }
+  return 'Не удалось применить шаблон доступа. Попробуйте ещё раз.';
+}
+
 const isScreenVisibleWithPerms = isScreenVisibleWithPermissions;
 
 export function AdminStaffDetail() {
@@ -155,12 +179,18 @@ export function AdminStaffDetail() {
   const [errorType, setErrorType] = useState<'none' | 'not_found' | 'forbidden' | 'generic'>('none');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const { user: currentActor, reloadStaff, hasPermission } = useAdminAuth();
+  const { user: currentActor, reloadStaff, hasPermission, isOwner } = useAdminAuth();
   const currentActorId = currentActor?.id || '';
 
   const canBlock = Boolean(hasPermission?.('staff.block'));
   const canResetPassword = Boolean(hasPermission?.('staff.update'));
   const canEditProfile = Boolean(hasPermission?.('staff.update'));
+
+  // Template Application Modal states (EMP.1D3A)
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [selectedTemplateCode, setSelectedTemplateCode] = useState('');
+  const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
+  const [templateModalError, setTemplateModalError] = useState<string | null>(null);
 
   // Profile Tab Editing states (EMP.1D2C)
   const [isProfileEditing, setIsProfileEditing] = useState(false);
@@ -306,6 +336,10 @@ export function AdminStaffDetail() {
     );
   }, [assignedRole]);
 
+  const canApplyTemplate =
+    Boolean(hasPermission?.('staff.update')) &&
+    (member?.roleCode === 'owner' || assignedRole?.code === 'owner' ? Boolean(isOwner?.()) : true);
+
   // Template diff based on current draft
   const templateDiff = useMemo(() => {
     const rolePerms = assignedRole?.permissions || [];
@@ -316,6 +350,28 @@ export function AdminStaffDetail() {
   const draftChanges = useMemo(() => {
     return getDraftChanges(originalPermissions, draftPermissions);
   }, [originalPermissions, draftPermissions]);
+
+  // Template role selected in modal (EMP.1D3A)
+  const selectedTemplateRole = useMemo(() => {
+    if (!selectedTemplateCode) return null;
+    return roles.find((r) => r.code === selectedTemplateCode) || null;
+  }, [selectedTemplateCode, roles]);
+
+  // Diff between employee's current direct permissions and the selected template preset
+  const templateApplicationDiff = useMemo(() => {
+    if (!selectedTemplateRole) return { addedCount: 0, removedCount: 0 };
+    const currentSet = new Set(originalPermissions || []);
+    const targetSet = new Set(selectedTemplateRole.permissions || []);
+    let addedCount = 0;
+    for (const p of targetSet) {
+      if (!currentSet.has(p)) addedCount++;
+    }
+    let removedCount = 0;
+    for (const p of currentSet) {
+      if (!targetSet.has(p)) removedCount++;
+    }
+    return { addedCount, removedCount };
+  }, [selectedTemplateRole, originalPermissions]);
 
   // Selected access section
   const selectedSection = useMemo(() => {
@@ -586,6 +642,50 @@ export function AdminStaffDetail() {
     });
   };
 
+  // ---- Access Template Handlers (EMP.1D3A) ----
+
+  const handleOpenTemplateModal = () => {
+    if (draftChanges.isDirty) return;
+    setSelectedTemplateCode('');
+    setTemplateModalError(null);
+    setIsTemplateModalOpen(true);
+  };
+
+  const handleCloseTemplateModal = () => {
+    if (isApplyingTemplate) return;
+    setIsTemplateModalOpen(false);
+    setSelectedTemplateCode('');
+    setTemplateModalError(null);
+  };
+
+  const handleApplyTemplate = async () => {
+    if (!selectedTemplateCode || !userId) return;
+    setIsApplyingTemplate(true);
+    setTemplateModalError(null);
+    try {
+      await updateStaffRole(userId, { roleCode: selectedTemplateCode });
+      const [updatedMember, updatedPerms] = await Promise.all([
+        getStaffMember(userId),
+        getStaffMemberPermissions(userId),
+      ]);
+      if (updatedMember) {
+        setMember(updatedMember);
+      }
+      const perms = updatedPerms.permissions || [];
+      setOriginalPermissions(perms);
+      setDraftPermissions(perms);
+      setIsTemplateModalOpen(false);
+      setSelectedTemplateCode('');
+      setSaveSuccessMessage('Шаблон доступа применён.');
+      setTimeout(() => {
+        setSaveSuccessMessage((prev) => (prev === 'Шаблон доступа применён.' ? null : prev));
+      }, 4000);
+    } catch (err: any) {
+      setTemplateModalError(humanizeTemplateError(err));
+    } finally {
+      setIsApplyingTemplate(false);
+    }
+  };
 
   // ---- Account Management Handlers (EMP.1D1) ----
 
@@ -867,7 +967,7 @@ export function AdminStaffDetail() {
                   : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
               }`}
             >
-              {templateDiff.matches ? 'По шаблону' : 'Индивидуально настроено'}
+              {templateDiff.matches ? 'По шаблону' : 'Настроено вручную'}
             </span>
           )}
         </div>
@@ -1256,13 +1356,39 @@ export function AdminStaffDetail() {
                         : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                     }`}
                   >
-                    {templateDiff.matches ? 'По шаблону' : 'Индивидуально настроено'}
+                    {templateDiff.matches ? 'По шаблону' : 'Настроено вручную'}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              {canApplyTemplate && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    data-testid="apply-template-btn"
+                    disabled={draftChanges.isDirty || isApplyingTemplate}
+                    onClick={handleOpenTemplateModal}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      draftChanges.isDirty || isApplyingTemplate
+                        ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                        : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
+                    }`}
+                  >
+                    <Shield className="w-3.5 h-3.5" />
+                    {assignedRole ? 'Применить другой шаблон' : 'Применить шаблон'}
+                  </button>
+                  {draftChanges.isDirty && (
+                    <span
+                      data-testid="apply-template-dirty-warning"
+                      className="text-[11px] text-amber-700"
+                    >
+                      Сначала сохраните или отмените изменения доступа.
+                    </span>
+                  )}
+                </div>
+              )}
               {!templateDiff.matches && (
                 <button
                   type="button"
@@ -2454,6 +2580,138 @@ export function AdminStaffDetail() {
             >
               Понятно
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Template Application Modal (EMP.1D3A) */}
+      {isTemplateModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+          data-testid="template-modal"
+        >
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2 text-gray-900 font-bold text-lg">
+                <Shield className="w-5 h-5 text-purple-600 shrink-0" />
+                <h2>Применить шаблон доступа</h2>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseTemplateModal}
+                disabled={isApplyingTemplate}
+                className="text-gray-400 hover:text-gray-600 p-1"
+                aria-label="Закрыть"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-600">
+              Выберите шаблон для замены индивидуальных прав сотрудника. Роли в системе являются шаблонами начального доступа.
+            </p>
+
+            {/* Template Selector */}
+            <div className="space-y-1.5">
+              <label htmlFor="template-select" className="block text-xs font-semibold text-gray-700">
+                Шаблон доступа
+              </label>
+              <select
+                id="template-select"
+                data-testid="select-access-template"
+                value={selectedTemplateCode}
+                onChange={(e) => {
+                  setSelectedTemplateCode(e.target.value);
+                  setTemplateModalError(null);
+                }}
+                disabled={isApplyingTemplate}
+                className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-purple-500 focus:border-purple-500"
+              >
+                <option value="">Выберите шаблон...</option>
+                {roles.map((r) => (
+                  <option key={r.id || r.code} value={r.code}>
+                    {r.name || r.code}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Confirmation & Diff Preview */}
+            {selectedTemplateRole && (
+              <div
+                data-testid="template-confirmation-preview"
+                className="bg-amber-50/70 border border-amber-200 rounded-lg p-4 text-xs space-y-3"
+              >
+                <div className="text-amber-900 font-medium leading-relaxed">
+                  Применение шаблона заменит текущий набор индивидуальных прав сотрудника.
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-amber-200/60 text-xs">
+                  <div>
+                    <span className="text-gray-500 block">Текущий шаблон:</span>
+                    <span className="font-semibold text-gray-800">
+                      {assignedRoleName} ({templateDiff.matches ? 'По шаблону' : 'Настроено вручную'})
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 block">Новый шаблон:</span>
+                    <span className="font-semibold text-gray-900">
+                      {selectedTemplateRole.name || selectedTemplateRole.code}
+                    </span>
+                  </div>
+                </div>
+
+                {selectedTemplateRole.description && (
+                  <div className="text-gray-600 text-[11px] italic">
+                    {selectedTemplateRole.description}
+                  </div>
+                )}
+
+                <div
+                  data-testid="template-diff-counts"
+                  className="flex items-center gap-4 pt-1 text-xs font-medium"
+                >
+                  <span className="text-emerald-700">
+                    Добавится: {templateApplicationDiff.addedCount} прав
+                  </span>
+                  <span className="text-rose-700">
+                    Удалится: {templateApplicationDiff.removedCount} прав
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Error Banner */}
+            {templateModalError && (
+              <div
+                data-testid="template-modal-error"
+                className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-md"
+              >
+                {templateModalError}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                data-testid="cancel-template-btn"
+                onClick={handleCloseTemplateModal}
+                disabled={isApplyingTemplate}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-apply-template-btn"
+                onClick={handleApplyTemplate}
+                disabled={!selectedTemplateCode || isApplyingTemplate}
+                className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700 disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {isApplyingTemplate ? 'Применение...' : 'Применить шаблон'}
+              </button>
+            </div>
           </div>
         </div>
       )}

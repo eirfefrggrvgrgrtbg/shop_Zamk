@@ -18,6 +18,7 @@ vi.mock('@zamk/api-client/src/admin', () => ({
   listStaffRoles: vi.fn(),
   getStaffMemberPermissions: vi.fn(),
   updateStaffMemberPermissions: vi.fn(),
+  updateStaffRole: vi.fn(),
   updateStaffStatus: vi.fn(),
   resetStaffPassword: vi.fn(),
 }));
@@ -1877,5 +1878,270 @@ describe('EMP.1D2C — Employee Responsibilities & Internal Work Note UI', () =>
     });
 
     expect(adminApi.patchStaffMemberProfile).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('EMP.1D3A — Move Access Template Application Into Employee Detail', () => {
+  const managerPresetPerms = ['orders.read', 'orders.update_status'];
+  const ownerPresetPerms = ['staff.read', 'staff.permissions.manage'];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useAdminAuth).mockReturnValue(defaultAuthContext);
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
+    vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
+    vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
+      userId: 'user-123',
+      permissions: ['orders.read'],
+    });
+    vi.mocked(adminApi.updateStaffRole).mockResolvedValue(undefined as any);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('A: Access tab renders current template name', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Доступ' }));
+
+    const templateHeading = screen.getByText('Назначенный шаблон доступа');
+    expect(templateHeading).toBeDefined();
+    expect(templateHeading.parentElement?.textContent).toContain('Менеджер');
+  });
+
+  it('B: "По шаблону" shown when direct permissions equal template preset', async () => {
+    vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
+      userId: 'user-123',
+      permissions: managerPresetPerms,
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Доступ' }));
+
+    const badges = screen.getAllByText('По шаблону');
+    expect(badges.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('C: "Настроено вручную" shown when direct permissions differ from template preset', async () => {
+    vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
+      userId: 'user-123',
+      permissions: ['orders.read'],
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Доступ' }));
+
+    const badges = screen.getAllByText('Настроено вручную');
+    expect(badges.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('D: authorized actor sees "Применить другой шаблон"', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Доступ' }));
+
+    const applyBtn = screen.getByTestId('apply-template-btn');
+    expect(applyBtn).toBeDefined();
+    expect(applyBtn.textContent).toContain('Применить другой шаблон');
+  });
+
+  it('E: unauthorized actor does not see template application action', async () => {
+    vi.mocked(useAdminAuth).mockReturnValue({
+      ...defaultAuthContext,
+      hasPermission: (perm: string) => perm !== 'staff.update',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Доступ' }));
+
+    expect(screen.queryByTestId('apply-template-btn')).toBeNull();
+  });
+
+  it('F & G: clicking opens template selector populated with existing role templates', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Доступ' }));
+    fireEvent.click(screen.getByTestId('apply-template-btn'));
+
+    expect(screen.getByTestId('template-modal')).toBeDefined();
+    const select = screen.getByTestId('select-access-template');
+    expect(select).toBeDefined();
+    expect(select.textContent).toContain('Менеджер');
+    expect(select.textContent).toContain('Владелец');
+  });
+
+  it('H, I & J: choosing template shows confirmation with replacement warning and diff counts', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Доступ' }));
+    fireEvent.click(screen.getByTestId('apply-template-btn'));
+
+    const select = screen.getByTestId('select-access-template');
+    fireEvent.change(select, { target: { value: 'owner' } });
+
+    const preview = screen.getByTestId('template-confirmation-preview');
+    expect(preview).toBeDefined();
+    expect(preview.textContent).toContain('Применение шаблона заменит текущий набор индивидуальных прав сотрудника.');
+    expect(preview.textContent).toContain('Владелец');
+
+    const diffCounts = screen.getByTestId('template-diff-counts');
+    expect(diffCounts.textContent).toContain('Добавится: 2 прав');
+    expect(diffCounts.textContent).toContain('Удалится: 1 прав');
+  });
+
+  it('K, L, M, N & O: confirming calls updateStaffRole, refetches member and permissions, updates Access UI and shows success banner', async () => {
+    const updatedMember = {
+      ...mockMember,
+      roleId: 'role-owner',
+      roleCode: 'owner',
+      roleName: 'Владелец',
+    };
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Доступ' }));
+    fireEvent.click(screen.getByTestId('apply-template-btn'));
+
+    const select = screen.getByTestId('select-access-template');
+    fireEvent.change(select, { target: { value: 'owner' } });
+
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(updatedMember);
+    vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
+      userId: 'user-123',
+      permissions: ownerPresetPerms,
+    });
+
+    fireEvent.click(screen.getByTestId('confirm-apply-template-btn'));
+
+    await waitFor(() => {
+      expect(adminApi.updateStaffRole).toHaveBeenCalledWith('user-123', { roleCode: 'owner' });
+    });
+    expect(adminApi.updateStaffRole).toHaveBeenCalledTimes(1);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('template-modal')).toBeNull();
+    });
+
+    expect(adminApi.getStaffMember).toHaveBeenCalledWith('user-123');
+    expect(adminApi.getStaffMemberPermissions).toHaveBeenCalledWith('user-123');
+
+    expect(screen.getByTestId('save-success-banner')).toBeDefined();
+    expect(screen.getByTestId('save-success-banner').textContent).toContain('Шаблон доступа применён.');
+
+    const templateHeading = screen.getByText('Назначенный шаблон доступа');
+    expect(templateHeading.parentElement?.textContent).toContain('Владелец');
+    expect(screen.getAllByText('По шаблону').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('P: 403 error is handled with humanized message', async () => {
+    vi.mocked(adminApi.updateStaffRole).mockRejectedValue({ status: 403 });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Доступ' }));
+    fireEvent.click(screen.getByTestId('apply-template-btn'));
+
+    fireEvent.change(screen.getByTestId('select-access-template'), { target: { value: 'owner' } });
+    fireEvent.click(screen.getByTestId('confirm-apply-template-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('template-modal-error')).toBeDefined();
+    });
+    expect(screen.getByTestId('template-modal-error').textContent).toContain(
+      'У вас нет права изменять шаблон доступа сотрудника.'
+    );
+  });
+
+  it('Q: network error does not corrupt current Access state', async () => {
+    vi.mocked(adminApi.updateStaffRole).mockRejectedValue(new Error('Failed to fetch'));
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Доступ' }));
+    fireEvent.click(screen.getByTestId('apply-template-btn'));
+
+    fireEvent.change(screen.getByTestId('select-access-template'), { target: { value: 'owner' } });
+    fireEvent.click(screen.getByTestId('confirm-apply-template-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('template-modal-error')).toBeDefined();
+    });
+    expect(screen.getByTestId('template-modal-error').textContent).toContain(
+      'Не удалось применить шаблон доступа. Попробуйте ещё раз.'
+    );
+
+    fireEvent.click(screen.getByTestId('cancel-template-btn'));
+    expect(screen.queryByTestId('template-modal')).toBeNull();
+
+    const templateHeading = screen.getByText('Назначенный шаблон доступа');
+    expect(templateHeading.parentElement?.textContent).toContain('Менеджер');
+    expect(screen.getAllByText('Настроено вручную').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('R: action is disabled and displays warning when Access draft is dirty', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Доступ' }));
+
+    fireEvent.click(screen.getByRole('radio', { name: /Закрыт/i }));
+    expect(screen.getByTestId('dirty-bottom-bar')).toBeDefined();
+
+    const applyBtn = screen.getByTestId('apply-template-btn') as HTMLButtonElement;
+    expect(applyBtn.disabled).toBe(true);
+
+    const warning = screen.getByTestId('apply-template-dirty-warning');
+    expect(warning).toBeDefined();
+    expect(warning.textContent).toContain('Сначала сохраните или отмените изменения доступа.');
+  });
+
+  it('S: Profile tab regression remains green', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    expect(screen.getByTestId('tab-profile-content')).toBeDefined();
+
+    const editButtons = screen.getAllByRole('button', { name: 'Редактировать' });
+    fireEvent.click(editButtons[0]);
+
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), {
+      target: { value: 'Новые обязанности' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => {
+      expect(adminApi.patchStaffMemberProfile).toHaveBeenCalledWith('user-123', {
+        responsibilities: 'Новые обязанности',
+      });
+    });
+  });
+
+  it('T: Account tab regression remains green', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Учётная запись' }));
+    expect(screen.getByTestId('tab-account-content')).toBeDefined();
+
+    const resetBtn = screen.getByRole('button', { name: 'Сбросить пароль' });
+    expect(resetBtn).toBeDefined();
+    fireEvent.click(resetBtn);
+
+    expect(screen.getByTestId('reset-password-modal')).toBeDefined();
   });
 });
