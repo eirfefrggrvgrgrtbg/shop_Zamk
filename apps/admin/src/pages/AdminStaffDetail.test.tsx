@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import { AdminStaffDetail, generatePassword } from './AdminStaffDetail';
+import { AdminStaffDetail, generatePassword, countUnicodeChars } from './AdminStaffDetail';
 import * as adminApi from '@zamk/api-client/src/admin';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 import type { StaffRoleWithPermissions } from '@zamk/api-client/src/types';
@@ -12,6 +12,8 @@ vi.mock('../contexts/AdminAuthContext', () => ({
 }));
 
 vi.mock('@zamk/api-client/src/admin', () => ({
+  getStaffMember: vi.fn(),
+  patchStaffMemberProfile: vi.fn(),
   listStaffMembers: vi.fn(),
   listStaffRoles: vi.fn(),
   getStaffMemberPermissions: vi.fn(),
@@ -53,6 +55,8 @@ const mockMember: any = {
   staffRoleId: 'role-manager',
   roleCode: 'manager',
   roleName: 'Менеджер',
+  responsibilities: null,
+  workNote: null,
   createdAt: '2026-02-15T12:00:00Z',
   updatedAt: '2026-02-15T12:00:00Z',
 };
@@ -106,6 +110,8 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useAdminAuth).mockReturnValue(defaultAuthContext);
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
+    vi.mocked(adminApi.patchStaffMemberProfile).mockResolvedValue({ success: true });
   });
 
   afterEach(() => {
@@ -113,7 +119,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('1. Tabs are exactly: Профиль, Доступ, Учётная запись', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -132,7 +138,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('2. Профиль is default active tab and shows empty state for responsibilities', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -143,12 +149,12 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
     await waitForHeader();
 
     expect(screen.getByTestId('tab-profile-content')).toBeDefined();
-    expect(screen.getByText('Обязанности пока не указаны.')).toBeDefined();
-    expect(screen.getByText('Рабочая заметка пока не добавлена.')).toBeDefined();
+    expect(screen.getByText('Обязанности пока не указаны')).toBeDefined();
+    expect(screen.getByText('Рабочая заметка пока не добавлена')).toBeDefined();
   });
 
   it('3. Access split editor switches sections and modes without API mutation', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -170,7 +176,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('A: useAdminAuth uses real typed context shape', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -188,7 +194,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('B: initial permissions GET 403 does NOT destroy base employee profile', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockRejectedValue({
       status: 403,
@@ -213,7 +219,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('C: initial permissions GET 403 renders non-editable Access forbidden state', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockRejectedValue({
       status: 403,
@@ -240,7 +246,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('D: PUT 403 enters permission-management-forbidden state', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -269,7 +275,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('E: PUT 403 does NOT retry GET permissions', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -297,7 +303,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('F: PUT 403 leaves no active Save/Continue controls', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -333,7 +339,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
       user: { ...defaultAuthContext.user!, id: 'user-123' },
     });
 
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -372,7 +378,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
       user: { ...defaultAuthContext.user!, id: 'user-123' },
     });
 
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -411,7 +417,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
       user: { ...defaultAuthContext.user!, id: 'user-123' },
     });
 
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -453,7 +459,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
       user: { ...defaultAuthContext.user!, id: 'user-123' },
     });
 
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -485,7 +491,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('K: ordinary successful save remains unchanged', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -514,7 +520,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('L: 409 still preserves editable draft', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -548,7 +554,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('M: 400 preserves draft and shows error', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -577,7 +583,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('N: network error preserves draft and allows retry', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -616,7 +622,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
 
   it('O: blocked target can save access and displays subtle note', async () => {
     const blockedMember = { ...mockMember, status: 'blocked', staffStatus: 'blocked' };
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [blockedMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(blockedMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -647,7 +653,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
 
   it('P: archived target can save access and displays subtle note', async () => {
     const archivedMember = { ...mockMember, status: 'archived', staffStatus: 'archived' };
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [archivedMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(archivedMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -677,7 +683,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('Q: Cancel before save still restores original without PUT', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -700,7 +706,7 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
   });
 
   it('R: navigation dirty warning triggers window.confirm', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -723,8 +729,8 @@ describe('AdminStaffDetail Employee Workspace Shell (EMP.1C3C2R.1 & R.2A)', () =
     confirmSpy.mockRestore();
   });
 
-  it('S: Base 403 on listStaffMembers still displays full page forbidden', async () => {
-    vi.mocked(adminApi.listStaffMembers).mockRejectedValue({ status: 403, code: 'forbidden' });
+  it('S: Base 403 on getStaffMember still displays full page forbidden', async () => {
+    vi.mocked(adminApi.getStaffMember).mockRejectedValue({ status: 403, code: 'forbidden' });
 
     renderComponent('user-123');
     await waitFor(() => {
@@ -738,7 +744,9 @@ describe('EMP.1D1 — Employee Account Management Tab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useAdminAuth).mockReturnValue(defaultAuthContext);
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [mockMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
+    vi.mocked(adminApi.patchStaffMemberProfile).mockResolvedValue({ success: true });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
     vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
     vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
       userId: 'user-123',
@@ -799,7 +807,7 @@ describe('EMP.1D1 — Employee Account Management Tab', () => {
 
   it('C: blocked employee shows valid actions (reset password, unblock, archive) and explanation banner', async () => {
     const blockedMember = { ...mockMember, status: 'blocked', staffStatus: 'blocked' };
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [blockedMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(blockedMember);
 
     renderComponent('user-123');
     await waitForHeader();
@@ -822,7 +830,7 @@ describe('EMP.1D1 — Employee Account Management Tab', () => {
 
   it('D: archived behavior matches actual backend semantics (restore button, no danger zone, explanation)', async () => {
     const archivedMember = { ...mockMember, status: 'archived', staffStatus: 'archived' };
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [archivedMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(archivedMember);
 
     renderComponent('user-123');
     await waitForHeader();
@@ -906,7 +914,7 @@ describe('EMP.1D1 — Employee Account Management Tab', () => {
 
   it('H: unblock/reactivate works if supported (calls updateStaffStatus active and restores state)', async () => {
     const blockedMember = { ...mockMember, status: 'blocked', staffStatus: 'blocked' };
-    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: [blockedMember] });
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(blockedMember);
     vi.mocked(adminApi.updateStaffStatus).mockResolvedValueOnce(undefined as any);
 
     renderComponent('user-123');
@@ -1256,5 +1264,618 @@ describe('EMP.1D1 — Employee Account Management Tab', () => {
       const successModal = screen.getByTestId('password-success-modal');
       expect(successModal.textContent).toContain(generatedVal);
     });
+  });
+});
+
+
+describe('EMP.1D2C — Employee Responsibilities & Internal Work Note UI', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useAdminAuth).mockReturnValue(defaultAuthContext);
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue(mockMember);
+    vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
+    vi.mocked(adminApi.getStaffMemberPermissions).mockResolvedValue({
+      userId: 'user-123',
+      permissions: ['orders.read'],
+    });
+    vi.mocked(adminApi.patchStaffMemberProfile).mockResolvedValue({ success: true });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('A: AdminStaffDetail uses getStaffMember for detail hydration', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    expect(adminApi.getStaffMember).toHaveBeenCalledWith('user-123');
+  });
+
+  it('B: responsibilities returned by backend render in Profile', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      responsibilities: 'Руководство отделом приёмки и инвентаризации',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    expect(screen.getByTestId('display-responsibilities').textContent).toBe(
+      'Руководство отделом приёмки и инвентаризации'
+    );
+  });
+
+  it('C: workNote returned by backend renders in Profile', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      workNote: 'График работы 2/2 с 9:00 до 21:00',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    expect(screen.getByTestId('display-work-note').textContent).toBe(
+      'График работы 2/2 с 9:00 до 21:00'
+    );
+  });
+
+  it('D: multiline formatting is preserved', async () => {
+    const multilineText = 'Линия 1: Первичная приёмка\nЛиния 2: Контроль маркировки\nЛиния 3: Склад';
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      responsibilities: multilineText,
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    const el = screen.getByTestId('display-responsibilities');
+    expect(el.textContent).toBe(multilineText);
+    expect(el.className).toContain('whitespace-pre-wrap');
+  });
+
+  it('E: null responsibilities shows "Обязанности пока не указаны"', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      responsibilities: null,
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    expect(screen.getByTestId('display-responsibilities-empty').textContent?.trim()).toBe(
+      'Обязанности пока не указаны'
+    );
+  });
+
+  it('F: null workNote shows "Рабочая заметка пока не добавлена"', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      workNote: null,
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    expect(screen.getByTestId('display-work-note-empty').textContent?.trim()).toBe(
+      'Рабочая заметка пока не добавлена'
+    );
+  });
+
+  it('G: actor with staff.update sees Edit button', async () => {
+    vi.mocked(useAdminAuth).mockReturnValue({
+      ...defaultAuthContext,
+      hasPermission: (p: string) => p === 'staff.update' || p === 'staff.read',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    expect(screen.getAllByRole('button', { name: 'Редактировать' })[0]).toBeDefined();
+  });
+
+  it('H: actor without staff.update does NOT see Edit button', async () => {
+    vi.mocked(useAdminAuth).mockReturnValue({
+      ...defaultAuthContext,
+      hasPermission: (p: string) => p === 'staff.read',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    expect(screen.queryByRole('button', { name: 'Редактировать' })).toBeNull();
+  });
+
+  it('I: Edit populates draft from canonical values', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      responsibilities: 'Контроль заказов',
+      workNote: 'Работает удаленно',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+
+    const respTextarea = screen.getByTestId('textarea-responsibilities') as HTMLTextAreaElement;
+    const noteTextarea = screen.getByTestId('textarea-work-note') as HTMLTextAreaElement;
+
+    expect(respTextarea.value).toBe('Контроль заказов');
+    expect(noteTextarea.value).toBe('Работает удаленно');
+  });
+
+  it('J: typing changes only local draft before Save', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+
+    const respTextarea = screen.getByTestId('textarea-responsibilities') as HTMLTextAreaElement;
+    fireEvent.change(respTextarea, { target: { value: 'Новые обязанности' } });
+
+    expect(respTextarea.value).toBe('Новые обязанности');
+    expect(adminApi.patchStaffMemberProfile).not.toHaveBeenCalled();
+  });
+
+  it('K: Cancel performs zero PATCH calls', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), { target: { value: 'Тест' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Отмена' }));
+
+    expect(adminApi.patchStaffMemberProfile).not.toHaveBeenCalled();
+  });
+
+  it('L: Cancel restores canonical display', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      responsibilities: 'Канонические обязанности',
+      workNote: null,
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), { target: { value: 'Случайный текст' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Отмена' }));
+
+    expect(screen.queryByTestId('textarea-responsibilities')).toBeNull();
+    expect(screen.getByTestId('display-responsibilities').textContent).toBe('Канонические обязанности');
+  });
+
+  it('M: changing only responsibilities sends only responsibilities', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      responsibilities: 'Старые обязанности',
+      workNote: 'Заметка без изменений',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), {
+      target: { value: 'Новые обязанности' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => {
+      expect(adminApi.patchStaffMemberProfile).toHaveBeenCalledWith('user-123', {
+        responsibilities: 'Новые обязанности',
+      });
+    });
+  });
+
+  it('N: changing only workNote sends only workNote', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      responsibilities: 'Обязанности без изменений',
+      workNote: 'Старая заметка',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+    fireEvent.change(screen.getByTestId('textarea-work-note'), {
+      target: { value: 'Обновлённая заметка' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => {
+      expect(adminApi.patchStaffMemberProfile).toHaveBeenCalledWith('user-123', {
+        workNote: 'Обновлённая заметка',
+      });
+    });
+  });
+
+  it('O: changing both sends both', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      responsibilities: 'Старые обязанности',
+      workNote: 'Старая заметка',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), { target: { value: 'Новые об' } });
+    fireEvent.change(screen.getByTestId('textarea-work-note'), { target: { value: 'Новая зам' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => {
+      expect(adminApi.patchStaffMemberProfile).toHaveBeenCalledWith('user-123', {
+        responsibilities: 'Новые об',
+        workNote: 'Новая зам',
+      });
+    });
+  });
+
+  it('P: clearing responsibilities sends null', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      responsibilities: 'Ранее заданные обязанности',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => {
+      expect(adminApi.patchStaffMemberProfile).toHaveBeenCalledWith('user-123', {
+        responsibilities: null,
+      });
+    });
+  });
+
+  it('Q: clearing workNote sends null', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      workNote: 'Ранее заданная заметка',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+    fireEvent.change(screen.getByTestId('textarea-work-note'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => {
+      expect(adminApi.patchStaffMemberProfile).toHaveBeenCalledWith('user-123', {
+        workNote: null,
+      });
+    });
+  });
+
+  it('R: unchanged normalized draft performs zero PATCH calls and exits edit mode', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      responsibilities: 'Обязанности',
+      workNote: 'Заметка',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+    // Add surrounding whitespace that trims to identical value
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), { target: { value: '  Обязанности  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    expect(adminApi.patchStaffMemberProfile).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('textarea-responsibilities')).toBeNull();
+  });
+
+  it('S & T & U & V: successful save flow (PATCH -> refetch -> truth -> exit edit -> success message)', async () => {
+    const updatedMember = {
+      ...mockMember,
+      responsibilities: 'Сохранённые обязанности',
+      workNote: 'Сохранённая заметка',
+    };
+
+    vi.mocked(adminApi.patchStaffMemberProfile).mockResolvedValue({ success: true });
+    vi.mocked(adminApi.getStaffMember)
+      .mockResolvedValueOnce(mockMember)
+      .mockResolvedValueOnce(updatedMember);
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), { target: { value: 'Сохранённые обязанности' } });
+    fireEvent.change(screen.getByTestId('textarea-work-note'), { target: { value: 'Сохранённая заметка' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => {
+      expect(adminApi.patchStaffMemberProfile).toHaveBeenCalled();
+      expect(adminApi.getStaffMember).toHaveBeenCalledTimes(2);
+    });
+
+    // U. Exits edit mode
+    expect(screen.queryByTestId('textarea-responsibilities')).toBeNull();
+
+    // T. Visible canonical truth
+    expect(screen.getByTestId('display-responsibilities').textContent).toBe('Сохранённые обязанности');
+    expect(screen.getByTestId('display-work-note').textContent).toBe('Сохранённая заметка');
+
+    // V. Success message appears
+    expect(screen.getByTestId('profile-success-banner').textContent).toContain('Профиль сотрудника обновлён.');
+  });
+
+  it('W: 403 preserves draft and displays human error', async () => {
+    vi.mocked(adminApi.patchStaffMemberProfile).mockRejectedValue({
+      status: 403,
+      code: 'forbidden',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), { target: { value: 'Черновик' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-error-banner')).toBeDefined();
+    });
+
+    expect(screen.getByTestId('profile-error-banner').textContent).toContain(
+      'У вас нет права редактировать профиль сотрудника.'
+    );
+    // Draft preserved
+    expect((screen.getByTestId('textarea-responsibilities') as HTMLTextAreaElement).value).toBe('Черновик');
+  });
+
+  it('X: 400 preserves draft and displays error message', async () => {
+    vi.mocked(adminApi.patchStaffMemberProfile).mockRejectedValue({
+      status: 400,
+      code: 'validation_error',
+      message: 'Некорректный формат данных',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), { target: { value: 'Особый черновик' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-error-banner')).toBeDefined();
+    });
+
+    expect(screen.getByTestId('profile-error-banner').textContent).toContain('Некорректный формат данных');
+    expect((screen.getByTestId('textarea-responsibilities') as HTMLTextAreaElement).value).toBe('Особый черновик');
+  });
+
+  it('Y: network failure preserves draft', async () => {
+    vi.mocked(adminApi.patchStaffMemberProfile).mockRejectedValue(new Error('Failed to fetch'));
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), { target: { value: 'Текст при обрыве связи' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-error-banner')).toBeDefined();
+    });
+
+    expect(screen.getByTestId('profile-error-banner').textContent).toContain(
+      'Не удалось сохранить профиль. Попробуйте ещё раз.'
+    );
+    expect((screen.getByTestId('textarea-responsibilities') as HTMLTextAreaElement).value).toBe(
+      'Текст при обрыве связи'
+    );
+  });
+
+  it('Z: exactly 4000 Unicode characters allowed and Save remains enabled', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+
+    const exact4000 = 'Ж'.repeat(4000);
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), { target: { value: exact4000 } });
+
+    expect(screen.getByTestId('responsibilities-char-counter').textContent).toBe('4000 / 4000');
+    const saveBtn = screen.getByRole('button', { name: 'Сохранить' }) as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(false);
+  });
+
+  it('AA: >4000 Unicode characters disables Save and shows validation error without API call', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Редактировать' })[0]);
+
+    const over4000 = 'Ж'.repeat(4001);
+    fireEvent.change(screen.getByTestId('textarea-responsibilities'), { target: { value: over4000 } });
+
+    expect(screen.getByTestId('responsibilities-char-counter').textContent).toBe('4001 / 4000');
+    expect(screen.getByText('Превышен лимит в 4000 символов')).toBeDefined();
+
+    const saveBtn = screen.getByRole('button', { name: 'Сохранить' }) as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(true);
+
+    fireEvent.click(saveBtn);
+    expect(adminApi.patchStaffMemberProfile).not.toHaveBeenCalled();
+  });
+
+  it('AB: Unicode counter handles multibyte/emoji correctly', () => {
+    expect(countUnicodeChars('👋🌍')).toBe(2);
+    expect(countUnicodeChars('Привет')).toBe(6);
+    expect(countUnicodeChars('A\uD83D\uDE00B')).toBe(3); // Surrogate pair counted as 1 emoji
+  });
+
+  it('AC: blocked target remains editable with staff.update', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      status: 'blocked',
+      staffStatus: 'blocked',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    expect(screen.getByTestId('blocked-banner')).toBeDefined();
+    const editBtn = screen.getAllByRole('button', { name: 'Редактировать' })[0];
+    expect(editBtn).toBeDefined();
+
+    fireEvent.click(editBtn);
+    expect(screen.getByTestId('profile-edit-mode')).toBeDefined();
+  });
+
+  it('AD: archived target remains editable with staff.update', async () => {
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      status: 'archived',
+      staffStatus: 'archived',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    expect(screen.getByTestId('archived-banner')).toBeDefined();
+    const editBtn = screen.getAllByRole('button', { name: 'Редактировать' })[0];
+    expect(editBtn).toBeDefined();
+
+    fireEvent.click(editBtn);
+    expect(screen.getByTestId('profile-edit-mode')).toBeDefined();
+  });
+
+  it('AE: Access tab regression remains green', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Доступ' }));
+    expect(screen.getByTestId('split-access-editor')).toBeDefined();
+  });
+
+  it('AF: Account tab regression remains green', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Учётная запись' }));
+    expect(screen.getByTestId('tab-account-content')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Сбросить пароль' })).toBeDefined();
+  });
+
+  it('AG: AdminStaffDetail calls getStaffMember with exact route userId and no legacy record ID substitution', async () => {
+    const targetUserId = '0152e515-28b2-4da6-9ffe-af65e6492858';
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      userId: targetUserId,
+      name: 'Тест Поддержка',
+    });
+
+    renderComponent(targetUserId);
+
+    await waitFor(() => {
+      expect(adminApi.getStaffMember).toHaveBeenCalledWith(targetUserId);
+    });
+
+    expect(adminApi.getStaffMember).toHaveBeenCalledTimes(1);
+    expect(adminApi.getStaffMember).not.toHaveBeenCalledWith(expect.not.stringMatching(targetUserId));
+  });
+
+  it('AH: direct route hydration works without list navigation state', async () => {
+    const targetUserId = 'cad55a1a-919e-4f33-95fc-400b549a904a';
+    vi.mocked(adminApi.getStaffMember).mockResolvedValue({
+      ...mockMember,
+      userId: targetUserId,
+      name: 'Тест Склад',
+    });
+
+    // Directly rendering without any location state (simulating direct link / browser reload)
+    renderComponent(targetUserId);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Тест Склад');
+    });
+
+    expect(screen.getByTestId('tab-profile-content')).toBeDefined();
+    expect(adminApi.getStaffMember).toHaveBeenCalledWith(targetUserId);
+  });
+
+  it('AI: read mode renders an Edit button in both Responsibilities and Work Note sections', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    const editButtons = screen.getAllByRole('button', { name: 'Редактировать' });
+    expect(editButtons.length).toBe(2);
+  });
+
+  it('AJ: both Edit buttons are hidden when actor lacks staff.update capability', async () => {
+    vi.mocked(useAdminAuth).mockReturnValue({
+      ...defaultAuthContext,
+      permissions: ['staff.read'],
+      hasPermission: (perm: string) => perm === 'staff.read',
+    });
+
+    renderComponent('user-123');
+    await waitForHeader();
+
+    expect(screen.queryByRole('button', { name: 'Редактировать' })).toBeNull();
+  });
+
+  it('AK: clicking Responsibilities Edit enters shared edit mode', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    const editButtons = screen.getAllByRole('button', { name: 'Редактировать' });
+    fireEvent.click(editButtons[0]);
+
+    expect(screen.getByTestId('profile-edit-mode')).toBeDefined();
+    expect(screen.getByTestId('textarea-responsibilities')).toBeDefined();
+    expect(screen.getByTestId('textarea-work-note')).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Редактировать' })).toBeNull();
+  });
+
+  it('AL & AM: clicking Work Note Edit enters the SAME shared edit mode exposing BOTH textareas', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    const editButtons = screen.getAllByRole('button', { name: 'Редактировать' });
+    // Click the second Edit button (Work Note section)
+    fireEvent.click(editButtons[1]);
+
+    expect(screen.getByTestId('profile-edit-mode')).toBeDefined();
+    expect(screen.getByTestId('textarea-responsibilities')).toBeDefined();
+    expect(screen.getByTestId('textarea-work-note')).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Редактировать' })).toBeNull();
+  });
+
+  it('AN: saving from Work Note initiated edit uses the same single PATCH flow without duplicate save logic', async () => {
+    renderComponent('user-123');
+    await waitForHeader();
+
+    const editButtons = screen.getAllByRole('button', { name: 'Редактировать' });
+    fireEvent.click(editButtons[1]);
+
+    fireEvent.change(screen.getByTestId('textarea-work-note'), {
+      target: { value: 'Обновлённая заметка' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => {
+      expect(adminApi.patchStaffMemberProfile).toHaveBeenCalledWith('user-123', {
+        workNote: 'Обновлённая заметка',
+      });
+    });
+
+    expect(adminApi.patchStaffMemberProfile).toHaveBeenCalledTimes(1);
   });
 });

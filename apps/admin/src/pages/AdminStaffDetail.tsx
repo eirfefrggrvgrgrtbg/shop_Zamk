@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-  listStaffMembers,
+  getStaffMember,
+  patchStaffMemberProfile,
   listStaffRoles,
   getStaffMemberPermissions,
   updateStaffMemberPermissions,
@@ -9,7 +10,7 @@ import {
   resetStaffPassword,
 } from '@zamk/api-client/src/admin';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
-import type { StaffMemberView, StaffRoleWithPermissions } from '@zamk/api-client/src/types';
+import type { StaffMemberDetailResponse, StaffRoleWithPermissions, UpdateStaffMemberProfileRequest } from '@zamk/api-client/src/types';
 import {
   STAFF_CAPABILITY_GROUPS,
   getCapabilitiesByGroup,
@@ -113,6 +114,11 @@ export function generatePassword(): string {
   return Array.from(randomValues, (val) => chars[val % chars.length]).join('');
 }
 
+export function countUnicodeChars(val?: string | null): number {
+  if (!val) return 0;
+  return Array.from(val).length;
+}
+
 function humanizeAccountError(err: any): string {
   if (!err) return 'Не удалось выполнить действие. Попробуйте ещё раз.';
   const status = err.status || err.statusCode;
@@ -141,7 +147,7 @@ const isScreenVisibleWithPerms = isScreenVisibleWithPermissions;
 export function AdminStaffDetail() {
   const { userId } = useParams<{ userId: string }>();
 
-  const [member, setMember] = useState<StaffMemberView | null>(null);
+  const [member, setMember] = useState<StaffMemberDetailResponse | null>(null);
   const [roles, setRoles] = useState<StaffRoleWithPermissions[]>([]);
   const [originalPermissions, setOriginalPermissions] = useState<string[]>([]);
   const [draftPermissions, setDraftPermissions] = useState<string[]>([]);
@@ -154,6 +160,15 @@ export function AdminStaffDetail() {
 
   const canBlock = Boolean(hasPermission?.('staff.block'));
   const canResetPassword = Boolean(hasPermission?.('staff.update'));
+  const canEditProfile = Boolean(hasPermission?.('staff.update'));
+
+  // Profile Tab Editing states (EMP.1D2C)
+  const [isProfileEditing, setIsProfileEditing] = useState(false);
+  const [draftResponsibilities, setDraftResponsibilities] = useState('');
+  const [draftWorkNote, setDraftWorkNote] = useState('');
+  const [isProfileSaving, setIsProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccessMessage, setProfileSuccessMessage] = useState<string | null>(null);
 
   // Account Tab & Modal states (EMP.1D1)
   const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
@@ -211,19 +226,18 @@ export function AdminStaffDetail() {
       setIsPermissionManagementForbidden(false);
 
       try {
-        const [membersRes, rolesRes] = await Promise.all([
-          listStaffMembers(),
+        const [memberRes, rolesRes] = await Promise.all([
+          getStaffMember(userId),
           listStaffRoles(),
         ]);
 
-        const found = membersRes.items?.find((m) => m.userId === userId);
-        if (!found) {
+        if (!memberRes) {
           setErrorType('not_found');
           setIsLoading(false);
           return;
         }
 
-        setMember(found);
+        setMember(memberRes);
         setRoles(rolesRes.items || []);
       } catch (err: any) {
         if (err?.status === 403 || err?.statusCode === 403) {
@@ -330,9 +344,115 @@ export function AdminStaffDetail() {
     }).filter((g) => g.sections.length > 0);
   }, [sectionSearch]);
 
+  // Profile dirty state and Unicode counters (EMP.1D2C)
+  const isProfileDirty = useMemo(() => {
+    if (!isProfileEditing || !member) return false;
+    const currentResp = member.responsibilities || '';
+    const currentNote = member.workNote || '';
+    return draftResponsibilities !== currentResp || draftWorkNote !== currentNote;
+  }, [isProfileEditing, member, draftResponsibilities, draftWorkNote]);
+
+  const respCharCount = useMemo(() => countUnicodeChars(draftResponsibilities), [draftResponsibilities]);
+  const workNoteCharCount = useMemo(() => countUnicodeChars(draftWorkNote), [draftWorkNote]);
+  const isRespExceeded = respCharCount > 4000;
+  const isWorkNoteExceeded = workNoteCharCount > 4000;
+  const isProfileLimitExceeded = isRespExceeded || isWorkNoteExceeded;
+
+  const handleStartProfileEdit = () => {
+    setDraftResponsibilities(member?.responsibilities || '');
+    setDraftWorkNote(member?.workNote || '');
+    setProfileError(null);
+    setProfileSuccessMessage(null);
+    setIsProfileEditing(true);
+  };
+
+  const handleCancelProfileEdit = () => {
+    setDraftResponsibilities(member?.responsibilities || '');
+    setDraftWorkNote(member?.workNote || '');
+    setProfileError(null);
+    setIsProfileEditing(false);
+  };
+
+  const handleSaveProfile = async () => {
+    if (isProfileSaving || !userId || !member) return;
+    if (isProfileLimitExceeded) return;
+
+    const trimmedDraftResp = draftResponsibilities.trim();
+    const finalDraftResp = trimmedDraftResp === '' ? null : trimmedDraftResp;
+
+    const trimmedCanonicalResp = (member.responsibilities ?? '').trim();
+    const finalCanonicalResp = trimmedCanonicalResp === '' ? null : trimmedCanonicalResp;
+
+    const respChanged = finalDraftResp !== finalCanonicalResp;
+
+    const trimmedDraftNote = draftWorkNote.trim();
+    const finalDraftNote = trimmedDraftNote === '' ? null : trimmedDraftNote;
+
+    const trimmedCanonicalNote = (member.workNote ?? '').trim();
+    const finalCanonicalNote = trimmedCanonicalNote === '' ? null : trimmedCanonicalNote;
+
+    const noteChanged = finalDraftNote !== finalCanonicalNote;
+
+    // If no effective changes after trim normalization, exit edit mode cleanly without PATCH
+    if (!respChanged && !noteChanged) {
+      setIsProfileEditing(false);
+      setProfileError(null);
+      return;
+    }
+
+    setIsProfileSaving(true);
+    setProfileError(null);
+
+    const payload: UpdateStaffMemberProfileRequest = {};
+    if (respChanged) {
+      payload.responsibilities = finalDraftResp;
+    }
+    if (noteChanged) {
+      payload.workNote = finalDraftNote;
+    }
+
+    try {
+      await patchStaffMemberProfile(userId, payload);
+      const refreshed = await getStaffMember(userId);
+      setMember(refreshed);
+      setIsProfileEditing(false);
+      setProfileSuccessMessage('Профиль сотрудника обновлён.');
+    } catch (err: any) {
+      const status = err?.status || err?.statusCode;
+      const code = err?.code || err?.error?.code || (typeof err?.error === 'string' ? err.error : undefined);
+
+      if (status === 403 || code === 'forbidden') {
+        setProfileError('У вас нет права редактировать профиль сотрудника.');
+      } else if (status === 404 || code === 'not_found') {
+        setProfileError('Сотрудник не найден.');
+      } else if (status === 400 || code === 'validation_error' || code === 'invalid_request') {
+        setProfileError(err?.message || 'Проверьте введённые данные.');
+      } else {
+        setProfileError('Не удалось сохранить профиль. Попробуйте ещё раз.');
+      }
+    } finally {
+      setIsProfileSaving(false);
+    }
+  };
+
+  // Tab switching with leave protection
+  const handleTabChange = (targetTab: 'profile' | 'access' | 'account') => {
+    if (targetTab === activeTab) return;
+    if (isProfileDirty) {
+      const confirmed = window.confirm('Есть несохранённые изменения. Выйти без сохранения?');
+      if (!confirmed) return;
+      handleCancelProfileEdit();
+    } else if (draftChanges.isDirty) {
+      const confirmed = window.confirm('Есть несохранённые изменения. Выйти без сохранения?');
+      if (!confirmed) return;
+      handleCancelDraft();
+    }
+    setActiveTab(targetTab);
+  };
+
   // Navigation leave protection
   const handleBackNavigation = (e: React.MouseEvent) => {
-    if (draftChanges.isDirty) {
+    if (draftChanges.isDirty || isProfileDirty) {
       const confirmed = window.confirm('Есть несохранённые изменения. Выйти без сохранения?');
       if (!confirmed) {
         e.preventDefault();
@@ -342,7 +462,7 @@ export function AdminStaffDetail() {
 
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (draftChanges.isDirty) {
+      if (draftChanges.isDirty || isProfileDirty) {
         e.preventDefault();
         e.returnValue = 'Есть несохранённые изменения. Выйти без сохранения?';
         return 'Есть несохранённые изменения. Выйти без сохранения?';
@@ -352,7 +472,7 @@ export function AdminStaffDetail() {
     return () => {
       window.removeEventListener('beforeunload', onBeforeUnload);
     };
-  }, [draftChanges.isDirty]);
+  }, [draftChanges.isDirty, isProfileDirty]);
 
   // Handle section mode change
   const handleModeSelect = (mode: 'CLOSED' | 'VIEW' | 'WORK') => {
@@ -758,7 +878,7 @@ export function AdminStaffDetail() {
         <button
           role="tab"
           aria-selected={activeTab === 'profile'}
-          onClick={() => setActiveTab('profile')}
+          onClick={() => handleTabChange('profile')}
           className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'profile'
               ? 'border-purple-600 text-purple-600'
@@ -770,7 +890,7 @@ export function AdminStaffDetail() {
         <button
           role="tab"
           aria-selected={activeTab === 'access'}
-          onClick={() => setActiveTab('access')}
+          onClick={() => handleTabChange('access')}
           className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'access'
               ? 'border-purple-600 text-purple-600'
@@ -782,7 +902,7 @@ export function AdminStaffDetail() {
         <button
           role="tab"
           aria-selected={activeTab === 'account'}
-          onClick={() => setActiveTab('account')}
+          onClick={() => handleTabChange('account')}
           className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'account'
               ? 'border-purple-600 text-purple-600'
@@ -796,6 +916,47 @@ export function AdminStaffDetail() {
       {/* TAB 1: ПРОФИЛЬ */}
       {activeTab === 'profile' && (
         <div className="space-y-6" data-testid="tab-profile-content">
+          {/* Profile Success Banner */}
+          {profileSuccessMessage && (
+            <div
+              data-testid="profile-success-banner"
+              className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg flex items-center justify-between text-sm shadow-sm"
+            >
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{profileSuccessMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProfileSuccessMessage(null)}
+                className="text-emerald-700 hover:text-emerald-900 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Profile Error Banner */}
+          {profileError && (
+            <div
+              data-testid="profile-error-banner"
+              className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-lg flex items-center justify-between text-sm shadow-sm"
+            >
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{profileError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProfileError(null)}
+                className="text-rose-700 hover:text-rose-900 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Section 1: О сотруднике */}
           <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6 shadow-sm">
             <div>
               <h2 className="text-base font-semibold text-gray-900">О сотруднике</h2>
@@ -840,23 +1001,174 @@ export function AdminStaffDetail() {
             </div>
           </div>
 
-          {/* Future-ready block: Обязанности */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-3 shadow-sm">
-            <h2 className="text-base font-semibold text-gray-900">Обязанности</h2>
-            <div className="text-sm text-gray-500 italic bg-gray-50 rounded-lg p-4 border border-dashed border-gray-200">
-              Обязанности пока не указаны.
+          {/* Editable sections: Обязанности and Рабочая заметка */}
+          <div data-testid={isProfileEditing ? 'profile-edit-mode' : undefined} className="space-y-6">
+            {/* Section 2: Обязанности */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold text-gray-900">Обязанности</h2>
+              {!isProfileEditing && canEditProfile && (
+                <button
+                  type="button"
+                  onClick={handleStartProfileEdit}
+                  className="inline-flex items-center px-3.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                >
+                  Редактировать
+                </button>
+              )}
             </div>
+
+            {isProfileEditing ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">
+                    Опишите фактические обязанности сотрудника
+                  </span>
+                  <span
+                    className={`text-xs ${
+                      isRespExceeded ? 'text-rose-600 font-semibold' : 'text-gray-500'
+                    }`}
+                    data-testid="responsibilities-char-counter"
+                  >
+                    {respCharCount} / 4000
+                  </span>
+                </div>
+                <textarea
+                  data-testid="textarea-responsibilities"
+                  rows={5}
+                  value={draftResponsibilities}
+                  onChange={(e) => setDraftResponsibilities(e.target.value)}
+                  placeholder="Обязанности сотрудника..."
+                  className={`w-full rounded-md shadow-sm text-sm border p-3 focus:outline-none focus:ring-2 ${
+                    isRespExceeded
+                      ? 'border-rose-300 focus:ring-rose-500 focus:border-rose-500'
+                      : 'border-gray-300 focus:ring-purple-500 focus:border-purple-500'
+                  }`}
+                />
+                {isRespExceeded && (
+                  <p className="text-xs text-rose-600 mt-1">Превышен лимит в 4000 символов</p>
+                )}
+              </div>
+            ) : (
+              <div>
+                {member.responsibilities && member.responsibilities.trim() ? (
+                  <div
+                    data-testid="display-responsibilities"
+                    className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed bg-gray-50/50 p-4 rounded-lg border border-gray-100"
+                  >
+                    {member.responsibilities}
+                  </div>
+                ) : (
+                  <div
+                    data-testid="display-responsibilities-empty"
+                    className="text-sm text-gray-500 italic bg-gray-50 rounded-lg p-4 border border-dashed border-gray-200"
+                  >
+                    Обязанности пока не указаны
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Future-ready block: Рабочая заметка */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-3 shadow-sm">
-            <h2 className="text-base font-semibold text-gray-900">Рабочая заметка</h2>
-            <div className="text-sm text-gray-500 italic bg-gray-50 rounded-lg p-4 border border-dashed border-gray-200">
-              Рабочая заметка пока не добавлена.
+          {/* Section 3: Рабочая заметка */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-gray-900">Рабочая заметка</h2>
+                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
+                  Внутренняя заметка
+                </span>
+              </div>
+              {!isProfileEditing && canEditProfile && (
+                <button
+                  type="button"
+                  onClick={handleStartProfileEdit}
+                  className="inline-flex items-center px-3.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                >
+                  Редактировать
+                </button>
+              )}
             </div>
+
+            {isProfileEditing ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">
+                    Внутренняя административная информация о сотруднике
+                  </span>
+                  <span
+                    className={`text-xs ${
+                      isWorkNoteExceeded ? 'text-rose-600 font-semibold' : 'text-gray-500'
+                    }`}
+                    data-testid="work-note-char-counter"
+                  >
+                    {workNoteCharCount} / 4000
+                  </span>
+                </div>
+                <textarea
+                  data-testid="textarea-work-note"
+                  rows={4}
+                  value={draftWorkNote}
+                  onChange={(e) => setDraftWorkNote(e.target.value)}
+                  placeholder="Рабочая заметка..."
+                  className={`w-full rounded-md shadow-sm text-sm border p-3 focus:outline-none focus:ring-2 ${
+                    isWorkNoteExceeded
+                      ? 'border-rose-300 focus:ring-rose-500 focus:border-rose-500'
+                      : 'border-gray-300 focus:ring-purple-500 focus:border-purple-500'
+                  }`}
+                />
+                {isWorkNoteExceeded && (
+                  <p className="text-xs text-rose-600 mt-1">Превышен лимит в 4000 символов</p>
+                )}
+              </div>
+            ) : (
+              <div>
+                {member.workNote && member.workNote.trim() ? (
+                  <div
+                    data-testid="display-work-note"
+                    className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed bg-gray-50/50 p-4 rounded-lg border border-gray-100"
+                  >
+                    {member.workNote}
+                  </div>
+                ) : (
+                  <div
+                    data-testid="display-work-note-empty"
+                    className="text-sm text-gray-500 italic bg-gray-50 rounded-lg p-4 border border-dashed border-gray-200"
+                  >
+                    Рабочая заметка пока не добавлена
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* In Edit Mode: Save and Cancel buttons at the bottom of the editing section */}
+            {isProfileEditing && (
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={handleCancelProfileEdit}
+                  disabled={isProfileSaving}
+                  className="px-4 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveProfile}
+                  disabled={isProfileSaving || isProfileLimitExceeded}
+                  className="px-4 py-2 text-xs font-medium text-white bg-purple-600 border border-transparent rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  {isProfileSaving && (
+                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  )}
+                  Сохранить
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {/* TAB 2: ДОСТУП */}
       {activeTab === 'access' && (

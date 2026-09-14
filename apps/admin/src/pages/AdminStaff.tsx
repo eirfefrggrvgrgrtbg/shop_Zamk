@@ -314,6 +314,7 @@ export function AdminStaff() {
                       <div>
                         <Link
                           to={`/staff/${m.userId}`}
+                          data-testid={`staff-link-${m.userId}`}
                           className="text-sm font-medium text-indigo-600 hover:text-indigo-900 hover:underline"
                         >
                           {m.name}
