@@ -191,3 +191,61 @@ describe('AdminReceivingScanner Permissions Contract', () => {
     expect(confirmButton.disabled).toBe(false);
   });
 });
+
+describe('AdminReceivingScanner Layout-Independent Normalization (SCN.1C)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(adminOrdersApi.resolveReceivingCode).mockResolvedValue(mockFulfillment as any);
+    vi.mocked(adminOrdersApi.startReceiving).mockResolvedValue(mockSession as any);
+    vi.mocked(adminOrdersApi.scanItem).mockResolvedValue({
+      ...mockSession,
+      items: [{ ...mockSession.items[0], scannedQuantity: 1 }],
+    } as any);
+    setupAuth(['orders.read', 'warehouse.receiving', 'shipments.create']);
+  });
+
+  it('normalizes Russian-layout fulfillment code on Enter and button click', async () => {
+    render(
+      <MemoryRouter>
+        <AdminReceivingScanner />
+      </MemoryRouter>
+    );
+
+    const searchInput = screen.getByTestId('receiving-code-input') as HTMLInputElement;
+    // FUL-2026-1001 in RU layout -> АГД-2026-1001
+    fireEvent.change(searchInput, { target: { value: 'АГД-2026-1001' } });
+    fireEvent.submit(searchInput.closest('form')!);
+
+    await waitFor(() => {
+      expect(adminOrdersApi.resolveReceivingCode).toHaveBeenCalledWith('FUL-2026-1001');
+    });
+  });
+
+  it('normalizes Russian-layout item barcode inside workspace', async () => {
+    render(
+      <MemoryRouter>
+        <AdminReceivingScanner />
+      </MemoryRouter>
+    );
+
+    const searchInput = screen.getByTestId('receiving-code-input') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: 'FUL-2026-1001' } });
+    fireEvent.submit(searchInput.closest('form')!);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('receiving-item-barcode-input')).toBeDefined();
+    });
+
+    const itemInput = screen.getByTestId('receiving-item-barcode-input') as HTMLInputElement;
+    // SKU-001 in RU layout -> ЫЛГ-001
+    fireEvent.change(itemInput, { target: { value: 'ЫЛГ-001' } });
+    fireEvent.submit(itemInput.closest('form')!);
+
+    await waitFor(() => {
+      expect(adminOrdersApi.scanItem).toHaveBeenCalledWith(
+        'ful-123',
+        expect.objectContaining({ barcode: 'SKU-001' })
+      );
+    });
+  });
+});

@@ -34,6 +34,7 @@ import {
   humanizeReturnStatus,
   humanizeSupplyStatus
 } from '../utils/statusMapper';
+import { normalizeScannerCode } from '../utils/scanner';
 
 const formatHumanUnitStatus = (status?: string): string => {
   switch (status) {
@@ -227,11 +228,11 @@ export function AdminInventoryReconciliation() {
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!scanCode.trim() || isProcessing || !session) return;
+    const code = normalizeScannerCode(scanCode);
+    if (!code || isProcessing || !session) return;
 
     setIsProcessing(true);
     setActionError(null);
-    const code = scanCode.trim();
 
     try {
       const res = await scanInventoryReconciliation(session.id, code);

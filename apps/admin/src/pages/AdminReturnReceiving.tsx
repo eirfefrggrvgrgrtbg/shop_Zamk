@@ -29,6 +29,7 @@ import type {
   AdminReturnReceivingState,
 } from '@zamk/api-client/src/types';
 import { playBeepSound } from '../utils/audio';
+import { normalizeScannerCode } from '../utils/scanner';
 
 export function AdminReturnReceiving() {
   const { id } = useParams<{ id: string }>();
@@ -133,7 +134,7 @@ export function AdminReturnReceiving() {
 
   const handleScanSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const code = barcodeInput.trim();
+    const code = normalizeScannerCode(barcodeInput);
     if (!code || !id || isScanning || !canReceive) return;
 
     try {

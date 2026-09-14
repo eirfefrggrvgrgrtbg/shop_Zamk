@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { PackageSearch, ArrowRight, XCircle, CheckCircle2, Box, Store, RefreshCw, Check, AlertTriangle } from 'lucide-react';
 import { processFoundUnit, ProcessFoundUnitResponse, finalizeSupplyReceivingSession } from '@zamk/api-client/src/admin';
 import { playBeepSound } from '../utils/audio';
+import { normalizeScannerCode } from '../utils/scanner';
 
 export function AdminFreeScanner() {
   const [searchParams] = useSearchParams();
@@ -28,7 +29,7 @@ export function AdminFreeScanner() {
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
-    const code = unitCode.trim();
+    const code = normalizeScannerCode(unitCode);
     if (!code) return;
 
     setLoading(true);

@@ -34,6 +34,7 @@ import type {
 } from '@zamk/api-client/src/types';
 
 import { playBeepSound } from '../utils/audio';
+import { normalizeScannerCode } from '../utils/scanner';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 
 function mapReceivingError(err: any): string {
@@ -220,7 +221,7 @@ export function AdminSupplyReceiving() {
 
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
-    const input = qrInput.trim();
+    const input = normalizeScannerCode(qrInput);
     if (!input) return;
 
     try {
@@ -306,7 +307,7 @@ export function AdminSupplyReceiving() {
 
   const handleScanItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    const rawInput = barcodeInput.trim();
+    const rawInput = normalizeScannerCode(barcodeInput);
     if (!rawInput || !session || !session.items) return;
 
     try {

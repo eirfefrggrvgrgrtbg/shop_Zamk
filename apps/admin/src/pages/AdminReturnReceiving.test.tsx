@@ -927,4 +927,50 @@ describe('AdminReturnReceiving Component & Flows', () => {
       expect(screen.getByText('Комментарий покупателя не указан')).toBeDefined();
     });
   });
+
+  describe('AdminReturnReceiving Layout-Independent Normalization (SCN.1C)', () => {
+    it('normalizes Russian-layout ZMU scan upon submission', async () => {
+      (useAdminAuth as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        permissions: ['returns.read', 'warehouse.returns'],
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+        hasPermission: (p: string) => p === 'returns.read' || p === 'warehouse.returns',
+        hasAnyPermission: (ps: string[]) => ps.some(p => p === 'returns.read' || p === 'warehouse.returns'),
+      });
+
+      vi.spyOn(adminReturnsApi, 'getAdminReturnReceivingState').mockResolvedValue(mockReceivingStateActive);
+      const scanSpy = vi.spyOn(adminReturnsApi, 'scanAdminReturnUnit').mockResolvedValue({
+        scannedUnit: {
+          id: 'u-1',
+          unitCode: 'ZMU-BR8XJV54XCMX48ZZ',
+          disposition: 'restock',
+          createdAt: new Date().toISOString(),
+        } as any,
+        item: mockReceivingStateActive.items[0],
+        canFinalize: false,
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/returns/ret-100193-id/receiving']}>
+          <Routes>
+            <Route path="/returns/:id/receiving" element={<AdminReturnReceiving />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText(/Например: ZMU-XUJBQQ5ADSW4BWTX/i)).toBeDefined();
+      });
+
+      const input = screen.getByPlaceholderText(/Например: ZMU-XUJBQQ5ADSW4BWTX/i) as HTMLInputElement;
+      // Scanned in Russian layout:
+      fireEvent.change(input, { target: { value: 'ЯЬГ-ИК8ЧОМ54ЧСЬЧ48ЯЯ' } });
+      fireEvent.submit(input.closest('form')!);
+
+      await waitFor(() => {
+        expect(scanSpy).toHaveBeenCalledWith('ret-100193-id', 'ZMU-BR8XJV54XCMX48ZZ');
+      });
+    });
+  });
 });

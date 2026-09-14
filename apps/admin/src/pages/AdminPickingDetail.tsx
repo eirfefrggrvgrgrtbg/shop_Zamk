@@ -25,6 +25,7 @@ import {
   CompatibleUnit,
 } from '../api/adminPicking';
 import { formatOrderNumber } from '../utils/orderFormatters';
+import { normalizeScannerCode } from '../utils/scanner';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 
 interface FeedbackMessage {
@@ -118,7 +119,7 @@ export function AdminPickingDetail() {
 
   const handleScanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const code = scanInput.trim();
+    const code = normalizeScannerCode(scanInput);
     if (!code || isScanning || !id) return;
 
     setIsScanning(true);

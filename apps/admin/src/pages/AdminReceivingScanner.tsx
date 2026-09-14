@@ -24,6 +24,7 @@ interface ReceivingSessionState {
 }
 
 import { playBeepSound } from '../utils/audio';
+import { normalizeScannerCode } from '../utils/scanner';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 
 export function AdminReceivingScanner() {
@@ -69,7 +70,7 @@ export function AdminReceivingScanner() {
   const handleCodeSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!canReceive) return;
-    const code = scannedCodeInput.trim();
+    const code = normalizeScannerCode(scannedCodeInput);
     if (!code) return;
 
     try {
@@ -103,7 +104,7 @@ export function AdminReceivingScanner() {
 
   const handleItemScan = async (e: React.FormEvent) => {
     e.preventDefault();
-    const barcode = itemBarcodeInput.trim();
+    const barcode = normalizeScannerCode(itemBarcodeInput);
     if (!barcode || !activeFulfillment || !session) return;
 
     try {

@@ -306,6 +306,36 @@ describe("AdminInventoryReconciliation", () => {
     });
   });
 
+  it("normalizes Cyrillic RU scanner input to Latin ZMU code", async () => {
+    vi.mocked(api.getInventoryReconciliation).mockResolvedValue(mockSession);
+    vi.mocked(api.scanInventoryReconciliation).mockResolvedValue({
+      classification: "expected_found",
+      session: { ...mockSession, foundExpectedCount: 3 },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/inventory/reconciliation/session-1"]}>
+        <Routes>
+          <Route path="/inventory/reconciliation/:id" element={<AdminInventoryReconciliation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/Штрихкод ZMU.../i)).toBeDefined();
+    });
+
+    const input = screen.getByPlaceholderText(/Штрихкод ZMU.../i) as HTMLInputElement;
+
+    // "ЯЬГ-ИК8ЧОМ54ЧСЬЧ48ЯЯ" -> "ZMU-BR8XJV54XCMX48ZZ"
+    fireEvent.change(input, { target: { value: "ЯЬГ-ИК8ЧОМ54ЧСЬЧ48ЯЯ" } });
+    fireEvent.submit(input);
+
+    await waitFor(() => {
+      expect(api.scanInventoryReconciliation).toHaveBeenCalledWith("session-1", "ZMU-BR8XJV54XCMX48ZZ");
+    });
+  });
+
   it("renders in_progress progress labels correctly", async () => {
     vi.mocked(api.getInventoryReconciliation).mockResolvedValue({
       ...mockSession,
