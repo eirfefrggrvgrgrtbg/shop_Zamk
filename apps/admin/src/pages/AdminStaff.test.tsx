@@ -159,10 +159,118 @@ describe('AdminStaff List Link Identifier Regressions (EMP.1D2C)', () => {
 
     const links = screen.getAllByRole('link');
     const staffMemberLinks = links.filter((l) => l.getAttribute('href')?.startsWith('/staff/'));
-    expect(staffMemberLinks.length).toBe(2);
+    expect(staffMemberLinks.length).toBe(4);
 
     const hrefs = staffMemberLinks.map((l) => l.getAttribute('href'));
     expect(hrefs).toContain('/staff/0152e515-28b2-4da6-9ffe-af65e6492858');
     expect(hrefs).toContain('/staff/cad55a1a-919e-4f33-95fc-400b549a904a');
+  });
+});
+
+describe('EMP.1D3B — Clean Staff List Into Employee Directory', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useAdminAuth).mockReturnValue(defaultAuthContext);
+    vi.mocked(adminApi.listStaffMembers).mockResolvedValue({ items: mockMembers });
+    vi.mocked(adminApi.listStaffRoles).mockResolvedValue({ items: mockRoles });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('A-E: renders employee directory columns: name/email, template name, status badge, created date', async () => {
+    render(
+      <MemoryRouter initialEntries={['/staff']}>
+        <Routes>
+          <Route path="/staff" element={<AdminStaff />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Тест Поддержка')).toBeDefined();
+    });
+
+    // Column heading
+    expect(screen.getByText('Шаблон доступа')).toBeDefined();
+    expect(screen.queryByText('РОЛЬ')).toBeNull();
+
+    // Row values
+    expect(screen.getByText('support@test.local')).toBeDefined();
+    expect(screen.getByText('Поддержка')).toBeDefined();
+    expect(screen.getByText('Оператор склада')).toBeDefined();
+    expect(screen.getAllByText('Активен').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('F & G: employee links use canonical userId and open /staff/{userId}', async () => {
+    render(
+      <MemoryRouter initialEntries={['/staff']}>
+        <Routes>
+          <Route path="/staff" element={<AdminStaff />} />
+          <Route path="/staff/:userId" element={<DummyDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Тест Поддержка')).toBeDefined();
+    });
+
+    const openLink = screen.getByTestId('staff-open-link-0152e515-28b2-4da6-9ffe-af65e6492858');
+    expect(openLink.getAttribute('href')).toBe('/staff/0152e515-28b2-4da6-9ffe-af65e6492858');
+
+    fireEvent.click(openLink);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dummy-detail')).toBeDefined();
+    });
+    expect(screen.getByTestId('dummy-detail').textContent).toBe('Detail for 0152e515-28b2-4da6-9ffe-af65e6492858');
+  });
+
+  it('H-N: all duplicated row action buttons and modals are absent', async () => {
+    render(
+      <MemoryRouter initialEntries={['/staff']}>
+        <Routes>
+          <Route path="/staff" element={<AdminStaff />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Тест Поддержка')).toBeDefined();
+    });
+
+    // Row action buttons absent
+    expect(screen.queryByRole('button', { name: 'Сменить роль' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Заблокировать' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Разблокировать' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Восстановить' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Архивировать' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Пароль' })).toBeNull();
+
+    // Modals absent
+    expect(screen.queryByText('Сменить роль')).toBeNull();
+    expect(screen.queryByText('Сбросить пароль')).toBeNull();
+  });
+
+  it('O: [Создать доступ] remains available for authorized users', async () => {
+    render(
+      <MemoryRouter initialEntries={['/staff']}>
+        <Routes>
+          <Route path="/staff" element={<AdminStaff />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Тест Поддержка')).toBeDefined();
+    });
+
+    const createBtn = screen.getByRole('button', { name: 'Создать доступ' });
+    expect(createBtn).toBeDefined();
+
+    fireEvent.click(createBtn);
+    expect(screen.getByText('Создать доступ сотрудника')).toBeDefined();
   });
 });

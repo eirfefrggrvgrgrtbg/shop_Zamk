@@ -4,13 +4,9 @@ import {
   listStaffMembers,
   listStaffRoles,
   createStaffMember,
-  updateStaffRole,
-  updateStaffStatus,
-  resetStaffPassword,
 } from '@zamk/api-client/src/admin';
 import type { StaffMemberView, StaffRoleWithPermissions } from '@zamk/api-client/src/types';
-import { useAdminAuth } from '../contexts/AdminAuthContext';
-import { AlertCircle, Plus, CheckCircle2, Users, RefreshCw, Copy } from 'lucide-react';
+import { AlertCircle, Plus, CheckCircle2, Users, Copy } from 'lucide-react';
 import { PermissionGuard } from '../components/PermissionGuard';
 
 // ---- Constants ----
@@ -72,7 +68,7 @@ function PasswordSuccessModal({ email, roleCode, password, onClose }: {
         </div>
         <p className="text-sm text-gray-600 mb-1">Пользователь: <span className="font-medium">{email}</span></p>
         <p className="text-sm text-gray-600 mb-3">
-          Роль: <span className="font-medium">{ROLE_NAMES[roleCode] ?? roleCode}</span>
+          Шаблон доступа: <span className="font-medium">{ROLE_NAMES[roleCode] ?? roleCode}</span>
         </p>
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">
           Передайте пароль пользователю надёжным способом. При первом входе он будет обязан сменить пароль.
@@ -100,8 +96,6 @@ function PasswordSuccessModal({ email, roleCode, password, onClose }: {
 // ---- Main Page ----
 
 export function AdminStaff() {
-  const { isOwner, user: currentUser } = useAdminAuth();
-
   const [members, setMembers] = useState<StaffMemberView[]>([]);
   const [roles, setRoles] = useState<StaffRoleWithPermissions[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -119,18 +113,6 @@ export function AdminStaff() {
 
   // Password success modal
   const [successPassword, setSuccessPassword] = useState<{ email: string; roleCode: string; password: string } | null>(null);
-
-  // Change role modal
-  const [changeRoleTarget, setChangeRoleTarget] = useState<StaffMemberView | null>(null);
-  const [changeRoleCode, setChangeRoleCode] = useState('');
-  const [isChangingRole, setIsChangingRole] = useState(false);
-  const [changeRoleError, setChangeRoleError] = useState<string | null>(null);
-
-  // Reset password modal
-  const [resetTarget, setResetTarget] = useState<StaffMemberView | null>(null);
-  const [resetPassword, setResetPasswordValue] = useState('');
-  const [isResetting, setIsResetting] = useState(false);
-  const [resetError, setResetError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -175,91 +157,12 @@ export function AdminStaff() {
     }
   };
 
-  // ---- Status handler ----
-
-  const handleStatusChange = async (member: StaffMemberView, newStatus: string) => {
-    const statusLabels: Record<string, string> = {
-      blocked: 'заблокирован',
-      archived: 'архивирован',
-    };
-    const confirmMsg = newStatus === 'blocked' || newStatus === 'archived'
-      ? `Вы уверены, что хотите перевести «${member.name}» в статус «${statusLabels[newStatus] ?? newStatus}»?`
-      : null;
-
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
-
-    try {
-      await updateStaffStatus(member.userId, { status: newStatus as any });
-      setMembers(prev => prev.map(m => m.userId === member.userId ? { ...m, staffStatus: newStatus } : m));
-    } catch (err: any) {
-      setError(err.message || 'Не удалось обновить статус');
-      setTimeout(() => setError(null), 3000);
-      loadData();
-    }
-  };
-
-  // ---- Change role handler ----
-
-  const openChangeRole = (member: StaffMemberView) => {
-    setChangeRoleTarget(member);
-    setChangeRoleCode(member.roleCode);
-    setChangeRoleError(null);
-  };
-
-  const handleChangeRole = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!changeRoleTarget) return;
-    setIsChangingRole(true);
-    setChangeRoleError(null);
-    try {
-      await updateStaffRole(changeRoleTarget.userId, { roleCode: changeRoleCode });
-      setChangeRoleTarget(null);
-      loadData();
-    } catch (err: any) {
-      setChangeRoleError(err.message || 'Не удалось изменить роль');
-    } finally {
-      setIsChangingRole(false);
-    }
-  };
-
-  // ---- Reset password handler ----
-
-  const openResetPassword = (member: StaffMemberView) => {
-    setResetTarget(member);
-    setResetPasswordValue('');
-    setResetError(null);
-  };
-
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!resetTarget) return;
-    setIsResetting(true);
-    setResetError(null);
-    const localPwd = resetPassword;
-    try {
-      await resetStaffPassword(resetTarget.userId, { temporaryPassword: localPwd });
-      const target = resetTarget;
-      setResetTarget(null);
-      setResetPasswordValue('');
-      // Show password one time from local variable
-      setSuccessPassword({ email: target.email, roleCode: target.roleCode, password: localPwd });
-    } catch (err: any) {
-      setResetError(err.message || 'Не удалось сбросить пароль');
-    } finally {
-      setIsResetting(false);
-    }
-  };
-
-  // ---- Helpers ----
-
-  const canModifyOwner = isOwner();
-
   return (
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Сотрудники</h1>
-          <p className="mt-1 text-sm text-gray-500">Управление доступом сотрудников платформы</p>
+          <p className="mt-1 text-sm text-gray-500">Справочник сотрудников платформы</p>
         </div>
         <PermissionGuard permission="staff.create">
           <button
@@ -295,19 +198,15 @@ export function AdminStaff() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Имя / Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Роль</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Сотрудник</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Шаблон доступа</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата создания</th>
-                <th className="relative px-6 py-3"><span className="sr-only">Действия</span></th>
+                <th className="relative px-6 py-3"><span className="sr-only">Открыть</span></th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {members.map((m) => {
-                const isCurrentUser = m.userId === currentUser?.id;
-                const isOwnerRow = m.roleCode === 'owner';
-                const canModify = isOwnerRow ? canModifyOwner : true;
-
                 return (
                   <tr key={m.userId}>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -339,41 +238,13 @@ export function AdminStaff() {
                       {new Date(m.createdAt).toLocaleDateString('ru-RU')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end space-x-2">
-                        <PermissionGuard permission="staff.update">
-                          {canModify && (
-                            <button
-                              onClick={() => openChangeRole(m)}
-                              className="text-indigo-600 hover:text-indigo-900"
-                            >
-                              Сменить роль
-                            </button>
-                          )}
-                        </PermissionGuard>
-                        <PermissionGuard permission="staff.block">
-                          {m.staffStatus !== 'active' && !isCurrentUser && canModify && (
-                            <button onClick={() => handleStatusChange(m, 'active')} className="text-green-600 hover:text-green-900">
-                              Восстановить
-                            </button>
-                          )}
-                          {m.staffStatus === 'active' && !isCurrentUser && canModify && (
-                            <button onClick={() => handleStatusChange(m, 'blocked')} className="text-red-600 hover:text-red-900">
-                              Заблокировать
-                            </button>
-                          )}
-                          {m.staffStatus !== 'archived' && !isCurrentUser && canModify && (
-                            <button onClick={() => handleStatusChange(m, 'archived')} className="text-gray-500 hover:text-gray-800">
-                              Архивировать
-                            </button>
-                          )}
-                        </PermissionGuard>
-                        <PermissionGuard permission="staff.update">
-                          <button onClick={() => openResetPassword(m)} className="text-gray-500 hover:text-gray-800 flex items-center gap-1">
-                            <RefreshCw className="h-3.5 w-3.5" />
-                            Пароль
-                          </button>
-                        </PermissionGuard>
-                      </div>
+                      <Link
+                        to={`/staff/${m.userId}`}
+                        data-testid={`staff-open-link-${m.userId}`}
+                        className="text-xs font-medium text-indigo-600 hover:text-indigo-900 hover:underline inline-flex items-center gap-1"
+                      >
+                        Открыть &rarr;
+                      </Link>
                     </td>
                   </tr>
                 );
@@ -414,10 +285,10 @@ export function AdminStaff() {
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Роль *</label>
+                <label className="block text-sm font-medium text-gray-700">Шаблон доступа *</label>
                 <select required value={newRoleCode} onChange={e => setNewRoleCode(e.target.value)}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
-                  <option value="">Выберите роль</option>
+                  <option value="">Выберите шаблон доступа</option>
                   {roles.map(r => (
                     <option key={r.code} value={r.code}>{ROLE_NAMES[r.code] ?? r.name}</option>
                   ))}
@@ -444,81 +315,6 @@ export function AdminStaff() {
                 <button type="submit" disabled={isCreating}
                   className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
                   {isCreating ? 'Создание...' : 'Создать доступ'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Change Role Modal */}
-      {changeRoleTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-xl">
-            <h2 className="text-lg font-bold mb-4">Сменить роль</h2>
-            {changeRoleError && (
-              <div className="mb-3 p-3 bg-red-50 text-red-700 text-sm rounded">{changeRoleError}</div>
-            )}
-            <form onSubmit={handleChangeRole} className="space-y-4">
-              <div>
-                <p className="text-sm text-gray-600">
-                  Текущая роль: <span className="font-medium">{ROLE_NAMES[changeRoleTarget.roleCode] ?? changeRoleTarget.roleName}</span>
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Новая роль</label>
-                <select required value={changeRoleCode} onChange={e => setChangeRoleCode(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
-                  {roles.map(r => (
-                    <option key={r.code} value={r.code}>{ROLE_NAMES[r.code] ?? r.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex justify-end space-x-3">
-                <button type="button" onClick={() => setChangeRoleTarget(null)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                  Отмена
-                </button>
-                <button type="submit" disabled={isChangingRole}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
-                  {isChangingRole ? 'Сохранение...' : 'Сохранить'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Reset Password Modal */}
-      {resetTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-xl">
-            <h2 className="text-lg font-bold mb-1">Сбросить пароль</h2>
-            <p className="text-sm text-gray-500 mb-4">{resetTarget.email}</p>
-            {resetError && (
-              <div className="mb-3 p-3 bg-red-50 text-red-700 text-sm rounded">{resetError}</div>
-            )}
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Временный пароль *</label>
-                <div className="mt-1 flex gap-2">
-                  <input required type="text" minLength={8} value={resetPassword} onChange={e => setResetPasswordValue(e.target.value)}
-                    placeholder="Минимум 8 символов"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
-                  <button type="button" onClick={() => setResetPasswordValue(generatePassword())}
-                    className="px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50">
-                    Сгенерировать
-                  </button>
-                </div>
-              </div>
-              <div className="flex justify-end space-x-3">
-                <button type="button" onClick={() => setResetTarget(null)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                  Отмена
-                </button>
-                <button type="submit" disabled={isResetting}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
-                  {isResetting ? 'Сброс...' : 'Сбросить пароль'}
                 </button>
               </div>
             </form>
