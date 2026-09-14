@@ -27,13 +27,14 @@ var (
 )
 
 type Service struct {
-	repo     *Repository
-	userRepo *users.Repository
-	db       *postgres.Client
+	repo      *Repository
+	userRepo  *users.Repository
+	auditRepo *AuditRepository
+	db        *postgres.Client
 }
 
-func NewService(repo *Repository, userRepo *users.Repository, db *postgres.Client) *Service {
-	return &Service{repo: repo, userRepo: userRepo, db: db}
+func NewService(repo *Repository, userRepo *users.Repository, auditRepo *AuditRepository, db *postgres.Client) *Service {
+	return &Service{repo: repo, userRepo: userRepo, auditRepo: auditRepo, db: db}
 }
 
 // GetStaffAccess returns the full staff access object for a user.
@@ -652,4 +653,136 @@ func (s *Service) UpdateStaffMemberPermissions(ctx context.Context, input Update
 		perms = []string{}
 	}
 	return perms, nil
+}
+
+
+// GetStaffMemberDetail retrieves detailed staff information including profile fields.
+func (s *Service) GetStaffMemberDetail(ctx context.Context, actorUserID, targetUserID uuid.UUID) (*StaffMemberDetail, error) {
+	hasPerm, err := s.repo.HasMemberPermission(ctx, actorUserID, PermissionStaffRead)
+	if err != nil {
+		return nil, fmt.Errorf("check read perm: %w", err)
+	}
+	if !hasPerm {
+		return nil, ErrPermissionManagementForbidden
+	}
+
+	detail, err := s.repo.GetStaffMemberDetail(ctx, targetUserID)
+	if err != nil {
+		if errors.Is(err, ErrStaffMemberNotFound) {
+			return nil, ErrTargetNotStaff
+		}
+		return nil, err
+	}
+
+	perms, err := s.repo.GetMemberPermissions(ctx, targetUserID)
+	if err != nil {
+		return nil, fmt.Errorf("get target perms: %w", err)
+	}
+	detail.Permissions = perms
+
+	return detail, nil
+}
+
+// UpdateStaffProfile updates the profile fields within a transaction, alongside an audit event.
+func (s *Service) UpdateStaffProfile(ctx context.Context, input UpdateStaffProfileInput) error {
+	tx, err := s.db.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := s.repo.WithTx(tx)
+	txAudit := s.auditRepo.WithTx(tx)
+
+	hasPerm, err := txRepo.HasMemberPermission(ctx, input.ActorUserID, PermissionStaffUpdate)
+	if err != nil {
+		return fmt.Errorf("check update perm: %w", err)
+	}
+	if !hasPerm {
+		return ErrPermissionManagementForbidden
+	}
+
+	// Fetch current to resolve omitted fields
+	current, err := txRepo.GetStaffMemberDetail(ctx, input.TargetUserID)
+	if err != nil {
+		if errors.Is(err, ErrStaffMemberNotFound) {
+			return ErrTargetNotStaff
+		}
+		return err
+	}
+
+	finalResp := current.Responsibilities
+	finalNote := current.WorkNote
+	respChanged := false
+	noteChanged := false
+
+	if input.ResponsibilitiesUpdate {
+		if input.Responsibilities != nil {
+			val := strings.TrimSpace(*input.Responsibilities)
+			if val == "" {
+				finalResp = nil
+			} else {
+				finalResp = &val
+			}
+		} else {
+			finalResp = nil
+		}
+
+		if current.Responsibilities == nil && finalResp != nil {
+			respChanged = true
+		} else if current.Responsibilities != nil && finalResp == nil {
+			respChanged = true
+		} else if current.Responsibilities != nil && finalResp != nil && *current.Responsibilities != *finalResp {
+			respChanged = true
+		}
+	}
+
+	if input.WorkNoteUpdate {
+		if input.WorkNote != nil {
+			val := strings.TrimSpace(*input.WorkNote)
+			if val == "" {
+				finalNote = nil
+			} else {
+				finalNote = &val
+			}
+		} else {
+			finalNote = nil
+		}
+
+		if current.WorkNote == nil && finalNote != nil {
+			noteChanged = true
+		} else if current.WorkNote != nil && finalNote == nil {
+			noteChanged = true
+		} else if current.WorkNote != nil && finalNote != nil && *current.WorkNote != *finalNote {
+			noteChanged = true
+		}
+	}
+
+	if finalResp != nil && len([]rune(*finalResp)) > 4000 {
+		return fmt.Errorf("%w: responsibilities must be <= 4000 characters", ErrInvalidPermission)
+	}
+	if finalNote != nil && len([]rune(*finalNote)) > 4000 {
+		return fmt.Errorf("%w: work note must be <= 4000 characters", ErrInvalidPermission)
+	}
+
+	if err := txRepo.UpdateStaffProfile(ctx, input.TargetUserID, finalResp, finalNote); err != nil {
+		return err
+	}
+
+	// Record audit within same transaction
+	err = txAudit.RecordAudit(ctx, AuditEvent{
+		ActorUserID: input.ActorUserID,
+		Action:      "staff.profile_update",
+		EntityType:  "staff_member",
+		EntityID:    &input.TargetUserID,
+		Metadata: map[string]any{
+			"responsibilitiesChanged": respChanged,
+			"workNoteChanged":         noteChanged,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("record audit: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }

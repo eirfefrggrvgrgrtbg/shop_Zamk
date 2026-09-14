@@ -29,7 +29,8 @@ func setupOwnerLockoutHarness(t *testing.T) (context.Context, *postgres.Client, 
 
 	staffRepo := staff.NewRepository(pgClient.Pool)
 	userRepo := users.NewRepository(pgClient.Pool)
-	svc := staff.NewService(staffRepo, userRepo, pgClient)
+	auditRepo := staff.NewAuditRepository(pgClient.Pool)
+	svc := staff.NewService(staffRepo, userRepo, auditRepo, pgClient)
 
 	var ownerRoleID, moderatorRoleID uuid.UUID
 	err = pgClient.Pool.QueryRow(ctx, `SELECT id FROM staff_roles WHERE code = 'owner'`).Scan(&ownerRoleID)

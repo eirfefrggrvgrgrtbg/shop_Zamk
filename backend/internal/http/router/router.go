@@ -452,6 +452,8 @@ func New(
 		r.With(perm("audit.read")).Get("/audit-logs", auditHandler.HandleListLogs)
 		r.With(perm("reports.read")).Get("/reports/summary", reportsHandler.HandleGetSummary)
 		r.With(perm("staff.read")).Get("/staff/members", staffHandler.ListStaffMembers)
+		r.With(perm("staff.read")).Get("/staff/members/{userId}", staffHandler.GetStaffMemberDetail)
+		r.With(perm("staff.update")).Patch("/staff/members/{userId}/profile", staffHandler.UpdateStaffProfile)
 		r.With(perm("staff.create")).Post("/staff/members", staffHandler.CreateStaffMember)
 		r.With(perm("staff.update")).Patch("/staff/members/{userId}/role", staffHandler.UpdateStaffRole)
 		r.With(perm("staff.block")).Patch("/staff/members/{userId}/status", staffHandler.UpdateStaffStatus)

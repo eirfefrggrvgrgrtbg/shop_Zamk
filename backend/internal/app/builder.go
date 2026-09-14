@@ -145,7 +145,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	// Staff RBAC
 	staffRepo := staff.NewRepository(pgClient.Pool)
 	staffAuditRepo := staff.NewAuditRepository(pgClient.Pool)
-	staffService := staff.NewService(staffRepo, userRepo, pgClient)
+	staffService := staff.NewService(staffRepo, userRepo, staffAuditRepo, pgClient)
 	staffHandler := staff.NewHandler(staffService, staffAuditRepo, userRepo)
 	sellersHandler = sellersHandler.WithAudit(staffAuditRepo)
 	payoutsHandler = payoutsHandler.WithAudit(staffAuditRepo).WithStaffSvc(staffService)

@@ -400,3 +400,50 @@ func (r *Repository) ReplaceMemberPermissions(ctx context.Context, userID uuid.U
 	}
 	return nil
 }
+
+// GetStaffMemberDetail returns the staff member with profile text fields.
+func (r *Repository) GetStaffMemberDetail(ctx context.Context, userID uuid.UUID) (*StaffMemberDetail, error) {
+	query := `
+		SELECT sm.user_id, u.name, u.email, u.status AS user_status, u.must_change_password,
+		       sm.status AS staff_status, sm.created_at, sm.updated_at,
+		       sr.code AS role_code, sr.name AS role_name, sr.id AS role_id,
+		       sm.responsibilities, sm.work_note
+		FROM staff_members sm
+		JOIN users u ON u.id = sm.user_id
+		JOIN staff_roles sr ON sr.id = sm.staff_role_id
+		WHERE sm.user_id = $1
+	`
+	var m StaffMemberDetail
+	err := r.db.QueryRow(ctx, query, userID).Scan(
+		&m.UserID, &m.Name, &m.Email, &m.UserStatus, &m.MustChangePassword,
+		&m.StaffStatus, &m.CreatedAt, &m.UpdatedAt,
+		&m.RoleCode, &m.RoleName, &m.RoleID,
+		&m.Responsibilities, &m.WorkNote,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrStaffMemberNotFound
+		}
+		fmt.Println("DB ERROR:", err)
+		return nil, fmt.Errorf("get staff member detail: %w", err)
+	}
+	return &m, nil
+}
+
+// UpdateStaffProfile updates the profile text fields of a staff member.
+func (r *Repository) UpdateStaffProfile(ctx context.Context, userID uuid.UUID, responsibilities *string, workNote *string) error {
+	query := `
+		UPDATE staff_members
+		SET responsibilities = $1, work_note = $2, updated_at = now()
+		WHERE user_id = $3
+	`
+	res, err := r.db.Exec(ctx, query, responsibilities, workNote, userID)
+	if err != nil {
+		fmt.Println("DB ERROR:", err)
+		return fmt.Errorf("update staff profile: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrStaffMemberNotFound
+	}
+	return nil
+}

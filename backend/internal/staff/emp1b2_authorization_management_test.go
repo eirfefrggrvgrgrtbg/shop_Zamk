@@ -29,7 +29,8 @@ func setupEMP1B2Harness(t *testing.T) (context.Context, *postgres.Client, *staff
 
 	staffRepo := staff.NewRepository(pgClient.Pool)
 	userRepo := users.NewRepository(pgClient.Pool)
-	svc := staff.NewService(staffRepo, userRepo, pgClient)
+	auditRepo := staff.NewAuditRepository(pgClient.Pool)
+	svc := staff.NewService(staffRepo, userRepo, auditRepo, pgClient)
 
 	return ctx, pgClient, svc, staffRepo
 }

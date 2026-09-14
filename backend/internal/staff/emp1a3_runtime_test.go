@@ -26,7 +26,8 @@ func setupEMP1A3TestHarness(t *testing.T) (context.Context, *postgres.Client, *s
 
 	staffRepo := staff.NewRepository(pgClient.Pool)
 	userRepo := users.NewRepository(pgClient.Pool)
-	svc := staff.NewService(staffRepo, userRepo, pgClient)
+	auditRepo := staff.NewAuditRepository(pgClient.Pool)
+	svc := staff.NewService(staffRepo, userRepo, auditRepo, pgClient)
 
 	// Ensure an active owner exists as actor
 	var ownerRoleID uuid.UUID

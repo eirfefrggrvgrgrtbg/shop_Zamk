@@ -3,6 +3,7 @@ package staff
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -489,4 +490,121 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, data any) {
 
 func (h *Handler) writeError(w http.ResponseWriter, status int, code, message string) {
 	h.writeJSON(w, status, map[string]string{"error": code, "message": message})
+}
+
+
+// GetStaffMemberDetail returns the detailed profile for a specific staff member.
+// GET /api/admin/staff/members/{userId}
+func (h *Handler) GetStaffMemberDetail(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := userIDFromCtx(r)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+
+	targetID, err := uuid.Parse(chi.URLParam(r, "userId"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid userId")
+		return
+	}
+
+	detail, err := h.service.GetStaffMemberDetail(r.Context(), actorID, targetID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrTargetNotStaff), errors.Is(err, ErrStaffMemberNotFound):
+			h.writeError(w, http.StatusNotFound, "not_found", "Staff member not found")
+		case errors.Is(err, ErrPermissionManagementForbidden):
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get staff detail")
+		}
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, detail)
+}
+
+// UpdateStaffProfile patches a staff member's administrative profile.
+// PATCH /api/admin/staff/members/{userId}/profile
+func (h *Handler) UpdateStaffProfile(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := userIDFromCtx(r)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+
+	targetID, err := uuid.Parse(chi.URLParam(r, "userId"))
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid userId")
+		return
+	}
+
+	var raw map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	if len(raw) == 0 {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "Nothing to update")
+		return
+	}
+
+	for k := range raw {
+		if k != "responsibilities" && k != "workNote" {
+			h.writeError(w, http.StatusBadRequest, "invalid_request", fmt.Sprintf("unsupported field: %s", k))
+			return
+		}
+	}
+
+	input := UpdateStaffProfileInput{
+		TargetUserID: targetID,
+		ActorUserID:  actorID,
+	}
+
+	if val, ok := raw["responsibilities"]; ok {
+		input.ResponsibilitiesUpdate = true
+		if val != nil {
+			if s, ok := val.(string); ok {
+				input.Responsibilities = &s
+			} else {
+				h.writeError(w, http.StatusBadRequest, "invalid_request", "responsibilities must be string or null")
+				return
+			}
+		}
+	}
+
+	if val, ok := raw["workNote"]; ok {
+		input.WorkNoteUpdate = true
+		if val != nil {
+			if s, ok := val.(string); ok {
+				input.WorkNote = &s
+			} else {
+				h.writeError(w, http.StatusBadRequest, "invalid_request", "workNote must be string or null")
+				return
+			}
+		}
+	}
+
+	if !input.ResponsibilitiesUpdate && !input.WorkNoteUpdate {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "Nothing to update")
+		return
+	}
+
+	err = h.service.UpdateStaffProfile(r.Context(), input)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrTargetNotStaff), errors.Is(err, ErrStaffMemberNotFound):
+			h.writeError(w, http.StatusNotFound, "not_found", "Staff member not found")
+		case errors.Is(err, ErrPermissionManagementForbidden):
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
+		case errors.Is(err, ErrInvalidPermission):
+			h.writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		default:
+			h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update profile")
+		}
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }

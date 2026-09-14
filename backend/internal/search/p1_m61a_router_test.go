@@ -535,7 +535,8 @@ func TestM61A_RouterRBAC(t *testing.T) {
 
 		userRepo := users.NewRepository(pgClient.Pool)
 		staffRepo := staff.NewRepository(pgClient.Pool)
-		staffSvc := staff.NewService(staffRepo, userRepo, pgClient)
+		auditRepo := staff.NewAuditRepository(pgClient.Pool)
+		staffSvc := staff.NewService(staffRepo, userRepo, auditRepo, pgClient)
 
 		h := search.NewHandler(search.NewService(search.NewRepository(closedPool)), staffSvc, logger)
 

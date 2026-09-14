@@ -53,7 +53,14 @@ func NewAuditRepository(db postgres.DBTX) *AuditRepository {
 }
 
 // RecordAudit inserts an audit log entry. Errors are non-fatal — callers should log but not fail.
+
+// WithTx returns an AuditRepository bound to a transaction.
+func (r *AuditRepository) WithTx(tx postgres.DBTX) *AuditRepository {
+	return &AuditRepository{db: tx}
+}
+
 func (r *AuditRepository) RecordAudit(ctx context.Context, event AuditEvent) error {
+
 	meta := SanitizeMetadata(event.Metadata)
 	metaBytes, err := json.Marshal(meta)
 	if err != nil {

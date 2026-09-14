@@ -2,6 +2,8 @@ package staff
 
 // PermissionStaffPermissionsManage is the canonical capability required to manage individual staff capabilities.
 const PermissionStaffPermissionsManage = "staff.permissions.manage"
+const PermissionStaffRead = "staff.read"
+const PermissionStaffUpdate = "staff.update"
 
 var allPermissions = []string{
 	"analytics.read",

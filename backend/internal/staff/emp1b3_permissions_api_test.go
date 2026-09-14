@@ -52,7 +52,7 @@ func setupEMP1B3Harness(t *testing.T) *emp1b3Harness {
 	staffRepo := staff.NewRepository(pgClient.Pool)
 	userRepo := users.NewRepository(pgClient.Pool)
 	auditRepo := staff.NewAuditRepository(pgClient.Pool)
-	svc := staff.NewService(staffRepo, userRepo, pgClient)
+	svc := staff.NewService(staffRepo, userRepo, auditRepo, pgClient)
 	handler := staff.NewHandler(svc, auditRepo, userRepo)
 
 	cfg := &config.Config{}

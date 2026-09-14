@@ -22,7 +22,16 @@ type StaffMemberView struct {
 	UpdatedAt          time.Time `json:"updatedAt"`
 }
 
+
+// StaffMemberDetail extends StaffMemberView with large profile text fields.
+type StaffMemberDetail struct {
+	StaffMemberView
+	Responsibilities *string `json:"responsibilities"`
+	WorkNote         *string `json:"workNote"`
+}
+
 type StaffRole struct {
+
 	ID          uuid.UUID `json:"id"`
 	Code        string    `json:"code"`
 	Name        string    `json:"name"`
@@ -49,7 +58,18 @@ const (
 	StatusArchived StaffMemberStatus = "archived"
 )
 
+
+type UpdateStaffProfileInput struct {
+	TargetUserID           uuid.UUID
+	ActorUserID            uuid.UUID
+	Responsibilities       *string
+	ResponsibilitiesUpdate bool
+	WorkNote               *string
+	WorkNoteUpdate         bool
+}
+
 // StaffAccess is the full access view for a user.
+
 type StaffAccess struct {
 	Role        *StaffRole   `json:"role"`
 	Member      *StaffMember `json:"member"`

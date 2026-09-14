@@ -2423,3 +2423,13 @@ export interface UpdateReturnResponsibilityRequest {
   reasonCode: string;
   internalNote?: string;
 }
+
+export interface StaffMemberDetailResponse extends StaffMemberView {
+  responsibilities: string | null;
+  workNote: string | null;
+}
+
+export interface UpdateStaffMemberProfileRequest {
+  responsibilities?: string | null;
+  workNote?: string | null;
+}
