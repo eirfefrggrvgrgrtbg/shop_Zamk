@@ -23,6 +23,7 @@ export default defineConfig({
       'src/pages/AdminPickingDetail.test.tsx',
       'src/pages/AdminReceivingScanner.test.tsx',
       'src/pages/AdminStaffDetail.test.tsx',
+      'src/components/AdminNavigationAccess.test.tsx',
       'src/config/**/*.test.{ts,tsx}',
     ],
   },

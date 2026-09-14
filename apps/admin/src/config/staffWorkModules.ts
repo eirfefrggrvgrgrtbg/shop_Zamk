@@ -94,6 +94,55 @@ export const STAFF_SCREEN_ACCESS_RULES: StaffScreenAccessRule[] = [
 ];
 
 /**
+ * Retrieve explicit screen access rule for a route or key.
+ */
+export function getStaffScreenAccessRule(routeOrKey: string): StaffScreenAccessRule | undefined {
+  return STAFF_SCREEN_ACCESS_RULES.find(
+    (rule) => rule.route === routeOrKey || rule.key === routeOrKey
+  );
+}
+
+/**
+ * Retrieve visibility requirement (string or string[]) for a route or key.
+ */
+export function getStaffScreenVisibility(routeOrKey: string): string | string[] | undefined {
+  return getStaffScreenAccessRule(routeOrKey)?.visibility;
+}
+
+/**
+ * Check if screen visibility rule is satisfied using permission predicates.
+ * Handles single capability (string) and multi-capability OR rules (string[]).
+ */
+export function isScreenRuleVisible(
+  visibility: string | string[],
+  hasPermission: (permission: string) => boolean,
+  hasAnyPermission?: (permissions: string[]) => boolean
+): boolean {
+  if (Array.isArray(visibility)) {
+    if (hasAnyPermission) {
+      return hasAnyPermission(visibility);
+    }
+    return visibility.some((p) => hasPermission(p));
+  }
+  return hasPermission(visibility);
+}
+
+/**
+ * Check if screen visibility rule is satisfied using a permission list or set.
+ * Set-based for high performance in list loops (e.g. preview modal).
+ */
+export function isScreenVisibleWithPermissions(
+  visibility: string | string[],
+  permissions: string[] | Set<string>
+): boolean {
+  const permSet = permissions instanceof Set ? permissions : new Set(permissions);
+  if (Array.isArray(visibility)) {
+    return visibility.some((p) => permSet.has(p));
+  }
+  return permSet.has(visibility);
+}
+
+/**
  * 12 Canonical Staff Work Modules.
  * Presentation-only structure mapping all 86 atomic capabilities.
  */

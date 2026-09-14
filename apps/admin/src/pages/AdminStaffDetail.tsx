@@ -16,6 +16,7 @@ import {
 import {
   STAFF_SCREEN_ACCESS_RULES,
   getAccessTemplateDiff,
+  isScreenVisibleWithPermissions,
 } from '../config/staffWorkModules';
 import {
   STAFF_ACCESS_SECTIONS,
@@ -102,13 +103,7 @@ function getInitials(name?: string | null, email?: string | null): string {
   return '??';
 }
 
-function isScreenVisibleWithPerms(visibility: string | string[], permissions: string[]): boolean {
-  const permSet = new Set(permissions);
-  if (Array.isArray(visibility)) {
-    return visibility.some((v) => permSet.has(v));
-  }
-  return permSet.has(visibility);
-}
+const isScreenVisibleWithPerms = isScreenVisibleWithPermissions;
 
 export function AdminStaffDetail() {
   const { userId } = useParams<{ userId: string }>();

@@ -47,6 +47,7 @@ import { AdminStaff } from './pages/AdminStaff';
 import { AdminStaffDetail } from './pages/AdminStaffDetail';
 import { AdminAuthProvider } from './contexts/AdminAuthContext';
 import { AdminProtectedRoute } from './components/AdminProtectedRoute';
+import { getStaffScreenVisibility } from './config/staffWorkModules';
 
 export default function App() {
   return (
@@ -59,22 +60,22 @@ export default function App() {
           {/* Persistent Authenticated Layout Shell */}
           <Route element={<AdminProtectedRoute><AdminLayout /></AdminProtectedRoute>}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<AdminDashboard />} />
-            <Route path="/users" element={<AdminUsers />} />
-            <Route path="/sellers" element={<AdminProtectedRoute permission="sellers.read"><AdminSellers /></AdminProtectedRoute>} />
-            <Route path="/sellers/:id" element={<AdminProtectedRoute permission="sellers.read"><AdminSellerDetail /></AdminProtectedRoute>} />
-            <Route path="/auctions" element={<AdminProtectedRoute permission="auctions.read"><AdminAuctionsList /></AdminProtectedRoute>} />
+            <Route path="/dashboard" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/dashboard')}><AdminDashboard /></AdminProtectedRoute>} />
+            <Route path="/users" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/users')}><AdminUsers /></AdminProtectedRoute>} />
+            <Route path="/sellers" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/sellers')}><AdminSellers /></AdminProtectedRoute>} />
+            <Route path="/sellers/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/sellers')}><AdminSellerDetail /></AdminProtectedRoute>} />
+            <Route path="/auctions" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/auctions')}><AdminAuctionsList /></AdminProtectedRoute>} />
             <Route path="/auctions/new" element={<AdminProtectedRoute permission="auctions.create"><AdminAuctionCreate /></AdminProtectedRoute>} />
-            <Route path="/auctions/:id" element={<AdminProtectedRoute permission="auctions.read"><AdminAuctionDetail /></AdminProtectedRoute>} />
-            <Route path="/catalog" element={<AdminProtectedRoute permission={['categories.read', 'brands.read']}><AdminCatalog /></AdminProtectedRoute>} />
+            <Route path="/auctions/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/auctions')}><AdminAuctionDetail /></AdminProtectedRoute>} />
+            <Route path="/catalog" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/catalog')}><AdminCatalog /></AdminProtectedRoute>} />
             <Route path="/categories" element={<AdminProtectedRoute permission="categories.read"><AdminCategories /></AdminProtectedRoute>} />
             <Route path="/brands" element={<AdminProtectedRoute permission="brands.read"><AdminBrands /></AdminProtectedRoute>} />
-            <Route path="/products" element={<AdminProtectedRoute permission="products.read"><AdminProducts /></AdminProtectedRoute>} />
-            <Route path="/products/:productId" element={<AdminProtectedRoute permission="products.read"><AdminProductDetail /></AdminProtectedRoute>} />
+            <Route path="/products" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/products')}><AdminProducts /></AdminProtectedRoute>} />
+            <Route path="/products/:productId" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/products')}><AdminProductDetail /></AdminProtectedRoute>} />
 
             {/* Moderation Unified Inbox & Sub-routes */}
             <Route path="/moderation" element={<Navigate to="/moderation/queue" replace />} />
-            <Route path="/moderation/queue" element={<AdminProtectedRoute permission={['products.moderate', 'reviews.read', 'sellers.read']}><AdminModerationQueue /></AdminProtectedRoute>} />
+            <Route path="/moderation/queue" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/moderation')}><AdminModerationQueue /></AdminProtectedRoute>} />
             <Route path="/moderation/sellers" element={<AdminProtectedRoute permission="sellers.read"><AdminModerationSellers /></AdminProtectedRoute>} />
             <Route path="/moderation/products" element={<AdminProtectedRoute permission="products.moderate"><AdminModeration /></AdminProtectedRoute>} />
             <Route path="/moderation/products/:productId" element={<AdminProtectedRoute permission="products.moderate"><AdminModerationProductDetail /></AdminProtectedRoute>} />
@@ -83,34 +84,34 @@ export default function App() {
             {/* Legacy Reviews Route Redirect */}
             <Route path="/reviews" element={<Navigate to="/moderation/reviews" replace />} />
 
-            <Route path="/orders" element={<AdminProtectedRoute permission="orders.read"><AdminOrders /></AdminProtectedRoute>} />
-            <Route path="/orders/fulfillments" element={<AdminProtectedRoute permission="orders.read"><AdminFulfillmentsList /></AdminProtectedRoute>} />
-            <Route path="/fulfillment/picking" element={<AdminProtectedRoute permission="orders.read"><AdminPickingQueue /></AdminProtectedRoute>} />
-            <Route path="/fulfillment/picking/:id" element={<AdminProtectedRoute permission="orders.read"><AdminPickingDetail /></AdminProtectedRoute>} />
+            <Route path="/orders" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/orders')}><AdminOrders /></AdminProtectedRoute>} />
+            <Route path="/orders/fulfillments" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/orders')}><AdminFulfillmentsList /></AdminProtectedRoute>} />
+            <Route path="/fulfillment/picking" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/picking')}><AdminPickingQueue /></AdminProtectedRoute>} />
+            <Route path="/fulfillment/picking/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/picking')}><AdminPickingDetail /></AdminProtectedRoute>} />
             <Route path="/fulfillment/packing/:id" element={<AdminProtectedRoute permission="orders.read"><AdminPackingDetail /></AdminProtectedRoute>} />
             <Route path="/fulfillment/dispatch/:id" element={<AdminProtectedRoute permission="orders.read"><AdminDispatchDetail /></AdminProtectedRoute>} />
-            <Route path="/orders/receiving" element={<AdminProtectedRoute permission="orders.read"><AdminReceivingScanner /></AdminProtectedRoute>} />
-            <Route path="/supplies/receiving" element={<AdminProtectedRoute permission="inventory.read"><AdminSupplyReceiving /></AdminProtectedRoute>} />
+            <Route path="/orders/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/orders/receiving')}><AdminReceivingScanner /></AdminProtectedRoute>} />
+            <Route path="/supplies/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/supplies/receiving')}><AdminSupplyReceiving /></AdminProtectedRoute>} />
             <Route path="/warehouse/free-scan" element={<AdminProtectedRoute permission="inventory.read"><AdminFreeScanner /></AdminProtectedRoute>} />
             <Route path="/orders/problems" element={<AdminProtectedRoute permission="orders.read"><AdminOrderProblems /></AdminProtectedRoute>} />
-            <Route path="/orders/:orderId" element={<AdminProtectedRoute permission="orders.read"><AdminOrderDetail /></AdminProtectedRoute>} />
-            <Route path="/payments" element={<AdminProtectedRoute permission="payments.read"><AdminPayments /></AdminProtectedRoute>} />
-            <Route path="/payments/:paymentId" element={<AdminProtectedRoute permission="payments.read"><AdminPaymentDetail /></AdminProtectedRoute>} />
-            <Route path="/shipments" element={<AdminProtectedRoute permission="shipments.read"><AdminShipments /></AdminProtectedRoute>} />
-            <Route path="/inventory" element={<AdminProtectedRoute permission="inventory.read"><AdminInventory /></AdminProtectedRoute>} />
+            <Route path="/orders/:orderId" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/orders')}><AdminOrderDetail /></AdminProtectedRoute>} />
+            <Route path="/payments" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/payments')}><AdminPayments /></AdminProtectedRoute>} />
+            <Route path="/payments/:paymentId" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/payments')}><AdminPaymentDetail /></AdminProtectedRoute>} />
+            <Route path="/shipments" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/shipments')}><AdminShipments /></AdminProtectedRoute>} />
+            <Route path="/inventory" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/inventory')}><AdminInventory /></AdminProtectedRoute>} />
             <Route path="/inventory/reconciliation/:id" element={<AdminProtectedRoute permission="inventory.adjust"><AdminInventoryReconciliation /></AdminProtectedRoute>} />
-            <Route path="/returns" element={<AdminProtectedRoute permission={['returns.read', 'warehouse.returns']}><AdminReturns /></AdminProtectedRoute>} />
-            <Route path="/returns/:id/receiving" element={<AdminProtectedRoute permission={['returns.read', 'warehouse.returns']}><AdminReturnReceiving /></AdminProtectedRoute>} />
-            <Route path="/refunds" element={<AdminProtectedRoute permission="refunds.read"><AdminRefunds /></AdminProtectedRoute>} />
-            <Route path="/payouts" element={<AdminProtectedRoute permission="payouts.read"><AdminPayouts /></AdminProtectedRoute>} />
-            <Route path="/audit-logs" element={<AdminProtectedRoute permission="audit.read"><AdminAuditLogs /></AdminProtectedRoute>} />
-            <Route path="/audit" element={<AdminProtectedRoute permission="audit.read"><AdminAuditLogs /></AdminProtectedRoute>} />
-            <Route path="/reports" element={<AdminProtectedRoute permission="reports.read"><AdminReports /></AdminProtectedRoute>} />
-            <Route path="/roles" element={<AdminProtectedRoute permission="roles.read"><AdminRoles /></AdminProtectedRoute>} />
-            <Route path="/staff" element={<AdminProtectedRoute permission="staff.read"><AdminStaff /></AdminProtectedRoute>} />
-            <Route path="/staff/:userId" element={<AdminProtectedRoute permission="staff.read"><AdminStaffDetail /></AdminProtectedRoute>} />
-            <Route path="/admin/staff/:userId" element={<AdminProtectedRoute permission="staff.read"><AdminStaffDetail /></AdminProtectedRoute>} />
-            <Route path="/settings" element={<AdminSettings />} />
+            <Route path="/returns" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/returns')}><AdminReturns /></AdminProtectedRoute>} />
+            <Route path="/returns/:id/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/returns')}><AdminReturnReceiving /></AdminProtectedRoute>} />
+            <Route path="/refunds" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/refunds')}><AdminRefunds /></AdminProtectedRoute>} />
+            <Route path="/payouts" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/payouts')}><AdminPayouts /></AdminProtectedRoute>} />
+            <Route path="/audit-logs" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/audit')}><AdminAuditLogs /></AdminProtectedRoute>} />
+            <Route path="/audit" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/audit')}><AdminAuditLogs /></AdminProtectedRoute>} />
+            <Route path="/reports" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/reports')}><AdminReports /></AdminProtectedRoute>} />
+            <Route path="/roles" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/roles')}><AdminRoles /></AdminProtectedRoute>} />
+            <Route path="/staff" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/staff')}><AdminStaff /></AdminProtectedRoute>} />
+            <Route path="/staff/:userId" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/staff')}><AdminStaffDetail /></AdminProtectedRoute>} />
+            <Route path="/admin/staff/:userId" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/staff')}><AdminStaffDetail /></AdminProtectedRoute>} />
+            <Route path="/settings" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/settings')}><AdminSettings /></AdminProtectedRoute>} />
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>

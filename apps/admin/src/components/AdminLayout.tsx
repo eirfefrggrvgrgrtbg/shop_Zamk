@@ -33,6 +33,10 @@ import { getAdminSellers } from '@zamk/api-client/src/admin';
 import { getModerationProducts } from '../api/adminProducts';
 import { getAdminReviews } from '../api/adminReviews';
 import { getAdminPickingQueue } from '../api/adminPicking';
+import {
+  getStaffScreenVisibility,
+  isScreenRuleVisible,
+} from '../config/staffWorkModules';
 
 interface NavItem {
   name: string;
@@ -73,8 +77,13 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
   const isPermissionVisible = (permission?: string | string[]) => {
     if (!permission) return true;
     if (staff === null) return false;
-    if (Array.isArray(permission)) return hasAnyPermission(permission);
-    return hasPermission(permission);
+    return isScreenRuleVisible(permission, hasPermission, hasAnyPermission);
+  };
+
+  const isNavItemVisible = (item: NavItem) => {
+    if (staff === null) return false;
+    const visibility = item.permission ?? getStaffScreenVisibility(item.path);
+    return isPermissionVisible(visibility);
   };
 
   // Moderation pending counts
@@ -90,16 +99,16 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     let isMounted = true;
     const loadCounts = async () => {
       try {
-        const canReadSellers = isPermissionVisible('sellers.read');
+        const canReadSellers = isPermissionVisible(getStaffScreenVisibility('/sellers'));
         const canModerateProducts = isPermissionVisible('products.moderate');
         const canReadReviews = isPermissionVisible('reviews.read');
-        const canReadOrders = isPermissionVisible('orders.read');
+        const canPick = isPermissionVisible(getStaffScreenVisibility('/fulfillment/picking'));
 
         const [sellersRes, productsRes, reviewsRes, pickingRes] = await Promise.allSettled([
           canReadSellers ? getAdminSellers({ limit: 100 }) : Promise.resolve({ items: [] }),
           canModerateProducts ? getModerationProducts({ status: 'pending_moderation', limit: 1 }) : Promise.resolve({ items: [], totalCount: 0 }),
           canReadReviews ? getAdminReviews() : Promise.resolve([]),
-          canReadOrders ? getAdminPickingQueue() : Promise.resolve([]),
+          canPick ? getAdminPickingQueue() : Promise.resolve([]),
         ]);
 
         let pCount = 0;
@@ -146,30 +155,30 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
 
   const baseNavItems: NavItem[] = [
     { name: 'Главная', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Продавцы', path: '/sellers', icon: Store, permission: 'sellers.read' },
-    { name: 'Аукционы', path: '/auctions', icon: Gavel, permission: 'auctions.read' },
-    { name: 'Товары', path: '/products', icon: Package, permission: 'products.read' },
-    { name: 'Модерация', path: '/moderation', icon: ShieldAlert, permission: ['products.moderate', 'reviews.read', 'sellers.read'] },
-    { name: 'Категории и бренды', path: '/catalog', icon: BookOpen, permission: ['categories.read', 'brands.read'] },
-    { name: 'Заказы', path: '/orders', icon: ShoppingCart, permission: 'orders.read' },
-    { name: 'Сборка заказов', path: '/fulfillment/picking', icon: PackageCheck, permission: 'orders.read' },
-    { name: 'Доставка / Отгрузки', path: '/shipments', icon: Truck, permission: 'shipments.read' },
-    { name: 'Остатки / Склад', path: '/inventory', icon: Boxes, permission: 'inventory.read' },
-    { name: 'Приемка поставок', path: '/supplies/receiving', icon: Truck, permission: 'inventory.read' },
-    { name: 'Платежи покупателей', path: '/payments', icon: CreditCard, permission: 'payments.read' },
-    { name: 'Возвраты', path: '/returns', icon: RotateCcw, permission: ['returns.read', 'warehouse.returns'] },
-    { name: 'Возмещения', path: '/refunds', icon: ReceiptText, permission: 'refunds.read' },
-    { name: 'Выплаты продавцам', path: '/payouts', icon: Wallet, permission: 'payouts.read' },
+    { name: 'Продавцы', path: '/sellers', icon: Store },
+    { name: 'Аукционы', path: '/auctions', icon: Gavel },
+    { name: 'Товары', path: '/products', icon: Package },
+    { name: 'Модерация', path: '/moderation', icon: ShieldAlert },
+    { name: 'Категории и бренды', path: '/catalog', icon: BookOpen },
+    { name: 'Заказы', path: '/orders', icon: ShoppingCart },
+    { name: 'Сборка заказов', path: '/fulfillment/picking', icon: PackageCheck },
+    { name: 'Доставка / Отгрузки', path: '/shipments', icon: Truck },
+    { name: 'Остатки / Склад', path: '/inventory', icon: Boxes },
+    { name: 'Приемка поставок', path: '/supplies/receiving', icon: Truck },
+    { name: 'Платежи покупателей', path: '/payments', icon: CreditCard },
+    { name: 'Возвраты', path: '/returns', icon: RotateCcw },
+    { name: 'Возмещения', path: '/refunds', icon: ReceiptText },
+    { name: 'Выплаты продавцам', path: '/payouts', icon: Wallet },
   ];
 
   const staffNavItems: NavItem[] = [
-    { name: 'Сводные отчеты', path: '/reports', icon: FileText, permission: 'reports.read' },
-    { name: 'Доступы и роли', path: '/roles', icon: Shield, permission: 'roles.read' },
-    { name: 'Сотрудники', path: '/staff', icon: Users, permission: 'staff.read' },
-    { name: 'Журнал действий', path: '/audit', icon: ClipboardList, permission: 'audit.read' },
+    { name: 'Сводные отчеты', path: '/reports', icon: FileText },
+    { name: 'Доступы и роли', path: '/roles', icon: Shield },
+    { name: 'Сотрудники', path: '/staff', icon: Users },
+    { name: 'Журнал действий', path: '/audit', icon: ClipboardList },
   ];
 
-  const canReadSellers = isPermissionVisible('sellers.read');
+  const canReadSellers = isPermissionVisible(getStaffScreenVisibility('/sellers'));
   const canModerateProducts = isPermissionVisible('products.moderate');
   const canReadReviews = isPermissionVisible('reviews.read');
 
@@ -180,8 +189,8 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     { name: 'Отзывы', path: '/moderation/reviews', count: moderationCounts.reviews, visible: canReadReviews },
   ].filter((s) => s.visible);
 
-  const visibleBaseItems = baseNavItems.filter(item => isPermissionVisible(item.permission));
-  const visibleStaffItems = staffNavItems.filter(item => isPermissionVisible(item.permission));
+  const visibleBaseItems = baseNavItems.filter(isNavItemVisible);
+  const visibleStaffItems = staffNavItems.filter(isNavItemVisible);
   const allNavItems = [...visibleBaseItems, ...visibleStaffItems];
 
   const isModerationActive = location.pathname.startsWith('/moderation');

@@ -9,6 +9,10 @@ import {
   getAssignedWorkModules,
   getAccessTemplateDiff,
   STAFF_SCREEN_ACCESS_RULES,
+  getStaffScreenAccessRule,
+  getStaffScreenVisibility,
+  isScreenRuleVisible,
+  isScreenVisibleWithPermissions,
 } from './staffWorkModules';
 import { getAllCapabilityKeys } from './staffCapabilities';
 
@@ -293,5 +297,49 @@ describe('STAFF_WORK_MODULES Presentation Config', () => {
     expect(getWorkModuleByCapability('warehouse.picking')?.key).toBe('warehouse');
     expect(getWorkModuleByCapability('staff.permissions.manage')?.key).toBe('staff_access');
     expect(getWorkModuleByCapability('unknown.capability')).toBeUndefined();
+  });
+
+  describe('Screen Access Navigation Helpers', () => {
+    it('retrieves rule and visibility by route or key', () => {
+      expect(getStaffScreenAccessRule('/dashboard')?.key).toBe('dashboard');
+      expect(getStaffScreenAccessRule('dashboard')?.route).toBe('/dashboard');
+      expect(getStaffScreenVisibility('/dashboard')).toEqual(['dashboard.read', 'analytics.read']);
+
+      expect(getStaffScreenAccessRule('/fulfillment/picking')?.visibility).toBe('warehouse.picking');
+      expect(getStaffScreenVisibility('/fulfillment/picking')).toBe('warehouse.picking');
+
+      expect(getStaffScreenAccessRule('/orders/receiving')?.visibility).toBe('warehouse.receiving');
+      expect(getStaffScreenVisibility('/orders/receiving')).toBe('warehouse.receiving');
+
+      expect(getStaffScreenAccessRule('/supplies/receiving')?.visibility).toBe('inventory.receipt');
+      expect(getStaffScreenVisibility('/supplies/receiving')).toBe('inventory.receipt');
+
+      expect(getStaffScreenAccessRule('/nonexistent')).toBeUndefined();
+      expect(getStaffScreenVisibility('/nonexistent')).toBeUndefined();
+    });
+
+    it('evaluates isScreenRuleVisible for single and array visibility', () => {
+      const hasPerm = (p: string) => p === 'orders.read' || p === 'brands.read';
+      const hasAny = (perms: string[]) => perms.some(hasPerm);
+
+      expect(isScreenRuleVisible('orders.read', hasPerm, hasAny)).toBe(true);
+      expect(isScreenRuleVisible('warehouse.picking', hasPerm, hasAny)).toBe(false);
+
+      // Multi-capability OR rule
+      expect(isScreenRuleVisible(['categories.read', 'brands.read'], hasPerm, hasAny)).toBe(true);
+      expect(isScreenRuleVisible(['categories.read', 'catalog.manage'], hasPerm, hasAny)).toBe(false);
+    });
+
+    it('evaluates isScreenVisibleWithPermissions for arrays and sets', () => {
+      const perms = ['orders.read', 'warehouse.returns'];
+
+      expect(isScreenVisibleWithPermissions('orders.read', perms)).toBe(true);
+      expect(isScreenVisibleWithPermissions('warehouse.picking', perms)).toBe(false);
+      expect(isScreenVisibleWithPermissions(['returns.read', 'warehouse.returns'], perms)).toBe(true);
+      expect(isScreenVisibleWithPermissions(['returns.read', 'other.perm'], perms)).toBe(false);
+
+      const permSet = new Set(perms);
+      expect(isScreenVisibleWithPermissions(['returns.read', 'warehouse.returns'], permSet)).toBe(true);
+    });
   });
 });
