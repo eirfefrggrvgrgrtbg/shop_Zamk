@@ -5,6 +5,8 @@ import {
   listStaffRoles,
   getStaffMemberPermissions,
   updateStaffMemberPermissions,
+  updateStaffStatus,
+  resetStaffPassword,
 } from '@zamk/api-client/src/admin';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 import type { StaffMemberView, StaffRoleWithPermissions } from '@zamk/api-client/src/types';
@@ -103,6 +105,37 @@ function getInitials(name?: string | null, email?: string | null): string {
   return '??';
 }
 
+
+export function generatePassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+  const randomValues = new Uint32Array(12);
+  globalThis.crypto.getRandomValues(randomValues);
+  return Array.from(randomValues, (val) => chars[val % chars.length]).join('');
+}
+
+function humanizeAccountError(err: any): string {
+  if (!err) return 'Не удалось выполнить действие. Попробуйте ещё раз.';
+  const status = err.status || err.statusCode;
+  const code = err.code || err.error?.code || err.data?.error?.code;
+
+  if (code === 'last_owner') {
+    return 'Невозможно заблокировать или архивировать последнего владельца платформы.';
+  }
+  if (code === 'last_permission_manager') {
+    return 'Невозможно заблокировать сотрудника: это последний сотрудник с правом управления доступом.';
+  }
+  if (status === 403 || code === 'forbidden') {
+    return 'У вас нет права выполнять это действие.';
+  }
+  if (status === 404 || code === 'not_found') {
+    return 'Сотрудник не найден.';
+  }
+  if (err.message && typeof err.message === 'string' && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
+    return err.message;
+  }
+  return 'Не удалось выполнить действие. Попробуйте ещё раз.';
+}
+
 const isScreenVisibleWithPerms = isScreenVisibleWithPermissions;
 
 export function AdminStaffDetail() {
@@ -116,8 +149,23 @@ export function AdminStaffDetail() {
   const [errorType, setErrorType] = useState<'none' | 'not_found' | 'forbidden' | 'generic'>('none');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const { user: currentActor, reloadStaff } = useAdminAuth();
+  const { user: currentActor, reloadStaff, hasPermission } = useAdminAuth();
   const currentActorId = currentActor?.id || '';
+
+  const canBlock = Boolean(hasPermission?.('staff.block'));
+  const canResetPassword = Boolean(hasPermission?.('staff.update'));
+
+  // Account Tab & Modal states (EMP.1D1)
+  const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
+  const [temporaryPassword, setTemporaryPassword] = useState('');
+  const [resetPasswordError, setResetPasswordError] = useState<string | null>(null);
+  const [successPassword, setSuccessPassword] = useState<string | null>(null);
+  const [isPasswordCopied, setIsPasswordCopied] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [accountActionError, setAccountActionError] = useState<string | null>(null);
+  const [accountActionSuccess, setAccountActionSuccess] = useState<string | null>(null);
 
   // Persistence & Modal states (EMP.1C3C2R.2A)
   const [isSaving, setIsSaving] = useState(false);
@@ -416,6 +464,117 @@ export function AdminStaffDetail() {
       }
       return next;
     });
+  };
+
+
+  // ---- Account Management Handlers (EMP.1D1) ----
+
+  const copyPasswordToClipboard = async () => {
+    if (!successPassword) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(successPassword);
+        setIsPasswordCopied(true);
+        setTimeout(() => setIsPasswordCopied(false), 2000);
+      }
+    } catch {
+      // Fallback or ignore
+    }
+  };
+
+  const openResetPasswordModal = () => {
+    setTemporaryPassword('');
+    setResetPasswordError(null);
+    setIsResetPasswordOpen(true);
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!member || !userId) return;
+    if (temporaryPassword.length < 8) {
+      setResetPasswordError('Пароль должен содержать минимум 8 символов');
+      return;
+    }
+    setIsActionLoading(true);
+    setResetPasswordError(null);
+    const pwdToSet = temporaryPassword;
+    try {
+      await resetStaffPassword(userId, { temporaryPassword: pwdToSet });
+      setIsResetPasswordOpen(false);
+      setTemporaryPassword('');
+      setSuccessPassword(pwdToSet);
+      setMember((prev) => (prev ? { ...prev, mustChangePassword: true } : prev));
+    } catch (err: any) {
+      setResetPasswordError(humanizeAccountError(err));
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleBlockConfirm = async () => {
+    if (!member || !userId) return;
+    setIsActionLoading(true);
+    setAccountActionError(null);
+    try {
+      await updateStaffStatus(userId, { status: 'blocked' });
+      setMember((prev) => (prev ? { ...prev, staffStatus: 'blocked', status: 'blocked' } : prev));
+      setIsBlockModalOpen(false);
+      setAccountActionSuccess('Сотрудник успешно заблокирован');
+      setTimeout(() => setAccountActionSuccess(null), 4000);
+    } catch (err: any) {
+      setAccountActionError(humanizeAccountError(err));
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleArchiveConfirm = async () => {
+    if (!member || !userId) return;
+    setIsActionLoading(true);
+    setAccountActionError(null);
+    try {
+      await updateStaffStatus(userId, { status: 'archived' });
+      setMember((prev) => (prev ? { ...prev, staffStatus: 'archived', status: 'archived' } : prev));
+      setIsArchiveModalOpen(false);
+      setAccountActionSuccess('Сотрудник переведён в архив');
+      setTimeout(() => setAccountActionSuccess(null), 4000);
+    } catch (err: any) {
+      setAccountActionError(humanizeAccountError(err));
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleUnblock = async () => {
+    if (!member || !userId) return;
+    setIsActionLoading(true);
+    setAccountActionError(null);
+    try {
+      await updateStaffStatus(userId, { status: 'active' });
+      setMember((prev) => (prev ? { ...prev, staffStatus: 'active', status: 'active' } : prev));
+      setAccountActionSuccess('Сотрудник успешно разблокирован');
+      setTimeout(() => setAccountActionSuccess(null), 4000);
+    } catch (err: any) {
+      setAccountActionError(humanizeAccountError(err));
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleRestoreFromArchive = async () => {
+    if (!member || !userId) return;
+    setIsActionLoading(true);
+    setAccountActionError(null);
+    try {
+      await updateStaffStatus(userId, { status: 'active' });
+      setMember((prev) => (prev ? { ...prev, staffStatus: 'active', status: 'active' } : prev));
+      setAccountActionSuccess('Сотрудник успешно восстановлен из архива');
+      setTimeout(() => setAccountActionSuccess(null), 4000);
+    } catch (err: any) {
+      setAccountActionError(humanizeAccountError(err));
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
   if (isLoading) {
@@ -1265,7 +1424,8 @@ export function AdminStaffDetail() {
       {/* TAB 3: УЧЁТНАЯ ЗАПИСЬ */}
       {activeTab === 'account' && (
         <div className="space-y-6" data-testid="tab-account-content">
-          <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6 shadow-sm">
+          {/* Top Section: Account Information */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4 shadow-sm">
             <div>
               <h2 className="text-base font-semibold text-gray-900">Учётная запись</h2>
               <p className="text-xs text-gray-500 mt-0.5">
@@ -1273,33 +1433,171 @@ export function AdminStaffDetail() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-gray-100">
-              <div>
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider block">
-                  Статус
+            {/* Explanatory notice when blocked or archived */}
+            {memberStatus === 'blocked' && (
+              <div
+                className="bg-rose-50 border border-rose-200 rounded-md p-3 text-xs text-rose-800 flex items-start gap-2.5"
+                data-testid="account-blocked-explanation"
+              >
+                <Lock className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>
+                  Учётная запись заблокирована. Настроенные права сохранены, но доступ к Admin не действует до разблокировки.
                 </span>
-                <span className="text-sm font-medium text-gray-900 mt-1 block">
+              </div>
+            )}
+            {memberStatus === 'archived' && (
+              <div
+                className="bg-gray-100 border border-gray-200 rounded-md p-3 text-xs text-gray-800 flex items-start gap-2.5"
+                data-testid="account-archived-explanation"
+              >
+                <Lock className="w-4 h-4 text-gray-600 shrink-0 mt-0.5" />
+                <span>
+                  Учётная запись находится в архиве. Индивидуальные права сохранены, но доступ к Admin закрыт.
+                </span>
+              </div>
+            )}
+
+            {/* Compact Information Rows */}
+            <div className="divide-y divide-gray-100 pt-1 border-t border-gray-100 text-sm">
+              <div className="py-3 flex items-center justify-between" data-testid="account-row-status">
+                <span className="text-gray-500">Статус</span>
+                <span
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    STAFF_STATUS_BADGE[memberStatus] || 'bg-gray-100 text-gray-700'
+                  }`}
+                >
                   {STAFF_STATUS_LABELS[memberStatus] || memberStatus}
                 </span>
               </div>
-              <div>
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider block">
-                  Дата создания
-                </span>
-                <span className="text-sm font-medium text-gray-900 mt-1 block">
-                  {formatDate(member.createdAt)}
-                </span>
+              <div className="py-3 flex items-center justify-between" data-testid="account-row-created-at">
+                <span className="text-gray-500">Дата создания</span>
+                <span className="font-medium text-gray-900">{formatDate(member.createdAt)}</span>
               </div>
-              <div>
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider block">
-                  Требование смены пароля
-                </span>
-                <span className="text-sm font-medium text-gray-900 mt-1 block">
-                  {member.mustChangePassword ? 'Да' : 'Нет'}
+              <div className="py-3 flex items-center justify-between" data-testid="account-row-must-change-password">
+                <span className="text-gray-500">Смена пароля</span>
+                <span className="font-medium text-gray-900">
+                  {member.mustChangePassword ? 'Требуется' : 'Не требуется'}
                 </span>
               </div>
             </div>
           </div>
+
+          {/* Account Actions Section */}
+          {(canResetPassword || canBlock) && (
+            <div
+              className="bg-white border border-gray-200 rounded-lg p-6 space-y-4 shadow-sm"
+              data-testid="account-actions-section"
+            >
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Управление учётной записью</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Действия со статусом доступа и аутентификацией сотрудника
+                </p>
+              </div>
+
+              {accountActionError && (
+                <div
+                  className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-md flex items-center gap-2"
+                  data-testid="account-action-error"
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                  <span>{accountActionError}</span>
+                </div>
+              )}
+
+              {accountActionSuccess && (
+                <div
+                  className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-md flex items-center gap-2"
+                  data-testid="account-action-success"
+                >
+                  <Check className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span>{accountActionSuccess}</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 flex-wrap pt-1">
+                {/* Reset Password Button */}
+                {canResetPassword && memberStatus !== 'archived' && (
+                  <button
+                    type="button"
+                    onClick={openResetPasswordModal}
+                    disabled={isActionLoading}
+                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                  >
+                    Сбросить пароль
+                  </button>
+                )}
+
+                {/* Active: Block button */}
+                {canBlock && memberStatus === 'active' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountActionError(null);
+                      setIsBlockModalOpen(true);
+                    }}
+                    disabled={isActionLoading}
+                    className="inline-flex items-center px-4 py-2 border border-rose-300 rounded-md shadow-sm text-sm font-medium text-rose-700 bg-white hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-500 disabled:opacity-50"
+                  >
+                    Заблокировать
+                  </button>
+                )}
+
+                {/* Blocked: Unblock button */}
+                {canBlock && memberStatus === 'blocked' && (
+                  <button
+                    type="button"
+                    onClick={handleUnblock}
+                    disabled={isActionLoading}
+                    className="inline-flex items-center px-4 py-2 border border-emerald-300 rounded-md shadow-sm text-sm font-medium text-emerald-700 bg-white hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50"
+                  >
+                    Разблокировать
+                  </button>
+                )}
+
+                {/* Archived: Restore button */}
+                {canBlock && memberStatus === 'archived' && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreFromArchive}
+                    disabled={isActionLoading}
+                    className="inline-flex items-center px-4 py-2 border border-emerald-300 rounded-md shadow-sm text-sm font-medium text-emerald-700 bg-white hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50"
+                  >
+                    Восстановить из архива
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Danger Zone: Archive */}
+          {canBlock && memberStatus !== 'archived' && (
+            <div
+              className="bg-white border border-rose-200 rounded-lg p-6 space-y-4 shadow-sm"
+              data-testid="danger-zone-section"
+            >
+              <div>
+                <h3 className="text-sm font-semibold text-rose-900">Опасные действия</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Сотрудник потеряет доступ к Admin. Индивидуальные права сохраняются.
+                </p>
+              </div>
+
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountActionError(null);
+                    setIsArchiveModalOpen(true);
+                  }}
+                  disabled={isActionLoading}
+                  className="inline-flex items-center px-4 py-2 border border-rose-300 rounded-md shadow-sm text-sm font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-500 disabled:opacity-50"
+                >
+                  Архивировать сотрудника
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Collapsed System Information */}
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
@@ -1649,6 +1947,205 @@ export function AdminStaffDetail() {
           </div>
         </div>
       )}
+
+      {/* Block Confirmation Modal */}
+      {isBlockModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+          data-testid="block-confirm-modal"
+        >
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <ShieldAlert className="h-6 w-6 shrink-0" />
+              <h2 className="text-lg font-bold text-gray-900">Заблокировать сотрудника?</h2>
+            </div>
+            <p className="text-sm text-gray-600">
+              «{memberName || member?.email}» больше не сможет войти в Admin до разблокировки.
+            </p>
+            {accountActionError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-md" data-testid="modal-error">
+                {accountActionError}
+              </div>
+            )}
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBlockModalOpen(false);
+                  setAccountActionError(null);
+                }}
+                disabled={isActionLoading}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleBlockConfirm}
+                disabled={isActionLoading}
+                className="px-4 py-2 bg-rose-600 text-white rounded-md text-sm font-medium hover:bg-rose-700 disabled:opacity-50"
+              >
+                {isActionLoading ? 'Блокировка...' : 'Заблокировать'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archive Confirmation Modal */}
+      {isArchiveModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+          data-testid="archive-confirm-modal"
+        >
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <ShieldAlert className="h-6 w-6 shrink-0" />
+              <h2 className="text-lg font-bold text-gray-900">Архивировать сотрудника?</h2>
+            </div>
+            <p className="text-sm text-gray-600">
+              Аккаунт будет переведён в архив и потеряет доступ к Admin.
+            </p>
+            {accountActionError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-md" data-testid="modal-error">
+                {accountActionError}
+              </div>
+            )}
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsArchiveModalOpen(false);
+                  setAccountActionError(null);
+                }}
+                disabled={isActionLoading}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleArchiveConfirm}
+                disabled={isActionLoading}
+                className="px-4 py-2 bg-rose-600 text-white rounded-md text-sm font-medium hover:bg-rose-700 disabled:opacity-50"
+              >
+                {isActionLoading ? 'Архивация...' : 'Архивировать'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {isResetPasswordOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+          data-testid="reset-password-modal"
+        >
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-xl">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Сбросить пароль</h2>
+            <p className="text-sm text-gray-500 mb-4">{member?.email}</p>
+            {resetPasswordError && (
+              <div className="mb-3 p-3 bg-red-50 text-red-700 text-xs rounded-md" data-testid="reset-password-error">
+                {resetPasswordError}
+              </div>
+            )}
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Временный пароль *</label>
+                <div className="mt-1 flex gap-2">
+                  <input
+                    required
+                    type="text"
+                    minLength={8}
+                    value={temporaryPassword}
+                    onChange={(e) => setTemporaryPassword(e.target.value)}
+                    placeholder="Минимум 8 символов"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTemporaryPassword(generatePassword())}
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50"
+                  >
+                    Сгенерировать
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsResetPasswordOpen(false);
+                    setTemporaryPassword('');
+                    setResetPasswordError(null);
+                  }}
+                  disabled={isActionLoading}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={isActionLoading || temporaryPassword.length < 8}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {isActionLoading ? 'Сброс...' : 'Сбросить пароль'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Password Success Modal */}
+      {successPassword && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+          data-testid="password-success-modal"
+        >
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+            <div className="flex items-center text-emerald-600 mb-4">
+              <Check className="h-7 w-7 mr-2" />
+              <h2 className="text-lg font-bold text-gray-900">Новый временный пароль</h2>
+            </div>
+            <p className="text-sm text-gray-600 mb-1">
+              Пользователь: <span className="font-medium">{member?.email}</span>
+            </p>
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">
+              Передайте пароль сотруднику безопасным способом. При первом входе он будет обязан сменить пароль.
+            </p>
+            <p className="text-xs font-medium text-gray-700 mb-2">
+              Временный пароль (показывается только один раз):
+            </p>
+            <div className="bg-gray-100 p-3.5 rounded text-center mb-4 border border-gray-200 flex items-center justify-between">
+              <code className="text-base font-mono font-bold text-gray-900 select-all flex-1 text-left">
+                {successPassword}
+              </code>
+              <button
+                type="button"
+                onClick={copyPasswordToClipboard}
+                className="ml-3 text-gray-500 hover:text-gray-700 p-1.5 rounded hover:bg-gray-200 transition-colors"
+                title="Скопировать"
+              >
+                {isPasswordCopied ? (
+                  <span className="text-xs text-emerald-600 font-medium">Скопировано</span>
+                ) : (
+                  <span className="text-xs text-indigo-600 font-medium">Копировать</span>
+                )}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSuccessPassword(null)}
+              className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
+            >
+              Понятно
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
