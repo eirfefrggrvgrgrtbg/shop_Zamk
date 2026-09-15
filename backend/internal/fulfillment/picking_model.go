@@ -79,3 +79,16 @@ type CompatibleUnit struct {
 	Availability     string     `json:"availability"` // "allocated_to_current_item" | "free"
 	PickedAt         *time.Time `json:"pickedAt,omitempty"`
 }
+
+type PackingQueueItem struct {
+	FulfillmentID      uuid.UUID  `json:"fulfillmentId"`
+	OrderID            uuid.UUID  `json:"orderId"`
+	OrderNumber        string     `json:"orderNumber"`
+	Status             string     `json:"status"`
+	OrderStatus        string     `json:"orderStatus"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	PickingCompletedAt *time.Time `json:"pickingCompletedAt,omitempty"`
+	ItemsCount         int        `json:"itemsCount"`
+	TotalQuantity      int        `json:"totalQuantity"`
+	PickedQuantity     int        `json:"pickedQuantity"`
+}

@@ -52,3 +52,7 @@ func (s *Service) PackFulfillment(ctx context.Context, adminID, fulfillmentID uu
 	}
 	return result, nil
 }
+
+func (s *Service) GetPackingQueue(ctx context.Context) ([]PackingQueueItem, error) {
+	return s.repo.GetPackingQueue(ctx)
+}

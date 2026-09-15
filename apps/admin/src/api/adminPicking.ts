@@ -271,6 +271,33 @@ export const getPickingErrorMessage = (error: unknown, fallback = 'Произо�
   return fallback;
 };
 
+export interface PackingQueueItem {
+  fulfillmentId: string;
+  orderId: string;
+  orderNumber: string;
+  status: string;
+  orderStatus: string;
+  createdAt: string;
+  pickingCompletedAt?: string;
+  itemsCount: number;
+  totalQuantity: number;
+  pickedQuantity: number;
+}
+
+export const getAdminPackingQueue = async (): Promise<PackingQueueItem[]> => {
+  const response = await fetch(`${API_URL}/admin/fulfillments/packing`, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getAccessToken() || ''}`,
+    },
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new ApiError(data.error?.message || 'Не удалось загрузить очередь упаковки', data.error?.code, response.status);
+  }
+  return Array.isArray(data) ? data : (data.items || []);
+};
+
 export interface PackResult {
   fulfillmentId: string;
   orderId: string;

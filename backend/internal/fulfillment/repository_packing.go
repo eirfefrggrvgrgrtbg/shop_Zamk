@@ -161,3 +161,106 @@ func (r *Repository) PackFulfillmentTx(ctx context.Context, tx pgx.Tx, fulfillme
 		PackedAt:          packedAt,
 	}, nil
 }
+
+func (r *Repository) GetPackingQueue(ctx context.Context) ([]PackingQueueItem, error) {
+	query := `
+		SELECT
+			of.id AS fulfillment_id,
+			o.id AS order_id,
+			COALESCE(o.order_number, SUBSTRING(o.id::text, 1, 8)) AS order_number,
+			of.status,
+			o.status AS order_status,
+			of.created_at,
+			(
+				SELECT MAX(a.picked_at)
+				FROM order_items oi_t
+				JOIN order_item_allocations a ON a.order_item_id = oi_t.id AND a.released_at IS NULL
+				WHERE oi_t.order_fulfillment_id = of.id
+			) AS picking_completed_at,
+			COUNT(oi.id) AS items_count,
+			COALESCE(SUM(oi.quantity), 0) AS total_quantity,
+			COALESCE(SUM(
+				CASE
+					WHEN (SELECT COUNT(*) FROM order_item_allocations a2 WHERE a2.order_item_id = oi.id AND a2.released_at IS NULL) = oi.quantity
+					THEN (SELECT COUNT(*) FROM order_item_allocations a3 WHERE a3.order_item_id = oi.id AND a3.released_at IS NULL AND a3.picked_at IS NOT NULL)
+					ELSE oi.picked_quantity
+				END
+			), 0) AS picked_quantity
+		FROM order_fulfillments of
+		JOIN orders o ON o.id = of.order_id
+		JOIN order_items oi ON oi.order_fulfillment_id = of.id
+		WHERE of.status = 'assembling'
+		  AND o.status = 'assembling'
+		  AND NOT EXISTS (
+			  SELECT 1
+			  FROM order_items oi2
+			  WHERE oi2.order_fulfillment_id = of.id
+				AND oi2.quantity > 0
+				AND (
+					-- Serialized: active allocations == quantity, but at least one allocation is unpicked
+					(
+						(SELECT COUNT(*) FROM order_item_allocations a_sub WHERE a_sub.order_item_id = oi2.id AND a_sub.released_at IS NULL) = oi2.quantity
+						AND EXISTS (
+							SELECT 1
+							FROM order_item_allocations a_unpicked
+							WHERE a_unpicked.order_item_id = oi2.id
+							  AND a_unpicked.released_at IS NULL
+							  AND a_unpicked.picked_at IS NULL
+						)
+					)
+					OR
+					-- Legacy: no active allocations, and picked_quantity < quantity
+					(
+						NOT EXISTS (
+							SELECT 1
+							FROM order_item_allocations a_none
+							WHERE a_none.order_item_id = oi2.id
+							  AND a_none.released_at IS NULL
+						)
+						AND oi2.picked_quantity < oi2.quantity
+					)
+					OR
+					-- Invariant failure: active allocations count > 0 but != quantity
+					(
+						(SELECT COUNT(*) FROM order_item_allocations a_inv WHERE a_inv.order_item_id = oi2.id AND a_inv.released_at IS NULL) > 0
+						AND (SELECT COUNT(*) FROM order_item_allocations a_inv WHERE a_inv.order_item_id = oi2.id AND a_inv.released_at IS NULL) != oi2.quantity
+					)
+				)
+		  )
+		GROUP BY of.id, o.id, o.order_number, of.status, o.status, of.created_at
+		HAVING COALESCE(SUM(oi.quantity), 0) > 0
+		ORDER BY of.created_at ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query packing queue: %w", err)
+	}
+	defer rows.Close()
+
+	var items []PackingQueueItem
+	for rows.Next() {
+		var item PackingQueueItem
+		if err := rows.Scan(
+			&item.FulfillmentID,
+			&item.OrderID,
+			&item.OrderNumber,
+			&item.Status,
+			&item.OrderStatus,
+			&item.CreatedAt,
+			&item.PickingCompletedAt,
+			&item.ItemsCount,
+			&item.TotalQuantity,
+			&item.PickedQuantity,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan packing queue item: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []PackingQueueItem{}
+	}
+	return items, nil
+}

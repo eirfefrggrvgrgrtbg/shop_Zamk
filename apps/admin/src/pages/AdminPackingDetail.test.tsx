@@ -138,6 +138,9 @@ describe('AdminPackingDetail Capability Guard & Least Privilege', () => {
     expect(await screen.findByText('Упаковка завершена')).toBeDefined();
     expect(screen.getByText(/Сборка переведена в статус «Упакован»/i)).toBeDefined();
     expect(screen.getByRole('link', { name: /Перейти к отгрузке/i })).toBeDefined();
+    const packingQueueLinks = screen.getAllByRole('link', { name: /К очереди упаковки/i });
+    expect(packingQueueLinks.length).toBeGreaterThanOrEqual(1);
+    expect(packingQueueLinks[0].getAttribute('href')).toBe('/fulfillment/packing');
     expect(adminPickingApi.getAdminPickingOrder).toHaveBeenCalledWith('fulf-123');
   });
 });

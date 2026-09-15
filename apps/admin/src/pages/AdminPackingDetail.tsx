@@ -102,6 +102,12 @@ export function AdminPackingDetail() {
               Попробовать снова
             </button>
             <Link
+              to="/fulfillment/packing"
+              className="px-4 py-2 bg-white hover:bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 transition-colors"
+            >
+              К очереди упаковки
+            </Link>
+            <Link
               to="/fulfillment/picking"
               className="px-4 py-2 bg-white hover:bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 transition-colors"
             >
@@ -145,10 +151,17 @@ export function AdminPackingDetail() {
         <div className="space-y-1">
           <div className="flex items-center gap-3 mb-2 text-xs font-semibold text-gray-500">
             <Link
-              to={id ? `/fulfillment/picking/${id}` : '/fulfillment/picking'}
+              to="/fulfillment/packing"
               className="inline-flex items-center hover:text-gray-900 transition-colors"
             >
               <ArrowLeft className="w-4 h-4 mr-1.5" />
+              К очереди упаковки
+            </Link>
+            <span>·</span>
+            <Link
+              to={id ? `/fulfillment/picking/${id}` : '/fulfillment/picking'}
+              className="hover:text-gray-900 transition-colors"
+            >
               К сборке заказа
             </Link>
             <span>·</span>
@@ -203,16 +216,32 @@ export function AdminPackingDetail() {
                 </p>
               </div>
             </div>
-            <Link
-              to={`/fulfillment/dispatch/${id}`}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors shrink-0"
-            >
-              <Truck className="w-4 h-4" />
-              Перейти к отгрузке
-            </Link>
+            <div className="flex items-center gap-2 shrink-0">
+              <Link
+                to="/fulfillment/packing"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-sm transition-colors"
+              >
+                <Package className="w-4 h-4" />
+                К очереди упаковки
+              </Link>
+              <Link
+                to={`/fulfillment/dispatch/${id}`}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors"
+              >
+                <Truck className="w-4 h-4" />
+                Перейти к отгрузке
+              </Link>
+            </div>
           </div>
 
           <div className="pt-3 border-t border-emerald-200/60 flex flex-wrap items-center gap-3 text-xs">
+            <Link
+              to="/fulfillment/packing"
+              className="font-medium text-emerald-700 hover:underline"
+            >
+              Вернуться в очередь упаковки
+            </Link>
+            <span>·</span>
             <Link
               to={`/fulfillment/dispatch/${id}`}
               className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-lg transition-colors"

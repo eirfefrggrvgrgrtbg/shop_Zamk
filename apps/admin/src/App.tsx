@@ -20,6 +20,7 @@ import { AdminOrderDetail } from './pages/AdminOrderDetail';
 import { AdminFulfillmentsList } from './pages/AdminFulfillmentsList';
 import { AdminPickingQueue } from './pages/AdminPickingQueue';
 import { AdminPickingDetail } from './pages/AdminPickingDetail';
+import { AdminPackingQueue } from './pages/AdminPackingQueue';
 import { AdminPackingDetail } from './pages/AdminPackingDetail';
 import { AdminDispatchDetail } from './pages/AdminDispatchDetail';
 import { AdminReceivingScanner } from './pages/AdminReceivingScanner';
@@ -88,6 +89,7 @@ export default function App() {
             <Route path="/orders/fulfillments" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/orders')}><AdminFulfillmentsList /></AdminProtectedRoute>} />
             <Route path="/fulfillment/picking" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/picking')}><AdminPickingQueue /></AdminProtectedRoute>} />
             <Route path="/fulfillment/picking/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/picking')}><AdminPickingDetail /></AdminProtectedRoute>} />
+            <Route path="/fulfillment/packing" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/packing')}><AdminPackingQueue /></AdminProtectedRoute>} />
             <Route path="/fulfillment/packing/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/packing')}><AdminPackingDetail /></AdminProtectedRoute>} />
             <Route path="/fulfillment/dispatch/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/dispatch')}><AdminDispatchDetail /></AdminProtectedRoute>} />
             <Route path="/orders/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/orders/receiving')}><AdminReceivingScanner /></AdminProtectedRoute>} />

@@ -32,6 +32,7 @@ vi.mock('../api/adminReviews', () => ({
 
 vi.mock('../api/adminPicking', () => ({
   getAdminPickingQueue: vi.fn().mockResolvedValue([]),
+  getAdminPackingQueue: vi.fn().mockResolvedValue([]),
 }));
 
 function mockAuth(permissions: string[], roleCode: string = 'manager') {
@@ -576,6 +577,33 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
     expect(screen.getByText('Недостаточно прав')).toBeDefined();
     expect(screen.queryByText('Packing Detail Screen')).toBeNull();
     unmount3();
+  });
+
+  // R2. packing sidebar item requires warehouse.packing
+  it('R2: sidebar renders "Упаковка заказов" for warehouse.packing and hides it for others', () => {
+    mockAuth(['warehouse.packing']);
+    const { unmount: unmount1 } = render(
+      <MemoryRouter initialEntries={['/fulfillment/packing']}>
+        <AdminLayout>
+          <div>Packing Queue</div>
+        </AdminLayout>
+      </MemoryRouter>
+    );
+    const sidebar1 = getSidebar();
+    expect(within(sidebar1).getByText('Упаковка заказов')).toBeDefined();
+    unmount1();
+
+    mockAuth(['orders.read']);
+    const { unmount: unmount2 } = render(
+      <MemoryRouter initialEntries={['/orders']}>
+        <AdminLayout>
+          <div>Orders</div>
+        </AdminLayout>
+      </MemoryRouter>
+    );
+    const sidebar2 = getSidebar();
+    expect(within(sidebar2).queryByText('Упаковка заказов')).toBeNull();
+    unmount2();
   });
 
   // S. dispatch route visibility and guard requires warehouse.dispatch

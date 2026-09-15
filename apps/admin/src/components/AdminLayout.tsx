@@ -32,7 +32,7 @@ import { useAdminGlobalSearchShortcut } from './search/useAdminGlobalSearchShort
 import { getAdminSellers } from '@zamk/api-client/src/admin';
 import { getModerationProducts } from '../api/adminProducts';
 import { getAdminReviews } from '../api/adminReviews';
-import { getAdminPickingQueue } from '../api/adminPicking';
+import { getAdminPickingQueue, getAdminPackingQueue } from '../api/adminPicking';
 import {
   getStaffScreenVisibility,
   isScreenRuleVisible,
@@ -94,6 +94,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     reviews: 0,
   });
   const [pickingCount, setPickingCount] = useState<number>(0);
+  const [packingCount, setPackingCount] = useState<number>(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -103,17 +104,24 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
         const canModerateProducts = isPermissionVisible('products.moderate');
         const canReadReviews = isPermissionVisible('reviews.read');
         const canPick = isPermissionVisible(getStaffScreenVisibility('/fulfillment/picking'));
+        const canPack = isPermissionVisible(getStaffScreenVisibility('/fulfillment/packing'));
 
-        const [sellersRes, productsRes, reviewsRes, pickingRes] = await Promise.allSettled([
+        const [sellersRes, productsRes, reviewsRes, pickingRes, packingRes] = await Promise.allSettled([
           canReadSellers ? getAdminSellers({ limit: 100 }) : Promise.resolve({ items: [] }),
           canModerateProducts ? getModerationProducts({ status: 'pending_moderation', limit: 1 }) : Promise.resolve({ items: [], totalCount: 0 }),
           canReadReviews ? getAdminReviews() : Promise.resolve([]),
           canPick ? getAdminPickingQueue() : Promise.resolve([]),
+          canPack ? getAdminPackingQueue() : Promise.resolve([]),
         ]);
 
         let pCount = 0;
         if (pickingRes.status === 'fulfilled' && Array.isArray(pickingRes.value)) {
           pCount = pickingRes.value.length;
+        }
+
+        let pkCount = 0;
+        if (packingRes.status === 'fulfilled' && Array.isArray(packingRes.value)) {
+          pkCount = packingRes.value.length;
         }
 
         let sellersCount = 0;
@@ -135,6 +143,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
 
         if (isMounted) {
           setPickingCount(pCount);
+          setPackingCount(pkCount);
           setModerationCounts({
             sellers: sellersCount,
             products: productsCount,
@@ -162,6 +171,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     { name: 'Категории и бренды', path: '/catalog', icon: BookOpen },
     { name: 'Заказы', path: '/orders', icon: ShoppingCart },
     { name: 'Сборка заказов', path: '/fulfillment/picking', icon: PackageCheck },
+    { name: 'Упаковка заказов', path: '/fulfillment/packing', icon: Package },
     { name: 'Доставка / Отгрузки', path: '/shipments', icon: Truck },
     { name: 'Остатки / Склад', path: '/inventory', icon: Boxes },
     { name: 'Приемка поставок', path: '/supplies/receiving', icon: Truck },
@@ -249,6 +259,15 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
                       className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
                     >
                       {pickingCount}
+                    </span>
+                  )}
+
+                  {!isCollapsed && item.path === '/fulfillment/packing' && packingCount > 0 && (
+                    <span
+                      data-testid="sidebar-packing-count"
+                      className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                    >
+                      {packingCount}
                     </span>
                   )}
                 </Link>

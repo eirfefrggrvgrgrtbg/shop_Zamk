@@ -67,3 +67,18 @@ func (h *Handler) PackFulfillment(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(res)
 }
+
+func (h *Handler) ListPackingQueue(w http.ResponseWriter, r *http.Request) {
+	items, err := h.svc.GetPackingQueue(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if items == nil {
+		items = []PackingQueueItem{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(items)
+}
