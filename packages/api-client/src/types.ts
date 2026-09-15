@@ -1214,6 +1214,23 @@ export interface AdminDispatchContext {
   items: AdminDispatchContextItem[];
 }
 
+export interface AdminDispatchQueueItem {
+  fulfillmentId: string;
+  orderId: string;
+  orderNumber: string;
+  status: string;
+  orderStatus: string;
+  packedAt?: string | null;
+  createdAt: string;
+  deliveryMethodName?: string | null;
+  itemsCount: number;
+  totalQuantity: number;
+  shipmentId?: string | null;
+  shipmentStatus?: string | null;
+  carrier?: string | null;
+}
+
+
 
 export interface PhysicalUnitContext {
   unitCode: string;

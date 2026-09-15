@@ -106,3 +106,18 @@ func (h *Handler) GetDispatchContext(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(dc)
 }
+
+func (h *Handler) ListDispatchQueue(w http.ResponseWriter, r *http.Request) {
+	items, err := h.svc.GetDispatchQueue(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if items == nil {
+		items = []DispatchQueueItem{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(items)
+}

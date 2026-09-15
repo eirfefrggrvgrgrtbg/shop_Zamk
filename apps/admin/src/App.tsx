@@ -22,6 +22,7 @@ import { AdminPickingQueue } from './pages/AdminPickingQueue';
 import { AdminPickingDetail } from './pages/AdminPickingDetail';
 import { AdminPackingQueue } from './pages/AdminPackingQueue';
 import { AdminPackingDetail } from './pages/AdminPackingDetail';
+import { AdminDispatchQueue } from './pages/AdminDispatchQueue';
 import { AdminDispatchDetail } from './pages/AdminDispatchDetail';
 import { AdminReceivingScanner } from './pages/AdminReceivingScanner';
 import { AdminSupplyReceiving } from './pages/AdminSupplyReceiving';
@@ -92,10 +93,11 @@ export default function App() {
             <Route path="/fulfillment/picking/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/picking')}><AdminPickingDetail /></AdminProtectedRoute>} />
             <Route path="/fulfillment/packing" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/packing')}><AdminPackingQueue /></AdminProtectedRoute>} />
             <Route path="/fulfillment/packing/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/packing')}><AdminPackingDetail /></AdminProtectedRoute>} />
+            <Route path="/fulfillment/dispatch" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/dispatch')}><AdminDispatchQueue /></AdminProtectedRoute>} />
             <Route path="/fulfillment/dispatch/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/dispatch')}><AdminDispatchDetail /></AdminProtectedRoute>} />
             <Route path="/orders/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/orders/receiving')}><AdminReceivingScanner /></AdminProtectedRoute>} />
             <Route path="/supplies/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/supplies/receiving')}><AdminSupplyReceiving /></AdminProtectedRoute>} />
-            <Route path="/warehouse/free-scan" element={<AdminProtectedRoute permission="inventory.read"><AdminFreeScanner /></AdminProtectedRoute>} />
+            <Route path="/warehouse/free-scan" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/warehouse/free-scan')}><AdminFreeScanner /></AdminProtectedRoute>} />
             <Route path="/orders/problems" element={<AdminProtectedRoute permission="orders.read"><AdminOrderProblems /></AdminProtectedRoute>} />
             <Route path="/orders/:orderId" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/orders')}><AdminOrderDetail /></AdminProtectedRoute>} />
             <Route path="/payments" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/payments')}><AdminPayments /></AdminProtectedRoute>} />
@@ -105,7 +107,7 @@ export default function App() {
             <Route path="/inventory/reconciliation/:id" element={<AdminProtectedRoute permission="inventory.adjust"><AdminInventoryReconciliation /></AdminProtectedRoute>} />
             <Route path="/returns" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/returns')}><AdminReturns /></AdminProtectedRoute>} />
             <Route path="/returns/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/returns/receiving')}><AdminReturnReceivingQueue /></AdminProtectedRoute>} />
-            <Route path="/returns/:id/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/returns')}><AdminReturnReceiving /></AdminProtectedRoute>} />
+            <Route path="/returns/:id/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/returns/receiving')}><AdminReturnReceiving /></AdminProtectedRoute>} />
             <Route path="/refunds" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/refunds')}><AdminRefunds /></AdminProtectedRoute>} />
             <Route path="/payouts" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/payouts')}><AdminPayouts /></AdminProtectedRoute>} />
             <Route path="/audit-logs" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/audit')}><AdminAuditLogs /></AdminProtectedRoute>} />

@@ -468,3 +468,74 @@ func (r *Repository) GetDispatchContext(ctx context.Context, fulfillmentID uuid.
 	dc.Items = items
 	return &dc, nil
 }
+
+func (r *Repository) GetDispatchQueue(ctx context.Context) ([]DispatchQueueItem, error) {
+	query := `
+		SELECT
+			of.id AS fulfillment_id,
+			o.id AS order_id,
+			COALESCE(o.order_number, SUBSTRING(o.id::text, 1, 8)) AS order_number,
+			of.status,
+			o.status AS order_status,
+			of.packed_at,
+			of.created_at,
+			o.delivery_method_name,
+			COUNT(oi.id) AS items_count,
+			COALESCE(SUM(oi.quantity), 0) AS total_quantity,
+			s.id AS shipment_id,
+			s.status AS shipment_status,
+			s.carrier AS shipment_carrier
+		FROM order_fulfillments of
+		JOIN orders o ON o.id = of.order_id
+		JOIN order_items oi ON oi.order_fulfillment_id = of.id
+		LEFT JOIN shipments s ON (
+			s.fulfillment_id = of.id
+			OR (
+				s.fulfillment_id IS NULL
+				AND s.order_id = of.order_id
+				AND (SELECT COUNT(*) FROM order_fulfillments WHERE order_id = of.order_id) = 1
+			)
+		)
+		WHERE of.status = 'packed'
+		  AND o.status IN ('assembling', 'packed')
+		  AND (s.status IS NULL OR s.status IN ('pending', 'assembling', 'packed'))
+		GROUP BY of.id, o.id, o.order_number, of.status, o.status, of.packed_at, of.created_at, o.delivery_method_name, s.id, s.status, s.carrier
+		HAVING COALESCE(SUM(oi.quantity), 0) > 0
+		ORDER BY COALESCE(of.packed_at, of.created_at) ASC, of.created_at ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query dispatch queue: %w", err)
+	}
+	defer rows.Close()
+
+	var items []DispatchQueueItem
+	for rows.Next() {
+		var item DispatchQueueItem
+		if err := rows.Scan(
+			&item.FulfillmentID,
+			&item.OrderID,
+			&item.OrderNumber,
+			&item.Status,
+			&item.OrderStatus,
+			&item.PackedAt,
+			&item.CreatedAt,
+			&item.DeliveryMethodName,
+			&item.ItemsCount,
+			&item.TotalQuantity,
+			&item.ShipmentID,
+			&item.ShipmentStatus,
+			&item.Carrier,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan dispatch queue item: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []DispatchQueueItem{}
+	}
+	return items, nil
+}

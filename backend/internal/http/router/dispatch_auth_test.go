@@ -310,4 +310,50 @@ func TestAdminDispatchRouter(t *testing.T) {
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusForbidden, rr.Code)
 	})
+
+	// 14. Admin with warehouse.dispatch can read dispatch queue -> 200 OK
+	t.Run("admin with warehouse.dispatch can read dispatch queue -> 200", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/dispatch", nil)
+		req.Header.Set("Authorization", "Bearer "+adminWithDispatchToken)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var queue []fulfillment.DispatchQueueItem
+		err := json.NewDecoder(rr.Body).Decode(&queue)
+		require.NoError(t, err)
+
+		// Assert exclusion of sensitive financial/commercial fields and customer PII in raw JSON
+		bodyStr := rr.Body.String()
+		assert.NotContains(t, bodyStr, "commissionBps")
+		assert.NotContains(t, bodyStr, "sellerAmountCents")
+		assert.NotContains(t, bodyStr, "subtotalCents")
+		assert.NotContains(t, bodyStr, "unitPriceCents")
+		assert.NotContains(t, bodyStr, "lineTotalCents")
+		assert.NotContains(t, bodyStr, "customerName")
+		assert.NotContains(t, bodyStr, "customerPhone")
+		assert.NotContains(t, bodyStr, "deliveryAddress")
+	})
+
+	// 15. Admin with orders.read can read dispatch queue -> 200 OK
+	t.Run("admin with orders.read can read dispatch queue -> 200", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/dispatch", nil)
+		req.Header.Set("Authorization", "Bearer "+adminReadOnlyToken)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+	})
+
+	// 16. Admin without warehouse.dispatch or orders.read cannot read dispatch queue -> 403 Forbidden
+	t.Run("admin with only warehouse.picking cannot read dispatch queue -> 403", func(t *testing.T) {
+		adminPicking := insertUser("admin")
+		insertAdminWithPerms(adminPicking, []string{"warehouse.picking"})
+		pickingTok := makeToken(adminPicking, "admin")
+
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/dispatch", nil)
+		req.Header.Set("Authorization", "Bearer "+pickingTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
 }

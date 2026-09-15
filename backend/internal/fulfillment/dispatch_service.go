@@ -72,3 +72,7 @@ func (s *Service) DispatchFulfillment(ctx context.Context, adminID, fulfillmentI
 func (s *Service) GetDispatchContext(ctx context.Context, fulfillmentID uuid.UUID) (*DispatchContext, error) {
 	return s.repo.GetDispatchContext(ctx, fulfillmentID)
 }
+
+func (s *Service) GetDispatchQueue(ctx context.Context) ([]DispatchQueueItem, error) {
+	return s.repo.GetDispatchQueue(ctx)
+}

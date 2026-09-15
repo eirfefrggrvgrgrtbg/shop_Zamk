@@ -446,3 +446,33 @@ export const getAdminDispatchContext = async (fulfillmentId: string): Promise<Di
   }
   return data;
 };
+
+export interface DispatchQueueItem {
+  fulfillmentId: string;
+  orderId: string;
+  orderNumber: string;
+  status: string;
+  orderStatus: string;
+  packedAt?: string | null;
+  createdAt: string;
+  deliveryMethodName?: string | null;
+  itemsCount: number;
+  totalQuantity: number;
+  shipmentId?: string | null;
+  shipmentStatus?: string | null;
+  carrier?: string | null;
+}
+
+export const getAdminDispatchQueue = async (): Promise<DispatchQueueItem[]> => {
+  const response = await fetch(`${API_URL}/admin/fulfillments/dispatch`, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getAccessToken() || ''}`,
+    },
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new ApiError(data.error?.message || 'Не удалось загрузить очередь отгрузки', data.error?.code, response.status);
+  }
+  return Array.isArray(data) ? data : (data.items || []);
+};

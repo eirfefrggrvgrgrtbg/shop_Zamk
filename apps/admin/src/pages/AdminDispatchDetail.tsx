@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
+  ArrowRight,
   CheckCircle2,
   AlertCircle,
   AlertTriangle,
@@ -123,10 +124,10 @@ export function AdminDispatchDetail() {
               Попробовать снова
             </button>
             <Link
-              to="/shipments"
+              to="/fulfillment/dispatch"
               className="px-4 py-2 bg-white hover:bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 transition-colors"
             >
-              К очереди отгрузок
+              К очереди отгрузки
             </Link>
           </div>
         </div>
@@ -212,11 +213,11 @@ export function AdminDispatchDetail() {
         <div className="space-y-1">
           <div className="flex items-center gap-3 mb-2 text-xs font-semibold text-gray-500">
             <Link
-              to="/shipments"
+              to="/fulfillment/dispatch"
               className="inline-flex items-center gap-1.5 hover:text-gray-900 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Очередь отгрузок</span>
+              <span>Очередь отгрузки</span>
             </Link>
             <span>/</span>
             <Link
@@ -289,6 +290,13 @@ export function AdminDispatchDetail() {
           </div>
 
           <div className="pt-3 border-t border-emerald-200/60 flex flex-wrap items-center gap-3 text-xs">
+            <Link
+              to="/fulfillment/dispatch"
+              className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <span>К очереди отгрузки</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
             <Link
               to={`/orders/${orderId}`}
               className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-lg transition-colors"

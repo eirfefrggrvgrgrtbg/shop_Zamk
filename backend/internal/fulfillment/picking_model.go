@@ -92,3 +92,19 @@ type PackingQueueItem struct {
 	TotalQuantity      int        `json:"totalQuantity"`
 	PickedQuantity     int        `json:"pickedQuantity"`
 }
+
+type DispatchQueueItem struct {
+	FulfillmentID      uuid.UUID  `json:"fulfillmentId"`
+	OrderID            uuid.UUID  `json:"orderId"`
+	OrderNumber        string     `json:"orderNumber"`
+	Status             string     `json:"status"`
+	OrderStatus        string     `json:"orderStatus"`
+	PackedAt           *time.Time `json:"packedAt,omitempty"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	DeliveryMethodName *string    `json:"deliveryMethodName,omitempty"`
+	ItemsCount         int        `json:"itemsCount"`
+	TotalQuantity      int        `json:"totalQuantity"`
+	ShipmentID         *uuid.UUID `json:"shipmentId,omitempty"`
+	ShipmentStatus     *string    `json:"shipmentStatus,omitempty"`
+	Carrier            *string    `json:"carrier,omitempty"`
+}

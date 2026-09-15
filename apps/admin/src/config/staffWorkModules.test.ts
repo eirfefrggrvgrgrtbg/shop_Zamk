@@ -225,20 +225,20 @@ describe('STAFF_WORK_MODULES Presentation Config', () => {
     expect(exactDiff.matches).toBe(true);
   });
 
-  // Q. screen visibility config has 25 unique keys and valid routes
-  it('Q: screen visibility config has exactly 25 unique keys and unique valid routes', () => {
-    expect(STAFF_SCREEN_ACCESS_RULES).toHaveLength(25);
+  // Q. screen visibility config has 26 unique keys and valid routes
+  it('Q: screen visibility config has exactly 26 unique keys and unique valid routes', () => {
+    expect(STAFF_SCREEN_ACCESS_RULES).toHaveLength(26);
 
     const keys = STAFF_SCREEN_ACCESS_RULES.map((r) => r.key);
     const uniqueKeys = new Set(keys);
-    expect(uniqueKeys.size).toBe(25);
+    expect(uniqueKeys.size).toBe(26);
 
     const routes = STAFF_SCREEN_ACCESS_RULES.map((r) => r.route);
     const uniqueRoutes = new Set(routes);
-    expect(uniqueRoutes.size).toBe(25);
+    expect(uniqueRoutes.size).toBe(26);
   });
 
-  // R. warehouse visibility rules: picking, packing, dispatch, orders receiving, supplies receiving, returns receiving
+  // R. warehouse visibility rules: picking, packing, dispatch, orders receiving, supplies receiving, returns receiving, free-scan
   it('R: warehouse screen visibility rules use exact accepted anchors', () => {
     // picking -> warehouse.picking
     const pickingRule = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/fulfillment/picking');
@@ -269,16 +269,28 @@ describe('STAFF_WORK_MODULES Presentation Config', () => {
     const returnsReceivingRule = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/returns/receiving');
     expect(returnsReceivingRule).toBeDefined();
     expect(returnsReceivingRule?.visibility).toBe('warehouse.returns');
+
+    // shipments -> shipments.read
+    const shipmentsRule = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/shipments');
+    expect(shipmentsRule).toBeDefined();
+    expect(shipmentsRule?.visibility).toBe('shipments.read');
+
+    // free-scan -> ['inventory.read', 'inventory.receipt']
+    const freeScanRule = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/warehouse/free-scan');
+    expect(freeScanRule).toBeDefined();
+    expect(freeScanRule?.visibility).toEqual(['inventory.read', 'inventory.receipt']);
   });
 
-  // S. individual checks for receiving routes
-  it('S: preserves receiving route distinct visibility anchors', () => {
+  // S. individual checks for receiving routes and returns separation
+  it('S: preserves receiving route distinct visibility anchors and returns separation', () => {
     const ordersRec = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/orders/receiving');
     const suppliesRec = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/supplies/receiving');
     const returnsRec = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/returns/receiving');
+    const supportReturns = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/returns');
     expect(ordersRec?.visibility).toBe('warehouse.receiving');
     expect(suppliesRec?.visibility).toBe('inventory.receipt');
     expect(returnsRec?.visibility).toBe('warehouse.returns');
+    expect(supportReturns?.visibility).toBe('returns.read');
   });
 
   // T. dashboard/users/settings have proposed explicit visibility rules

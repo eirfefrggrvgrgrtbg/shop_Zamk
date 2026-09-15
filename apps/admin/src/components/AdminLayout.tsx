@@ -22,6 +22,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PackageCheck,
+  PackageSearch,
   Search,
 } from 'lucide-react';
 
@@ -170,16 +171,21 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     { name: 'Модерация', path: '/moderation', icon: ShieldAlert },
     { name: 'Категории и бренды', path: '/catalog', icon: BookOpen },
     { name: 'Заказы', path: '/orders', icon: ShoppingCart },
-    { name: 'Сборка заказов', path: '/fulfillment/picking', icon: PackageCheck },
-    { name: 'Упаковка заказов', path: '/fulfillment/packing', icon: Package },
-    { name: 'Доставка / Отгрузки', path: '/shipments', icon: Truck },
-    { name: 'Остатки / Склад', path: '/inventory', icon: Boxes },
-    { name: 'Приемка поставок', path: '/supplies/receiving', icon: Truck },
-    { name: 'Приёмка возвратов', path: '/returns/receiving', icon: RotateCcw },
+    { name: 'Отправления', path: '/shipments', icon: Truck },
     { name: 'Платежи покупателей', path: '/payments', icon: CreditCard },
     { name: 'Возвраты', path: '/returns', icon: RotateCcw },
     { name: 'Возмещения', path: '/refunds', icon: ReceiptText },
     { name: 'Выплаты продавцам', path: '/payouts', icon: Wallet },
+  ];
+
+  const warehouseNavItems: NavItem[] = [
+    { name: 'Сборка', path: '/fulfillment/picking', icon: PackageCheck },
+    { name: 'Упаковка', path: '/fulfillment/packing', icon: Package },
+    { name: 'Отгрузка', path: '/fulfillment/dispatch', icon: Truck },
+    { name: 'Приёмка поставок', path: '/supplies/receiving', icon: Truck },
+    { name: 'Приёмка возвратов', path: '/returns/receiving', icon: RotateCcw },
+    { name: 'Остатки', path: '/inventory', icon: Boxes },
+    { name: 'Свободный сканер', path: '/warehouse/free-scan', icon: PackageSearch },
   ];
 
   const staffNavItems: NavItem[] = [
@@ -201,10 +207,60 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
   ].filter((s) => s.visible);
 
   const visibleBaseItems = baseNavItems.filter(isNavItemVisible);
+  const visibleWarehouseItems = warehouseNavItems.filter(isNavItemVisible);
   const visibleStaffItems = staffNavItems.filter(isNavItemVisible);
-  const allNavItems = [...visibleBaseItems, ...visibleStaffItems];
+  const allNavItems = [...visibleBaseItems, ...visibleWarehouseItems, ...visibleStaffItems];
 
   const isModerationActive = location.pathname.startsWith('/moderation');
+
+  const isRouteActive = (itemPath: string) => {
+    if (itemPath === '/moderation') {
+      return isModerationActive;
+    }
+    if (itemPath === '/returns') {
+      if (location.pathname === '/returns/receiving' || location.pathname.startsWith('/returns/receiving/')) {
+        return false;
+      }
+      if (location.pathname.startsWith('/returns/') && location.pathname.endsWith('/receiving')) {
+        return false;
+      }
+      return location.pathname === '/returns' || location.pathname.startsWith('/returns/');
+    }
+    if (itemPath === '/returns/receiving') {
+      if (location.pathname === '/returns/receiving' || location.pathname.startsWith('/returns/receiving/')) {
+        return true;
+      }
+      if (location.pathname.startsWith('/returns/') && location.pathname.endsWith('/receiving')) {
+        return true;
+      }
+      return false;
+    }
+    if (itemPath === '/shipments') {
+      return location.pathname === '/shipments' || location.pathname.startsWith('/shipments/');
+    }
+    if (itemPath === '/fulfillment/dispatch') {
+      return (
+        location.pathname === '/fulfillment/dispatch' ||
+        location.pathname.startsWith('/fulfillment/dispatch/')
+      );
+    }
+    if (itemPath === '/fulfillment/picking') {
+      return location.pathname === '/fulfillment/picking' || location.pathname.startsWith('/fulfillment/picking/');
+    }
+    if (itemPath === '/fulfillment/packing') {
+      return location.pathname === '/fulfillment/packing' || location.pathname.startsWith('/fulfillment/packing/');
+    }
+    if (itemPath === '/supplies/receiving') {
+      return location.pathname === '/supplies/receiving' || location.pathname.startsWith('/supplies/receiving/');
+    }
+    if (itemPath === '/inventory') {
+      return location.pathname === '/inventory' || location.pathname.startsWith('/inventory/');
+    }
+    if (itemPath === '/warehouse/free-scan') {
+      return location.pathname === '/warehouse/free-scan' || location.pathname.startsWith('/warehouse/free-scan/');
+    }
+    return location.pathname === itemPath || (location.pathname.startsWith(itemPath + '/') && itemPath !== '/');
+  };
 
   return (
     <div data-testid="admin-layout" className="flex h-screen bg-gray-50">
@@ -230,9 +286,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {visibleBaseItems.map((item) => {
             const isModerationItem = item.path === '/moderation';
-            const isActive = isModerationItem
-              ? isModerationActive
-              : (location.pathname === item.path || (location.pathname.startsWith(item.path + '/') && item.path !== '/'));
+            const isActive = isRouteActive(item.path);
 
             return (
               <div key={item.path}>
@@ -251,24 +305,6 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
                   {!isCollapsed && isModerationItem && moderationCounts.total > 0 && (
                     <span className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                       {moderationCounts.total}
-                    </span>
-                  )}
-
-                  {!isCollapsed && item.path === '/fulfillment/picking' && pickingCount > 0 && (
-                    <span
-                      data-testid="sidebar-picking-count"
-                      className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
-                    >
-                      {pickingCount}
-                    </span>
-                  )}
-
-                  {!isCollapsed && item.path === '/fulfillment/packing' && packingCount > 0 && (
-                    <span
-                      data-testid="sidebar-packing-count"
-                      className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
-                    >
-                      {packingCount}
                     </span>
                   )}
                 </Link>
@@ -309,6 +345,55 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
             );
           })}
 
+          {visibleWarehouseItems.length > 0 && (
+            <>
+              <div className="pt-4 pb-1">
+                {!isCollapsed ? (
+                  <p className="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">СКЛАД</p>
+                ) : (
+                  <div className="w-full h-px bg-slate-800 my-2" />
+                )}
+              </div>
+              {visibleWarehouseItems.map((item) => {
+                const isActive = isRouteActive(item.path);
+
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    title={isCollapsed ? item.name : undefined}
+                    className={`flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-xl group transition-colors ${
+                      isActive ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    } ${isCollapsed ? 'justify-center' : ''}`}
+                  >
+                    <div className="flex items-center min-w-0">
+                      <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-400 group-hover:text-slate-300'} ${!isCollapsed ? 'mr-3' : ''}`} />
+                      {!isCollapsed && <span className="truncate">{item.name}</span>}
+                    </div>
+
+                    {!isCollapsed && item.path === '/fulfillment/picking' && pickingCount > 0 && (
+                      <span
+                        data-testid="sidebar-picking-count"
+                        className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                      >
+                        {pickingCount}
+                      </span>
+                    )}
+
+                    {!isCollapsed && item.path === '/fulfillment/packing' && packingCount > 0 && (
+                      <span
+                        data-testid="sidebar-packing-count"
+                        className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                      >
+                        {packingCount}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </>
+          )}
+
           {visibleStaffItems.length > 0 && (
             <>
               <div className="pt-4 pb-1">
@@ -319,7 +404,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
                 )}
               </div>
               {visibleStaffItems.map((item) => {
-                const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+                const isActive = isRouteActive(item.path);
                 return (
                   <Link
                     key={item.path}
@@ -362,7 +447,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
             <span className="text-gray-800 font-semibold">
               {isModerationActive
                 ? 'Модерация'
-                : (allNavItems.find(item => location.pathname.startsWith(item.path))?.name || 'Панель администратора')}
+                : (allNavItems.find(item => isRouteActive(item.path))?.name || 'Панель администратора')}
             </span>
           </div>
           <div className="flex items-center space-x-3 sm:space-x-4">

@@ -542,6 +542,7 @@ func New(
 		r.With(perm("orders.read")).Get("/order-fulfillments", fulfillmentHandler.ListAdminFulfillments)
 		r.With(perm("orders.read")).Get("/order-fulfillments/{id}", fulfillmentHandler.GetAdminFulfillment)
 		r.With(permAny("warehouse.packing", "orders.read")).Get("/fulfillments/packing", fulfillmentHandler.ListPackingQueue)
+		r.With(permAny("warehouse.dispatch", "orders.read")).Get("/fulfillments/dispatch", fulfillmentHandler.ListDispatchQueue)
 		r.With(perm("orders.read")).Get("/fulfillments/{id}", fulfillmentHandler.GetAdminFulfillment)
 		r.With(perm("shipments.create")).Post("/fulfillments/{id}/shipment", fulfillmentHandler.CreateShipmentForFulfillment)
 		r.With(perm("orders.read")).Post("/fulfillments/resolve-receiving-code", fulfillmentHandler.ResolveReceivingCode)

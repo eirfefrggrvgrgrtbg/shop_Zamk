@@ -77,9 +77,9 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
     vi.clearAllMocks();
   });
 
-  // A. 25 screen rules are consumed by navigation/route helpers
-  it('A: all 25 canonical screen rules are consumed by getStaffScreenVisibility', () => {
-    expect(STAFF_SCREEN_ACCESS_RULES).toHaveLength(25);
+  // A. 26 screen rules are consumed by navigation/route helpers
+  it('A: all 26 canonical screen rules are consumed by getStaffScreenVisibility', () => {
+    expect(STAFF_SCREEN_ACCESS_RULES).toHaveLength(26);
 
     for (const rule of STAFF_SCREEN_ACCESS_RULES) {
       const visibility = getStaffScreenVisibility(rule.route);
@@ -115,7 +115,7 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
         <AdminLayout />
       </MemoryRouter>
     );
-    expect(within(getSidebar()).getByText('Сборка заказов')).toBeDefined();
+    expect(within(getSidebar()).getByText('Сборка')).toBeDefined();
   });
 
   // D. order receiving uses warehouse.receiving
@@ -152,7 +152,7 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
         <AdminLayout />
       </MemoryRouter>
     );
-    expect(within(getSidebar()).getByText('Приемка поставок')).toBeDefined();
+    expect(within(getSidebar()).getByText('Приёмка поставок')).toBeDefined();
   });
 
   // F. orders.read does not imply picking
@@ -177,7 +177,7 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
 
     const sidebar = getSidebar();
     expect(within(sidebar).getByText('Заказы')).toBeDefined();
-    expect(within(sidebar).queryByText('Сборка заказов')).toBeNull();
+    expect(within(sidebar).queryByText('Сборка')).toBeNull();
 
     expect(screen.getByText('Недостаточно прав')).toBeDefined();
     expect(screen.queryByText('Picking Queue')).toBeNull();
@@ -226,8 +226,8 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
     );
 
     const sidebar = getSidebar();
-    expect(within(sidebar).getByText('Остатки / Склад')).toBeDefined();
-    expect(within(sidebar).queryByText('Приемка поставок')).toBeNull();
+    expect(within(sidebar).getByText('Остатки')).toBeDefined();
+    expect(within(sidebar).queryByText('Приёмка поставок')).toBeNull();
     expect(screen.getByText('Недостаточно прав')).toBeDefined();
     expect(screen.queryByText('Supply Receiving Screen')).toBeNull();
   });
@@ -304,12 +304,12 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
     unmount3();
   });
 
-  // K. returns OR works
-  it('K: returns multi-capability OR rule works correctly', () => {
+  // K. returns separation: support /returns requires returns.read
+  it('K: returns separation: support /returns requires returns.read and warehouse.returns does not grant CRM access', () => {
     const returnsRule = getStaffScreenVisibility('/returns');
-    expect(returnsRule).toEqual(['returns.read', 'warehouse.returns']);
+    expect(returnsRule).toBe('returns.read');
 
-    // 1. returns.read -> visible
+    // 1. returns.read -> visible in main nav, no warehouse return receiving
     mockAuth(['returns.read']);
     const { unmount: unmount1 } = render(
       <MemoryRouter initialEntries={['/returns']}>
@@ -317,16 +317,18 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
       </MemoryRouter>
     );
     expect(within(getSidebar()).getByText('Возвраты')).toBeDefined();
+    expect(within(getSidebar()).queryByText('Приёмка возвратов')).toBeNull();
     unmount1();
 
-    // 2. warehouse.returns -> visible
+    // 2. warehouse.returns -> sees Приёмка возвратов under СКЛАД, but NOT support Возвраты
     mockAuth(['warehouse.returns']);
     const { unmount: unmount2 } = render(
-      <MemoryRouter initialEntries={['/returns']}>
+      <MemoryRouter initialEntries={['/returns/receiving']}>
         <AdminLayout />
       </MemoryRouter>
     );
-    expect(within(getSidebar()).getByText('Возвраты')).toBeDefined();
+    expect(within(getSidebar()).getByText('Приёмка возвратов')).toBeDefined();
+    expect(within(getSidebar()).queryByText('Возвраты')).toBeNull();
     unmount2();
 
     // 3. neither -> hidden
@@ -337,6 +339,7 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
       </MemoryRouter>
     );
     expect(within(getSidebar()).queryByText('Возвраты')).toBeNull();
+    expect(within(getSidebar()).queryByText('Приёмка возвратов')).toBeNull();
     unmount3();
   });
 
@@ -478,14 +481,19 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
       'Модерация',
       'Категории и бренды',
       'Заказы',
-      'Сборка заказов',
-      'Доставка / Отгрузки',
-      'Остатки / Склад',
-      'Приемка поставок',
       'Платежи покупателей',
       'Возвраты',
       'Возмещения',
       'Выплаты продавцам',
+      'СКЛАД',
+      'Сборка',
+      'Упаковка',
+      'Отгрузка',
+      'Приёмка поставок',
+      'Приёмка возвратов',
+      'Остатки',
+      'Свободный сканер',
+      'Администрирование',
       'Сводные отчеты',
       'Доступы и роли',
       'Сотрудники',
@@ -495,8 +503,6 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
     for (const name of expectedNavNames) {
       expect(within(sidebar).getByText(name)).toBeDefined();
     }
-
-    expect(within(sidebar).getByText('Администрирование')).toBeDefined();
   });
 
   // Owner without role bypass
@@ -510,7 +516,7 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
     );
 
     const sidebar = getSidebar();
-    expect(within(sidebar).queryByText('Сборка заказов')).toBeNull();
+    expect(within(sidebar).queryByText('Сборка')).toBeNull();
     expect(within(sidebar).getByText('Заказы')).toBeDefined();
   });
 
@@ -580,7 +586,7 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
   });
 
   // R2. packing sidebar item requires warehouse.packing
-  it('R2: sidebar renders "Упаковка заказов" for warehouse.packing and hides it for others', () => {
+  it('R2: sidebar renders "Упаковка" for warehouse.packing and hides it for others', () => {
     mockAuth(['warehouse.packing']);
     const { unmount: unmount1 } = render(
       <MemoryRouter initialEntries={['/fulfillment/packing']}>
@@ -590,7 +596,7 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
       </MemoryRouter>
     );
     const sidebar1 = getSidebar();
-    expect(within(sidebar1).getByText('Упаковка заказов')).toBeDefined();
+    expect(within(sidebar1).getByText('Упаковка')).toBeDefined();
     unmount1();
 
     mockAuth(['orders.read']);
@@ -602,7 +608,7 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
       </MemoryRouter>
     );
     const sidebar2 = getSidebar();
-    expect(within(sidebar2).queryByText('Упаковка заказов')).toBeNull();
+    expect(within(sidebar2).queryByText('Упаковка')).toBeNull();
     unmount2();
   });
 
@@ -669,5 +675,256 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
     expect(screen.getByText('Недостаточно прав')).toBeDefined();
     expect(screen.queryByText('Dispatch Detail Screen')).toBeNull();
     unmount3();
+  });
+});
+
+describe('WH.5 — Warehouse Navigation & Workspace Pass', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  // A. employee with warehouse.picking sees СКЛАД and Сборка, not Packing/Dispatch/Receiving
+  it('A: employee with warehouse.picking sees СКЛАД and Сборка, and does not see Packing/Dispatch/Receiving', () => {
+    mockAuth(['warehouse.picking']);
+    render(
+      <MemoryRouter initialEntries={['/fulfillment/picking']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).getByText('СКЛАД')).toBeDefined();
+    expect(within(sidebar).getByText('Сборка')).toBeDefined();
+    expect(within(sidebar).queryByText('Упаковка')).toBeNull();
+    expect(within(sidebar).queryByText('Отгрузка')).toBeNull();
+    expect(within(sidebar).queryByText('Приёмка поставок')).toBeNull();
+    expect(within(sidebar).queryByText('Приёмка возвратов')).toBeNull();
+  });
+
+  // B. employee with warehouse.packing sees СКЛАД and Упаковка
+  it('B: employee with warehouse.packing sees СКЛАД and Упаковка', () => {
+    mockAuth(['warehouse.packing']);
+    render(
+      <MemoryRouter initialEntries={['/fulfillment/packing']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).getByText('СКЛАД')).toBeDefined();
+    expect(within(sidebar).getByText('Упаковка')).toBeDefined();
+    expect(within(sidebar).queryByText('Сборка')).toBeNull();
+    expect(within(sidebar).queryByText('Отгрузка')).toBeNull();
+  });
+
+  // C. employee with inventory.receipt sees Приёмка поставок and Free Scanner
+  it('C: employee with inventory.receipt sees Приёмка поставок and Free Scanner', () => {
+    mockAuth(['inventory.receipt']);
+    render(
+      <MemoryRouter initialEntries={['/supplies/receiving']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).getByText('СКЛАД')).toBeDefined();
+    expect(within(sidebar).getByText('Приёмка поставок')).toBeDefined();
+    expect(within(sidebar).getByText('Свободный сканер')).toBeDefined();
+    expect(within(sidebar).queryByText('Остатки')).toBeNull();
+  });
+
+  // D. employee with warehouse.returns sees Приёмка возвратов but NOT support /returns
+  it('D: employee with warehouse.returns sees Приёмка возвратов but NOT support /returns', () => {
+    mockAuth(['warehouse.returns']);
+    render(
+      <MemoryRouter initialEntries={['/returns/receiving']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).getByText('СКЛАД')).toBeDefined();
+    expect(within(sidebar).getByText('Приёмка возвратов')).toBeDefined();
+    expect(within(sidebar).queryByText('Возвраты')).toBeNull();
+  });
+
+  // E. employee with Free Scanner read-only canonical capability sees Free Scanner but cannot receive
+  it('E: employee with Free Scanner read-only canonical capability sees Free Scanner but cannot gain receiving permissions', () => {
+    const freeScanRule = getStaffScreenVisibility('/warehouse/free-scan');
+    expect(freeScanRule).toEqual(['inventory.read', 'inventory.receipt']);
+
+    // 1. With inventory.read -> Free Scanner is visible in sidebar
+    mockAuth(['inventory.read']);
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/warehouse/free-scan']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).getByText('Свободный сканер')).toBeDefined();
+    unmount();
+
+    // 2. Free Scanner route guard allows inventory.read
+    mockAuth(['inventory.read']);
+    const { unmount: unmountRoute } = render(
+      <MemoryRouter initialEntries={['/warehouse/free-scan']}>
+        <Routes>
+          <Route
+            path="/warehouse/free-scan"
+            element={
+              <AdminProtectedRoute permission={getStaffScreenVisibility('/warehouse/free-scan')}>
+                <div>Free Scanner Screen</div>
+              </AdminProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Free Scanner Screen')).toBeDefined();
+    unmountRoute();
+  });
+
+  // F. warehouse.dispatch sees Отгрузка without orders.read dependency
+  it('F: warehouse.dispatch sees Отгрузка without orders.read dependency', () => {
+    mockAuth(['warehouse.dispatch']);
+    render(
+      <MemoryRouter initialEntries={['/fulfillment/dispatch']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).getByText('СКЛАД')).toBeDefined();
+    expect(within(sidebar).getByText('Отгрузка')).toBeDefined();
+    const link = within(sidebar).getByText('Отгрузка').closest('a');
+    expect(link?.getAttribute('href')).toBe('/fulfillment/dispatch');
+    expect(within(sidebar).queryByText('Заказы')).toBeNull();
+  });
+
+  // G. owner/admin still sees all applicable warehouse tools
+  it('G: owner/admin sees all 7 applicable warehouse tools in СКЛАД group', () => {
+    mockAuth(getAllCapabilityKeys(), 'owner');
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).getByText('СКЛАД')).toBeDefined();
+
+    const expectedWarehouseTools = [
+      'Сборка',
+      'Упаковка',
+      'Отгрузка',
+      'Приёмка поставок',
+      'Приёмка возвратов',
+      'Остатки',
+      'Свободный сканер',
+    ];
+
+    for (const tool of expectedWarehouseTools) {
+      expect(within(sidebar).getByText(tool)).toBeDefined();
+    }
+  });
+
+  // H. Free Scanner is discoverable
+  it('H: Free Scanner is discoverable with correct route link in sidebar', () => {
+    mockAuth(['inventory.read']);
+    render(
+      <MemoryRouter initialEntries={['/inventory']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    const link = within(sidebar).getByText('Свободный сканер').closest('a');
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute('href')).toBe('/warehouse/free-scan');
+  });
+
+  // I. support-only employee does not get warehouse group unless they possess a warehouse capability
+  it('I: support-only employee does not get warehouse group unless authorized', () => {
+    mockAuth(['returns.read', 'support.read', 'orders.read']);
+    render(
+      <MemoryRouter initialEntries={['/orders']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).queryByText('СКЛАД')).toBeNull();
+    expect(within(sidebar).getByText('Заказы')).toBeDefined();
+    expect(within(sidebar).getByText('Возвраты')).toBeDefined();
+  });
+
+  // J. existing non-warehouse navigation remains unchanged
+  it('J: existing non-warehouse navigation remains unchanged', () => {
+    mockAuth(['dashboard.read', 'analytics.read', 'sellers.read', 'auctions.read', 'products.read', 'moderation.read', 'categories.read', 'orders.read', 'shipments.read', 'payments.read', 'returns.read', 'refunds.read', 'payouts.read']);
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    const nonWarehouseItems = [
+      'Главная',
+      'Продавцы',
+      'Аукционы',
+      'Товары',
+      'Категории и бренды',
+      'Заказы',
+      'Отправления',
+      'Платежи покупателей',
+      'Возвраты',
+      'Возмещения',
+      'Выплаты продавцам',
+    ];
+    for (const item of nonWarehouseItems) {
+      expect(within(sidebar).getByText(item)).toBeDefined();
+    }
+    expect(within(sidebar).queryByText('СКЛАД')).toBeNull();
+  });
+
+  // K. active route highlighting for nested warehouse routes
+  it('K: active route highlighting works for direct and nested warehouse routes and preserves support returns', () => {
+    const testCases = [
+      { route: '/fulfillment/picking', expectedActive: 'Сборка' },
+      { route: '/fulfillment/picking/order-123', expectedActive: 'Сборка' },
+      { route: '/fulfillment/packing', expectedActive: 'Упаковка' },
+      { route: '/fulfillment/packing/order-123', expectedActive: 'Упаковка' },
+      { route: '/fulfillment/dispatch', expectedActive: 'Отгрузка' },
+      { route: '/fulfillment/dispatch/order-123', expectedActive: 'Отгрузка' },
+      { route: '/shipments', expectedActive: 'Отправления' },
+      { route: '/supplies/receiving', expectedActive: 'Приёмка поставок' },
+      { route: '/returns/receiving', expectedActive: 'Приёмка возвратов' },
+      { route: '/returns/ret-123/receiving', expectedActive: 'Приёмка возвратов' },
+      { route: '/inventory', expectedActive: 'Остатки' },
+      { route: '/inventory/reconciliation/rec-123', expectedActive: 'Остатки' },
+      { route: '/warehouse/free-scan', expectedActive: 'Свободный сканер' },
+      { route: '/returns', expectedActive: 'Возвраты' },
+      { route: '/returns/ret-123', expectedActive: 'Возвраты' },
+    ];
+
+    for (const tc of testCases) {
+      mockAuth(getAllCapabilityKeys());
+      const { unmount } = render(
+        <MemoryRouter initialEntries={[tc.route]}>
+          <AdminLayout />
+        </MemoryRouter>
+      );
+      const sidebar = getSidebar();
+      const activeLink = within(sidebar).getByText(tc.expectedActive).closest('a');
+      expect(activeLink?.className, `Route ${tc.route} should highlight ${tc.expectedActive}`).toContain('shadow-sm');
+
+      // Specifically check that when on /returns/receiving or /returns/:id/receiving, support 'Возвраты' is NOT active
+      if (tc.expectedActive === 'Приёмка возвратов') {
+        const supportReturnsLink = within(sidebar).getByText('Возвраты').closest('a');
+        expect(supportReturnsLink?.className).toContain('text-slate-300');
+        expect(supportReturnsLink?.className).not.toContain('shadow-sm');
+      }
+
+      // And when on support /returns, 'Приёмка возвратов' is NOT active
+      if (tc.expectedActive === 'Возвраты') {
+        const warehouseReturnsLink = within(sidebar).getByText('Приёмка возвратов').closest('a');
+        expect(warehouseReturnsLink?.className).toContain('text-slate-300');
+        expect(warehouseReturnsLink?.className).not.toContain('shadow-sm');
+      }
+
+      unmount();
+    }
   });
 });
