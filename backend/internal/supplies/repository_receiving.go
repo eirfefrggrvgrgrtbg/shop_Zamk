@@ -688,3 +688,102 @@ func (r *Repository) ResolvePhysicalUnitByCode(ctx context.Context, unitCode str
 
 	return &res, nil
 }
+
+func (r *Repository) GetReceivingQueue(ctx context.Context) ([]SupplyReceivingQueueItem, error) {
+	query := `
+		SELECT
+			s.id,
+			s.supply_number,
+			s.status,
+			s.seller_id,
+			COALESCE(sel.brand_name, '') AS seller_name,
+			COALESCE((
+				SELECT SUM(si.expected_quantity)
+				FROM seller_supply_items si
+				WHERE si.supply_id = s.id
+			), 0) AS expected_units_count,
+			COALESCE(
+				CASE
+					WHEN s.status = 'receiving' THEN (
+						SELECT COALESCE(SUM(sri.scanned_quantity + sri.damaged_quantity), 0)
+						FROM supply_receiving_items sri
+						JOIN supply_receiving_sessions srs ON srs.id = sri.session_id
+						WHERE srs.supply_id = s.id AND srs.status = 'active'
+					)
+					ELSE (
+						SELECT COALESCE(SUM(si.accepted_quantity + si.damaged_quantity), 0)
+						FROM seller_supply_items si
+						WHERE si.supply_id = s.id
+					)
+				END, 0
+			) AS accepted_units_count,
+			(
+				SELECT COUNT(*)
+				FROM seller_supply_boxes b
+				WHERE b.supply_id = s.id
+			) AS cargo_places_count,
+			s.arrived_at,
+			COALESCE(s.receiving_started_at, (
+				SELECT srs.started_at
+				FROM supply_receiving_sessions srs
+				WHERE srs.supply_id = s.id AND srs.status = 'active'
+				ORDER BY srs.created_at DESC
+				LIMIT 1
+			)) AS receiving_started_at,
+			(
+				SELECT srs.id
+				FROM supply_receiving_sessions srs
+				WHERE srs.supply_id = s.id AND srs.status = 'active'
+				ORDER BY srs.created_at DESC
+				LIMIT 1
+			) AS active_session_id
+		FROM seller_supplies s
+		LEFT JOIN sellers sel ON sel.id = s.seller_id
+		WHERE s.status IN ('arrived_at_zamk', 'receiving')
+		ORDER BY
+			CASE s.status
+				WHEN 'receiving' THEN 1
+				WHEN 'arrived_at_zamk' THEN 2
+				ELSE 3
+			END ASC,
+			COALESCE(s.arrived_at, s.created_at) ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query receiving queue: %w", err)
+	}
+	defer rows.Close()
+
+	var items []SupplyReceivingQueueItem
+	for rows.Next() {
+		var item SupplyReceivingQueueItem
+		if err := rows.Scan(
+			&item.SupplyID,
+			&item.SupplyNumber,
+			&item.Status,
+			&item.SellerID,
+			&item.SellerName,
+			&item.ExpectedUnitsCount,
+			&item.AcceptedUnitsCount,
+			&item.CargoPlacesCount,
+			&item.ArrivedAt,
+			&item.ReceivingStartedAt,
+			&item.ActiveReceivingSessionID,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan receiving queue item: %w", err)
+		}
+		rem := item.ExpectedUnitsCount - item.AcceptedUnitsCount
+		if rem < 0 {
+			rem = 0
+		}
+		item.RemainingUnitsCount = rem
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []SupplyReceivingQueueItem{}
+	}
+	return items, nil
+}

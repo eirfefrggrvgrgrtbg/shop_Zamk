@@ -50,6 +50,24 @@ func (h *Handler) MarkArrived(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handler) GetReceivingQueue(w http.ResponseWriter, r *http.Request) {
+	role, okRole := r.Context().Value("role").(string)
+	if !okRole || (role != "admin" && role != "super_admin") {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+
+	queue, err := h.svc.GetReceivingQueue(r.Context())
+	if err != nil {
+		h.logger.Error("failed to get receiving queue", "error", err)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get receiving queue")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(queue)
+}
+
 func (h *Handler) LookupSupply(w http.ResponseWriter, r *http.Request) {
 	role, okRole := r.Context().Value("role").(string)
 	if !okRole || (role != "admin" && role != "super_admin") {

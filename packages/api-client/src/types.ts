@@ -465,6 +465,21 @@ export interface SellerSupply {
   boxes?: SellerSupplyBox[];
 }
 
+export interface SupplyReceivingQueueItem {
+  supplyId: string;
+  supplyNumber: string;
+  status: string;
+  sellerId: string;
+  sellerName: string;
+  expectedUnitsCount: number;
+  acceptedUnitsCount: number;
+  remainingUnitsCount: number;
+  cargoPlacesCount: number;
+  arrivedAt?: string;
+  receivingStartedAt?: string;
+  activeReceivingSessionId?: string;
+}
+
 export interface SellerSupplyUnitLabelBox {
   id: string;
   boxNumber: string;

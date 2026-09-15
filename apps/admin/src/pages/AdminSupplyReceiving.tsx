@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowRight,
+  ArrowLeft,
   RefreshCw,
   AlertCircle,
   RotateCcw,
@@ -25,10 +26,12 @@ import {
   getSerializedReceivingScans,
   undoSerializedReceivingScan,
   finalizeSupplyReceivingSession,
+  getSupplyReceivingQueue,
 } from '@zamk/api-client/src/admin';
 import type {
   SellerSupply,
   SupplyReceivingSession,
+  SupplyReceivingQueueItem,
   SerializedRecentScan,
   SerializedScanResponse,
 } from '@zamk/api-client/src/types';
@@ -145,6 +148,44 @@ function getStatusBadge(status: string) {
   }
 }
 
+function formatOperationalTime(dateStr?: string): string {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    const now = new Date();
+    const isToday =
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+
+    const timeStr = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    if (isToday) {
+      return `сегодня, ${timeStr}`;
+    }
+    const datePart = d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return `${datePart}, ${timeStr}`;
+  } catch {
+    return '';
+  }
+}
+
+function formatCargoPlaces(count: number): string {
+  const n = count || 0;
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 19) {
+    return `${n} грузовых мест`;
+  }
+  if (mod10 === 1) {
+    return `${n} грузовое место`;
+  }
+  if (mod10 >= 2 && mod10 <= 4) {
+    return `${n} грузовых места`;
+  }
+  return `${n} грузовых мест`;
+}
+
 export function AdminSupplyReceiving() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { hasPermission } = useAdminAuth();
@@ -165,6 +206,11 @@ export function AdminSupplyReceiving() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const [queue, setQueue] = useState<SupplyReceivingQueueItem[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [openingSupplyId, setOpeningSupplyId] = useState<string | null>(null);
+
   const [isFinalized, setIsFinalized] = useState(false);
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
 
@@ -182,6 +228,23 @@ export function AdminSupplyReceiving() {
     )
   );
   const isAdditionalSession = Boolean(session && isAdditionalDossier);
+
+  const fetchQueue = async () => {
+    try {
+      setQueueLoading(true);
+      setQueueError(null);
+      const items = await getSupplyReceivingQueue();
+      setQueue(items || []);
+    } catch (err: any) {
+      setQueueError(err?.message || 'Не удалось загрузить очередь приёмки');
+    } finally {
+      setQueueLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchQueue();
+  }, []);
 
   useEffect(() => {
     const qrParam = searchParams.get('qr');
@@ -209,6 +272,32 @@ export function AdminSupplyReceiving() {
       barcodeRef.current?.focus();
     }
   }, [session, dossier, isFinalized]);
+
+  const handleSelectSupplyFromQueue = async (item: SupplyReceivingQueueItem) => {
+    try {
+      setOpeningSupplyId(item.supplyId);
+      setError(null);
+      setSuccessMessage(null);
+
+      const lookupCode = item.supplyNumber || item.supplyId;
+      const fullDossier = await lookupSupplyByCode(lookupCode);
+      setDossier(fullDossier);
+
+      if (canReceive) {
+        const sess = await startSupplyReceivingSession(lookupCode);
+        setSession(sess);
+        if (sess.receivingMode === 'serialized') {
+          await loadRecentScans(sess.id);
+        }
+      }
+      playBeepSound('success');
+    } catch (err: any) {
+      setError(mapReceivingError(err));
+      playBeepSound('error');
+    } finally {
+      setOpeningSupplyId(null);
+    }
+  };
 
   const loadRecentScans = async (sessionId: string) => {
     try {
@@ -302,6 +391,7 @@ export function AdminSupplyReceiving() {
     setBarcodeInput('');
     setIsDamagedScan(false);
     setSearchParams({});
+    fetchQueue();
     setTimeout(() => qrRef.current?.focus(), 50);
   };
 
@@ -472,24 +562,43 @@ export function AdminSupplyReceiving() {
   const totalRemaining = Math.max(0, totalExpected - totalScanned);
   const hasDiscrepancy = session?.items?.some((i) => i.expectedQuantity !== i.scannedQuantity + i.damagedQuantity);
   const latestNonVoidedScan = recentScans.find((s) => !s.voidedAt);
+  const countArrived = queue.filter((q) => q.status === 'arrived_at_zamk').length;
+  const countReceiving = queue.filter((q) => q.status === 'receiving').length;
+  const totalRemainingInQueue = queue.reduce((sum, q) => sum + (q.remainingUnitsCount || 0), 0);
+  const isSessionOrDossier = Boolean(dossier || session);
 
   return (
-    <div className="space-y-6 pb-20">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">
-            {isAdditionalSession
-              ? 'Доприёмка поставок (Additional Receiving)'
-              : 'Приемка поставок (Supplies)'}
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            {isAdditionalSession
-              ? 'Доприёмка оставшихся физических единиц по ZMU'
-              : isSerialized
-              ? 'Сериализованная приёмка физических единиц по ZMU'
-              : 'Сканирование QR поставок и штрихкодов товаров'}
-          </p>
-        </div>
+    <div className={`space-y-6 pb-20 ${isSessionOrDossier ? '' : 'max-w-5xl'}`}>
+      <div className={isSessionOrDossier ? 'px-4 sm:px-6' : ''}>
+        {isSessionOrDossier && !isFinalized && (
+          <button
+            type="button"
+            onClick={resetFlow}
+            className="inline-flex items-center text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors mb-3"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1.5" />
+            К очереди приёмки
+          </button>
+        )}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {isAdditionalSession
+                ? 'Доприёмка поставок (Additional Receiving)'
+                : isSessionOrDossier
+                ? 'Приемка поставок (Supplies)'
+                : 'Приёмка поставок'}
+            </h1>
+            <p className="text-sm mt-1 text-gray-500">
+              {isAdditionalSession
+                ? 'Доприёмка оставшихся физических единиц по ZMU'
+                : isSerialized
+                ? 'Сериализованная приёмка физических единиц по ZMU'
+                : isSessionOrDossier
+                ? 'Сканирование QR поставок и штрихкодов товаров'
+                : 'Поиск поставок и операционная очередь входящих поставок на склад ZAMK'}
+            </p>
+          </div>
         {session && (
           <div className="mt-3 sm:mt-0 flex items-center space-x-2">
             {isAdditionalSession ? (
@@ -510,19 +619,20 @@ export function AdminSupplyReceiving() {
             )}
           </div>
         )}
+        </div>
       </div>
 
       {error && !isFinalized && (
-        <div className="mx-4 sm:mx-6 bg-rose-500/10 border border-rose-500/20 rounded-lg p-4 flex items-center">
-          <AlertTriangle className="h-5 w-5 text-rose-500 mr-3 flex-shrink-0" />
-          <span className="text-rose-200 text-sm font-medium">{error}</span>
+        <div className={`p-4 rounded-xl flex items-center ${isSessionOrDossier ? 'mx-4 sm:mx-6 bg-rose-500/10 border border-rose-500/20 text-rose-200' : 'bg-rose-50 border border-rose-200 text-rose-800'}`}>
+          <AlertTriangle className={`h-5 w-5 mr-3 flex-shrink-0 ${isSessionOrDossier ? 'text-rose-500' : 'text-rose-600'}`} />
+          <span className="text-sm font-medium">{error}</span>
         </div>
       )}
 
       {successMessage && !isFinalized && (
-        <div className="mx-4 sm:mx-6 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 flex items-center">
-          <CheckCircle2 className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0" />
-          <span className="text-emerald-200 text-sm font-medium">{successMessage}</span>
+        <div className={`p-4 rounded-xl flex items-center ${isSessionOrDossier ? 'mx-4 sm:mx-6 bg-emerald-500/10 border border-emerald-500/20 text-emerald-200' : 'bg-emerald-50 border border-emerald-200 text-emerald-800'}`}>
+          <CheckCircle2 className={`h-5 w-5 mr-3 flex-shrink-0 ${isSessionOrDossier ? 'text-emerald-500' : 'text-emerald-600'}`} />
+          <span className="text-sm font-medium">{successMessage}</span>
         </div>
       )}
 
@@ -613,32 +723,195 @@ export function AdminSupplyReceiving() {
         </div>
       ) : !session ? (
         !dossier ? (
-          <div className="mx-4 sm:mx-6 bg-slate-800 border border-slate-700 rounded-xl p-8 max-w-2xl text-center shadow-lg">
-            <Truck className="mx-auto h-16 w-16 text-slate-500 mb-4" />
-            <h2 className="text-xl font-medium text-white mb-2">Поиск поставки</h2>
-            <p className="text-slate-400 mb-6 text-sm">
-              Отсканируйте QR-код поставки (SUP-XXXXX), штрихкод коробки или введите номер вручную.
-            </p>
+          <div className="space-y-6">
+            {/* Search Toolbar */}
+            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-2xs">
+              <form onSubmit={handleLookup} className="space-y-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                  <div className="relative flex-1">
+                    <input
+                      ref={qrRef}
+                      type="text"
+                      value={qrInput}
+                      onChange={(e) => setQrInput(e.target.value)}
+                      placeholder="SUP-номер, коробка или QR..."
+                      className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-3.5 pr-10 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:bg-white transition-colors"
+                      disabled={lookupLoading}
+                      autoFocus
+                    />
+                    {lookupLoading && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <RefreshCw className="h-4 w-4 text-indigo-600 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={lookupLoading || !qrInput.trim()}
+                    className="inline-flex items-center justify-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 shadow-2xs shrink-0"
+                  >
+                    {lookupLoading ? (
+                      <RefreshCw className="h-4 w-4 animate-spin mr-1.5" />
+                    ) : (
+                      <Search className="h-4 w-4 mr-1.5" />
+                    )}
+                    Найти
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Отсканируйте QR, код коробки или введите номер поставки
+                </p>
+              </form>
+            </div>
 
-            <form onSubmit={handleLookup} className="max-w-md mx-auto relative">
-              <input
-                ref={qrRef}
-                type="text"
-                value={qrInput}
-                onChange={(e) => setQrInput(e.target.value)}
-                placeholder="Номер SUP-..., коробка или скан QR..."
-                className="w-full bg-slate-900 border border-slate-600 rounded-lg pl-4 pr-12 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-inner"
-                disabled={lookupLoading}
-                autoFocus
-              />
-              <button
-                type="submit"
-                disabled={lookupLoading || !qrInput.trim()}
-                className="absolute right-2 top-2 bottom-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md px-3 transition-colors disabled:opacity-50 flex items-center justify-center"
-              >
-                {lookupLoading ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5" />}
-              </button>
-            </form>
+            {/* Receiving Queue Section */}
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">
+                    Ожидают приёмки {queue.length > 0 && <span className="text-gray-400 font-normal">· {queue.length}</span>}
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Поставки, которые уже прибыли на склад и требуют действий
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                  {queue.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
+                        Ожидают начала {countArrived}
+                      </span>
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-medium">
+                        В процессе {countReceiving}
+                      </span>
+                      {totalRemainingInQueue > 0 && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-medium">
+                          Осталось принять {totalRemainingInQueue} шт.
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={fetchQueue}
+                    disabled={queueLoading}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg transition-colors shadow-2xs disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${queueLoading ? 'animate-spin' : ''}`} />
+                    Обновить
+                  </button>
+                </div>
+              </div>
+
+              {queueError && (
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center justify-between shadow-2xs">
+                  <div className="flex items-center space-x-2 text-xs font-medium">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-600" />
+                    <span>{queueError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchQueue}
+                    className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 rounded-md text-xs font-semibold text-rose-800 transition-colors"
+                  >
+                    Повторить
+                  </button>
+                </div>
+              )}
+
+              {queueLoading && queue.length === 0 ? (
+                <div className="p-8 text-center bg-white rounded-xl border border-gray-200 shadow-2xs">
+                  <RefreshCw className="w-5 h-5 animate-spin mx-auto text-indigo-600 mb-2" />
+                  <p className="text-xs text-gray-500 font-medium">Загрузка очереди приёмки...</p>
+                </div>
+              ) : queue.length === 0 ? (
+                <div className="p-8 text-center bg-white rounded-xl border border-gray-200 shadow-2xs space-y-1.5">
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    Нет поставок, ожидающих приёмки
+                  </h3>
+                  <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                    Все прибывшие поставки обработаны, либо новые поставки ещё не поступили на склад.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {queue.map((item) => {
+                    const isArrived = item.status === 'arrived_at_zamk';
+                    const isReceiving = item.status === 'receiving';
+                    const isOpening = openingSupplyId === item.supplyId;
+
+                    return (
+                      <div
+                        key={item.supplyId}
+                        className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:border-indigo-300 hover:shadow-xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                      >
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono font-bold text-base text-gray-900">
+                              {item.supplyNumber || 'Поставка'}
+                            </span>
+                            {isArrived && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Ожидает приёмки
+                              </span>
+                            )}
+                            {isReceiving && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                Приёмка начата
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-sm font-medium text-gray-800">
+                            {item.sellerName || 'Продавец ZAMK'}
+                          </div>
+
+                          <div className="text-xs text-gray-500 space-y-0.5">
+                            {isArrived ? (
+                              <>
+                                <div>
+                                  {formatCargoPlaces(item.cargoPlacesCount)} · {item.expectedUnitsCount} единиц
+                                </div>
+                                {item.arrivedAt && (
+                                  <div>Прибыла {formatOperationalTime(item.arrivedAt)}</div>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <div>
+                                  Принято {item.acceptedUnitsCount} из {item.expectedUnitsCount} · осталось {item.remainingUnitsCount}
+                                </div>
+                                {item.receivingStartedAt && (
+                                  <div>Начата {formatOperationalTime(item.receivingStartedAt)}</div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center sm:self-center shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleSelectSupplyFromQueue(item)}
+                            disabled={!canReceive || isOpening}
+                            className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-2xs disabled:opacity-50"
+                          >
+                            {isOpening ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                            ) : (
+                              <ArrowRight className="w-3.5 h-3.5 mr-1.5" />
+                            )}
+                            {isReceiving ? 'Продолжить приёмку' : 'Начать приёмку'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="mx-4 sm:mx-6 bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-4xl mx-auto shadow-xl space-y-6">
@@ -658,8 +931,8 @@ export function AdminSupplyReceiving() {
                 onClick={resetFlow}
                 className="self-start sm:self-auto text-slate-400 hover:text-white flex items-center text-sm px-3 py-1.5 border border-slate-700 rounded-md hover:bg-slate-700 transition-colors"
               >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Новый поиск
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                К очереди приёмки
               </button>
             </div>
 
@@ -960,8 +1233,8 @@ export function AdminSupplyReceiving() {
                   onClick={resetFlow}
                   className="text-slate-400 hover:text-white flex items-center text-sm px-3 py-1.5 border border-slate-700 rounded-md hover:bg-slate-700 transition-colors"
                 >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Сбросить
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  К очереди приёмки
                 </button>
               </div>
 

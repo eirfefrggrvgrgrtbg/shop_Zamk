@@ -466,6 +466,7 @@ func New(
 
 			r.Group(func(r chi.Router) {
 				r.Use(perm("inventory.receipt"))
+				r.Get("/queue", suppliesHandler.GetReceivingQueue)
 				r.Post("/{supplyId}/arrive", suppliesHandler.MarkArrived)
 				r.Get("/lookup", suppliesHandler.LookupSupply)
 				r.Post("/free-scan/process", suppliesHandler.ProcessFoundUnit)

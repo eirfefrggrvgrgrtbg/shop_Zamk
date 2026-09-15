@@ -24,6 +24,10 @@ func (s *Service) MarkSupplyArrived(ctx context.Context, adminID uuid.UUID, supp
 	return s.repo.UpdateSupplyStatus(ctx, supplyID, "arrived_at_zamk")
 }
 
+func (s *Service) GetReceivingQueue(ctx context.Context) ([]SupplyReceivingQueueItem, error) {
+	return s.repo.GetReceivingQueue(ctx)
+}
+
 func (s *Service) StartReceivingSession(ctx context.Context, staffID uuid.UUID, qrToken string) (*ReceivingSession, error) {
 	qrToken = strings.TrimSpace(qrToken)
 	if qrToken == "" {
