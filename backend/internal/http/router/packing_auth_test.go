@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -235,6 +236,19 @@ func TestAdminPackingRouter(t *testing.T) {
 		assert.Equal(t, "fulfillment_not_fully_picked", res.Error.Code)
 	})
 
+	// 7.1 Admin with warehouse.packing can read picking order before packing -> 200 OK
+	t.Run("admin with warehouse.packing can read picking order before packing -> 200", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking", nil)
+		req.Header.Set("Authorization", "Bearer "+adminPackTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var po fulfillment.PickingOrder
+		require.NoError(t, json.NewDecoder(rr.Body).Decode(&po))
+		assert.Equal(t, fulfillmentID, po.FulfillmentID)
+	})
+
 	// 8. Pick allocation and pack successfully with orders.update_status -> 200 OK
 	t.Run("fully picked with orders.update_status -> 200 OK", func(t *testing.T) {
 		_, err := pgClient.Pool.Exec(ctx, `UPDATE order_item_allocations SET picked_at = now() WHERE id = $1`, allocID)
@@ -265,5 +279,101 @@ func TestAdminPackingRouter(t *testing.T) {
 		var res errResponse
 		require.NoError(t, json.NewDecoder(rr.Body).Decode(&res))
 		assert.Equal(t, "packing_not_allowed", res.Error.Code)
+	})
+
+	// 10. Admin with warehouse.packing CAN read picking order even when already packed -> 200 OK
+	t.Run("admin with warehouse.packing can read packed picking order with packedAt -> 200", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking", nil)
+		req.Header.Set("Authorization", "Bearer "+adminPackTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var po fulfillment.PickingOrder
+		require.NoError(t, json.NewDecoder(rr.Body).Decode(&po))
+		assert.Equal(t, fulfillmentID, po.FulfillmentID)
+		assert.Equal(t, "packed", po.FulfillmentStatus)
+		assert.NotNil(t, po.PackedAt)
+
+		// Verify no financial or customer PII in body
+		bodyStr := rr.Body.String()
+		assert.NotContains(t, bodyStr, "commissionBps")
+		assert.NotContains(t, bodyStr, "sellerAmountCents")
+		assert.NotContains(t, bodyStr, "subtotalCents")
+		assert.NotContains(t, bodyStr, "customerName")
+		assert.NotContains(t, bodyStr, "deliveryAddress")
+	})
+
+	// 11. Picking scan on already packed fulfillment remains strictly forbidden -> 409
+	t.Run("picking scan on packed fulfillment -> 409 picking_not_allowed", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking/scan", nil)
+		req.Header.Set("Authorization", "Bearer "+adminPackTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		// Should be 403 or 409 depending on perm; adminPack has warehouse.packing (picking scan requires warehouse.picking)
+		// With warehouse.picking:
+		adminPick := insertUser("admin")
+		insertAdminWithPerms(adminPick, []string{"warehouse.picking"})
+		adminPickTok := makeToken(adminPick, "admin")
+
+		scanBody := `{"code":"ZMU-001"}`
+		req2 := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking/scan", strings.NewReader(scanBody))
+		req2.Header.Set("Authorization", "Bearer "+adminPickTok)
+		req2.Header.Set("Content-Type", "application/json")
+		rr2 := httptest.NewRecorder()
+		r.ServeHTTP(rr2, req2)
+		assert.Equal(t, http.StatusConflict, rr2.Code)
+	})
+
+	// 12. Admin with warehouse.packing CANNOT access broad generic fulfillment endpoints -> 403 Forbidden
+	t.Run("admin with warehouse.packing CANNOT read broad generic fulfillment -> 403", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/order-fulfillments/"+fulfillmentID.String(), nil)
+		req.Header.Set("Authorization", "Bearer "+adminPackTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+
+		req2 := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String(), nil)
+		req2.Header.Set("Authorization", "Bearer "+adminPackTok)
+		rr2 := httptest.NewRecorder()
+		r.ServeHTTP(rr2, req2)
+		assert.Equal(t, http.StatusForbidden, rr2.Code)
+	})
+
+	// 13. Admin with warehouse.packing CANNOT dispatch -> 403 Forbidden
+	t.Run("admin with warehouse.packing CANNOT dispatch -> 403", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/dispatch", nil)
+		req.Header.Set("Authorization", "Bearer "+adminPackTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
+	// 14. Admin with orders.read CAN access broad generic fulfillment -> 200 OK
+	t.Run("admin with orders.read CAN read broad generic fulfillment -> 200", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/order-fulfillments/"+fulfillmentID.String(), nil)
+		req.Header.Set("Authorization", "Bearer "+adminReadTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+	})
+
+	// 15. Admin without required capabilities cannot read fulfillment or picking data -> 403 Forbidden
+	t.Run("admin without permissions cannot read fulfillment or picking data -> 403", func(t *testing.T) {
+		adminNoPerm := insertUser("admin")
+		insertAdminWithPerms(adminNoPerm, []string{"inventory.read"})
+		noPermTok := makeToken(adminNoPerm, "admin")
+
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking", nil)
+		req.Header.Set("Authorization", "Bearer "+noPermTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+
+		req2 := httptest.NewRequest("GET", "/api/admin/order-fulfillments/"+fulfillmentID.String(), nil)
+		req2.Header.Set("Authorization", "Bearer "+noPermTok)
+		rr2 := httptest.NewRecorder()
+		r.ServeHTTP(rr2, req2)
+		assert.Equal(t, http.StatusForbidden, rr2.Code)
 	})
 }

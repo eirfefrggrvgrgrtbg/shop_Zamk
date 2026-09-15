@@ -77,6 +77,8 @@ export const STAFF_SCREEN_ACCESS_RULES: StaffScreenAccessRule[] = [
   { key: 'catalog', title: 'Категории и бренды', route: '/catalog', visibility: ['categories.read', 'brands.read'] },
   { key: 'orders', title: 'Заказы', route: '/orders', visibility: 'orders.read' },
   { key: 'picking', title: 'Сборка заказов', route: '/fulfillment/picking', visibility: 'warehouse.picking' },
+  { key: 'packing', title: 'Упаковка заказов', route: '/fulfillment/packing', visibility: 'warehouse.packing' },
+  { key: 'dispatch', title: 'Отгрузка заказов', route: '/fulfillment/dispatch', visibility: 'warehouse.dispatch' },
   { key: 'orders_receiving', title: 'Приемка заказов', route: '/orders/receiving', visibility: 'warehouse.receiving' },
   { key: 'receiving', title: 'Приемка поставок', route: '/supplies/receiving', visibility: 'inventory.receipt' },
   { key: 'shipments', title: 'Доставка / Отгрузки', route: '/shipments', visibility: 'shipments.read' },

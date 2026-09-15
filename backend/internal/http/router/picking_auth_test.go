@@ -641,4 +641,25 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		assert.NotEqual(t, http.StatusUnauthorized, rrStartPass.Code)
 		assert.NotEqual(t, http.StatusForbidden, rrStartPass.Code)
 	})
+
+	// 16. warehouse.picking can read operational picking order, but CANNOT access broad fulfillment endpoints -> 403
+	t.Run("warehouse.picking can read picking order but CANNOT read broad fulfillment", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking", nil)
+		req.Header.Set("Authorization", "Bearer "+adminUpdateTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		reqBroad1 := httptest.NewRequest("GET", "/api/admin/order-fulfillments/"+fulfillmentID.String(), nil)
+		reqBroad1.Header.Set("Authorization", "Bearer "+adminUpdateTok)
+		rrBroad1 := httptest.NewRecorder()
+		r.ServeHTTP(rrBroad1, reqBroad1)
+		assert.Equal(t, http.StatusForbidden, rrBroad1.Code)
+
+		reqBroad2 := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String(), nil)
+		reqBroad2.Header.Set("Authorization", "Bearer "+adminUpdateTok)
+		rrBroad2 := httptest.NewRecorder()
+		r.ServeHTTP(rrBroad2, reqBroad2)
+		assert.Equal(t, http.StatusForbidden, rrBroad2.Code)
+	})
 }

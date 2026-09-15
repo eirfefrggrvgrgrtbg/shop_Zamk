@@ -20,9 +20,7 @@ import {
   PickingOrder,
   PackResult,
 } from '../api/adminPicking';
-import { getAdminFulfillment } from '../api/adminOrders';
 import { formatOrderNumber } from '../utils/orderFormatters';
-import type { AdminFulfillment } from '@zamk/api-client/src/types';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 
 export function AdminPackingDetail() {
@@ -31,7 +29,6 @@ export function AdminPackingDetail() {
   const canPack = hasPermission('warehouse.packing');
 
   const [pickingOrder, setPickingOrder] = useState<PickingOrder | null>(null);
-  const [fulfillmentData, setFulfillmentData] = useState<AdminFulfillment | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,20 +43,8 @@ export function AdminPackingDetail() {
       setError(null);
       setPackError(null);
 
-      // Attempt to load picking order details
-      try {
-        const po = await getAdminPickingOrder(id);
-        setPickingOrder(po);
-        if (po.fulfillmentStatus === 'packed') {
-          // If already packed, also fetch fulfillment for packedAt metadata
-          const f = await getAdminFulfillment(id).catch(() => null);
-          if (f) setFulfillmentData(f);
-        }
-      } catch (err: any) {
-        // If picking order is rejected because it's already packed, fetch fulfillment directly
-        const f = await getAdminFulfillment(id);
-        setFulfillmentData(f);
-      }
+      const po = await getAdminPickingOrder(id);
+      setPickingOrder(po);
     } catch (err: any) {
       setError(err.message || 'Не удалось загрузить данные упаковки.');
     } finally {
@@ -80,9 +65,9 @@ export function AdminPackingDetail() {
     try {
       const res = await packFulfillment(id);
       setPackResult(res);
-      // Refresh fulfillment data
-      const f = await getAdminFulfillment(id).catch(() => null);
-      if (f) setFulfillmentData(f);
+      // Refresh picking order data
+      const po = await getAdminPickingOrder(id).catch(() => null);
+      if (po) setPickingOrder(po);
     } catch (err: any) {
       const msg = getPackingErrorMessage(err);
       setPackError(msg);
@@ -100,7 +85,7 @@ export function AdminPackingDetail() {
     );
   }
 
-  if (error && !pickingOrder && !fulfillmentData) {
+  if (error && !pickingOrder) {
     return (
       <div className="max-w-4xl mx-auto p-6 space-y-6">
         <div className="p-6 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 space-y-4 shadow-sm">
@@ -128,17 +113,15 @@ export function AdminPackingDetail() {
     );
   }
 
-  const orderId = pickingOrder?.orderId || fulfillmentData?.orderId || '';
-  const orderNumber = pickingOrder?.orderNumber || fulfillmentData?.orderNumber;
+  const orderId = pickingOrder?.orderId || '';
+  const orderNumber = pickingOrder?.orderNumber;
   const isPacked =
     packResult?.fulfillmentStatus === 'packed' ||
-    pickingOrder?.fulfillmentStatus === 'packed' ||
-    fulfillmentData?.status === 'packed';
+    pickingOrder?.fulfillmentStatus === 'packed';
 
   const packedAtTimestamp =
     packResult?.packedAt ||
-    fulfillmentData?.packedAt ||
-    (fulfillmentData as any)?.packed_at;
+    pickingOrder?.packedAt;
 
   const formattedPackedAt = packedAtTimestamp
     ? new Date(packedAtTimestamp).toLocaleString('ru-RU', {

@@ -545,10 +545,11 @@ func New(
 		r.With(perm("shipments.create")).Post("/fulfillments/{id}/receiving/confirm", fulfillmentHandler.ConfirmReceiving)
 		r.With(perm("warehouse.receiving")).Post("/fulfillments/{id}/receiving/discrepancy", fulfillmentHandler.RecordDiscrepancy)
 
-		r.With(perm("orders.read")).Get("/fulfillments/{id}/picking", fulfillmentHandler.GetPickingOrder)
-		r.With(perm("orders.read")).Get("/fulfillments/{id}/picking/compatible-units", fulfillmentHandler.GetCompatibleUnits)
+		r.With(permAny("orders.read", "warehouse.picking", "warehouse.packing")).Get("/fulfillments/{id}/picking", fulfillmentHandler.GetPickingOrder)
+		r.With(permAny("orders.read", "warehouse.picking")).Get("/fulfillments/{id}/picking/compatible-units", fulfillmentHandler.GetCompatibleUnits)
 		r.With(perm("warehouse.picking")).Post("/fulfillments/{id}/picking/scan", fulfillmentHandler.ScanPickingCode)
 		r.With(perm("warehouse.packing")).Post("/fulfillments/{id}/pack", fulfillmentHandler.PackFulfillment)
+		r.With(permAny("orders.read", "warehouse.dispatch")).Get("/fulfillments/{id}/dispatch-context", fulfillmentHandler.GetDispatchContext)
 		r.With(perm("warehouse.dispatch")).Post("/fulfillments/{id}/dispatch", fulfillmentHandler.DispatchFulfillment)
 
 		// Returns

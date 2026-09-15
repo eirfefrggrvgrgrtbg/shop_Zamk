@@ -235,4 +235,79 @@ func TestAdminDispatchRouter(t *testing.T) {
 		_ = json.NewDecoder(rr.Body).Decode(&res)
 		assert.Equal(t, "dispatch_not_allowed", res.Error.Code)
 	})
+
+	// 9. Admin with warehouse.dispatch CAN read dispatch-context without orders.read -> 200 OK
+	t.Run("admin with warehouse.dispatch can read dispatch-context -> 200", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/dispatch-context", nil)
+		req.Header.Set("Authorization", "Bearer "+adminWithDispatchToken)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var dc fulfillment.DispatchContext
+		err := json.NewDecoder(rr.Body).Decode(&dc)
+		require.NoError(t, err)
+		assert.Equal(t, fulfillmentID, dc.ID)
+		assert.Equal(t, fulfillmentID, dc.FulfillmentID)
+		assert.Equal(t, orderID, dc.OrderID)
+		assert.Equal(t, "A", *dc.DeliveryAddress)
+		assert.Equal(t, "N", *dc.CustomerName)
+		assert.Equal(t, "P", *dc.CustomerPhone)
+		assert.NotEmpty(t, dc.Items)
+
+		// Assert exclusion of sensitive financial/commercial fields in JSON
+		bodyStr := rr.Body.String()
+		assert.NotContains(t, bodyStr, "commissionBps")
+		assert.NotContains(t, bodyStr, "sellerAmountCents")
+		assert.NotContains(t, bodyStr, "subtotalCents")
+		assert.NotContains(t, bodyStr, "unitPriceCents")
+		assert.NotContains(t, bodyStr, "lineTotalCents")
+		assert.NotContains(t, bodyStr, "sellerName")
+	})
+
+	// 10. Admin with warehouse.dispatch CANNOT read broad generic fulfillment endpoints -> 403 Forbidden
+	t.Run("admin with warehouse.dispatch CANNOT read broad generic fulfillment -> 403", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/order-fulfillments/"+fulfillmentID.String(), nil)
+		req.Header.Set("Authorization", "Bearer "+adminWithDispatchToken)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+
+		req2 := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String(), nil)
+		req2.Header.Set("Authorization", "Bearer "+adminWithDispatchToken)
+		rr2 := httptest.NewRecorder()
+		r.ServeHTTP(rr2, req2)
+		assert.Equal(t, http.StatusForbidden, rr2.Code)
+	})
+
+	// 11. Admin with warehouse.dispatch CANNOT read picking order endpoint -> 403 Forbidden
+	t.Run("admin with warehouse.dispatch CANNOT read picking order -> 403", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking", nil)
+		req.Header.Set("Authorization", "Bearer "+adminWithDispatchToken)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
+	// 12. Admin with warehouse.dispatch CANNOT pack -> 403 Forbidden
+	t.Run("admin with warehouse.dispatch CANNOT pack -> 403", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/pack", nil)
+		req.Header.Set("Authorization", "Bearer "+adminWithDispatchToken)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
+	// 13. Admin without required capabilities cannot read dispatch-context -> 403 Forbidden
+	t.Run("admin without permissions cannot read dispatch-context -> 403", func(t *testing.T) {
+		adminNoPerm := insertUser("admin")
+		insertAdminWithPerms(adminNoPerm, []string{"inventory.read"})
+		noPermTok := makeToken(adminNoPerm, "admin")
+
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/dispatch-context", nil)
+		req.Header.Set("Authorization", "Bearer "+noPermTok)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
 }

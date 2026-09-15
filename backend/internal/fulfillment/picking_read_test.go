@@ -246,6 +246,21 @@ func TestPickingRead_Assembling_Allowed(t *testing.T) {
 	assert.Equal(t, "assembling", po.FulfillmentStatus)
 }
 
+func TestPickingRead_Packed_Allowed(t *testing.T) {
+	ctx := context.Background()
+	f := setupPickingFixture(t, ctx)
+	defer f.db.Close()
+
+	_, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "packed", "packed")
+	_, err := f.db.Exec(ctx, `UPDATE order_fulfillments SET packed_at = now() WHERE id = $1`, fulfillmentID)
+	require.NoError(t, err)
+
+	po, err := f.svc.GetPickingOrder(ctx, fulfillmentID)
+	require.NoError(t, err)
+	assert.Equal(t, "packed", po.FulfillmentStatus)
+	assert.NotNil(t, po.PackedAt)
+}
+
 func TestPickingRead_Classification_Serialized(t *testing.T) {
 	ctx := context.Background()
 	f := setupPickingFixture(t, ctx)

@@ -112,3 +112,39 @@ type ReceivingItem struct {
 	UpdatedAt          time.Time  `json:"updatedAt"`
 }
 
+type DispatchContext struct {
+	ID                 uuid.UUID             `json:"id"`
+	FulfillmentID      uuid.UUID             `json:"fulfillmentId"`
+	OrderID            uuid.UUID             `json:"orderId"`
+	OrderNumber        *string               `json:"orderNumber,omitempty"`
+	Status             string                `json:"status"`
+	PackedAt           *time.Time            `json:"packedAt,omitempty"`
+	ShipmentStatus     *string               `json:"shipmentStatus,omitempty"`
+	ShipmentID         *uuid.UUID            `json:"shipmentId,omitempty"`
+	CustomerName       *string               `json:"customerName,omitempty"`
+	CustomerPhone      *string               `json:"customerPhone,omitempty"`
+	RecipientName      *string               `json:"recipientName,omitempty"`
+	RecipientPhone     *string               `json:"recipientPhone,omitempty"`
+	DeliveryAddress    *string               `json:"deliveryAddress,omitempty"`
+	DeliveryMethodName *string               `json:"deliveryMethodName,omitempty"`
+	Items              []DispatchContextItem `json:"items"`
+}
+
+type DispatchContextItem struct {
+	OrderItemID    uuid.UUID                      `json:"orderItemId"`
+	ProductTitle   string                         `json:"productTitle"`
+	VariantSize    *string                        `json:"variantSize,omitempty"`
+	VariantColor   *string                        `json:"variantColor,omitempty"`
+	SKU            *string                        `json:"sku,omitempty"`
+	Barcode        *string                        `json:"barcode,omitempty"`
+	Quantity       int                            `json:"quantity"`
+	AllocationMode string                         `json:"allocationMode"` // "serialized" | "legacy"
+	AllocatedUnits []DispatchContextAllocatedUnit `json:"allocatedUnits,omitempty"`
+}
+
+type DispatchContextAllocatedUnit struct {
+	InventoryUnitID uuid.UUID  `json:"inventoryUnitId"`
+	UnitCode        string     `json:"unitCode"`
+	PickedAt        *time.Time `json:"pickedAt,omitempty"`
+}
+

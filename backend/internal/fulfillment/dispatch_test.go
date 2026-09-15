@@ -860,3 +860,45 @@ func TestDispatch_ConcurrentWithOrderCancellation(t *testing.T) {
 	}
 }
 
+func TestGetDispatchContext(t *testing.T) {
+	ctx := context.Background()
+	f := setupPickingFixture(t, ctx)
+	defer f.db.Close()
+
+	orderID, fulfillmentID := f.createOrderAndFulfillment(t, ctx, "packed", "packed")
+	_, err := f.db.Exec(ctx, `
+		UPDATE orders
+		SET customer_name = 'Customer Doe', customer_phone = '+79998887766', delivery_address = 'Moscow, Red Square 1', delivery_method_name = 'Courier'
+		WHERE id = $1
+	`, orderID)
+	require.NoError(t, err)
+
+	_, err = f.db.Exec(ctx, `UPDATE order_fulfillments SET packed_at = now() WHERE id = $1`, fulfillmentID)
+	require.NoError(t, err)
+
+	itemID := f.createOrderItem(t, ctx, orderID, fulfillmentID, 1, 0)
+	f.createAllocation(t, ctx, itemID, true)
+
+	dc, err := f.svc.GetDispatchContext(ctx, fulfillmentID)
+	require.NoError(t, err)
+	require.NotNil(t, dc)
+
+	assert.Equal(t, fulfillmentID, dc.ID)
+	assert.Equal(t, fulfillmentID, dc.FulfillmentID)
+	assert.Equal(t, orderID, dc.OrderID)
+	assert.Equal(t, "packed", dc.Status)
+	assert.NotNil(t, dc.PackedAt)
+	assert.Equal(t, "Customer Doe", *dc.CustomerName)
+	assert.Equal(t, "+79998887766", *dc.CustomerPhone)
+	assert.Equal(t, "Moscow, Red Square 1", *dc.DeliveryAddress)
+	assert.Equal(t, "Courier", *dc.DeliveryMethodName)
+
+	require.Len(t, dc.Items, 1)
+	assert.Equal(t, itemID, dc.Items[0].OrderItemID)
+	assert.Equal(t, 1, dc.Items[0].Quantity)
+	assert.Equal(t, "serialized", dc.Items[0].AllocationMode)
+	require.Len(t, dc.Items[0].AllocatedUnits, 1)
+	assert.NotEmpty(t, dc.Items[0].AllocatedUnits[0].UnitCode)
+	assert.NotNil(t, dc.Items[0].AllocatedUnits[0].PickedAt)
+}
+

@@ -1163,6 +1163,43 @@ export interface AdminFulfillment {
   items: AdminFulfillmentItem[];
 }
 
+export interface AdminDispatchContextAllocatedUnit {
+  inventoryUnitId: string;
+  unitCode: string;
+  pickedAt?: string | null;
+}
+
+export interface AdminDispatchContextItem {
+  orderItemId: string;
+  productTitle: string;
+  variantSize?: string | null;
+  variantColor?: string | null;
+  sku?: string | null;
+  barcode?: string | null;
+  quantity: number;
+  allocationMode: 'serialized' | 'legacy';
+  allocatedUnits?: AdminDispatchContextAllocatedUnit[];
+}
+
+export interface AdminDispatchContext {
+  id: string;
+  fulfillmentId: string;
+  orderId: string;
+  orderNumber?: string | null;
+  status: string;
+  packedAt?: string | null;
+  shipmentStatus?: string | null;
+  shipmentId?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  recipientName?: string | null;
+  recipientPhone?: string | null;
+  deliveryAddress?: string | null;
+  deliveryMethodName?: string | null;
+  items: AdminDispatchContextItem[];
+}
+
+
 export interface PhysicalUnitContext {
   unitCode: string;
   status: string;

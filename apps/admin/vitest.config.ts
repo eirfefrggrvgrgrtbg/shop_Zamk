@@ -21,6 +21,8 @@ export default defineConfig({
       'src/pages/AdminFreeScanner.test.tsx',
       'src/pages/AdminInventoryReconciliation.test.tsx',
       'src/pages/AdminPickingDetail.test.tsx',
+      'src/pages/AdminPackingDetail.test.tsx',
+      'src/pages/AdminDispatchDetail.test.tsx',
       'src/pages/AdminReceivingScanner.test.tsx',
       'src/pages/AdminStaff.test.tsx',
       'src/pages/AdminStaffDetail.test.tsx',

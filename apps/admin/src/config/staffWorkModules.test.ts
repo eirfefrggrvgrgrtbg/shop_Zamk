@@ -225,25 +225,35 @@ describe('STAFF_WORK_MODULES Presentation Config', () => {
     expect(exactDiff.matches).toBe(true);
   });
 
-  // Q. screen visibility config has 22 unique keys and valid routes
-  it('Q: screen visibility config has exactly 22 unique keys and unique valid routes', () => {
-    expect(STAFF_SCREEN_ACCESS_RULES).toHaveLength(22);
+  // Q. screen visibility config has 24 unique keys and valid routes
+  it('Q: screen visibility config has exactly 24 unique keys and unique valid routes', () => {
+    expect(STAFF_SCREEN_ACCESS_RULES).toHaveLength(24);
 
     const keys = STAFF_SCREEN_ACCESS_RULES.map((r) => r.key);
     const uniqueKeys = new Set(keys);
-    expect(uniqueKeys.size).toBe(22);
+    expect(uniqueKeys.size).toBe(24);
 
     const routes = STAFF_SCREEN_ACCESS_RULES.map((r) => r.route);
     const uniqueRoutes = new Set(routes);
-    expect(uniqueRoutes.size).toBe(22);
+    expect(uniqueRoutes.size).toBe(24);
   });
 
-  // R. warehouse visibility rules: picking, orders receiving, supplies receiving
+  // R. warehouse visibility rules: picking, packing, dispatch, orders receiving, supplies receiving
   it('R: warehouse screen visibility rules use exact accepted anchors', () => {
     // picking -> warehouse.picking
     const pickingRule = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/fulfillment/picking');
     expect(pickingRule).toBeDefined();
     expect(pickingRule?.visibility).toBe('warehouse.picking');
+
+    // packing -> warehouse.packing
+    const packingRule = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/fulfillment/packing');
+    expect(packingRule).toBeDefined();
+    expect(packingRule?.visibility).toBe('warehouse.packing');
+
+    // dispatch -> warehouse.dispatch
+    const dispatchRule = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/fulfillment/dispatch');
+    expect(dispatchRule).toBeDefined();
+    expect(dispatchRule?.visibility).toBe('warehouse.dispatch');
 
     // orders receiving scanner -> warehouse.receiving
     const ordersReceivingRule = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/orders/receiving');

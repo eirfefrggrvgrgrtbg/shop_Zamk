@@ -371,3 +371,100 @@ func (r *Repository) DispatchFulfillmentTx(ctx context.Context, tx pgx.Tx, admin
 		ShippedAt:         now,
 	}, nil
 }
+
+func (r *Repository) GetDispatchContext(ctx context.Context, fulfillmentID uuid.UUID) (*DispatchContext, error) {
+	queryHeader := `
+		SELECT
+			f.id, f.order_id, f.status, f.packed_at,
+			s.status as shipment_status, s.id as shipment_id,
+			o.order_number, o.delivery_address, o.customer_name, o.customer_phone, o.delivery_method_name
+		FROM order_fulfillments f
+		JOIN orders o ON o.id = f.order_id
+		LEFT JOIN shipments s ON (s.fulfillment_id = f.id) OR (s.fulfillment_id IS NULL AND s.order_id = f.order_id AND (SELECT COUNT(*) FROM order_fulfillments WHERE order_id = f.order_id) = 1)
+		WHERE f.id = $1
+	`
+
+	var dc DispatchContext
+	err := r.db.QueryRow(ctx, queryHeader, fulfillmentID).Scan(
+		&dc.ID, &dc.OrderID, &dc.Status, &dc.PackedAt,
+		&dc.ShipmentStatus, &dc.ShipmentID,
+		&dc.OrderNumber, &dc.DeliveryAddress, &dc.CustomerName, &dc.CustomerPhone, &dc.DeliveryMethodName,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrFulfillmentNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch dispatch context: %w", err)
+	}
+	dc.FulfillmentID = dc.ID
+	dc.RecipientName = dc.CustomerName
+	dc.RecipientPhone = dc.CustomerPhone
+
+	// Query items without financial or commercial data
+	queryItems := `
+		SELECT oi.id, oi.title, oi.variant_size, oi.variant_color, oi.sku, pv.barcode, oi.quantity
+		FROM order_items oi
+		LEFT JOIN product_variants pv ON pv.id = oi.product_variant_id
+		WHERE oi.order_fulfillment_id = $1
+		ORDER BY oi.created_at ASC, oi.id ASC
+	`
+	rows, err := r.db.Query(ctx, queryItems, fulfillmentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query dispatch items: %w", err)
+	}
+	defer rows.Close()
+
+	var items []DispatchContextItem
+	for rows.Next() {
+		var item DispatchContextItem
+		if err := rows.Scan(
+			&item.OrderItemID, &item.ProductTitle, &item.VariantSize, &item.VariantColor,
+			&item.SKU, &item.Barcode, &item.Quantity,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan dispatch item: %w", err)
+		}
+		items = append(items, item)
+	}
+	rows.Close()
+
+	if items == nil {
+		items = make([]DispatchContextItem, 0)
+	}
+
+	queryAllocs := `
+		SELECT a.inventory_unit_id, u.unit_code, a.picked_at
+		FROM order_item_allocations a
+		JOIN inventory_units u ON u.id = a.inventory_unit_id
+		WHERE a.order_item_id = $1 AND a.released_at IS NULL
+		ORDER BY a.created_at ASC, a.id ASC
+	`
+	for i := range items {
+		arows, err := r.db.Query(ctx, queryAllocs, items[i].OrderItemID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query dispatch item allocations: %w", err)
+		}
+		var allocs []DispatchContextAllocatedUnit
+		for arows.Next() {
+			var a DispatchContextAllocatedUnit
+			if err := arows.Scan(&a.InventoryUnitID, &a.UnitCode, &a.PickedAt); err != nil {
+				arows.Close()
+				return nil, fmt.Errorf("failed to scan dispatch unit: %w", err)
+			}
+			allocs = append(allocs, a)
+		}
+		arows.Close()
+
+		if allocs == nil {
+			allocs = make([]DispatchContextAllocatedUnit, 0)
+		}
+		items[i].AllocatedUnits = allocs
+		if len(allocs) > 0 {
+			items[i].AllocationMode = "serialized"
+		} else {
+			items[i].AllocationMode = "legacy"
+		}
+	}
+
+	dc.Items = items
+	return &dc, nil
+}

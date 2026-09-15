@@ -68,3 +68,7 @@ func (s *Service) DispatchFulfillment(ctx context.Context, adminID, fulfillmentI
 	}
 	return result, nil
 }
+
+func (s *Service) GetDispatchContext(ctx context.Context, fulfillmentID uuid.UUID) (*DispatchContext, error) {
+	return s.repo.GetDispatchContext(ctx, fulfillmentID)
+}

@@ -29,13 +29,13 @@ func (r *Repository) GetPickingOrderTx(ctx context.Context, tx pgx.Tx, fulfillme
 
 	// 1. Fetch order & fulfillment basic details
 	queryHeader := `
-		SELECT o.id, o.status, of.id, of.status, o.order_number
+		SELECT o.id, o.status, of.id, of.status, o.order_number, of.packed_at
 		FROM order_fulfillments of
 		JOIN orders o ON o.id = of.order_id
 		WHERE of.id = $1
 	`
 	err := tx.QueryRow(ctx, queryHeader, fulfillmentID).Scan(
-		&po.OrderID, &po.OrderStatus, &po.FulfillmentID, &po.FulfillmentStatus, &po.OrderNumber,
+		&po.OrderID, &po.OrderStatus, &po.FulfillmentID, &po.FulfillmentStatus, &po.OrderNumber, &po.PackedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -45,8 +45,12 @@ func (r *Repository) GetPickingOrderTx(ctx context.Context, tx pgx.Tx, fulfillme
 	}
 
 	// 2. Validate business rules for eligibility
-	if (po.OrderStatus != "paid" && po.OrderStatus != "assembling") ||
-		(po.FulfillmentStatus != "paid" && po.FulfillmentStatus != "assembling") {
+	isPickingActive := (po.OrderStatus == "paid" || po.OrderStatus == "assembling") &&
+		(po.FulfillmentStatus == "paid" || po.FulfillmentStatus == "assembling")
+	isPackedRead := po.FulfillmentStatus == "packed" &&
+		(po.OrderStatus == "assembling" || po.OrderStatus == "packed")
+
+	if !isPickingActive && !isPackedRead {
 		return nil, ErrPickingNotAllowed
 	}
 

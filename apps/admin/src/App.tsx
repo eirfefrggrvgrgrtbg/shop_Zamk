@@ -88,8 +88,8 @@ export default function App() {
             <Route path="/orders/fulfillments" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/orders')}><AdminFulfillmentsList /></AdminProtectedRoute>} />
             <Route path="/fulfillment/picking" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/picking')}><AdminPickingQueue /></AdminProtectedRoute>} />
             <Route path="/fulfillment/picking/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/picking')}><AdminPickingDetail /></AdminProtectedRoute>} />
-            <Route path="/fulfillment/packing/:id" element={<AdminProtectedRoute permission="orders.read"><AdminPackingDetail /></AdminProtectedRoute>} />
-            <Route path="/fulfillment/dispatch/:id" element={<AdminProtectedRoute permission="orders.read"><AdminDispatchDetail /></AdminProtectedRoute>} />
+            <Route path="/fulfillment/packing/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/packing')}><AdminPackingDetail /></AdminProtectedRoute>} />
+            <Route path="/fulfillment/dispatch/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/dispatch')}><AdminDispatchDetail /></AdminProtectedRoute>} />
             <Route path="/orders/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/orders/receiving')}><AdminReceivingScanner /></AdminProtectedRoute>} />
             <Route path="/supplies/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/supplies/receiving')}><AdminSupplyReceiving /></AdminProtectedRoute>} />
             <Route path="/warehouse/free-scan" element={<AdminProtectedRoute permission="inventory.read"><AdminFreeScanner /></AdminProtectedRoute>} />

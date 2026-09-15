@@ -83,3 +83,26 @@ func (h *Handler) DispatchFulfillment(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(res)
 }
+
+func (h *Handler) GetDispatchContext(w http.ResponseWriter, r *http.Request) {
+	fIDStr := chi.URLParam(r, "id")
+	fulfillmentID, err := uuid.Parse(fIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid fulfillment ID")
+		return
+	}
+
+	dc, err := h.svc.GetDispatchContext(r.Context(), fulfillmentID)
+	if err != nil {
+		if errors.Is(err, ErrFulfillmentNotFound) {
+			h.writeError(w, http.StatusNotFound, "fulfillment_not_found", "Fulfillment not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(dc)
+}

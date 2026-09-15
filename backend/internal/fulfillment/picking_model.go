@@ -12,6 +12,7 @@ type PickingOrder struct {
 	OrderStatus       string        `json:"orderStatus"`
 	FulfillmentID     uuid.UUID     `json:"fulfillmentId"`
 	FulfillmentStatus string        `json:"fulfillmentStatus"`
+	PackedAt          *time.Time    `json:"packedAt,omitempty"`
 	Items             []PickingItem `json:"items"`
 }
 

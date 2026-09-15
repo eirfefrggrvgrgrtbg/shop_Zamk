@@ -40,6 +40,7 @@ export interface PickingOrder {
   orderStatus: string;
   fulfillmentId: string;
   fulfillmentStatus: string;
+  packedAt?: string | null;
   items: PickingItem[];
 }
 
@@ -366,4 +367,55 @@ export const getDispatchErrorMessage = (error: unknown, fallback = 'Произо
     return error.message || fallback;
   }
   return fallback;
+};
+
+export interface DispatchContextAllocatedUnit {
+  inventoryUnitId: string;
+  unitCode: string;
+  pickedAt?: string | null;
+}
+
+export interface DispatchContextItem {
+  orderItemId: string;
+  productTitle: string;
+  variantSize?: string | null;
+  variantColor?: string | null;
+  sku?: string | null;
+  barcode?: string | null;
+  quantity: number;
+  allocationMode: 'serialized' | 'legacy';
+  allocatedUnits?: DispatchContextAllocatedUnit[];
+}
+
+export interface DispatchContext {
+  id: string;
+  fulfillmentId: string;
+  orderId: string;
+  orderNumber?: string | null;
+  status: string;
+  packedAt?: string | null;
+  shipmentStatus?: string | null;
+  shipmentId?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  recipientName?: string | null;
+  recipientPhone?: string | null;
+  deliveryAddress?: string | null;
+  deliveryMethodName?: string | null;
+  items: DispatchContextItem[];
+}
+
+export const getAdminDispatchContext = async (fulfillmentId: string): Promise<DispatchContext> => {
+  const response = await fetch(`${API_URL}/admin/fulfillments/${fulfillmentId}/dispatch-context`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getAccessToken() || ''}`,
+    },
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new ApiError(data.error?.message || 'Не удалось загрузить данные для отгрузки', data.error?.code, response.status);
+  }
+  return data;
 };

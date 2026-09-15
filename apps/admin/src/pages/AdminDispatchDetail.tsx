@@ -19,15 +19,13 @@ import {
   X,
 } from 'lucide-react';
 import {
-  getAdminPickingOrder,
+  getAdminDispatchContext,
   dispatchFulfillment,
   getDispatchErrorMessage,
-  PickingOrder,
+  DispatchContext,
   DispatchResult,
 } from '../api/adminPicking';
-import { getAdminFulfillment, getAdminOrder, AdminOrderView } from '../api/adminOrders';
 import { formatOrderNumber } from '../utils/orderFormatters';
-import type { AdminFulfillment } from '@zamk/api-client/src/types';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 
 interface DispatchDisplayItem {
@@ -47,9 +45,7 @@ export function AdminDispatchDetail() {
   const { hasPermission } = useAdminAuth();
   const canDispatch = hasPermission('warehouse.dispatch');
 
-  const [pickingOrder, setPickingOrder] = useState<PickingOrder | null>(null);
-  const [fulfillmentData, setFulfillmentData] = useState<AdminFulfillment | null>(null);
-  const [orderData, setOrderData] = useState<AdminOrderView | null>(null);
+  const [dispatchContext, setDispatchContext] = useState<DispatchContext | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,33 +61,8 @@ export function AdminDispatchDetail() {
       setError(null);
       setDispatchError(null);
 
-      // Primary canonical read model: Fulfillment
-      let f: AdminFulfillment | null = null;
-      try {
-        f = await getAdminFulfillment(id);
-        setFulfillmentData(f);
-      } catch (fErr: any) {
-        console.warn('getAdminFulfillment failed:', fErr);
-      }
-
-      // Supplementary read model: Picking Order (if still in picking workflow)
-      let po: PickingOrder | null = null;
-      try {
-        po = await getAdminPickingOrder(id);
-        setPickingOrder(po);
-      } catch (poErr: any) {
-        // Expected to fail with 409 if already packed/shipped
-      }
-
-      const oId = f?.orderId || po?.orderId;
-      if (oId) {
-        const ord = await getAdminOrder(oId).catch(() => null);
-        if (ord) setOrderData(ord);
-      }
-
-      if (!f && !po) {
-        throw new Error('Не удалось загрузить данные сборки.');
-      }
+      const ctx = await getAdminDispatchContext(id);
+      setDispatchContext(ctx);
     } catch (err: any) {
       setError(err.message || 'Не удалось загрузить данные для отгрузки.');
     } finally {
@@ -114,13 +85,9 @@ export function AdminDispatchDetail() {
       setDispatchResult(res);
       setShowConfirmModal(false);
 
-      // Refresh fulfillment and order data
-      const f = await getAdminFulfillment(id).catch(() => null);
-      if (f) setFulfillmentData(f);
-      if (res.orderId) {
-        const ord = await getAdminOrder(res.orderId).catch(() => null);
-        if (ord) setOrderData(ord);
-      }
+      // Refresh dispatch context
+      const ctx = await getAdminDispatchContext(id).catch(() => null);
+      if (ctx) setDispatchContext(ctx);
     } catch (err: any) {
       const msg = getDispatchErrorMessage(err);
       setDispatchError(msg);
@@ -139,7 +106,7 @@ export function AdminDispatchDetail() {
     );
   }
 
-  if (error && !pickingOrder && !fulfillmentData) {
+  if (error && !dispatchContext) {
     return (
       <div className="max-w-4xl mx-auto p-6 space-y-6">
         <div className="p-6 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 space-y-4 shadow-sm">
@@ -167,22 +134,19 @@ export function AdminDispatchDetail() {
     );
   }
 
-  const orderId = fulfillmentData?.orderId || pickingOrder?.orderId || orderData?.id || '';
-  const orderNumber = fulfillmentData?.orderNumber || pickingOrder?.orderNumber || orderData?.orderNumber;
+  const orderId = dispatchResult?.orderId || dispatchContext?.orderId || '';
+  const orderNumber = dispatchContext?.orderNumber;
 
   const currentFulfillmentStatus =
     dispatchResult?.fulfillmentStatus ||
-    fulfillmentData?.status ||
-    pickingOrder?.fulfillmentStatus ||
+    dispatchContext?.status ||
     '';
 
   const isShipped = currentFulfillmentStatus === 'shipped';
-  const isPacked = currentFulfillmentStatus === 'packed' || (!isShipped && Boolean(fulfillmentData?.packedAt));
+  const isPacked = currentFulfillmentStatus === 'packed' || (!isShipped && Boolean(dispatchContext?.packedAt));
 
   const shippedAtTimestamp =
-    dispatchResult?.shippedAt ||
-    (fulfillmentData as any)?.shippedAt ||
-    (fulfillmentData as any)?.shipped_at;
+    dispatchResult?.shippedAt;
 
   const formattedShippedAt = shippedAtTimestamp
     ? new Date(shippedAtTimestamp).toLocaleString('ru-RU', {
@@ -194,7 +158,7 @@ export function AdminDispatchDetail() {
       })
     : null;
 
-  const packedAtTimestamp = fulfillmentData?.packedAt;
+  const packedAtTimestamp = dispatchContext?.packedAt;
   const formattedPackedAt = packedAtTimestamp
     ? new Date(packedAtTimestamp).toLocaleString('ru-RU', {
         day: '2-digit',
@@ -206,24 +170,10 @@ export function AdminDispatchDetail() {
     : null;
 
   const items: DispatchDisplayItem[] = (
-    fulfillmentData?.items && fulfillmentData.items.length > 0
-      ? fulfillmentData.items.map((i) => ({
+    dispatchContext?.items && dispatchContext.items.length > 0
+      ? dispatchContext.items.map((i) => ({
           orderItemId: i.orderItemId,
-          title: i.productTitle || (i as any).title || 'Товар',
-          quantity: i.quantity,
-          allocationMode:
-            (i.allocationMode as 'serialized' | 'legacy') ||
-            (i.allocatedUnits && i.allocatedUnits.length > 0 ? 'serialized' : 'legacy'),
-          allocatedUnits: (i.allocatedUnits || []).map((u) => ({
-            inventoryUnitId: u.inventoryUnitId,
-            unitCode: u.unitCode,
-            pickedAt: u.pickedAt,
-          })),
-        }))
-      : pickingOrder?.items && pickingOrder.items.length > 0
-      ? pickingOrder.items.map((i) => ({
-          orderItemId: i.orderItemId,
-          title: i.title,
+          title: i.productTitle || 'Товар',
           quantity: i.quantity,
           allocationMode: (i.allocationMode as 'serialized' | 'legacy') || 'legacy',
           allocatedUnits: (i.allocatedUnits || []).map((u) => ({
@@ -238,26 +188,21 @@ export function AdminDispatchDetail() {
   const totalQuantity = items.reduce((sum, i) => sum + i.quantity, 0);
 
   const deliveryAddress =
-    fulfillmentData?.deliveryAddress ||
-    orderData?.deliveryAddress ||
+    dispatchContext?.deliveryAddress ||
     'Самовывоз / Не указан';
 
   const customerName =
-    fulfillmentData?.customerName ||
-    orderData?.customerName ||
+    dispatchContext?.recipientName ||
+    dispatchContext?.customerName ||
     '—';
 
   const customerPhone =
-    fulfillmentData?.customerPhone ||
-    orderData?.customerPhone ||
-    null;
-
-  const customerEmail =
-    orderData?.customerEmail ||
+    dispatchContext?.recipientPhone ||
+    dispatchContext?.customerPhone ||
     null;
 
   const deliveryMethodName =
-    orderData?.deliveryMethodName ||
+    dispatchContext?.deliveryMethodName ||
     null;
 
   return (
@@ -425,15 +370,12 @@ export function AdminDispatchDetail() {
             <div className="font-semibold text-gray-900">
               {customerName}
             </div>
-            {(customerPhone || customerEmail) && (
+            {customerPhone && (
               <div className="text-gray-500 text-[11px] flex flex-wrap items-center gap-2">
-                {customerPhone && (
-                  <span className="flex items-center gap-1">
-                    <Phone className="w-3 h-3 text-gray-400" />
-                    {customerPhone}
-                  </span>
-                )}
-                {customerEmail && <span>{customerEmail}</span>}
+                <span className="flex items-center gap-1">
+                  <Phone className="w-3 h-3 text-gray-400" />
+                  {customerPhone}
+                </span>
               </div>
             )}
           </div>
@@ -441,10 +383,10 @@ export function AdminDispatchDetail() {
           <div className="space-y-1.5 p-3 rounded-lg bg-gray-50 border border-gray-100">
             <div className="text-gray-500 font-medium flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5 text-gray-400" />
-              Продавец / Склад
+              Отправитель
             </div>
             <div className="font-semibold text-gray-900">
-              {fulfillmentData?.sellerName || 'Склад ZAMK'}
+              Склад ZAMK
             </div>
             <div className="text-gray-500 text-[11px]">
               Идентификатор сборки: <span className="font-mono">{id?.substring(0, 8)}...</span>
