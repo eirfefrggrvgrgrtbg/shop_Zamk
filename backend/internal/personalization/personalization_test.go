@@ -2,7 +2,9 @@ package personalization_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -639,5 +641,458 @@ func TestSimilarProducts_Acceptance(t *testing.T) {
 		for _, p := range similar {
 			assert.NotEqual(t, candStock1, p.ID, "Candidate with free stock = 1 must be excluded")
 		}
+	})
+}
+
+func TestCustomerPreferenceProfile_Acceptance(t *testing.T) {
+	ctx, pgClient, _, svc := setupTestDB(t)
+	defer pgClient.Close()
+
+	now := time.Now()
+	var createdUserIDs []uuid.UUID
+	var createdSellerIDs []uuid.UUID
+	var createdCatIDs []uuid.UUID
+	var createdBrandIDs []uuid.UUID
+	var createdProdIDs []uuid.UUID
+
+	createCat := func(name string) uuid.UUID {
+		id := uuid.New()
+		slug := "cat-" + id.String()[:8]
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO categories (id, name, slug, is_active, created_at, updated_at)
+			VALUES ($1, $2, $3, true, $4, $4)
+		`, id, name, slug, now)
+		require.NoError(t, err)
+		createdCatIDs = append(createdCatIDs, id)
+		return id
+	}
+
+	createBrand := func(name string) uuid.UUID {
+		id := uuid.New()
+		slug := "brand-" + id.String()[:8]
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO brands (id, name, slug, is_active, created_at, updated_at)
+			VALUES ($1, $2, $3, true, $4, $4)
+		`, id, name, slug, now)
+		require.NoError(t, err)
+		createdBrandIDs = append(createdBrandIDs, id)
+		return id
+	}
+
+	createUser := func(name string) uuid.UUID {
+		id := uuid.New()
+		email := "cust-" + id.String()[:8] + "@test.local"
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO users (id, email, phone, name, password_hash, role, status, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, 'hash', 'customer', 'active', $5, $5)
+		`, id, email, "+7999"+id.String()[:7], name, now)
+		require.NoError(t, err)
+		createdUserIDs = append(createdUserIDs, id)
+		return id
+	}
+
+	createSeller := func(name string) uuid.UUID {
+		id := uuid.New()
+		slug := "seller-" + id.String()[:8]
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO sellers (id, brand_name, slug, contact_email, status, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, 'active', $5, $5)
+		`, id, name, slug, slug+"@test.local", now)
+		require.NoError(t, err)
+		createdSellerIDs = append(createdSellerIDs, id)
+		return id
+	}
+
+	createProd := func(sellerID, catID uuid.UUID, brandID *uuid.UUID, title string) uuid.UUID {
+		prodID := createTestProduct(t, ctx, pgClient, sellerID, catID, brandID, title, 100000, 4.5, 10, now, "published", 10)
+		createdProdIDs = append(createdProdIDs, prodID)
+		return prodID
+	}
+
+	addFav := func(userID, prodID uuid.UUID, createdAt time.Time) {
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO customer_favorites (id, user_id, product_id, created_at)
+			VALUES ($1, $2, $3, $4)
+		`, uuid.New(), userID, prodID, createdAt)
+		require.NoError(t, err)
+	}
+
+	addView := func(userID, prodID uuid.UUID, lastViewedAt time.Time, count int64) {
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO customer_product_views (user_id, product_id, last_viewed_at, view_count)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (user_id, product_id)
+			DO UPDATE SET last_viewed_at = $3, view_count = $4
+		`, userID, prodID, lastViewedAt, count)
+		require.NoError(t, err)
+	}
+
+	defer func() {
+		if len(createdUserIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM customer_favorites WHERE user_id = ANY($1)", createdUserIDs)
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM customer_product_views WHERE user_id = ANY($1)", createdUserIDs)
+		}
+		if len(createdProdIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM inventory_items WHERE product_id = ANY($1)", createdProdIDs)
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM product_variants WHERE product_id = ANY($1)", createdProdIDs)
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM products WHERE id = ANY($1)", createdProdIDs)
+		}
+		if len(createdBrandIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM brands WHERE id = ANY($1)", createdBrandIDs)
+		}
+		if len(createdCatIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM categories WHERE id = ANY($1)", createdCatIDs)
+		}
+		if len(createdSellerIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM sellers WHERE id = ANY($1)", createdSellerIDs)
+		}
+		if len(createdUserIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM users WHERE id = ANY($1)", createdUserIDs)
+		}
+	}()
+
+	seller := createSeller("Pref Seller")
+	custA := createUser("Customer A")
+	custB := createUser("Customer B")
+	custEmpty := createUser("Customer Empty")
+
+	catX := createCat("Category X")
+	catY := createCat("Category Y")
+	brandX := createBrand("Brand X")
+	brandY := createBrand("Brand Y")
+
+	pX1 := createProd(seller, catX, &brandX, "Product X1")
+	pX2 := createProd(seller, catX, &brandX, "Product X2")
+	pY1 := createProd(seller, catY, &brandY, "Product Y1")
+
+	// Subtest A: Customer A favorites two products in Category X and one in Category Y -> favoriteCategories ranks X before Y.
+	t.Run("A: Customer A favorites two products in Category X and one in Category Y -> favoriteCategories ranks X before Y", func(t *testing.T) {
+		addFav(custA, pX1, now.Add(-2*time.Hour))
+		addFav(custA, pX2, now.Add(-1*time.Hour))
+		addFav(custA, pY1, now.Add(-30*time.Minute))
+
+		profile, err := svc.GetCustomerPreferenceProfile(ctx, custA, 5)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		require.GreaterOrEqual(t, len(profile.FavoriteCategories), 2)
+
+		assert.Equal(t, catX, profile.FavoriteCategories[0].CategoryID)
+		assert.Equal(t, int64(2), profile.FavoriteCategories[0].DistinctProductCount)
+		assert.Equal(t, personalization.AffinityProvenanceFavorite, profile.FavoriteCategories[0].Provenance)
+
+		assert.Equal(t, catY, profile.FavoriteCategories[1].CategoryID)
+		assert.Equal(t, int64(1), profile.FavoriteCategories[1].DistinctProductCount)
+		assert.Equal(t, personalization.AffinityProvenanceFavorite, profile.FavoriteCategories[1].Provenance)
+	})
+
+	// Subtest B: Customer A favorites two products from Brand X and one from Brand Y -> favoriteBrands ranks X before Y.
+	t.Run("B: Customer A favorites two products from Brand X and one from Brand Y -> favoriteBrands ranks X before Y", func(t *testing.T) {
+		profile, err := svc.GetCustomerPreferenceProfile(ctx, custA, 5)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		require.GreaterOrEqual(t, len(profile.FavoriteBrands), 2)
+
+		assert.Equal(t, brandX, profile.FavoriteBrands[0].BrandID)
+		assert.Equal(t, int64(2), profile.FavoriteBrands[0].DistinctProductCount)
+		assert.Equal(t, personalization.AffinityProvenanceFavorite, profile.FavoriteBrands[0].Provenance)
+
+		assert.Equal(t, brandY, profile.FavoriteBrands[1].BrandID)
+		assert.Equal(t, int64(1), profile.FavoriteBrands[1].DistinctProductCount)
+		assert.Equal(t, personalization.AffinityProvenanceFavorite, profile.FavoriteBrands[1].Provenance)
+	})
+
+	// Subtest C: Repeated views of SAME Product A do NOT increase category/brand affinity beyond one distinct-product contribution.
+	t.Run("C: Repeated views of SAME Product A do NOT increase category/brand affinity beyond one distinct-product contribution", func(t *testing.T) {
+		custRepeat := createUser("Customer Repeat")
+		catRepeat := createCat("Category Repeat")
+		brandRepeat := createBrand("Brand Repeat")
+		pRepeat := createProd(seller, catRepeat, &brandRepeat, "Product Repeat")
+
+		// View the same product 5 times with view_count = 5
+		addView(custRepeat, pRepeat, now, 5)
+
+		profile, err := svc.GetCustomerPreferenceProfile(ctx, custRepeat, 5)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+
+		require.Len(t, profile.ViewedCategories, 1)
+		assert.Equal(t, catRepeat, profile.ViewedCategories[0].CategoryID)
+		assert.Equal(t, int64(1), profile.ViewedCategories[0].DistinctProductCount, "DistinctProductCount must remain 1 despite repeated views")
+
+		require.Len(t, profile.ViewedBrands, 1)
+		assert.Equal(t, brandRepeat, profile.ViewedBrands[0].BrandID)
+		assert.Equal(t, int64(1), profile.ViewedBrands[0].DistinctProductCount, "DistinctProductCount must remain 1 despite repeated views")
+	})
+
+	// Subtest D: Views of Product A and Product B in same category -> viewed category count = 2.
+	t.Run("D: Views of Product A and Product B in same category -> viewed category count = 2", func(t *testing.T) {
+		custMulti := createUser("Customer Multi")
+		catMulti := createCat("Category Multi")
+		brandMulti := createBrand("Brand Multi")
+		pM1 := createProd(seller, catMulti, &brandMulti, "Product M1")
+		pM2 := createProd(seller, catMulti, &brandMulti, "Product M2")
+
+		addView(custMulti, pM1, now.Add(-2*time.Hour), 3)
+		addView(custMulti, pM2, now.Add(-1*time.Hour), 4)
+
+		profile, err := svc.GetCustomerPreferenceProfile(ctx, custMulti, 5)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+
+		require.Len(t, profile.ViewedCategories, 1)
+		assert.Equal(t, catMulti, profile.ViewedCategories[0].CategoryID)
+		assert.Equal(t, int64(2), profile.ViewedCategories[0].DistinctProductCount)
+		assert.Equal(t, personalization.AffinityProvenanceViewed, profile.ViewedCategories[0].Provenance)
+	})
+
+	// Subtest E: viewed affinity tie uses latest last_viewed_at.
+	t.Run("E: viewed affinity tie uses latest last_viewed_at", func(t *testing.T) {
+		custTie := createUser("Customer Tie")
+		catOlder := createCat("Category Older")
+		catNewer := createCat("Category Newer")
+		brandCommon := createBrand("Brand Common")
+
+		pOlder := createProd(seller, catOlder, &brandCommon, "Product Older")
+		pNewer := createProd(seller, catNewer, &brandCommon, "Product Newer")
+
+		tOlder := now.Add(-3 * time.Hour)
+		tNewer := now.Add(-10 * time.Minute)
+
+		addView(custTie, pOlder, tOlder, 1)
+		addView(custTie, pNewer, tNewer, 1)
+
+		profile, err := svc.GetCustomerPreferenceProfile(ctx, custTie, 5)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		require.Len(t, profile.ViewedCategories, 2)
+
+		assert.Equal(t, catNewer, profile.ViewedCategories[0].CategoryID)
+		assert.Equal(t, int64(1), profile.ViewedCategories[0].DistinctProductCount)
+		assert.Equal(t, catOlder, profile.ViewedCategories[1].CategoryID)
+		assert.Equal(t, int64(1), profile.ViewedCategories[1].DistinctProductCount)
+	})
+
+	// Subtest F: Customer B data never affects Customer A profile.
+	t.Run("F: Customer B data never affects Customer A profile", func(t *testing.T) {
+		catOnlyB := createCat("Category Only B")
+		brandOnlyB := createBrand("Brand Only B")
+		pOnlyB := createProd(seller, catOnlyB, &brandOnlyB, "Product Only B")
+
+		addFav(custB, pOnlyB, now)
+		addView(custB, pOnlyB, now, 10)
+
+		profA, err := svc.GetCustomerPreferenceProfile(ctx, custA, 10)
+		require.NoError(t, err)
+		for _, c := range profA.FavoriteCategories {
+			assert.NotEqual(t, catOnlyB, c.CategoryID, "Customer A profile must not contain Customer B favorite category")
+		}
+		for _, b := range profA.FavoriteBrands {
+			assert.NotEqual(t, brandOnlyB, b.BrandID, "Customer A profile must not contain Customer B favorite brand")
+		}
+		for _, c := range profA.ViewedCategories {
+			assert.NotEqual(t, catOnlyB, c.CategoryID, "Customer A profile must not contain Customer B viewed category")
+		}
+		for _, b := range profA.ViewedBrands {
+			assert.NotEqual(t, brandOnlyB, b.BrandID, "Customer A profile must not contain Customer B viewed brand")
+		}
+	})
+
+	// Subtest G: favorite provenance remains separate from viewed provenance.
+	t.Run("G: favorite provenance remains separate from viewed provenance", func(t *testing.T) {
+		custProv := createUser("Customer Prov")
+		catFav := createCat("Category Fav Only")
+		catView := createCat("Category View Only")
+		brandFav := createBrand("Brand Fav Only")
+		brandView := createBrand("Brand View Only")
+
+		pFav := createProd(seller, catFav, &brandFav, "Product Fav")
+		pView := createProd(seller, catView, &brandView, "Product View")
+
+		addFav(custProv, pFav, now)
+		addView(custProv, pView, now, 1)
+
+		profile, err := svc.GetCustomerPreferenceProfile(ctx, custProv, 5)
+		require.NoError(t, err)
+
+		require.Len(t, profile.FavoriteCategories, 1)
+		assert.Equal(t, catFav, profile.FavoriteCategories[0].CategoryID)
+		assert.Equal(t, personalization.AffinityProvenanceFavorite, profile.FavoriteCategories[0].Provenance)
+
+		require.Len(t, profile.ViewedCategories, 1)
+		assert.Equal(t, catView, profile.ViewedCategories[0].CategoryID)
+		assert.Equal(t, personalization.AffinityProvenanceViewed, profile.ViewedCategories[0].Provenance)
+
+		require.Len(t, profile.FavoriteBrands, 1)
+		assert.Equal(t, brandFav, profile.FavoriteBrands[0].BrandID)
+		assert.Equal(t, personalization.AffinityProvenanceFavorite, profile.FavoriteBrands[0].Provenance)
+
+		require.Len(t, profile.ViewedBrands, 1)
+		assert.Equal(t, brandView, profile.ViewedBrands[0].BrandID)
+		assert.Equal(t, personalization.AffinityProvenanceViewed, profile.ViewedBrands[0].Provenance)
+	})
+
+	// Subtest H: brand NULL does not fail profile generation.
+	t.Run("H: brand NULL does not fail profile generation", func(t *testing.T) {
+		custNoBrand := createUser("Customer NoBrand")
+		catNoBrand := createCat("Category NoBrand")
+		pNoBrand := createProd(seller, catNoBrand, nil, "Product NoBrand")
+
+		addFav(custNoBrand, pNoBrand, now)
+		addView(custNoBrand, pNoBrand, now, 2)
+
+		profile, err := svc.GetCustomerPreferenceProfile(ctx, custNoBrand, 5)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+
+		require.Len(t, profile.FavoriteCategories, 1)
+		assert.Equal(t, catNoBrand, profile.FavoriteCategories[0].CategoryID)
+
+		require.Len(t, profile.ViewedCategories, 1)
+		assert.Equal(t, catNoBrand, profile.ViewedCategories[0].CategoryID)
+
+		assert.Empty(t, profile.FavoriteBrands, "brand NULL must be excluded from FavoriteBrands")
+		assert.Empty(t, profile.ViewedBrands, "brand NULL must be excluded from ViewedBrands")
+	})
+
+	// Subtest I: customer with no favorites/views -> valid empty profile.
+	t.Run("I: customer with no favorites/views -> valid empty profile", func(t *testing.T) {
+		profile, err := svc.GetCustomerPreferenceProfile(ctx, custEmpty, 5)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+
+		assert.Equal(t, custEmpty, profile.UserID)
+		assert.Empty(t, profile.FavoriteCategories)
+		assert.Empty(t, profile.FavoriteBrands)
+		assert.Empty(t, profile.ViewedCategories)
+		assert.Empty(t, profile.ViewedBrands)
+
+		// Must serialize to clean non-null arrays in JSON
+		b, err := json.Marshal(profile)
+		require.NoError(t, err)
+		var jsonMap map[string]interface{}
+		err = json.Unmarshal(b, &jsonMap)
+		require.NoError(t, err)
+		assert.Equal(t, []interface{}{}, jsonMap["favoriteCategories"])
+		assert.Equal(t, []interface{}{}, jsonMap["favoriteBrands"])
+		assert.Equal(t, []interface{}{}, jsonMap["viewedCategories"])
+		assert.Equal(t, []interface{}{}, jsonMap["viewedBrands"])
+	})
+
+	// Subtest J: profile lists respect configured limits.
+	t.Run("J: profile lists respect configured limits", func(t *testing.T) {
+		custLimits := createUser("Customer Limits")
+		for i := 0; i < 8; i++ {
+			c := createCat("Cat Limit")
+			p := createProd(seller, c, nil, "Prod Limit")
+			addFav(custLimits, p, now.Add(-time.Duration(i)*time.Hour))
+		}
+
+		// Explicit limit = 3
+		prof3, err := svc.GetCustomerPreferenceProfile(ctx, custLimits, 3)
+		require.NoError(t, err)
+		assert.Len(t, prof3.FavoriteCategories, 3)
+
+		// Limit <= 0 defaults to DefaultProfileAffinityLimit (5)
+		profDefault, err := svc.GetCustomerPreferenceProfile(ctx, custLimits, 0)
+		require.NoError(t, err)
+		assert.Len(t, profDefault.FavoriteCategories, personalization.DefaultProfileAffinityLimit)
+
+		// Limit > 20 is clamped to MaxProfileAffinityLimit (20)
+		profClamped, err := svc.GetCustomerPreferenceProfile(ctx, custLimits, 999)
+		require.NoError(t, err)
+		assert.LessOrEqual(t, len(profClamped.FavoriteCategories), personalization.MaxProfileAffinityLimit)
+	})
+
+	// Subtest K: deterministic tie-breaking.
+	t.Run("K: deterministic tie-breaking", func(t *testing.T) {
+		custTieBreak := createUser("Customer TieBreak")
+		tFixed := now.Add(-5 * time.Hour)
+
+		cat1 := createCat("Cat Tie 1")
+		cat2 := createCat("Cat Tie 2")
+		p1 := createProd(seller, cat1, nil, "Prod Tie 1")
+		p2 := createProd(seller, cat2, nil, "Prod Tie 2")
+
+		addFav(custTieBreak, p1, tFixed)
+		addFav(custTieBreak, p2, tFixed)
+
+		pFirst, err := svc.GetCustomerPreferenceProfile(ctx, custTieBreak, 5)
+		require.NoError(t, err)
+		require.Len(t, pFirst.FavoriteCategories, 2)
+
+		// Run repeated calls to verify stable ordering
+		for i := 0; i < 5; i++ {
+			pNext, err := svc.GetCustomerPreferenceProfile(ctx, custTieBreak, 5)
+			require.NoError(t, err)
+			assert.Equal(t, pFirst.FavoriteCategories[0].CategoryID, pNext.FavoriteCategories[0].CategoryID)
+			assert.Equal(t, pFirst.FavoriteCategories[1].CategoryID, pNext.FavoriteCategories[1].CategoryID)
+		}
+	})
+
+	// Subtest L: no customer PII / finance / order/payment data exists in profile model.
+	t.Run("L: no customer PII / finance / order/payment data exists in profile model", func(t *testing.T) {
+		profileType := reflect.TypeOf(personalization.CustomerPreferenceProfile{})
+		disallowed := []string{"email", "phone", "name", "password", "card", "bank", "price", "cents", "order", "payment", "payout", "balance"}
+
+		for i := 0; i < profileType.NumField(); i++ {
+			field := profileType.Field(i)
+			tag := field.Tag.Get("json")
+			for _, bad := range disallowed {
+				assert.NotContains(t, tag, bad, "Field tag %s must not contain PII or financial term %s", tag, bad)
+			}
+		}
+
+		catAffType := reflect.TypeOf(personalization.CategoryAffinity{})
+		for i := 0; i < catAffType.NumField(); i++ {
+			tag := catAffType.Field(i).Tag.Get("json")
+			for _, bad := range disallowed {
+				assert.NotContains(t, tag, bad, "CategoryAffinity tag %s must not contain %s", tag, bad)
+			}
+		}
+
+		brandAffType := reflect.TypeOf(personalization.BrandAffinity{})
+		for i := 0; i < brandAffType.NumField(); i++ {
+			tag := brandAffType.Field(i).Tag.Get("json")
+			for _, bad := range disallowed {
+				assert.NotContains(t, tag, bad, "BrandAffinity tag %s must not contain %s", tag, bad)
+			}
+		}
+	})
+
+	// Section 15 Negative Test:
+	// Product A: view_count = 100
+	// Product B: view_count = 1
+	// If both are the only distinct products in different categories:
+	// viewed category affinity must NOT become 100 vs 1 merely because of view_count.
+	// Each distinct viewed product contributes once.
+	t.Run("Negative Test (Section 15): view_count = 100 vs view_count = 1 does not inflate affinity score", func(t *testing.T) {
+		custNeg := createUser("Customer Neg")
+		catInflated := createCat("Cat Inflated Views")
+		catSingle := createCat("Cat Single View")
+		brandCommon := createBrand("Brand Neg")
+
+		pInflated := createProd(seller, catInflated, &brandCommon, "Prod Inflated")
+		pSingle := createProd(seller, catSingle, &brandCommon, "Prod Single")
+
+		tOlder := now.Add(-2 * time.Hour)
+		tNewer := now.Add(-10 * time.Minute)
+
+		// Product A has 100 views, but older last_viewed_at
+		addView(custNeg, pInflated, tOlder, 100)
+		// Product B has 1 view, but newer last_viewed_at
+		addView(custNeg, pSingle, tNewer, 1)
+
+		profile, err := svc.GetCustomerPreferenceProfile(ctx, custNeg, 5)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		require.Len(t, profile.ViewedCategories, 2)
+
+		// Both categories must have DistinctProductCount = 1!
+		// Because both have count = 1, tie-breaker MAX(last_viewed_at) DESC must place catSingle FIRST!
+		assert.Equal(t, catSingle, profile.ViewedCategories[0].CategoryID)
+		assert.Equal(t, int64(1), profile.ViewedCategories[0].DistinctProductCount)
+
+		assert.Equal(t, catInflated, profile.ViewedCategories[1].CategoryID)
+		assert.Equal(t, int64(1), profile.ViewedCategories[1].DistinctProductCount, "Cat with view_count=100 must have distinct count=1, not 100")
 	})
 }

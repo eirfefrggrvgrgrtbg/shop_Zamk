@@ -50,9 +50,14 @@ func (s *Service) GetSimilarProducts(ctx context.Context, productID uuid.UUID, l
 	for _, p := range prods {
 		pubItems = append(pubItems, products.MapToPublicProduct(p))
 	}
-
 	if pubItems == nil {
 		pubItems = []products.PublicProduct{}
 	}
 	return pubItems, nil
+}
+
+// GetCustomerPreferenceProfile returns the authenticated customer's preference profile derived on read
+// from current favorites and product views.
+func (s *Service) GetCustomerPreferenceProfile(ctx context.Context, userID uuid.UUID, limit int) (*CustomerPreferenceProfile, error) {
+	return s.repo.GetCustomerPreferenceProfile(ctx, userID, limit)
 }

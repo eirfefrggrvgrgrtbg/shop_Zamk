@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"time"
 )
 
 var (
@@ -239,4 +240,202 @@ func (r *Repository) GetSimilarProducts(ctx context.Context, productID uuid.UUID
 	}
 
 	return results, nil
+}
+
+// GetCustomerPreferenceProfile derives an authenticated customer's preference profile on read
+// from current favorites and product views without collapsing strong and soft signals into arbitrary scores.
+func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uuid.UUID, limit int) (*CustomerPreferenceProfile, error) {
+	if limit <= 0 {
+		limit = DefaultProfileAffinityLimit
+	} else if limit > MaxProfileAffinityLimit {
+		limit = MaxProfileAffinityLimit
+	}
+
+	profile := &CustomerPreferenceProfile{
+		UserID:             userID,
+		FavoriteCategories: make([]CategoryAffinity, 0),
+		FavoriteBrands:     make([]BrandAffinity, 0),
+		ViewedCategories:   make([]CategoryAffinity, 0),
+		ViewedBrands:       make([]BrandAffinity, 0),
+	}
+
+	// 1. Favorite Categories (Strong explicit preference)
+	// Ranked by distinct favorited products DESC, then trustworthy MAX(created_at) DESC, then category_id ASC.
+	favCatQuery := `
+		SELECT
+			p.category_id,
+			COUNT(DISTINCT cf.product_id) AS distinct_product_count,
+			MAX(cf.created_at) AS latest_interaction_at
+		FROM customer_favorites cf
+		INNER JOIN products p ON cf.product_id = p.id
+		INNER JOIN categories c ON p.category_id = c.id
+		WHERE cf.user_id = $1
+		  AND p.category_id IS NOT NULL
+		GROUP BY p.category_id
+		ORDER BY
+			COUNT(DISTINCT cf.product_id) DESC,
+			MAX(cf.created_at) DESC,
+			p.category_id ASC
+		LIMIT $2
+	`
+	favCatRows, err := r.db.Query(ctx, favCatQuery, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query favorite categories: %w", err)
+	}
+	for favCatRows.Next() {
+		var catID uuid.UUID
+		var count int64
+		var latest time.Time
+		if err := favCatRows.Scan(&catID, &count, &latest); err != nil {
+			favCatRows.Close()
+			return nil, fmt.Errorf("failed to scan favorite category row: %w", err)
+		}
+		t := latest
+		profile.FavoriteCategories = append(profile.FavoriteCategories, CategoryAffinity{
+			CategoryID:           catID,
+			DistinctProductCount: count,
+			LatestInteractionAt:  &t,
+			Provenance:           AffinityProvenanceFavorite,
+		})
+	}
+	favCatRows.Close()
+	if favCatRows.Err() != nil {
+		return nil, favCatRows.Err()
+	}
+
+	// 2. Favorite Brands (Strong explicit preference)
+	// Ranked by distinct favorited products DESC, then trustworthy MAX(created_at) DESC, then brand_id ASC.
+	favBrandQuery := `
+		SELECT
+			p.brand_id,
+			COUNT(DISTINCT cf.product_id) AS distinct_product_count,
+			MAX(cf.created_at) AS latest_interaction_at
+		FROM customer_favorites cf
+		INNER JOIN products p ON cf.product_id = p.id
+		INNER JOIN brands b ON p.brand_id = b.id
+		WHERE cf.user_id = $1
+		  AND p.brand_id IS NOT NULL
+		GROUP BY p.brand_id
+		ORDER BY
+			COUNT(DISTINCT cf.product_id) DESC,
+			MAX(cf.created_at) DESC,
+			p.brand_id ASC
+		LIMIT $2
+	`
+	favBrandRows, err := r.db.Query(ctx, favBrandQuery, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query favorite brands: %w", err)
+	}
+	for favBrandRows.Next() {
+		var brandID uuid.UUID
+		var count int64
+		var latest time.Time
+		if err := favBrandRows.Scan(&brandID, &count, &latest); err != nil {
+			favBrandRows.Close()
+			return nil, fmt.Errorf("failed to scan favorite brand row: %w", err)
+		}
+		t := latest
+		profile.FavoriteBrands = append(profile.FavoriteBrands, BrandAffinity{
+			BrandID:              brandID,
+			DistinctProductCount: count,
+			LatestInteractionAt:  &t,
+			Provenance:           AffinityProvenanceFavorite,
+		})
+	}
+	favBrandRows.Close()
+	if favBrandRows.Err() != nil {
+		return nil, favBrandRows.Err()
+	}
+
+	// 3. Viewed Categories (Soft behavioral signal)
+	// Distinct product count only (view_count is not used as affinity weight).
+	// Ties broken by MAX(last_viewed_at) DESC, then category_id ASC.
+	viewCatQuery := `
+		SELECT
+			p.category_id,
+			COUNT(DISTINCT cv.product_id) AS distinct_product_count,
+			MAX(cv.last_viewed_at) AS latest_interaction_at
+		FROM customer_product_views cv
+		INNER JOIN products p ON cv.product_id = p.id
+		INNER JOIN categories c ON p.category_id = c.id
+		WHERE cv.user_id = $1
+		  AND p.category_id IS NOT NULL
+		GROUP BY p.category_id
+		ORDER BY
+			COUNT(DISTINCT cv.product_id) DESC,
+			MAX(cv.last_viewed_at) DESC,
+			p.category_id ASC
+		LIMIT $2
+	`
+	viewCatRows, err := r.db.Query(ctx, viewCatQuery, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query viewed categories: %w", err)
+	}
+	for viewCatRows.Next() {
+		var catID uuid.UUID
+		var count int64
+		var latest time.Time
+		if err := viewCatRows.Scan(&catID, &count, &latest); err != nil {
+			viewCatRows.Close()
+			return nil, fmt.Errorf("failed to scan viewed category row: %w", err)
+		}
+		t := latest
+		profile.ViewedCategories = append(profile.ViewedCategories, CategoryAffinity{
+			CategoryID:           catID,
+			DistinctProductCount: count,
+			LatestInteractionAt:  &t,
+			Provenance:           AffinityProvenanceViewed,
+		})
+	}
+	viewCatRows.Close()
+	if viewCatRows.Err() != nil {
+		return nil, viewCatRows.Err()
+	}
+
+	// 4. Viewed Brands (Soft behavioral signal)
+	// Distinct product count only (view_count is not used as affinity weight).
+	// Ties broken by MAX(last_viewed_at) DESC, then brand_id ASC.
+	viewBrandQuery := `
+		SELECT
+			p.brand_id,
+			COUNT(DISTINCT cv.product_id) AS distinct_product_count,
+			MAX(cv.last_viewed_at) AS latest_interaction_at
+		FROM customer_product_views cv
+		INNER JOIN products p ON cv.product_id = p.id
+		INNER JOIN brands b ON p.brand_id = b.id
+		WHERE cv.user_id = $1
+		  AND p.brand_id IS NOT NULL
+		GROUP BY p.brand_id
+		ORDER BY
+			COUNT(DISTINCT cv.product_id) DESC,
+			MAX(cv.last_viewed_at) DESC,
+			p.brand_id ASC
+		LIMIT $2
+	`
+	viewBrandRows, err := r.db.Query(ctx, viewBrandQuery, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query viewed brands: %w", err)
+	}
+	for viewBrandRows.Next() {
+		var brandID uuid.UUID
+		var count int64
+		var latest time.Time
+		if err := viewBrandRows.Scan(&brandID, &count, &latest); err != nil {
+			viewBrandRows.Close()
+			return nil, fmt.Errorf("failed to scan viewed brand row: %w", err)
+		}
+		t := latest
+		profile.ViewedBrands = append(profile.ViewedBrands, BrandAffinity{
+			BrandID:              brandID,
+			DistinctProductCount: count,
+			LatestInteractionAt:  &t,
+			Provenance:           AffinityProvenanceViewed,
+		})
+	}
+	viewBrandRows.Close()
+	if viewBrandRows.Err() != nil {
+		return nil, viewBrandRows.Err()
+	}
+
+	return profile, nil
 }
