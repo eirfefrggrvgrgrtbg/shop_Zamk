@@ -7,6 +7,7 @@ import {
   getAdminReturnRefundQuote as apiGetAdminReturnRefundQuote,
   createAdminRefundForReturn as apiCreateAdminRefundForReturn,
   getAdminReturnReceivingState as apiGetAdminReturnReceivingState,
+  getAdminReturnReceivingQueue as apiGetAdminReturnReceivingQueue,
   startAdminReturnReceiving as apiStartAdminReturnReceiving,
   scanAdminReturnUnit as apiScanAdminReturnUnit,
   inspectSerializedReturnUnit as apiInspectSerializedReturnUnit,
@@ -32,6 +33,7 @@ import type {
   AdminRefund,
   AdminReturnReceivingItem,
   AdminReturnReceivingState,
+  AdminReturnReceivingQueueItem,
   ScanReturnUnitResponse,
   UpdateSerializedUnitInspectionInput,
   UpdateLegacyItemInspectionInput,
@@ -54,6 +56,7 @@ export type {
   AdminRefund,
   AdminReturnReceivingItem,
   AdminReturnReceivingState,
+  AdminReturnReceivingQueueItem,
   ScanReturnUnitResponse,
   UpdateSerializedUnitInspectionInput,
   UpdateLegacyItemInspectionInput,
@@ -210,6 +213,11 @@ export const inspectLegacyReturnItem = async (
 
 export const finalizeAdminReturnReceiving = async (returnId: string): Promise<void> => {
   await apiFinalizeAdminReturnReceiving(returnId);
+};
+
+export const getAdminReturnReceivingQueue = async (): Promise<AdminReturnReceivingQueueItem[]> => {
+  const response = (await apiGetAdminReturnReceivingQueue()) as unknown as ListResponse<AdminReturnReceivingQueueItem>;
+  return unwrapItems(response);
 };
 
 export const getAdminReturnErrorMessage = (error: unknown, fallback: string): string => {

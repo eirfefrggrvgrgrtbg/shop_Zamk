@@ -2397,3 +2397,104 @@ func (r *Repository) GetReturnResponsibilityAllocationHistory(ctx context.Contex
 	}
 	return history, nil
 }
+
+func (r *Repository) GetReturnReceivingQueue(ctx context.Context) ([]AdminReturnReceivingQueueItem, error) {
+	query := `
+		SELECT
+			r.id,
+			r.order_id,
+			o.order_number,
+			r.status,
+			COALESCE(latest_rs.status, ''),
+			latest_rs.tracking_number,
+			latest_rs.updated_at,
+			r.receiving_started_at,
+			s.brand_name,
+			r.created_at,
+			COALESCE(SUM(ri.quantity), 0) AS expected_units_count,
+			COALESCE(SUM(
+				CASE
+					WHEN EXISTS (SELECT 1 FROM order_item_allocations oia WHERE oia.order_item_id = ri.order_item_id)
+					THEN (SELECT COUNT(*) FROM return_item_units riu WHERE riu.return_item_id = ri.id)
+					ELSE (ri.accepted_quantity + ri.damaged_quantity + ri.rejected_quantity)
+				END
+			), 0) AS received_units_count,
+			(
+				SELECT oi.title
+				FROM return_items ri_first
+				JOIN order_items oi ON oi.id = ri_first.order_item_id
+				WHERE ri_first.return_id = r.id
+				ORDER BY ri_first.created_at ASC
+				LIMIT 1
+			) AS product_summary
+		FROM returns r
+		JOIN orders o ON o.id = r.order_id
+		LEFT JOIN order_fulfillments of ON of.id = r.fulfillment_id
+		LEFT JOIN sellers s ON s.id = of.seller_id
+		LEFT JOIN LATERAL (
+			SELECT rs.id, rs.status, rs.tracking_number, rs.updated_at
+			FROM return_shipments rs
+			WHERE rs.return_id = r.id
+			ORDER BY
+				CASE WHEN rs.status != 'cancelled' THEN 0 ELSE 1 END ASC,
+				rs.created_at DESC,
+				rs.id DESC
+			LIMIT 1
+		) latest_rs ON true
+		LEFT JOIN return_items ri ON ri.return_id = r.id
+		WHERE (r.status = 'approved' AND latest_rs.status = 'arrived_at_zamk')
+		   OR (r.status = 'receiving')
+		GROUP BY
+			r.id,
+			r.order_id,
+			o.order_number,
+			r.status,
+			latest_rs.status,
+			latest_rs.tracking_number,
+			latest_rs.updated_at,
+			r.receiving_started_at,
+			s.brand_name,
+			r.created_at
+		ORDER BY
+			CASE WHEN r.status = 'receiving' THEN 0 ELSE 1 END ASC,
+			COALESCE(latest_rs.updated_at, r.created_at) ASC,
+			r.created_at ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]AdminReturnReceivingQueueItem, 0)
+	for rows.Next() {
+		var item AdminReturnReceivingQueueItem
+		if err := rows.Scan(
+			&item.ReturnID,
+			&item.OrderID,
+			&item.OrderNumber,
+			&item.ReturnStatus,
+			&item.ShipmentStatus,
+			&item.TrackingNumber,
+			&item.ArrivedAt,
+			&item.ReceivingStartedAt,
+			&item.SellerName,
+			&item.CreatedAt,
+			&item.ExpectedUnitsCount,
+			&item.ReceivedUnitsCount,
+			&item.ProductSummary,
+		); err != nil {
+			return nil, err
+		}
+		if item.ShipmentStatus == "" {
+			item.ShipmentStatus = "arrived_at_zamk"
+		}
+		item.RemainingUnitsCount = item.ExpectedUnitsCount - item.ReceivedUnitsCount
+		if item.RemainingUnitsCount < 0 {
+			item.RemainingUnitsCount = 0
+		}
+		items = append(items, item)
+	}
+
+	return items, nil
+}

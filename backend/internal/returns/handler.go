@@ -1271,3 +1271,17 @@ func (h *Handler) GetAdminReturnResponsibilityAllocations(w http.ResponseWriter,
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(allocs)
 }
+
+func (h *Handler) GetReturnReceivingQueue(w http.ResponseWriter, r *http.Request) {
+	items, err := h.service.GetReturnReceivingQueue(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get return receiving queue")
+		return
+	}
+	if items == nil {
+		items = make([]AdminReturnReceivingQueueItem, 0)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(items)
+}

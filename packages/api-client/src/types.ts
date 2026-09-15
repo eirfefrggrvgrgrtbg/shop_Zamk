@@ -1534,6 +1534,23 @@ export interface AdminReturnReceivingState {
   canFinalize: boolean;
 }
 
+export interface AdminReturnReceivingQueueItem {
+  returnId: string;
+  orderId: string;
+  orderNumber: string;
+  returnStatus: 'approved' | 'receiving' | string;
+  shipmentStatus: string;
+  trackingNumber?: string;
+  expectedUnitsCount: number;
+  receivedUnitsCount: number;
+  remainingUnitsCount: number;
+  arrivedAt?: string;
+  receivingStartedAt?: string;
+  sellerName?: string;
+  productSummary?: string;
+  createdAt: string;
+}
+
 export interface ScanReturnUnitResponse {
   scannedUnit: ScannedUnitDetail;
   item: AdminReturnReceivingItem;

@@ -34,6 +34,7 @@ import { AdminInventory } from './pages/AdminInventory';
 import { AdminInventoryReconciliation } from './pages/AdminInventoryReconciliation';
 import { AdminReturns } from './pages/AdminReturns';
 import { AdminReturnReceiving } from './pages/AdminReturnReceiving';
+import { AdminReturnReceivingQueue } from './pages/AdminReturnReceivingQueue';
 import { AdminRefunds } from './pages/AdminRefunds';
 import { AdminPayouts } from './pages/AdminPayouts';
 import { AdminAuditLogs } from './pages/AdminAuditLogs';
@@ -103,6 +104,7 @@ export default function App() {
             <Route path="/inventory" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/inventory')}><AdminInventory /></AdminProtectedRoute>} />
             <Route path="/inventory/reconciliation/:id" element={<AdminProtectedRoute permission="inventory.adjust"><AdminInventoryReconciliation /></AdminProtectedRoute>} />
             <Route path="/returns" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/returns')}><AdminReturns /></AdminProtectedRoute>} />
+            <Route path="/returns/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/returns/receiving')}><AdminReturnReceivingQueue /></AdminProtectedRoute>} />
             <Route path="/returns/:id/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/returns')}><AdminReturnReceiving /></AdminProtectedRoute>} />
             <Route path="/refunds" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/refunds')}><AdminRefunds /></AdminProtectedRoute>} />
             <Route path="/payouts" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/payouts')}><AdminPayouts /></AdminProtectedRoute>} />

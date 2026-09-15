@@ -77,9 +77,9 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
     vi.clearAllMocks();
   });
 
-  // A. 24 screen rules are consumed by navigation/route helpers
-  it('A: all 24 canonical screen rules are consumed by getStaffScreenVisibility', () => {
-    expect(STAFF_SCREEN_ACCESS_RULES).toHaveLength(24);
+  // A. 25 screen rules are consumed by navigation/route helpers
+  it('A: all 25 canonical screen rules are consumed by getStaffScreenVisibility', () => {
+    expect(STAFF_SCREEN_ACCESS_RULES).toHaveLength(25);
 
     for (const rule of STAFF_SCREEN_ACCESS_RULES) {
       const visibility = getStaffScreenVisibility(rule.route);

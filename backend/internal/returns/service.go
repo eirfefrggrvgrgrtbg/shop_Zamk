@@ -1266,3 +1266,7 @@ func (s *Service) AdvanceSimulatedReturnShipment(ctx context.Context, returnID u
 	})
 	return result, err
 }
+
+func (s *Service) GetReturnReceivingQueue(ctx context.Context) ([]AdminReturnReceivingQueueItem, error) {
+	return s.repo.GetReturnReceivingQueue(ctx)
+}

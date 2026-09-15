@@ -350,9 +350,9 @@ export function AdminReturnReceiving() {
         {/* Navigation & Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-200 pb-4">
           <div>
-            <Link to="/returns" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-700 mb-2">
+            <Link to="/returns/receiving" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-700 mb-2">
               <ArrowLeft className="h-4 w-4 mr-1" />
-              К списку возвратов
+              К очереди возвратов
             </Link>
             <div className="flex items-center space-x-3">
               <h1 className="text-2xl font-bold text-gray-900">
@@ -520,9 +520,18 @@ export function AdminReturnReceiving() {
                 </p>
               </div>
             </div>
-            <span className="text-xs font-semibold text-green-800 bg-green-200 px-3 py-1.5 rounded-md">
-              Приёмка завершена
-            </span>
+            <div className="flex items-center space-x-3">
+              <Link
+                to="/returns/receiving"
+                className="inline-flex items-center px-4 py-2 text-xs font-semibold rounded-lg bg-green-700 hover:bg-green-800 text-white transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4 mr-1.5" />
+                К очереди возвратов
+              </Link>
+              <span className="text-xs font-semibold text-green-800 bg-green-200 px-3 py-1.5 rounded-md">
+                Приёмка завершена
+              </span>
+            </div>
           </div>
         )}
 
@@ -1024,7 +1033,7 @@ export function AdminReturnReceiving() {
                   <strong className="text-green-700">{totalRestock} шт.</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Повреждено / списано:</span>
+                  <span className="text-gray-600">Повреждено:</span>
                   <strong className="text-amber-700">{totalDamaged} шт.</strong>
                 </div>
                 <div className="flex justify-between">

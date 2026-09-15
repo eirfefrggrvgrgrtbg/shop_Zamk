@@ -558,6 +558,7 @@ func New(
 		r.With(perm("warehouse.dispatch")).Post("/fulfillments/{id}/dispatch", fulfillmentHandler.DispatchFulfillment)
 
 		// Returns
+		r.With(perm("warehouse.returns")).Get("/returns/receiving-queue", returnsHandler.GetReturnReceivingQueue)
 		r.With(permAny("returns.read", "warehouse.returns")).Get("/returns", returnsHandler.ListAdminReturns)
 		r.With(permAny("returns.read", "warehouse.returns")).Get("/returns/{id}", returnsHandler.GetAdminReturn)
 		r.With(perm("returns.read")).Get("/returns/{id}/timeline", returnsHandler.GetAdminReturnTimeline)

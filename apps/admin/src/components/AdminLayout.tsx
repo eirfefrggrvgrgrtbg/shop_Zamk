@@ -175,6 +175,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     { name: 'Доставка / Отгрузки', path: '/shipments', icon: Truck },
     { name: 'Остатки / Склад', path: '/inventory', icon: Boxes },
     { name: 'Приемка поставок', path: '/supplies/receiving', icon: Truck },
+    { name: 'Приёмка возвратов', path: '/returns/receiving', icon: RotateCcw },
     { name: 'Платежи покупателей', path: '/payments', icon: CreditCard },
     { name: 'Возвраты', path: '/returns', icon: RotateCcw },
     { name: 'Возмещения', path: '/refunds', icon: ReceiptText },
