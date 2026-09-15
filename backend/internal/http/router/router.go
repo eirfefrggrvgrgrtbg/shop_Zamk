@@ -462,17 +462,20 @@ func New(
 		r.With(perm("staff.permissions.manage")).Put("/staff/members/{userId}/permissions", staffHandler.UpdateStaffMemberPermissions)
 
 		r.Route("/receiving", func(r chi.Router) {
-			r.Use(perm("inventory.receipt"))
-			r.Post("/{supplyId}/arrive", suppliesHandler.MarkArrived)
-			r.Get("/lookup", suppliesHandler.LookupSupply)
-			r.Get("/free-scan", suppliesHandler.ResolvePhysicalUnit)
-			r.Post("/free-scan/process", suppliesHandler.ProcessFoundUnit)
-			r.Post("/sessions", suppliesHandler.StartSession)
-			r.Post("/sessions/{sessionId}/scan", suppliesHandler.RecordScan)
-			r.Post("/sessions/{sessionId}/scan-unit", suppliesHandler.RecordSerializedScan)
-			r.Get("/sessions/{sessionId}/scans", suppliesHandler.GetRecentSerializedScans)
-			r.Post("/sessions/{sessionId}/scans/{scanId}/undo", suppliesHandler.UndoSerializedScan)
-			r.Post("/sessions/{sessionId}/finalize", suppliesHandler.FinalizeSession)
+			r.With(permAny("inventory.read", "inventory.receipt")).Get("/free-scan", suppliesHandler.ResolvePhysicalUnit)
+
+			r.Group(func(r chi.Router) {
+				r.Use(perm("inventory.receipt"))
+				r.Post("/{supplyId}/arrive", suppliesHandler.MarkArrived)
+				r.Get("/lookup", suppliesHandler.LookupSupply)
+				r.Post("/free-scan/process", suppliesHandler.ProcessFoundUnit)
+				r.Post("/sessions", suppliesHandler.StartSession)
+				r.Post("/sessions/{sessionId}/scan", suppliesHandler.RecordScan)
+				r.Post("/sessions/{sessionId}/scan-unit", suppliesHandler.RecordSerializedScan)
+				r.Get("/sessions/{sessionId}/scans", suppliesHandler.GetRecentSerializedScans)
+				r.Post("/sessions/{sessionId}/scans/{scanId}/undo", suppliesHandler.UndoSerializedScan)
+				r.Post("/sessions/{sessionId}/finalize", suppliesHandler.FinalizeSession)
+			})
 		})
 
 		// Catalog

@@ -608,6 +608,30 @@ func (h *Handler) ProcessFoundUnit(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusBadRequest, "receiving_session_finalized", "Сессия приёмки уже завершена.")
 			return
 		}
+		if errors.Is(err, ErrSupplyNotArrived) {
+			h.writeError(w, http.StatusBadRequest, "supply_not_arrived", "Поставка ещё не прибыла на склад.")
+			return
+		}
+		if errors.Is(err, ErrSupplyNotReadyForReceiving) || errors.Is(err, ErrInvalidStatus) {
+			h.writeError(w, http.StatusBadRequest, "supply_not_ready_for_receiving", "Поставка ещё не готова к приёмке.")
+			return
+		}
+		if errors.Is(err, ErrSupplyAlreadyCompleted) {
+			h.writeError(w, http.StatusBadRequest, "supply_already_completed", "Приёмка по этой поставке уже завершена.")
+			return
+		}
+		if errors.Is(err, ErrSupplyCancelled) {
+			h.writeError(w, http.StatusBadRequest, "supply_cancelled", "Поставка отменена.")
+			return
+		}
+		if errors.Is(err, ErrNoExpectedUnitsRemain) {
+			h.writeError(w, http.StatusBadRequest, "no_expected_units_remain", "Все ожидаемые товарные единицы по этой поставке уже приняты.")
+			return
+		}
+		if errors.Is(err, ErrSupplyUnitIdentityMismatch) {
+			h.writeError(w, http.StatusUnprocessableEntity, "supply_unit_identity_mismatch", "Идентификаторы товарных единиц не совпадают с составом поставки.")
+			return
+		}
 		h.logger.Error("failed to process found unit", "error", err.Error(), "unitCode", req.UnitCode)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
