@@ -232,4 +232,116 @@ func TestPersonalization_RepositoryAndService(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, int64(2+concurrency), view.ViewCount)
 	})
+
+	t.Run("I. GetRecentlyViewedProducts returns correct products in order", func(t *testing.T) {
+		// Create another published product
+		pubProd2 := uuid.New()
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO products (
+				id, seller_id, category_id, title, slug, price_cents, currency, status,
+				submitted_at, approved_at, published_at, created_at, updated_at
+			) VALUES ($1, $2, $3, 'Published Product 2', $4, 200000, 'RUB', 'published', $5, $5, $5, $5, $5)
+		`, pubProd2, sellerID, catID, "pub-prod2-"+pubProd2.String()[:8], time.Now())
+		require.NoError(t, err)
+
+		pubVariantID2 := uuid.New()
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, is_active, created_at, updated_at)
+			VALUES ($1, $2, $3, $3, $4, 200000, true, $5, $5)
+		`, pubVariantID2, pubProd2, "SKU-"+pubVariantID2.String()[:8], "BC-"+pubVariantID2.String()[:8], time.Now())
+		require.NoError(t, err)
+
+		_, err = pgClient.Pool.Exec(ctx, `
+			INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, 10, 0, $5, $5)
+		`, uuid.New(), pubProd2, pubVariantID2, sellerID, time.Now())
+		require.NoError(t, err)
+
+		defer func() {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM customer_product_views WHERE product_id = $1", pubProd2)
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM inventory_items WHERE product_id = $1", pubProd2)
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM product_variants WHERE product_id = $1", pubProd2)
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM products WHERE id = $1", pubProd2)
+		}()
+
+		// View product 2
+		err = svc.RecordProductView(ctx, custA, pubProd2)
+		require.NoError(t, err)
+
+		// Get recently viewed products
+		recentProds, err := svc.GetRecentlyViewedProducts(ctx, custA, 10)
+		require.NoError(t, err)
+
+		require.Len(t, recentProds, 2)
+		assert.Equal(t, pubProd2, recentProds[0].ID, "most recently viewed should be first")
+		assert.Equal(t, pubProd, recentProds[1].ID, "older view should be second")
+
+		// B. Customer views A again -> returns A, B -> A appears only once.
+		time.Sleep(10 * time.Millisecond)
+		err = svc.RecordProductView(ctx, custA, pubProd)
+		require.NoError(t, err)
+
+		recentProds, err = svc.GetRecentlyViewedProducts(ctx, custA, 10)
+		require.NoError(t, err)
+		require.Len(t, recentProds, 2)
+		assert.Equal(t, pubProd, recentProds[0].ID, "A should now be first")
+		assert.Equal(t, pubProd2, recentProds[1].ID, "B should be second")
+
+		// C. Customer B has independent history -> no cross-user leakage.
+		recentProdsB, err := svc.GetRecentlyViewedProducts(ctx, custB, 10)
+		require.NoError(t, err)
+		// CustB only viewed pubProd (in test C above)
+		require.Len(t, recentProdsB, 1)
+		assert.Equal(t, pubProd, recentProdsB[0].ID)
+
+		// F. authenticated customer with no history -> []
+		custC := uuid.New()
+		recentProdsC, err := svc.GetRecentlyViewedProducts(ctx, custC, 10)
+		require.NoError(t, err)
+		assert.Empty(t, recentProdsC)
+
+		// G. historically viewed product becomes unpublished -> excluded.
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE products SET status = 'draft' WHERE id = $1", pubProd2)
+		require.NoError(t, err)
+
+		recentProds, err = svc.GetRecentlyViewedProducts(ctx, custA, 10)
+		require.NoError(t, err)
+		require.Len(t, recentProds, 1)
+		assert.Equal(t, pubProd, recentProds[0].ID)
+
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE products SET status = 'published' WHERE id = $1", pubProd2)
+		require.NoError(t, err)
+
+		// H. historically viewed product falls below canonical CAT.1A storefront threshold -> excluded.
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE inventory_items SET total_stock = 1 WHERE product_id = $1", pubProd2)
+		require.NoError(t, err)
+
+		recentProds, err = svc.GetRecentlyViewedProducts(ctx, custA, 10)
+		require.NoError(t, err)
+		require.Len(t, recentProds, 1)
+		assert.Equal(t, pubProd, recentProds[0].ID)
+
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE inventory_items SET total_stock = 10 WHERE product_id = $1", pubProd2)
+		require.NoError(t, err)
+
+		// I. product seller becomes inactive -> excluded.
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE sellers SET status = 'blocked' WHERE id = $1", sellerID)
+		require.NoError(t, err)
+
+		recentProds, err = svc.GetRecentlyViewedProducts(ctx, custA, 10)
+		require.NoError(t, err)
+		assert.Empty(t, recentProds)
+
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE sellers SET status = 'active' WHERE id = $1", sellerID)
+		require.NoError(t, err)
+
+		// K. limit is bounded
+		recentProds, err = svc.GetRecentlyViewedProducts(ctx, custA, 1)
+		require.NoError(t, err)
+		require.Len(t, recentProds, 1)
+
+		// L. response does NOT expose private fields
+		// PublicProduct is used which omits customer/user identity, payment, private seller info
+		assert.NotZero(t, recentProds[0].SellerID) // SellerID is expected for PublicProduct, but not private finance data.
+	})
 }

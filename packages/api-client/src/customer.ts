@@ -137,6 +137,11 @@ export const recordProductView = async (productId: string): Promise<any> => {
   return request('POST', `/customer/products/${productId}/view`);
 };
 
+export const getCustomerRecentlyViewed = async (limit = 12): Promise<{ items: any[]; totalCount: number }> => {
+  const res = await request<any>('GET', `/customer/products/recently-viewed?limit=${limit}`);
+  return { items: res?.items || [], totalCount: res?.totalCount ?? (res?.items?.length || 0) };
+};
+
 export const getProfile = async (): Promise<any> => {
   return request('GET', '/customer/profile');
 };

@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button';
 import { fetchBrands, fetchCategories, fetchProducts, fetchDirectSaleProducts } from '../api/publicCatalog';
 import { HeroSection } from '../components/home/HeroSection';
 import { HomeAuctionBlock } from '../components/home/HomeAuctionBlock';
+import { RecentlyViewedBlock } from '../components/home/RecentlyViewedBlock';
 import type { Brand, Category, Product } from '../types/catalog';
 
 const reveal = {
@@ -131,6 +132,8 @@ export function Home() {
               <EmptyHomeSection text="Коллекции пока не подключены" />
             </motion.section>
 
+            <RecentlyViewedBlock />
+
             <motion.section {...reveal}>
               <SectionHeader label="Новинки" title="Свежие поступления" />
               {recentProducts.length > 0 ? (
@@ -147,9 +150,9 @@ export function Home() {
             {directSaleProducts.length > 0 && (
               <motion.section {...reveal} className="glass-panel p-7 md:p-10 relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent opacity-50"></div>
-                <SectionHeader 
-                  label="Архив" 
-                  title="Вещи ZAMK" 
+                <SectionHeader
+                  label="Архив"
+                  title="Вещи ZAMK"
                   action={
                     <Link to="/zamk">
                       <Button variant="secondary" className="gap-2 bg-white/50 dark:bg-black/50">

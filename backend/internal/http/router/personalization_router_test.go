@@ -362,4 +362,35 @@ func TestPersonalization_CustomerProductViewRoute(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, orderCountBefore, orderCountAfter)
 	})
+
+	// GetRecentlyViewedProducts auth tests
+	getRecent := func(token string) *http.Response {
+		req := httptest.NewRequest("GET", "/api/customer/products/recently-viewed", nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec.Result()
+	}
+
+	t.Run("J. recently viewed: anonymous -> 401", func(t *testing.T) {
+		res := getRecent("")
+		assert.Equal(t, http.StatusUnauthorized, res.StatusCode)
+	})
+
+	t.Run("K. recently viewed: seller -> 403", func(t *testing.T) {
+		res := getRecent(tokenSeller)
+		assert.Equal(t, http.StatusForbidden, res.StatusCode)
+	})
+
+	t.Run("L. recently viewed: admin -> 403", func(t *testing.T) {
+		res := getRecent(tokenAdmin)
+		assert.Equal(t, http.StatusForbidden, res.StatusCode)
+	})
+
+	t.Run("M. recently viewed: customer -> 200", func(t *testing.T) {
+		res := getRecent(tokenCustomerA)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
 }

@@ -1341,7 +1341,7 @@ func (s *Service) BlockProduct(ctx context.Context, adminUserID, productID uuid.
 // Public Operations
 // ---------------------------------------------------------
 
-func mapToPublicProduct(p Product) PublicProduct {
+func MapToPublicProduct(p Product) PublicProduct {
 	var sellerSlug, sellerName string
 	if p.SellerSlug != nil {
 		sellerSlug = *p.SellerSlug
@@ -1438,7 +1438,7 @@ func (s *Service) ListPublicProducts(ctx context.Context, filter PublicProductFi
 				}
 			}
 		}
-		pubItems = append(pubItems, mapToPublicProduct(items[i]))
+		pubItems = append(pubItems, MapToPublicProduct(items[i]))
 	}
 
 	if pubItems == nil {
@@ -1464,7 +1464,7 @@ func (s *Service) GetPublicProduct(ctx context.Context, idOrSlug string) (Public
 		}
 	}
 
-	return mapToPublicProduct(*p), nil
+	return MapToPublicProduct(*p), nil
 }
 
 

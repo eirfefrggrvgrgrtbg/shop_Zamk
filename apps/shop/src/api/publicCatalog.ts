@@ -97,6 +97,18 @@ export async function fetchProducts(params?: any): Promise<{ items: UIProduct[],
   };
 }
 
+export async function fetchRecentlyViewed(limit = 12): Promise<{ items: UIProduct[], totalCount: number }> {
+  const { getCustomerRecentlyViewed } = await import('@zamk/api-client/src/customer');
+  try {
+    const res = await getCustomerRecentlyViewed(limit);
+    const items = await mapFavoritesToCatalog(res.items);
+    return { items, totalCount: res.totalCount };
+  } catch (error) {
+    // If not authenticated or other error, degrade gracefully
+    return { items: [], totalCount: 0 };
+  }
+}
+
 export async function fetchDirectSaleProducts(params?: any): Promise<{ items: UIProduct[], totalCount: number }> {
   if (Object.keys(cachedBrands).length === 0) {
     await fetchBrands().catch(() => {});

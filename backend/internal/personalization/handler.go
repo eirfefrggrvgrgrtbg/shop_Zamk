@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -61,5 +62,41 @@ func (h *Handler) writeError(w http.ResponseWriter, statusCode int, code, messag
 			"code":    code,
 			"message": message,
 		},
+	})
+}
+
+func (h *Handler) GetRecentlyViewedProducts(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value("userID")
+	if val == nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+
+	userID, ok := val.(uuid.UUID)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Invalid user context")
+		return
+	}
+
+	limitStr := r.URL.Query().Get("limit")
+	limit := 12 // Default to 12
+	if limitStr != "" {
+		parsedLimit, err := strconv.Atoi(limitStr)
+		if err == nil && parsedLimit > 0 && parsedLimit <= 50 {
+			limit = parsedLimit
+		}
+	}
+
+	items, err := h.service.GetRecentlyViewedProducts(r.Context(), userID, limit)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get recently viewed products")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items":      items,
+		"totalCount": len(items),
 	})
 }
