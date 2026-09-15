@@ -100,3 +100,39 @@ func (h *Handler) GetRecentlyViewedProducts(w http.ResponseWriter, r *http.Reque
 		"totalCount": len(items),
 	})
 }
+
+// GetSimilarProducts retrieves similar products for the given product ID without authentication.
+func (h *Handler) GetSimilarProducts(w http.ResponseWriter, r *http.Request) {
+	productIDStr := chi.URLParam(r, "productId")
+	productID, err := uuid.Parse(productIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_id", "Invalid product ID")
+		return
+	}
+
+	limit := 8
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr != "" {
+		parsedLimit, err := strconv.Atoi(limitStr)
+		if err == nil && parsedLimit > 0 && parsedLimit <= 50 {
+			limit = parsedLimit
+		}
+	}
+
+	items, err := h.service.GetSimilarProducts(r.Context(), productID, limit)
+	if err != nil {
+		if errors.Is(err, ErrProductNotAccessible) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Product not found or not accessible")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get similar products")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items":      items,
+		"totalCount": len(items),
+	})
+}

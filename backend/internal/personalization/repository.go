@@ -143,3 +143,100 @@ func (r *Repository) GetRecentlyViewedProducts(ctx context.Context, userID uuid.
 
 	return results, nil
 }
+
+// GetStorefrontProduct retrieves an accessible storefront product by ID.
+func (r *Repository) GetStorefrontProduct(ctx context.Context, productID uuid.UUID) (*products.Product, error) {
+	query := fmt.Sprintf(`
+		SELECT p.id, p.category_id, p.brand_id, p.price_cents
+		FROM products p
+		INNER JOIN sellers s ON p.seller_id = s.id
+		WHERE p.id = $1 AND p.status = 'published' AND s.status = 'active' AND %s >= %d
+	`, products.CanonicalProductFreeStockSQL("p.id"), products.MinStorefrontFreeSellableUnits)
+
+	var p products.Product
+	err := r.db.QueryRow(ctx, query, productID).Scan(
+		&p.ID,
+		&p.CategoryID,
+		&p.BrandID,
+		&p.PriceCents,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrProductNotAccessible
+		}
+		return nil, fmt.Errorf("failed to get storefront product: %w", err)
+	}
+	return &p, nil
+}
+
+// GetSimilarProducts retrieves similar products within the same direct category,
+// ranked by deterministic relevance tiers (Tier 1: same brand, Tier 2: other/any brand)
+// and closeness (absolute price distance, rating, reviews count, published_at, id).
+func (r *Repository) GetSimilarProducts(ctx context.Context, productID uuid.UUID, limit int) ([]products.Product, error) {
+	source, err := r.GetStorefrontProduct(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+
+	if source.CategoryID == nil {
+		return []products.Product{}, nil
+	}
+
+	query := fmt.Sprintf(`
+		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
+			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
+			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
+			p.average_rating, p.reviews_count,
+			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment,
+			s.slug, s.brand_name
+		FROM products p
+		INNER JOIN sellers s ON p.seller_id = s.id
+		WHERE p.id != $1
+		  AND p.category_id = $2
+		  AND p.status = 'published'
+		  AND s.status = 'active'
+		  AND %s >= %d
+		ORDER BY
+		  CASE
+		    WHEN $3::uuid IS NOT NULL AND p.brand_id = $3::uuid THEN 1
+		    ELSE 2
+		  END ASC,
+		  ABS(p.price_cents - $4::bigint) ASC,
+		  p.average_rating DESC NULLS LAST,
+		  p.reviews_count DESC,
+		  p.published_at DESC NULLS LAST,
+		  p.id ASC
+		LIMIT $5
+	`, products.CanonicalProductFreeStockSQL("p.id"), products.MinStorefrontFreeSellableUnits)
+
+	rows, err := r.db.Query(ctx, query, source.ID, *source.CategoryID, source.BrandID, source.PriceCents, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get similar products: %w", err)
+	}
+	defer rows.Close()
+
+	var results []products.Product
+	for rows.Next() {
+		var p products.Product
+		if err := rows.Scan(
+			&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
+			&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
+			&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
+			&p.AverageRating, &p.ReviewsCount,
+			&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
+			&p.SellerSlug, &p.SellerName,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, p)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	if results == nil {
+		results = []products.Product{}
+	}
+
+	return results, nil
+}

@@ -12,6 +12,7 @@ import { formatPrice, cn } from '../lib/utils';
 import { fetchProductById, fetchProductReviews, fetchProductPreviewByToken } from '../api/publicCatalog';
 import { recordProductView } from '@zamk/api-client/src/customer';
 import { useVariantSelection } from '../lib/variantSelection';
+import { SimilarProductsBlock } from '../components/product/SimilarProductsBlock';
 import type { Product, Review } from '../types/catalog';
 
 export interface MeasurementMeta {
@@ -948,6 +949,8 @@ export function ProductDetail() {
           )}
         </section>
 
+        {/* Similar Products */}
+        <SimilarProductsBlock productId={product.id} />
       </div>
 
       {/* Size Chart Modal */}

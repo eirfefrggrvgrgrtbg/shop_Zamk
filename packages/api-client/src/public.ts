@@ -25,6 +25,11 @@ export const getProduct = async (idOrSlug: string): Promise<ProductDetail> => {
   return res;
 };
 
+export const getSimilarProducts = async (productId: string, limit = 8): Promise<ProductListResponse> => {
+  const res = await request<ProductListResponse>('GET', `/public/products/${productId}/similar`, { params: { limit } });
+  return { ...res, items: res?.items || [] };
+};
+
 export const getProductPreviewByToken = async (token: string): Promise<any> => {
   const res = await request<any>('GET', `/public/product-previews/${token}`);
   if (res) {

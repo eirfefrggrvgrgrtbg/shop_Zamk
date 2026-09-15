@@ -393,4 +393,65 @@ func TestPersonalization_CustomerProductViewRoute(t *testing.T) {
 		res := getRecent(tokenCustomerA)
 		assert.Equal(t, http.StatusOK, res.StatusCode)
 	})
+
+	// Similar products public route tests
+	getSimilar := func(productID string, token string) *http.Response {
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/public/products/%s/similar", productID), nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec.Result()
+	}
+
+	t.Run("N. similar products: anonymous -> 200", func(t *testing.T) {
+		res := getSimilar(publishedProdID.String(), "")
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("O. similar products: customer -> 200", func(t *testing.T) {
+		res := getSimilar(publishedProdID.String(), tokenCustomerA)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("P. similar products: seller -> 200", func(t *testing.T) {
+		res := getSimilar(publishedProdID.String(), tokenSeller)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("Q. similar products: admin -> 200", func(t *testing.T) {
+		res := getSimilar(publishedProdID.String(), tokenAdmin)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("R. similar products: invalid UUID -> 400", func(t *testing.T) {
+		res := getSimilar("not-a-valid-uuid", "")
+		assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+	})
+
+	t.Run("S. similar products: nonexistent product -> 404", func(t *testing.T) {
+		res := getSimilar(uuid.New().String(), "")
+		assert.Equal(t, http.StatusNotFound, res.StatusCode)
+	})
+
+	t.Run("T. similar products: source with free stock = 1 -> 404, free stock = 2 -> 200", func(t *testing.T) {
+		// Stock = 1 (free < 2 -> 404)
+		_, err := pgClient.Pool.Exec(ctx, "UPDATE inventory_items SET total_stock = 1 WHERE product_id = $1", publishedProdID)
+		require.NoError(t, err)
+
+		res := getSimilar(publishedProdID.String(), "")
+		assert.Equal(t, http.StatusNotFound, res.StatusCode)
+
+		// Stock = 2 (free >= 2 -> 200)
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE inventory_items SET total_stock = 2 WHERE product_id = $1", publishedProdID)
+		require.NoError(t, err)
+
+		res2 := getSimilar(publishedProdID.String(), "")
+		assert.Equal(t, http.StatusOK, res2.StatusCode)
+
+		// Restore original stock
+		_, err = pgClient.Pool.Exec(ctx, "UPDATE inventory_items SET total_stock = 5 WHERE product_id = $1", publishedProdID)
+		require.NoError(t, err)
+	})
 }

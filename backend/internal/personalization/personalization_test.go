@@ -345,3 +345,299 @@ func TestPersonalization_RepositoryAndService(t *testing.T) {
 		assert.NotZero(t, recentProds[0].SellerID) // SellerID is expected for PublicProduct, but not private finance data.
 	})
 }
+
+func createTestProduct(
+	t *testing.T,
+	ctx context.Context,
+	client *postgres.Client,
+	sellerID uuid.UUID,
+	catID uuid.UUID,
+	brandID *uuid.UUID,
+	title string,
+	priceCents int64,
+	rating float64,
+	reviewsCount int,
+	publishedAt time.Time,
+	status string,
+	stock int,
+) uuid.UUID {
+	t.Helper()
+	prodID := uuid.New()
+	slug := "sim-" + prodID.String()[:8]
+	now := time.Now()
+
+	_, err := client.Pool.Exec(ctx, `
+		INSERT INTO products (
+			id, seller_id, category_id, brand_id, title, slug, price_cents, currency, status,
+			average_rating, reviews_count,
+			submitted_at, approved_at, published_at, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, 'RUB', $8, $9, $10, $11, $11, $12, $11, $11)
+	`, prodID, sellerID, catID, brandID, title, slug, priceCents, status, rating, reviewsCount, now, publishedAt)
+	require.NoError(t, err)
+
+	varID := uuid.New()
+	_, err = client.Pool.Exec(ctx, `
+		INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, $3, $4, $5, true, $6, $6)
+	`, varID, prodID, "SKU-"+varID.String()[:8], "BC-"+varID.String()[:8], priceCents, now)
+	require.NoError(t, err)
+
+	if stock > 0 {
+		_, err = client.Pool.Exec(ctx, `
+			INSERT INTO inventory_items (id, product_id, product_variant_id, seller_id, total_stock, reserved_stock, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, 0, $6, $6)
+		`, uuid.New(), prodID, varID, sellerID, stock, now)
+		require.NoError(t, err)
+	}
+
+	return prodID
+}
+
+func TestSimilarProducts_Acceptance(t *testing.T) {
+	ctx, pgClient, _, svc := setupTestDB(t)
+
+	now := time.Now()
+	t0 := now.Add(-10 * time.Hour)
+	t1 := now.Add(-5 * time.Hour)
+	t2 := now.Add(-1 * time.Hour)
+
+	// Setup sellers
+	activeSellerID := uuid.New()
+	_, err := pgClient.Pool.Exec(ctx, `
+		INSERT INTO sellers (id, brand_name, slug, contact_email, status, created_at, updated_at)
+		VALUES ($1, 'Active Seller', $2, $3, 'active', $4, $4)
+	`, activeSellerID, "seller-act-"+activeSellerID.String()[:8], "act-"+activeSellerID.String()[:8]+"@test.local", now)
+	require.NoError(t, err)
+
+	blockedSellerID := uuid.New()
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO sellers (id, brand_name, slug, contact_email, status, created_at, updated_at)
+		VALUES ($1, 'Blocked Seller', $2, $3, 'blocked', $4, $4)
+	`, blockedSellerID, "seller-blk-"+blockedSellerID.String()[:8], "blk-"+blockedSellerID.String()[:8]+"@test.local", now)
+	require.NoError(t, err)
+
+	// Setup brands
+	brandA := uuid.New()
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO brands (id, name, slug, is_active, created_at, updated_at)
+		VALUES ($1, 'Brand Alpha', $2, true, $3, $3)
+	`, brandA, "brand-alpha-"+brandA.String()[:8], now)
+	require.NoError(t, err)
+
+	brandB := uuid.New()
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO brands (id, name, slug, is_active, created_at, updated_at)
+		VALUES ($1, 'Brand Beta', $2, true, $3, $3)
+	`, brandB, "brand-beta-"+brandB.String()[:8], now)
+	require.NoError(t, err)
+
+	// Setup categories
+	catMain := uuid.New()
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO categories (id, name, slug, is_active, created_at, updated_at)
+		VALUES ($1, 'Main Category', $2, true, $3, $3)
+	`, catMain, "cat-main-"+catMain.String()[:8], now)
+	require.NoError(t, err)
+
+	catIsolated := uuid.New()
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO categories (id, name, slug, is_active, created_at, updated_at)
+		VALUES ($1, 'Isolated Category', $2, true, $3, $3)
+	`, catIsolated, "cat-iso-"+catIsolated.String()[:8], now)
+	require.NoError(t, err)
+
+	// Source product: Brand A, Price 100_000, Rating 4.0, Stock 10
+	sourceProdID := createTestProduct(t, ctx, pgClient, activeSellerID, catMain, &brandA, "Source Product", 100000, 4.0, 10, t0, "published", 10)
+
+	// Tier 1 Candidate 1: Same Brand A, Price 105_000 (diff: 5_000)
+	cTier1Close := createTestProduct(t, ctx, pgClient, activeSellerID, catMain, &brandA, "Tier 1 Close", 105000, 4.0, 10, t0, "published", 10)
+
+	// Tier 1 Candidate 2: Same Brand A, Price 150_000 (diff: 50_000)
+	cTier1Far := createTestProduct(t, ctx, pgClient, activeSellerID, catMain, &brandA, "Tier 1 Far", 150000, 4.0, 10, t0, "published", 10)
+
+	// Tier 2 Candidate 1: Different Brand B, Price 100_000 (diff: 0)
+	cTier2Exact := createTestProduct(t, ctx, pgClient, activeSellerID, catMain, &brandB, "Tier 2 Exact Price", 100000, 4.0, 10, t0, "published", 10)
+
+	// Tier 2 Candidate 2: Different Brand B, Price 120_000 (diff: 20_000)
+	cTier2Far := createTestProduct(t, ctx, pgClient, activeSellerID, catMain, &brandB, "Tier 2 Far Price", 120000, 4.0, 10, t0, "published", 10)
+
+	// Ineligible candidates:
+	// E. Unpublished candidate
+	cUnpublished := createTestProduct(t, ctx, pgClient, activeSellerID, catMain, &brandA, "Unpublished Candidate", 101000, 5.0, 100, t0, "pending_moderation", 10)
+
+	// F. Inactive seller candidate
+	cInactiveSeller := createTestProduct(t, ctx, pgClient, blockedSellerID, catMain, &brandA, "Inactive Seller Candidate", 101000, 5.0, 100, t0, "published", 10)
+
+	// G. Below CAT.1A threshold (stock = 1, required >= 2)
+	cLowStock := createTestProduct(t, ctx, pgClient, activeSellerID, catMain, &brandA, "Low Stock Candidate", 101000, 5.0, 100, t0, "published", 1)
+
+	// Run acceptance checks
+	t.Run("A, B, D, E, F, G: Tiers, closeness, source exclusion, eligibility filtering", func(t *testing.T) {
+		res, err := svc.GetSimilarProducts(ctx, sourceProdID, 10)
+		require.NoError(t, err)
+
+		// Expected candidates: exactly 4 eligible products
+		require.Len(t, res, 4)
+
+		// D. Source product must be excluded
+		for _, p := range res {
+			assert.NotEqual(t, sourceProdID, p.ID, "Source product must not appear in similar products")
+			assert.NotEqual(t, cUnpublished, p.ID, "Unpublished product must be excluded")
+			assert.NotEqual(t, cInactiveSeller, p.ID, "Product with inactive seller must be excluded")
+			assert.NotEqual(t, cLowStock, p.ID, "Product below CAT.1A stock threshold must be excluded")
+		}
+
+		// A. Same-brand (Tier 1) rank before different-brand (Tier 2), even if Tier 2 has closer price
+		assert.Equal(t, cTier1Close, res[0].ID)
+		assert.Equal(t, cTier1Far, res[1].ID)
+		assert.Equal(t, cTier2Exact, res[2].ID)
+		assert.Equal(t, cTier2Far, res[3].ID)
+
+		// B. Within same tier, closer price ranks first (105k before 150k in Tier 1; 100k before 120k in Tier 2)
+		assert.Equal(t, cTier1Close, res[0].ID)
+		assert.Equal(t, cTier1Far, res[1].ID)
+	})
+
+	t.Run("C: Within-tier deterministic tie-breakers (rating -> reviews -> published_at -> id)", func(t *testing.T) {
+		catTie := uuid.New()
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO categories (id, name, slug, is_active, created_at, updated_at)
+			VALUES ($1, 'Tie Category', $2, true, $3, $3)
+		`, catTie, "cat-tie-"+catTie.String()[:8], now)
+		require.NoError(t, err)
+
+		srcTie := createTestProduct(t, ctx, pgClient, activeSellerID, catTie, &brandA, "Src Tie", 100000, 4.0, 10, t0, "published", 10)
+
+		// High rating (5.0, 5 reviews, t1)
+		c1HighRating := createTestProduct(t, ctx, pgClient, activeSellerID, catTie, &brandA, "High Rating", 100000, 5.0, 5, t1, "published", 10)
+		// Lower rating, high reviews (4.5, 50 reviews, t1)
+		c2HighReviews := createTestProduct(t, ctx, pgClient, activeSellerID, catTie, &brandA, "High Reviews", 100000, 4.5, 50, t1, "published", 10)
+		// Same rating, lower reviews, newer published (4.5, 20 reviews, t2)
+		c3NewerPub := createTestProduct(t, ctx, pgClient, activeSellerID, catTie, &brandA, "Newer Pub", 100000, 4.5, 20, t2, "published", 10)
+		// Same rating, lower reviews, older published (4.5, 20 reviews, t1)
+		c4OlderPub := createTestProduct(t, ctx, pgClient, activeSellerID, catTie, &brandA, "Older Pub", 100000, 4.5, 20, t1, "published", 10)
+
+		res, err := svc.GetSimilarProducts(ctx, srcTie, 10)
+		require.NoError(t, err)
+		require.Len(t, res, 4)
+
+		// 1. Rating DESC: 5.0 > 4.5
+		assert.Equal(t, c1HighRating, res[0].ID)
+		// 2. Reviews DESC: 50 > 20
+		assert.Equal(t, c2HighReviews, res[1].ID)
+		// 3. PublishedAt DESC: t2 > t1
+		assert.Equal(t, c3NewerPub, res[2].ID)
+		// 4. Older pub
+		assert.Equal(t, c4OlderPub, res[3].ID)
+	})
+
+	t.Run("H: Nonexistent or non-public source product -> error", func(t *testing.T) {
+		// Nonexistent ID
+		_, err := svc.GetSimilarProducts(ctx, uuid.New(), 10)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, personalization.ErrProductNotAccessible)
+
+		// Unpublished source product
+		_, err = svc.GetSimilarProducts(ctx, cUnpublished, 10)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, personalization.ErrProductNotAccessible)
+
+		// Inactive seller source product
+		_, err = svc.GetSimilarProducts(ctx, cInactiveSeller, 10)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, personalization.ErrProductNotAccessible)
+
+		// Low stock source product
+		_, err = svc.GetSimilarProducts(ctx, cLowStock, 10)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, personalization.ErrProductNotAccessible)
+	})
+
+	t.Run("I: Brand NULL does not break query", func(t *testing.T) {
+		catNoBrand := uuid.New()
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO categories (id, name, slug, is_active, created_at, updated_at)
+			VALUES ($1, 'No Brand Cat', $2, true, $3, $3)
+		`, catNoBrand, "cat-nobrand-"+catNoBrand.String()[:8], now)
+		require.NoError(t, err)
+
+		srcNoBrand := createTestProduct(t, ctx, pgClient, activeSellerID, catNoBrand, nil, "No Brand Src", 100000, 4.0, 10, t0, "published", 10)
+		cWithBrand := createTestProduct(t, ctx, pgClient, activeSellerID, catNoBrand, &brandA, "Cand Brand A", 105000, 4.0, 10, t0, "published", 10)
+		cNoBrand := createTestProduct(t, ctx, pgClient, activeSellerID, catNoBrand, nil, "Cand No Brand", 102000, 4.0, 10, t0, "published", 10)
+
+		res, err := svc.GetSimilarProducts(ctx, srcNoBrand, 10)
+		require.NoError(t, err)
+		require.Len(t, res, 2)
+		// Both in Tier 2, ordered by price distance (102k diff 2k vs 105k diff 5k)
+		assert.Equal(t, cNoBrand, res[0].ID)
+		assert.Equal(t, cWithBrand, res[1].ID)
+	})
+
+	t.Run("J: No candidates -> empty slice", func(t *testing.T) {
+		srcIsolated := createTestProduct(t, ctx, pgClient, activeSellerID, catIsolated, &brandA, "Isolated Src", 100000, 4.0, 10, t0, "published", 10)
+		res, err := svc.GetSimilarProducts(ctx, srcIsolated, 10)
+		require.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Empty(t, res)
+	})
+
+	t.Run("K: Bounded limit enforced", func(t *testing.T) {
+		res, err := svc.GetSimilarProducts(ctx, sourceProdID, 2)
+		require.NoError(t, err)
+		require.Len(t, res, 2)
+	})
+
+	t.Run("L: Response uses safe PublicProduct DTO", func(t *testing.T) {
+		res, err := svc.GetSimilarProducts(ctx, sourceProdID, 5)
+		require.NoError(t, err)
+		require.NotEmpty(t, res)
+
+		p := res[0]
+		assert.NotEmpty(t, p.ID)
+		assert.NotEmpty(t, p.Title)
+		assert.NotEmpty(t, p.Slug)
+		assert.NotZero(t, p.PriceCents)
+		assert.Equal(t, "RUB", p.Currency)
+		assert.NotEmpty(t, p.SellerID)
+		assert.NotEmpty(t, p.SellerSlug)
+		assert.NotEmpty(t, p.SellerName)
+	})
+
+	t.Run("CAT.1A exact stock boundary tests for source and candidate", func(t *testing.T) {
+		catBoundary := uuid.New()
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO categories (id, name, slug, is_active, created_at, updated_at)
+			VALUES ($1, 'Boundary Category', $2, true, $3, $3)
+		`, catBoundary, "cat-bound-"+catBoundary.String()[:8], now)
+		require.NoError(t, err)
+
+		// Source with stock = 1 (free < 2 -> ineligible)
+		srcStock1 := createTestProduct(t, ctx, pgClient, activeSellerID, catBoundary, &brandA, "Src Stock 1", 100000, 4.0, 10, t0, "published", 1)
+
+		// Source with stock = 2 (free >= 2 -> eligible)
+		srcStock2 := createTestProduct(t, ctx, pgClient, activeSellerID, catBoundary, &brandA, "Src Stock 2", 100000, 4.0, 10, t0, "published", 2)
+
+		// Candidate with stock = 1 (free = 1 -> excluded)
+		candStock1 := createTestProduct(t, ctx, pgClient, activeSellerID, catBoundary, &brandA, "Cand Stock 1", 105000, 4.0, 10, t0, "published", 1)
+
+		// Candidate with stock = 2 (free = 2 -> eligible)
+		candStock2 := createTestProduct(t, ctx, pgClient, activeSellerID, catBoundary, &brandA, "Cand Stock 2", 105000, 4.0, 10, t0, "published", 2)
+
+		// A. Source with free=1 -> ErrProductNotAccessible (404)
+		_, err = svc.GetSimilarProducts(ctx, srcStock1, 10)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, personalization.ErrProductNotAccessible)
+
+		// B. Source with free=2 -> eligible
+		similar, err := svc.GetSimilarProducts(ctx, srcStock2, 10)
+		require.NoError(t, err)
+
+		// C. Candidate with free=1 -> excluded
+		// D. Candidate with free=2 -> included
+		require.Len(t, similar, 1)
+		assert.Equal(t, candStock2, similar[0].ID)
+		for _, p := range similar {
+			assert.NotEqual(t, candStock1, p.ID, "Candidate with free stock = 1 must be excluded")
+		}
+	})
+}

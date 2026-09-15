@@ -39,3 +39,20 @@ func (s *Service) GetRecentlyViewedProducts(ctx context.Context, userID uuid.UUI
 	}
 	return pubItems, nil
 }
+
+func (s *Service) GetSimilarProducts(ctx context.Context, productID uuid.UUID, limit int) ([]products.PublicProduct, error) {
+	prods, err := s.repo.GetSimilarProducts(ctx, productID, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	var pubItems []products.PublicProduct
+	for _, p := range prods {
+		pubItems = append(pubItems, products.MapToPublicProduct(p))
+	}
+
+	if pubItems == nil {
+		pubItems = []products.PublicProduct{}
+	}
+	return pubItems, nil
+}

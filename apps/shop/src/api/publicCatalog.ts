@@ -1,4 +1,4 @@
-import { getProducts, getDirectSaleProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller, getProductPreviewByToken } from '@zamk/api-client/src/public';
+import { getProducts, getDirectSaleProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller, getProductPreviewByToken, getSimilarProducts } from '@zamk/api-client/src/public';
 import type { ProductSummary } from '@zamk/api-client/src/types';
 import type { Product as UIProduct, Brand as UIBrand, Category as UICategory, Review as UIReview } from '../types/catalog';
 
@@ -105,6 +105,16 @@ export async function fetchRecentlyViewed(limit = 12): Promise<{ items: UIProduc
     return { items, totalCount: res.totalCount };
   } catch (error) {
     // If not authenticated or other error, degrade gracefully
+    return { items: [], totalCount: 0 };
+  }
+}
+
+export async function fetchSimilarProducts(productId: string, limit = 8): Promise<{ items: UIProduct[], totalCount: number }> {
+  try {
+    const res = await getSimilarProducts(productId, limit);
+    const items = await mapFavoritesToCatalog(res.items);
+    return { items, totalCount: res.totalCount };
+  } catch (error) {
     return { items: [], totalCount: 0 };
   }
 }
