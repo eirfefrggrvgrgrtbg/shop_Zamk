@@ -133,6 +133,10 @@ export const removeFavorite = async (productId: string): Promise<any> => {
   return request('DELETE', `/customer/favorites/${productId}`);
 };
 
+export const recordProductView = async (productId: string): Promise<any> => {
+  return request('POST', `/customer/products/${productId}/view`);
+};
+
 export const getProfile = async (): Promise<any> => {
   return request('GET', '/customer/profile');
 };

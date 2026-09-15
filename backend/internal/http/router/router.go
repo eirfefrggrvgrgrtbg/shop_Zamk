@@ -30,6 +30,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payments"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/personalization"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/ratelimit"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
@@ -68,6 +69,7 @@ func New(
 	auditRepo *staff.AuditRepository,
 	staffSvc *staff.Service,
 	favoritesHandler *favorites.Handler,
+	personalizationHandler *personalization.Handler,
 	usersHandler *users.Handler,
 	addressesHandler *addresses.Handler,
 	notificationsHandler *notifications.Handler,
@@ -304,6 +306,9 @@ func New(
 		r.Get("/favorites", favoritesHandler.ListFavorites)
 		r.Post("/favorites/{productId}", favoritesHandler.AddFavorite)
 		r.Delete("/favorites/{productId}", favoritesHandler.RemoveFavorite)
+
+		// Personalization (Customer)
+		r.Post("/products/{productId}/view", personalizationHandler.RecordProductView)
 
 		r.Get("/profile", usersHandler.GetProfile)
 		r.Patch("/profile", usersHandler.UpdateProfile)

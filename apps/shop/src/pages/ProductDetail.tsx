@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronRight, Heart, Minus, Plus, Ruler, ShoppingBag, Star, Truck, RefreshCw, Shield, ChevronDown, Eye } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -10,6 +10,7 @@ import { useToast } from '../contexts/ToastContext';
 import { PreviewPageMetadata } from '../components/PreviewPageMetadata';
 import { formatPrice, cn } from '../lib/utils';
 import { fetchProductById, fetchProductReviews, fetchProductPreviewByToken } from '../api/publicCatalog';
+import { recordProductView } from '@zamk/api-client/src/customer';
 import { useVariantSelection } from '../lib/variantSelection';
 import type { Product, Review } from '../types/catalog';
 
@@ -365,9 +366,29 @@ export function ProductDetail() {
   }, [id, token]);
 
   const { addItem } = useCart();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { toggleFavorite, isFavorite } = useFavorites();
   const { showToast } = useToast();
+
+  const lastTrackedKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Only record for authenticated customers on canonical published products (never preview)
+    if (!isAuthenticated || !user?.id || !product || product.isPreview || !product.id) {
+      return;
+    }
+    const trackKey = `${user.id}:${product.id}`;
+    // Prevent duplicate recording on ordinary re-renders of the same product
+    if (lastTrackedKeyRef.current === trackKey) {
+      return;
+    }
+    lastTrackedKeyRef.current = trackKey;
+
+    recordProductView(product.id).catch((err) => {
+      // Best-effort soft telemetry: failure must never break PDP rendering
+      console.debug('Failed to record product view', err);
+    });
+  }, [isAuthenticated, user?.id, product?.id, product?.isPreview]);
 
   const {
     dimensionType,

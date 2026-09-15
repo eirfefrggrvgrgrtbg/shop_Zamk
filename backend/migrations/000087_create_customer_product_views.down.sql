@@ -1,0 +1,1 @@
+-- Down migration is a NO-OP to preserve forward-only project invariants.
