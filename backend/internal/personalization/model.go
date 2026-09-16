@@ -21,6 +21,9 @@ const (
 
 	DefaultProfileAffinityLimit = 5
 	MaxProfileAffinityLimit     = 20
+
+	DefaultForYouLimit = 12
+	MaxForYouLimit     = 24
 )
 
 // CategoryAffinity captures an authenticated customer's category interest derived from

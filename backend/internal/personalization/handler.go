@@ -101,6 +101,47 @@ func (h *Handler) GetRecentlyViewedProducts(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+// GetForYouProducts retrieves personalized product recommendations for the authenticated customer.
+func (h *Handler) GetForYouProducts(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value("userID")
+	if val == nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+
+	userID, ok := val.(uuid.UUID)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Invalid user context")
+		return
+	}
+
+	limit := DefaultForYouLimit
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr != "" {
+		parsedLimit, err := strconv.Atoi(limitStr)
+		if err == nil && parsedLimit > 0 {
+			if parsedLimit > MaxForYouLimit {
+				limit = MaxForYouLimit
+			} else {
+				limit = parsedLimit
+			}
+		}
+	}
+
+	items, err := h.service.GetForYouProducts(r.Context(), userID, limit)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get for-you recommendations")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items":      items,
+		"totalCount": len(items),
+	})
+}
+
 // GetSimilarProducts retrieves similar products for the given product ID without authentication.
 func (h *Handler) GetSimilarProducts(w http.ResponseWriter, r *http.Request) {
 	productIDStr := chi.URLParam(r, "productId")

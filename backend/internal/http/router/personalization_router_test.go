@@ -454,4 +454,44 @@ func TestPersonalization_CustomerProductViewRoute(t *testing.T) {
 		_, err = pgClient.Pool.Exec(ctx, "UPDATE inventory_items SET total_stock = 5 WHERE product_id = $1", publishedProdID)
 		require.NoError(t, err)
 	})
+
+	// For you candidate engine customer route auth tests
+	getForYou := func(token string, query ...string) *http.Response {
+		url := "/api/customer/products/for-you"
+		if len(query) > 0 && query[0] != "" {
+			url += "?" + query[0]
+		}
+		req := httptest.NewRequest("GET", url, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec.Result()
+	}
+
+	t.Run("U. for you: anonymous -> 401", func(t *testing.T) {
+		res := getForYou("")
+		assert.Equal(t, http.StatusUnauthorized, res.StatusCode)
+	})
+
+	t.Run("V. for you: seller -> 403", func(t *testing.T) {
+		res := getForYou(tokenSeller)
+		assert.Equal(t, http.StatusForbidden, res.StatusCode)
+	})
+
+	t.Run("W. for you: admin -> 403", func(t *testing.T) {
+		res := getForYou(tokenAdmin)
+		assert.Equal(t, http.StatusForbidden, res.StatusCode)
+	})
+
+	t.Run("X. for you: customer -> 200", func(t *testing.T) {
+		res := getForYou(tokenCustomerA)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("Y. for you: customer_id in query is ignored", func(t *testing.T) {
+		res := getForYou(tokenCustomerA, "customer_id="+uuid.New().String())
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
 }

@@ -1096,3 +1096,668 @@ func TestCustomerPreferenceProfile_Acceptance(t *testing.T) {
 		assert.Equal(t, int64(1), profile.ViewedCategories[1].DistinctProductCount, "Cat with view_count=100 must have distinct count=1, not 100")
 	})
 }
+
+func TestForYouCandidateEngine_Acceptance(t *testing.T) {
+	ctx, pgClient, _, svc := setupTestDB(t)
+	defer pgClient.Close()
+
+	now := time.Now()
+	var createdUserIDs []uuid.UUID
+	var createdSellerIDs []uuid.UUID
+	var createdCatIDs []uuid.UUID
+	var createdBrandIDs []uuid.UUID
+	var createdProdIDs []uuid.UUID
+
+	createCat := func(name string) uuid.UUID {
+		id := uuid.New()
+		slug := "cat-" + id.String()[:8]
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO categories (id, name, slug, is_active, created_at, updated_at)
+			VALUES ($1, $2, $3, true, $4, $4)
+		`, id, name, slug, now)
+		require.NoError(t, err)
+		createdCatIDs = append(createdCatIDs, id)
+		return id
+	}
+
+	createBrand := func(name string) uuid.UUID {
+		id := uuid.New()
+		slug := "brand-" + id.String()[:8]
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO brands (id, name, slug, is_active, created_at, updated_at)
+			VALUES ($1, $2, $3, true, $4, $4)
+		`, id, name, slug, now)
+		require.NoError(t, err)
+		createdBrandIDs = append(createdBrandIDs, id)
+		return id
+	}
+
+	createUser := func(name string) uuid.UUID {
+		id := uuid.New()
+		email := "cust-" + id.String()[:8] + "@test.local"
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO users (id, email, phone, name, password_hash, role, status, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, 'hash', 'customer', 'active', $5, $5)
+		`, id, email, "+7999"+id.String()[:7], name, now)
+		require.NoError(t, err)
+		createdUserIDs = append(createdUserIDs, id)
+		return id
+	}
+
+	createSellerWithStatus := func(name, status string) uuid.UUID {
+		id := uuid.New()
+		slug := "seller-" + id.String()[:8]
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO sellers (id, brand_name, slug, contact_email, status, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $6)
+		`, id, name, slug, slug+"@test.local", status, now)
+		require.NoError(t, err)
+		createdSellerIDs = append(createdSellerIDs, id)
+		return id
+	}
+
+	createCustomProd := func(
+		sellerID, catID uuid.UUID,
+		brandID *uuid.UUID,
+		title string,
+		rating float64,
+		reviewsCount int,
+		publishedAt time.Time,
+		status string,
+		stock int,
+	) uuid.UUID {
+		prodID := createTestProduct(t, ctx, pgClient, sellerID, catID, brandID, title, 100000, rating, reviewsCount, publishedAt, status, stock)
+		createdProdIDs = append(createdProdIDs, prodID)
+		return prodID
+	}
+
+	addFav := func(userID, prodID uuid.UUID, createdAt time.Time) {
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO customer_favorites (id, user_id, product_id, created_at)
+			VALUES ($1, $2, $3, $4)
+		`, uuid.New(), userID, prodID, createdAt)
+		require.NoError(t, err)
+	}
+
+	addView := func(userID, prodID uuid.UUID, lastViewedAt time.Time, count int64) {
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO customer_product_views (user_id, product_id, last_viewed_at, view_count)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (user_id, product_id)
+			DO UPDATE SET last_viewed_at = $3, view_count = $4
+		`, userID, prodID, lastViewedAt, count)
+		require.NoError(t, err)
+	}
+
+	defer func() {
+		if len(createdUserIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM customer_favorites WHERE user_id = ANY($1)", createdUserIDs)
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM customer_product_views WHERE user_id = ANY($1)", createdUserIDs)
+		}
+		if len(createdProdIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM inventory_items WHERE product_id = ANY($1)", createdProdIDs)
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM product_variants WHERE product_id = ANY($1)", createdProdIDs)
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM products WHERE id = ANY($1)", createdProdIDs)
+		}
+		if len(createdBrandIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM brands WHERE id = ANY($1)", createdBrandIDs)
+		}
+		if len(createdCatIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM categories WHERE id = ANY($1)", createdCatIDs)
+		}
+		if len(createdSellerIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM sellers WHERE id = ANY($1)", createdSellerIDs)
+		}
+		if len(createdUserIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM users WHERE id = ANY($1)", createdUserIDs)
+		}
+	}()
+
+	seller := createSellerWithStatus("Active ForYou Seller", "active")
+	blockedSeller := createSellerWithStatus("Blocked ForYou Seller", "blocked")
+
+	// Subtest A: favorite category+brand match ranks before favorite-brand-only
+	t.Run("A: favorite category+brand match ranks before favorite-brand-only", func(t *testing.T) {
+		uA := createUser("User A")
+		cFav := createCat("Cat Fav A")
+		cOther := createCat("Cat Other A")
+		bFav := createBrand("Brand Fav A")
+
+		pFavSeed := createCustomProd(seller, cFav, &bFav, "Fav Seed A", 4.0, 1, now, "published", 10)
+		addFav(uA, pFavSeed, now)
+
+		// Candidate 1: Tier 1 (matches cFav AND bFav)
+		cTier1 := createCustomProd(seller, cFav, &bFav, "Tier 1 Candidate", 4.0, 1, now, "published", 10)
+		// Candidate 2: Tier 2 (matches bFav, but cOther)
+		cTier2 := createCustomProd(seller, cOther, &bFav, "Tier 2 Candidate", 4.0, 1, now, "published", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uA, 10)
+		require.NoError(t, err)
+		require.Len(t, res, 2)
+		assert.Equal(t, cTier1, res[0].ID)
+		assert.Equal(t, cTier2, res[1].ID)
+	})
+
+	// Subtest B: favorite-brand-only ranks before favorite-category-only
+	t.Run("B: favorite-brand-only ranks before favorite-category-only", func(t *testing.T) {
+		uB := createUser("User B")
+		cFav := createCat("Cat Fav B")
+		cOther := createCat("Cat Other B")
+		bFav := createBrand("Brand Fav B")
+		bOther := createBrand("Brand Other B")
+
+		pFavSeed := createCustomProd(seller, cFav, &bFav, "Fav Seed B", 4.0, 1, now, "published", 10)
+		addFav(uB, pFavSeed, now)
+
+		// Candidate Tier 2: matches bFav, cOther
+		cTier2 := createCustomProd(seller, cOther, &bFav, "Tier 2 Brand Candidate", 4.0, 1, now, "published", 10)
+		// Candidate Tier 3: matches cFav, bOther
+		cTier3 := createCustomProd(seller, cFav, &bOther, "Tier 3 Cat Candidate", 4.0, 1, now, "published", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uB, 10)
+		require.NoError(t, err)
+		require.Len(t, res, 2)
+		assert.Equal(t, cTier2, res[0].ID)
+		assert.Equal(t, cTier3, res[1].ID)
+	})
+
+	// Subtest C: all Favorite tiers rank before all Viewed tiers
+	t.Run("C: all Favorite tiers rank before all Viewed tiers", func(t *testing.T) {
+		uC := createUser("User C")
+		cFav := createCat("Cat Fav C")
+		bFav := createBrand("Brand Fav C")
+		cView := createCat("Cat View C")
+		bView := createBrand("Brand View C")
+		bOther := createBrand("Brand Other C")
+
+		// Favorite seed in cFav
+		pFavSeed := createCustomProd(seller, cFav, &bFav, "Fav Seed C", 4.0, 1, now, "published", 10)
+		addFav(uC, pFavSeed, now)
+
+		// View seed in cView & bView
+		pViewSeed := createCustomProd(seller, cView, &bView, "View Seed C", 4.0, 1, now, "published", 10)
+		addView(uC, pViewSeed, now, 1)
+
+		// Candidate FavCat: matches cFav (Tier 3)
+		cFavCat := createCustomProd(seller, cFav, &bOther, "Fav Cat Cand (Tier 3)", 4.0, 1, now, "published", 10)
+		// Candidate ViewedBoth: matches cView AND bView (Tier 4)
+		cViewBoth := createCustomProd(seller, cView, &bView, "Viewed Both Cand (Tier 4)", 5.0, 100, now, "published", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uC, 10)
+		require.NoError(t, err)
+		// Note: pViewSeed is also returned as it is an eligible viewed candidate (see subtest J), but let's check relative order of cFavCat vs cViewBoth
+		var favCatIdx, viewBothIdx int = -1, -1
+		for i, p := range res {
+			if p.ID == cFavCat {
+				favCatIdx = i
+			}
+			if p.ID == cViewBoth {
+				viewBothIdx = i
+			}
+		}
+		require.NotEqual(t, -1, favCatIdx)
+		require.NotEqual(t, -1, viewBothIdx)
+		assert.Less(t, favCatIdx, viewBothIdx, "Tier 3 (Favorite Category) must outrank Tier 4 (Viewed Category+Brand)")
+	})
+
+	// Subtest D: viewed category+brand ranks before viewed-brand-only / viewed-category-only
+	t.Run("D: viewed category+brand ranks before viewed-brand-only / viewed-category-only", func(t *testing.T) {
+		uD := createUser("User D")
+		cView := createCat("Cat View D")
+		bView := createBrand("Brand View D")
+		cOther := createCat("Cat Other D")
+		bOther := createBrand("Brand Other D")
+
+		pSeed := createCustomProd(seller, cView, &bView, "Seed D", 4.0, 1, now, "published", 10)
+		addView(uD, pSeed, now, 1)
+
+		cTier4 := createCustomProd(seller, cView, &bView, "Tier 4 Cand", 4.0, 1, now, "published", 10)
+		cTier5 := createCustomProd(seller, cOther, &bView, "Tier 5 Cand", 4.0, 1, now, "published", 10)
+		cTier6 := createCustomProd(seller, cView, &bOther, "Tier 6 Cand", 4.0, 1, now, "published", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uD, 10)
+		require.NoError(t, err)
+
+		var idx4, idx5, idx6 int = -1, -1, -1
+		for i, p := range res {
+			if p.ID == cTier4 {
+				idx4 = i
+			}
+			if p.ID == cTier5 {
+				idx5 = i
+			}
+			if p.ID == cTier6 {
+				idx6 = i
+			}
+		}
+		require.NotEqual(t, -1, idx4)
+		require.NotEqual(t, -1, idx5)
+		require.NotEqual(t, -1, idx6)
+		assert.Less(t, idx4, idx5, "Tier 4 must rank before Tier 5")
+		assert.Less(t, idx5, idx6, "Tier 5 must rank before Tier 6")
+	})
+
+	// Subtest E: profile rank is respected: top favorite brand/category outranks lower-ranked affinity when tier equal
+	t.Run("E: profile rank is respected: top favorite brand/category outranks lower-ranked affinity when tier equal", func(t *testing.T) {
+		uE := createUser("User E")
+		cDummy := createCat("Cat Dummy E")
+		b1 := createBrand("Brand Top E")
+		b2 := createBrand("Brand Lower E")
+
+		// Customer favorites 2 products of b1, and 1 product of b2
+		p1 := createCustomProd(seller, cDummy, &b1, "b1 prod 1", 4.0, 1, now, "published", 10)
+		p2 := createCustomProd(seller, cDummy, &b1, "b1 prod 2", 4.0, 1, now, "published", 10)
+		p3 := createCustomProd(seller, cDummy, &b2, "b2 prod 1", 4.0, 1, now, "published", 10)
+
+		addFav(uE, p1, now.Add(-2*time.Hour))
+		addFav(uE, p2, now.Add(-1*time.Hour))
+		addFav(uE, p3, now.Add(-30*time.Minute))
+
+		// Candidate for b1 vs Candidate for b2 (both in Tier 2: favorite brand, with different category)
+		cOtherCat := createCat("Cat Other E")
+		cB1 := createCustomProd(seller, cOtherCat, &b1, "Cand B1 (Rank 0)", 4.0, 1, now, "published", 10)
+		cB2 := createCustomProd(seller, cOtherCat, &b2, "Cand B2 (Rank 1)", 4.0, 1, now, "published", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uE, 10)
+		require.NoError(t, err)
+
+		var idxB1, idxB2 int = -1, -1
+		for i, p := range res {
+			if p.ID == cB1 {
+				idxB1 = i
+			}
+			if p.ID == cB2 {
+				idxB2 = i
+			}
+		}
+		require.NotEqual(t, -1, idxB1)
+		require.NotEqual(t, -1, idxB2)
+		assert.Less(t, idxB1, idxB2, "Candidate matching top profile rank brand must rank before candidate matching lower profile rank brand")
+	})
+
+	// Subtest F: same relevance/profile match uses deterministic: rating -> review count -> published_at -> product_id
+	t.Run("F: same relevance/profile match uses deterministic tie-breakers", func(t *testing.T) {
+		uF := createUser("User F")
+		cF := createCat("Cat F")
+		bF := createBrand("Brand F")
+
+		seed := createCustomProd(seller, cF, &bF, "Seed F", 4.0, 1, now, "published", 10)
+		addFav(uF, seed, now)
+
+		t0 := now.Add(-10 * time.Hour)
+		t1 := now.Add(-5 * time.Hour)
+		t2 := now.Add(-1 * time.Hour)
+
+		// 1. High rating (5.0, 5 reviews, t0)
+		pHighRating := createCustomProd(seller, cF, &bF, "High Rating F", 5.0, 5, t0, "published", 10)
+		// 2. Lower rating, high reviews (4.5, 50 reviews, t0)
+		pHighReviews := createCustomProd(seller, cF, &bF, "High Reviews F", 4.5, 50, t0, "published", 10)
+		// 3. Same rating, lower reviews, newer published (4.5, 20 reviews, t2)
+		pNewer := createCustomProd(seller, cF, &bF, "Newer F", 4.5, 20, t2, "published", 10)
+		// 4. Same rating, lower reviews, older published (4.5, 20 reviews, t1)
+		pOlder := createCustomProd(seller, cF, &bF, "Older F", 4.5, 20, t1, "published", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uF, 10)
+		require.NoError(t, err)
+		require.Len(t, res, 4)
+
+		assert.Equal(t, pHighRating, res[0].ID, "Highest rating must rank first")
+		assert.Equal(t, pHighReviews, res[1].ID, "Higher reviews must break rating tie")
+		assert.Equal(t, pNewer, res[2].ID, "Newer published_at must break reviews tie")
+		assert.Equal(t, pOlder, res[3].ID, "Older published_at ranks after newer")
+	})
+
+	// Subtest G: same product matching multiple affinities appears ONCE at strongest tier
+	t.Run("G: same product matching multiple affinities appears ONCE at strongest tier", func(t *testing.T) {
+		uG := createUser("User G")
+		cG := createCat("Cat G")
+		bG := createBrand("Brand G")
+
+		seed := createCustomProd(seller, cG, &bG, "Seed G", 4.0, 1, now, "published", 10)
+		addFav(uG, seed, now)
+		addView(uG, seed, now, 10)
+
+		cand := createCustomProd(seller, cG, &bG, "Cand G", 4.0, 1, now, "published", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uG, 10)
+		require.NoError(t, err)
+
+		count := 0
+		for _, p := range res {
+			if p.ID == cand {
+				count++
+			}
+		}
+		assert.Equal(t, 1, count, "Candidate matching multiple affinities must appear exactly ONCE")
+	})
+
+	// Subtest H: currently favorited product is excluded
+	t.Run("H: currently favorited product is excluded", func(t *testing.T) {
+		uH := createUser("User H")
+		cH := createCat("Cat H")
+		bH := createBrand("Brand H")
+
+		favProd := createCustomProd(seller, cH, &bH, "Fav Prod H", 5.0, 100, now, "published", 10)
+		addFav(uH, favProd, now)
+
+		cand := createCustomProd(seller, cH, &bH, "Cand H", 4.0, 1, now, "published", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uH, 10)
+		require.NoError(t, err)
+		require.Len(t, res, 1)
+		assert.Equal(t, cand, res[0].ID)
+		for _, p := range res {
+			assert.NotEqual(t, favProd, p.ID, "Currently favorited product must be excluded")
+		}
+	})
+
+	// Subtest I: unfavorite makes previously excluded product eligible again on next read
+	t.Run("I: unfavorite makes previously excluded product eligible again on next read", func(t *testing.T) {
+		uI := createUser("User I")
+		cI := createCat("Cat I")
+		bI := createBrand("Brand I")
+
+		seed := createCustomProd(seller, cI, &bI, "Seed I", 4.0, 1, now, "published", 10)
+		addFav(uI, seed, now)
+
+		targetProd := createCustomProd(seller, cI, &bI, "Target Prod I", 5.0, 50, now, "published", 10)
+		addFav(uI, targetProd, now)
+
+		// Before unfavorite: targetProd is excluded
+		res1, err := svc.GetForYouProducts(ctx, uI, 10)
+		require.NoError(t, err)
+		for _, p := range res1 {
+			assert.NotEqual(t, targetProd, p.ID)
+		}
+
+		// Unfavorite targetProd
+		_, err = pgClient.Pool.Exec(ctx, "DELETE FROM customer_favorites WHERE user_id = $1 AND product_id = $2", uI, targetProd)
+		require.NoError(t, err)
+
+		// Next read: targetProd is eligible
+		res2, err := svc.GetForYouProducts(ctx, uI, 10)
+		require.NoError(t, err)
+		found := false
+		for _, p := range res2 {
+			if p.ID == targetProd {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Previously favorited product becomes eligible on next read after unfavorite")
+	})
+
+	// Subtest J: viewed product may still be returned if otherwise strongest relevant candidate
+	t.Run("J: viewed product may still be returned if otherwise strongest relevant candidate", func(t *testing.T) {
+		uJ := createUser("User J")
+		cJ := createCat("Cat J")
+		bJ := createBrand("Brand J")
+
+		viewedProd := createCustomProd(seller, cJ, &bJ, "Viewed Prod J", 5.0, 100, now, "published", 10)
+		addView(uJ, viewedProd, now, 1)
+
+		res, err := svc.GetForYouProducts(ctx, uJ, 10)
+		require.NoError(t, err)
+		require.Len(t, res, 1)
+		assert.Equal(t, viewedProd, res[0].ID, "Viewed product should be returned if it is an eligible relevant candidate")
+	})
+
+	// Subtest K: unpublished candidate excluded
+	t.Run("K: unpublished candidate excluded", func(t *testing.T) {
+		uK := createUser("User K")
+		cK := createCat("Cat K")
+		bK := createBrand("Brand K")
+
+		seed := createCustomProd(seller, cK, &bK, "Seed K", 4.0, 1, now, "published", 10)
+		addFav(uK, seed, now)
+
+		unpubCand := createCustomProd(seller, cK, &bK, "Unpub Cand K", 5.0, 100, now, "pending_moderation", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uK, 10)
+		require.NoError(t, err)
+		for _, p := range res {
+			assert.NotEqual(t, unpubCand, p.ID, "Unpublished candidate must be excluded")
+		}
+	})
+
+	// Subtest L: inactive seller candidate excluded
+	t.Run("L: inactive seller candidate excluded", func(t *testing.T) {
+		uL := createUser("User L")
+		cL := createCat("Cat L")
+		bL := createBrand("Brand L")
+
+		seed := createCustomProd(seller, cL, &bL, "Seed L", 4.0, 1, now, "published", 10)
+		addFav(uL, seed, now)
+
+		blockedCand := createCustomProd(blockedSeller, cL, &bL, "Blocked Seller Cand L", 5.0, 100, now, "published", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uL, 10)
+		require.NoError(t, err)
+		for _, p := range res {
+			assert.NotEqual(t, blockedCand, p.ID, "Candidate from inactive/blocked seller must be excluded")
+		}
+	})
+
+	// Subtest M: free sellable = 1 excluded by CAT.1A
+	t.Run("M: free sellable = 1 excluded by CAT.1A", func(t *testing.T) {
+		uM := createUser("User M")
+		cM := createCat("Cat M")
+		bM := createBrand("Brand M")
+
+		seed := createCustomProd(seller, cM, &bM, "Seed M", 4.0, 1, now, "published", 10)
+		addFav(uM, seed, now)
+
+		lowStockCand := createCustomProd(seller, cM, &bM, "Low Stock Cand M", 5.0, 100, now, "published", 1)
+
+		res, err := svc.GetForYouProducts(ctx, uM, 10)
+		require.NoError(t, err)
+		for _, p := range res {
+			assert.NotEqual(t, lowStockCand, p.ID, "Candidate with free stock = 1 must be excluded by CAT.1A")
+		}
+	})
+
+	// Subtest N: free sellable = 2 eligible
+	t.Run("N: free sellable = 2 eligible", func(t *testing.T) {
+		uN := createUser("User N")
+		cN := createCat("Cat N")
+		bN := createBrand("Brand N")
+
+		seed := createCustomProd(seller, cN, &bN, "Seed N", 4.0, 1, now, "published", 10)
+		addFav(uN, seed, now)
+
+		candStock2 := createCustomProd(seller, cN, &bN, "Stock 2 Cand N", 4.0, 1, now, "published", 2)
+
+		res, err := svc.GetForYouProducts(ctx, uN, 10)
+		require.NoError(t, err)
+		require.Len(t, res, 1)
+		assert.Equal(t, candStock2, res[0].ID, "Candidate with free stock = 2 must be eligible")
+	})
+
+	// Subtest O: Customer A never receives candidate based on Customer B profile
+	t.Run("O: Customer A never receives candidate based on Customer B profile", func(t *testing.T) {
+		uO1 := createUser("User O1")
+		uO2 := createUser("User O2")
+		cO := createCat("Cat O")
+		bO := createBrand("Brand O")
+
+		seed := createCustomProd(seller, cO, &bO, "Seed O", 4.0, 1, now, "published", 10)
+		addFav(uO2, seed, now) // uO2 favorites it, uO1 has zero favorites/views
+
+		candO := createCustomProd(seller, cO, &bO, "Cand O", 4.0, 1, now, "published", 10)
+
+		resO1, err := svc.GetForYouProducts(ctx, uO1, 10)
+		require.NoError(t, err)
+		assert.Empty(t, resO1, "Customer 1 must not receive recommendations based on Customer 2 profile")
+
+		resO2, err := svc.GetForYouProducts(ctx, uO2, 10)
+		require.NoError(t, err)
+		require.Len(t, resO2, 1)
+		assert.Equal(t, candO, resO2[0].ID)
+	})
+
+	// Subtest P: empty profile -> []
+	t.Run("P: empty profile -> []", func(t *testing.T) {
+		uP := createUser("User P")
+		res, err := svc.GetForYouProducts(ctx, uP, 10)
+		require.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Empty(t, res)
+	})
+
+	// Subtest Q: profile exists but no eligible candidates -> []
+	t.Run("Q: profile exists but no eligible candidates -> []", func(t *testing.T) {
+		uQ := createUser("User Q")
+		cQ := createCat("Cat Q")
+		bQ := createBrand("Brand Q")
+
+		seed := createCustomProd(seller, cQ, &bQ, "Seed Q", 4.0, 1, now, "published", 10)
+		addFav(uQ, seed, now)
+
+		// The only candidate in this category/brand is unpublished
+		_ = createCustomProd(seller, cQ, &bQ, "Unpub Q", 4.0, 1, now, "draft", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uQ, 10)
+		require.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Empty(t, res)
+	})
+
+	// Subtest R: limit is bounded
+	t.Run("R: limit is bounded", func(t *testing.T) {
+		uR := createUser("User R")
+		cR := createCat("Cat R")
+		bR := createBrand("Brand R")
+
+		seed := createCustomProd(seller, cR, &bR, "Seed R", 4.0, 1, now, "published", 10)
+		addFav(uR, seed, now)
+
+		for i := 0; i < 30; i++ {
+			_ = createCustomProd(seller, cR, &bR, "Batch Cand R", 4.0, 1, now, "published", 10)
+		}
+
+		// Explicit limit = 5
+		res5, err := svc.GetForYouProducts(ctx, uR, 5)
+		require.NoError(t, err)
+		assert.Len(t, res5, 5)
+
+		// Limit <= 0 defaults to DefaultForYouLimit (12)
+		resDef, err := svc.GetForYouProducts(ctx, uR, 0)
+		require.NoError(t, err)
+		assert.Len(t, resDef, personalization.DefaultForYouLimit)
+
+		// Limit > 24 is clamped to MaxForYouLimit (24)
+		resMax, err := svc.GetForYouProducts(ctx, uR, 100)
+		require.NoError(t, err)
+		assert.Len(t, resMax, personalization.MaxForYouLimit)
+	})
+
+	// Subtest S: response contains no user/customer ID, behavioral timestamps, profile counts, PII, finance/payment/order data
+	t.Run("S: response contains no private or internal fields", func(t *testing.T) {
+		uS := createUser("User S")
+		cS := createCat("Cat S")
+		bS := createBrand("Brand S")
+
+		seed := createCustomProd(seller, cS, &bS, "Seed S", 4.0, 1, now, "published", 10)
+		addFav(uS, seed, now)
+		_ = createCustomProd(seller, cS, &bS, "Cand S", 4.0, 1, now, "published", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uS, 5)
+		require.NoError(t, err)
+		require.NotEmpty(t, res)
+
+		b, err := json.Marshal(res)
+		require.NoError(t, err)
+		var jsonItems []map[string]interface{}
+		err = json.Unmarshal(b, &jsonItems)
+		require.NoError(t, err)
+
+		disallowed := []string{
+			"user_id", "userId", "customer_id", "customerId",
+			"view_count", "viewCount", "last_viewed_at", "lastViewedAt",
+			"affinity", "score", "provenance", "profile",
+			"email", "phone", "password", "bank", "card", "payout",
+		}
+
+		for _, item := range jsonItems {
+			for k := range item {
+				for _, bad := range disallowed {
+					assert.NotEqual(t, bad, k, "JSON key %s is disallowed in response", k)
+				}
+			}
+		}
+	})
+
+	// Subtest T: repeated unchanged calls return deterministic identical product order
+	t.Run("T: repeated unchanged calls return deterministic identical product order", func(t *testing.T) {
+		uT := createUser("User T")
+		cT := createCat("Cat T")
+		bT := createBrand("Brand T")
+
+		seed := createCustomProd(seller, cT, &bT, "Seed T", 4.0, 1, now, "published", 10)
+		addFav(uT, seed, now)
+
+		for i := 0; i < 6; i++ {
+			_ = createCustomProd(seller, cT, &bT, "Cand T", float64(3+i%3), i*5, now.Add(-time.Duration(i)*time.Hour), "published", 10)
+		}
+
+		firstRun, err := svc.GetForYouProducts(ctx, uT, 6)
+		require.NoError(t, err)
+		require.Len(t, firstRun, 6)
+
+		for run := 0; run < 5; run++ {
+			nextRun, err := svc.GetForYouProducts(ctx, uT, 6)
+			require.NoError(t, err)
+			require.Len(t, nextRun, 6)
+			for i := 0; i < 6; i++ {
+				assert.Equal(t, firstRun[i].ID, nextRun[i].ID, "Order must be completely deterministic across repeated calls")
+			}
+		}
+	})
+
+	// Section 18 Negative Test:
+	// Customer viewed Product A 100 times and Product B 1 time.
+	// If PER.5A yields equal distinct-product affinity semantics,
+	// PER.5B1 must NOT rank based on raw view_count.
+	t.Run("Negative Test (Section 18): view_count = 100 vs view_count = 1 does not inflate candidate ranking", func(t *testing.T) {
+		uNeg := createUser("User Neg 18")
+		catInflated := createCat("Cat Inflated 18")
+		catSingle := createCat("Cat Single 18")
+		brandCommon := createBrand("Brand Neg 18")
+
+		pInflated := createCustomProd(seller, catInflated, &brandCommon, "Seed Inflated", 4.0, 1, now, "published", 10)
+		pSingle := createCustomProd(seller, catSingle, &brandCommon, "Seed Single", 4.0, 1, now, "published", 10)
+
+		tOlder := now.Add(-2 * time.Hour)
+		tNewer := now.Add(-10 * time.Minute)
+
+		// Product A has 100 views, but older last_viewed_at
+		addView(uNeg, pInflated, tOlder, 100)
+		// Product B has 1 view, but newer last_viewed_at
+		addView(uNeg, pSingle, tNewer, 1)
+
+		// Candidate in catSingle (matches brandCommon & catSingle -> Tier 4)
+		cSingle := createCustomProd(seller, catSingle, &brandCommon, "Cand Single", 4.0, 1, now, "published", 10)
+		// Candidate in catInflated (matches brandCommon & catInflated -> Tier 4)
+		cInflated := createCustomProd(seller, catInflated, &brandCommon, "Cand Inflated", 4.0, 1, now, "published", 10)
+
+		res, err := svc.GetForYouProducts(ctx, uNeg, 10)
+		require.NoError(t, err)
+
+		var idxSingle, idxInflated int = -1, -1
+		for i, p := range res {
+			if p.ID == cSingle {
+				idxSingle = i
+			}
+			if p.ID == cInflated {
+				idxInflated = i
+			}
+		}
+		require.NotEqual(t, -1, idxSingle)
+		require.NotEqual(t, -1, idxInflated)
+
+		// Because catSingle has newer last_viewed_at, catSingle has profile rank 0 (top),
+		// while catInflated has profile rank 1, despite having 100 views.
+		// Therefore cSingle MUST outrank cInflated!
+		assert.Less(t, idxSingle, idxInflated, "Candidate in catSingle must rank before candidate in catInflated because distinct view count = 1 for both and catSingle was viewed more recently")
+	})
+}
