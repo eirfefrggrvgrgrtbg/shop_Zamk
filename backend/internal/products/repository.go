@@ -967,16 +967,16 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 	if filter.Sort != nil {
 		switch *filter.Sort {
 		case "price_asc":
-			queryBuilder.WriteString(" ORDER BY p.price_cents ASC")
+			queryBuilder.WriteString(" ORDER BY p.price_cents ASC, p.id ASC")
 		case "price_desc":
-			queryBuilder.WriteString(" ORDER BY p.price_cents DESC")
+			queryBuilder.WriteString(" ORDER BY p.price_cents DESC, p.id ASC")
 		case "newest":
-			queryBuilder.WriteString(" ORDER BY p.published_at DESC NULLS LAST, p.created_at DESC")
+			queryBuilder.WriteString(" ORDER BY p.published_at DESC NULLS LAST, p.created_at DESC, p.id ASC")
 		default:
-			queryBuilder.WriteString(" ORDER BY p.published_at DESC NULLS LAST, p.created_at DESC")
+			queryBuilder.WriteString(" ORDER BY p.published_at DESC NULLS LAST, p.created_at DESC, p.id ASC")
 		}
 	} else {
-		queryBuilder.WriteString(" ORDER BY p.published_at DESC NULLS LAST, p.created_at DESC")
+		queryBuilder.WriteString(" ORDER BY p.published_at DESC NULLS LAST, p.created_at DESC, p.id ASC")
 	}
 
 	queryBuilder.WriteString(fmt.Sprintf(" LIMIT $%d OFFSET $%d", argID, argID+1))

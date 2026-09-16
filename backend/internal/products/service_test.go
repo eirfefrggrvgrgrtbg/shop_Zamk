@@ -201,7 +201,7 @@ func TestMapToPublicProduct_VariantTruth(t *testing.T) {
 		},
 	}
 
-	pub := mapToPublicProduct(prod)
+	pub := MapToPublicProduct(prod)
 	if len(pub.Variants) != 2 {
 		t.Fatalf("expected 2 variants, got %d", len(pub.Variants))
 	}
