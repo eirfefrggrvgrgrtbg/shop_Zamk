@@ -236,6 +236,12 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 
 	now := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
 
+	reconcileProduct := func(pID uuid.UUID) error {
+		return pgClient.RunInTx(ctx, func(tx pgx.Tx) error {
+			return productsService.ReconcileStockForecastForProductTx(ctx, tx, pID, now)
+		})
+	}
+
 	// -------------------------------------------------------------
 	// 19.A: Payment Cardinality: Failed attempt + Successful attempt
 	// -------------------------------------------------------------
@@ -254,7 +260,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 			{status: "succeeded", paidAt: &paidTime},
 		})
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 
 		alert := getActiveAlert(pID)
@@ -289,7 +295,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 			{status: "succeeded", paidAt: &paid2},
 		})
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 
 		alert := getActiveAlert(pID)
@@ -312,7 +318,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 			{status: "succeeded", paidAt: &paidNew},
 		})
 
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID2)
+		err = reconcileProduct(pID2)
 		require.NoError(t, err)
 
 		alertOld := getActiveAlert(pID2)
@@ -326,7 +332,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		pID, vID := createProductAndVariant("Мертвый Товар", now.AddDate(0, 0, -30), now.AddDate(0, 0, -30), "Серый", "XL")
 		setVariantStock(pID, vID, 0, 0) // free = 0
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 
 		alert := getActiveAlert(pID)
@@ -343,7 +349,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		paidTime := now.AddDate(0, 0, -1)
 		createOrderWithPayments(pID, vID, 1, paidTime, nil, []paymentFixture{{status: "succeeded", paidAt: &paidTime}})
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 		assert.Nil(t, getActiveAlert(pID), "1 sale in 2 days does not meet minimum demand evidence")
 
@@ -353,7 +359,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		paidTime2 := now.AddDate(0, 0, -1)
 		createOrderWithPayments(pID2, vID2, 2, paidTime2, nil, []paymentFixture{{status: "succeeded", paidAt: &paidTime2}})
 
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID2)
+		err = reconcileProduct(pID2)
 		require.NoError(t, err)
 		alert := getActiveAlert(pID2)
 		require.NotNil(t, alert, "2 sales in 2 days meets evidence and triggers critical alert (cover=2d)")
@@ -370,7 +376,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		paidTime := now.AddDate(0, 0, -10)
 		createOrderWithPayments(pID, vID, 2, paidTime, nil, []paymentFixture{{status: "succeeded", paidAt: &paidTime}})
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 		assert.Nil(t, getActiveAlert(pID), "Cover=15 days (>14) must not create new alert")
 	})
@@ -384,7 +390,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		paidTime := now.AddDate(0, 0, -10)
 		createOrderWithPayments(pID, vID, 6, paidTime, nil, []paymentFixture{{status: "succeeded", paidAt: &paidTime}})
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 		alert := getActiveAlert(pID)
 		require.NotNil(t, alert)
@@ -401,7 +407,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		paidTime := now.AddDate(0, 0, -10)
 		createOrderWithPayments(pID, vID, 20, paidTime, nil, []paymentFixture{{status: "succeeded", paidAt: &paidTime}})
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 		alert := getActiveAlert(pID)
 		require.NotNil(t, alert)
@@ -417,7 +423,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		paidTime := now.AddDate(0, 0, -10)
 		createOrderWithPayments(pID, vID, 10, paidTime, nil, []paymentFixture{{status: "succeeded", paidAt: &paidTime}}) // DSV = 10/30 = 0.333, Cover = 2/0.333 = 6 days <= 7
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 		alert := getActiveAlert(pID)
 		require.NotNil(t, alert)
@@ -437,7 +443,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 
 		// Free = 13 -> cover = 13 <= 14 -> triggers warning alert
 		setVariantStock(pID, vID, 13, 0)
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 
 		alert1 := getActiveAlert(pID)
@@ -448,7 +454,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		// Re-run with Free = 16 -> cover = 16 (between 14 and 18).
 		// Because it was already participating in active alert, it must STAY active on the SAME alert ID!
 		setVariantStock(pID, vID, 16, 0)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 
 		alert2 := getActiveAlert(pID)
@@ -457,7 +463,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 
 		// Re-run with Free = 19 -> cover = 19 (>= 18) -> must resolve!
 		setVariantStock(pID, vID, 19, 0)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 
 		alert3 := getActiveAlert(pID)
@@ -474,7 +480,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 
 		// Free = 10 -> Warning
 		setVariantStock(pID, vID, 10, 0)
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 
 		alert1 := getActiveAlert(pID)
@@ -484,7 +490,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 
 		// Free drops to 5 -> cover = 5 <= 7 -> Critical
 		setVariantStock(pID, vID, 5, 0)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 
 		alert2 := getActiveAlert(pID)
@@ -518,7 +524,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		setVariantStock(pID, vID1, 4, 0)
 		setVariantStock(pID, vID2, 9, 0)
 
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 
 		alert := getActiveAlert(pID)
@@ -531,7 +537,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		// 19.M: Partial recovery: Var1 receives stock, free becomes 20 (>=18)
 		// Var2 remains at free = 9
 		setVariantStock(pID, vID1, 20, 0)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 
 		alert2 := getActiveAlert(pID)
@@ -542,7 +548,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 
 		// Second variant recovers: Free = 20 (>=18)
 		setVariantStock(pID, vID2, 20, 0)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 
 		alert3 := getActiveAlert(pID)
@@ -559,7 +565,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 
 		// 1. Trigger alert
 		setVariantStock(pID, vID, 5, 0)
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 		alert1 := getActiveAlert(pID)
 		require.NotNil(t, alert1)
@@ -567,13 +573,13 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 
 		// 2. Resolve alert via stock increase
 		setVariantStock(pID, vID, 25, 0)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 		assert.Nil(t, getActiveAlert(pID))
 
 		// 3. Stock drops again to 5 -> new alert ID!
 		setVariantStock(pID, vID, 5, 0)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 		alert2 := getActiveAlert(pID)
 		require.NotNil(t, alert2)
@@ -590,7 +596,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		createOrderWithPayments(pID, vID, 30, paidTime, nil, []paymentFixture{{status: "succeeded", paidAt: &paidTime}})
 		setVariantStock(pID, vID, 5, 0)
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 		require.NotNil(t, getActiveAlert(pID))
 
@@ -598,14 +604,14 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		_, err = pgClient.Pool.Exec(ctx, "UPDATE product_variants SET is_active = false WHERE id = $1", vID)
 		require.NoError(t, err)
 
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 		assert.Nil(t, getActiveAlert(pID), "Inactive variant must cause alert to resolve")
 
 		// Reactivate variant -> alert re-appears
 		_, err = pgClient.Pool.Exec(ctx, "UPDATE product_variants SET is_active = true WHERE id = $1", vID)
 		require.NoError(t, err)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 		require.NotNil(t, getActiveAlert(pID))
 
@@ -613,7 +619,7 @@ func TestNTF3_StockForecastAlerts(t *testing.T) {
 		_, err = pgClient.Pool.Exec(ctx, "UPDATE products SET status = 'draft' WHERE id = $1", pID)
 		require.NoError(t, err)
 
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 		assert.Nil(t, getActiveAlert(pID), "Draft product must cause alert to resolve")
 	})
@@ -795,6 +801,12 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 
 	now := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
 
+	reconcileProduct := func(pID uuid.UUID) error {
+		return pgClient.RunInTx(ctx, func(tx pgx.Tx) error {
+			return productsService.ReconcileStockForecastForProductTx(ctx, tx, pID, now)
+		})
+	}
+
 	// -------------------------------------------------------------
 	// 1. Snapshot Persistence Integration (A-G)
 	// -------------------------------------------------------------
@@ -803,7 +815,7 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 		setVariantStock(pID, vID, 10, 0)
 		createOrderWithPaidUnits(pID, vID, 1, now.AddDate(0, 0, -1)) // paidDemandUnits < 2 and observedDays < 7
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 
 		snap := getSnapshot(vID)
@@ -817,7 +829,7 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 		setVariantStock(pID, vID, 10, 0)
 		// 0 orders
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 
 		snap := getSnapshot(vID)
@@ -831,7 +843,7 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 		setVariantStock(pID, vID, 50, 0)
 		createOrderWithPaidUnits(pID, vID, 3, now.AddDate(0, 0, -10)) // DSV = 0.1, cover = 500
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 
 		snap := getSnapshot(vID)
@@ -846,7 +858,7 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 		setVariantStock(pID, vID, 2, 0)
 		createOrderWithPaidUnits(pID, vID, 6, now.AddDate(0, 0, -10)) // DSV = 0.2, cover = 10 (<=14)
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 
 		snap := getSnapshot(vID)
@@ -861,7 +873,7 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 		setVariantStock(pID, vID, 2, 0)
 		createOrderWithPaidUnits(pID, vID, 10, now.AddDate(0, 0, -10)) // DSV = 10/30, cover = 6 (<=7)
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 
 		snap := getSnapshot(vID)
@@ -876,7 +888,7 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 		setVariantStock(pID, vID, 2, 0)
 		createOrderWithPaidUnits(pID, vID, 6, now.AddDate(0, 0, -10))
 
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 
 		var count int
@@ -886,7 +898,7 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 
 		// Reconcile again with new stock
 		setVariantStock(pID, vID, 50, 0)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err = reconcileProduct(pID)
 		require.NoError(t, err)
 
 		err = pgClient.Pool.QueryRow(ctx, "SELECT count(*) FROM variant_stock_forecasts WHERE product_variant_id = $1", vID).Scan(&count)
@@ -952,12 +964,12 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 		createOrderWithPaidUnits(pID2, vID2, 3, now.AddDate(0, 0, -10))
 
 		// Reconcile Product 2 first
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID2)
+		err := reconcileProduct(pID2)
 		require.NoError(t, err)
 		require.NotNil(t, getSnapshot(vID2), "Product 2 must have a snapshot")
 
 		// Reconcile Product 1
-		err = productsService.ReconcileStockForecastForProduct(ctx, pID1)
+		err = reconcileProduct(pID1)
 		require.NoError(t, err)
 		require.NotNil(t, getSnapshot(vID1), "Product 1 must have a snapshot")
 
@@ -974,7 +986,7 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 		createOrderWithPaidUnits(pID, vID, 6, now.AddDate(0, 0, -10)) // warning, cover = 10
 
 		// Establish valid existing snapshot
-		err := productsService.ReconcileStockForecastForProduct(ctx, pID)
+		err := reconcileProduct(pID)
 		require.NoError(t, err)
 		initialSnap := getSnapshot(vID)
 		require.NotNil(t, initialSnap)
@@ -1015,9 +1027,9 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 		createOrderWithPaidUnits(pIDOther, vIDOther, 3, now.AddDate(0, 0, -10))
 
 		// Establish snapshots for both
-		err := productsService.ReconcileStockForecastForProduct(ctx, pIDTarget)
+		err := reconcileProduct(pIDTarget)
 		require.NoError(t, err)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pIDOther)
+		err = reconcileProduct(pIDOther)
 		require.NoError(t, err)
 		require.NotNil(t, getSnapshot(vIDTarget))
 		require.NotNil(t, getSnapshot(vIDOther))
@@ -1025,7 +1037,7 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 		// 1. Variant becomes inactive -> its snapshot removed
 		_, err = pgClient.Pool.Exec(ctx, "UPDATE product_variants SET is_active = false WHERE id = $1", vIDTarget)
 		require.NoError(t, err)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pIDTarget)
+		err = reconcileProduct(pIDTarget)
 		require.NoError(t, err)
 		assert.Nil(t, getSnapshot(vIDTarget), "Inactive variant snapshot must be deleted")
 		assert.NotNil(t, getSnapshot(vIDOther), "Unrelated variant snapshot must remain intact")
@@ -1033,14 +1045,14 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 		// Reactivate variant -> snapshot restored
 		_, err = pgClient.Pool.Exec(ctx, "UPDATE product_variants SET is_active = true WHERE id = $1", vIDTarget)
 		require.NoError(t, err)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pIDTarget)
+		err = reconcileProduct(pIDTarget)
 		require.NoError(t, err)
 		assert.NotNil(t, getSnapshot(vIDTarget))
 
 		// 2. Product becomes draft (non-published) -> snapshot removed
 		_, err = pgClient.Pool.Exec(ctx, "UPDATE products SET status = 'draft' WHERE id = $1", pIDTarget)
 		require.NoError(t, err)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pIDTarget)
+		err = reconcileProduct(pIDTarget)
 		require.NoError(t, err)
 		assert.Nil(t, getSnapshot(vIDTarget), "Draft product snapshot must be deleted")
 		assert.NotNil(t, getSnapshot(vIDOther), "Unrelated variant snapshot must remain intact")
@@ -1048,14 +1060,14 @@ func TestNTF3_ForecastSnapshotPersistence(t *testing.T) {
 		// Reactivate product -> snapshot restored
 		_, err = pgClient.Pool.Exec(ctx, "UPDATE products SET status = 'published' WHERE id = $1", pIDTarget)
 		require.NoError(t, err)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pIDTarget)
+		err = reconcileProduct(pIDTarget)
 		require.NoError(t, err)
 		assert.NotNil(t, getSnapshot(vIDTarget))
 
 		// 3. Seller becomes inactive -> snapshot removed
 		_, err = pgClient.Pool.Exec(ctx, "UPDATE sellers SET status = 'blocked' WHERE id = $1", sellerID)
 		require.NoError(t, err)
-		err = productsService.ReconcileStockForecastForProduct(ctx, pIDTarget)
+		err = reconcileProduct(pIDTarget)
 		require.NoError(t, err)
 		assert.Nil(t, getSnapshot(vIDTarget), "Snapshot for non-active seller must be deleted")
 	})
