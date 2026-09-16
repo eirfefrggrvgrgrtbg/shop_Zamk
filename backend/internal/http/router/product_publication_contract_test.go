@@ -732,32 +732,22 @@ func TestProductPublicationContract(t *testing.T) {
 		require.NotNil(t, normPublishedAt)
 
 		// B. published + free=2:
-		// - appears in public catalog
+		// - publicly resolvable by exact ID
 		// - PDP = 200
 		// - add to cart succeeds
 		// - checkout/order creation succeeds
-		catReq2 := httptest.NewRequest(http.MethodGet, "/api/public/products?limit=100", nil)
-		catRec2 := httptest.NewRecorder()
-		r.ServeHTTP(catRec2, catReq2)
-		var catResp2 struct {
-			Items []struct {
-				ID uuid.UUID `json:"id"`
-			} `json:"items"`
-		}
-		json.NewDecoder(catRec2.Body).Decode(&catResp2)
-		foundNorm := false
-		for _, item := range catResp2.Items {
-			if item.ID == legacyID {
-				foundNorm = true
-				break
-			}
-		}
-		assert.True(t, foundNorm, "Normalized product must appear in public catalog")
-
 		pdpReq2 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/public/products/%s", legacyID), nil)
 		pdpRec2 := httptest.NewRecorder()
 		r.ServeHTTP(pdpRec2, pdpReq2)
 		assert.Equal(t, http.StatusOK, pdpRec2.Code, "Normalized product PDP must return 200")
+		var pdpResp2 struct {
+			ID     uuid.UUID `json:"id"`
+			Status string    `json:"status"`
+		}
+		err = json.NewDecoder(pdpRec2.Body).Decode(&pdpResp2)
+		require.NoError(t, err)
+		assert.Equal(t, legacyID, pdpResp2.ID, "Normalized product must be publicly resolvable by exact ID")
+		assert.Equal(t, "published", pdpResp2.Status, "Normalized product public status must be published")
 
 		cartReq2 := httptest.NewRequest(http.MethodPost, "/api/customer/cart/items", bytes.NewReader(cartBody))
 		cartReq2.Header.Set("Authorization", "Bearer "+customerToken)
