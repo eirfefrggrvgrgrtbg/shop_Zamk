@@ -220,16 +220,32 @@ type ModerationHistoryResponse struct {
 	Items []ModerationHistoryItem `json:"items"`
 }
 
+type CatalogAffinities struct {
+	FavoriteCategoryIDs []uuid.UUID
+	FavoriteBrandIDs    []uuid.UUID
+	ViewedCategoryIDs   []uuid.UUID
+	ViewedBrandIDs      []uuid.UUID
+}
+
+func (a *CatalogAffinities) HasAny() bool {
+	if a == nil {
+		return false
+	}
+	return len(a.FavoriteCategoryIDs) > 0 || len(a.FavoriteBrandIDs) > 0 ||
+		len(a.ViewedCategoryIDs) > 0 || len(a.ViewedBrandIDs) > 0
+}
+
 type PublicProductFilter struct {
-	Query         *string    `json:"q,omitempty"`
-	CategoryID    *uuid.UUID `json:"categoryId,omitempty"`
-	BrandID       *uuid.UUID `json:"brandId,omitempty"`
-	SellerID      *uuid.UUID `json:"sellerId,omitempty"`
-	Size          *string    `json:"size,omitempty"`
-	MinPriceCents *int64     `json:"minPriceCents,omitempty"`
-	MaxPriceCents *int64     `json:"maxPriceCents,omitempty"`
-	InStock       *bool      `json:"inStock,omitempty"`
-	Sort          *string    `json:"sort,omitempty"`
+	Query         *string            `json:"q,omitempty"`
+	CategoryID    *uuid.UUID         `json:"categoryId,omitempty"`
+	BrandID       *uuid.UUID         `json:"brandId,omitempty"`
+	SellerID      *uuid.UUID         `json:"sellerId,omitempty"`
+	Size          *string            `json:"size,omitempty"`
+	MinPriceCents *int64             `json:"minPriceCents,omitempty"`
+	MaxPriceCents *int64             `json:"maxPriceCents,omitempty"`
+	InStock       *bool              `json:"inStock,omitempty"`
+	Sort          *string            `json:"sort,omitempty"`
+	Affinities    *CatalogAffinities `json:"-"`
 }
 
 type ModerationConfig struct {

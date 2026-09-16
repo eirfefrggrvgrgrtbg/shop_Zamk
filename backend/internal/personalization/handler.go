@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 )
 
 type Handler struct {
@@ -176,4 +177,35 @@ func (h *Handler) GetSimilarProducts(w http.ResponseWriter, r *http.Request) {
 		"items":      items,
 		"totalCount": len(items),
 	})
+}
+
+// GetCustomerCatalog returns the catalog for the authenticated customer, applying personalized default ordering when sort is default.
+func (h *Handler) GetCustomerCatalog(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value("userID")
+	if val == nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+
+	userID, ok := val.(uuid.UUID)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Invalid user context")
+		return
+	}
+
+	filter, page, filterErr := products.ParsePublicProductFilter(r)
+	if filterErr != nil {
+		h.writeError(w, http.StatusBadRequest, filterErr.Code, filterErr.Message)
+		return
+	}
+
+	resp, err := h.service.GetCustomerCatalog(r.Context(), userID, filter, page.Limit, page.Offset)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list customer catalog")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
 }

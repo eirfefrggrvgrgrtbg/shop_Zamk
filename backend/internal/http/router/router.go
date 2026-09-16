@@ -309,6 +309,7 @@ func New(
 		r.Delete("/favorites/{productId}", favoritesHandler.RemoveFavorite)
 
 		// Personalization (Customer)
+		r.Get("/catalog", personalizationHandler.GetCustomerCatalog)
 		r.Get("/products/recently-viewed", personalizationHandler.GetRecentlyViewedProducts)
 		r.Get("/products/for-you", personalizationHandler.GetForYouProducts)
 		r.Post("/products/{productId}/view", personalizationHandler.RecordProductView)

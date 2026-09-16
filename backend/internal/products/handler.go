@@ -793,7 +793,16 @@ func (h *Handler) handleAdminModerationAction(w http.ResponseWriter, r *http.Req
 // Public Handlers
 // ---------------------------------------------------------
 
-func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
+type FilterError struct {
+	Code    string
+	Message string
+}
+
+func (e *FilterError) Error() string {
+	return e.Message
+}
+
+func ParsePublicProductFilter(r *http.Request) (PublicProductFilter, pagination.Params, *FilterError) {
 	page := pagination.FromRequest(r)
 
 	filter := PublicProductFilter{}
@@ -805,8 +814,7 @@ func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
 	if catID := r.URL.Query().Get("categoryId"); catID != "" && catID != "all" {
 		id, err := uuid.Parse(catID)
 		if err != nil {
-			h.writeError(w, http.StatusBadRequest, "invalid_filter", "Invalid categoryId: must be a valid UUID")
-			return
+			return PublicProductFilter{}, page, &FilterError{Code: "invalid_filter", Message: "Invalid categoryId: must be a valid UUID"}
 		}
 		filter.CategoryID = &id
 	}
@@ -814,8 +822,7 @@ func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
 	if brandID := r.URL.Query().Get("brandId"); brandID != "" && brandID != "all" {
 		id, err := uuid.Parse(brandID)
 		if err != nil {
-			h.writeError(w, http.StatusBadRequest, "invalid_filter", "Invalid brandId: must be a valid UUID")
-			return
+			return PublicProductFilter{}, page, &FilterError{Code: "invalid_filter", Message: "Invalid brandId: must be a valid UUID"}
 		}
 		filter.BrandID = &id
 	}
@@ -823,8 +830,7 @@ func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
 	if sellerID := r.URL.Query().Get("sellerId"); sellerID != "" {
 		id, err := uuid.Parse(sellerID)
 		if err != nil {
-			h.writeError(w, http.StatusBadRequest, "invalid_filter", "Invalid sellerId: must be a valid UUID")
-			return
+			return PublicProductFilter{}, page, &FilterError{Code: "invalid_filter", Message: "Invalid sellerId: must be a valid UUID"}
 		}
 		filter.SellerID = &id
 	}
@@ -841,8 +847,7 @@ func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
 	if minPrice := r.URL.Query().Get("minPriceCents"); minPrice != "" {
 		var min int64
 		if _, err := fmt.Sscanf(minPrice, "%d", &min); err != nil || min < 0 {
-			h.writeError(w, http.StatusBadRequest, "invalid_filter", "Invalid minPriceCents: must be a non-negative integer")
-			return
+			return PublicProductFilter{}, page, &FilterError{Code: "invalid_filter", Message: "Invalid minPriceCents: must be a non-negative integer"}
 		}
 		minPriceCents = &min
 	}
@@ -850,15 +855,13 @@ func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
 	if maxPrice := r.URL.Query().Get("maxPriceCents"); maxPrice != "" {
 		var max int64
 		if _, err := fmt.Sscanf(maxPrice, "%d", &max); err != nil || max < 0 {
-			h.writeError(w, http.StatusBadRequest, "invalid_filter", "Invalid maxPriceCents: must be a non-negative integer")
-			return
+			return PublicProductFilter{}, page, &FilterError{Code: "invalid_filter", Message: "Invalid maxPriceCents: must be a non-negative integer"}
 		}
 		maxPriceCents = &max
 	}
 
 	if minPriceCents != nil && maxPriceCents != nil && *minPriceCents > *maxPriceCents {
-		h.writeError(w, http.StatusBadRequest, "invalid_filter", "minPriceCents must be less than or equal to maxPriceCents")
-		return
+		return PublicProductFilter{}, page, &FilterError{Code: "invalid_filter", Message: "minPriceCents must be less than or equal to maxPriceCents"}
 	}
 	filter.MinPriceCents = minPriceCents
 	filter.MaxPriceCents = maxPriceCents
@@ -866,6 +869,16 @@ func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
 	if inStock := r.URL.Query().Get("inStock"); inStock == "true" {
 		b := true
 		filter.InStock = &b
+	}
+
+	return filter, page, nil
+}
+
+func (h *Handler) ListPublicProducts(w http.ResponseWriter, r *http.Request) {
+	filter, page, filterErr := ParsePublicProductFilter(r)
+	if filterErr != nil {
+		h.writeError(w, http.StatusBadRequest, filterErr.Code, filterErr.Message)
+		return
 	}
 
 	resp, err := h.service.ListPublicProducts(r.Context(), filter, page.Limit, page.Offset)

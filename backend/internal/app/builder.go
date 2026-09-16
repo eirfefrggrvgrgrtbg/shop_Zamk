@@ -162,7 +162,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	favoritesHandler := favorites.NewHandler(favoritesService)
 
 	personalizationRepo := personalization.NewRepository(pgClient.Pool)
-	personalizationService := personalization.NewService(personalizationRepo)
+	personalizationService := personalization.NewService(personalizationRepo).WithProductsService(productsService)
 	personalizationHandler := personalization.NewHandler(personalizationService)
 
 	usersHandler := users.NewHandler(userRepo)

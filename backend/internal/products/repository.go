@@ -964,7 +964,92 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 	}
 
 	// Apply Sorting
-	if filter.Sort != nil {
+	isDefaultSort := filter.Sort == nil || *filter.Sort == "" || *filter.Sort == "default"
+	if isDefaultSort && filter.Affinities.HasAny() {
+		favCats := filter.Affinities.FavoriteCategoryIDs
+		if favCats == nil {
+			favCats = []uuid.UUID{}
+		}
+		favBrands := filter.Affinities.FavoriteBrandIDs
+		if favBrands == nil {
+			favBrands = []uuid.UUID{}
+		}
+		viewedCats := filter.Affinities.ViewedCategoryIDs
+		if viewedCats == nil {
+			viewedCats = []uuid.UUID{}
+		}
+		viewedBrands := filter.Affinities.ViewedBrandIDs
+		if viewedBrands == nil {
+			viewedBrands = []uuid.UUID{}
+		}
+
+		favCatArg := argID
+		favBrandArg := argID + 1
+		viewedCatArg := argID + 2
+		viewedBrandArg := argID + 3
+		argID += 4
+		args = append(args, favCats, favBrands, viewedCats, viewedBrands)
+
+		queryBuilder.WriteString(fmt.Sprintf(` ORDER BY
+			-- 1. Provenance Tier (Tier 1..7)
+			CASE
+				WHEN array_position($%d::uuid[], p.category_id) IS NOT NULL AND array_position($%d::uuid[], p.brand_id) IS NOT NULL THEN 1
+				WHEN array_position($%d::uuid[], p.brand_id) IS NOT NULL THEN 2
+				WHEN array_position($%d::uuid[], p.category_id) IS NOT NULL THEN 3
+				WHEN array_position($%d::uuid[], p.category_id) IS NOT NULL AND array_position($%d::uuid[], p.brand_id) IS NOT NULL THEN 4
+				WHEN array_position($%d::uuid[], p.brand_id) IS NOT NULL THEN 5
+				WHEN array_position($%d::uuid[], p.category_id) IS NOT NULL THEN 6
+				ELSE 7
+			END ASC,
+
+			-- 2. Primary Profile Rank within tier (lower index = stronger affinity)
+			CASE
+				WHEN array_position($%d::uuid[], p.category_id) IS NOT NULL AND array_position($%d::uuid[], p.brand_id) IS NOT NULL
+					THEN array_position($%d::uuid[], p.category_id)
+				WHEN array_position($%d::uuid[], p.brand_id) IS NOT NULL
+					THEN array_position($%d::uuid[], p.brand_id)
+				WHEN array_position($%d::uuid[], p.category_id) IS NOT NULL
+					THEN array_position($%d::uuid[], p.category_id)
+				WHEN array_position($%d::uuid[], p.category_id) IS NOT NULL AND array_position($%d::uuid[], p.brand_id) IS NOT NULL
+					THEN array_position($%d::uuid[], p.category_id)
+				WHEN array_position($%d::uuid[], p.brand_id) IS NOT NULL
+					THEN array_position($%d::uuid[], p.brand_id)
+				WHEN array_position($%d::uuid[], p.category_id) IS NOT NULL
+					THEN array_position($%d::uuid[], p.category_id)
+				ELSE 0
+			END ASC,
+
+			-- 3. Secondary Profile Rank (for dual matches Tiers 1 and 4)
+			CASE
+				WHEN array_position($%d::uuid[], p.category_id) IS NOT NULL AND array_position($%d::uuid[], p.brand_id) IS NOT NULL
+					THEN array_position($%d::uuid[], p.brand_id)
+				WHEN array_position($%d::uuid[], p.category_id) IS NOT NULL AND array_position($%d::uuid[], p.brand_id) IS NOT NULL
+					THEN array_position($%d::uuid[], p.brand_id)
+				ELSE 0
+			END ASC,
+
+			-- 4. Within-tier canonical default order
+			p.published_at DESC NULLS LAST,
+			p.created_at DESC,
+			p.id ASC`,
+			favCatArg, favBrandArg,
+			favBrandArg,
+			favCatArg,
+			viewedCatArg, viewedBrandArg,
+			viewedBrandArg,
+			viewedCatArg,
+
+			favCatArg, favBrandArg, favCatArg,
+			favBrandArg, favBrandArg,
+			favCatArg, favCatArg,
+			viewedCatArg, viewedBrandArg, viewedCatArg,
+			viewedBrandArg, viewedBrandArg,
+			viewedCatArg, viewedCatArg,
+
+			favCatArg, favBrandArg, favBrandArg,
+			viewedCatArg, viewedBrandArg, viewedBrandArg,
+		))
+	} else if filter.Sort != nil {
 		switch *filter.Sort {
 		case "price_asc":
 			queryBuilder.WriteString(" ORDER BY p.price_cents ASC, p.id ASC")

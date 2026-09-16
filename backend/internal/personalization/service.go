@@ -9,11 +9,59 @@ import (
 )
 
 type Service struct {
-	repo *Repository
+	repo        *Repository
+	productsSvc *products.Service
 }
 
 func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
+}
+
+func (s *Service) WithProductsService(productsSvc *products.Service) *Service {
+	s.productsSvc = productsSvc
+	return s
+}
+
+func (s *Service) GetCustomerCatalog(ctx context.Context, userID uuid.UUID, filter products.PublicProductFilter, limit, offset int) (products.PublicProductListResponse, error) {
+	if s.productsSvc == nil {
+		return products.PublicProductListResponse{}, fmt.Errorf("products service not configured")
+	}
+
+	isDefaultSort := filter.Sort == nil || *filter.Sort == "" || *filter.Sort == "default"
+	if isDefaultSort {
+		profile, err := s.GetCustomerPreferenceProfile(ctx, userID, 0)
+		if err != nil {
+			return products.PublicProductListResponse{}, fmt.Errorf("failed to get customer preference profile: %w", err)
+		}
+
+		if profile != nil {
+			favCatIDs := make([]uuid.UUID, 0, len(profile.FavoriteCategories))
+			for _, a := range profile.FavoriteCategories {
+				favCatIDs = append(favCatIDs, a.CategoryID)
+			}
+			favBrandIDs := make([]uuid.UUID, 0, len(profile.FavoriteBrands))
+			for _, a := range profile.FavoriteBrands {
+				favBrandIDs = append(favBrandIDs, a.BrandID)
+			}
+			viewedCatIDs := make([]uuid.UUID, 0, len(profile.ViewedCategories))
+			for _, a := range profile.ViewedCategories {
+				viewedCatIDs = append(viewedCatIDs, a.CategoryID)
+			}
+			viewedBrandIDs := make([]uuid.UUID, 0, len(profile.ViewedBrands))
+			for _, a := range profile.ViewedBrands {
+				viewedBrandIDs = append(viewedBrandIDs, a.BrandID)
+			}
+
+			filter.Affinities = &products.CatalogAffinities{
+				FavoriteCategoryIDs: favCatIDs,
+				FavoriteBrandIDs:    favBrandIDs,
+				ViewedCategoryIDs:   viewedCatIDs,
+				ViewedBrandIDs:      viewedBrandIDs,
+			}
+		}
+	}
+
+	return s.productsSvc.ListPublicProducts(ctx, filter, limit, offset)
 }
 
 func (s *Service) RecordProductView(ctx context.Context, userID, productID uuid.UUID) error {
