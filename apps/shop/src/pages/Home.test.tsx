@@ -61,6 +61,7 @@ describe('Home Page - PER.3 Recently Viewed Block', () => {
     vi.mocked(publicCatalog.fetchBrands).mockResolvedValue([]);
     vi.mocked(publicCatalog.fetchCategories).mockResolvedValue([]);
     vi.mocked(publicCatalog.fetchRecentlyViewed).mockResolvedValue({ items: [], totalCount: 0 });
+    vi.mocked(publicCatalog.fetchForYouProducts).mockResolvedValue({ items: [], totalCount: 0 });
     vi.mocked(authContext.useAuth).mockReturnValue({ isAuthenticated: false } as any);
   });
 
@@ -148,5 +149,86 @@ describe('Home Page - PER.3 Recently Viewed Block', () => {
     expect(screen.getByTestId('hero-section')).toBeTruthy();
     expect(screen.getByTestId('auction-block')).toBeTruthy();
     expect(screen.getByText('Новинки - Свежие поступления')).toBeTruthy();
+  });
+
+  describe('PER.5B2 - For You Block on Home', () => {
+    const mockForYouProducts: Product[] = [
+      { id: 'fy1', name: 'For You Jacket', price: 300, category: 'Cat 1', brand: 'Brand 1', brandId: 'b1', sellerId: 's1', sellerName: 'Seller 1', sellerSlug: 'seller-1', image: 'img1.jpg', images: [], isNew: false },
+      { id: 'fy2', name: 'For You Coat', price: 450, category: 'Cat 1', brand: 'Brand 1', brandId: 'b1', sellerId: 's1', sellerName: 'Seller 1', sellerSlug: 'seller-1', image: 'img2.jpg', images: [], isNew: false },
+    ];
+
+    it('A. authenticated customer + non-empty response -> "Для вас" rendered', async () => {
+      vi.mocked(authContext.useAuth).mockReturnValue({
+        isAuthenticated: true,
+        user: { id: 'c1', role: 'customer' } as any,
+      } as any);
+      vi.mocked(publicCatalog.fetchForYouProducts).mockResolvedValue({ items: mockForYouProducts, totalCount: 2 });
+
+      renderHome();
+
+      await waitFor(() => {
+        expect(screen.getByText('Рекомендации - Для вас')).toBeTruthy();
+      });
+
+      expect(screen.getByTestId('product-card-fy1')).toBeTruthy();
+      expect(screen.getByTestId('product-card-fy2')).toBeTruthy();
+    });
+
+    it('B. "Для вас" and "Недавно просмотренные" coexist in preferred order', async () => {
+      vi.mocked(authContext.useAuth).mockReturnValue({
+        isAuthenticated: true,
+        user: { id: 'c1', role: 'customer' } as any,
+      } as any);
+      vi.mocked(publicCatalog.fetchForYouProducts).mockResolvedValue({ items: mockForYouProducts, totalCount: 2 });
+      vi.mocked(publicCatalog.fetchRecentlyViewed).mockResolvedValue({ items: mockRecentProducts, totalCount: 2 });
+
+      renderHome();
+
+      await waitFor(() => {
+        expect(screen.getByText('Рекомендации - Для вас')).toBeTruthy();
+        expect(screen.getByText('История - Недавно просмотренные')).toBeTruthy();
+      });
+
+      const forYouHeader = screen.getByText('Рекомендации - Для вас');
+      const recentlyViewedHeader = screen.getByText('История - Недавно просмотренные');
+      // For You must appear before Recently Viewed
+      expect(forYouHeader.compareDocumentPosition(recentlyViewedHeader)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
+    it('I. when "Для вас" errors, "Недавно просмотренные" still renders intact', async () => {
+      vi.mocked(authContext.useAuth).mockReturnValue({
+        isAuthenticated: true,
+        user: { id: 'c1', role: 'customer' } as any,
+      } as any);
+      vi.mocked(publicCatalog.fetchForYouProducts).mockRejectedValue(new Error('For-you API error'));
+      vi.mocked(publicCatalog.fetchRecentlyViewed).mockResolvedValue({ items: mockRecentProducts, totalCount: 2 });
+
+      renderHome();
+
+      await waitFor(() => {
+        expect(screen.getByText('История - Недавно просмотренные')).toBeTruthy();
+      });
+
+      expect(screen.queryByText('Рекомендации - Для вас')).toBeNull();
+      expect(screen.getByTestId('product-card-r2')).toBeTruthy();
+    });
+
+    it('I2. when "Недавно просмотренные" errors, "Для вас" still renders intact', async () => {
+      vi.mocked(authContext.useAuth).mockReturnValue({
+        isAuthenticated: true,
+        user: { id: 'c1', role: 'customer' } as any,
+      } as any);
+      vi.mocked(publicCatalog.fetchForYouProducts).mockResolvedValue({ items: mockForYouProducts, totalCount: 2 });
+      vi.mocked(publicCatalog.fetchRecentlyViewed).mockRejectedValue(new Error('Recently viewed API error'));
+
+      renderHome();
+
+      await waitFor(() => {
+        expect(screen.getByText('Рекомендации - Для вас')).toBeTruthy();
+      });
+
+      expect(screen.queryByText('История - Недавно просмотренные')).toBeNull();
+      expect(screen.getByTestId('product-card-fy1')).toBeTruthy();
+    });
   });
 });

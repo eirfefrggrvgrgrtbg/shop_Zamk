@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button';
 import { fetchBrands, fetchCategories, fetchProducts, fetchDirectSaleProducts } from '../api/publicCatalog';
 import { HeroSection } from '../components/home/HeroSection';
 import { HomeAuctionBlock } from '../components/home/HomeAuctionBlock';
+import { ForYouBlock } from '../components/home/ForYouBlock';
 import { RecentlyViewedBlock } from '../components/home/RecentlyViewedBlock';
 import type { Brand, Category, Product } from '../types/catalog';
 
@@ -131,6 +132,8 @@ export function Home() {
               />
               <EmptyHomeSection text="Коллекции пока не подключены" />
             </motion.section>
+
+            <ForYouBlock />
 
             <RecentlyViewedBlock />
 

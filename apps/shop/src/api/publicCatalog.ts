@@ -109,6 +109,17 @@ export async function fetchRecentlyViewed(limit = 12): Promise<{ items: UIProduc
   }
 }
 
+export async function fetchForYouProducts(limit = 12): Promise<{ items: UIProduct[], totalCount: number }> {
+  const { getCustomerForYou } = await import('@zamk/api-client/src/customer');
+  try {
+    const res = await getCustomerForYou(limit);
+    const items = await mapFavoritesToCatalog(res.items);
+    return { items, totalCount: res.totalCount };
+  } catch (error) {
+    return { items: [], totalCount: 0 };
+  }
+}
+
 export async function fetchSimilarProducts(productId: string, limit = 8): Promise<{ items: UIProduct[], totalCount: number }> {
   try {
     const res = await getSimilarProducts(productId, limit);

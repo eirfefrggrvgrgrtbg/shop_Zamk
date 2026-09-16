@@ -11,6 +11,7 @@ import type {
   ReturnShipment,
   CreateReturnShipmentRequest,
   CDEKOffice,
+  ProductSummary,
 } from './types';
 
 export const getCart = async (): Promise<Cart> => {
@@ -139,6 +140,11 @@ export const recordProductView = async (productId: string): Promise<any> => {
 
 export const getCustomerRecentlyViewed = async (limit = 12): Promise<{ items: any[]; totalCount: number }> => {
   const res = await request<any>('GET', `/customer/products/recently-viewed?limit=${limit}`);
+  return { items: res?.items || [], totalCount: res?.totalCount ?? (res?.items?.length || 0) };
+};
+
+export const getCustomerForYou = async (limit = 12): Promise<{ items: ProductSummary[]; totalCount: number }> => {
+  const res = await request<any>('GET', `/customer/products/for-you?limit=${limit}`);
   return { items: res?.items || [], totalCount: res?.totalCount ?? (res?.items?.length || 0) };
 };
 
