@@ -148,6 +148,11 @@ export const getCustomerForYou = async (limit = 12): Promise<{ items: ProductSum
   return { items: res?.items || [], totalCount: res?.totalCount ?? (res?.items?.length || 0) };
 };
 
+export const getCustomerCatalog = async (params?: any): Promise<{ items: ProductSummary[]; totalCount: number }> => {
+  const res = await request<{ items: ProductSummary[]; totalCount: number }>('GET', '/customer/catalog', { params });
+  return { ...res, items: res?.items || [] };
+};
+
 export const getProfile = async (): Promise<any> => {
   return request('GET', '/customer/profile');
 };

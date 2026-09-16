@@ -69,13 +69,45 @@ export async function fetchCategories(): Promise<UICategory[]> {
   }));
 }
 
-export async function fetchProducts(params?: any): Promise<{ items: UIProduct[], totalCount: number }> {
+export interface FetchProductsOptions {
+  isCustomer?: boolean;
+}
+
+export async function fetchProducts(params?: any, options?: FetchProductsOptions): Promise<{ items: UIProduct[], totalCount: number }> {
   // ensure brands are loaded for mapping
   if (Object.keys(cachedBrands).length === 0) {
     await fetchBrands().catch(() => {}); // best effort
   }
 
-  const res = await getProducts(params);
+  const isDefaultSort = !params?.sort || params.sort === 'default' || params.sort === '';
+  const useCustomerCatalog = Boolean(options?.isCustomer && isDefaultSort);
+
+  let res;
+  if (useCustomerCatalog) {
+    try {
+      const { getCustomerCatalog } = await import('@zamk/api-client/src/customer');
+      const cleanParams = { ...params };
+      if (cleanParams.sort === 'default') {
+        delete cleanParams.sort;
+      }
+      res = await getCustomerCatalog(cleanParams);
+    } catch (err) {
+      // Fail-open fallback: if customer catalog fails, fallback once to public products with identical params
+      console.warn('Customer catalog fetch failed, falling back to public products:', err);
+      const cleanParams = { ...params };
+      if (cleanParams.sort === 'default') {
+        delete cleanParams.sort;
+      }
+      res = await getProducts(cleanParams);
+    }
+  } else {
+    const cleanParams = { ...params };
+    if (cleanParams.sort === 'default') {
+      delete cleanParams.sort;
+    }
+    res = await getProducts(cleanParams);
+  }
+
   return {
     items: res.items.map(p => ({
       id: p.id,

@@ -6,10 +6,12 @@ import { Drawer } from '../components/ui/Drawer';
 import { SortDropdown } from '../components/editorial/StudioKit';
 import { Button } from '../components/ui/Button';
 import { fetchBrands, fetchCategories, fetchProducts } from '../api/publicCatalog';
+import { useAuth } from '../contexts/AuthContext';
 import type { Brand, Category, Product } from '../types/catalog';
 import { cn } from '../lib/utils';
 
 const SORT_OPTIONS = [
+  { value: 'default', label: 'По умолчанию' },
   { value: 'newest', label: 'Сначала новые' },
   { value: 'price_asc', label: 'Цена по возрастанию' },
   { value: 'price_desc', label: 'Цена по убыванию' },
@@ -78,6 +80,8 @@ function FilterCheckbox({
 
 export function Catalog() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { isAuthenticated, user } = useAuth();
+  const isCustomer = Boolean(isAuthenticated && user?.role === 'customer');
 
   // Initialize state from URL params
   const [activeCategory, setActiveCategory] = useState(searchParams.get('categoryId') || 'all');
@@ -86,7 +90,7 @@ export function Catalog() {
     Number(searchParams.get('minPriceCents')) / 100 || DEFAULT_PRICE_RANGE[0],
     Number(searchParams.get('maxPriceCents')) / 100 || DEFAULT_PRICE_RANGE[1]
   ]);
-  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'newest');
+  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'default');
   const [activeSize, setActiveSize] = useState<string | null>(searchParams.get('size'));
   const [onlyInStock, setOnlyInStock] = useState(searchParams.get('inStock') === 'true');
 
@@ -105,7 +109,10 @@ export function Catalog() {
   const metaLoaded = useRef(false);
 
   const buildParams = useCallback(() => {
-    const params: Record<string, any> = { limit: PAGE_LIMIT, sort: sortBy };
+    const params: Record<string, any> = { limit: PAGE_LIMIT };
+    if (sortBy && sortBy !== 'default') {
+      params.sort = sortBy;
+    }
     if (activeCategory !== 'all') params.categoryId = activeCategory;
     if (activeBrand) params.brandId = activeBrand;
     if (activeSize) params.size = activeSize;
@@ -127,8 +134,8 @@ export function Catalog() {
         const params = { ...buildParams(), offset: 0 };
 
         const [productsRes, apiCategories, apiBrands] = metaLoaded.current
-          ? [await fetchProducts(params), categories, brands]
-          : await Promise.all([fetchProducts(params), fetchCategories(), fetchBrands()]);
+          ? [await fetchProducts(params, { isCustomer }), categories, brands]
+          : await Promise.all([fetchProducts(params, { isCustomer }), fetchCategories(), fetchBrands()]);
 
         if (!metaLoaded.current) {
           setCategories(apiCategories as Category[]);
@@ -149,7 +156,11 @@ export function Catalog() {
         if (onlyInStock) newParams.set('inStock', 'true'); else newParams.delete('inStock');
         if (priceRange[0] > DEFAULT_PRICE_RANGE[0]) newParams.set('minPriceCents', (priceRange[0] * 100).toString()); else newParams.delete('minPriceCents');
         if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) newParams.set('maxPriceCents', (priceRange[1] * 100).toString()); else newParams.delete('maxPriceCents');
-        newParams.set('sort', sortBy);
+        if (sortBy && sortBy !== 'default') {
+          newParams.set('sort', sortBy);
+        } else {
+          newParams.delete('sort');
+        }
         setSearchParams(newParams, { replace: true });
 
       } catch (err) {
@@ -161,7 +172,7 @@ export function Catalog() {
     }
     loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCategory, activeBrand, activeSize, onlyInStock, priceRange, sortBy, searchParams.get('q')]);
+  }, [activeCategory, activeBrand, activeSize, onlyInStock, priceRange, sortBy, searchParams.get('q'), isCustomer]);
 
   const loadMore = async () => {
     if (isLoadingMore || !hasMore) return;
@@ -169,7 +180,7 @@ export function Catalog() {
       setIsLoadingMore(true);
       const newOffset = offset + PAGE_LIMIT;
       const params = { ...buildParams(), offset: newOffset };
-      const res = await fetchProducts(params);
+      const res = await fetchProducts(params, { isCustomer });
       setApiProducts(prev => [...prev, ...res.items]);
       setOffset(newOffset);
       setHasMore(res.items.length === PAGE_LIMIT && (newOffset + PAGE_LIMIT) < res.totalCount);
