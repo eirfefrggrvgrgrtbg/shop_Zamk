@@ -5,6 +5,8 @@ import type { SellerInventoryItem } from '@zamk/api-client/src/types';
 import { Package, Search, Filter, AlertCircle, TrendingUp, CheckCircle } from 'lucide-react';
 import { formatApproximateDaysOfCover, formatVariantDisplayLabel } from '../lib/stockForecastPresentation';
 import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
+import { SellerSurface, SellerKpiCard, SellerTableShell, SellerFilterBar } from '../components/SellerSurface';
+import { cn } from '../lib/utils';
 
 type FilterType = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | 'inbound';
 
@@ -81,9 +83,9 @@ export function SellerInventory() {
   if (isLoading) {
     return (
       <SellerPageFrame variant="wide">
-        <div className="flex justify-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
-        </div>
+        <SellerSurface className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-900"></div>
+        </SellerSurface>
       </SellerPageFrame>
     );
   }
@@ -91,7 +93,7 @@ export function SellerInventory() {
   if (error) {
     return (
       <SellerPageFrame variant="wide">
-        <div className="flex justify-center py-20 text-red-500">{error}</div>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-6 flex justify-center text-red-600">{error}</div>
       </SellerPageFrame>
     );
   }
@@ -105,7 +107,7 @@ export function SellerInventory() {
         action={
           <button
             onClick={() => navigate('/supplies/new')}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white transition-colors hover:bg-gray-800"
           >
             <Package className="h-4 w-4" />
             Создать поставку
@@ -114,43 +116,42 @@ export function SellerInventory() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col">
-          <span className="text-sm text-gray-500 font-medium mb-1">На складе</span>
-          <span className="text-3xl font-bold text-gray-900">{stats.onHand}</span>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col">
-          <span className="text-sm text-gray-500 font-medium mb-1 flex items-center gap-1">
-            <CheckCircle className="w-4 h-4 text-green-500" />
-            Доступно
-          </span>
-          <span className="text-3xl font-bold text-green-600">{stats.available}</span>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col">
-          <span className="text-sm text-gray-500 font-medium mb-1">В резерве</span>
-          <span className="text-3xl font-bold text-gray-900">{stats.reserved}</span>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col">
-          <span className="text-sm text-gray-500 font-medium mb-1 flex items-center gap-1">
-            <TrendingUp className="w-4 h-4 text-blue-500" />
-            В пути
-          </span>
-          <span className="text-3xl font-bold text-blue-600">{stats.inbound}</span>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col">
-          <span className="text-sm text-gray-500 font-medium mb-1 flex items-center gap-1">
-            <AlertCircle className="w-4 h-4 text-red-500" />
-            Без остатка
-          </span>
-          <span className="text-3xl font-bold text-red-600">{stats.outOfStock}</span>
-        </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <SellerKpiCard
+          label="На складе"
+          value={String(stats.onHand)}
+          icon={Package}
+        />
+        <SellerKpiCard
+          label="Доступно"
+          value={String(stats.available)}
+          accent={stats.available > 0 ? "positive" : undefined}
+          icon={CheckCircle}
+        />
+        <SellerKpiCard
+          label="В резерве"
+          value={String(stats.reserved)}
+          icon={Package}
+        />
+        <SellerKpiCard
+          label="В пути"
+          value={String(stats.inbound)}
+          accent={stats.inbound > 0 ? "info" : undefined}
+          icon={TrendingUp}
+        />
+        <SellerKpiCard
+          label="Без остатка"
+          value={String(stats.outOfStock)}
+          accent={stats.outOfStock > 0 ? "danger" : undefined}
+          icon={AlertCircle}
+        />
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <SellerTableShell>
         {/* Controls */}
-        <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50/50">
+        <SellerFilterBar>
           <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto">
-            <Filter className="w-4 h-4 text-gray-400 mr-2" />
+            <Filter className="w-4 h-4 text-gray-400 mr-1 shrink-0" />
             {(['all', 'in_stock', 'low_stock', 'out_of_stock', 'inbound'] as const).map(f => {
               const labels: Record<FilterType, string> = {
                 all: 'Все',
@@ -163,11 +164,12 @@ export function SellerInventory() {
                 <button
                   key={f}
                   onClick={() => setActiveFilter(f)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                    activeFilter === f 
-                      ? 'bg-black text-white' 
-                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                  }`}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-colors",
+                    activeFilter === f
+                      ? "bg-gray-900 text-white"
+                      : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                  )}
                 >
                   {labels[f]}
                 </button>
@@ -180,26 +182,26 @@ export function SellerInventory() {
               placeholder="Поиск по SKU или названию..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-sm"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-gray-900 focus:border-gray-900"
             />
-            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
-        </div>
+        </SellerFilterBar>
 
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-white">
+            <thead className="bg-gray-50/60 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/10">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Фото</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Товар / Вариант</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">SKU</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">На складе</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Резерв</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Доступно</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">В пути</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Статус</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Прогноз</th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Фото</th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Товар / Вариант</th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">SKU</th>
+                <th className="px-6 py-3.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">На складе</th>
+                <th className="px-6 py-3.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Резерв</th>
+                <th className="px-6 py-3.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Доступно</th>
+                <th className="px-6 py-3.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">В пути</th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Статус</th>
+                <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Прогноз</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 bg-white">
@@ -282,31 +284,26 @@ export function SellerInventory() {
             </tbody>
           </table>
         </div>
-      </div>
+      </SellerTableShell>
     </SellerPageFrame>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
-  let bg = 'bg-gray-100';
-  let text = 'text-gray-800';
+  let colorClasses = 'bg-gray-100 text-gray-800 border-gray-200';
   
   if (status === 'В наличии') {
-    bg = 'bg-green-100';
-    text = 'text-green-800';
+    colorClasses = 'bg-emerald-50 text-emerald-700 border-emerald-200';
   } else if (status === 'Заканчивается') {
-    bg = 'bg-yellow-100';
-    text = 'text-yellow-800';
+    colorClasses = 'bg-amber-50 text-amber-700 border-amber-200';
   } else if (status === 'Ожидается поставка') {
-    bg = 'bg-blue-100';
-    text = 'text-blue-800';
+    colorClasses = 'bg-blue-50 text-blue-700 border-blue-200';
   } else if (status === 'Нет в наличии') {
-    bg = 'bg-red-100';
-    text = 'text-red-800';
+    colorClasses = 'bg-red-50 text-red-700 border-red-200';
   }
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${bg} ${text}`}>
+    <span className={cn("inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border", colorClasses)}>
       {status}
     </span>
   );
