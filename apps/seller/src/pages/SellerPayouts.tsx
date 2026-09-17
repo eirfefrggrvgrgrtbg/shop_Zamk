@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getSellerBalance, getSellerLedger, getSellerPayouts } from '@zamk/api-client/src/seller';
 import { adaptBalance, adaptLedger, adaptPayoutBatches } from '../api/sellerFinance';
+import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
   style: 'currency',
@@ -41,11 +42,21 @@ export function SellerPayouts() {
   }, []);
 
   if (isLoading && !balance) {
-    return <div className="min-h-screen pt-24 pb-24 flex justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div></div>;
+    return (
+      <SellerPageFrame variant="wide">
+        <div className="flex h-64 items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black" />
+        </div>
+      </SellerPageFrame>
+    );
   }
 
   if (error && !balance) {
-    return <div className="min-h-screen pt-24 pb-24 flex justify-center text-red-500">{error}</div>;
+    return (
+      <SellerPageFrame variant="wide">
+        <div className="flex h-64 items-center justify-center text-red-500">{error}</div>
+      </SellerPageFrame>
+    );
   }
 
   const inTransit = payouts
@@ -53,12 +64,14 @@ export function SellerPayouts() {
     .reduce((sum, p) => sum + p.amount, 0);
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold mb-2">Финансы и выплаты</h1>
-        <p className="text-gray-600 mb-6">Детализация баланса и история автоматических выплат.</p>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <SellerPageFrame variant="wide">
+      <SellerPageHeader
+        eyebrow="Данные"
+        title="Финансы и выплаты"
+        description="Детализация баланса и история автоматических выплат."
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <h3 className="font-semibold text-gray-900 mb-2">Как работают выплаты</h3>
             <p className="text-sm text-gray-600">
@@ -72,7 +85,6 @@ export function SellerPayouts() {
             </p>
           </div>
         </div>
-      </div>
 
       {/* Balance Cards */}
       {balance && (
@@ -246,6 +258,6 @@ export function SellerPayouts() {
           </div>
         </div>
       )}
-    </div>
+    </SellerPageFrame>
   );
 }

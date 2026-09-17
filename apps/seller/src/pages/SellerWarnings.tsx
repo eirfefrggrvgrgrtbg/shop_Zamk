@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CheckCircle, Info, XCircle } from 'lucide-react';
 import { getSellerWarnings, getSellerViolations } from '@zamk/api-client/src/seller';
 import type { SellerWarning, SellerViolation } from '@zamk/api-client/src/types';
+import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 
 const SEVERITY_COLORS: Record<string, string> = {
   low: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -61,27 +62,31 @@ export function SellerWarnings() {
 
   if (isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <p className="text-gray-500">Загрузка данных...</p>
-      </div>
+      <SellerPageFrame variant="summary">
+        <div className="flex h-64 items-center justify-center">
+          <p className="text-gray-500">Загрузка данных...</p>
+        </div>
+      </SellerPageFrame>
     );
   }
 
   if (error) {
     return (
-      <div className="p-8">
+      <SellerPageFrame variant="summary">
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
-      </div>
+      </SellerPageFrame>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="mx-auto max-w-4xl space-y-8">
-        <div>
-          <p className="text-sm font-medium uppercase tracking-wide text-gray-500">Политика платформы</p>
-          <h1 className="mt-2 text-3xl font-bold text-gray-900">Предупреждения и нарушения</h1>
-        </div>
+    <SellerPageFrame variant="summary">
+      <SellerPageHeader
+        eyebrow="Контроль"
+        title="Предупреждения и нарушения"
+        description="Политика платформы ZAMK и контроль за соблюдением правил торговли."
+      />
+
+      <div className="max-w-4xl space-y-6">
 
         {/* Инфо о комиссии */}
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
@@ -196,6 +201,6 @@ export function SellerWarnings() {
         )}
 
       </div>
-    </div>
+    </SellerPageFrame>
   );
 }

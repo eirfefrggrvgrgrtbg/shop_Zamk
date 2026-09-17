@@ -10,6 +10,10 @@ import { SellerOrders } from '../pages/SellerOrders';
 import { SellerInventory } from '../pages/SellerInventory';
 import { SellerSupplies } from '../pages/SellerSupplies';
 import { SellerReturns } from '../pages/SellerReturns';
+import { SellerReviews } from '../pages/SellerReviews';
+import { SellerPayouts } from '../pages/SellerPayouts';
+import { SellerAnalytics } from '../pages/SellerAnalytics';
+import { SellerWarnings } from '../pages/SellerWarnings';
 
 vi.mock('@zamk/api-client/src/seller', () => ({
   getSellerMe: vi.fn().mockResolvedValue({
@@ -36,11 +40,32 @@ vi.mock('@zamk/api-client/src/seller', () => ({
   getSellerReturns: vi.fn().mockResolvedValue([]),
   getSellerInventory: vi.fn().mockResolvedValue([]),
   getSellerSupplies: vi.fn().mockResolvedValue([]),
+  getSellerReviews: vi.fn().mockResolvedValue([]),
+  getSellerLedger: vi.fn().mockResolvedValue([]),
+  getSellerPayouts: vi.fn().mockResolvedValue([]),
   getSellerBalance: vi.fn().mockResolvedValue({ availableCents: 5000000 }),
   getSellerWarnings: vi.fn().mockResolvedValue([]),
   getSellerViolations: vi.fn().mockResolvedValue([]),
   updateSellerMe: vi.fn(),
   uploadSellerLogo: vi.fn(),
+}));
+
+vi.mock('../api/selleranalytics', () => ({
+  getAnalyticsOverview: vi.fn().mockResolvedValue({
+    kpis: {
+      orderedRevenueCents: 0,
+      deliveredRevenueCents: 0,
+      ordersCount: 0,
+      unitsCount: 0,
+      returnsCount: 0,
+      cancellationsCount: 0,
+      avgOrderValueCents: 0,
+      buyoutRatePercent: 0,
+    },
+    timeseries: [],
+    insights: [],
+  }),
+  getAnalyticsProducts: vi.fn().mockResolvedValue([]),
 }));
 
 describe('SellerPageFrame & SellerPageHeader — Canonical 1296px Canvas Architecture', () => {
@@ -65,7 +90,7 @@ describe('SellerPageFrame & SellerPageHeader — Canonical 1296px Canvas Archite
     expect(expectedClasses).toContain('max-w-[1296px]');
     expect(expectedClasses).toContain('mx-auto');
     expect(expectedClasses).toContain('px-4 sm:px-6 lg:px-8');
-    expect(expectedClasses).toContain('pt-8 pb-12');
+    expect(expectedClasses).toContain('pt-6 pb-10');
 
     rerender(
       <SellerPageFrame variant="wide">
@@ -166,7 +191,7 @@ describe('Reference Pages Geometry Integration — R1.2A', () => {
     expect(dashboardCanvasClasses).toContain('max-w-[1296px]');
     expect(dashboardCanvasClasses).toContain('mx-auto');
     expect(dashboardCanvasClasses).toContain('px-4 sm:px-6 lg:px-8');
-    expect(dashboardCanvasClasses).toContain('pt-8 pb-12');
+    expect(dashboardCanvasClasses).toContain('pt-6 pb-10');
   });
 
   it('Dashboard uses SUMMARY geometry and renders page header correctly', async () => {
@@ -275,7 +300,7 @@ describe('Rollout Pages Geometry Integration — R1.2B1 (Orders, Inventory, Supp
     expect(ordersCanvasClasses).toContain('max-w-[1296px]');
     expect(ordersCanvasClasses).toContain('mx-auto');
     expect(ordersCanvasClasses).toContain('px-4 sm:px-6 lg:px-8');
-    expect(ordersCanvasClasses).toContain('pt-8 pb-12');
+    expect(ordersCanvasClasses).toContain('pt-6 pb-10');
   });
 
   it('Orders uses summary frame and renders header with correct eyebrow and title', async () => {
@@ -345,5 +370,149 @@ describe('Rollout Pages Geometry Integration — R1.2B1 (Orders, Inventory, Supp
       expect(screen.getByTestId('seller-page-header-eyebrow').textContent).toBe('Продажи');
       expect(screen.getByTestId('seller-page-header-title').textContent).toBe('Возвраты');
     });
+  });
+});
+
+describe('R1.3A Canonical Vertical Rhythm & Remaining Pages (Reviews, Finance, Analytics, Warnings)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('Reviews, Finance, Analytics, and Warnings share the exact same canonical outer geometry and pt-6 pb-10 rhythm', async () => {
+    const { unmount: unmountReviews } = render(
+      <MemoryRouter>
+        <SellerReviews />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+    const reviewsCanvas = screen.getByTestId('seller-page-frame').className;
+    unmountReviews();
+
+    const { unmount: unmountPayouts } = render(
+      <MemoryRouter>
+        <SellerPayouts />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+    const payoutsCanvas = screen.getByTestId('seller-page-frame').className;
+    unmountPayouts();
+
+    const { unmount: unmountAnalytics } = render(
+      <MemoryRouter>
+        <SellerAnalytics />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+    const analyticsCanvas = screen.getByTestId('seller-page-frame').className;
+    unmountAnalytics();
+
+    const { unmount: unmountWarnings } = render(
+      <MemoryRouter>
+        <SellerWarnings />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+    const warningsCanvas = screen.getByTestId('seller-page-frame').className;
+    unmountWarnings();
+
+    expect(reviewsCanvas).toBe(payoutsCanvas);
+    expect(payoutsCanvas).toBe(analyticsCanvas);
+    expect(analyticsCanvas).toBe(warningsCanvas);
+    expect(reviewsCanvas).toContain('max-w-[1296px]');
+    expect(reviewsCanvas).toContain('mx-auto');
+    expect(reviewsCanvas).toContain('px-4 sm:px-6 lg:px-8');
+    expect(reviewsCanvas).toContain('pt-6 pb-10');
+  });
+
+  it('Reviews uses summary frame and renders header with eyebrow="Продажи" and title="Отзывы"', async () => {
+    render(
+      <MemoryRouter>
+        <SellerReviews />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('seller-page-frame');
+      expect(frame.getAttribute('data-variant')).toBe('summary');
+      expect(frame.className).toContain('max-w-[1296px]');
+      expect(screen.getByTestId('seller-page-header-eyebrow').textContent).toBe('Продажи');
+      expect(screen.getByTestId('seller-page-header-title').textContent).toBe('Отзывы');
+      expect(screen.getByTestId('seller-page-header-description')).toBeTruthy();
+    });
+  });
+
+  it('Finance (Payouts) uses wide frame and renders header with eyebrow="Данные" and title="Финансы и выплаты"', async () => {
+    render(
+      <MemoryRouter>
+        <SellerPayouts />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('seller-page-frame');
+      expect(frame.getAttribute('data-variant')).toBe('wide');
+      expect(frame.className).toContain('max-w-[1296px]');
+      expect(screen.getByTestId('seller-page-header-eyebrow').textContent).toBe('Данные');
+      expect(screen.getByTestId('seller-page-header-title').textContent).toBe('Финансы и выплаты');
+      expect(screen.getByTestId('seller-page-header-description')).toBeTruthy();
+    });
+  });
+
+  it('Analytics uses wide frame and renders header with eyebrow="Данные", title="Аналитика", and period action', async () => {
+    render(
+      <MemoryRouter>
+        <SellerAnalytics />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('seller-page-frame');
+      expect(frame.getAttribute('data-variant')).toBe('wide');
+      expect(frame.className).toContain('max-w-[1296px]');
+      expect(screen.getByTestId('seller-page-header-eyebrow').textContent).toBe('Данные');
+      expect(screen.getByTestId('seller-page-header-title').textContent).toBe('Аналитика');
+      expect(screen.getByTestId('seller-page-header-action')).toBeTruthy();
+    });
+  });
+
+  it('Warnings uses summary frame and renders header with eyebrow="Контроль" and title="Предупреждения и нарушения"', async () => {
+    render(
+      <MemoryRouter>
+        <SellerWarnings />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('seller-page-frame');
+      expect(frame.getAttribute('data-variant')).toBe('summary');
+      expect(frame.className).toContain('max-w-[1296px]');
+      expect(screen.getByTestId('seller-page-header-eyebrow').textContent).toBe('Контроль');
+      expect(screen.getByTestId('seller-page-header-title').textContent).toBe('Предупреждения и нарушения');
+      expect(screen.getByTestId('seller-page-header-description')).toBeTruthy();
+    });
+  });
+
+  it('proves that existing Dashboard and Products still share the canonical pt-6 pb-10 canvas rhythm', async () => {
+    const { unmount: unmountDashboard } = render(
+      <MemoryRouter>
+        <SellerDashboard />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+    const dashboardCanvas = screen.getByTestId('seller-page-frame').className;
+    unmountDashboard();
+
+    const { unmount: unmountProducts } = render(
+      <MemoryRouter>
+        <SellerProducts />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+    const productsCanvas = screen.getByTestId('seller-page-frame').className;
+    unmountProducts();
+
+    expect(dashboardCanvas).toBe(productsCanvas);
+    expect(dashboardCanvas).toContain('max-w-[1296px]');
+    expect(dashboardCanvas).toContain('pt-6 pb-10');
   });
 });

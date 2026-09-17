@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getSellerReviews } from '@zamk/api-client/src/seller';
 import { adaptReviews } from '../api/sellerOperations';
+import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 
 export function SellerReviews() {
   const [reviews, setReviews] = useState<any[]>([]);
@@ -22,17 +23,30 @@ export function SellerReviews() {
   }, []);
 
   if (isLoading) {
-    return <div className="min-h-screen pt-24 pb-24 flex justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div></div>;
+    return (
+      <SellerPageFrame variant="summary">
+        <div className="flex h-64 items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black" />
+        </div>
+      </SellerPageFrame>
+    );
   }
 
   if (error) {
-    return <div className="min-h-screen pt-24 pb-24 flex justify-center text-red-500">{error}</div>;
+    return (
+      <SellerPageFrame variant="summary">
+        <div className="flex h-64 items-center justify-center text-red-500">{error}</div>
+      </SellerPageFrame>
+    );
   }
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4">Отзывы</h1>
-      <p className="text-gray-600 mb-6">Отзывы покупателей на ваши товары (только для чтения).</p>
+    <SellerPageFrame variant="summary">
+      <SellerPageHeader
+        eyebrow="Продажи"
+        title="Отзывы"
+        description="Отзывы покупателей о ваших товарах (только для чтения)."
+      />
       
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
@@ -67,6 +81,6 @@ export function SellerReviews() {
           </tbody>
         </table>
       </div>
-    </div>
+    </SellerPageFrame>
   );
 }

@@ -17,7 +17,7 @@ export interface SellerPageFrameProps {
  * - max-w-[1296px]
  * - mx-auto
  * - px-4 sm:px-6 lg:px-8
- * - pt-8 pb-12
+ * - pt-6 pb-10
  *
  * Page types differ strictly by internal layout/grid composition,
  * NOT by changing the width of the outer page canvas.
@@ -33,13 +33,13 @@ export function SellerPageFrame({
       data-testid="seller-page-frame"
       data-variant={variant}
       className={cn(
-        "w-full max-w-[1296px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12",
+        "w-full max-w-[1296px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-10",
         className
       )}
     >
       <div
         data-testid="seller-page-canvas-container"
-        className={cn("w-full space-y-6 md:space-y-8", containerClassName)}
+        className={cn("w-full space-y-6", containerClassName)}
       >
         {children}
       </div>

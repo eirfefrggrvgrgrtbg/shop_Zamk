@@ -6,6 +6,7 @@ import { ProductsTab } from '../components/analytics/ProductsTab';
 import { InventoryTab } from '../components/analytics/InventoryTab';
 import { FinanceTab } from '../components/analytics/FinanceTab';
 import { AnalyticsPeriodPicker } from '../components/analytics/AnalyticsPeriodPicker';
+import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 import { cn } from '../lib/utils';
 
 
@@ -78,12 +79,12 @@ export function SellerAnalytics() {
   ];
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-2xl font-bold text-gray-900">Аналитика</h1>
-        
-        <AnalyticsPeriodPicker from={from} to={to} />
-      </div>
+    <SellerPageFrame variant="wide">
+      <SellerPageHeader
+        eyebrow="Данные"
+        title="Аналитика"
+        action={<AnalyticsPeriodPicker from={from} to={to} />}
+      />
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
@@ -112,6 +113,6 @@ export function SellerAnalytics() {
         {currentTab === 'inventory' && <InventoryTab from={from} to={to} />}
         {currentTab === 'finance' && <FinanceTab from={from} to={to} />}
       </div>
-    </div>
+    </SellerPageFrame>
   );
 }
