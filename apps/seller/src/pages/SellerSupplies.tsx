@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, Package, Truck, AlertCircle, Calendar } from 'lucide-react';
 import { getSellerSupplies } from '@zamk/api-client/src/seller';
 import type { SellerSupply } from '@zamk/api-client/src/types';
+import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 
 export function SellerSupplies() {
   const [supplies, setSupplies] = useState<SellerSupply[]>([]);
@@ -50,21 +51,31 @@ export function SellerSupplies() {
   });
 
   if (loading) {
-    return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div></div>;
+    return (
+      <SellerPageFrame variant="wide">
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
+        </div>
+      </SellerPageFrame>
+    );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Поставки</h1>
-        <Link
-          to="/supplies/new"
-          className="inline-flex items-center px-6 py-3 border border-transparent rounded-full shadow-sm text-sm font-bold text-white bg-black hover:bg-gray-800 focus:outline-none transition-colors"
-        >
-          <Plus className="-ml-1 mr-2 h-5 w-5" />
-          Создать поставку
-        </Link>
-      </div>
+    <SellerPageFrame variant="wide">
+      <SellerPageHeader
+        eyebrow="Ассортимент"
+        title="Поставки"
+        description="Управление поставками товаров на склад ZAMK и отслеживание статуса приёмки."
+        action={
+          <Link
+            to="/supplies/new"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+          >
+            <Plus className="h-4 w-4" />
+            Создать поставку
+          </Link>
+        }
+      />
 
       <div className="flex space-x-2 mb-6 overflow-x-auto pb-2">
         {['all', 'ready', 'shipped', 'receiving', 'completed'].map((f) => (
@@ -170,6 +181,6 @@ export function SellerSupplies() {
           </div>
         )}
       </div>
-    </div>
+    </SellerPageFrame>
   );
 }

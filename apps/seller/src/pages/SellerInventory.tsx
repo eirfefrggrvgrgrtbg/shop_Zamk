@@ -4,6 +4,7 @@ import { getSellerInventory } from '@zamk/api-client/src/seller';
 import type { SellerInventoryItem } from '@zamk/api-client/src/types';
 import { Package, Search, Filter, AlertCircle, TrendingUp, CheckCircle } from 'lucide-react';
 import { formatApproximateDaysOfCover, formatVariantDisplayLabel } from '../lib/stockForecastPresentation';
+import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 
 type FilterType = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | 'inbound';
 
@@ -79,31 +80,38 @@ export function SellerInventory() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex justify-center items-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
-      </div>
+      <SellerPageFrame variant="wide">
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
+        </div>
+      </SellerPageFrame>
     );
   }
 
   if (error) {
-    return <div className="min-h-screen pt-24 pb-24 flex justify-center text-red-500">{error}</div>;
+    return (
+      <SellerPageFrame variant="wide">
+        <div className="flex justify-center py-20 text-red-500">{error}</div>
+      </SellerPageFrame>
+    );
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Склад ZAMK</h1>
-          <p className="text-gray-500 mt-2">Единый источник правды об остатках ваших товаров (только для чтения)</p>
-        </div>
-        <button
-          onClick={() => navigate('/supplies/new')}
-          className="bg-black text-white px-6 py-2.5 rounded-lg hover:bg-gray-800 transition-colors font-medium flex items-center gap-2"
-        >
-          <Package className="w-4 h-4" />
-          Создать поставку
-        </button>
-      </div>
+    <SellerPageFrame variant="wide">
+      <SellerPageHeader
+        eyebrow="Ассортимент"
+        title="Остатки"
+        description="Единый источник правды об остатках ваших товаров на складе ZAMK (только для чтения)."
+        action={
+          <button
+            onClick={() => navigate('/supplies/new')}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+          >
+            <Package className="h-4 w-4" />
+            Создать поставку
+          </button>
+        }
+      />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
@@ -275,7 +283,7 @@ export function SellerInventory() {
           </table>
         </div>
       </div>
-    </div>
+    </SellerPageFrame>
   );
 }
 

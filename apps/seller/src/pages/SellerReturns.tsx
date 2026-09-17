@@ -5,6 +5,7 @@ import type { SellerReturn } from '@zamk/api-client/src/types';
 import { adaptReturns } from '../api/sellerOperations';
 import { Package, AlertCircle } from 'lucide-react';
 import { RETURN_REASON_LABELS } from './SellerReturnDetail';
+import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
   style: 'currency',
@@ -63,30 +64,35 @@ export function SellerReturns() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen pt-24 pb-24 flex justify-center flex-col items-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mb-4"></div>
-        <div className="text-ash">Загружаем возвраты...</div>
-      </div>
+      <SellerPageFrame variant="summary">
+        <div className="flex justify-center flex-col items-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mb-4"></div>
+          <div className="text-ash">Загружаем возвраты...</div>
+        </div>
+      </SellerPageFrame>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen pt-24 pb-24 flex justify-center">
-        <div className="bg-red-50 text-red-600 p-6 rounded-2xl flex items-center gap-3">
-          <AlertCircle className="w-6 h-6" />
-          <span>{error}</span>
+      <SellerPageFrame variant="summary">
+        <div className="flex justify-center py-20">
+          <div className="bg-red-50 text-red-600 p-6 rounded-2xl flex items-center gap-3">
+            <AlertCircle className="w-6 h-6" />
+            <span>{error}</span>
+          </div>
         </div>
-      </div>
+      </SellerPageFrame>
     );
   }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-graphite dark:text-white mb-2">Возвраты</h1>
-      <p className="text-ash mb-8">
-        Возвраты покупателей по вашим товарам. Логистикой и проверкой занимается ZAMK (только для чтения).
-      </p>
+    <SellerPageFrame variant="summary">
+      <SellerPageHeader
+        eyebrow="Продажи"
+        title="Возвраты"
+        description="Возвраты покупателей по вашим товарам. Логистикой и проверкой занимается ZAMK (только для чтения)."
+      />
 
       {returns.length === 0 ? (
         <div className="py-12 text-center text-ash bg-white dark:bg-white/5 rounded-2xl border border-border-soft dark:border-white/10">
@@ -191,6 +197,6 @@ export function SellerReturns() {
           </div>
         </div>
       )}
-    </div>
+    </SellerPageFrame>
   );
 }

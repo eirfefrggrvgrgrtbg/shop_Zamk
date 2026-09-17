@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { getSellerOrders, getSellerOrderSummary } from '@zamk/api-client/src/seller';
 import type { SellerOrder } from '@zamk/api-client/src/types';
 import { ChevronDown, ChevronUp, Package, AlertCircle, TrendingUp, RefreshCcw } from 'lucide-react';
+import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
   style: 'currency',
@@ -60,30 +61,35 @@ export function SellerOrders() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen pt-24 pb-24 flex justify-center flex-col items-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mb-4"></div>
-        <div className="text-ash">Загружаем продажи...</div>
-      </div>
+      <SellerPageFrame variant="summary">
+        <div className="flex justify-center flex-col items-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mb-4"></div>
+          <div className="text-ash">Загружаем продажи...</div>
+        </div>
+      </SellerPageFrame>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen pt-24 pb-24 flex justify-center">
-        <div className="bg-red-50 text-red-600 p-6 rounded-2xl flex items-center gap-3">
-          <AlertCircle className="w-6 h-6" />
-          <span>{error}</span>
+      <SellerPageFrame variant="summary">
+        <div className="flex justify-center py-20">
+          <div className="bg-red-50 text-red-600 p-6 rounded-2xl flex items-center gap-3">
+            <AlertCircle className="w-6 h-6" />
+            <span>{error}</span>
+          </div>
         </div>
-      </div>
+      </SellerPageFrame>
     );
   }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-graphite dark:text-white mb-2">Продажи</h1>
-      <p className="text-ash mb-8">
-        Заказы покупателей с вашими товарами. Сборкой и доставкой занимается ZAMK.
-      </p>
+    <SellerPageFrame variant="summary">
+      <SellerPageHeader
+        eyebrow="Продажи"
+        title="Заказы"
+        description="Заказы покупателей с вашими товарами. Сборкой и доставкой занимается ZAMK."
+      />
 
       {/* Summary Cards */}
       {summary && (
@@ -245,6 +251,6 @@ export function SellerOrders() {
           </div>
         </div>
       )}
-    </div>
+    </SellerPageFrame>
   );
 }

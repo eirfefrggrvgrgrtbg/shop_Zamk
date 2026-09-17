@@ -6,6 +6,10 @@ import { SellerPageFrame, SellerPageHeader } from './SellerPageFrame';
 import { SellerDashboard } from '../pages/SellerDashboard';
 import { SellerProducts } from '../pages/SellerProducts';
 import { SellerSettings } from '../pages/SellerSettings';
+import { SellerOrders } from '../pages/SellerOrders';
+import { SellerInventory } from '../pages/SellerInventory';
+import { SellerSupplies } from '../pages/SellerSupplies';
+import { SellerReturns } from '../pages/SellerReturns';
 
 vi.mock('@zamk/api-client/src/seller', () => ({
   getSellerMe: vi.fn().mockResolvedValue({
@@ -22,8 +26,16 @@ vi.mock('@zamk/api-client/src/seller', () => ({
   }),
   getSellerProducts: vi.fn().mockResolvedValue([]),
   getSellerOrders: vi.fn().mockResolvedValue([]),
+  getSellerOrderSummary: vi.fn().mockResolvedValue({
+    totalOrders: 0,
+    totalRevenueCents: 0,
+    pendingDelivery: 0,
+    delivered: 0,
+    returnRatePercent: 0,
+  }),
   getSellerReturns: vi.fn().mockResolvedValue([]),
   getSellerInventory: vi.fn().mockResolvedValue([]),
+  getSellerSupplies: vi.fn().mockResolvedValue([]),
   getSellerBalance: vi.fn().mockResolvedValue({ availableCents: 5000000 }),
   getSellerWarnings: vi.fn().mockResolvedValue([]),
   getSellerViolations: vi.fn().mockResolvedValue([]),
@@ -211,6 +223,127 @@ describe('Reference Pages Geometry Integration — R1.2A', () => {
       const formColumn = grid.firstElementChild;
       expect(formColumn?.className).toContain('lg:col-span-8');
       expect(formColumn?.className).toContain('xl:col-span-9');
+    });
+  });
+});
+
+describe('Rollout Pages Geometry Integration — R1.2B1 (Orders, Inventory, Supplies, Returns)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('Orders, Inventory, Supplies, and Returns share the exact same outer canvas geometry', async () => {
+    const { unmount: unmountOrders } = render(
+      <MemoryRouter>
+        <SellerOrders />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+    const ordersCanvasClasses = screen.getByTestId('seller-page-frame').className;
+    unmountOrders();
+
+    const { unmount: unmountInventory } = render(
+      <MemoryRouter>
+        <SellerInventory />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+    const inventoryCanvasClasses = screen.getByTestId('seller-page-frame').className;
+    unmountInventory();
+
+    const { unmount: unmountSupplies } = render(
+      <MemoryRouter>
+        <SellerSupplies />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+    const suppliesCanvasClasses = screen.getByTestId('seller-page-frame').className;
+    unmountSupplies();
+
+    const { unmount: unmountReturns } = render(
+      <MemoryRouter>
+        <SellerReturns />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+    const returnsCanvasClasses = screen.getByTestId('seller-page-frame').className;
+    unmountReturns();
+
+    expect(ordersCanvasClasses).toBe(inventoryCanvasClasses);
+    expect(inventoryCanvasClasses).toBe(suppliesCanvasClasses);
+    expect(suppliesCanvasClasses).toBe(returnsCanvasClasses);
+    expect(ordersCanvasClasses).toContain('max-w-[1296px]');
+    expect(ordersCanvasClasses).toContain('mx-auto');
+    expect(ordersCanvasClasses).toContain('px-4 sm:px-6 lg:px-8');
+    expect(ordersCanvasClasses).toContain('pt-8 pb-12');
+  });
+
+  it('Orders uses summary frame and renders header with correct eyebrow and title', async () => {
+    render(
+      <MemoryRouter>
+        <SellerOrders />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('seller-page-frame');
+      expect(frame.getAttribute('data-variant')).toBe('summary');
+      expect(frame.className).toContain('max-w-[1296px]');
+      expect(screen.getByTestId('seller-page-header-eyebrow').textContent).toBe('Продажи');
+      expect(screen.getByTestId('seller-page-header-title').textContent).toBe('Заказы');
+    });
+  });
+
+  it('Inventory uses wide frame, renders header, and provides Create Supply CTA to /supplies/new', async () => {
+    render(
+      <MemoryRouter>
+        <SellerInventory />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('seller-page-frame');
+      expect(frame.getAttribute('data-variant')).toBe('wide');
+      expect(frame.className).toContain('max-w-[1296px]');
+      expect(screen.getByTestId('seller-page-header-eyebrow').textContent).toBe('Ассортимент');
+      expect(screen.getByTestId('seller-page-header-title').textContent).toBe('Остатки');
+      expect(screen.getByRole('button', { name: /создать поставку/i })).toBeTruthy();
+    });
+  });
+
+  it('Supplies uses wide frame, renders header, and provides Create Supply CTA to /supplies/new', async () => {
+    render(
+      <MemoryRouter>
+        <SellerSupplies />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('seller-page-frame');
+      expect(frame.getAttribute('data-variant')).toBe('wide');
+      expect(frame.className).toContain('max-w-[1296px]');
+      expect(screen.getByTestId('seller-page-header-eyebrow').textContent).toBe('Ассортимент');
+      expect(screen.getByTestId('seller-page-header-title').textContent).toBe('Поставки');
+    });
+
+    const createLinks = screen.getAllByRole('link', { name: /создать поставку/i });
+    expect(createLinks.length).toBeGreaterThan(0);
+    expect(createLinks.every((link) => link.getAttribute('href') === '/supplies/new')).toBe(true);
+  });
+
+  it('Returns uses summary frame and renders header with correct eyebrow and title', async () => {
+    render(
+      <MemoryRouter>
+        <SellerReturns />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('seller-page-frame');
+      expect(frame.getAttribute('data-variant')).toBe('summary');
+      expect(frame.className).toContain('max-w-[1296px]');
+      expect(screen.getByTestId('seller-page-header-eyebrow').textContent).toBe('Продажи');
+      expect(screen.getByTestId('seller-page-header-title').textContent).toBe('Возвраты');
     });
   });
 });
