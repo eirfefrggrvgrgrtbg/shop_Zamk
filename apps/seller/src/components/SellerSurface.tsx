@@ -6,7 +6,7 @@ import { cn } from '../lib/utils';
 export type SellerSurfaceVariant = 'primary' | 'secondary' | 'muted';
 
 export interface SellerSurfaceProps extends React.HTMLAttributes<HTMLElement> {
-  as?: 'div' | 'section' | 'article';
+  as?: 'div' | 'section' | 'article' | 'aside';
   variant?: SellerSurfaceVariant;
   children?: React.ReactNode;
   className?: string;
@@ -241,6 +241,115 @@ export function SellerFilterBar({
       {...props}
     >
       {children}
+    </div>
+  );
+}
+
+export interface SellerDrawerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  'data-testid'?: string;
+}
+
+/**
+ * Canonical Seller Drawer / Sheet Primitive:
+ * - Floating surface overlaying the page (does not push or compress content underneath)
+ * - Backdrop blur / tint with click-to-close
+ * - Explicit close button & Escape key handling
+ * - Clean semantic elevation shadow (shadow-xl)
+ * - Responsive desktop width ~440-480px, nearly full-width on mobile
+ * - Accessible z-index (z-50) above page content and sticky nav (z-30)
+ */
+export function SellerDrawer({
+  isOpen,
+  onClose,
+  title,
+  children,
+  className,
+  'data-testid': dataTestId = 'seller-drawer',
+}: SellerDrawerProps) {
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-hidden" data-testid={dataTestId}>
+      {/* Backdrop */}
+      <div
+        data-testid="seller-drawer-backdrop"
+        className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Drawer Container */}
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={typeof title === 'string' ? title : 'Детали'}
+          className={cn(
+            "w-screen max-w-md sm:max-w-lg bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-white/10 flex flex-col transition-transform animate-in slide-in-from-right duration-200",
+            className
+          )}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-white/10 bg-white dark:bg-gray-900 shrink-0">
+            <div className="min-w-0 flex-1">
+              {typeof title === 'string' ? (
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white truncate">
+                  {title}
+                </h3>
+              ) : (
+                title
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              data-testid="seller-drawer-close"
+              aria-label="Закрыть"
+              className="p-1.5 -mr-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-white/10 dark:hover:text-white transition-colors cursor-pointer"
+            >
+              <svg
+                aria-hidden="true"
+                className="h-5 w-5"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+            {children}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

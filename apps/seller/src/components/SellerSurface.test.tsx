@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Package } from 'lucide-react';
 import {
@@ -8,13 +8,17 @@ import {
   SellerKpiCard,
   SellerTableShell,
   SellerFilterBar,
+  SellerDrawer,
 } from './SellerSurface';
 import { SellerDashboard } from '../pages/SellerDashboard';
 import { SellerOrders } from '../pages/SellerOrders';
 import { SellerInventory } from '../pages/SellerInventory';
-import type { SellerOrder, SellerInventoryItem } from '@zamk/api-client/src/types';
+import { SellerProducts } from '../pages/SellerProducts';
+import { SellerSupplies } from '../pages/SellerSupplies';
+import { SellerReturns } from '../pages/SellerReturns';
+import type { SellerOrder, SellerInventoryItem, SellerSupply, SellerReturn } from '@zamk/api-client/src/types';
 
-const { mockOrders, mockInventory } = vi.hoisted(() => {
+const { mockOrders, mockInventory, mockSupplies, mockReturns, mockProductsList } = vi.hoisted(() => {
   const mockOrders: SellerOrder[] = [
     {
       id: 'ord-12345-abc',
@@ -79,7 +83,80 @@ const { mockOrders, mockInventory } = vi.hoisted(() => {
     },
   ];
 
-  return { mockOrders, mockInventory };
+  const mockSupplies: SellerSupply[] = [
+    {
+      id: 'sup-1',
+      supplyNumber: 'SUP-001',
+      status: 'ready_to_ship',
+      createdAt: '2026-09-15T10:00:00Z',
+      totalExpectedItems: 10,
+      totalExpectedBoxes: 2,
+      carrierName: 'СДЭК',
+      trackingNumber: 'TRK-123456',
+    } as any,
+  ];
+
+  const mockReturns: SellerReturn[] = [
+    {
+      returnItemId: 'ret-item-1',
+      returnId: 'ret-1',
+      orderId: 'ord-12345-abc',
+      orderNumber: '12345',
+      orderItemId: 'item-1',
+      status: 'item_received',
+      quantity: 1,
+      productTitle: 'Шелковое платье',
+      sku: 'SKU-001',
+      priceCents: 250000,
+      subtotalPriceCents: 250000,
+      restock: true,
+      physicalOutcome: 'restocked',
+      financialAdjustment: {
+        deductionCents: 225000,
+        context: 'customer_return',
+        adjustedAt: '2026-09-16T10:00:00Z',
+        grossCents: 250000,
+        commissionCents: 25000,
+        sellerEarningCents: 225000,
+      },
+      compensation: {
+        status: 'credited',
+      },
+      createdAt: '2026-09-16T10:00:00Z',
+      updatedAt: '2026-09-16T12:00:00Z',
+    } as any,
+  ];
+
+  const mockProductsList: any[] = [
+    {
+      id: 'prod-1',
+      title: 'Шелковое платье',
+      status: 'approved',
+      slug: 'SKU-001',
+      categoryId: 'Платья',
+      brandId: 'ZAMK',
+      priceCents: 250000,
+      description: 'Премиальное шелковое платье',
+      variants: [
+        { id: 'v1', size: 'M', availableStock: 8, priceCents: 250000 },
+      ],
+    },
+    {
+      id: 'prod-2',
+      title: 'Худи оверсайз',
+      status: 'pending_moderation',
+      slug: 'SKU-002',
+      categoryId: 'Толстовки',
+      brandId: 'ZAMK',
+      priceCents: 180000,
+      description: 'Худи из плотного хлопка',
+      variants: [
+        { id: 'v2', size: 'L', availableStock: 0, priceCents: 180000 },
+      ],
+    },
+  ];
+
+  return { mockOrders, mockInventory, mockSupplies, mockReturns, mockProductsList };
 });
 
 vi.mock('@zamk/api-client/src/seller', () => ({
@@ -95,9 +172,7 @@ vi.mock('@zamk/api-client/src/seller', () => ({
       logoUrl: '',
     },
   }),
-  getSellerProducts: vi.fn().mockResolvedValue([
-    { id: 'p1', title: 'Шелковое платье' },
-  ]),
+  getSellerProducts: vi.fn().mockResolvedValue(mockProductsList),
   getSellerOrders: vi.fn().mockResolvedValue({ items: mockOrders }),
   getSellerOrderSummary: vi.fn().mockResolvedValue({
     todayUnits: 2,
@@ -107,9 +182,9 @@ vi.mock('@zamk/api-client/src/seller', () => ({
     returnsAmount: 0,
     returnsCount: 0,
   }),
-  getSellerReturns: vi.fn().mockResolvedValue([]),
+  getSellerReturns: vi.fn().mockResolvedValue({ items: mockReturns }),
   getSellerInventory: vi.fn().mockResolvedValue({ items: mockInventory }),
-  getSellerSupplies: vi.fn().mockResolvedValue([]),
+  getSellerSupplies: vi.fn().mockResolvedValue(mockSupplies),
   getSellerReviews: vi.fn().mockResolvedValue([]),
   getSellerLedger: vi.fn().mockResolvedValue([]),
   getSellerPayouts: vi.fn().mockResolvedValue([]),
@@ -121,6 +196,10 @@ vi.mock('@zamk/api-client/src/seller', () => ({
 describe('SELLER R1.4A — Surface System Reference', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   describe('1. Shared Surface Primitives Contract', () => {
@@ -203,6 +282,53 @@ describe('SELLER R1.4A — Surface System Reference', () => {
       const filterBar = screen.getByTestId('custom-filter-bar');
       expect(filterBar.className).toContain('border-b');
       expect(filterBar.className).toContain('p-3');
+    });
+
+    it('SellerDrawer renders dialog when open, traps focus/aria, and closes via backdrop, close button, or Escape', () => {
+      const handleClose = vi.fn();
+      const { rerender } = render(
+        <SellerDrawer
+          isOpen={true}
+          onClose={handleClose}
+          title="Панель деталей"
+          data-testid="test-drawer"
+        >
+          <div>Контент панели</div>
+        </SellerDrawer>
+      );
+
+      const drawer = screen.getByTestId('test-drawer');
+      expect(drawer).toBeTruthy();
+      expect(screen.getByRole('dialog')).toBeTruthy();
+      expect(screen.getByText('Панель деталей')).toBeTruthy();
+      expect(screen.getByText('Контент панели')).toBeTruthy();
+
+      // Close button triggers onClose
+      const closeBtn = screen.getByTestId('seller-drawer-close');
+      fireEvent.click(closeBtn);
+      expect(handleClose).toHaveBeenCalledTimes(1);
+
+      // Backdrop click triggers onClose
+      const backdrop = screen.getByTestId('seller-drawer-backdrop');
+      fireEvent.click(backdrop);
+      expect(handleClose).toHaveBeenCalledTimes(2);
+
+      // Escape key triggers onClose
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(handleClose).toHaveBeenCalledTimes(3);
+
+      // When isOpen is false, nothing is rendered
+      rerender(
+        <SellerDrawer
+          isOpen={false}
+          onClose={handleClose}
+          title="Панель деталей"
+          data-testid="test-drawer"
+        >
+          <div>Контент панели</div>
+        </SellerDrawer>
+      );
+      expect(screen.queryByTestId('test-drawer')).toBeNull();
     });
   });
 
@@ -321,8 +447,121 @@ describe('SELLER R1.4A — Surface System Reference', () => {
     });
   });
 
-  describe('5. Canvas Geometry Preservation', () => {
-    it('Dashboard, Orders, and Inventory strictly preserve canonical 1296px canvas rhythm', async () => {
+  describe('5. Products Canonical Surface Rollout (R1.4B1 & R1.4B1A)', () => {
+    it('Products adopts SellerKpiCard, SellerTableShell, and on-demand SellerDrawer on row click', async () => {
+      render(
+        <MemoryRouter>
+          <SellerProducts />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Мои товары')).toBeTruthy();
+      });
+
+      // KPI metrics adopted
+      const kpis = screen.getAllByTestId('seller-kpi-card');
+      expect(kpis.length).toBeGreaterThanOrEqual(4);
+
+      const kpiLabels = screen.getAllByTestId('seller-kpi-label').map(el => el.textContent);
+      expect(kpiLabels).toContain('Всего карточек');
+      expect(kpiLabels).toContain('Одобрено');
+      expect(kpiLabels).toContain('На проверке');
+      expect(kpiLabels).toContain('Текущая выручка');
+
+      // Table shell exists
+      expect(screen.getByTestId('seller-table-shell')).toBeTruthy();
+
+      // Product rows exist in full-width table
+      expect(screen.getByText('Шелковое платье')).toBeTruthy();
+      expect(screen.getByText('Худи оверсайз')).toBeTruthy();
+
+      // Initially, detail drawer is NOT open (default selection is null)
+      expect(screen.queryByTestId('seller-product-drawer')).toBeNull();
+
+      // Clicking a row opens the on-demand detail drawer
+      fireEvent.click(screen.getByText('Шелковое платье'));
+      expect(screen.getByTestId('seller-product-drawer')).toBeTruthy();
+      expect(screen.getByText('Карточка товара')).toBeTruthy();
+      expect(screen.getAllByText('Шелковое платье').length).toBeGreaterThanOrEqual(2); // In table and in drawer
+
+      // Closing drawer via close button dismisses drawer and clears selection
+      const closeBtn = screen.getByTestId('seller-drawer-close');
+      fireEvent.click(closeBtn);
+      expect(screen.queryByTestId('seller-product-drawer')).toBeNull();
+
+      // Reopening drawer and closing via Escape key
+      fireEvent.click(screen.getByText('Худи оверсайз'));
+      expect(screen.getByTestId('seller-product-drawer')).toBeTruthy();
+      expect(screen.getAllByText('Худи оверсайз').length).toBeGreaterThanOrEqual(2);
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.queryByTestId('seller-product-drawer')).toBeNull();
+    });
+  });
+
+  describe('6. Supplies Canonical Surface Rollout (R1.4B1)', () => {
+    it('Supplies adopts SellerTableShell, clean filter buttons, and standardized status badges', async () => {
+      render(
+        <MemoryRouter>
+          <SellerSupplies />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Поставки')).toBeTruthy();
+      });
+
+      // Filter pills present
+      expect(screen.getByRole('button', { name: 'Все' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Готовы к отправке' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'В пути' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'На приёмке' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Завершены' })).toBeTruthy();
+
+      // Table shell container present
+      expect(screen.getByTestId('seller-table-shell')).toBeTruthy();
+
+      // Supply number and status badge
+      expect(screen.getByText('SUP-001')).toBeTruthy();
+      expect(screen.getByText('Готова к отправке')).toBeTruthy();
+      expect(screen.getByText(/СДЭК/)).toBeTruthy();
+    });
+  });
+
+  describe('7. Returns Canonical Surface Rollout (R1.4B1)', () => {
+    it('Returns adopts SellerTableShell with canonical headers, row dividers, and financial truth', async () => {
+      render(
+        <MemoryRouter>
+          <SellerReturns />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Возвраты')).toBeTruthy();
+      });
+
+      // Table shell container present
+      expect(screen.getByTestId('seller-table-shell')).toBeTruthy();
+
+      // Column headers
+      expect(screen.getByText('Товар')).toBeTruthy();
+      expect(screen.getByText('Заказ')).toBeTruthy();
+      expect(screen.getByText('Дата возврата')).toBeTruthy();
+      expect(screen.getByText('Статус')).toBeTruthy();
+      expect(screen.getByText('Финансы')).toBeTruthy();
+
+      // Return item and financial adjustment displayed truthfully
+      expect(screen.getByText('Шелковое платье')).toBeTruthy();
+      expect(screen.getByText('#12345')).toBeTruthy();
+      expect(screen.getByText('Получен')).toBeTruthy();
+      expect(screen.getByText('Возвращён в продажу')).toBeTruthy();
+      expect(screen.getByText(/2\s?250/)).toBeTruthy();
+      expect(screen.getByText('Компенсация ZAMK')).toBeTruthy();
+    });
+  });
+
+  describe('8. Canvas Geometry Preservation', () => {
+    it('All pages strictly preserve canonical 1296px canvas rhythm (pt-6 pb-10)', async () => {
       const { unmount: unmountDashboard } = render(
         <MemoryRouter>
           <SellerDashboard />
@@ -350,10 +589,40 @@ describe('SELLER R1.4A — Surface System Reference', () => {
       const inventoryCanvas = screen.getByTestId('seller-page-frame').className;
       unmountInventory();
 
+      const { unmount: unmountProducts } = render(
+        <MemoryRouter>
+          <SellerProducts />
+        </MemoryRouter>
+      );
+      await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+      const productsCanvas = screen.getByTestId('seller-page-frame').className;
+      unmountProducts();
+
+      const { unmount: unmountSupplies } = render(
+        <MemoryRouter>
+          <SellerSupplies />
+        </MemoryRouter>
+      );
+      await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+      const suppliesCanvas = screen.getByTestId('seller-page-frame').className;
+      unmountSupplies();
+
+      const { unmount: unmountReturns } = render(
+        <MemoryRouter>
+          <SellerReturns />
+        </MemoryRouter>
+      );
+      await waitFor(() => expect(screen.getByTestId('seller-page-frame')).toBeTruthy());
+      const returnsCanvas = screen.getByTestId('seller-page-frame').className;
+      unmountReturns();
+
       expect(dashboardCanvas).toContain('max-w-[1296px]');
       expect(dashboardCanvas).toContain('pt-6 pb-10');
       expect(ordersCanvas).toBe(dashboardCanvas);
       expect(inventoryCanvas).toBe(dashboardCanvas);
+      expect(productsCanvas).toBe(dashboardCanvas);
+      expect(suppliesCanvas).toBe(dashboardCanvas);
+      expect(returnsCanvas).toBe(dashboardCanvas);
     });
   });
 });

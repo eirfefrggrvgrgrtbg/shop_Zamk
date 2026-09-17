@@ -4,6 +4,8 @@ import { Plus, Package, Truck, AlertCircle, Calendar } from 'lucide-react';
 import { getSellerSupplies } from '@zamk/api-client/src/seller';
 import type { SellerSupply } from '@zamk/api-client/src/types';
 import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
+import { SellerSurface, SellerTableShell } from '../components/SellerSurface';
+import { cn } from '../lib/utils';
 
 export function SellerSupplies() {
   const [supplies, setSupplies] = useState<SellerSupply[]>([]);
@@ -28,17 +30,24 @@ export function SellerSupplies() {
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'draft': return <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-bold uppercase tracking-wide">Черновик</span>;
-      case 'ready_to_ship': return <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-bold uppercase tracking-wide">Готова к отправке</span>;
-      case 'shipped_by_seller': return <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold uppercase tracking-wide">В пути</span>;
-      case 'arrived_at_zamk': return <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold uppercase tracking-wide">Прибыла в ZAMK</span>;
-      case 'receiving': return <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-bold uppercase tracking-wide">Приёмка</span>;
-      case 'completed': return <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-bold uppercase tracking-wide">Принята</span>;
-      case 'completed_with_discrepancies': return <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-bold uppercase tracking-wide">Принята с расхождениями</span>;
-      case 'cancelled': return <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-bold uppercase tracking-wide">Отменена</span>;
-      default: return <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-bold uppercase tracking-wide">{status}</span>;
-    }
+    const badgeMap: Record<string, { label: string; className: string }> = {
+      draft: { label: 'Черновик', className: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-white/10 dark:text-white/80 dark:border-white/10' },
+      ready_to_ship: { label: 'Готова к отправке', className: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-white/10 dark:text-white/80 dark:border-white/10' },
+      shipped_by_seller: { label: 'В пути', className: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/40' },
+      arrived_at_zamk: { label: 'Прибыла в ZAMK', className: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/40' },
+      receiving: { label: 'Приёмка', className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/40' },
+      completed: { label: 'Принята', className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/40' },
+      completed_with_discrepancies: { label: 'Принята с расхождениями', className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/40' },
+      cancelled: { label: 'Отменена', className: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-900/40' },
+    };
+
+    const item = badgeMap[status] || { label: status, className: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-white/10 dark:text-white/80 dark:border-white/10' };
+
+    return (
+      <span className={cn('inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium', item.className)}>
+        {item.label}
+      </span>
+    );
   };
 
   const filteredSupplies = supplies.filter(s => {
@@ -69,7 +78,7 @@ export function SellerSupplies() {
         action={
           <Link
             to="/supplies/new"
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white transition-colors hover:bg-gray-800"
           >
             <Plus className="h-4 w-4" />
             Создать поставку
@@ -78,78 +87,83 @@ export function SellerSupplies() {
       />
 
       <div className="flex space-x-2 mb-6 overflow-x-auto pb-2">
-        {['all', 'ready', 'shipped', 'receiving', 'completed'].map((f) => (
+        {[
+          { key: 'all', label: 'Все' },
+          { key: 'ready', label: 'Готовы к отправке' },
+          { key: 'shipped', label: 'В пути' },
+          { key: 'receiving', label: 'На приёмке' },
+          { key: 'completed', label: 'Завершены' },
+        ].map(({ key, label }) => (
           <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-              filter === f ? 'bg-black text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
-            }`}
+            key={key}
+            onClick={() => setFilter(key)}
+            className={cn(
+              "px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-colors",
+              filter === key
+                ? "bg-gray-900 text-white"
+                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 dark:bg-white/5 dark:text-white/70 dark:border-white/10 dark:hover:bg-white/10"
+            )}
           >
-            {f === 'all' && 'Все'}
-            {f === 'ready' && 'Готовы к отправке'}
-            {f === 'shipped' && 'В пути'}
-            {f === 'receiving' && 'На приёмке'}
-            {f === 'completed' && 'Завершены'}
+            {label}
           </button>
         ))}
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-50 p-4 rounded-lg flex items-center border border-red-100">
+        <div className="mb-6 bg-red-50 p-4 rounded-lg flex items-center border border-red-200 dark:bg-red-950/20 dark:border-red-900/30">
           <AlertCircle className="h-5 w-5 text-red-500 mr-3" />
-          <span className="text-red-700 font-medium">{error}</span>
+          <span className="text-red-700 font-medium text-sm dark:text-red-300">{error}</span>
         </div>
       )}
 
-      <div className="bg-white shadow-sm border border-gray-200 overflow-hidden sm:rounded-2xl">
-        {filteredSupplies.length > 0 ? (
-          <ul className="divide-y divide-gray-100">
+      {filteredSupplies.length > 0 ? (
+        <SellerTableShell>
+          <ul className="divide-y divide-gray-100 dark:divide-white/5">
             {filteredSupplies.map((supply) => {
               const skuCount = supply.skuCount ?? (supply.items ? new Set(supply.items.map(i => i.sku || i.variantId)).size : 0);
 
               return (
                 <li key={supply.id}>
-                  <Link to={`/supplies/${supply.id}`} className="block hover:bg-gray-50 transition-colors p-6">
+                  <Link to={`/supplies/${supply.id}`} className="block hover:bg-gray-50/60 dark:hover:bg-white/[0.02] transition-colors p-5 sm:p-6">
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between">
                       <div className="mb-4 sm:mb-0">
-                        <div className="flex items-center space-x-4 mb-2">
-                          <h3 className="text-lg font-bold text-black">{supply.supplyNumber || 'SUP-...'}</h3>
+                        <div className="flex items-center space-x-3 mb-2">
+                          <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">{supply.supplyNumber || 'SUP-...'}</h3>
                           {getStatusBadge(supply.status)}
                         </div>
-                        <div className="flex items-center text-sm text-gray-500 mb-4 space-x-4">
+                        <div className="flex flex-wrap items-center text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-4 gap-x-4 gap-y-1">
                           <span className="flex items-center">
-                            <Calendar className="w-4 h-4 mr-1" />
+                            <Calendar className="w-4 h-4 mr-1 text-gray-400" />
                             {new Date(supply.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
                           </span>
                           <span className="flex items-center">
-                            <Truck className="w-4 h-4 mr-1" />
+                            <Truck className="w-4 h-4 mr-1 text-gray-400" />
                             {supply.carrierName ? `Транспортная компания (${supply.carrierName})` : 'Транспортная компания'}
                           </span>
                           {supply.trackingNumber && (
-                            <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600">
+                            <span className="font-mono text-xs bg-gray-100 dark:bg-white/10 px-2 py-0.5 rounded text-gray-600 dark:text-gray-300">
                               {supply.trackingNumber}
                             </span>
                           )}
                         </div>
 
-                        <div className="flex items-center space-x-6">
+                        <div className="flex flex-wrap items-center gap-6">
                           <div>
-                            <p className="text-xs text-gray-500 uppercase tracking-wide font-bold">SKU</p>
-                            <p className="mt-1 font-medium text-gray-900">{skuCount}</p>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">SKU</p>
+                            <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">{skuCount}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 uppercase tracking-wide font-bold">Заявлено (шт)</p>
-                            <p className="mt-1 font-medium text-gray-900">{supply.totalExpectedItems ?? 0}</p>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Заявлено (шт)</p>
+                            <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">{supply.totalExpectedItems ?? 0}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 uppercase tracking-wide font-bold">Грузомест</p>
-                            <p className="mt-1 font-medium text-gray-900">{supply.totalExpectedBoxes ?? 1}</p>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Грузомест</p>
+                            <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">{supply.totalExpectedBoxes ?? 1}</p>
                           </div>
                           {(supply.status === 'completed' || supply.status === 'completed_with_discrepancies') && (
-                            <div className="pl-6 border-l border-gray-200">
-                              <p className="text-xs text-gray-500 uppercase tracking-wide font-bold">Итог приёмки</p>
-                              <p className={`mt-1 font-bold ${supply.totalExpectedItems === supply.totalAcceptedItems ? 'text-green-600' : 'text-orange-600'}`}>
+                            <div className="pl-6 border-l border-gray-200 dark:border-white/10">
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Итог приёмки</p>
+                              <p className={`mt-1 text-sm font-bold ${supply.totalExpectedItems === supply.totalAcceptedItems ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                                 {supply.totalAcceptedItems ?? 0} принято
                               </p>
                             </div>
@@ -162,25 +176,25 @@ export function SellerSupplies() {
               );
             })}
           </ul>
-        ) : (
-          <div className="text-center py-16 px-4">
-            <Package className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900">Нет поставок</h3>
-            <p className="mt-2 text-sm text-gray-500">
-              Пока вы не создали ни одной поставки, подходящей под фильтры.
-            </p>
-            <div className="mt-6">
-              <Link
-                to="/supplies/new"
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800"
-              >
-                <Plus className="-ml-1 mr-2 h-5 w-5" />
-                Создать поставку
-              </Link>
-            </div>
+        </SellerTableShell>
+      ) : (
+        <SellerSurface className="text-center py-16 px-4">
+          <Package className="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600 mb-4" />
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white">Нет поставок</h3>
+          <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
+            Пока вы не создали ни одной поставки, подходящей под фильтры.
+          </p>
+          <div className="mt-6">
+            <Link
+              to="/supplies/new"
+              className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-gray-900 hover:bg-gray-800 transition-colors shadow-sm"
+            >
+              <Plus className="-ml-1 mr-2 h-4 w-4" />
+              Создать поставку
+            </Link>
           </div>
-        )}
-      </div>
+        </SellerSurface>
+      )}
     </SellerPageFrame>
   );
 }
