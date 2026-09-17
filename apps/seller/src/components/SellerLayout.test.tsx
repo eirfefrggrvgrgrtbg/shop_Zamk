@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { SellerLayout } from './SellerLayout';
 import { getSellerBalance } from '@zamk/api-client/src/seller';
@@ -29,7 +29,7 @@ vi.mock('../api/notifications', () => ({
   },
 }));
 
-describe('SellerLayout - R1.1 & R1.1A Global Shell & Header Balance', () => {
+describe('SellerLayout - R1.1B Desktop Top Navigation Shell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getSellerBalance).mockResolvedValue({
@@ -66,111 +66,256 @@ describe('SellerLayout - R1.1 & R1.1A Global Shell & Header Balance', () => {
     expect(screen.getByText('Page Content')).toBeTruthy();
   });
 
-  it('renders NotificationBell in header, and does NOT render GlobalMoneyStrip', () => {
+  // 1. Desktop permanent sidebar is not rendered
+  it('does not render a permanent desktop sidebar aside', () => {
     renderLayout('/dashboard');
-    // Notification bell is present
-    expect(screen.getByRole('button', { name: /уведомления/i })).toBeTruthy();
-    // Old Money strip fields (multi-currency, frozen, in transit) are absent
-    expect(screen.queryByText(/в пути/i)).toBeNull();
-    expect(screen.queryByText(/заморожено/i)).toBeNull();
+    const desktopSidebar = document.querySelector('aside.hidden.md\\:flex, aside.md\\:flex');
+    expect(desktopSidebar).toBeNull();
+    // Ensure the only aside in the document is the mobile drawer
+    const asides = document.querySelectorAll('aside');
+    expect(asides.length).toBe(1);
+    expect(asides[0].getAttribute('data-testid')).toBe('mobile-drawer');
   });
 
-  it('renders exactly the 5 canonical navigation groups with section titles', () => {
+  // 2. Desktop top navigation renders: Обзор, Ассортимент, Продажи, Данные, Контроль, Профиль
+  it('renders desktop top navigation with canonical groups, direct link, and triggers', () => {
     renderLayout('/dashboard');
+    const topNav = screen.getByTestId('desktop-top-nav');
+    expect(topNav).toBeTruthy();
 
-    expect(screen.getAllByText('Ориентация').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Ассортимент').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Продажи').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Данные').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Контроль').length).toBeGreaterThan(0);
+    expect(within(topNav).getByRole('link', { name: 'Обзор' })).toBeTruthy();
+    expect(within(topNav).getByRole('button', { name: /ассортимент/i })).toBeTruthy();
+    expect(within(topNav).getByRole('button', { name: /продажи/i })).toBeTruthy();
+    expect(within(topNav).getByRole('button', { name: /данные/i })).toBeTruthy();
+    expect(within(topNav).getByRole('button', { name: /контроль/i })).toBeTruthy();
+    expect(within(topNav).getByRole('button', { name: /профиль/i })).toBeTruthy();
   });
 
-  it('renders all canonical navigation links in their designated groups', () => {
+  // 3. Ассортимент dropdown contains: Товары, Остатки, Поставки
+  it('opens Ассортимент dropdown on click and renders its items', () => {
     renderLayout('/dashboard');
+    const topNav = screen.getByTestId('desktop-top-nav');
+    const assortmentBtn = within(topNav).getByRole('button', { name: /ассортимент/i });
 
-    // Group 1: Ориентация
-    const dashboardLinks = screen.getAllByRole('link', { name: /панель продавца/i });
-    expect(dashboardLinks.some(link => link.getAttribute('href') === '/dashboard')).toBe(true);
+    expect(assortmentBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(within(topNav).queryByRole('menuitem', { name: /товары/i })).toBeNull();
 
-    // Group 2: Ассортимент
-    const productLinks = screen.getAllByRole('link', { name: /товары/i });
-    expect(productLinks.some(link => link.getAttribute('href') === '/products')).toBe(true);
+    fireEvent.click(assortmentBtn);
+    expect(assortmentBtn.getAttribute('aria-expanded')).toBe('true');
 
-    const inventoryLinks = screen.getAllByRole('link', { name: /остатки/i });
-    expect(inventoryLinks.some(link => link.getAttribute('href') === '/inventory')).toBe(true);
+    const productsLink = within(topNav).getByRole('menuitem', { name: /товары/i });
+    expect(productsLink.getAttribute('href')).toBe('/products');
 
-    const supplyLinks = screen.getAllByRole('link', { name: /поставки/i });
-    expect(supplyLinks.some(link => link.getAttribute('href') === '/supplies')).toBe(true);
+    const inventoryLink = within(topNav).getByRole('menuitem', { name: /остатки/i });
+    expect(inventoryLink.getAttribute('href')).toBe('/inventory');
 
-    // Group 3: Продажи
-    const orderLinks = screen.getAllByRole('link', { name: /заказы/i });
-    expect(orderLinks.some(link => link.getAttribute('href') === '/orders')).toBe(true);
-
-    const returnLinks = screen.getAllByRole('link', { name: /возвраты/i });
-    expect(returnLinks.some(link => link.getAttribute('href') === '/returns')).toBe(true);
-
-    const reviewLinks = screen.getAllByRole('link', { name: /отзывы/i });
-    expect(reviewLinks.some(link => link.getAttribute('href') === '/reviews')).toBe(true);
-
-    // Group 4: Данные
-    // Note: there are now two links to /payouts: the sidebar "Финансы" and the header balance link
-    const financeLinks = screen.getAllByRole('link', { name: /финансы/i });
-    expect(financeLinks.some(link => link.getAttribute('href') === '/payouts')).toBe(true);
-
-    const analyticsLinks = screen.getAllByRole('link', { name: /аналитика/i });
-    expect(analyticsLinks.some(link => link.getAttribute('href') === '/analytics')).toBe(true);
-
-    // Group 5: Контроль
-    const warningLinks = screen.getAllByRole('link', { name: /предупреждения/i });
-    expect(warningLinks.some(link => link.getAttribute('href') === '/warnings')).toBe(true);
+    const suppliesLink = within(topNav).getByRole('menuitem', { name: /поставки/i });
+    expect(suppliesLink.getAttribute('href')).toBe('/supplies');
   });
 
-  it('does NOT render removed or hidden items from sidebar navigation', () => {
+  // 4. Продажи dropdown contains: Заказы, Возвраты, Отзывы
+  it('opens Продажи dropdown on click and renders its items', () => {
     renderLayout('/dashboard');
+    const topNav = screen.getByTestId('desktop-top-nav');
+    const salesBtn = within(topNav).getByRole('button', { name: /продажи/i });
 
-    // "Добавить товар" removed from sidebar
-    expect(screen.queryByRole('link', { name: /добавить товар/i })).toBeNull();
+    fireEvent.click(salesBtn);
+    expect(salesBtn.getAttribute('aria-expanded')).toBe('true');
 
-    // "Шаблоны" hidden from sidebar
-    expect(screen.queryByRole('link', { name: /шаблоны/i })).toBeNull();
+    const ordersLink = within(topNav).getByRole('menuitem', { name: /заказы/i });
+    expect(ordersLink.getAttribute('href')).toBe('/orders');
 
-    // "Выплаты" renamed to "Финансы"
-    expect(screen.queryByRole('link', { name: /^выплаты$/i })).toBeNull();
+    const returnsLink = within(topNav).getByRole('menuitem', { name: /возвраты/i });
+    expect(returnsLink.getAttribute('href')).toBe('/returns');
+
+    const reviewsLink = within(topNav).getByRole('menuitem', { name: /отзывы/i });
+    expect(reviewsLink.getAttribute('href')).toBe('/reviews');
   });
 
-  it('renders "Профиль магазина" in the lower profile/footer section linking to /settings', () => {
+  // 5. Данные dropdown contains: Финансы, Аналитика
+  it('opens Данные dropdown on click and renders its items', () => {
     renderLayout('/dashboard');
+    const topNav = screen.getByTestId('desktop-top-nav');
+    const dataBtn = within(topNav).getByRole('button', { name: /данные/i });
 
-    const profileLinks = screen.getAllByRole('link', { name: /профиль магазина/i });
-    expect(profileLinks.length).toBeGreaterThan(0);
-    expect(profileLinks.some(link => link.getAttribute('href') === '/settings')).toBe(true);
+    fireEvent.click(dataBtn);
+    expect(dataBtn.getAttribute('aria-expanded')).toBe('true');
+
+    const financeLink = within(topNav).getByRole('menuitem', { name: /финансы/i });
+    expect(financeLink.getAttribute('href')).toBe('/payouts');
+
+    const analyticsLink = within(topNav).getByRole('menuitem', { name: /аналитика/i });
+    expect(analyticsLink.getAttribute('href')).toBe('/analytics');
   });
 
-  it('renders logout button and calls logout on click', () => {
+  // 6. Контроль dropdown contains: Предупреждения
+  it('opens Контроль dropdown on click and renders its items', () => {
     renderLayout('/dashboard');
+    const topNav = screen.getByTestId('desktop-top-nav');
+    const controlBtn = within(topNav).getByRole('button', { name: /контроль/i });
 
-    const logoutBtns = screen.getAllByRole('button', { name: /выйти/i });
-    expect(logoutBtns.length).toBeGreaterThan(0);
+    fireEvent.click(controlBtn);
+    expect(controlBtn.getAttribute('aria-expanded')).toBe('true');
 
-    fireEvent.click(logoutBtns[0]);
+    const warningsLink = within(topNav).getByRole('menuitem', { name: /предупреждения/i });
+    expect(warningsLink.getAttribute('href')).toBe('/warnings');
+  });
+
+  // 7. Profile dropdown contains: Профиль магазина, Выйти
+  it('opens Profile dropdown on click and renders Профиль магазина and Выйти', () => {
+    renderLayout('/dashboard');
+    const topNav = screen.getByTestId('desktop-top-nav');
+    const profileBtn = within(topNav).getByRole('button', { name: /профиль/i });
+
+    fireEvent.click(profileBtn);
+    expect(profileBtn.getAttribute('aria-expanded')).toBe('true');
+
+    const settingsLink = within(topNav).getByRole('menuitem', { name: /профиль магазина/i });
+    expect(settingsLink.getAttribute('href')).toBe('/settings');
+
+    const logoutBtn = within(topNav).getByRole('menuitem', { name: /выйти/i });
+    expect(logoutBtn).toBeTruthy();
+
+    fireEvent.click(logoutBtn);
     expect(mockLogout).toHaveBeenCalled();
   });
 
-  it('highlights the active link correctly based on current path', () => {
-    renderLayout('/orders');
+  // 8. Only one dropdown is open at once
+  it('ensures only one dropdown is open at a time', () => {
+    renderLayout('/dashboard');
+    const topNav = screen.getByTestId('desktop-top-nav');
+    const assortmentBtn = within(topNav).getByRole('button', { name: /ассортимент/i });
+    const salesBtn = within(topNav).getByRole('button', { name: /продажи/i });
+    const profileBtn = within(topNav).getByRole('button', { name: /профиль/i });
 
-    const orderLinks = screen.getAllByRole('link', { name: /заказы/i });
-    expect(orderLinks.some(link => link.className.includes('bg-black') && link.className.includes('text-white'))).toBe(true);
+    // Open assortment
+    fireEvent.click(assortmentBtn);
+    expect(assortmentBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(within(topNav).getByRole('menuitem', { name: /товары/i })).toBeTruthy();
 
-    const productLinks = screen.getAllByRole('link', { name: /товары/i });
-    expect(productLinks.every(link => !link.className.includes('bg-black'))).toBe(true);
+    // Click sales -> assortment closes, sales opens
+    fireEvent.click(salesBtn);
+    expect(assortmentBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(salesBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(within(topNav).queryByRole('menuitem', { name: /товары/i })).toBeNull();
+    expect(within(topNav).getByRole('menuitem', { name: /заказы/i })).toBeTruthy();
+
+    // Click profile -> sales closes, profile opens
+    fireEvent.click(profileBtn);
+    expect(salesBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(profileBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(within(topNav).queryByRole('menuitem', { name: /заказы/i })).toBeNull();
+    expect(within(topNav).getByRole('menuitem', { name: /профиль магазина/i })).toBeTruthy();
   });
 
-  it('highlights /settings when on settings route', () => {
-    renderLayout('/settings');
+  // 9. Clicking outside closes dropdown
+  it('closes open dropdown when clicking outside', () => {
+    renderLayout('/dashboard');
+    const topNav = screen.getByTestId('desktop-top-nav');
+    const assortmentBtn = within(topNav).getByRole('button', { name: /ассортимент/i });
 
-    const profileLinks = screen.getAllByRole('link', { name: /профиль магазина/i });
-    expect(profileLinks.some(link => link.className.includes('bg-black') && link.className.includes('text-white'))).toBe(true);
+    fireEvent.click(assortmentBtn);
+    expect(within(topNav).getByRole('menuitem', { name: /товары/i })).toBeTruthy();
+
+    // Click outside
+    fireEvent.mouseDown(screen.getByTestId('child-content'));
+    expect(within(topNav).queryByRole('menuitem', { name: /товары/i })).toBeNull();
+    expect(assortmentBtn.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  // 10. Escape closes dropdown
+  it('closes open dropdown when pressing Escape key', () => {
+    renderLayout('/dashboard');
+    const topNav = screen.getByTestId('desktop-top-nav');
+    const assortmentBtn = within(topNav).getByRole('button', { name: /ассортимент/i });
+
+    fireEvent.click(assortmentBtn);
+    expect(within(topNav).getByRole('menuitem', { name: /товары/i })).toBeTruthy();
+
+    // Press Escape
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(within(topNav).queryByRole('menuitem', { name: /товары/i })).toBeNull();
+    expect(assortmentBtn.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  // 11. Active group follows current route
+  it('highlights active group and active child items following the current route', () => {
+    // 1. Dashboard -> Обзор active
+    const { unmount: u1 } = renderLayout('/dashboard');
+    const topNav1 = screen.getByTestId('desktop-top-nav');
+    const overviewLink = within(topNav1).getByRole('link', { name: 'Обзор' });
+    expect(overviewLink.getAttribute('data-active')).toBe('true');
+    u1();
+
+    // 2. /products -> Ассортимент active
+    const { unmount: u2 } = renderLayout('/products');
+    const topNav2 = screen.getByTestId('desktop-top-nav');
+    const assortmentBtn = within(topNav2).getByRole('button', { name: /ассортимент/i });
+    expect(assortmentBtn.getAttribute('data-active')).toBe('true');
+    // Open assortment and check that Товары has active styling
+    fireEvent.click(assortmentBtn);
+    const productsItem = within(topNav2).getByRole('menuitem', { name: /товары/i });
+    expect(productsItem.className).toContain('bg-black');
+    expect(productsItem.className).toContain('text-white');
+    u2();
+
+    // 3. /orders -> Продажи active
+    const { unmount: u3 } = renderLayout('/orders');
+    const topNav3 = screen.getByTestId('desktop-top-nav');
+    expect(within(topNav3).getByRole('button', { name: /продажи/i }).getAttribute('data-active')).toBe('true');
+    u3();
+
+    // 4. /payouts -> Данные active
+    const { unmount: u4 } = renderLayout('/payouts');
+    const topNav4 = screen.getByTestId('desktop-top-nav');
+    expect(within(topNav4).getByRole('button', { name: /данные/i }).getAttribute('data-active')).toBe('true');
+    u4();
+
+    // 5. /warnings -> Контроль active
+    const { unmount: u5 } = renderLayout('/warnings');
+    const topNav5 = screen.getByTestId('desktop-top-nav');
+    expect(within(topNav5).getByRole('button', { name: /контроль/i }).getAttribute('data-active')).toBe('true');
+    u5();
+
+    // 6. /settings -> Профиль active
+    const { unmount: u6 } = renderLayout('/settings');
+    const topNav6 = screen.getByTestId('desktop-top-nav');
+    expect(within(topNav6).getByRole('button', { name: /профиль/i }).getAttribute('data-active')).toBe('true');
+    u6();
+  });
+
+  // 13. NotificationBell remains
+  it('renders NotificationBell in the desktop top navigation bar', () => {
+    renderLayout('/dashboard');
+    const topNav = screen.getByTestId('desktop-top-nav');
+    expect(within(topNav).getByRole('button', { name: /уведомления/i })).toBeTruthy();
+  });
+
+  // 14. Mobile navigation remains reachable
+  it('renders mobile menu trigger and mobile drawer with accessible navigation', () => {
+    renderLayout('/dashboard');
+    const menuBtn = screen.getByRole('button', { name: /открыть меню/i });
+    expect(menuBtn).toBeTruthy();
+
+    const drawer = screen.getByTestId('mobile-drawer');
+    expect(drawer.className).toContain('-translate-x-full');
+
+    fireEvent.click(menuBtn);
+    expect(drawer.className).toContain('translate-x-0');
+
+    // Verify drawer contains canonical links
+    expect(within(drawer).getByRole('link', { name: /обзор/i })).toBeTruthy();
+    expect(within(drawer).getByRole('link', { name: /товары/i })).toBeTruthy();
+    expect(within(drawer).getByRole('link', { name: /заказы/i })).toBeTruthy();
+    expect(within(drawer).getByRole('link', { name: /профиль магазина/i })).toBeTruthy();
+    expect(within(drawer).getByRole('button', { name: /выйти/i })).toBeTruthy();
+  });
+
+  // 15. “Добавить товар” and “Шаблоны” are absent from global nav
+  it('does NOT render removed or hidden items (“Добавить товар”, “Шаблоны”) in navigation', () => {
+    renderLayout('/dashboard');
+    expect(screen.queryByRole('link', { name: /добавить товар/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /шаблоны/i })).toBeNull();
   });
 
   // ==================================================
