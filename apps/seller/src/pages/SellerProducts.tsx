@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import {
   AlertTriangle,
-  ArrowLeft,
   BarChart3,
   Eye,
   Edit2,
@@ -13,6 +12,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from 'lucide-react';
+import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 import {
   statusLabels,
   type SellerProduct,
@@ -263,39 +263,41 @@ export function SellerProducts() {
   const revenue = products.reduce((sum, product) => sum + product.revenue, 0);
 
   if (isLoading) {
-    return <div className="min-h-screen pt-24 pb-24 md:pt-28 md:pb-20 flex justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div></div>;
+    return (
+      <SellerPageFrame variant="wide">
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
+        </div>
+      </SellerPageFrame>
+    );
   }
 
   if (error) {
-    return <div className="min-h-screen pt-24 pb-24 md:pt-28 md:pb-20 flex justify-center text-red-500">{error}</div>;
+    return (
+      <SellerPageFrame variant="wide">
+        <div className="flex justify-center py-20 text-red-500">
+          {error}
+        </div>
+      </SellerPageFrame>
+    );
   }
 
   return (
-    <div className="relative z-10 min-h-screen pt-24 pb-24 md:pt-28 md:pb-20">
-      <div className="container mx-auto max-w-[1400px] px-4 sm:px-6">
-        <Link to="/dashboard" className="inline-flex items-center gap-2 text-sm text-ash hover:text-graphite dark:text-white/60 dark:hover:text-white">
-          <ArrowLeft className="h-4 w-4" />
-          Кабинет продавца
-        </Link>
-
-        <section className="mt-6 glass-panel-strong p-7 md:p-10">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="studio-label">Ассортимент</p>
-              <h1 className="mt-3 text-4xl font-serif leading-tight text-graphite dark:text-white md:text-6xl">Мои товары</h1>
-              <p className="studio-subtitle mt-4 max-w-3xl">
-                Управляйте карточками товаров. После модерации необходимо оформить поставку на склад ZAMK для старта продаж.
-              </p>
-            </div>
-            <Link
-              to="/products/new"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-graphite px-6 text-sm font-semibold text-white transition-colors hover:bg-graphite-light dark:bg-white dark:text-black dark:hover:bg-white/86"
-            >
-              <PackagePlus className="h-4 w-4" />
-              Добавить товар
-            </Link>
-          </div>
-        </section>
+    <SellerPageFrame variant="wide">
+      <SellerPageHeader
+        eyebrow="Ассортимент"
+        title="Мои товары"
+        description="Управляйте карточками товаров. После модерации необходимо оформить поставку на склад ZAMK для старта продаж."
+        action={
+          <Link
+            to="/products/new"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+          >
+            <PackagePlus className="h-4 w-4" />
+            Добавить товар
+          </Link>
+        }
+      />
 
         <section className="mt-6 grid gap-4 md:grid-cols-3 xl:grid-cols-4">
           <SummaryCard label="Всего карточек" value={formatNumber(products.length)} hint="создано в системе" icon={ShoppingBag} />
@@ -419,7 +421,6 @@ export function SellerProducts() {
               {selectedProduct && <ProductDetailPanel product={selectedProduct} sellerStatus={sellerStatus} />}
             </div>
           )}
-      </div>
-    </div>
+    </SellerPageFrame>
   );
 }

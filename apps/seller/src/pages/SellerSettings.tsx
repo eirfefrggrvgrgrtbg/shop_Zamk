@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Store, Upload, CheckCircle, AlertCircle, Clock, Ban, Archive } from 'lucide-react';
 import { getSellerMe, updateSellerMe, uploadSellerLogo } from '@zamk/api-client/src/seller';
 import type { SellerMe, UpdateSellerProfileRequest } from '@zamk/api-client/src/types';
+import { SellerPageFrame, SellerPageHeader, SellerGrid } from '../components/SellerPageFrame';
 
 const STATUS_LABELS: Record<string, { label: string; color: string; icon: typeof CheckCircle }> = {
   active:   { label: 'Активен',     color: 'bg-green-100 text-green-800',  icon: CheckCircle },
@@ -133,33 +134,33 @@ export function SellerSettings() {
 
   if (isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <p className="text-gray-500">Загрузка профиля магазина...</p>
-      </div>
+      <SellerPageFrame variant="form">
+        <div className="flex h-64 items-center justify-center">
+          <p className="text-gray-500">Загрузка профиля магазина...</p>
+        </div>
+      </SellerPageFrame>
     );
   }
 
   if (loadError) {
     return (
-      <div className="p-8">
+      <SellerPageFrame variant="form">
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{loadError}</div>
-      </div>
+      </SellerPageFrame>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="mx-auto max-w-2xl space-y-8">
+    <SellerPageFrame variant="form">
+      <SellerPageHeader
+        eyebrow="Настройки"
+        title="Профиль магазина"
+        description="Информация о бренде и контакты магазина."
+        action={sellerData ? <StatusBadge status={sellerData.seller.status} /> : undefined}
+      />
 
-        {/* Заголовок */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium uppercase tracking-wide text-gray-500">Настройки</p>
-            <h1 className="mt-1 text-3xl font-bold text-gray-900">Профиль магазина</h1>
-          </div>
-          {sellerData && <StatusBadge status={sellerData.seller.status} />}
-        </div>
-
+      <SellerGrid>
+        <div className="lg:col-span-8 xl:col-span-9 space-y-8">
         {/* Статус-подсказка для не-активных */}
         {sellerData?.seller.status === 'pending' && (
           <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
@@ -324,10 +325,8 @@ export function SellerSettings() {
             </button>
           </div>
         </div>
-
-
-
       </div>
-    </div>
+    </SellerGrid>
+  </SellerPageFrame>
   );
 }

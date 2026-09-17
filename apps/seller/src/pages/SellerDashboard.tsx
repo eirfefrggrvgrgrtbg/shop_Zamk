@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Archive, Package, RotateCcw, ShoppingCart, AlertTriangle, CheckCircle2, ChevronRight, PlusCircle } from 'lucide-react';
+import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 import {
   getSellerBalance,
   getSellerInventory,
@@ -174,15 +175,12 @@ export function SellerDashboard() {
   if (data.returns.length > 0) attentionItems.push({ label: `Обработайте ${pluralize(data.returns.length, ['новый возврат', 'новых возврата', 'новых возвратов'])}`, to: '/returns' });
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="mx-auto max-w-7xl space-y-8">
-        <div>
-          <p className="text-sm font-medium uppercase tracking-wide text-gray-500">Панель продавца</p>
-          <h1 className="mt-2 text-3xl font-bold text-gray-900">Обзор магазина</h1>
-          <p className="mt-2 text-gray-600">
-            Ключевые показатели и задачи, требующие вашего внимания.
-          </p>
-        </div>
+    <SellerPageFrame variant="summary">
+      <SellerPageHeader
+        eyebrow="Панель продавца"
+        title="Обзор магазина"
+        description="Ключевые показатели и задачи, требующие вашего внимания."
+      />
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -305,7 +303,6 @@ export function SellerDashboard() {
 
           </>
         )}
-      </div>
-    </div>
+    </SellerPageFrame>
   );
 }
