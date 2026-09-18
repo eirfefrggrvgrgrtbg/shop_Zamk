@@ -604,6 +604,12 @@ export function useVariantSelection(
     setSelectedSizeId(null);
   }, []);
 
+  const restoreSelection = useCallback((colorId: string | null, sizeId: string | null, notice: string | null = null) => {
+    setSelectedColorId(colorId);
+    setSelectedSizeId(sizeId);
+    setSizeSelectionNotice(notice);
+  }, []);
+
   const state = useMemo(() => {
     return selectVariantState(variants, selectedColorId, selectedSizeId, sizeChart, sizeSelectionNotice);
   }, [variants, selectedColorId, selectedSizeId, sizeChart, sizeSelectionNotice]);
@@ -614,8 +620,10 @@ export function useVariantSelection(
     selectSize,
     clearNotice,
     clearSelectedSize,
+    setSelectedColorId,
     setSelectedSizeId,
     setSizeSelectionNotice,
+    restoreSelection,
   };
 }
 

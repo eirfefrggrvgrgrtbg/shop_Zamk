@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { ChevronRight, ChevronLeft, Heart, ShoppingBag, Star, ChevronDown, Eye, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -17,9 +17,18 @@ import { isInsufficientStockError } from '@zamk/api-client/src/errors';
 import {
   useVariantSelection,
   reconcileSelectionAfterStaleStock,
+  getDefaultColorId,
+  getVariantColorId,
+  getVariantSizeId,
+  isVariantBuyable,
   PRODUCT_JUST_SOLD_OUT_NOTICE,
   REFRESH_ERROR_NOTICE,
 } from '../lib/variantSelection';
+import {
+  validateVariantUrlState,
+  computeVariantUrlParams,
+  areSearchParamsEqual,
+} from '../lib/variantUrlState';
 import {
   findMediaIndexForColor,
   deduplicateGalleryImages,
@@ -341,6 +350,7 @@ function AccordionSection({ title, children, defaultOpen = false }: { title: str
 
 export function ProductDetail() {
   const { id, token } = useParams<{ id?: string; token?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -455,6 +465,7 @@ export function ProductDetail() {
     selectSize,
     clearSelectedSize,
     setSizeSelectionNotice,
+    restoreSelection,
   } = useVariantSelection(product?.variants, product?.sizeChart);
 
   const defaultImage = { url: 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image' };
@@ -464,6 +475,78 @@ export function ProductDetail() {
   const visibleImages: GalleryMediaItem[] = useMemo(() => {
     return deduplicateGalleryImages(product?.images, product?.image, defaultImage);
   }, [product?.images, product?.image]);
+
+  // Track last focused color to avoid re-focusing when manually browsing thumbnails
+  const lastFocusedColorRef = useRef<string | null | undefined>(undefined);
+
+  // Synchronize state with URL search params (on load, Back/Forward, or shared link)
+  useEffect(() => {
+    if (!product?.variants) return;
+
+    const validated = validateVariantUrlState(product.variants, searchParams);
+
+    // 1. Sanitization: if URL has invalid/sold-out/not-offered params, sanitize via REPLACE
+    if (validated.needsReplace) {
+      setSearchParams(validated.sanitizedSearchParams, { replace: true });
+    }
+
+    // 2. Selection state synchronization
+    if (validated.hasExplicitColorIntent && validated.targetColorId) {
+      if (
+        validated.targetColorId !== selectedColorId ||
+        validated.targetSizeId !== selectedSizeId ||
+        (validated.notice !== null && validated.notice !== sizeSelectionNotice)
+      ) {
+        const nextNotice = validated.notice !== null ? validated.notice : sizeSelectionNotice;
+        restoreSelection(validated.targetColorId, validated.targetSizeId, nextNotice);
+      }
+
+      // Media focus: URL-restored color represents explicit color intent (PDP.2D2 Section 15)
+      // Focus media only if the explicit color changed from what was last focused
+      if (lastFocusedColorRef.current !== validated.targetColorId) {
+        lastFocusedColorRef.current = validated.targetColorId;
+        const targetIndex = findMediaIndexForColor(visibleImages, validated.targetColorId);
+        setActiveImage(targetIndex);
+      }
+    } else if (dimensionType === 'SIZE_ONLY' && validated.hasExplicitSizeIntent) {
+      if (
+        validated.targetSizeId !== selectedSizeId ||
+        (validated.notice !== null && validated.notice !== sizeSelectionNotice)
+      ) {
+        const nextNotice = validated.notice !== null ? validated.notice : sizeSelectionNotice;
+        restoreSelection(null, validated.targetSizeId, nextNotice);
+      }
+    } else {
+      // Clean URL:
+      // If user navigated Back to clean URL from a colored URL, reset media focus to main image:
+      if (
+        lastFocusedColorRef.current !== undefined &&
+        lastFocusedColorRef.current !== null &&
+        lastFocusedColorRef.current !== getDefaultColorId(colors)
+      ) {
+        lastFocusedColorRef.current = getDefaultColorId(colors);
+        setActiveImage(0);
+      } else if (lastFocusedColorRef.current === undefined) {
+        // Initial clean load: mark default color as focused so selecting a size does not refocus media
+        lastFocusedColorRef.current = getDefaultColorId(colors);
+      }
+      const isCleanUrl = !searchParams.has('color') && !searchParams.has('size');
+      if (isCleanUrl && (selectedSizeId !== null || (selectedColorId && selectedColorId !== getDefaultColorId(colors)))) {
+        restoreSelection(getDefaultColorId(colors), null, null);
+      }
+    }
+  }, [
+    product?.variants,
+    searchParams,
+    dimensionType,
+    colors,
+    visibleImages,
+    selectedColorId,
+    selectedSizeId,
+    sizeSelectionNotice,
+    restoreSelection,
+    setSearchParams,
+  ]);
 
   const resetZoom = () => {
     setIsZoomed(false);
@@ -559,6 +642,41 @@ export function ProductDetail() {
     // Focus the first image matching selected color, or fallback to general image, or fallback to index 0.
     const targetIndex = findMediaIndexForColor(visibleImages, colorId);
     setActiveImage(targetIndex);
+    lastFocusedColorRef.current = colorId;
+
+    // Check if selected size remains buyable in new color (PDP.2B / PDP.2D2 Section 5)
+    let nextSizeId: string | null = null;
+    if (selectedSizeId) {
+      const targetVariant = product?.variants?.find(
+        v => v.isActive !== false &&
+             getVariantColorId(v) === colorId &&
+             getVariantSizeId(v) === selectedSizeId
+      );
+      if (isVariantBuyable(targetVariant)) {
+        nextSizeId = selectedSizeId;
+      }
+    }
+
+    const nextParams = computeVariantUrlParams(searchParams, dimensionType, colorId, nextSizeId, product?.variants);
+    if (!areSearchParamsEqual(nextParams, searchParams)) {
+      setSearchParams(nextParams);
+    }
+  };
+
+  const handleSizeChange = (sizeId: string) => {
+    if (isProductUnavailable) return;
+    selectSize(sizeId);
+    if (sizeError) setSizeError('');
+    setRefreshErrorNotice(null);
+
+    const effColorId = (dimensionType === 'COLOR_AND_SIZE' || dimensionType === 'COLOR_ONLY')
+      ? selectedColorId
+      : null;
+
+    const nextParams = computeVariantUrlParams(searchParams, dimensionType, effColorId, sizeId, product?.variants);
+    if (!areSearchParamsEqual(nextParams, searchParams)) {
+      setSearchParams(nextParams);
+    }
   };
 
   const liked = isFavorite(product.id);
@@ -640,6 +758,11 @@ export function ProductDetail() {
           if (!reconciliation.isBuyable) {
             if (reconciliation.nextSizeId === null && selectedSizeId !== null) {
               clearSelectedSize();
+              if (searchParams.has('size')) {
+                const nextParams = new URLSearchParams(searchParams);
+                nextParams.delete('size');
+                setSearchParams(nextParams, { replace: true });
+              }
             }
             if (reconciliation.notice) {
               setSizeSelectionNotice(reconciliation.notice);
@@ -655,6 +778,11 @@ export function ProductDetail() {
           ) {
             setIsProductUnavailable(true);
             clearSelectedSize();
+            if (searchParams.has('size')) {
+              const nextParams = new URLSearchParams(searchParams);
+              nextParams.delete('size');
+              setSearchParams(nextParams, { replace: true });
+            }
             setSizeSelectionNotice(PRODUCT_JUST_SOLD_OUT_NOTICE);
             showToast(PRODUCT_JUST_SOLD_OUT_NOTICE);
           } else {
@@ -717,6 +845,7 @@ export function ProductDetail() {
                       <button
                         key={index + image.url}
                         type="button"
+                        data-testid={`pdp-thumbnail-${index}`}
                         onClick={() => setActiveImage(index)}
                         aria-label={`Фото ${index + 1}`}
                         className={cn(
@@ -750,6 +879,7 @@ export function ProductDetail() {
                     key={currentImageUrl}
                     src={currentImageUrl}
                     alt={product.name}
+                    data-testid="main-product-image"
                     className="w-full h-full object-contain mix-blend-multiply dark:mix-blend-normal transition-opacity duration-200 pointer-events-none"
                   />
 
@@ -940,6 +1070,7 @@ export function ProductDetail() {
                           key={color.id}
                           type="button"
                           role="radio"
+                          data-testid={`color-swatch-${color.id}`}
                           aria-checked={isSelected}
                           aria-label={color.name + (color.shadeName ? ` (${color.shadeName})` : '') + (!color.hasInStock ? ' (нет в наличии)' : '')}
                           title={color.name + (color.shadeName ? ` (${color.shadeName})` : '') + (!color.hasInStock ? ' (нет в наличии)' : '')}
@@ -1007,6 +1138,7 @@ export function ProductDetail() {
                         <button
                           key={sizeObj.id}
                           type="button"
+                          data-testid={`size-button-${sizeObj.label}`}
                           aria-pressed={isSelected}
                           aria-label={sizeObj.accessibleLabel}
                           title={sizeObj.accessibleLabel}
@@ -1014,9 +1146,7 @@ export function ProductDetail() {
                           disabled={isButtonDisabled}
                           onClick={() => {
                             if (!isButtonDisabled) {
-                              selectSize(sizeObj.id);
-                              if (sizeError) setSizeError('');
-                              setRefreshErrorNotice(null);
+                              handleSizeChange(sizeObj.id);
                             }
                           }}
                           className={cn(
@@ -1036,7 +1166,7 @@ export function ProductDetail() {
                     })}
                   </div>
                   {sizeSelectionNotice && !isProductUnavailable && (
-                    <p className="mt-2 text-xs sm:text-sm text-amber-600 dark:text-amber-400 font-normal" role="status" aria-live="polite">
+                    <p data-testid="size-selection-notice" className="mt-2 text-xs sm:text-sm text-amber-600 dark:text-amber-400 font-normal" role="status" aria-live="polite">
                       {sizeSelectionNotice}
                     </p>
                   )}
@@ -1054,7 +1184,7 @@ export function ProductDetail() {
                   {PRODUCT_JUST_SOLD_OUT_NOTICE}
                 </p>
               ) : !requiresSize && sizeSelectionNotice ? (
-                <p className="mt-4 text-xs sm:text-sm text-amber-600 dark:text-amber-400 font-normal" role="status" aria-live="polite">
+                <p data-testid="size-selection-notice" className="mt-4 text-xs sm:text-sm text-amber-600 dark:text-amber-400 font-normal" role="status" aria-live="polite">
                   {sizeSelectionNotice}
                 </p>
               ) : refreshErrorNotice ? (
@@ -1068,6 +1198,7 @@ export function ProductDetail() {
                 <Button
                   type="button"
                   variant="primary"
+                  data-testid="add-to-cart-button"
                   className="flex-1 h-[52px] rounded-lg text-sm font-medium tracking-wide gap-2"
                   onClick={handleAddToCart}
                   disabled={product.isPreview || isAddingToCart || isProductUnavailable || !isResolved || !canAddToCart}
