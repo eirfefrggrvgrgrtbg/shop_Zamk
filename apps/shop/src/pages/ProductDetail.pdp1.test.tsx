@@ -511,20 +511,21 @@ describe('SHOP PDP.1 Canonical Geometry & Information Hierarchy', () => {
     expect(screen.getByText('3 / 4')).toBeTruthy();
     expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-red-1.jpg');
 
-    // Switch color to Красный
+    // Switch color to Красный: focuses first red photo (photo 3)
     const redColorBtn = screen.getByRole('radio', { name: /Красный/i });
     fireEvent.click(redColorBtn);
 
-    // Active image remains photo 3 (not reset to 0) and total count remains 4
+    // Active image focuses first Красный photo (photo 3) and total count remains 4
     expect(screen.getByText('3 / 4')).toBeTruthy();
     expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-red-1.jpg');
 
-    // Switch back to Чёрный
+    // Switch back to Чёрный: focuses first black photo (photo 1)
     const blackColorBtn = screen.getByRole('radio', { name: /Чёрный/i });
     fireEvent.click(blackColorBtn);
 
-    // Still photo 3
-    expect(screen.getByText('3 / 4')).toBeTruthy();
+    // Active image focuses first Чёрный photo (photo 1) while total count remains 4
+    expect(screen.getByText('1 / 4')).toBeTruthy();
+    expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-black-1.jpg');
   });
 
   it('11. lightbox real zoom toggles on image click, allows dragging, and resets on photo navigation', async () => {
@@ -826,25 +827,26 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
     fireEvent.click(sizeSBtn);
 
-    // Switch color to Белый (S is sold out in White)
+    // Switch color to Белый (S is sold out in White; focuses White photo at 3 / 3)
     const whiteColorRadio = screen.getByRole('radio', { name: /Белый/i });
     fireEvent.click(whiteColorRadio);
 
-    // Size S was cleared with notice, but gallery image MUST remain at 2 / 3
-    expect(screen.getByText('2 / 3')).toBeTruthy();
-    expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-2.jpg');
+    // Size S was cleared with notice, and gallery image focuses White photo at 3 / 3
+    expect(screen.getByText('3 / 3')).toBeTruthy();
+    expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-3.jpg');
 
-    // Select size M (buyable)
+    // Select size M (buyable; size selection does not affect active image)
     const sizeMBtn = screen.getByRole('button', { name: /^Размер M/i });
     fireEvent.click(sizeMBtn);
+    expect(screen.getByText('3 / 3')).toBeTruthy();
 
-    // Switch back to Чёрный (M is buyable in Black, size retained)
+    // Switch back to Чёрный (M is buyable in Black, size retained; focuses first Black photo at 1 / 3)
     const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
     fireEvent.click(blackColorRadio);
 
-    // Gallery image still at 2 / 3
-    expect(screen.getByText('2 / 3')).toBeTruthy();
-    expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-2.jpg');
+    // Gallery image focuses first Black photo at 1 / 3 while size M remains selected
+    expect(screen.getByText('1 / 3')).toBeTruthy();
+    expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-1.jpg');
   });
 
   describe('SHOP PDP.2D1 — Stale Stock Recovery After Add-to-Cart Failure', () => {
@@ -1269,6 +1271,565 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       // CTA becomes "Нет в наличии"
       const cta = screen.getByRole('button', { name: /Нет в наличии/i });
       expect(cta.hasAttribute('disabled')).toBe(true);
+    });
+  });
+
+  describe('SHOP PDP.2E1 — Color-Aware Media Focus', () => {
+    const multiMediaColorProduct: Product = {
+      ...mockApparelProduct,
+      id: 'prod-dress-media-focus',
+      name: 'Платье с цветной галереей',
+      images: [
+        { url: 'https://example.com/general-hero.jpg' }, // 0: general hero
+        { url: 'https://example.com/black-1.jpg', colorId: 'color-black' }, // 1: black #1
+        { url: 'https://example.com/white-1.jpg', colorId: 'color-white' }, // 2: white #1
+        { url: 'https://example.com/black-2.jpg', colorId: 'color-black' }, // 3: black #2
+        { url: 'https://example.com/general-fabric.jpg' }, // 4: general detail
+      ],
+      variants: [
+        {
+          id: 'var-blk-s',
+          size: 'S',
+          color: 'Чёрный',
+          colorName: 'Чёрный',
+          colorHex: '#000000',
+          colorId: 'color-black',
+          inStock: true,
+          isActive: true,
+          priceCents: 4500000,
+        },
+        {
+          id: 'var-blk-m',
+          size: 'M',
+          color: 'Чёрный',
+          colorName: 'Чёрный',
+          colorHex: '#000000',
+          colorId: 'color-black',
+          inStock: true,
+          isActive: true,
+          priceCents: 4500000,
+        },
+        {
+          id: 'var-wht-s',
+          size: 'S',
+          color: 'Белый',
+          colorName: 'Белый',
+          colorHex: '#ffffff',
+          colorId: 'color-white',
+          inStock: false, // sold out in white for retention test
+          isActive: true,
+          priceCents: 4500000,
+        },
+        {
+          id: 'var-wht-m',
+          size: 'M',
+          color: 'Белый',
+          colorName: 'Белый',
+          colorHex: '#ffffff',
+          colorId: 'color-white',
+          inStock: true,
+          isActive: true,
+          priceCents: 4500000,
+        },
+        {
+          id: 'var-grn-s',
+          size: 'S',
+          color: 'Зелёный',
+          colorName: 'Зелёный',
+          colorHex: '#00aa00',
+          colorId: 'color-green',
+          inStock: true,
+          isActive: true,
+          priceCents: 4500000,
+        },
+      ],
+    };
+
+    it('1. Initial load: default selected BLACK but GENERAL image remains active', async () => {
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-media-focus']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
+      });
+
+      // Default selected color is Чёрный
+      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+      expect(blackSwatch.getAttribute('aria-checked')).toBe('true');
+
+      // Active image remains the first GENERAL hero photo (index 0, '1 / 5')
+      expect(screen.getByText('1 / 5')).toBeTruthy();
+      const mainImg = screen.getByAltText('Платье с цветной галереей') as HTMLImageElement;
+      expect(mainImg.src).toContain('general-hero.jpg');
+    });
+
+    it('2. Explicit BLACK click: focuses first BLACK-tagged image', async () => {
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-media-focus']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
+      });
+
+      // Initially on photo 1 (general hero)
+      expect(screen.getByText('1 / 5')).toBeTruthy();
+
+      // Explicitly click Чёрный swatch
+      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackSwatch);
+
+      // Jumps to photo 2 (black-1.jpg)
+      expect(screen.getByText('2 / 5')).toBeTruthy();
+      const mainImg = screen.getByAltText('Платье с цветной галереей') as HTMLImageElement;
+      expect(mainImg.src).toContain('black-1.jpg');
+    });
+
+    it('3. Explicit WHITE click: focuses first WHITE-tagged image', async () => {
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-media-focus']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
+      });
+
+      // Explicitly click Белый swatch
+      const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
+      fireEvent.click(whiteSwatch);
+
+      // Jumps to photo 3 (white-1.jpg)
+      expect(screen.getByText('3 / 5')).toBeTruthy();
+      const mainImg = screen.getByAltText('Платье с цветной галереей') as HTMLImageElement;
+      expect(mainImg.src).toContain('white-1.jpg');
+    });
+
+    it('4. Gallery content count and order does not change after color selection', async () => {
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-media-focus']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
+      });
+
+      // Select White: active jumps to photo 3
+      const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
+      fireEvent.click(whiteSwatch);
+      expect(screen.getByText('3 / 5')).toBeTruthy();
+
+      // Total count remains 5 in thumbnail strip and counter badge
+      const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
+      fireEvent.click(nextBtn);
+      expect(screen.getByText('4 / 5')).toBeTruthy();
+      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('black-2.jpg');
+
+      fireEvent.click(nextBtn);
+      expect(screen.getByText('5 / 5')).toBeTruthy();
+      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('general-fabric.jpg');
+
+      fireEvent.click(nextBtn);
+      expect(screen.getByText('1 / 5')).toBeTruthy();
+      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('general-hero.jpg');
+    });
+
+    it('5. After BLACK focus, user can manually navigate to WHITE/general images', async () => {
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-media-focus']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
+      });
+
+      // Focus Black (photo 2)
+      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackSwatch);
+      expect(screen.getByText('2 / 5')).toBeTruthy();
+
+      // Browse to White photo (photo 3)
+      const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
+      fireEvent.click(nextBtn);
+      expect(screen.getByText('3 / 5')).toBeTruthy();
+      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('white-1.jpg');
+    });
+
+    it('6. Re-click current BLACK: returns to first BLACK-tagged image', async () => {
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-media-focus']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
+      });
+
+      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackSwatch);
+      expect(screen.getByText('2 / 5')).toBeTruthy();
+
+      // Browse forward to photo 5 (general fabric)
+      const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
+      fireEvent.click(nextBtn); // 3
+      fireEvent.click(nextBtn); // 4
+      fireEvent.click(nextBtn); // 5
+      expect(screen.getByText('5 / 5')).toBeTruthy();
+
+      // Re-click current Black swatch
+      fireEvent.click(blackSwatch);
+
+      // Focus returns to first Black image (photo 2, 2 / 5)
+      expect(screen.getByText('2 / 5')).toBeTruthy();
+      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('black-1.jpg');
+    });
+
+    it('7. Color without tagged image: falls back to GENERAL image', async () => {
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-media-focus']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
+      });
+
+      // User first moves to photo 3 (White)
+      const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
+      fireEvent.click(whiteSwatch);
+      expect(screen.getByText('3 / 5')).toBeTruthy();
+
+      // User selects Зелёный (has no tagged images, but general images exist)
+      const greenSwatch = screen.getByRole('radio', { name: /Зелёный/i });
+      fireEvent.click(greenSwatch);
+
+      // Focuses first GENERAL image (photo 1, general-hero.jpg)
+      expect(screen.getByText('1 / 5')).toBeTruthy();
+      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('general-hero.jpg');
+    });
+
+    it('8. Size selection: does not affect active image', async () => {
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-media-focus']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
+      });
+
+      // Go to photo 3 (White)
+      const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
+      fireEvent.click(whiteSwatch);
+      expect(screen.getByText('3 / 5')).toBeTruthy();
+
+      // Select size M
+      const sizeMBtn = screen.getByRole('button', { name: /^Размер M/i });
+      fireEvent.click(sizeMBtn);
+
+      // Still photo 3
+      expect(screen.getByText('3 / 5')).toBeTruthy();
+      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('white-1.jpg');
+    });
+
+    it('9. PDP.2B size-retention color logic still works while media focus also occurs', async () => {
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-media-focus']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
+      });
+
+      // Select Size S in Black
+      const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
+      fireEvent.click(sizeSBtn);
+
+      // Switch color to Белый: S is sold out in White
+      const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
+      fireEvent.click(whiteSwatch);
+
+      // Media focused to White photo (photo 3)
+      expect(screen.getByText('3 / 5')).toBeTruthy();
+      // Size S was cleared with contextual notice
+      expect(screen.getByRole('status').textContent).toBe('Размер S недоступен в белом цвете');
+
+      // Now select Size M (available in White and Black)
+      const sizeMBtn = screen.getByRole('button', { name: /^Размер M/i });
+      fireEvent.click(sizeMBtn);
+
+      // Switch back to Чёрный: M is available in Black -> size retained
+      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackSwatch);
+
+      // Media focused to first Black photo (photo 2)
+      expect(screen.getByText('2 / 5')).toBeTruthy();
+      // Size M is retained
+      const sizeMBtnAfter = screen.getByRole('button', { name: /^Размер M/i });
+      expect(sizeMBtnAfter.getAttribute('aria-pressed')).toBe('true');
+      expect(screen.queryByRole('status')).toBeNull();
+    });
+
+    it('10. Stale-stock refresh: does NOT trigger color-media refocus', async () => {
+      mockAddItem.mockRejectedValueOnce(
+        new ApiError('Недостаточно товара на складе', 'insufficient_stock', 409)
+      );
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
+
+      const refreshedProduct: Product = {
+        ...multiMediaColorProduct,
+        variants: multiMediaColorProduct.variants?.map((v) =>
+          v.id === 'var-blk-s' ? { ...v, inStock: false } : v
+        ),
+      };
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(refreshedProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-media-focus']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
+      });
+
+      // Move to photo 4 (black-2.jpg)
+      const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
+      fireEvent.click(nextBtn); // 2
+      fireEvent.click(nextBtn); // 3
+      fireEvent.click(nextBtn); // 4
+      expect(screen.getByText('4 / 5')).toBeTruthy();
+
+      // Select size S
+      const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
+      fireEvent.click(sizeSBtn);
+
+      // Still photo 4
+      expect(screen.getByText('4 / 5')).toBeTruthy();
+
+      // Click Add to Cart -> triggers stale stock recovery
+      const addBtn = screen.getByRole('button', { name: /Добавить в корзину/i });
+      fireEvent.click(addBtn);
+
+      await waitFor(() => {
+        expect(publicCatalog.fetchProductById).toHaveBeenCalledTimes(2);
+      });
+
+      // Active image MUST still be photo 4 (4 / 5) - not refocused to photo 1 or photo 2!
+      expect(screen.getByText('4 / 5')).toBeTruthy();
+      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('black-2.jpg');
+    });
+
+    it('11. Thumbnail active state and counter follow focused image', async () => {
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-media-focus']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
+      });
+
+      // On initial load: thumbnail 1 is active
+      const thumb1 = screen.getAllByRole('button', { name: 'Фото 1' })[0];
+      expect(thumb1.className).toContain('border-graphite');
+
+      // Click White: focuses photo 3
+      const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
+      fireEvent.click(whiteSwatch);
+
+      expect(screen.getByText('3 / 5')).toBeTruthy();
+      const thumb3 = screen.getAllByRole('button', { name: 'Фото 3' })[0];
+      expect(thumb3.className).toContain('border-graphite');
+      expect(thumb1.className).not.toContain('border-graphite');
+    });
+
+    it('12. Single-image product remains correct', async () => {
+      const singleImgProduct: Product = {
+        ...mockApparelProduct,
+        id: 'prod-single',
+        images: [{ url: 'https://example.com/single-hero.jpg' }],
+      };
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(singleImgProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-single']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+      });
+
+      // No thumbnails or counter badge
+      expect(screen.queryByText(/1 \/ 1/)).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Фото 1' })).toBeNull();
+      expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('single-hero.jpg');
+    });
+
+    it('13. Product with no color-tagged images behaves exactly like normal general gallery', async () => {
+      const allGeneralProduct: Product = {
+        ...mockApparelProduct,
+        id: 'prod-all-general',
+        images: [
+          { url: 'https://example.com/gen-1.jpg' },
+          { url: 'https://example.com/gen-2.jpg' },
+          { url: 'https://example.com/gen-3.jpg' },
+        ],
+      };
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(allGeneralProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-all-general']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+      });
+
+      expect(screen.getByText('1 / 3')).toBeTruthy();
+
+      // Click color swatch -> falls back to first general image (1 / 3)
+      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackSwatch);
+      expect(screen.getByText('1 / 3')).toBeTruthy();
+
+      // User navigates normally
+      const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
+      fireEvent.click(nextBtn);
+      expect(screen.getByText('2 / 3')).toBeTruthy();
+      expect(((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src)).toContain('gen-2.jpg');
+    });
+
+    it('14. Last-resort fallback: all photos are color-tagged and selected color has no match', async () => {
+      const allColoredProduct: Product = {
+        ...mockApparelProduct,
+        id: 'prod-all-colored',
+        images: [
+          { url: 'https://example.com/red-1.jpg', colorId: 'color-red' },
+          { url: 'https://example.com/blue-1.jpg', colorId: 'color-blue' },
+        ],
+        variants: [
+          {
+            id: 'var-red',
+            color: 'Красный',
+            colorName: 'Красный',
+            colorHex: '#ff0000',
+            colorId: 'color-red',
+            inStock: true,
+            isActive: true,
+          },
+          {
+            id: 'var-blue',
+            color: 'Синий',
+            colorName: 'Синий',
+            colorHex: '#0000ff',
+            colorId: 'color-blue',
+            inStock: true,
+            isActive: true,
+          },
+          {
+            id: 'var-yellow',
+            color: 'Жёлтый',
+            colorName: 'Жёлтый',
+            colorHex: '#ffff00',
+            colorId: 'color-yellow',
+            inStock: true,
+            isActive: true,
+          },
+        ],
+      };
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(allColoredProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-all-colored']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+      });
+
+      // Move to blue photo (photo 2)
+      const blueSwatch = screen.getByRole('radio', { name: /Синий/i });
+      fireEvent.click(blueSwatch);
+      expect(screen.getByText('2 / 2')).toBeTruthy();
+
+      // Click Жёлтый (no yellow photos and no uncolored photos) -> falls back to photo 1 (index 0)
+      const yellowSwatch = screen.getByRole('radio', { name: /Жёлтый/i });
+      fireEvent.click(yellowSwatch);
+
+      expect(screen.getByText('1 / 2')).toBeTruthy();
+      expect(((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src)).toContain('red-1.jpg');
     });
   });
 });

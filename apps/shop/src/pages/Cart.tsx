@@ -6,7 +6,7 @@ import { useCart } from '../contexts/CartContext';
 import { formatPrice, cn } from '../lib/utils';
 import { getProductEffectivePrice } from '../lib/orders';
 import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
-import { formatVariantDetails } from '../lib/variantSelection';
+import { formatVariantDetails, getCartItemImageUrl } from '../lib/variantSelection';
 import { InfoPanel } from '../components/editorial/StudioKit';
 
 export function Cart() {
@@ -78,7 +78,7 @@ export function Cart() {
           <div className='lg:col-span-8 space-y-4'>
             {items.map((item) => {
               const productName = item.title || item.product?.name || 'Неизвестный товар';
-              const productImage = item.imageUrl || item.product?.image || PRODUCT_PLACEHOLDER_IMAGE;
+              const productImage = getCartItemImageUrl(item.imageUrl, item.product?.image, PRODUCT_PLACEHOLDER_IMAGE);
               const productBrand = item.product?.brand || 'Бренд не указан';
               const productPrice = item.price || (item.product ? getProductEffectivePrice(item.product) : 0);
               const variantDetails = formatVariantDetails(item.color, item.size);

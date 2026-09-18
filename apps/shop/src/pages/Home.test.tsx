@@ -207,10 +207,10 @@ describe('Home Page - PER.3 Recently Viewed Block', () => {
 
       await waitFor(() => {
         expect(screen.getByText('История - Недавно просмотренные')).toBeTruthy();
+        expect(screen.getByTestId('product-card-r2')).toBeTruthy();
       });
 
       expect(screen.queryByText('Рекомендации - Для вас')).toBeNull();
-      expect(screen.getByTestId('product-card-r2')).toBeTruthy();
     });
 
     it('I2. when "Недавно просмотренные" errors, "Для вас" still renders intact', async () => {

@@ -38,7 +38,7 @@ func (r *Repository) GetCartByUserID(ctx context.Context, userID uuid.UUID) (*Ca
 			COALESCE(sv.value, pv.size) AS size,
 			COALESCE(c.name_ru, pv.color) AS color,
 			COALESCE(pv.seller_sku, pv.sku) AS seller_sku,
-			img.image_url
+			COALESCE(img.image_url, p.main_image_url) AS image_url
 		FROM cart_items ci
 		JOIN products p ON ci.product_id = p.id
 		JOIN product_variants pv ON ci.product_variant_id = pv.id
@@ -46,7 +46,7 @@ func (r *Repository) GetCartByUserID(ctx context.Context, userID uuid.UUID) (*Ca
 		LEFT JOIN colors c ON pv.color_id = c.id
 		LEFT JOIN inventory_items ii ON pv.id = ii.product_variant_id
 		LEFT JOIN LATERAL (
-			SELECT pi.image_url
+			SELECT COALESCE(pi.rendition_url, pi.image_url) AS image_url
 			FROM product_images pi
 			WHERE pi.product_id = p.id
 			  AND (
@@ -59,7 +59,6 @@ func (r *Repository) GetCartByUserID(ctx context.Context, userID uuid.UUID) (*Ca
 				WHEN pi.color_id IS NULL THEN 2
 				ELSE 3
 			  END ASC,
-			  pi.is_main DESC,
 			  pi.sort_order ASC,
 			  pi.created_at ASC
 			LIMIT 1

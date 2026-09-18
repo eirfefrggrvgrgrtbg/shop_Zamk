@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronRight, ChevronLeft, Heart, ShoppingBag, Star, ChevronDown, Eye, X } from 'lucide-react';
@@ -20,6 +20,11 @@ import {
   PRODUCT_JUST_SOLD_OUT_NOTICE,
   REFRESH_ERROR_NOTICE,
 } from '../lib/variantSelection';
+import {
+  findMediaIndexForColor,
+  deduplicateGalleryImages,
+  type GalleryMediaItem,
+} from '../lib/mediaFocus';
 import { SimilarProductsBlock } from '../components/product/SimilarProductsBlock';
 import type { Product, Review } from '../types/catalog';
 
@@ -456,24 +461,9 @@ export function ProductDetail() {
 
   // Product-level media stream: photos belong to the product as a whole.
   // One stable, ordered media collection without filtering by selectedColor or selectedVariant.
-  const visibleImages: { url: string; colorId?: string }[] = (() => {
-    if (product?.images && product.images.length > 0) {
-      // Deduplicate by URL while preserving deterministic order
-      const seen = new Set<string>();
-      const result: { url: string; colorId?: string }[] = [];
-      for (const img of product.images) {
-        if (img?.url && !seen.has(img.url)) {
-          seen.add(img.url);
-          result.push({ url: img.url, colorId: img.colorId });
-        }
-      }
-      if (result.length > 0) return result;
-    }
-    if (product?.image) {
-      return [{ url: product.image }];
-    }
-    return [defaultImage];
-  })();
+  const visibleImages: GalleryMediaItem[] = useMemo(() => {
+    return deduplicateGalleryImages(product?.images, product?.image, defaultImage);
+  }, [product?.images, product?.image]);
 
   const resetZoom = () => {
     setIsZoomed(false);
@@ -563,9 +553,12 @@ export function ProductDetail() {
     if (isProductUnavailable) return;
     selectColor(colorId);
     setRefreshErrorNotice(null);
-    // Preserves active photo index across color switches.
-    // Gallery media stream belongs to the product as a whole.
     if (sizeError) setSizeError('');
+
+    // Color-aware media focus (PDP.2E1):
+    // Focus the first image matching selected color, or fallback to general image, or fallback to index 0.
+    const targetIndex = findMediaIndexForColor(visibleImages, colorId);
+    setActiveImage(targetIndex);
   };
 
   const liked = isFavorite(product.id);
