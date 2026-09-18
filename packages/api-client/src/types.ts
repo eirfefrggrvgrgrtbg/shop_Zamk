@@ -222,6 +222,7 @@ export interface CartItem {
   color?: string;
   sellerSku?: string;
   imageUrl?: string;
+  brandName?: string;
   priceCents?: number;
   inStock?: boolean;
 }

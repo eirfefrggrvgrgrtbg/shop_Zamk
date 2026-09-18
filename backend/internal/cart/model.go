@@ -31,4 +31,5 @@ type CartItem struct {
 	Color      *string `json:"color" db:"-"`
 	SellerSKU  *string `json:"sellerSku" db:"-"`
 	ImageURL   *string `json:"imageUrl" db:"-"`
+	BrandName  *string `json:"brandName,omitempty" db:"-"`
 }

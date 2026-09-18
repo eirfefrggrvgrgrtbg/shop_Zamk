@@ -9,6 +9,14 @@ import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
 import { formatVariantDetails, getCartItemImageUrl } from '../lib/variantSelection';
 import { InfoPanel } from '../components/editorial/StudioKit';
 
+const isUUID = (val?: string): boolean =>
+  !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+function resolveBrandName(brandName?: string, productBrand?: string): string {
+  const candidate = brandName?.trim() || (productBrand && productBrand !== 'Бренд не указан' && !isUUID(productBrand) ? productBrand.trim() : '');
+  return candidate;
+}
+
 export function Cart() {
   const { items, updateQuantity, removeItem, totalPrice, isLoadingCart } = useCart();
   const delivery = 0; // Доставка рассчитывается при оформлении
@@ -79,7 +87,7 @@ export function Cart() {
             {items.map((item) => {
               const productName = item.title || item.product?.name || 'Неизвестный товар';
               const productImage = getCartItemImageUrl(item.imageUrl, item.product?.image, PRODUCT_PLACEHOLDER_IMAGE);
-              const productBrand = item.product?.brand || 'Бренд не указан';
+              const canonicalBrand = resolveBrandName(item.brandName, item.product?.brand);
               const productPrice = item.price || (item.product ? getProductEffectivePrice(item.product) : 0);
               const variantDetails = formatVariantDetails(item.color, item.size);
               const isUnavailable = item.inStock === false;
@@ -103,16 +111,20 @@ export function Cart() {
                   )}
                 </Link>
                 <div className='flex-1 flex flex-col'>
-                  <div className="flex items-center justify-between">
-                    <p className='text-xs uppercase tracking-[0.14em] text-ash'>{productBrand}</p>
-                    {isUnavailable && (
-                      <span className='text-xs font-medium text-error bg-error/10 dark:bg-error/20 px-2 py-0.5 rounded-full'>
-                        Товар закончился
-                      </span>
-                    )}
-                  </div>
+                  {(canonicalBrand || isUnavailable) && (
+                    <div className={cn('flex items-center justify-between', !canonicalBrand && isUnavailable && 'justify-end')}>
+                      {canonicalBrand ? (
+                        <p className='text-xs uppercase tracking-[0.14em] text-ash' data-testid="cart-item-brand">{canonicalBrand}</p>
+                      ) : null}
+                      {isUnavailable && (
+                        <span className='text-xs font-medium text-error bg-error/10 dark:bg-error/20 px-2 py-0.5 rounded-full'>
+                          Товар закончился
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <Link to={`/product/${item.productId}`}>
-                    <h3 className='text-lg font-medium text-graphite dark:text-gray-200 leading-tight mt-1 hover:underline'>{productName}</h3>
+                    <h3 className={cn('text-lg font-medium text-graphite dark:text-gray-200 leading-tight hover:underline', (canonicalBrand || isUnavailable) && 'mt-1')}>{productName}</h3>
                   </Link>
                   {variantDetails && (
                     <p className='mt-1 text-sm text-ash font-medium'>{variantDetails}</p>

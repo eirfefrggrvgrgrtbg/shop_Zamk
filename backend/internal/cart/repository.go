@@ -38,10 +38,12 @@ func (r *Repository) GetCartByUserID(ctx context.Context, userID uuid.UUID) (*Ca
 			COALESCE(sv.value, pv.size) AS size,
 			COALESCE(c.name_ru, pv.color) AS color,
 			COALESCE(pv.seller_sku, pv.sku) AS seller_sku,
-			COALESCE(img.image_url, p.main_image_url) AS image_url
+			COALESCE(img.image_url, p.main_image_url) AS image_url,
+			b.name AS brand_name
 		FROM cart_items ci
 		JOIN products p ON ci.product_id = p.id
 		JOIN product_variants pv ON ci.product_variant_id = pv.id
+		LEFT JOIN brands b ON p.brand_id = b.id
 		LEFT JOIN size_values sv ON pv.size_value_id = sv.id
 		LEFT JOIN colors c ON pv.color_id = c.id
 		LEFT JOIN inventory_items ii ON pv.id = ii.product_variant_id
@@ -77,7 +79,7 @@ func (r *Repository) GetCartByUserID(ctx context.Context, userID uuid.UUID) (*Ca
 		if err := rows.Scan(
 			&item.ID, &item.CartID, &item.ProductID, &item.ProductVariantID, &item.Quantity, &item.CreatedAt, &item.UpdatedAt,
 			&item.Title, &item.PriceCents, &item.InStock,
-			&item.Size, &item.Color, &item.SellerSKU, &item.ImageURL,
+			&item.Size, &item.Color, &item.SellerSKU, &item.ImageURL, &item.BrandName,
 		); err != nil {
 			return nil, err
 		}

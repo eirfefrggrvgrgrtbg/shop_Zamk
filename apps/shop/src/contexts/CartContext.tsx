@@ -17,6 +17,7 @@ export interface UIContextCartItem {
   color?: string;
   sellerSku?: string;
   imageUrl?: string;
+  brandName?: string;
 }
 
 interface CartContextType {
@@ -62,14 +63,22 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         color: item.color,
         sellerSku: item.sellerSku,
         imageUrl: item.imageUrl,
+        brandName: item.brandName,
         product: item.product ? {
           id: item.product.id,
           name: item.product.title,
           price: item.product.priceCents / 100,
           image: item.imageUrl || item.product.mainImageUrl || '',
-          brand: 'Бренд не указан',
+          brand: item.brandName || '',
           category: 'Категория не указана'
-        } as Product : undefined
+        } as Product : (item.brandName ? {
+          id: item.productId,
+          name: item.title || '',
+          price: (item.priceCents ?? 0) / 100,
+          image: item.imageUrl || '',
+          brand: item.brandName,
+          category: ''
+        } as Product : undefined)
       }));
 
       // Backend does not return totalPriceCents — compute from items to stay consistent

@@ -196,3 +196,176 @@ describe('SHOP PDP.2E2 — Cart Variant Image Truth (Frontend Acceptance)', () =
     expect(img.getAttribute('src')).toBe(PRODUCT_PLACEHOLDER_IMAGE);
   });
 });
+
+describe('SHOP CART.1 — Canonical Brand Consistency (Frontend Acceptance)', () => {
+  beforeEach(() => {
+    mockCartState = {
+      items: [],
+      isLoadingCart: false,
+    };
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('1. Cart line item with canonical brand displays brand name in uppercase', () => {
+    mockCartState.items = [
+      {
+        id: 'cart-item-brand-1',
+        productId: 'prod-hoodie-1',
+        productVariantId: 'var-1',
+        quantity: 1,
+        title: 'Премиум Худи',
+        price: 12000,
+        brandName: 'DEV BRAND',
+        color: 'Чёрный',
+        size: 'L',
+        imageUrl: 'https://cdn.zamk.test/hoodie.jpg',
+        inStock: true,
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <Cart />
+      </MemoryRouter>
+    );
+
+    const brandEl = screen.getByTestId('cart-item-brand');
+    expect(brandEl).toBeDefined();
+    expect(brandEl.textContent).toBe('DEV BRAND');
+    expect(screen.queryByText(/бренд не указан/i)).toBeNull();
+  });
+
+  it('2. Cart line item without brand omits brand line completely and NEVER displays "Бренд не указан"', () => {
+    mockCartState.items = [
+      {
+        id: 'cart-item-no-brand',
+        productId: 'prod-hoodie-2',
+        productVariantId: 'var-2',
+        quantity: 1,
+        title: 'Базовое Худи Без Бренда',
+        price: 8000,
+        brandName: undefined,
+        color: 'Белый',
+        size: 'M',
+        imageUrl: 'https://cdn.zamk.test/basic.jpg',
+        inStock: true,
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <Cart />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByTestId('cart-item-brand')).toBeNull();
+    expect(screen.queryByText(/бренд не указан/i)).toBeNull();
+    expect(screen.getByText('Базовое Худи Без Бренда')).toBeDefined();
+  });
+
+  it('3. Brand resolution strictly isolates seller name (never substitutes seller name for brand)', () => {
+    mockCartState.items = [
+      {
+        id: 'cart-item-seller-isolated',
+        productId: 'prod-hoodie-3',
+        productVariantId: 'var-3',
+        quantity: 1,
+        title: 'Дизайнерский Свитшот',
+        price: 9500,
+        brandName: undefined, // No canonical brand
+        color: 'Серый',
+        size: 'S',
+        imageUrl: 'https://cdn.zamk.test/sweatshirt.jpg',
+        inStock: true,
+        // Even if some legacy context had seller info or raw UUID
+        product: {
+          id: 'prod-hoodie-3',
+          name: 'Дизайнерский Свитшот',
+          price: 9500,
+          image: 'https://cdn.zamk.test/sweatshirt.jpg',
+          brand: 'Бренд не указан',
+          category: 'Свитшоты',
+        } as any,
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <Cart />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByTestId('cart-item-brand')).toBeNull();
+    expect(screen.queryByText(/бренд не указан/i)).toBeNull();
+    expect(screen.queryByText(/SELLER/i)).toBeNull();
+  });
+
+  it('4. Unavailable item without brand renders "Товар закончился" without brand placeholder', () => {
+    mockCartState.items = [
+      {
+        id: 'cart-item-unavail-nobrand',
+        productId: 'prod-hoodie-4',
+        productVariantId: 'var-4',
+        quantity: 1,
+        title: 'Раскупленное Худи',
+        price: 7000,
+        brandName: undefined,
+        color: 'Чёрный',
+        size: 'XL',
+        imageUrl: 'https://cdn.zamk.test/hoodie-sold.jpg',
+        inStock: false,
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <Cart />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByTestId('cart-item-brand')).toBeNull();
+    expect(screen.queryByText(/бренд не указан/i)).toBeNull();
+    expect(screen.getByText('Товар закончился')).toBeDefined();
+  });
+
+  it('5. Mixed cart: items with and without brand render independently and correctly', () => {
+    mockCartState.items = [
+      {
+        id: 'cart-item-branded',
+        productId: 'prod-1',
+        productVariantId: 'var-1',
+        quantity: 1,
+        title: 'Фирменная Куртка',
+        price: 25000,
+        brandName: 'ZAMK ARCHIVE',
+        imageUrl: 'https://cdn.zamk.test/jacket.jpg',
+        inStock: true,
+      },
+      {
+        id: 'cart-item-unbranded',
+        productId: 'prod-2',
+        productVariantId: 'var-2',
+        quantity: 1,
+        title: 'Носки Хлопок',
+        price: 500,
+        brandName: undefined,
+        imageUrl: 'https://cdn.zamk.test/socks.jpg',
+        inStock: true,
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <Cart />
+      </MemoryRouter>
+    );
+
+    const brands = screen.getAllByTestId('cart-item-brand');
+    expect(brands).toHaveLength(1);
+    expect(brands[0].textContent).toBe('ZAMK ARCHIVE');
+    expect(screen.queryByText(/бренд не указан/i)).toBeNull();
+  });
+});
