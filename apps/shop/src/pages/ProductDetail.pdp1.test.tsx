@@ -578,3 +578,267 @@ describe('SHOP PDP.1 Canonical Geometry & Information Hierarchy', () => {
     expect(lbImg.className).toContain('cursor-zoom-in');
   });
 });
+
+describe('SHOP PDP.2B Variant Selection State Hardening', () => {
+  const mockMultiColorSizeProduct: Product = {
+    ...mockApparelProduct,
+    variants: [
+      {
+        id: 'var-black-s',
+        size: 'S',
+        color: 'Чёрный',
+        colorName: 'Чёрный',
+        colorHex: '#000000',
+        colorId: 'color-black',
+        inStock: true,
+        isActive: true,
+        priceCents: 4500000,
+      },
+      {
+        id: 'var-black-m',
+        size: 'M',
+        color: 'Чёрный',
+        colorName: 'Чёрный',
+        colorHex: '#000000',
+        colorId: 'color-black',
+        inStock: true,
+        isActive: true,
+        priceCents: 4500000,
+      },
+      {
+        id: 'var-white-s',
+        size: 'S',
+        color: 'Белый',
+        colorName: 'Белый',
+        colorHex: '#ffffff',
+        colorId: 'color-white',
+        inStock: false, // SOLD OUT in White!
+        isActive: true,
+        priceCents: 4800000,
+      },
+      {
+        id: 'var-white-m',
+        size: 'M',
+        color: 'Белый',
+        colorName: 'Белый',
+        colorHex: '#ffffff',
+        colorId: 'color-white',
+        inStock: true, // Buyable in White!
+        isActive: true,
+        priceCents: 4800000,
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('preserves selected size across color switch when size is buyable in the new color, updates variant and adds exact variant to cart', async () => {
+    vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(mockMultiColorSizeProduct);
+
+    render(
+      <MemoryRouter initialEntries={['/product/prod-dress-100']}>
+        <Routes>
+          <Route path="/product/:id" element={<ProductDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+    });
+
+    // Initially color-black is selected by default. Select size M.
+    const sizeMBtn = screen.getByRole('button', { name: 'M' });
+    fireEvent.click(sizeMBtn);
+
+    // Switch to Белый
+    const whiteColorRadio = screen.getByRole('radio', { name: /Белый/i });
+    fireEvent.click(whiteColorRadio);
+
+    // Size M should still be selected
+    expect(sizeMBtn.getAttribute('aria-pressed')).toBe('true');
+
+    // No warning notice should be displayed
+    expect(screen.queryByRole('status')).toBeNull();
+
+    // CTA should be ready
+    const addBtn = screen.getByRole('button', { name: 'Добавить в корзину' });
+    expect(addBtn.hasAttribute('disabled')).toBe(false);
+
+    // Clicking Add to Cart must send the WHITE M variant id ('var-white-m')
+    fireEvent.click(addBtn);
+    await waitFor(() => {
+      expect(mockAddItem).toHaveBeenCalledWith('prod-dress-100', 'var-white-m', 1);
+    });
+  });
+
+  it('clears size selection, shows contextual notice, and does NOT auto-select when size is sold out in new color', async () => {
+    vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(mockMultiColorSizeProduct);
+
+    render(
+      <MemoryRouter initialEntries={['/product/prod-dress-100']}>
+        <Routes>
+          <Route path="/product/:id" element={<ProductDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+    });
+
+    // In Black color, select size S (in stock)
+    const sizeSBtn = screen.getByRole('button', { name: 'S' });
+    fireEvent.click(sizeSBtn);
+    expect(sizeSBtn.getAttribute('aria-pressed')).toBe('true');
+
+    // Switch to Белый (size S is sold out in White!)
+    const whiteColorRadio = screen.getByRole('radio', { name: /Белый/i });
+    fireEvent.click(whiteColorRadio);
+
+    // Size S must be cleared, NOT selected
+    expect(sizeSBtn.getAttribute('aria-pressed')).toBe('false');
+
+    // No other size must be auto-selected (M must not be pressed)
+    const sizeMBtn = screen.getByRole('button', { name: 'M' });
+    expect(sizeMBtn.getAttribute('aria-pressed')).toBe('false');
+
+    // Contextual notice must be visible
+    const notice = screen.getByRole('status');
+    expect(notice).toBeTruthy();
+    expect(notice.textContent).toBe('Размер S недоступен в белом цвете');
+
+    // CTA must be disabled ("Выберите размер")
+    const disabledBtn = screen.getByRole('button', { name: 'Выберите размер' });
+    expect(disabledBtn.hasAttribute('disabled')).toBe(true);
+
+    // Clicking an available size (M) clears notice and enables CTA
+    fireEvent.click(sizeMBtn);
+    expect(screen.queryByRole('status')).toBeNull();
+    const activeCta = screen.getByRole('button', { name: 'Добавить в корзину' });
+    expect(activeCta.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('clears size selection and shows contextual notice when combination does not exist in new color', async () => {
+    const productWithMissingCombo: Product = {
+      ...mockApparelProduct,
+      variants: [
+        {
+          id: 'var-black-l',
+          size: 'L',
+          color: 'Чёрный',
+          colorName: 'Чёрный',
+          colorHex: '#000000',
+          colorId: 'color-black',
+          inStock: true,
+          isActive: true,
+          priceCents: 4500000,
+        },
+        {
+          id: 'var-white-s',
+          size: 'S',
+          color: 'Белый',
+          colorName: 'Белый',
+          colorHex: '#ffffff',
+          colorId: 'color-white',
+          inStock: true,
+          isActive: true,
+          priceCents: 4800000,
+        },
+      ],
+    };
+
+    vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(productWithMissingCombo);
+
+    render(
+      <MemoryRouter initialEntries={['/product/prod-dress-100']}>
+        <Routes>
+          <Route path="/product/:id" element={<ProductDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+    });
+
+    // In Black color, select size L
+    const sizeLBtn = screen.getByRole('button', { name: 'L' });
+    fireEvent.click(sizeLBtn);
+    expect(sizeLBtn.getAttribute('aria-pressed')).toBe('true');
+
+    // Switch to Белый (size L does not exist in White!)
+    const whiteColorRadio = screen.getByRole('radio', { name: /Белый/i });
+    fireEvent.click(whiteColorRadio);
+
+    // Size must be cleared
+    expect(screen.queryByRole('button', { name: 'L' })).toBeNull(); // L doesn't exist for White
+    const sizeSBtn = screen.getByRole('button', { name: 'S' });
+    expect(sizeSBtn.getAttribute('aria-pressed')).toBe('false'); // S must NOT be auto-selected
+
+    // Notice shown
+    const notice = screen.getByRole('status');
+    expect(notice.textContent).toBe('Размер L недоступен в белом цвете');
+  });
+
+  it('switching colors while retaining or clearing size preserves gallery media stream and active image', async () => {
+    const multiMediaProduct: Product = {
+      ...mockMultiColorSizeProduct,
+      images: [
+        { url: 'https://example.com/dress-1.jpg', colorId: 'color-black' },
+        { url: 'https://example.com/dress-2.jpg', colorId: 'color-black' },
+        { url: 'https://example.com/dress-3.jpg', colorId: 'color-white' },
+      ],
+    };
+
+    vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaProduct);
+
+    render(
+      <MemoryRouter initialEntries={['/product/prod-dress-100']}>
+        <Routes>
+          <Route path="/product/:id" element={<ProductDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+    });
+
+    // Advance gallery to photo 2
+    const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
+    fireEvent.click(nextBtn);
+    expect(screen.getByText('2 / 3')).toBeTruthy();
+    expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-2.jpg');
+
+    // Select size S
+    const sizeSBtn = screen.getByRole('button', { name: 'S' });
+    fireEvent.click(sizeSBtn);
+
+    // Switch color to Белый (S is sold out in White)
+    const whiteColorRadio = screen.getByRole('radio', { name: /Белый/i });
+    fireEvent.click(whiteColorRadio);
+
+    // Size S was cleared with notice, but gallery image MUST remain at 2 / 3
+    expect(screen.getByText('2 / 3')).toBeTruthy();
+    expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-2.jpg');
+
+    // Select size M (buyable)
+    const sizeMBtn = screen.getByRole('button', { name: 'M' });
+    fireEvent.click(sizeMBtn);
+
+    // Switch back to Чёрный (M is buyable in Black, size retained)
+    const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
+    fireEvent.click(blackColorRadio);
+
+    // Gallery image still at 2 / 3
+    expect(screen.getByText('2 / 3')).toBeTruthy();
+    expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-2.jpg');
+  });
+});

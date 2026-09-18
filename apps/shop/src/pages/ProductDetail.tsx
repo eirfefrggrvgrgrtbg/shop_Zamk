@@ -436,6 +436,7 @@ export function ProductDetail() {
     requiresColor,
     requiresSize,
     ctaText,
+    sizeSelectionNotice,
     selectColor,
     selectSize,
   } = useVariantSelection(product?.variants, product?.sizeChart);
@@ -949,6 +950,7 @@ export function ProductDetail() {
                         <button
                           key={sizeObj.id}
                           type="button"
+                          aria-pressed={isSelected}
                           disabled={sizeObj.disabled}
                           onClick={() => {
                             if (!sizeObj.disabled) {
@@ -970,6 +972,11 @@ export function ProductDetail() {
                       );
                     })}
                   </div>
+                  {sizeSelectionNotice && (
+                    <p className="mt-2 text-xs sm:text-sm text-amber-600 dark:text-amber-400 font-normal" role="status" aria-live="polite">
+                      {sizeSelectionNotice}
+                    </p>
+                  )}
                   {sizeError && (
                     <p className="mt-2 text-xs sm:text-sm text-error" role="alert">
                       {sizeError}

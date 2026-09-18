@@ -1,10 +1,15 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
 import {
   getColorOptions,
   getSizeOptions,
   getDimensionType,
   resolveExactVariant,
   selectVariantState,
+  useVariantSelection,
+  isVariantBuyable,
+  formatSizeUnavailableNotice,
   type ProductVariantItem,
 } from './variantSelection';
 
@@ -306,5 +311,252 @@ describe('Canonical Shop Variant Selection Model (PV.2B)', () => {
     const redLState = selectVariantState(hoodieVariants, redColorId, sizeLId);
     const isQtyEnabledRedL = redLState.isResolved && redLState.canAddToCart;
     expect(isQtyEnabledRedL).toBe(true);
+  });
+});
+
+describe('SHOP PDP.2B — Variant Selection State Hardening', () => {
+  const blackColorId = 'color-black-1';
+  const whiteColorId = 'color-white-2';
+  const blueColorId = 'color-blue-3';
+
+  const sizeSId = 'size-s-1';
+  const sizeMId = 'size-m-2';
+  const sizeLId = 'size-l-3';
+
+  // Product fixture matching prompt target behavior:
+  // BLACK: S (inStock: true), M (inStock: true, price 10000), L (inStock: false)
+  // WHITE: S (inStock: true), M (does not exist), L (inStock: true)
+  // BLUE: S (inStock: true), M (inStock: false, sold out), L (inStock: true)
+  const testVariants: ProductVariantItem[] = [
+    {
+      id: 'var-black-s',
+      productId: 'prod-test',
+      colorId: blackColorId,
+      colorName: 'Черный',
+      colorHex: '#000000',
+      sizeValueId: sizeSId,
+      size: 'S',
+      isActive: true,
+      inStock: true,
+      priceCents: 900000,
+    },
+    {
+      id: 'var-black-m',
+      productId: 'prod-test',
+      colorId: blackColorId,
+      colorName: 'Черный',
+      colorHex: '#000000',
+      sizeValueId: sizeMId,
+      size: 'M',
+      isActive: true,
+      inStock: true,
+      priceCents: 1000000,
+    },
+    {
+      id: 'var-black-l',
+      productId: 'prod-test',
+      colorId: blackColorId,
+      colorName: 'Черный',
+      colorHex: '#000000',
+      sizeValueId: sizeLId,
+      size: 'L',
+      isActive: true,
+      inStock: false,
+      priceCents: 1000000,
+    },
+    {
+      id: 'var-white-s',
+      productId: 'prod-test',
+      colorId: whiteColorId,
+      colorName: 'Белый',
+      colorHex: '#FFFFFF',
+      sizeValueId: sizeSId,
+      size: 'S',
+      isActive: true,
+      inStock: true,
+      priceCents: 950000,
+    },
+    // WHITE M does not exist!
+    {
+      id: 'var-white-l',
+      productId: 'prod-test',
+      colorId: whiteColorId,
+      colorName: 'Белый',
+      colorHex: '#FFFFFF',
+      sizeValueId: sizeLId,
+      size: 'L',
+      isActive: true,
+      inStock: true,
+      priceCents: 1200000,
+    },
+    {
+      id: 'var-blue-m',
+      productId: 'prod-test',
+      colorId: blueColorId,
+      colorName: 'Синий',
+      colorHex: '#0000FF',
+      sizeValueId: sizeMId,
+      size: 'M',
+      isActive: true,
+      inStock: false, // SOLD OUT in blue!
+      priceCents: 1100000,
+    },
+  ];
+
+  // Fixture where WHITE also has M buyable at a different price:
+  const whiteWithMVariants: ProductVariantItem[] = [
+    ...testVariants,
+    {
+      id: 'var-white-m',
+      productId: 'prod-test',
+      colorId: whiteColorId,
+      colorName: 'Белый',
+      colorHex: '#FFFFFF',
+      sizeValueId: sizeMId,
+      size: 'M',
+      isActive: true,
+      inStock: true, // Buyable in white!
+      priceCents: 1200000, // Price is 12000 (differs from black)
+    },
+  ];
+
+  it('1. BLACK/M inStock -> switch WHITE/M inStock => M retained', () => {
+    const { result } = renderHook(() =>
+      useVariantSelection(whiteWithMVariants, undefined, blackColorId, sizeMId)
+    );
+    expect(result.current.selectedColorId).toBe(blackColorId);
+    expect(result.current.selectedSizeId).toBe(sizeMId);
+    expect(result.current.selectedVariant?.id).toBe('var-black-m');
+
+    act(() => {
+      result.current.selectColor(whiteColorId);
+    });
+
+    expect(result.current.selectedColorId).toBe(whiteColorId);
+    expect(result.current.selectedSizeId).toBe(sizeMId);
+    expect(result.current.selectedVariant?.id).toBe('var-white-m');
+    expect(result.current.canAddToCart).toBe(true);
+    expect(result.current.sizeSelectionNotice).toBeNull();
+  });
+
+  it('2. BLACK/M inStock -> switch BLUE/M exists but inStock false => M cleared => notice shown => no alternative auto-selected', () => {
+    const { result } = renderHook(() =>
+      useVariantSelection(testVariants, undefined, blackColorId, sizeMId)
+    );
+    expect(result.current.selectedColorId).toBe(blackColorId);
+    expect(result.current.selectedSizeId).toBe(sizeMId);
+
+    act(() => {
+      result.current.selectColor(blueColorId);
+    });
+
+    expect(result.current.selectedColorId).toBe(blueColorId);
+    expect(result.current.selectedSizeId).toBeNull();
+    expect(result.current.selectedVariant).toBeNull();
+    expect(result.current.canAddToCart).toBe(false);
+    expect(result.current.sizeSelectionNotice).toBe('Размер M недоступен в синем цвете');
+  });
+
+  it('3. BLACK/M inStock -> switch WHITE with no M variant => M cleared => notice shown', () => {
+    const { result } = renderHook(() =>
+      useVariantSelection(testVariants, undefined, blackColorId, sizeMId)
+    );
+
+    act(() => {
+      result.current.selectColor(whiteColorId);
+    });
+
+    expect(result.current.selectedColorId).toBe(whiteColorId);
+    expect(result.current.selectedSizeId).toBeNull();
+    expect(result.current.selectedVariant).toBeNull();
+    expect(result.current.sizeSelectionNotice).toBe('Размер M недоступен в белом цвете');
+  });
+
+  it('4. No size selected -> change color => no notice', () => {
+    const { result } = renderHook(() =>
+      useVariantSelection(testVariants, undefined, blackColorId, null)
+    );
+
+    act(() => {
+      result.current.selectColor(whiteColorId);
+    });
+
+    expect(result.current.selectedColorId).toBe(whiteColorId);
+    expect(result.current.selectedSizeId).toBeNull();
+    expect(result.current.sizeSelectionNotice).toBeNull();
+  });
+
+  it('5. Invalidated size -> user selects valid new size => notice cleared', () => {
+    const { result } = renderHook(() =>
+      useVariantSelection(testVariants, undefined, blackColorId, sizeMId)
+    );
+
+    // Switch to white where M does not exist
+    act(() => {
+      result.current.selectColor(whiteColorId);
+    });
+    expect(result.current.sizeSelectionNotice).toBe('Размер M недоступен в белом цвете');
+
+    // Customer selects S in white
+    act(() => {
+      result.current.selectSize(sizeSId);
+    });
+
+    expect(result.current.selectedSizeId).toBe(sizeSId);
+    expect(result.current.selectedVariant?.id).toBe('var-white-s');
+    expect(result.current.sizeSelectionNotice).toBeNull();
+  });
+
+  it('6. Preserved size resolves new exact variant ID', () => {
+    const { result } = renderHook(() =>
+      useVariantSelection(whiteWithMVariants, undefined, blackColorId, sizeMId)
+    );
+    expect(result.current.selectedVariant?.id).toBe('var-black-m');
+
+    act(() => {
+      result.current.selectColor(whiteColorId);
+    });
+
+    expect(result.current.selectedVariant?.id).toBe('var-white-m');
+    expect(result.current.selectedVariant?.id).not.toBe('var-black-m');
+  });
+
+  it('7. Preserved size resolves new variant price', () => {
+    const { result } = renderHook(() =>
+      useVariantSelection(whiteWithMVariants, undefined, blackColorId, sizeMId)
+    );
+    expect(result.current.selectedVariant?.priceCents).toBe(1000000);
+
+    act(() => {
+      result.current.selectColor(whiteColorId);
+    });
+
+    expect(result.current.selectedVariant?.priceCents).toBe(1200000);
+  });
+
+  it('8. inStock undefined + isActive true => NOT buyable', () => {
+    const variantNoStock: ProductVariantItem = {
+      id: 'var-no-stock',
+      productId: 'prod-1',
+      size: 'M',
+      sizeValueId: 's-m',
+      isActive: true,
+      inStock: undefined,
+    };
+    expect(isVariantBuyable(variantNoStock)).toBe(false);
+
+    const state = selectVariantState([variantNoStock], null, 's-m');
+    expect(state.isResolved).toBe(true);
+    expect(state.canAddToCart).toBe(false);
+    expect(state.ctaText).toBe('Нет в наличии');
+  });
+
+  it('formatSizeUnavailableNotice produces correct Russian grammar for standard and custom colors', () => {
+    expect(formatSizeUnavailableNotice('M', 'Белый')).toBe('Размер M недоступен в белом цвете');
+    expect(formatSizeUnavailableNotice('L', 'Красный')).toBe('Размер L недоступен в красном цвете');
+    expect(formatSizeUnavailableNotice('S', 'Черный')).toBe('Размер S недоступен в черном цвете');
+    expect(formatSizeUnavailableNotice('XL', 'Хаки')).toBe('Размер XL недоступен в цвете хаки');
+    expect(formatSizeUnavailableNotice('42', 'CustomGold')).toBe('Размер 42 недоступен в цвете «CustomGold»');
+    expect(formatSizeUnavailableNotice('M', null)).toBe('Размер M недоступен в выбранном цвете');
   });
 });
