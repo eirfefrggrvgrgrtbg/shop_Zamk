@@ -12,9 +12,14 @@ import {
   formatSizeUnavailableNotice,
   formatSizeSoldOutAriaLabel,
   formatSizeNotOfferedAriaLabel,
+  formatStaleSizeNotice,
+  reconcileSelectionAfterStaleStock,
+  PRODUCT_JUST_SOLD_OUT_NOTICE,
+  REFRESH_ERROR_NOTICE,
   type SizeAvailabilityState,
   type ProductVariantItem,
 } from './variantSelection';
+import { ApiError, isInsufficientStockError } from '@zamk/api-client/src/errors';
 
 describe('Canonical Shop Variant Selection Model (PV.2B)', () => {
   // Proven DEV "худи" fixture:
@@ -809,6 +814,215 @@ describe('SHOP PDP.2B — Variant Selection State Hardening', () => {
       expect(sizes[0].state).toBe('AVAILABLE');
       expect(sizes[0].disabled).toBe(false);
       expect(sizes[0].accessibleLabel).toBe('Размер M');
+    });
+  });
+
+  describe('SHOP PDP.2D1 — Stale Stock Recovery Helpers & Contracts', () => {
+    it('1. formatStaleSizeNotice generates correct customer-facing wording', () => {
+      expect(formatStaleSizeNotice('M')).toBe('Размер M только что закончился. Выберите другой размер.');
+      expect(formatStaleSizeNotice('XL')).toBe('Размер XL только что закончился. Выберите другой размер.');
+      expect(formatStaleSizeNotice('')).toBe('Этот вариант только что закончился.');
+      expect(formatStaleSizeNotice(null)).toBe('Этот вариант только что закончился.');
+    });
+
+    it('2. constants match approved copy', () => {
+      expect(PRODUCT_JUST_SOLD_OUT_NOTICE).toBe('Товар только что закончился.');
+      expect(REFRESH_ERROR_NOTICE).toBe('Не удалось обновить данные о наличии. Попробуйте обновить страницу.');
+    });
+
+    it('3. isInsufficientStockError recognizes structured backend error identity without relying on Russian text', () => {
+      // Direct backend shape
+      const structuredErr = new ApiError(
+        'Недостаточно товара на складе',
+        'invalid_item',
+        400,
+        { error: { code: 'invalid_item', message: 'insufficient stock' } },
+        'insufficient stock'
+      );
+      expect(isInsufficientStockError(structuredErr)).toBe(true);
+
+      // Error without rawMessage argument but data present
+      const fromDataOnly = new ApiError(
+        'Недостаточно товара на складе',
+        'invalid_item',
+        400,
+        { error: { code: 'invalid_item', message: 'insufficient stock' } }
+      );
+      expect(isInsufficientStockError(fromDataOnly)).toBe(true);
+
+      // Future-proof code 'insufficient_stock'
+      const codeErr = new ApiError('Some message', 'insufficient_stock', 400);
+      expect(isInsufficientStockError(codeErr)).toBe(true);
+
+      // Other invalid_item error (e.g. variant not found or not published)
+      const otherInvalidItem = new ApiError(
+        'Выбранный вариант недоступен',
+        'invalid_item',
+        400,
+        { error: { code: 'invalid_item', message: 'product variant not found' } },
+        'product variant not found'
+      );
+      expect(isInsufficientStockError(otherInvalidItem)).toBe(false);
+
+      // Unrelated 500 error
+      const serverErr = new ApiError('Internal server error', 'internal_error', 500);
+      expect(isInsufficientStockError(serverErr)).toBe(false);
+
+      // Plain error
+      expect(isInsufficientStockError(new Error('Network failure'))).toBe(false);
+      expect(isInsufficientStockError(null)).toBe(false);
+    });
+
+    describe('reconcileSelectionAfterStaleStock', () => {
+      const refreshedVariants: ProductVariantItem[] = [
+        {
+          id: 'v-black-s',
+          productId: 'p1',
+          colorId: 'c-black',
+          sizeValueId: 's-s',
+          size: 'S',
+          isActive: true,
+          inStock: true,
+        },
+        {
+          id: 'v-black-m',
+          productId: 'p1',
+          colorId: 'c-black',
+          sizeValueId: 's-m',
+          size: 'M',
+          isActive: true,
+          inStock: false, // SOLD OUT in fresh data!
+        },
+        {
+          id: 'v-black-l',
+          productId: 'p1',
+          colorId: 'c-black',
+          sizeValueId: 's-l',
+          size: 'L',
+          isActive: true,
+          inStock: true,
+        },
+      ];
+
+      it('COLOR_AND_SIZE: sold-out variant clears size, shows notice, does NOT auto-select another size', () => {
+        const result = reconcileSelectionAfterStaleStock(
+          'COLOR_AND_SIZE',
+          'c-black',
+          's-m',
+          refreshedVariants,
+          'M'
+        );
+        expect(result.isBuyable).toBe(false);
+        expect(result.nextSizeId).toBeNull();
+        expect(result.notice).toBe('Размер M только что закончился. Выберите другой размер.');
+      });
+
+      it('COLOR_AND_SIZE: variant that remains buyable retains size selection', () => {
+        const result = reconcileSelectionAfterStaleStock(
+          'COLOR_AND_SIZE',
+          'c-black',
+          's-s',
+          refreshedVariants,
+          'S'
+        );
+        expect(result.isBuyable).toBe(true);
+        expect(result.nextSizeId).toBe('s-s');
+        expect(result.notice).toBeNull();
+      });
+
+      it('SIZE_ONLY: sold-out variant clears size and shows notice', () => {
+        const sizeOnlyVariants: ProductVariantItem[] = [
+          { id: 'v-s', productId: 'p1', sizeValueId: 's-s', size: 'S', isActive: true, inStock: true },
+          { id: 'v-m', productId: 'p1', sizeValueId: 's-m', size: 'M', isActive: true, inStock: false },
+        ];
+        const result = reconcileSelectionAfterStaleStock(
+          'SIZE_ONLY',
+          null,
+          's-m',
+          sizeOnlyVariants,
+          'M'
+        );
+        expect(result.isBuyable).toBe(false);
+        expect(result.nextSizeId).toBeNull();
+        expect(result.notice).toBe('Размер M только что закончился. Выберите другой размер.');
+      });
+
+      it('COLOR_ONLY: sold-out color shows "Этот вариант только что закончился."', () => {
+        const colorOnlyVariants: ProductVariantItem[] = [
+          { id: 'v-red', productId: 'p1', colorId: 'c-red', isActive: true, inStock: false },
+        ];
+        const result = reconcileSelectionAfterStaleStock(
+          'COLOR_ONLY',
+          'c-red',
+          null,
+          colorOnlyVariants,
+          null
+        );
+        expect(result.isBuyable).toBe(false);
+        expect(result.notice).toBe('Этот вариант только что закончился.');
+      });
+
+      it('SINGLE_VARIANT: sold-out variant shows "Этот вариант только что закончился."', () => {
+        const singleVariants: ProductVariantItem[] = [
+          { id: 'v-1', productId: 'p1', isActive: true, inStock: false },
+        ];
+        const result = reconcileSelectionAfterStaleStock(
+          'SINGLE_VARIANT',
+          null,
+          null,
+          singleVariants,
+          null
+        );
+        expect(result.isBuyable).toBe(false);
+        expect(result.notice).toBe('Этот вариант только что закончился.');
+      });
+    });
+
+    describe('useVariantSelection hook with stale-recovery controls', () => {
+      it('clearSelectedSize clears selectedSizeId without selecting an alternative', () => {
+        const variants: ProductVariantItem[] = [
+          { id: 'v1', productId: 'p1', sizeValueId: 's-s', size: 'S', isActive: true, inStock: true },
+          { id: 'v2', productId: 'p1', sizeValueId: 's-m', size: 'M', isActive: true, inStock: true },
+        ];
+        const { result } = renderHook(() =>
+          useVariantSelection(variants, undefined, null, 's-m')
+        );
+        expect(result.current.selectedSizeId).toBe('s-m');
+
+        act(() => {
+          result.current.clearSelectedSize();
+        });
+
+        expect(result.current.selectedSizeId).toBeNull();
+        expect(result.current.selectedVariant).toBeNull();
+        expect(result.current.canAddToCart).toBe(false);
+        expect(result.current.ctaText).toBe('Выберите размер');
+      });
+
+      it('setSizeSelectionNotice sets custom notice and selecting available size clears it', () => {
+        const variants: ProductVariantItem[] = [
+          { id: 'v1', productId: 'p1', sizeValueId: 's-s', size: 'S', isActive: true, inStock: true },
+          { id: 'v2', productId: 'p1', sizeValueId: 's-m', size: 'M', isActive: true, inStock: false },
+        ];
+        const { result } = renderHook(() =>
+          useVariantSelection(variants, undefined, null, 's-m')
+        );
+
+        act(() => {
+          result.current.setSizeSelectionNotice('Размер M только что закончился. Выберите другой размер.');
+          result.current.clearSelectedSize();
+        });
+
+        expect(result.current.sizeSelectionNotice).toBe('Размер M только что закончился. Выберите другой размер.');
+
+        // User clicks available size S
+        act(() => {
+          result.current.selectSize('s-s');
+        });
+
+        expect(result.current.selectedSizeId).toBe('s-s');
+        expect(result.current.sizeSelectionNotice).toBeNull();
+      });
     });
   });
 });

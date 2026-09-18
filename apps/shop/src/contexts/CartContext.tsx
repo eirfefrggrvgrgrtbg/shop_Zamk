@@ -104,7 +104,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       await addToCart({ productId, productVariantId, quantity });
       await fetchCart();
     } catch (e: any) {
-      throw new Error(e.message || 'Ошибка при добавлении в корзину');
+      throw e;
     }
   }, [isAuthenticated, openAuthModal, fetchCart]);
 

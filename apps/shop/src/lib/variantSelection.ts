@@ -109,6 +109,17 @@ export function formatSizeUnavailableNotice(sizeLabel: string, colorName?: strin
   return `Размер ${cleanSize} недоступен в цвете «${cleanColor}»`;
 }
 
+export function formatStaleSizeNotice(sizeLabel?: string | null): string {
+  const clean = (sizeLabel || '').trim();
+  if (clean) {
+    return `Размер ${clean} только что закончился. Выберите другой размер.`;
+  }
+  return 'Этот вариант только что закончился.';
+}
+
+export const PRODUCT_JUST_SOLD_OUT_NOTICE = 'Товар только что закончился.';
+export const REFRESH_ERROR_NOTICE = 'Не удалось обновить данные о наличии. Попробуйте обновить страницу.';
+
 export function formatSizeSoldOutAriaLabel(sizeLabel: string): string {
   const cleanSize = (sizeLabel || '').trim();
   return cleanSize ? `Размер ${cleanSize}, закончился` : 'Закончился';
@@ -589,6 +600,10 @@ export function useVariantSelection(
     setSizeSelectionNotice(null);
   }, []);
 
+  const clearSelectedSize = useCallback(() => {
+    setSelectedSizeId(null);
+  }, []);
+
   const state = useMemo(() => {
     return selectVariantState(variants, selectedColorId, selectedSizeId, sizeChart, sizeSelectionNotice);
   }, [variants, selectedColorId, selectedSizeId, sizeChart, sizeSelectionNotice]);
@@ -598,6 +613,80 @@ export function useVariantSelection(
     selectColor,
     selectSize,
     clearNotice,
+    clearSelectedSize,
+    setSelectedSizeId,
+    setSizeSelectionNotice,
+  };
+}
+
+export interface StaleStockReconciliationResult {
+  nextSizeId: string | null;
+  notice: string | null;
+  isBuyable: boolean;
+}
+
+export function reconcileSelectionAfterStaleStock(
+  dimensionType: DimensionType,
+  selectedColorId: string | null,
+  selectedSizeId: string | null,
+  refreshedVariants: ProductVariantItem[] | undefined,
+  previousSizeLabel?: string | null
+): StaleStockReconciliationResult {
+  if (dimensionType === 'COLOR_AND_SIZE') {
+    const targetVariant = refreshedVariants?.find(
+      v => v.isActive !== false &&
+           getVariantColorId(v) === selectedColorId &&
+           getVariantSizeId(v) === selectedSizeId
+    );
+    if (isVariantBuyable(targetVariant)) {
+      return { nextSizeId: selectedSizeId, notice: null, isBuyable: true };
+    }
+    return {
+      nextSizeId: null,
+      notice: formatStaleSizeNotice(previousSizeLabel),
+      isBuyable: false,
+    };
+  }
+
+  if (dimensionType === 'SIZE_ONLY') {
+    const targetVariant = refreshedVariants?.find(
+      v => v.isActive !== false &&
+           getVariantSizeId(v) === selectedSizeId
+    );
+    if (isVariantBuyable(targetVariant)) {
+      return { nextSizeId: selectedSizeId, notice: null, isBuyable: true };
+    }
+    return {
+      nextSizeId: null,
+      notice: formatStaleSizeNotice(previousSizeLabel),
+      isBuyable: false,
+    };
+  }
+
+  if (dimensionType === 'COLOR_ONLY') {
+    const targetVariant = refreshedVariants?.find(
+      v => v.isActive !== false &&
+           getVariantColorId(v) === selectedColorId
+    );
+    if (isVariantBuyable(targetVariant)) {
+      return { nextSizeId: null, notice: null, isBuyable: true };
+    }
+    return {
+      nextSizeId: null,
+      notice: 'Этот вариант только что закончился.',
+      isBuyable: false,
+    };
+  }
+
+  // SINGLE_VARIANT
+  const targetVariant = refreshedVariants?.[0];
+  if (isVariantBuyable(targetVariant)) {
+    return { nextSizeId: null, notice: null, isBuyable: true };
+  }
+  return {
+    nextSizeId: null,
+    notice: 'Этот вариант только что закончился.',
+    isBuyable: false,
   };
 }
 

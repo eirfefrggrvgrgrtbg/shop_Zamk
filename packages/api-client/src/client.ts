@@ -147,7 +147,8 @@ export const request = async <T>(
       // Handle nested error shape: { error: { code, message } }
       if (data && data.error && typeof data.error === 'object') {
         const code = data.error.code;
-        throw new ApiError(getSafeErrorMessage(code, data.error.message), code, response.status, data);
+        const rawMessage = typeof data.error.message === 'string' ? data.error.message : undefined;
+        throw new ApiError(getSafeErrorMessage(code, rawMessage), code, response.status, data, rawMessage);
       }
       // Handle flat error shape: { error: "code", message: "..." } or { code: "code", message: "..." }
       if (data && (typeof data.error === 'string' || typeof data.code === 'string')) {

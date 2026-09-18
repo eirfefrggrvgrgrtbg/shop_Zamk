@@ -13,7 +13,13 @@ import { PreviewPageMetadata } from '../components/PreviewPageMetadata';
 import { formatPrice, cn } from '../lib/utils';
 import { fetchProductById, fetchProductReviews, fetchProductPreviewByToken } from '../api/publicCatalog';
 import { recordProductView } from '@zamk/api-client/src/customer';
-import { useVariantSelection } from '../lib/variantSelection';
+import { isInsufficientStockError } from '@zamk/api-client/src/errors';
+import {
+  useVariantSelection,
+  reconcileSelectionAfterStaleStock,
+  PRODUCT_JUST_SOLD_OUT_NOTICE,
+  REFRESH_ERROR_NOTICE,
+} from '../lib/variantSelection';
 import { SimilarProductsBlock } from '../components/product/SimilarProductsBlock';
 import type { Product, Review } from '../types/catalog';
 
@@ -335,6 +341,9 @@ export function ProductDetail() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [isProductUnavailable, setIsProductUnavailable] = useState(false);
+  const [refreshErrorNotice, setRefreshErrorNotice] = useState<string | null>(null);
 
   const [activeImage, setActiveImage] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -439,6 +448,8 @@ export function ProductDetail() {
     sizeSelectionNotice,
     selectColor,
     selectSize,
+    clearSelectedSize,
+    setSizeSelectionNotice,
   } = useVariantSelection(product?.variants, product?.sizeChart);
 
   const defaultImage = { url: 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image' };
@@ -549,7 +560,9 @@ export function ProductDetail() {
   }
 
   const handleColorChange = (colorId: string) => {
+    if (isProductUnavailable) return;
     selectColor(colorId);
+    setRefreshErrorNotice(null);
     // Preserves active photo index across color switches.
     // Gallery media stream belongs to the product as a whole.
     if (sizeError) setSizeError('');
@@ -591,7 +604,7 @@ export function ProductDetail() {
 
 
   const handleAddToCart = async () => {
-    if (product.isPreview) return;
+    if (product.isPreview || isAddingToCart || isProductUnavailable) return;
     if (requiresSize && !selectedSizeId) {
       setSizeError('Выберите размер перед добавлением в корзину');
       return;
@@ -609,10 +622,58 @@ export function ProductDetail() {
     }
 
     try {
+      setIsAddingToCart(true);
+      setRefreshErrorNotice(null);
       await addItem(product.id, selectedVariant.id, 1);
       showToast('Товар добавлен в корзину');
     } catch (e: any) {
-      showToast(e.message || 'Ошибка при добавлении');
+      if (isInsufficientStockError(e)) {
+        const prevSizeLabel = selectedSize?.label || selectedVariant.size;
+        try {
+          const freshProduct = token
+            ? await fetchProductPreviewByToken(token)
+            : await fetchProductById(product.id || id!);
+
+          setProduct(freshProduct);
+
+          const reconciliation = reconcileSelectionAfterStaleStock(
+            dimensionType,
+            selectedColorId,
+            selectedSizeId,
+            freshProduct.variants,
+            prevSizeLabel
+          );
+
+          if (!reconciliation.isBuyable) {
+            if (reconciliation.nextSizeId === null && selectedSizeId !== null) {
+              clearSelectedSize();
+            }
+            if (reconciliation.notice) {
+              setSizeSelectionNotice(reconciliation.notice);
+              showToast(reconciliation.notice);
+            }
+          }
+        } catch (refreshErr: any) {
+          if (
+            refreshErr?.status === 404 ||
+            refreshErr?.code === 'not_found' ||
+            refreshErr?.status === 410 ||
+            refreshErr?.code === 'product_unavailable'
+          ) {
+            setIsProductUnavailable(true);
+            clearSelectedSize();
+            setSizeSelectionNotice(PRODUCT_JUST_SOLD_OUT_NOTICE);
+            showToast(PRODUCT_JUST_SOLD_OUT_NOTICE);
+          } else {
+            setRefreshErrorNotice(REFRESH_ERROR_NOTICE);
+            showToast(REFRESH_ERROR_NOTICE);
+          }
+        }
+      } else {
+        showToast(e.message || 'Ошибка при добавлении в корзину');
+      }
+    } finally {
+      setIsAddingToCart(false);
     }
   };
 
@@ -948,6 +1009,7 @@ export function ProductDetail() {
                       const isSelected = selectedSizeId === sizeObj.id;
                       const isSoldOut = sizeObj.state === 'SOLD_OUT';
                       const isNotOffered = sizeObj.state === 'NOT_OFFERED';
+                      const isButtonDisabled = isProductUnavailable || sizeObj.disabled;
                       return (
                         <button
                           key={sizeObj.id}
@@ -956,11 +1018,12 @@ export function ProductDetail() {
                           aria-label={sizeObj.accessibleLabel}
                           title={sizeObj.accessibleLabel}
                           data-state={sizeObj.state}
-                          disabled={sizeObj.disabled}
+                          disabled={isButtonDisabled}
                           onClick={() => {
-                            if (!sizeObj.disabled) {
+                            if (!isButtonDisabled) {
                               selectSize(sizeObj.id);
                               if (sizeError) setSizeError('');
+                              setRefreshErrorNotice(null);
                             }
                           }}
                           className={cn(
@@ -979,18 +1042,33 @@ export function ProductDetail() {
                       );
                     })}
                   </div>
-                  {sizeSelectionNotice && (
+                  {sizeSelectionNotice && !isProductUnavailable && (
                     <p className="mt-2 text-xs sm:text-sm text-amber-600 dark:text-amber-400 font-normal" role="status" aria-live="polite">
                       {sizeSelectionNotice}
                     </p>
                   )}
-                  {sizeError && (
+                  {sizeError && !isProductUnavailable && (
                     <p className="mt-2 text-xs sm:text-sm text-error" role="alert">
                       {sizeError}
                     </p>
                   )}
                 </div>
               )}
+
+              {/* Notice for product-level unavailability, non-size stale variant, or refresh network failure */}
+              {isProductUnavailable ? (
+                <p className="mt-4 text-xs sm:text-sm text-amber-600 dark:text-amber-400 font-normal" role="status" aria-live="polite">
+                  {PRODUCT_JUST_SOLD_OUT_NOTICE}
+                </p>
+              ) : !requiresSize && sizeSelectionNotice ? (
+                <p className="mt-4 text-xs sm:text-sm text-amber-600 dark:text-amber-400 font-normal" role="status" aria-live="polite">
+                  {sizeSelectionNotice}
+                </p>
+              ) : refreshErrorNotice ? (
+                <p className="mt-4 text-xs sm:text-sm text-amber-600 dark:text-amber-400 font-normal" role="status" aria-live="polite">
+                  {refreshErrorNotice}
+                </p>
+              ) : null}
 
               {/* PRIMARY CTA + FAVORITE */}
               <div className="mt-6 flex gap-3">
@@ -999,12 +1077,16 @@ export function ProductDetail() {
                   variant="primary"
                   className="flex-1 h-[52px] rounded-lg text-sm font-medium tracking-wide gap-2"
                   onClick={handleAddToCart}
-                  disabled={product.isPreview || !isResolved || !canAddToCart}
+                  disabled={product.isPreview || isAddingToCart || isProductUnavailable || !isResolved || !canAddToCart}
                 >
                   <ShoppingBag className="w-4 h-4" />
                   {product.isPreview
                     ? 'Покупка недоступна в предпросмотре'
-                    : ctaText}
+                    : isProductUnavailable
+                      ? 'Товар закончился'
+                      : isAddingToCart
+                        ? 'Добавление...'
+                        : ctaText}
                 </Button>
                 <Button
                   type="button"

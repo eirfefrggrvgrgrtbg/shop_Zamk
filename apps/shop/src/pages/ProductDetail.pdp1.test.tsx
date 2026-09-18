@@ -6,6 +6,7 @@ import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ProductDetail } from './ProductDetail';
 import * as publicCatalog from '../api/publicCatalog';
+import { ApiError } from '@zamk/api-client/src/errors';
 import type { Product } from '../types/catalog';
 
 // Mock contexts
@@ -844,5 +845,430 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     // Gallery image still at 2 / 3
     expect(screen.getByText('2 / 3')).toBeTruthy();
     expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-2.jpg');
+  });
+
+  describe('SHOP PDP.2D1 — Stale Stock Recovery After Add-to-Cart Failure', () => {
+    it('1. Successful Add: item added, no stale refetch, no stale warning', async () => {
+      mockAddItem.mockResolvedValueOnce(undefined);
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(mockApparelProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-100']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+      });
+
+      // Select size S
+      const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
+      fireEvent.click(sizeSBtn);
+
+      // Click Add to Cart
+      const addBtn = screen.getByRole('button', { name: /Добавить в корзину/i });
+      fireEvent.click(addBtn);
+
+      await waitFor(() => {
+        expect(mockAddItem).toHaveBeenCalledTimes(1);
+      });
+
+      // Exactly 1 loadProduct on mount, NO refetch on successful add
+      expect(publicCatalog.fetchProductById).toHaveBeenCalledTimes(1);
+      expect(mockShowToast).toHaveBeenCalledWith('Товар добавлен в корзину');
+      expect(screen.queryByRole('status')).toBeNull();
+    });
+
+    it('2 & 3. Insufficient stock recognized structurally: triggers 1 refresh, clears size, keeps in stable matrix as SOLD_OUT, shows notice, no auto-select', async () => {
+      const insufficientStockErr = new ApiError(
+        'Недостаточно товара на складе',
+        'invalid_item',
+        400,
+        { error: { code: 'invalid_item', message: 'insufficient stock' } },
+        'insufficient stock'
+      );
+      mockAddItem.mockRejectedValueOnce(insufficientStockErr);
+
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(mockApparelProduct);
+
+      // Refreshed product where S is now SOLD_OUT (inStock: false)
+      const refreshedProduct: Product = {
+        ...mockApparelProduct,
+        variants: mockApparelProduct.variants?.map((v) =>
+          v.id === 'var-black-s' ? { ...v, inStock: false } : v
+        ),
+      };
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(refreshedProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-100']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+      });
+
+      // Select size S
+      const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
+      fireEvent.click(sizeSBtn);
+      expect(sizeSBtn.getAttribute('aria-pressed')).toBe('true');
+
+      // Click Add to Cart
+      const addBtn = screen.getByRole('button', { name: /Добавить в корзину/i });
+      fireEvent.click(addBtn);
+
+      await waitFor(() => {
+        expect(mockAddItem).toHaveBeenCalledTimes(1);
+        // Product was refetched (1 on mount + 1 stale recovery)
+        expect(publicCatalog.fetchProductById).toHaveBeenCalledTimes(2);
+      });
+
+      // Selected size S must be cleared
+      await waitFor(() => {
+        expect(sizeSBtn.getAttribute('aria-pressed')).toBe('false');
+      });
+
+      // Size S remains visible in the stable matrix, but transitioned in-place to SOLD_OUT
+      expect(sizeSBtn.hasAttribute('disabled')).toBe(true);
+      expect(sizeSBtn.getAttribute('data-state')).toBe('SOLD_OUT');
+      expect(sizeSBtn.getAttribute('aria-label')).toBe('Размер S, закончился');
+
+      // Other sizes must NOT be auto-selected
+      const sizeMBtn = screen.getByRole('button', { name: /^Размер M/i });
+      expect(sizeMBtn.getAttribute('aria-pressed')).toBe('false');
+
+      // Contextual message shown
+      const notice = screen.getByRole('status');
+      expect(notice.textContent).toBe('Размер S только что закончился. Выберите другой размер.');
+      expect(mockShowToast).toHaveBeenCalledWith('Размер S только что закончился. Выберите другой размер.');
+
+      // CTA must require a new valid size selection
+      const cta = screen.getByRole('button', { name: /Выберите размер/i });
+      expect(cta.hasAttribute('disabled')).toBe(true);
+
+      // Selecting available size M clears the stale notice
+      fireEvent.click(sizeMBtn);
+      expect(sizeMBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(screen.queryByRole('status')).toBeNull();
+    });
+
+    it('4. Refreshed selected size remains buyable: selection is preserved and fresh truth used', async () => {
+      const insufficientStockErr = new ApiError(
+        'Недостаточно товара на складе',
+        'invalid_item',
+        400,
+        { error: { code: 'invalid_item', message: 'insufficient stock' } },
+        'insufficient stock'
+      );
+      mockAddItem.mockRejectedValueOnce(insufficientStockErr);
+
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(mockApparelProduct);
+
+      // Refreshed product where S is still inStock (e.g. price updated to 48000)
+      const refreshedProduct: Product = {
+        ...mockApparelProduct,
+        variants: mockApparelProduct.variants?.map((v) =>
+          v.id === 'var-black-s' ? { ...v, inStock: true, priceCents: 4800000 } : v
+        ),
+      };
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(refreshedProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-100']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+      });
+
+      // Select size S
+      const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
+      fireEvent.click(sizeSBtn);
+      expect(sizeSBtn.getAttribute('aria-pressed')).toBe('true');
+
+      // Click Add to Cart
+      const addBtn = screen.getByRole('button', { name: /Добавить в корзину/i });
+      fireEvent.click(addBtn);
+
+      await waitFor(() => {
+        expect(publicCatalog.fetchProductById).toHaveBeenCalledTimes(2);
+      });
+
+      // Since S is still buyable in refreshedProduct, selection remains
+      expect(sizeSBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(screen.queryByRole('status')).toBeNull();
+      // Fresh price reflected
+      expect(screen.getByText(/48\s?000/)).toBeTruthy();
+    });
+
+    it('5. Product drops below public visibility and refresh returns 404: PDP does not crash, purchasing disabled, product-level notice shown', async () => {
+      const insufficientStockErr = new ApiError(
+        'Недостаточно товара на складе',
+        'invalid_item',
+        400,
+        { error: { code: 'invalid_item', message: 'insufficient stock' } },
+        'insufficient stock'
+      );
+      mockAddItem.mockRejectedValueOnce(insufficientStockErr);
+
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(mockApparelProduct);
+
+      // Refresh throws 404 Not Found (product fell below free stock threshold and became hidden)
+      const notFoundErr = new ApiError('Product not found', 'not_found', 404);
+      vi.mocked(publicCatalog.fetchProductById).mockRejectedValueOnce(notFoundErr);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-100']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+      });
+
+      const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
+      fireEvent.click(sizeSBtn);
+
+      const addBtn = screen.getByRole('button', { name: /Добавить в корзину/i });
+      fireEvent.click(addBtn);
+
+      await waitFor(() => {
+        expect(publicCatalog.fetchProductById).toHaveBeenCalledTimes(2);
+      });
+
+      // Page must NOT crash or show generic 404 page
+      expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+
+      // Purchasing disabled
+      const cta = screen.getByRole('button', { name: /Товар закончился/i });
+      expect(cta.hasAttribute('disabled')).toBe(true);
+
+      // Product-level notice shown
+      const notice = screen.getByRole('status');
+      expect(notice.textContent).toBe('Товар только что закончился.');
+      expect(mockShowToast).toHaveBeenCalledWith('Товар только что закончился.');
+
+      // Clicking old controls does NOT clear product-level unavailable state
+      fireEvent.click(sizeSBtn);
+      expect(screen.getByRole('status').textContent).toBe('Товар только что закончился.');
+    });
+
+    it('6. Network/server refresh failure: not falsely labeled sold out, restrained message shown', async () => {
+      const insufficientStockErr = new ApiError(
+        'Недостаточно товара на складе',
+        'invalid_item',
+        400,
+        { error: { code: 'invalid_item', message: 'insufficient stock' } },
+        'insufficient stock'
+      );
+      mockAddItem.mockRejectedValueOnce(insufficientStockErr);
+
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(mockApparelProduct);
+
+      // Refresh throws network error
+      const netErr = new ApiError('Network error', 'NETWORK_ERROR', 0);
+      vi.mocked(publicCatalog.fetchProductById).mockRejectedValueOnce(netErr);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-100']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+      });
+
+      const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
+      fireEvent.click(sizeSBtn);
+
+      const addBtn = screen.getByRole('button', { name: /Добавить в корзину/i });
+      fireEvent.click(addBtn);
+
+      await waitFor(() => {
+        expect(publicCatalog.fetchProductById).toHaveBeenCalledTimes(2);
+      });
+
+      // Not labeled sold out!
+      expect(screen.queryByText('Товар только что закончился.')).toBeNull();
+
+      // Restrained message asking user to retry/refresh
+      expect(mockShowToast).toHaveBeenCalledWith('Не удалось обновить данные о наличии. Попробуйте обновить страницу.');
+    });
+
+    it('7. Unrelated Add-to-Cart error: does NOT trigger stale-stock refresh', async () => {
+      const serverErr = new ApiError('Internal server error', 'internal_error', 500);
+      mockAddItem.mockRejectedValueOnce(serverErr);
+
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(mockApparelProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-100']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+      });
+
+      const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
+      fireEvent.click(sizeSBtn);
+
+      const addBtn = screen.getByRole('button', { name: /Добавить в корзину/i });
+      fireEvent.click(addBtn);
+
+      await waitFor(() => {
+        expect(mockAddItem).toHaveBeenCalledTimes(1);
+      });
+
+      // Only initial mount fetch, NO stale refetch
+      expect(publicCatalog.fetchProductById).toHaveBeenCalledTimes(1);
+      expect(mockShowToast).toHaveBeenCalledWith('Internal server error');
+    });
+
+    it('8. Exact gallery index is unchanged throughout stale recovery', async () => {
+      const insufficientStockErr = new ApiError(
+        'Недостаточно товара на складе',
+        'invalid_item',
+        400,
+        { error: { code: 'invalid_item', message: 'insufficient stock' } },
+        'insufficient stock'
+      );
+      mockAddItem.mockRejectedValueOnce(insufficientStockErr);
+
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(mockApparelProduct);
+
+      const refreshedProduct: Product = {
+        ...mockApparelProduct,
+        variants: mockApparelProduct.variants?.map((v) =>
+          v.id === 'var-black-s' ? { ...v, inStock: false } : v
+        ),
+      };
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(refreshedProduct);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-dress-100']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
+      });
+
+      // Navigate to photo 2
+      const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
+      fireEvent.click(nextBtn);
+      expect(screen.getByText('2 / 3')).toBeTruthy();
+      expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-back.jpg');
+
+      // Select size S and click Add to Cart
+      const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
+      fireEvent.click(sizeSBtn);
+
+      const addBtn = screen.getByRole('button', { name: /Добавить в корзину/i });
+      fireEvent.click(addBtn);
+
+      await waitFor(() => {
+        expect(publicCatalog.fetchProductById).toHaveBeenCalledTimes(2);
+      });
+
+      // Gallery index must remain EXACTLY at photo 2
+      expect(screen.getByText('2 / 3')).toBeTruthy();
+      expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-back.jpg');
+    });
+
+    it('9 & 11. COLOR_ONLY product stale recovery: no size axis, stays on color, CTA becomes unavailable, strict inStock truth enforced', async () => {
+      const colorOnlyProduct: Product = {
+        id: 'prod-color-only',
+        name: 'Шарф кашемировый',
+        brand: 'ZAMK Couture',
+        brandId: 'brand-couture',
+        category: 'Шарфы',
+        price: 15000,
+        image: 'https://example.com/scarf.jpg',
+        variants: [
+          {
+            id: 'var-scarf-black',
+            colorId: 'c-black',
+            colorName: 'Чёрный',
+            inStock: true,
+            isActive: true,
+            priceCents: 1500000,
+          },
+        ],
+      };
+
+      const insufficientStockErr = new ApiError(
+        'Недостаточно товара на складе',
+        'invalid_item',
+        400,
+        { error: { code: 'invalid_item', message: 'insufficient stock' } },
+        'insufficient stock'
+      );
+      mockAddItem.mockRejectedValueOnce(insufficientStockErr);
+
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(colorOnlyProduct);
+
+      const refreshedScarf: Product = {
+        ...colorOnlyProduct,
+        variants: [
+          {
+            ...colorOnlyProduct.variants![0],
+            inStock: false,
+          },
+        ],
+      };
+      vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(refreshedScarf);
+
+      render(
+        <MemoryRouter initialEntries={['/product/prod-color-only']}>
+          <Routes>
+            <Route path="/product/:id" element={<ProductDetail />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1, name: 'Шарф кашемировый' })).toBeTruthy();
+      });
+
+      const addBtn = screen.getByRole('button', { name: /Добавить в корзину/i });
+      fireEvent.click(addBtn);
+
+      await waitFor(() => {
+        expect(publicCatalog.fetchProductById).toHaveBeenCalledTimes(2);
+      });
+
+      // Notice shown for no size axis
+      expect(mockShowToast).toHaveBeenCalledWith('Этот вариант только что закончился.');
+      const notice = screen.getByRole('status');
+      expect(notice.textContent).toBe('Этот вариант только что закончился.');
+
+      // CTA becomes "Нет в наличии"
+      const cta = screen.getByRole('button', { name: /Нет в наличии/i });
+      expect(cta.hasAttribute('disabled')).toBe(true);
+    });
   });
 });
