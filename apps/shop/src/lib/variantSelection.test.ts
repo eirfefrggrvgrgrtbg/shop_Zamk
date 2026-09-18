@@ -10,6 +10,9 @@ import {
   useVariantSelection,
   isVariantBuyable,
   formatSizeUnavailableNotice,
+  formatSizeSoldOutAriaLabel,
+  formatSizeNotOfferedAriaLabel,
+  type SizeAvailabilityState,
   type ProductVariantItem,
 } from './variantSelection';
 
@@ -558,5 +561,254 @@ describe('SHOP PDP.2B — Variant Selection State Hardening', () => {
     expect(formatSizeUnavailableNotice('XL', 'Хаки')).toBe('Размер XL недоступен в цвете хаки');
     expect(formatSizeUnavailableNotice('42', 'CustomGold')).toBe('Размер 42 недоступен в цвете «CustomGold»');
     expect(formatSizeUnavailableNotice('M', null)).toBe('Размер M недоступен в выбранном цвете');
+  });
+
+  describe('SHOP PDP.2C — Stable Size Matrix + Explicit Availability States', () => {
+    // Asymmetric fixture:
+    // Color 1: Red (id: c-red) has size S (inStock: true) and size M (inStock: false)
+    // Color 2: White (id: c-white) has size M (inStock: true) and size L (inStock: false)
+    const asymVariants: ProductVariantItem[] = [
+      {
+        id: 'var-red-s',
+        productId: 'prod-asym',
+        colorId: 'c-red',
+        colorName: 'Красный',
+        sizeValueId: 's-s',
+        size: 'S',
+        isActive: true,
+        inStock: true,
+      },
+      {
+        id: 'var-red-m',
+        productId: 'prod-asym',
+        colorId: 'c-red',
+        colorName: 'Красный',
+        sizeValueId: 's-m',
+        size: 'M',
+        isActive: true,
+        inStock: false,
+      },
+      {
+        id: 'var-white-m',
+        productId: 'prod-asym',
+        colorId: 'c-white',
+        colorName: 'Белый',
+        sizeValueId: 's-m',
+        size: 'M',
+        isActive: true,
+        inStock: true,
+      },
+      {
+        id: 'var-white-l',
+        productId: 'prod-asym',
+        colorId: 'c-white',
+        colorName: 'Белый',
+        sizeValueId: 's-l',
+        size: 'L',
+        isActive: true,
+        inStock: false,
+      },
+    ];
+
+    it('1. Calculates product-level size universe containing all sizes across colors (S, M, L)', () => {
+      const sizesRed = getSizeOptions(asymVariants, 'c-red');
+      const sizesWhite = getSizeOptions(asymVariants, 'c-white');
+
+      expect(sizesRed.map((s) => s.label)).toEqual(['S', 'M', 'L']);
+      expect(sizesWhite.map((s) => s.label)).toEqual(['S', 'M', 'L']);
+    });
+
+    it('2. Preserves sizeChart row ordering if sizeChart is present', () => {
+      const customChart = {
+        id: 'sc-1',
+        title: 'Размерная сетка',
+        columns: ['Размер'],
+        rows: [
+          { size: 'L', measurements: {} },
+          { size: 'M', measurements: {} },
+          { size: 'S', measurements: {} },
+        ],
+      };
+      const sizes = getSizeOptions(asymVariants, 'c-red', customChart);
+      expect(sizes.map((s) => s.label)).toEqual(['L', 'M', 'S']);
+    });
+
+    it('3. When Color = Red: S is AVAILABLE, M is SOLD_OUT, L is NOT_OFFERED', () => {
+      const sizes = getSizeOptions(asymVariants, 'c-red');
+      const s = sizes.find((x) => x.label === 'S')!;
+      const m = sizes.find((x) => x.label === 'M')!;
+      const l = sizes.find((x) => x.label === 'L')!;
+
+      expect(s.state).toBe('AVAILABLE');
+      expect(s.disabled).toBe(false);
+      expect(s.inStock).toBe(true);
+      expect(s.variantId).toBe('var-red-s');
+      expect(s.accessibleLabel).toBe('Размер S');
+
+      expect(m.state).toBe('SOLD_OUT');
+      expect(m.disabled).toBe(true);
+      expect(m.inStock).toBe(false);
+      expect(m.variantId).toBe('var-red-m');
+      expect(m.accessibleLabel).toBe('Размер M, закончился');
+
+      expect(l.state).toBe('NOT_OFFERED');
+      expect(l.disabled).toBe(true);
+      expect(l.inStock).toBe(false);
+      expect(l.variantId).toBeUndefined();
+      expect(l.accessibleLabel).toBe('Размер L, не представлен в красном цвете');
+    });
+
+    it('4. When Color = White: S is NOT_OFFERED, M is AVAILABLE, L is SOLD_OUT', () => {
+      const sizes = getSizeOptions(asymVariants, 'c-white');
+      const s = sizes.find((x) => x.label === 'S')!;
+      const m = sizes.find((x) => x.label === 'M')!;
+      const l = sizes.find((x) => x.label === 'L')!;
+
+      expect(s.state).toBe('NOT_OFFERED');
+      expect(s.disabled).toBe(true);
+      expect(s.inStock).toBe(false);
+      expect(s.variantId).toBeUndefined();
+      expect(s.accessibleLabel).toBe('Размер S, не представлен в белом цвете');
+
+      expect(m.state).toBe('AVAILABLE');
+      expect(m.disabled).toBe(false);
+      expect(m.inStock).toBe(true);
+      expect(m.variantId).toBe('var-white-m');
+      expect(m.accessibleLabel).toBe('Размер M');
+
+      expect(l.state).toBe('SOLD_OUT');
+      expect(l.disabled).toBe(true);
+      expect(l.inStock).toBe(false);
+      expect(l.variantId).toBe('var-white-l');
+      expect(l.accessibleLabel).toBe('Размер L, закончился');
+    });
+
+    it('5. Disabled SOLD_OUT and NOT_OFFERED sizes cannot be selected via selectSize', () => {
+      const { result } = renderHook(() =>
+        useVariantSelection(asymVariants, undefined, 'c-red', 's-s')
+      );
+
+      // Attempt to select SOLD_OUT M (s-m is sold out in red)
+      act(() => {
+        result.current.selectSize('s-m');
+      });
+      // Should reject change
+      expect(result.current.selectedSizeId).toBe('s-s');
+
+      // Attempt to select NOT_OFFERED L (s-l is not offered in red)
+      act(() => {
+        result.current.selectSize('s-l');
+      });
+      // Should reject change
+      expect(result.current.selectedSizeId).toBe('s-s');
+    });
+
+    it('6. Switching colors preserves stable size matrix count and order', () => {
+      const { result } = renderHook(() =>
+        useVariantSelection(asymVariants, undefined, 'c-red', 's-s')
+      );
+
+      const initialSizeLabels = result.current.sizes.map((s) => s.label);
+      expect(initialSizeLabels).toEqual(['S', 'M', 'L']);
+
+      act(() => {
+        result.current.selectColor('c-white');
+      });
+
+      const updatedSizeLabels = result.current.sizes.map((s) => s.label);
+      expect(updatedSizeLabels).toEqual(['S', 'M', 'L']);
+      expect(updatedSizeLabels.length).toBe(initialSizeLabels.length);
+    });
+
+    it('7. When color is not yet selected, all sizes in universe are rendered with disabled=true and appropriate label', () => {
+      const sizes = getSizeOptions(asymVariants, null);
+      expect(sizes.map((s) => s.label)).toEqual(['S', 'M', 'L']);
+      sizes.forEach((s) => {
+        expect(s.disabled).toBe(true);
+        expect(s.state).toBe('AVAILABLE');
+        expect(s.accessibleLabel).toBe(`Размер ${s.label}`);
+      });
+    });
+
+    it('8. SIZE_ONLY product: sizes are either AVAILABLE or SOLD_OUT (no NOT_OFFERED)', () => {
+      const sizeOnlyVariants: ProductVariantItem[] = [
+        {
+          id: 'var-1',
+          productId: 'prod-so',
+          sizeValueId: 's-s',
+          size: 'S',
+          isActive: true,
+          inStock: true,
+        },
+        {
+          id: 'var-2',
+          productId: 'prod-so',
+          sizeValueId: 's-m',
+          size: 'M',
+          isActive: true,
+          inStock: false,
+        },
+      ];
+
+      const sizes = getSizeOptions(sizeOnlyVariants, null);
+      expect(sizes).toHaveLength(2);
+      expect(sizes[0].state).toBe('AVAILABLE');
+      expect(sizes[0].disabled).toBe(false);
+      expect(sizes[1].state).toBe('SOLD_OUT');
+      expect(sizes[1].disabled).toBe(true);
+      expect(sizes[1].accessibleLabel).toBe('Размер M, закончился');
+    });
+
+    it('9. formatSizeSoldOutAriaLabel formats correct accessible text', () => {
+      expect(formatSizeSoldOutAriaLabel('S')).toBe('Размер S, закончился');
+      expect(formatSizeSoldOutAriaLabel('42')).toBe('Размер 42, закончился');
+      expect(formatSizeSoldOutAriaLabel('')).toBe('Закончился');
+    });
+
+    it('10. formatSizeNotOfferedAriaLabel inflects colors accurately', () => {
+      expect(formatSizeNotOfferedAriaLabel('L', 'Красный')).toBe('Размер L, не представлен в красном цвете');
+      expect(formatSizeNotOfferedAriaLabel('M', 'Белый')).toBe('Размер M, не представлен в белом цвете');
+      expect(formatSizeNotOfferedAriaLabel('S', 'Синий')).toBe('Размер S, не представлен в синем цвете');
+      expect(formatSizeNotOfferedAriaLabel('XL', 'Хаки')).toBe('Размер XL, не представлен в цвете хаки');
+      expect(formatSizeNotOfferedAriaLabel('XXL', 'Айвори')).toBe('Размер XXL, не представлен в цвете айвори');
+      expect(formatSizeNotOfferedAriaLabel('M', 'SilverMetallic')).toBe('Размер M, не представлен в цвете «SilverMetallic»');
+      expect(formatSizeNotOfferedAriaLabel('L', null)).toBe('Размер L, не представлен в выбранном цвете');
+    });
+
+    it('11. Invariant: variant exists + isActive: true + inStock: false => SOLD_OUT', () => {
+      const v: ProductVariantItem[] = [
+        { id: 'v1', productId: 'p1', size: 'M', isActive: true, inStock: false },
+      ];
+      const sizes = getSizeOptions(v, null);
+      expect(sizes[0].state).toBe('SOLD_OUT');
+    });
+
+    it('12. Invariant: variant exists + inStock: undefined => SOLD_OUT (unbuyable)', () => {
+      const v: ProductVariantItem[] = [
+        { id: 'v1', productId: 'p1', size: 'M', isActive: true, inStock: undefined },
+      ];
+      const sizes = getSizeOptions(v, null);
+      expect(sizes[0].state).toBe('SOLD_OUT');
+      expect(sizes[0].disabled).toBe(true);
+    });
+
+    it('13. Invariant: variant does not exist for selected color => NOT_OFFERED', () => {
+      const v: ProductVariantItem[] = [
+        { id: 'v1', productId: 'p1', colorId: 'c1', colorName: 'Синий', size: 'M', isActive: true, inStock: true },
+      ];
+      const sizes = getSizeOptions(v, 'c2'); // c2 has no variants
+      expect(sizes[0].state).toBe('NOT_OFFERED');
+      expect(sizes[0].disabled).toBe(true);
+    });
+
+    it('14. Invariant: variant exists + isActive: true + inStock: true => AVAILABLE', () => {
+      const v: ProductVariantItem[] = [
+        { id: 'v1', productId: 'p1', size: 'M', isActive: true, inStock: true },
+      ];
+      const sizes = getSizeOptions(v, null);
+      expect(sizes[0].state).toBe('AVAILABLE');
+      expect(sizes[0].disabled).toBe(false);
+      expect(sizes[0].accessibleLabel).toBe('Размер M');
+    });
   });
 });

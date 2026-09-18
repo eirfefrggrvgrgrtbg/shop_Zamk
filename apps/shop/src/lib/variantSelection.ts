@@ -13,12 +13,16 @@ export interface ColorOption {
   hasInStock: boolean;
 }
 
+export type SizeAvailabilityState = 'AVAILABLE' | 'SOLD_OUT' | 'NOT_OFFERED';
+
 export interface SizeOption {
   id: string;
   label: string;
   inStock: boolean;
   disabled: boolean;
   variantId?: string;
+  state: SizeAvailabilityState;
+  accessibleLabel: string;
 }
 
 export interface VariantSelectionState {
@@ -105,6 +109,71 @@ export function formatSizeUnavailableNotice(sizeLabel: string, colorName?: strin
   return `Размер ${cleanSize} недоступен в цвете «${cleanColor}»`;
 }
 
+export function formatSizeSoldOutAriaLabel(sizeLabel: string): string {
+  const cleanSize = (sizeLabel || '').trim();
+  return cleanSize ? `Размер ${cleanSize}, закончился` : 'Закончился';
+}
+
+export function formatSizeNotOfferedAriaLabel(sizeLabel: string, colorName?: string | null): string {
+  const cleanSize = (sizeLabel || '').trim();
+  const cleanColor = (colorName || '').trim();
+
+  if (!cleanColor) {
+    return cleanSize ? `Размер ${cleanSize}, не представлен в выбранном цвете` : 'Не представлен в выбранном цвете';
+  }
+
+  const lower = cleanColor.toLowerCase();
+  const inflected: Record<string, string> = {
+    'белый': 'белом',
+    'черный': 'черном',
+    'чёрный': 'чёрном',
+    'красный': 'красном',
+    'синий': 'синем',
+    'темно-синий': 'темно-синем',
+    'тёмно-синий': 'тёмно-синем',
+    'светло-синий': 'светло-синем',
+    'серый': 'сером',
+    'темно-серый': 'темно-сером',
+    'тёмно-серый': 'тёмно-сером',
+    'светло-серый': 'светло-сером',
+    'зеленый': 'зеленом',
+    'зелёный': 'зелёном',
+    'темно-зеленый': 'темно-зеленом',
+    'тёмно-зелёный': 'тёмно-зелёном',
+    'желтый': 'желтом',
+    'жёлтый': 'жёлтом',
+    'розовый': 'розовом',
+    'бежевый': 'бежевом',
+    'коричневый': 'коричневом',
+    'фиолетовый': 'фиолетовом',
+    'голубой': 'голубом',
+    'оранжевый': 'оранжевом',
+    'бордовый': 'бордовом',
+    'мятный': 'мятном',
+    'хаки': 'цвете хаки',
+    'айвори': 'цвете айвори',
+  };
+
+  if (inflected[lower]) {
+    const prep = inflected[lower];
+    if (prep.startsWith('цвете ')) {
+      return `Размер ${cleanSize}, не представлен в ${prep}`;
+    }
+    return `Размер ${cleanSize}, не представлен в ${prep} цвете`;
+  }
+
+  if (lower.endsWith('ый') || lower.endsWith('ой')) {
+    const stem = cleanColor.slice(0, -2);
+    return `Размер ${cleanSize}, не представлен в ${stem.toLowerCase()}ом цвете`;
+  }
+  if (lower.endsWith('ий')) {
+    const stem = cleanColor.slice(0, -2);
+    return `Размер ${cleanSize}, не представлен в ${stem.toLowerCase()}ем цвете`;
+  }
+
+  return `Размер ${cleanSize}, не представлен в цвете «${cleanColor}»`;
+}
+
 export function normalizeIdentity(val?: string | null): string {
   return (val || '').trim().toLowerCase();
 }
@@ -182,54 +251,155 @@ export function getDefaultColorId(colors: ColorOption[]): string | null {
 export function getSizeOptions(
   variants?: ProductVariantItem[],
   selectedColorId?: string | null,
-  dimensionType: DimensionType = 'COLOR_AND_SIZE',
-  sizeChart?: any
+  dimensionTypeOrSizeChart?: DimensionType | any,
+  maybeSizeChart?: any
 ): SizeOption[] {
   const active = variants?.filter(v => v.isActive !== false) || [];
-  const matchingVariants = active.filter(v => {
-    if (dimensionType === 'COLOR_AND_SIZE') {
-      if (!selectedColorId) return false;
-      return getVariantColorId(v) === selectedColorId;
-    }
-    return true;
-  });
 
-  const map = new Map<string, SizeOption>();
-  for (const v of matchingVariants) {
+  let dimensionType: DimensionType;
+  let sizeChart: any;
+
+  if (typeof dimensionTypeOrSizeChart === 'string') {
+    dimensionType = dimensionTypeOrSizeChart as DimensionType;
+    sizeChart = maybeSizeChart;
+  } else {
+    dimensionType = getDimensionType(variants);
+    sizeChart = dimensionTypeOrSizeChart;
+  }
+
+  // 1. Collect all unique sizes across active variants for the product, preserving first-seen order
+  interface ProductSizeMeta {
+    sizeId: string;
+    label: string;
+  }
+  const productSizes: ProductSizeMeta[] = [];
+  const seenSizeIds = new Set<string>();
+
+  for (const v of active) {
     const sizeId = getVariantSizeId(v);
     if (!sizeId) continue;
-    const label = v.size || 'Стандарт';
-    const inStock = isVariantBuyable(v);
-
-    const existing = map.get(sizeId);
-    if (!existing) {
-      map.set(sizeId, {
-        id: sizeId,
-        label,
-        inStock,
-        disabled: !inStock,
-        variantId: v.id,
+    if (!seenSizeIds.has(sizeId)) {
+      seenSizeIds.add(sizeId);
+      productSizes.push({
+        sizeId,
+        label: v.size || 'Стандарт',
       });
-    } else if (inStock) {
-      existing.inStock = true;
-      existing.disabled = false;
-      existing.variantId = v.id;
     }
   }
 
-  const list = Array.from(map.values());
-  if (sizeChart?.rows) {
-    const sortOrder = sizeChart.rows.map((r: any) => r.sizeValueName);
-    list.sort((a, b) => {
-      const idxA = sortOrder.indexOf(a.label);
-      const idxB = sortOrder.indexOf(b.label);
+  // 2. Deterministic ordering:
+  // Use sizeChart rows if available (matching sizeValueId or label)
+  if (sizeChart?.rows && Array.isArray(sizeChart.rows)) {
+    const chartRows = sizeChart.rows;
+    productSizes.sort((a, b) => {
+      const idxA = chartRows.findIndex((r: any) =>
+        (r.sizeValueId && r.sizeValueId === a.sizeId) ||
+        (r.sizeValueName && r.sizeValueName === a.label) ||
+        (r.size && r.size === a.label)
+      );
+      const idxB = chartRows.findIndex((r: any) =>
+        (r.sizeValueId && r.sizeValueId === b.sizeId) ||
+        (r.sizeValueName && r.sizeValueName === b.label) ||
+        (r.size && r.size === b.label)
+      );
       if (idxA !== -1 && idxB !== -1) return idxA - idxB;
       if (idxA !== -1) return -1;
       if (idxB !== -1) return 1;
       return 0;
     });
   }
-  return list;
+
+  // Look up color name for NOT_OFFERED aria label formatting if in COLOR_AND_SIZE mode
+  let selectedColorName: string | null = null;
+  if (selectedColorId) {
+    const colorVar = active.find(v => getVariantColorId(v) === selectedColorId);
+    selectedColorName = colorVar?.colorName || colorVar?.color || null;
+  }
+
+  // 3. For each size in the product size universe, calculate the exact state
+  return productSizes.map(({ sizeId, label }) => {
+    if (dimensionType === 'COLOR_AND_SIZE') {
+      if (!selectedColorId) {
+        // No color selected: neutral disabled
+        return {
+          id: sizeId,
+          label,
+          inStock: false,
+          disabled: true,
+          variantId: undefined,
+          state: 'AVAILABLE',
+          accessibleLabel: `Размер ${label}`,
+        };
+      }
+
+      const matchingVariants = active.filter(
+        v => getVariantColorId(v) === selectedColorId && getVariantSizeId(v) === sizeId
+      );
+
+      if (matchingVariants.length === 0) {
+        // Size does not exist under selected color
+        return {
+          id: sizeId,
+          label,
+          inStock: false,
+          disabled: true,
+          variantId: undefined,
+          state: 'NOT_OFFERED',
+          accessibleLabel: formatSizeNotOfferedAriaLabel(label, selectedColorName),
+        };
+      }
+
+      // Exact variant exists
+      const buyableVariant = matchingVariants.find(v => isVariantBuyable(v));
+      if (buyableVariant) {
+        return {
+          id: sizeId,
+          label,
+          inStock: true,
+          disabled: false,
+          variantId: buyableVariant.id,
+          state: 'AVAILABLE',
+          accessibleLabel: `Размер ${label}`,
+        };
+      }
+
+      // Variant exists but zero stock / not buyable
+      return {
+        id: sizeId,
+        label,
+        inStock: false,
+        disabled: true,
+        variantId: matchingVariants[0].id,
+        state: 'SOLD_OUT',
+        accessibleLabel: formatSizeSoldOutAriaLabel(label),
+      };
+    }
+
+    // SIZE_ONLY or others
+    const matchingVariants = active.filter(v => getVariantSizeId(v) === sizeId);
+    const buyableVariant = matchingVariants.find(v => isVariantBuyable(v));
+    if (buyableVariant) {
+      return {
+        id: sizeId,
+        label,
+        inStock: true,
+        disabled: false,
+        variantId: buyableVariant.id,
+        state: 'AVAILABLE',
+        accessibleLabel: `Размер ${label}`,
+      };
+    }
+
+    return {
+      id: sizeId,
+      label,
+      inStock: false,
+      disabled: true,
+      variantId: matchingVariants[0]?.id,
+      state: 'SOLD_OUT',
+      accessibleLabel: formatSizeSoldOutAriaLabel(label),
+    };
+  });
 }
 
 export function resolveExactVariant(
@@ -401,10 +571,19 @@ export function useVariantSelection(
   }, [selectedColorId, selectedSizeId, variants, colors]);
 
   const selectSize = useCallback((sizeId: string) => {
+    const dimType = getDimensionType(variants);
+    const effColorId = (dimType === 'COLOR_AND_SIZE' || dimType === 'COLOR_ONLY')
+      ? (selectedColorId !== undefined && selectedColorId !== null ? selectedColorId : getDefaultColorId(colors))
+      : null;
+    const currentSizes = getSizeOptions(variants, effColorId, dimType, sizeChart);
+    const targetSize = currentSizes.find(s => s.id === sizeId);
+    if (targetSize && targetSize.disabled) {
+      return;
+    }
     setSelectedSizeId(sizeId);
     // User made an explicit size choice -> clear contextual notice
     setSizeSelectionNotice(null);
-  }, []);
+  }, [variants, selectedColorId, colors, sizeChart]);
 
   const clearNotice = useCallback(() => {
     setSizeSelectionNotice(null);

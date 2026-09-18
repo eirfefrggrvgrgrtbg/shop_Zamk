@@ -376,11 +376,16 @@ function QuickBuyModalBody({
             <div className="flex flex-wrap gap-2">
               {sizes.map((sizeObj) => {
                 const isSelected = selectedSizeId === sizeObj.id;
+                const isSoldOut = sizeObj.state === 'SOLD_OUT';
+                const isNotOffered = sizeObj.state === 'NOT_OFFERED';
                 return (
                   <button
                     key={sizeObj.id}
                     type="button"
                     disabled={sizeObj.disabled}
+                    aria-label={sizeObj.accessibleLabel}
+                    title={sizeObj.accessibleLabel}
+                    data-state={sizeObj.state}
                     onClick={() => {
                       if (!sizeObj.disabled) {
                         selectSize(sizeObj.id);
@@ -390,9 +395,11 @@ function QuickBuyModalBody({
                       "h-9 min-w-[40px] px-3 rounded-md border font-mono text-xs transition-all relative flex items-center justify-center",
                       isSelected
                         ? "bg-graphite text-white border-graphite dark:bg-white dark:text-black dark:border-white shadow-sm"
-                        : sizeObj.disabled
+                        : isSoldOut
                           ? "border-border-lighter/60 dark:border-white/10 text-ash/60 dark:text-white/30 cursor-not-allowed line-through bg-ice/30 dark:bg-white/[0.02]"
-                          : "bg-white dark:bg-transparent border-border-lighter dark:border-white/20 text-graphite dark:text-white hover:border-black/50 dark:hover:border-white/50"
+                          : isNotOffered
+                            ? "border-dashed border-border-lighter/70 dark:border-white/10 text-ash/40 dark:text-white/20 cursor-not-allowed bg-transparent"
+                            : "bg-white dark:bg-transparent border-border-lighter dark:border-white/20 text-graphite dark:text-white hover:border-black/50 dark:hover:border-white/50"
                     )}
                   >
                     {sizeObj.label}

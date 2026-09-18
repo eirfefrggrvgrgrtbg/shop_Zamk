@@ -946,11 +946,16 @@ export function ProductDetail() {
                   <div className="flex flex-wrap gap-2">
                     {sizes.map((sizeObj) => {
                       const isSelected = selectedSizeId === sizeObj.id;
+                      const isSoldOut = sizeObj.state === 'SOLD_OUT';
+                      const isNotOffered = sizeObj.state === 'NOT_OFFERED';
                       return (
                         <button
                           key={sizeObj.id}
                           type="button"
                           aria-pressed={isSelected}
+                          aria-label={sizeObj.accessibleLabel}
+                          title={sizeObj.accessibleLabel}
+                          data-state={sizeObj.state}
                           disabled={sizeObj.disabled}
                           onClick={() => {
                             if (!sizeObj.disabled) {
@@ -962,9 +967,11 @@ export function ProductDetail() {
                             "min-w-[48px] h-11 px-3.5 rounded-md text-sm font-medium transition-colors relative flex items-center justify-center cursor-pointer",
                             isSelected
                               ? "bg-graphite text-white dark:bg-white dark:text-black border border-graphite dark:border-white shadow-xs"
-                              : sizeObj.disabled
+                              : isSoldOut
                                 ? "border border-border-lighter/60 dark:border-white/10 text-ash/50 dark:text-white/30 cursor-not-allowed line-through bg-ice/30 dark:bg-white/[0.02]"
-                                : "bg-white dark:bg-transparent border border-border-soft dark:border-white/20 text-graphite dark:text-white hover:bg-[#fafafb] dark:hover:bg-white/5 hover:border-graphite/40 dark:hover:border-white/40"
+                                : isNotOffered
+                                  ? "border border-dashed border-border-lighter/70 dark:border-white/10 text-ash/35 dark:text-white/20 cursor-not-allowed bg-transparent"
+                                  : "bg-white dark:bg-transparent border border-border-soft dark:border-white/20 text-graphite dark:text-white hover:bg-[#fafafb] dark:hover:bg-white/5 hover:border-graphite/40 dark:hover:border-white/40"
                           )}
                         >
                           {sizeObj.label}

@@ -253,7 +253,7 @@ describe('SHOP PDP.1 Canonical Geometry & Information Hierarchy', () => {
     expect(disabledBtn.hasAttribute('disabled')).toBe(true);
 
     // Select size S
-    const sizeSBtn = screen.getByRole('button', { name: 'S' });
+    const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
     fireEvent.click(sizeSBtn);
 
     // Now CTA becomes active "Добавить в корзину"
@@ -654,7 +654,7 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     });
 
     // Initially color-black is selected by default. Select size M.
-    const sizeMBtn = screen.getByRole('button', { name: 'M' });
+    const sizeMBtn = screen.getByRole('button', { name: /^Размер M/i });
     fireEvent.click(sizeMBtn);
 
     // Switch to Белый
@@ -694,7 +694,7 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     });
 
     // In Black color, select size S (in stock)
-    const sizeSBtn = screen.getByRole('button', { name: 'S' });
+    const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
     fireEvent.click(sizeSBtn);
     expect(sizeSBtn.getAttribute('aria-pressed')).toBe('true');
 
@@ -702,11 +702,12 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     const whiteColorRadio = screen.getByRole('radio', { name: /Белый/i });
     fireEvent.click(whiteColorRadio);
 
-    // Size S must be cleared, NOT selected
+    // Size S must be cleared, NOT selected, but still visible and disabled
     expect(sizeSBtn.getAttribute('aria-pressed')).toBe('false');
+    expect(sizeSBtn.hasAttribute('disabled')).toBe(true);
 
     // No other size must be auto-selected (M must not be pressed)
-    const sizeMBtn = screen.getByRole('button', { name: 'M' });
+    const sizeMBtn = screen.getByRole('button', { name: /^Размер M/i });
     expect(sizeMBtn.getAttribute('aria-pressed')).toBe('false');
 
     // Contextual notice must be visible
@@ -769,7 +770,7 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     });
 
     // In Black color, select size L
-    const sizeLBtn = screen.getByRole('button', { name: 'L' });
+    const sizeLBtn = screen.getByRole('button', { name: /^Размер L/i });
     fireEvent.click(sizeLBtn);
     expect(sizeLBtn.getAttribute('aria-pressed')).toBe('true');
 
@@ -777,9 +778,12 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     const whiteColorRadio = screen.getByRole('radio', { name: /Белый/i });
     fireEvent.click(whiteColorRadio);
 
-    // Size must be cleared
-    expect(screen.queryByRole('button', { name: 'L' })).toBeNull(); // L doesn't exist for White
-    const sizeSBtn = screen.getByRole('button', { name: 'S' });
+    // Size L remains visible in the stable matrix, but disabled as NOT_OFFERED
+    expect(sizeLBtn.getAttribute('aria-pressed')).toBe('false');
+    expect(sizeLBtn.hasAttribute('disabled')).toBe(true);
+    expect(sizeLBtn.getAttribute('data-state')).toBe('NOT_OFFERED');
+
+    const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
     expect(sizeSBtn.getAttribute('aria-pressed')).toBe('false'); // S must NOT be auto-selected
 
     // Notice shown
@@ -818,7 +822,7 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-2.jpg');
 
     // Select size S
-    const sizeSBtn = screen.getByRole('button', { name: 'S' });
+    const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
     fireEvent.click(sizeSBtn);
 
     // Switch color to Белый (S is sold out in White)
@@ -830,7 +834,7 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-2.jpg');
 
     // Select size M (buyable)
-    const sizeMBtn = screen.getByRole('button', { name: 'M' });
+    const sizeMBtn = screen.getByRole('button', { name: /^Размер M/i });
     fireEvent.click(sizeMBtn);
 
     // Switch back to Чёрный (M is buyable in Black, size retained)
