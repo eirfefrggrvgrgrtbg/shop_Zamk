@@ -460,7 +460,7 @@ export function selectVariantState(
   const colors = getColorOptions(variants);
 
   const effectiveColorId = (dimensionType === 'COLOR_AND_SIZE' || dimensionType === 'COLOR_ONLY')
-    ? (selectedColorId !== undefined && selectedColorId !== null ? selectedColorId : getDefaultColorId(colors))
+    ? (selectedColorId || null)
     : null;
 
   const sizes = getSizeOptions(variants, effectiveColorId, dimensionType, sizeChart);
@@ -526,7 +526,7 @@ export function useVariantSelection(
 
   const [selectedColorId, setSelectedColorId] = useState<string | null>(() => {
     if (initialColorId !== undefined && initialColorId !== null) return initialColorId;
-    return getDefaultColorId(colors);
+    return null;
   });
 
   const [selectedSizeId, setSelectedSizeId] = useState<string | null>(() => {
@@ -534,12 +534,6 @@ export function useVariantSelection(
   });
 
   const [sizeSelectionNotice, setSizeSelectionNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (colors.length > 0 && !selectedColorId) {
-      setSelectedColorId(getDefaultColorId(colors));
-    }
-  }, [colors, selectedColorId]);
 
   const selectColor = useCallback((colorId: string) => {
     if (!colorId || colorId === selectedColorId) return;
@@ -584,7 +578,7 @@ export function useVariantSelection(
   const selectSize = useCallback((sizeId: string) => {
     const dimType = getDimensionType(variants);
     const effColorId = (dimType === 'COLOR_AND_SIZE' || dimType === 'COLOR_ONLY')
-      ? (selectedColorId !== undefined && selectedColorId !== null ? selectedColorId : getDefaultColorId(colors))
+      ? (selectedColorId || null)
       : null;
     const currentSizes = getSizeOptions(variants, effColorId, dimType, sizeChart);
     const targetSize = currentSizes.find(s => s.id === sizeId);

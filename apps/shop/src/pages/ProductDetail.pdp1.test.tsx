@@ -249,12 +249,23 @@ describe('SHOP PDP.1 Canonical Geometry & Information Hierarchy', () => {
       expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
     });
 
-    // Before size selection, button indicates size selection is required and is disabled
-    const disabledBtn = screen.getByRole('button', { name: 'Выберите размер' });
+    // Before color/size selection, button indicates color selection is required and is disabled
+    const disabledBtn = screen.getByRole('button', { name: 'Выберите цвет' });
     expect(disabledBtn.hasAttribute('disabled')).toBe(true);
 
-    // Select size S
+    // Select size S is disabled before color selection
     const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
+    expect(sizeSBtn.hasAttribute('disabled')).toBe(true);
+
+    // Select color Чёрный
+    const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+    fireEvent.click(blackSwatch);
+
+    // Now button indicates size selection is required
+    const sizeRequiredBtn = screen.getByRole('button', { name: 'Выберите размер' });
+    expect(sizeRequiredBtn.hasAttribute('disabled')).toBe(true);
+
+    // Select size S
     fireEvent.click(sizeSBtn);
 
     // Now CTA becomes active "Добавить в корзину"
@@ -655,7 +666,11 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
     });
 
-    // Initially color-black is selected by default. Select size M.
+    // Explicitly select Чёрный first
+    const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
+    fireEvent.click(blackColorRadio);
+
+    // Select size M.
     const sizeMBtn = screen.getByRole('button', { name: /^Размер M/i });
     fireEvent.click(sizeMBtn);
 
@@ -694,6 +709,10 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
     });
+
+    // Explicitly select Чёрный first
+    const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
+    fireEvent.click(blackColorRadio);
 
     // In Black color, select size S (in stock)
     const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
@@ -770,6 +789,10 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
     });
+
+    // Explicitly select Чёрный first
+    const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
+    fireEvent.click(blackColorRadio);
 
     // In Black color, select size L
     const sizeLBtn = screen.getByRole('button', { name: /^Размер L/i });
@@ -866,6 +889,10 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
       });
 
+      // Explicitly select Чёрный first
+      const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackColorRadio);
+
       // Select size S
       const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
       fireEvent.click(sizeSBtn);
@@ -917,6 +944,10 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
       });
 
+      // Explicitly select Чёрный first
+      const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackColorRadio);
+
       // Select size S
       const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
       fireEvent.click(sizeSBtn);
@@ -948,14 +979,11 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
 
       // Contextual message shown
       const notice = screen.getByRole('status');
+      expect(notice).toBeTruthy();
       expect(notice.textContent).toBe('Размер S только что закончился. Выберите другой размер.');
       expect(mockShowToast).toHaveBeenCalledWith('Размер S только что закончился. Выберите другой размер.');
 
-      // CTA must require a new valid size selection
-      const cta = screen.getByRole('button', { name: /Выберите размер/i });
-      expect(cta.hasAttribute('disabled')).toBe(true);
-
-      // Selecting available size M clears the stale notice
+      // Can pick another size (M) immediately; notice is cleared and button becomes active
       fireEvent.click(sizeMBtn);
       expect(sizeMBtn.getAttribute('aria-pressed')).toBe('true');
       expect(screen.queryByRole('status')).toBeNull();
@@ -993,6 +1021,10 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       await waitFor(() => {
         expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
       });
+
+      // Explicitly select Чёрный first
+      const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackColorRadio);
 
       // Select size S
       const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
@@ -1041,6 +1073,10 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       await waitFor(() => {
         expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
       });
+
+      // Explicitly select Чёрный first
+      const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackColorRadio);
 
       const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
       fireEvent.click(sizeSBtn);
@@ -1097,6 +1133,10 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
       });
 
+      // Explicitly select Чёрный first
+      const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackColorRadio);
+
       const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
       fireEvent.click(sizeSBtn);
 
@@ -1131,6 +1171,10 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       await waitFor(() => {
         expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
       });
+
+      // Explicitly select Чёрный first
+      const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackColorRadio);
 
       const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
       fireEvent.click(sizeSBtn);
@@ -1179,6 +1223,10 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
       });
 
+      // Explicitly select Чёрный first
+      const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackColorRadio);
+
       // Navigate to photo 2
       const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
       fireEvent.click(nextBtn);
@@ -1196,7 +1244,7 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(publicCatalog.fetchProductById).toHaveBeenCalledTimes(2);
       });
 
-      // Gallery index must remain EXACTLY at photo 2
+      // Gallery index must remain EXACTLY at photo 2 (black photo)
       expect(screen.getByText('2 / 3')).toBeTruthy();
       expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-back.jpg');
     });
@@ -1255,6 +1303,10 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       await waitFor(() => {
         expect(screen.getByRole('heading', { level: 1, name: 'Шарф кашемировый' })).toBeTruthy();
       });
+
+      // Explicitly select Чёрный color
+      const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackColorRadio);
 
       const addBtn = screen.getByRole('button', { name: /Добавить в корзину/i });
       fireEvent.click(addBtn);
@@ -1345,7 +1397,7 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       ],
     };
 
-    it('1. Initial load: default selected BLACK but GENERAL image remains active', async () => {
+    it('1. Initial load: no color selected on clean load and GENERAL image remains active', async () => {
       vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
 
       render(
@@ -1360,9 +1412,13 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
       });
 
-      // Default selected color is Чёрный
+      // On clean load, no color swatch is selected
       const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
-      expect(blackSwatch.getAttribute('aria-checked')).toBe('true');
+      expect(blackSwatch.getAttribute('aria-checked')).toBe('false');
+      const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
+      expect(whiteSwatch.getAttribute('aria-checked')).toBe('false');
+      const unselectedLabels = screen.getAllByText('Не выбран');
+      expect(unselectedLabels.length).toBeGreaterThan(0);
 
       // Active image remains the first GENERAL hero photo (index 0, '1 / 5')
       expect(screen.getByText('1 / 5')).toBeTruthy();
@@ -1592,6 +1648,10 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
       });
 
+      // Select Black color first
+      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackSwatch);
+
       // Select Size S in Black
       const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
       fireEvent.click(sizeSBtn);
@@ -1610,8 +1670,8 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       fireEvent.click(sizeMBtn);
 
       // Switch back to Чёрный: M is available in Black -> size retained
-      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
-      fireEvent.click(blackSwatch);
+      const blackSwatchAgain = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackSwatchAgain);
 
       // Media focused to first Black photo (photo 2)
       expect(screen.getByText('2 / 5')).toBeTruthy();
@@ -1647,9 +1707,13 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
       });
 
+      // Select Black color first
+      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackSwatch);
+      expect(screen.getByText('2 / 5')).toBeTruthy();
+
       // Move to photo 4 (black-2.jpg)
       const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
-      fireEvent.click(nextBtn); // 2
       fireEvent.click(nextBtn); // 3
       fireEvent.click(nextBtn); // 4
       expect(screen.getByText('4 / 5')).toBeTruthy();

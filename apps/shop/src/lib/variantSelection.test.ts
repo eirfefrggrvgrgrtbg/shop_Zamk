@@ -1025,4 +1025,150 @@ describe('SHOP PDP.2B — Variant Selection State Hardening', () => {
       });
     });
   });
+
+  describe('SHOP PDP.2F — No Implicit Color Selection on Clean PDP', () => {
+    const colorAndSizeVariants: ProductVariantItem[] = [
+      {
+        id: 'var-blk-s',
+        productId: 'prod-pdp2f',
+        colorId: 'col-black',
+        colorName: 'Черный',
+        colorHex: '#000000',
+        sizeValueId: 'sz-s',
+        size: 'S',
+        inStock: true,
+        isActive: true,
+        priceCents: 500000,
+      },
+      {
+        id: 'var-blk-m',
+        productId: 'prod-pdp2f',
+        colorId: 'col-black',
+        colorName: 'Черный',
+        colorHex: '#000000',
+        sizeValueId: 'sz-m',
+        size: 'M',
+        inStock: true,
+        isActive: true,
+        priceCents: 500000,
+      },
+      {
+        id: 'var-wht-s',
+        productId: 'prod-pdp2f',
+        colorId: 'col-white',
+        colorName: 'Белый',
+        colorHex: '#ffffff',
+        sizeValueId: 'sz-s',
+        size: 'S',
+        inStock: true,
+        isActive: true,
+        priceCents: 500000,
+      },
+    ];
+
+    const colorOnlyVariants: ProductVariantItem[] = [
+      {
+        id: 'var-scarf-blk',
+        productId: 'prod-scarf',
+        colorId: 'col-black',
+        colorName: 'Черный',
+        inStock: true,
+        isActive: true,
+        priceCents: 300000,
+      },
+      {
+        id: 'var-scarf-wht',
+        productId: 'prod-scarf',
+        colorId: 'col-white',
+        colorName: 'Белый',
+        inStock: true,
+        isActive: true,
+        priceCents: 300000,
+      },
+    ];
+
+    it('1. Clean load with COLOR_AND_SIZE: selectedColorId is null and CTA requires color first', () => {
+      const { result } = renderHook(() => useVariantSelection(colorAndSizeVariants));
+
+      expect(result.current.selectedColorId).toBeNull();
+      expect(result.current.selectedSizeId).toBeNull();
+      expect(result.current.selectedColor).toBeNull();
+      expect(result.current.selectedVariant).toBeNull();
+      expect(result.current.isResolved).toBe(false);
+      expect(result.current.canAddToCart).toBe(false);
+      expect(result.current.ctaText).toBe('Выберите цвет');
+
+      // All sizes are disabled until a color is chosen
+      result.current.sizes.forEach((s) => {
+        expect(s.disabled).toBe(true);
+      });
+    });
+
+    it('2. Clean load with COLOR_ONLY: selectedColorId is null and CTA requires color', () => {
+      const { result } = renderHook(() => useVariantSelection(colorOnlyVariants));
+
+      expect(result.current.selectedColorId).toBeNull();
+      expect(result.current.selectedColor).toBeNull();
+      expect(result.current.selectedVariant).toBeNull();
+      expect(result.current.isResolved).toBe(false);
+      expect(result.current.canAddToCart).toBe(false);
+      expect(result.current.ctaText).toBe('Выберите цвет');
+    });
+
+    it('3. In COLOR_AND_SIZE, calling selectSize before color is selected is ignored', () => {
+      const { result } = renderHook(() => useVariantSelection(colorAndSizeVariants));
+
+      act(() => {
+        result.current.selectSize('sz-s');
+      });
+
+      expect(result.current.selectedColorId).toBeNull();
+      expect(result.current.selectedSizeId).toBeNull();
+      expect(result.current.selectedVariant).toBeNull();
+      expect(result.current.ctaText).toBe('Выберите цвет');
+    });
+
+    it('4. Explicit selectColor resolves color and enables size selection', () => {
+      const { result } = renderHook(() => useVariantSelection(colorAndSizeVariants));
+
+      act(() => {
+        result.current.selectColor('col-black');
+      });
+
+      expect(result.current.selectedColorId).toBe('col-black');
+      expect(result.current.selectedColor?.name).toBe('Черный');
+      expect(result.current.selectedSizeId).toBeNull();
+      expect(result.current.ctaText).toBe('Выберите размер');
+
+      // Now size S can be selected
+      act(() => {
+        result.current.selectSize('sz-s');
+      });
+
+      expect(result.current.selectedSizeId).toBe('sz-s');
+      expect(result.current.selectedVariant?.id).toBe('var-blk-s');
+      expect(result.current.canAddToCart).toBe(true);
+      expect(result.current.ctaText).toBe('Добавить в корзину');
+    });
+
+    it('5. restoreSelection(null, null, null) resets selection back to clean unselected state', () => {
+      const { result } = renderHook(() =>
+        useVariantSelection(colorAndSizeVariants, undefined, 'col-black', 'sz-s')
+      );
+
+      expect(result.current.selectedColorId).toBe('col-black');
+      expect(result.current.selectedSizeId).toBe('sz-s');
+      expect(result.current.canAddToCart).toBe(true);
+
+      act(() => {
+        result.current.restoreSelection(null, null, null);
+      });
+
+      expect(result.current.selectedColorId).toBeNull();
+      expect(result.current.selectedSizeId).toBeNull();
+      expect(result.current.selectedColor).toBeNull();
+      expect(result.current.selectedVariant).toBeNull();
+      expect(result.current.ctaText).toBe('Выберите цвет');
+    });
+  });
 });

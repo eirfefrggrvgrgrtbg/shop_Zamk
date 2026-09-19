@@ -12,7 +12,6 @@ import { isInsufficientStockError } from '@zamk/api-client/src/errors';
 import {
   useVariantSelection,
   reconcileSelectionAfterStaleStock,
-  getDefaultColorId,
   getVariantColorId,
   getVariantSizeId,
   isVariantBuyable,
@@ -194,18 +193,16 @@ export function ProductDetail() {
       // If user navigated Back to clean URL from a colored URL, reset media focus to main image:
       if (
         lastFocusedColorRef.current !== undefined &&
-        lastFocusedColorRef.current !== null &&
-        lastFocusedColorRef.current !== getDefaultColorId(colors)
+        lastFocusedColorRef.current !== null
       ) {
-        lastFocusedColorRef.current = getDefaultColorId(colors);
+        lastFocusedColorRef.current = null;
         setActiveImage(0);
       } else if (lastFocusedColorRef.current === undefined) {
-        // Initial clean load: mark default color as focused so selecting a size does not refocus media
-        lastFocusedColorRef.current = getDefaultColorId(colors);
+        lastFocusedColorRef.current = null;
       }
       const isCleanUrl = !searchParams.has('color') && !searchParams.has('size');
-      if (isCleanUrl && (selectedSizeId !== null || (selectedColorId && selectedColorId !== getDefaultColorId(colors)))) {
-        restoreSelection(getDefaultColorId(colors), null, null);
+      if (isCleanUrl && (selectedSizeId !== null || selectedColorId !== null)) {
+        restoreSelection(null, null, null);
       }
     }
   }, [
@@ -277,6 +274,7 @@ export function ProductDetail() {
 
   const handleSizeChange = (sizeId: string) => {
     if (isProductUnavailable) return;
+    if (dimensionType === 'COLOR_AND_SIZE' && !selectedColorId) return;
     selectSize(sizeId);
     if (sizeError) setSizeError('');
     setRefreshErrorNotice(null);
