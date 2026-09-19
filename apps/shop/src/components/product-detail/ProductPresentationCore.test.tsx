@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { ProductPresentationCore } from './ProductPresentationCore';
+import { ProductPresentationCore } from "@zamk/shared";
 
 const mockProduct = {
   id: 'product-1',
@@ -25,15 +25,14 @@ const defaultProps = {
   activeImage: 0,
   onActiveImageChange: vi.fn(),
   displayPrice: 5000,
-  dimensionType: 'COLOR_AND_SIZE',
   colors: [
     { id: 'color-1', name: 'Black', hex: '#000000', hasInStock: true },
     { id: 'color-2', name: 'White', hex: '#FFFFFF', hasInStock: false }
   ],
   sizes: [
-    { id: 'size-1', label: 'S', state: 'AVAILABLE' },
-    { id: 'size-2', label: 'M', state: 'SOLD_OUT' },
-    { id: 'size-3', label: 'L', state: 'NOT_OFFERED' }
+    { id: 'size-1', label: 'S', state: 'AVAILABLE' as const },
+    { id: 'size-2', label: 'M', state: 'SOLD_OUT' as const },
+    { id: 'size-3', label: 'L', state: 'NOT_OFFERED' as const }
   ],
   selectedColorId: null,
   selectedSizeId: null,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { ChevronRight, Star } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useFavorites } from '../contexts/FavoritesContext';
@@ -28,7 +28,7 @@ import {
   deduplicateGalleryImages,
 } from '../lib/mediaFocus';
 import { SimilarProductsBlock } from '../components/product/SimilarProductsBlock';
-import { ProductPresentationCore, formatReviewsCount } from '../components/product-detail/ProductPresentationCore';
+import { ProductPresentationCore, formatReviewsCount } from '@zamk/shared';
 import type { Product, Review } from '../types/catalog';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
@@ -37,6 +37,7 @@ import type { GalleryMediaItem } from '../lib/mediaFocus';
 export function ProductDetail() {
   const { id, token } = useParams<{ id?: string; token?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -409,7 +410,6 @@ export function ProductDetail() {
             activeImage={activeImage}
             onActiveImageChange={setActiveImage}
             displayPrice={getDisplayPrice()}
-            dimensionType={dimensionType}
             colors={colors}
             sizes={sizes}
             selectedColorId={selectedColorId}
@@ -443,6 +443,10 @@ export function ProductDetail() {
               const el = document.getElementById('product-reviews-section');
               el?.scrollIntoView({ behavior: 'smooth' });
             }}
+            onBrandClick={(brandId) => navigate(`/brand/${brandId}`)}
+            onDeliveryClick={() => navigate('/delivery')}
+            onReturnsClick={() => navigate('/returns')}
+            onSellerClick={(sellerSlug) => navigate(`/seller/${sellerSlug}`)}
           />
         </div>
 
