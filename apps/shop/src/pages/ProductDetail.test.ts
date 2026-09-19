@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { useEffect, useRef } from 'react';
 import { renderHook } from '@testing-library/react';
-import { isLightColor, getMeasurementMeta } from './ProductDetail';
+import { isLightColor, getMeasurementMeta } from '../components/product-detail/ProductPresentationCore';
 
 describe('ProductDetail Visual & Logic Behaviors', () => {
   it('A. white/light swatch receives visible boundary treatment', () => {
