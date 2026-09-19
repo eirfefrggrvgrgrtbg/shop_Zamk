@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, act, cleanup, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import fs from 'fs';
 import path from 'path';
@@ -36,10 +36,16 @@ function ContextInspector({ contextRef }: { contextRef: ContextRef }) {
   );
 }
 
+
+afterEach(() => {
+  cleanup();
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
 
   // Requirement 1: default view is VISUAL
   it('1. default view is VISUAL', () => {
@@ -79,10 +85,10 @@ describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
       </MemoryRouter>
     );
 
-    // Verify initial values in Visual placeholder
-    expect(screen.getByTestId('visual-draft-title').textContent).toBe('Классический кардиган');
-    expect(screen.getByTestId('visual-draft-description').textContent).toBe('Кардиган крупной вязки из 100% шерсти мериноса.');
-    expect(screen.getByTestId('visual-draft-price').textContent).toMatch(/12[\s\u00a0]000/);
+    // Verify initial values in Visual workspace
+    expect(within(screen.getByTestId('studio-visual-workspace')).getByRole('heading', { level: 1 }).textContent).toBe('Классический кардиган');
+    expect(screen.getByText('Кардиган крупной вязки из 100% шерсти мериноса.')).toBeTruthy();
+    expect(screen.getByText(/12[\s\u00a0]000/)).toBeTruthy();
 
     // Switch to Form mode
     fireEvent.click(screen.getByTestId('studio-view-toggle-form'));
@@ -112,9 +118,9 @@ describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
     expect(screen.queryByTestId('studio-form-workspace')).toBeNull();
 
     // Verify Visual displays updated draft values seamlessly
-    expect(screen.getByTestId('visual-draft-title').textContent).toBe('Обновленный кардиган оверсайз');
-    expect(screen.getByTestId('visual-draft-description').textContent).toBe('Новое детальное описание товара.');
-    expect(screen.getByTestId('visual-draft-price').textContent).toMatch(/15[\s\u00a0]500/);
+    expect(within(screen.getByTestId('studio-visual-workspace')).getByRole('heading', { level: 1 }).textContent).toBe('Обновленный кардиган оверсайз');
+    expect(screen.getByText('Новое детальное описание товара.')).toBeTruthy();
+    expect(screen.getByText(/15[\s\u00a0]500/)).toBeTruthy();
 
     // Switch back to Form mode and verify inputs retain changes
     fireEvent.click(screen.getByTestId('studio-view-toggle-form'));
@@ -436,7 +442,8 @@ describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
       path.join(studioDir, 'ProductStudioHeader.tsx'),
       path.join(studioDir, 'ProductStudioViewToggle.tsx'),
       path.join(studioDir, 'ProductStudioSectionNav.tsx'),
-      path.join(studioDir, 'ProductStudioVisualPlaceholder.tsx'),
+      path.join(studioDir, 'ProductStudioVisualWorkspace.tsx'),
+      path.join(studioDir, 'productStudioPresentationAdapter.ts'),
       path.join(studioDir, 'ProductStudioFormWorkspace.tsx'),
     ];
 
@@ -464,5 +471,379 @@ describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
     // ProductStudio must NOT be mounted in App.tsx routes yet
     expect(appContent).not.toContain('ProductStudio');
     expect(appContent).not.toContain('/products/studio');
+  });
+});
+
+
+describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio Visual Mode', () => {
+  const sampleColorAndSizeDraft: Partial<ProductStudioDraft> = {
+    title: 'Шелковая блуза',
+    brandName: 'Acne Studios',
+    brandId: 'b-acne',
+    categoryName: 'Блузы',
+    description: 'Премиальная блуза из натурального шелка.',
+    priceCents: 1800000, // 18 000 ₽
+    images: [
+      { url: 'https://example.com/main.jpg', isMain: true, sortOrder: 1 },
+      { url: 'https://example.com/black.jpg', sortOrder: 2, colorId: 'col-black' },
+      { url: 'https://example.com/white.jpg', sortOrder: 3, colorId: 'col-white' },
+    ],
+    variants: [
+      { id: 'v1', colorId: 'col-black', colorName: 'Черный', colorHex: '#000000', sizeValueId: 'sz-s', size: 'S', sellerSku: 'SKU-BLK-S' },
+      { id: 'v2', colorId: 'col-black', colorName: 'Черный', colorHex: '#000000', sizeValueId: 'sz-m', size: 'M', sellerSku: 'SKU-BLK-M' },
+      { id: 'v3', colorId: 'col-white', colorName: 'Белый', colorHex: '#ffffff', sizeValueId: 'sz-s', size: 'S', sellerSku: 'SKU-WHT-S' },
+    ],
+  };
+
+  // 1. Visual remains default view
+  it('1. Visual remains default view', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('studio-visual-workspace')).toBeTruthy();
+    expect(screen.getByTestId('studio-view-toggle-visual').getAttribute('aria-selected')).toBe('true');
+  });
+
+  // 2. Visual uses shared ProductPresentationCore
+  it('2. Visual uses shared ProductPresentationCore', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('add-to-cart-button')).toBeTruthy();
+    expect(screen.getByTestId('main-product-image')).toBeTruthy();
+    expect(screen.getByRole('radiogroup', { name: 'Выбор цвета' })).toBeTruthy();
+  });
+
+  // 3. Draft title renders in actual presentation
+  it('3. Draft title renders in actual presentation', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={{ title: 'Трендовый тренч оверсайз' }}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    expect(within(screen.getByTestId('studio-visual-workspace')).getByRole('heading', { level: 1 }).textContent).toBe('Трендовый тренч оверсайз');
+  });
+
+  // 4. Draft brandName renders read-only
+  it('4. Draft brandName renders read-only', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Acne Studios')).toBeTruthy();
+  });
+
+  // 5. Draft price maps cents -> display correctly
+  it('5. Draft price maps cents -> display correctly', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/18[\s\u00a0]000/)).toBeTruthy();
+  });
+
+  // 6. ordered draft media renders in expected order
+  it('6. ordered draft media renders in expected order', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    const mainImg = screen.getByTestId('main-product-image');
+    expect(mainImg.getAttribute('src')).toBe('https://example.com/main.jpg');
+  });
+
+  // 7. media.colorId mapping preserved
+  it('7. media.colorId mapping preserved', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    // Initial canonical media
+    expect(screen.getByTestId('main-product-image').getAttribute('src')).toBe('https://example.com/main.jpg');
+
+    // Clicking black swatch focuses black media
+    fireEvent.click(screen.getByTestId('color-swatch-col-black'));
+    expect(screen.getByTestId('main-product-image').getAttribute('src')).toBe('https://example.com/black.jpg');
+  });
+
+  // 8. clean Visual preview has no implicit selected color
+  it('8. clean Visual preview has no implicit selected color', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Цвет:').parentElement?.textContent).toContain('Не выбран');
+    expect(screen.getByTestId('color-swatch-col-black').getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByTestId('color-swatch-col-white').getAttribute('aria-checked')).toBe('false');
+  });
+
+  // 9. explicit color click selects color locally
+  it('9. explicit color click selects color locally', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId('color-swatch-col-black'));
+    expect(screen.getByTestId('color-swatch-col-black').getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByText('Цвет:').parentElement?.textContent).toContain('Черный');
+  });
+
+  // 10. explicit color click focuses matching media
+  it('10. explicit color click focuses matching media', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId('color-swatch-col-white'));
+    expect(screen.getByTestId('main-product-image').getAttribute('src')).toBe('https://example.com/white.jpg');
+  });
+
+  // 11. manual gallery browsing remains continuous
+  it('11. manual gallery browsing remains continuous', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    // Click thumbnail 0
+    fireEvent.click(screen.getByTestId('pdp-thumbnail-0'));
+    expect(screen.getByTestId('main-product-image').getAttribute('src')).toBe('https://example.com/main.jpg');
+
+    // Click thumbnail 1
+    fireEvent.click(screen.getByTestId('pdp-thumbnail-1'));
+    expect(screen.getByTestId('main-product-image').getAttribute('src')).toBe('https://example.com/black.jpg');
+  });
+
+  // 12. sizes disabled before color for COLOR_AND_SIZE
+  it('12. sizes disabled before color for COLOR_AND_SIZE', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    expect((screen.getByTestId('size-button-S') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('size-button-M') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('size-selection-notice').textContent).toBe('Сначала выберите цвет');
+  });
+
+  // 13. offered size becomes AVAILABLE after color
+  it('13. offered size becomes AVAILABLE after color', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId('color-swatch-col-black'));
+    expect((screen.getByTestId('size-button-S') as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId('size-button-S').getAttribute('data-state')).toBe('AVAILABLE');
+    expect((screen.getByTestId('size-button-M') as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId('size-button-M').getAttribute('data-state')).toBe('AVAILABLE');
+  });
+
+  // 14. absent combination renders NOT_OFFERED
+  it('14. absent combination renders NOT_OFFERED', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    // For white color, only S is offered; M is absent
+    fireEvent.click(screen.getByTestId('color-swatch-col-white'));
+    expect((screen.getByTestId('size-button-S') as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByTestId('size-button-M') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('size-button-M').getAttribute('data-state')).toBe('NOT_OFFERED');
+  });
+
+  // 15. no SOLD_OUT is fabricated from Seller draft
+  it('15. no SOLD_OUT is fabricated from Seller draft', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId('color-swatch-col-white'));
+    expect(screen.getByTestId('size-button-S').getAttribute('data-state')).not.toBe('SOLD_OUT');
+    expect(screen.getByTestId('size-button-M').getAttribute('data-state')).not.toBe('SOLD_OUT');
+  });
+
+  // 16. size click updates local preview selection only
+  it('16. size click updates local preview selection only', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId('color-swatch-col-black'));
+    fireEvent.click(screen.getByTestId('size-button-S'));
+
+    expect(screen.getByTestId('size-button-S').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Размер:').parentElement?.textContent).toContain('S');
+    expect(screen.getByTestId('add-to-cart-button').textContent).toContain('Добавить в корзину');
+  });
+
+  // 17. Visual interactions do NOT mutate ProductStudioDraft merely by selecting preview color/size/gallery
+  it('17. Visual interactions do NOT mutate ProductStudioDraft merely by selecting preview color/size/gallery', () => {
+    const contextRef: ContextRef = { current: null };
+
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+          <ContextInspector contextRef={contextRef} />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    // Perform preview interactions
+    fireEvent.click(screen.getByTestId('color-swatch-col-black'));
+    fireEvent.click(screen.getByTestId('size-button-S'));
+    fireEvent.click(screen.getByTestId('pdp-thumbnail-1'));
+
+    // Draft remains clean and unmodified
+    expect(contextRef.current?.isDirty).toBe(false);
+  });
+
+  // 18. Form -> Visual still shows latest edited draft values
+  it('18. Form -> Visual still shows latest edited draft values', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    // Switch to Form and edit title
+    fireEvent.click(screen.getByTestId('studio-view-toggle-form'));
+    const titleInput = screen.getByTestId('form-product-title-input');
+    fireEvent.change(titleInput, { target: { value: 'Шелковая блуза новая редакция' } });
+
+    // Switch back to Visual
+    fireEvent.click(screen.getByTestId('studio-view-toggle-visual'));
+    expect(within(screen.getByTestId('studio-visual-workspace')).getByRole('heading', { level: 1 }).textContent).toBe('Шелковая блуза новая редакция');
+  });
+
+  // 19. CTA causes NO cart/network side effect
+  it('19. CTA causes NO cart/network side effect', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId('color-swatch-col-black'));
+    fireEvent.click(screen.getByTestId('size-button-S'));
+
+    // Click CTA
+    fireEvent.click(screen.getByTestId('add-to-cart-button'));
+
+    // No network requests or commerce side effects
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // 20. favorite/navigation preview actions cause NO customer side effects
+  it('20. favorite/navigation preview actions cause NO customer side effects', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    // Click favorite button (should be disabled or harmless no-op)
+    const favoriteBtns = screen.getAllByLabelText(/избранн/i);
+    expect(favoriteBtns.length).toBeGreaterThan(0);
+    fireEvent.click(favoriteBtns[0]);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // 21. no Shop imports exist in Seller Product Studio
+  it('21. no Shop imports exist in Seller Product Studio', () => {
+    const studioDir = path.resolve(__dirname);
+    const files = fs.readdirSync(studioDir).filter((f) => f.endsWith('.tsx') || f.endsWith('.ts'));
+
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(studioDir, file), 'utf-8');
+      expect(content).not.toMatch(/from\s+['"][^'"]*apps\/shop/);
+      expect(content).not.toMatch(/from\s+['"][^'"]*shop\//);
+    }
+  });
+
+  // 22. no production route changed
+  it('22. no production route changed in App.tsx', () => {
+    const appPath = path.resolve(__dirname, '../../App.tsx');
+    const appContent = fs.readFileSync(appPath, 'utf-8');
+
+    expect(appContent).toContain('path="/products" element={<SellerProtectedRoute><SellerLayout><SellerProducts /></SellerLayout></SellerProtectedRoute>}');
+    expect(appContent).toContain('path="/products/new" element={<SellerProtectedRoute><SellerLayout><SellerProductNew /></SellerLayout></SellerProtectedRoute>}');
+    expect(appContent).toContain('path="/products/:id/edit" element={<SellerProtectedRoute><SellerLayout><SellerProductEdit /></SellerLayout></SellerProtectedRoute>}');
+    expect(appContent).not.toContain('ProductStudio');
   });
 });

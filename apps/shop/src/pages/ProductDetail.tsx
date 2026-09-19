@@ -443,6 +443,10 @@ export function ProductDetail() {
               const el = document.getElementById('product-reviews-section');
               el?.scrollIntoView({ behavior: 'smooth' });
             }}
+            brandHref={product.brandId ? `/brand/${product.brandId}` : null}
+            deliveryHref="/delivery"
+            returnsHref="/returns"
+            sellerHref={product.sellerSlug ? `/seller/${product.sellerSlug}` : null}
             onBrandClick={(brandId) => navigate(`/brand/${brandId}`)}
             onDeliveryClick={() => navigate('/delivery')}
             onReturnsClick={() => navigate('/returns')}

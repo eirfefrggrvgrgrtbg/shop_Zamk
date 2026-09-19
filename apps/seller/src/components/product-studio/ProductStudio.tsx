@@ -1,7 +1,7 @@
-import { useProductStudio } from '../../contexts/ProductStudioContext';
-import { ProductStudioHeader } from './ProductStudioHeader';
-import { ProductStudioVisualPlaceholder } from './ProductStudioVisualPlaceholder';
-import { ProductStudioFormWorkspace } from './ProductStudioFormWorkspace';
+import { useProductStudio } from "../../contexts/ProductStudioContext";
+import { ProductStudioHeader } from "./ProductStudioHeader";
+import { ProductStudioVisualWorkspace } from "./ProductStudioVisualWorkspace";
+import { ProductStudioFormWorkspace } from "./ProductStudioFormWorkspace";
 
 export function ProductStudio() {
   const { viewMode } = useProductStudio();
@@ -11,8 +11,8 @@ export function ProductStudio() {
       <ProductStudioHeader />
 
       <main className="w-full">
-        {viewMode === 'visual' ? (
-          <ProductStudioVisualPlaceholder />
+        {viewMode === "visual" ? (
+          <ProductStudioVisualWorkspace />
         ) : (
           <ProductStudioFormWorkspace />
         )}

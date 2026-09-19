@@ -108,7 +108,11 @@ export interface ProductPresentationCoreProps {
   onToggleFavorite: () => void;
   onScrollToReviews: () => void;
   onBrandClick?: (brandId: string) => void;
+  brandHref?: string | null;
   onDeliveryClick?: () => void;
+  deliveryHref?: string | null;
   onReturnsClick?: () => void;
+  returnsHref?: string | null;
   onSellerClick?: (sellerSlug: string) => void;
+  sellerHref?: string | null;
 }

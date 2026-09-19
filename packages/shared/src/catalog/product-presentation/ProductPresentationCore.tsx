@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode, type KeyboardEvent, type MouseEvent } from 'react';
+import { useState, useRef, useEffect, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, ChevronLeft, Heart, ShoppingBag, ChevronDown, X } from 'lucide-react';
 import { cn, formatPrice } from './internal/presentationUtils';
@@ -86,9 +86,13 @@ export function ProductPresentationCore({
   onToggleFavorite,
   onScrollToReviews,
   onBrandClick,
+  brandHref,
   onDeliveryClick,
+  deliveryHref,
   onReturnsClick,
+  returnsHref,
   onSellerClick,
+  sellerHref,
 }: ProductPresentationCoreProps) {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
@@ -173,7 +177,7 @@ export function ProductPresentationCore({
     resetZoom();
     onActiveImageChange((activeImage + 1) % visibleImages.length);
   };
-  const handleGalleryKeyDown = (e: React.KeyboardEvent) => {
+  const handleGalleryKeyDown = (e: ReactKeyboardEvent) => {
     if (visibleImages.length <= 1) return;
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
@@ -337,10 +341,12 @@ export function ProductPresentationCore({
           {product.brand && product.brand !== 'Бренд не указан' && !isUUID(product.brand) ? (
             product.brandId ? (
               <a
-                href={`/brand/${product.brandId}`}
+                href={brandHref || undefined}
+                role={brandHref ? undefined : 'button'}
+                tabIndex={brandHref ? undefined : 0}
                 data-testid="product-brand-link"
                 onClick={(e) => handleAnchorClick(e, () => product.brandId && onBrandClick?.(product.brandId))}
-                className="text-xs font-semibold uppercase tracking-widest text-ash hover:text-graphite dark:hover:text-white transition-colors w-fit"
+                className="text-xs font-semibold uppercase tracking-widest text-ash hover:text-graphite dark:hover:text-white transition-colors w-fit cursor-pointer"
               >
                 {product.brand}
               </a>
@@ -578,9 +584,11 @@ export function ProductPresentationCore({
             <div className="flex items-center justify-between">
               <span>Доставка: по России от 2 дней</span>
               <a
-                href="/delivery"
+                href={deliveryHref || undefined}
+                role={deliveryHref ? undefined : 'button'}
+                tabIndex={deliveryHref ? undefined : 0}
                 onClick={(e) => handleAnchorClick(e, onDeliveryClick)}
-                className="text-graphite dark:text-white hover:underline text-xs"
+                className="text-graphite dark:text-white hover:underline text-xs cursor-pointer"
               >
                 Подробнее →
               </a>
@@ -588,9 +596,11 @@ export function ProductPresentationCore({
             <div className="flex items-center justify-between">
               <span>Возврат: в течение 14 дней</span>
               <a
-                href="/returns"
+                href={returnsHref || undefined}
+                role={returnsHref ? undefined : 'button'}
+                tabIndex={returnsHref ? undefined : 0}
                 onClick={(e) => handleAnchorClick(e, onReturnsClick)}
-                className="text-graphite dark:text-white hover:underline text-xs"
+                className="text-graphite dark:text-white hover:underline text-xs cursor-pointer"
               >
                 Условия →
               </a>
@@ -600,9 +610,11 @@ export function ProductPresentationCore({
                 <span>Продавец: <strong className="text-graphite dark:text-white font-medium">{product.sellerName}</strong></span>
                 {product.sellerSlug && (
                   <a
-                    href={`/seller/${product.sellerSlug}`}
+                    href={sellerHref || undefined}
+                    role={sellerHref ? undefined : 'button'}
+                    tabIndex={sellerHref ? undefined : 0}
                     onClick={(e) => handleAnchorClick(e, () => product.sellerSlug && onSellerClick?.(product.sellerSlug))}
-                    className="text-graphite dark:text-white hover:underline text-xs font-medium"
+                    className="text-graphite dark:text-white hover:underline text-xs font-medium cursor-pointer"
                   >
                     В магазин →
                   </a>
@@ -698,9 +710,11 @@ export function ProductPresentationCore({
               <p>• Доставка по России: 2–7 дней</p>
               <p>• Примерка и возврат в течение 14 дней</p>
               <a
-                href="/returns"
+                href={returnsHref || undefined}
+                role={returnsHref ? undefined : 'button'}
+                tabIndex={returnsHref ? undefined : 0}
                 onClick={(e) => handleAnchorClick(e, onReturnsClick)}
-                className="inline-block mt-2 text-graphite dark:text-white hover:underline font-medium"
+                className="inline-block mt-2 text-graphite dark:text-white hover:underline font-medium cursor-pointer"
               >
                 Подробнее об условиях возврата →
               </a>
