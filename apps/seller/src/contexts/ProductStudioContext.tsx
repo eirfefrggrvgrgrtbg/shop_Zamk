@@ -1,4 +1,8 @@
-import React, { createContext, useContext, useReducer, useMemo } from 'react';
+import React, { createContext, useContext, useReducer, useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { getSellerCategorySchema, type SellerCategory, type SellerCategorySchema } from '@zamk/api-client';
+import { ProductStudioCategoryModal } from '../components/product-studio/ProductStudioCategoryModal';
+import { createStudioMediaRegistry, type StudioMediaRegistry } from '../components/product-studio/productStudioMediaSession';
+import { getProductStudioReadiness, type ProductStudioReadiness } from '../components/product-studio/productStudioReadinessHelper';
 
 export type ProductStudioEntryMode = 'create' | 'edit';
 export type ProductStudioViewMode = 'visual' | 'form';
@@ -65,8 +69,8 @@ export interface ProductStudioDraft {
   currency?: string;
   images?: ProductStudioImage[];
   variants?: ProductStudioVariant[];
-  attributes?: Array<{ attributeDefinitionId?: string; name?: string; code?: string; value?: any }>;
-  materialComposition?: Array<{ materialId?: string; materialName?: string; percentage?: number }>;
+  attributes?: Array<{ attributeDefinitionId?: string; name?: string; code?: string; value?: any; dictionaryValueId?: string }>;
+  materialComposition?: Array<{ materialId?: string; materialName?: string; percentage?: number; material?: string }>;
   [key: string]: any;
 }
 
@@ -78,6 +82,9 @@ export interface ProductStudioState {
   initialDraft: ProductStudioDraft;
   isDirty: boolean;
   editingField: string | null;
+  isCategoryModalOpen: boolean;
+  touchedFields: Record<string, boolean>;
+  showReadinessAttention: boolean;
 }
 
 type ProductStudioAction =
@@ -85,6 +92,9 @@ type ProductStudioAction =
   | { type: 'SET_ACTIVE_SECTION'; payload: ProductStudioSection }
   | { type: 'UPDATE_DRAFT'; payload: Partial<ProductStudioDraft> }
   | { type: 'SET_EDITING_FIELD'; payload: string | null }
+  | { type: 'SET_CATEGORY_MODAL_OPEN'; payload: boolean }
+  | { type: 'MARK_TOUCHED'; payload: string }
+  | { type: 'SET_READINESS_ATTENTION'; payload: boolean }
   | { type: 'RESET_DRAFT' };
 
 function computeIsDirty(current: ProductStudioDraft, initial: ProductStudioDraft): boolean {
@@ -125,12 +135,35 @@ function productStudioReducer(
         ...state,
         draft: { ...state.initialDraft },
         isDirty: false,
+        touchedFields: {},
+        showReadinessAttention: false,
       };
 
     case 'SET_EDITING_FIELD':
       return {
         ...state,
         editingField: action.payload,
+      };
+
+    case 'SET_CATEGORY_MODAL_OPEN':
+      return {
+        ...state,
+        isCategoryModalOpen: action.payload,
+      };
+
+    case 'MARK_TOUCHED':
+      return {
+        ...state,
+        touchedFields: {
+          ...state.touchedFields,
+          [action.payload]: true,
+        },
+      };
+
+    case 'SET_READINESS_ATTENTION':
+      return {
+        ...state,
+        showReadinessAttention: action.payload,
       };
 
     default:
@@ -143,7 +176,15 @@ export interface ProductStudioContextValue extends ProductStudioState {
   setActiveSection: (section: ProductStudioSection) => void;
   updateDraft: (patch: Partial<ProductStudioDraft>) => void;
   setEditingField: (field: string | null) => void;
+  setCategoryModalOpen: (open: boolean) => void;
   resetDraft: () => void;
+  markTouched: (field: string) => void;
+  setShowReadinessAttention: (show: boolean) => void;
+  isFieldAttention: (field: string) => boolean;
+  readiness: ProductStudioReadiness;
+  categorySchema: SellerCategorySchema | null;
+  createMediaUrl: (file: File) => string;
+  revokeMediaUrl: (url: string) => void;
 }
 
 const ProductStudioContext = createContext<ProductStudioContextValue | undefined>(undefined);
@@ -180,7 +221,86 @@ export function ProductStudioProvider({
     initialDraft: { ...normalizedInitial },
     isDirty: false,
     editingField: null,
+    isCategoryModalOpen: false,
+    touchedFields: {},
+    showReadinessAttention: false,
   });
+
+  const mediaRegistryRef = useRef<StudioMediaRegistry | null>(null);
+  if (!mediaRegistryRef.current) {
+    mediaRegistryRef.current = createStudioMediaRegistry();
+  }
+  const mediaRegistry = mediaRegistryRef.current;
+
+  // Cleanup object URLs ONLY when provider unmounts
+  useEffect(() => {
+    return () => {
+      mediaRegistry.revokeAll();
+    };
+  }, [mediaRegistry]);
+
+  // Load category schema when categoryId changes
+  const [categorySchema, setCategorySchema] = useState<SellerCategorySchema | null>(null);
+
+  useEffect(() => {
+    if (!state.draft.categoryId) {
+      setCategorySchema(null);
+      return;
+    }
+    let isMounted = true;
+    getSellerCategorySchema(state.draft.categoryId)
+      .then((schema) => {
+        if (isMounted) setCategorySchema(schema);
+      })
+      .catch(() => {
+        if (isMounted) setCategorySchema(null);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [state.draft.categoryId]);
+
+  const readiness = useMemo(() => {
+    return getProductStudioReadiness(state.draft, categorySchema);
+  }, [state.draft, categorySchema]);
+
+  const markTouched = useCallback((field: string) => {
+    dispatch({ type: 'MARK_TOUCHED', payload: field });
+  }, []);
+
+  const setShowReadinessAttention = useCallback((show: boolean) => {
+    dispatch({ type: 'SET_READINESS_ATTENTION', payload: show });
+  }, []);
+
+  const isFieldAttention = useCallback(
+    (field: string): boolean => {
+      const isBlocking = readiness?.blockingFields?.includes(field as any) ?? false;
+      if (!isBlocking) return false;
+      return Boolean(state.showReadinessAttention || state.touchedFields[field]);
+    },
+    [readiness?.blockingFields, state.showReadinessAttention, state.touchedFields]
+  );
+
+  const updateDraft = useCallback((patch: Partial<ProductStudioDraft>) => {
+    // If draft images are being updated and any registered URL was removed, revoke it
+    if (patch.images && state.draft.images) {
+      const nextUrls = new Set(patch.images.map((img) => img.url));
+      for (const prevImg of state.draft.images) {
+        if (prevImg.url && !nextUrls.has(prevImg.url)) {
+          mediaRegistry.revokeObjectUrl(prevImg.url);
+        }
+      }
+    }
+    dispatch({ type: 'UPDATE_DRAFT', payload: patch });
+  }, [state.draft.images, mediaRegistry]);
+
+  const createMediaUrl = useCallback((file: File) => {
+    return mediaRegistry.createObjectUrl(file);
+  }, [mediaRegistry]);
+
+  const revokeMediaUrl = useCallback((url: string) => {
+    mediaRegistry.revokeObjectUrl(url);
+  }, [mediaRegistry]);
 
   const contextValue = useMemo<ProductStudioContextValue>(() => {
     return {
@@ -189,17 +309,64 @@ export function ProductStudioProvider({
         dispatch({ type: 'SET_VIEW_MODE', payload: mode }),
       setActiveSection: (section: ProductStudioSection) =>
         dispatch({ type: 'SET_ACTIVE_SECTION', payload: section }),
-      updateDraft: (patch: Partial<ProductStudioDraft>) =>
-        dispatch({ type: 'UPDATE_DRAFT', payload: patch }),
+      updateDraft,
       setEditingField: (field: string | null) =>
         dispatch({ type: 'SET_EDITING_FIELD', payload: field }),
+      setCategoryModalOpen: (open: boolean) =>
+        dispatch({ type: 'SET_CATEGORY_MODAL_OPEN', payload: open }),
       resetDraft: () => dispatch({ type: 'RESET_DRAFT' }),
+      markTouched,
+      setShowReadinessAttention,
+      isFieldAttention,
+      readiness,
+      categorySchema,
+      createMediaUrl,
+      revokeMediaUrl,
     };
-  }, [state]);
+  }, [
+    state,
+    updateDraft,
+    markTouched,
+    setShowReadinessAttention,
+    isFieldAttention,
+    readiness,
+    categorySchema,
+    createMediaUrl,
+    revokeMediaUrl,
+  ]);
+
+  const handleSelectCategory = async (cat: SellerCategory) => {
+    try {
+      const schema = await getSellerCategorySchema(cat.id);
+      setCategorySchema(schema);
+      dispatch({
+        type: 'UPDATE_DRAFT',
+        payload: {
+          categoryId: cat.id,
+          categoryName: cat.name,
+          dimensionType: schema.dimensionType || state.draft.dimensionType || 'COLOR_AND_SIZE',
+        },
+      });
+    } catch {
+      dispatch({
+        type: 'UPDATE_DRAFT',
+        payload: {
+          categoryId: cat.id,
+          categoryName: cat.name,
+        },
+      });
+    }
+  };
 
   return (
     <ProductStudioContext.Provider value={contextValue}>
       {children}
+      <ProductStudioCategoryModal
+        isOpen={state.isCategoryModalOpen}
+        onClose={() => dispatch({ type: 'SET_CATEGORY_MODAL_OPEN', payload: false })}
+        onSelectCategory={handleSelectCategory}
+        currentCategoryId={state.draft.categoryId}
+      />
     </ProductStudioContext.Provider>
   );
 }

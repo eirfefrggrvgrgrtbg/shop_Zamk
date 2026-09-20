@@ -5,7 +5,6 @@ import {
   findMatchingDraftVariant,
   mapToPresentationSelectedVariant,
   findFirstMediaIndexForColor,
-  STUDIO_PREVIEW_PLACEHOLDER_IMAGE,
 } from "./productStudioPresentationAdapter";
 import type { ProductStudioDraft } from "../../contexts/ProductStudioContext";
 
@@ -76,7 +75,7 @@ describe("productStudioPresentationAdapter", () => {
       images: [],
     };
     const emptyRes = mapStudioDraftToPresentation(emptyDraft);
-    expect(emptyRes.visibleImages).toEqual([{ url: STUDIO_PREVIEW_PLACEHOLDER_IMAGE }]);
+    expect(emptyRes.visibleImages).toEqual([]);
 
     const draftWithImages: ProductStudioDraft = {
       title: "Худи",

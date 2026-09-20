@@ -52,19 +52,26 @@ export function mapStudioDraftToPresentation(draft: ProductStudioDraft): StudioP
     return 0;
   });
 
-  const visibleImages: ProductPresentationMediaItem[] =
-    sortedImages.length > 0
-      ? sortedImages.map((img) => ({
-          url: img.url,
-          colorId: img.colorId || undefined,
-        }))
-      : [{ url: STUDIO_PREVIEW_PLACEHOLDER_IMAGE }];
+  const visibleImages: ProductPresentationMediaItem[] = sortedImages.map((img) => ({
+    url: img.url,
+    colorId: img.colorId || undefined,
+  }));
 
   const variants = draft.variants || [];
   const hasVariants = variants.length > 0;
 
-  // Color options mapping from draft variants (keyed strictly by canonical colorId)
+  // Color options mapping from draft.colors and draft variants (keyed strictly by canonical colorId)
   const colorMap = new Map<string, ProductPresentationColorOption>();
+  for (const c of draft.colors || []) {
+    if (c.id && !colorMap.has(c.id)) {
+      colorMap.set(c.id, {
+        id: c.id,
+        name: c.name || "Цвет",
+        hex: c.hex || (c as any).hexValue || undefined,
+        hasInStock: true,
+      });
+    }
+  }
   for (const v of variants) {
     if (v.colorId && !colorMap.has(v.colorId)) {
       colorMap.set(v.colorId, {
@@ -118,6 +125,12 @@ export function mapStudioDraftToPresentation(draft: ProductStudioDraft): StudioP
     discountPrice: presentationDiscountPrice,
     isNew: false,
     sizeChart: draft.sizeChart,
+    attributes: draft.attributes
+      ?.map((attr) => ({
+        label: attr.name || '',
+        value: typeof attr.value === 'boolean' ? (attr.value ? 'Да' : 'Нет') : String(attr.value ?? ''),
+      }))
+      .filter((attr) => attr.label && attr.value),
   };
 
   return {

@@ -7,16 +7,16 @@ export function ProductStudio() {
   const { viewMode } = useProductStudio();
 
   return (
-    <div data-testid="product-studio-root" className="w-full space-y-6">
+    <div data-testid="product-studio-root" className="w-full">
       <ProductStudioHeader />
 
-      <main className="w-full">
+      <div className="w-full">
         {viewMode === "visual" ? (
           <ProductStudioVisualWorkspace />
         ) : (
           <ProductStudioFormWorkspace />
         )}
-      </main>
+      </div>
     </div>
   );
 }

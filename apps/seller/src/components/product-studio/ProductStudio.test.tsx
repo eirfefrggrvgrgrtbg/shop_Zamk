@@ -1,4 +1,13 @@
 /** @vitest-environment jsdom */
+vi.mock('@zamk/api-client/src/seller', async (importOriginal: any) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    getSellerColors: vi.fn().mockResolvedValue([{ id: 'col-black', name: 'Чёрный', hexValue: '#000000' }]),
+    getSellerSizeValues: vi.fn().mockResolvedValue([]),
+  };
+});
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, cleanup, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -459,18 +468,15 @@ describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
   });
 
   // Requirement 12: no production route is changed
-  it('12. no production route is changed in App.tsx', () => {
+  // Requirement 12: create route points to SellerProductStudioNew, edit remains legacy
+  it('12. /products/new routes to SellerProductStudioNew while edit and list remain unchanged in App.tsx', () => {
     const appPath = path.resolve(__dirname, '../../App.tsx');
     const appContent = fs.readFileSync(appPath, 'utf-8');
 
-    // Production routes must point to original components
+    // Production routes: list and edit remain legacy, new points to SellerProductStudioNew
     expect(appContent).toContain('path="/products" element={<SellerProtectedRoute><SellerLayout><SellerProducts /></SellerLayout></SellerProtectedRoute>}');
-    expect(appContent).toContain('path="/products/new" element={<SellerProtectedRoute><SellerLayout><SellerProductNew /></SellerLayout></SellerProtectedRoute>}');
+    expect(appContent).toContain('path="/products/new" element={<SellerProtectedRoute><SellerLayout><SellerProductStudioNew /></SellerLayout></SellerProtectedRoute>}');
     expect(appContent).toContain('path="/products/:id/edit" element={<SellerProtectedRoute><SellerLayout><SellerProductEdit /></SellerLayout></SellerProtectedRoute>}');
-
-    // ProductStudio must NOT be mounted in App.tsx routes yet
-    expect(appContent).not.toContain('ProductStudio');
-    expect(appContent).not.toContain('/products/studio');
   });
 });
 
@@ -836,14 +842,47 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
     }
   });
 
-  // 22. no production route changed
-  it('22. no production route changed in App.tsx', () => {
+  // 22. production route cutover for create only
+  it('22. production route cutover in App.tsx mounts SellerProductStudioNew on /products/new only', () => {
     const appPath = path.resolve(__dirname, '../../App.tsx');
     const appContent = fs.readFileSync(appPath, 'utf-8');
 
     expect(appContent).toContain('path="/products" element={<SellerProtectedRoute><SellerLayout><SellerProducts /></SellerLayout></SellerProtectedRoute>}');
-    expect(appContent).toContain('path="/products/new" element={<SellerProtectedRoute><SellerLayout><SellerProductNew /></SellerLayout></SellerProtectedRoute>}');
+    expect(appContent).toContain('path="/products/new" element={<SellerProtectedRoute><SellerLayout><SellerProductStudioNew /></SellerLayout></SellerProtectedRoute>}');
     expect(appContent).toContain('path="/products/:id/edit" element={<SellerProtectedRoute><SellerLayout><SellerProductEdit /></SellerLayout></SellerProtectedRoute>}');
-    expect(appContent).not.toContain('ProductStudio');
+  });
+
+  // 23. empty draft: Save disabled, Moderation disabled
+  it('23. empty draft: Save disabled, Moderation disabled', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create">
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    const saveBtn = screen.getByText('Сохранить').closest('button');
+    const modBtn = screen.getByText('Отправить на модерацию').closest('button');
+
+    expect(saveBtn?.disabled).toBe(true);
+    expect(modBtn?.disabled).toBe(true);
+  });
+
+  // 24. fully populated draft: Save STILL disabled, Moderation STILL disabled
+  it('24. fully populated draft: Save STILL disabled, Moderation STILL disabled', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+          <ProductStudio />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    const saveBtn = screen.getByText('Сохранить').closest('button');
+    const modBtn = screen.getByText('Отправить на модерацию').closest('button');
+
+    expect(saveBtn?.disabled).toBe(true);
+    expect(modBtn?.disabled).toBe(true);
   });
 });
