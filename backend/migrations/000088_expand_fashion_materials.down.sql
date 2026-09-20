@@ -1,0 +1,3 @@
+-- Down migration is intentionally a NO-OP.
+-- Canonical material rows and ordering may already be referenced by products.
+-- Forward-only project invariant: do not delete/deactivate/reorder them.
