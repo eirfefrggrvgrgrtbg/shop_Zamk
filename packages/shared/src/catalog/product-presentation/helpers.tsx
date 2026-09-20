@@ -43,11 +43,18 @@ export const MEASUREMENT_FIELDS_MAP: Record<string, MeasurementMeta> = {
   },
 };
 
-export const getMeasurementMeta = (field: string): MeasurementMeta => {
+export const getMeasurementMeta = (field?: string): MeasurementMeta => {
+  if (!field) {
+    return {
+      label: 'Мерка, см',
+      shortLabel: 'Мерка',
+      instruction: 'Измеряйте согласно стандартам производителя.',
+    };
+  }
   if (MEASUREMENT_FIELDS_MAP[field]) {
     return MEASUREMENT_FIELDS_MAP[field];
   }
-  const formatted = field.toLowerCase().replace(/_/g, ' ');
+  const formatted = String(field).toLowerCase().replace(/_/g, ' ');
   return {
     label: `${formatted}, см`,
     shortLabel: formatted,

@@ -3,12 +3,22 @@ export interface ProductPresentationMediaItem {
   colorId?: string;
 }
 
+export interface ProductPresentationSizeChartField {
+  code: string;
+  name: string;
+  unit?: string;
+  isRequired?: boolean;
+  sortOrder?: number;
+}
+
 export interface ProductPresentationSizeChartRow {
+  sizeValueId?: string;
   sizeValueName: string;
   measurements?: Record<string, string | number>;
 }
 
 export interface ProductPresentationSizeChart {
+  fields?: ProductPresentationSizeChartField[];
   rows: ProductPresentationSizeChartRow[];
 }
 
@@ -34,6 +44,10 @@ export interface ProductPresentationCoreProduct {
   sellerSlug?: string;
   sizeChart?: ProductPresentationSizeChart;
   isPreview?: boolean;
+  attributes?: Array<{
+    label: string;
+    value: string;
+  }>;
 }
 
 export interface ProductPresentationColorOption {
@@ -115,4 +129,24 @@ export interface ProductPresentationCoreProps {
   returnsHref?: string | null;
   onSellerClick?: (sellerSlug: string) => void;
   sellerHref?: string | null;
+  emptyMediaSlot?: React.ReactNode;
+  emptyPricePlaceholder?: string;
+  colorLabelSuffix?: React.ReactNode;
+  colorLabelSuffixClassName?: string;
+  sizeLabelSuffix?: React.ReactNode;
+  sizeLabelSuffixClassName?: string;
+  mediaAddSlot?: React.ReactNode;
+  colorAddSlot?: React.ReactNode;
+  sizeAddSlot?: React.ReactNode;
+  compositionAddSlot?: React.ReactNode;
+  compositionSlot?: React.ReactNode;
+  characteristicsAddSlot?: React.ReactNode;
+  sizeChartSlot?: React.ReactNode;
+  titleSlot?: React.ReactNode;
+  priceSlot?: React.ReactNode;
+  descriptionSlot?: React.ReactNode;
+  galleryExtraSlot?: React.ReactNode;
+  renderThumbnailOverlay?: (image: ProductPresentationMediaItem, index: number) => React.ReactNode;
+  onColorRemove?: (id: string) => void;
+  onSizeRemove?: (id: string) => void;
 }

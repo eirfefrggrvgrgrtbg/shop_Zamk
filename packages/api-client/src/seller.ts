@@ -178,7 +178,8 @@ export interface SellerColor {
   id: string;
   code: string;
   nameRu: string;
-  hexValue: string;
+  hexValue?: string;
+  hex?: string;
 }
 
 export interface SellerMaterial {
@@ -190,7 +191,9 @@ export interface SellerMaterial {
 export interface SellerSizeSystem {
   id: string;
   code: string;
-  nameRu: string;
+  nameRu?: string;
+  name?: string;
+  isDefault?: boolean;
 }
 
 export interface SellerSizeValue {
@@ -211,6 +214,7 @@ export interface SellerCategorySchema {
   id: string;
   name: string;
   slug: string;
+  dimensionType?: string;
   sizeChartRequired: boolean;
   attributes: {
     id: string;

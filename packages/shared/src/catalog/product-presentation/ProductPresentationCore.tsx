@@ -17,8 +17,8 @@ import type {
   ProductPresentationSelectedVariant,
 } from './types';
 
-const getProductSpecs = (product: ProductPresentationCoreProduct, selectedVariant?: ProductPresentationSelectedVariant | null) =>
-  [
+const getProductSpecs = (product: ProductPresentationCoreProduct, selectedVariant?: ProductPresentationSelectedVariant | null) => {
+  const baseSpecs = [
     (selectedVariant?.sellerSku || (product.id && !isUUID(product.id)))
       ? { label: 'Артикул', value: (selectedVariant?.sellerSku || product.id)!.toUpperCase() }
       : (selectedVariant?.sku ? { label: 'Артикул', value: selectedVariant.sku.toUpperCase() } : null),
@@ -30,6 +30,17 @@ const getProductSpecs = (product: ProductPresentationCoreProduct, selectedVarian
       : null,
     product.materials ? { label: 'Материал', value: product.materials } : null,
   ].filter((spec): spec is { label: string; value: string } => Boolean(spec));
+
+  if (product.attributes && product.attributes.length > 0) {
+    for (const attr of product.attributes) {
+      if (attr.value) {
+        baseSpecs.push({ label: attr.label, value: String(attr.value) });
+      }
+    }
+  }
+
+  return baseSpecs;
+};
 
 function AccordionSection({ title, children, defaultOpen = false }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -71,6 +82,7 @@ export function ProductPresentationCore({
   selectedVariant,
   isResolved,
   canAddToCart,
+  requiresColor,
   requiresSize,
   isAddingToCart,
   isProductUnavailable,
@@ -92,6 +104,26 @@ export function ProductPresentationCore({
   onReturnsClick,
   returnsHref,
   onSellerClick,
+  mediaAddSlot,
+  emptyMediaSlot,
+  emptyPricePlaceholder,
+  colorLabelSuffix,
+  colorLabelSuffixClassName,
+  sizeLabelSuffix,
+  sizeLabelSuffixClassName,
+  colorAddSlot,
+  sizeAddSlot,
+  onColorRemove,
+  onSizeRemove,
+  characteristicsAddSlot,
+  compositionAddSlot,
+  compositionSlot,
+  sizeChartSlot,
+  titleSlot,
+  priceSlot,
+  descriptionSlot,
+  galleryExtraSlot,
+  renderThumbnailOverlay,
   sellerHref,
 }: ProductPresentationCoreProps) {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -163,7 +195,11 @@ export function ProductPresentationCore({
   const specs = getProductSpecs(product, selectedVariant);
   const currentActiveImage = activeImage < visibleImages.length ? activeImage : 0;
   const currentImageUrl = visibleImages[currentActiveImage]?.url || 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image';
-  const activeFields: string[] = product.sizeChart?.rows?.[0]?.measurements
+  const activeFields: string[] = product.sizeChart?.fields?.length
+    ? (product.sizeChart.fields
+        .map((f: any) => f.code || f.key)
+        .filter(Boolean) as string[])
+    : product.sizeChart?.rows?.[0]?.measurements
     ? Object.keys(product.sizeChart.rows[0].measurements)
     : [];
 
@@ -198,33 +234,57 @@ export function ProductPresentationCore({
           onKeyDown={handleGalleryKeyDown}
           aria-label="Галерея товара"
         >
+          {visibleImages.length === 0 ? (
+            <div className="flex-1 w-full max-w-[520px] mx-auto min-[960px]:mx-0">
+              {emptyMediaSlot ? (
+                emptyMediaSlot
+              ) : mediaAddSlot ? (
+                <div className="group relative bg-[#f5f5f7] dark:bg-[#1a1a1c] border-2 border-dashed border-ash/30 rounded-xl overflow-hidden w-full aspect-[4/5] max-h-[640px] flex items-center justify-center">
+                  {mediaAddSlot}
+                </div>
+              ) : (
+                <div className="group relative bg-[#f5f5f7] dark:bg-[#1a1a1c] border border-black/5 dark:border-white/5 rounded-xl overflow-hidden w-full aspect-[4/5] max-h-[640px] flex items-center justify-center select-none">
+                  <img
+                    src={currentImageUrl}
+                    alt={product.name}
+                    data-testid="main-product-image"
+                    className="w-full h-full object-contain mix-blend-multiply dark:mix-blend-normal transition-opacity duration-200 pointer-events-none"
+                  />
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
           {/* Vertical Thumbnail Rail (Desktop) */}
-          {visibleImages.length > 1 && (
+          {(visibleImages.length > 1 || (visibleImages.length === 1 && mediaAddSlot)) && (
             <div className="hidden min-[960px]:flex flex-col gap-2.5 w-16 min-[1200px]:w-[72px] flex-shrink-0 max-h-[680px] overflow-y-auto scrollbar-none">
               {visibleImages.map((image, index) => {
                 const isSelected = currentActiveImage === index;
                 return (
-                  <button
-                    key={index + image.url}
-                    type="button"
-                    data-testid={`pdp-thumbnail-${index}`}
-                    onClick={() => onActiveImageChange(index)}
-                    aria-label={`Фото ${index + 1}`}
-                    className={cn(
-                      "w-16 h-20 min-[1200px]:w-[72px] min-[1200px]:h-[90px] flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f7] dark:bg-[#1a1a1c] transition-all p-1 flex items-center justify-center cursor-pointer",
-                      isSelected
-                        ? "border border-graphite dark:border-white ring-1 ring-graphite/20 dark:ring-white/20 opacity-100"
-                        : "border border-transparent hover:border-border-soft dark:hover:border-white/20 opacity-70 hover:opacity-100"
-                    )}
-                  >
-                    <img
-                      src={image.url}
-                      alt=""
-                      className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal"
-                    />
-                  </button>
+                  <div key={index + image.url} className="relative group/thumb flex-shrink-0">
+                    <button
+                      type="button"
+                      data-testid={`pdp-thumbnail-${index}`}
+                      onClick={() => onActiveImageChange(index)}
+                      aria-label={`Фото ${index + 1}`}
+                      className={cn(
+                        "w-16 h-20 min-[1200px]:w-[72px] min-[1200px]:h-[90px] flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f7] dark:bg-[#1a1a1c] transition-all p-1 flex items-center justify-center cursor-pointer",
+                        isSelected
+                          ? "border border-graphite dark:border-white ring-1 ring-graphite/20 dark:ring-white/20 opacity-100"
+                          : "border border-transparent hover:border-border-soft dark:hover:border-white/20 opacity-70 hover:opacity-100"
+                      )}
+                    >
+                      <img
+                        src={image.url}
+                        alt=""
+                        className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal"
+                      />
+                    </button>
+                    {renderThumbnailOverlay?.(image, index)}
+                  </div>
                 );
               })}
+              {mediaAddSlot}
               {visibleImages.length > 7 && (
                 <span className="text-[10px] text-ash text-center font-medium pt-0.5">
                   +{visibleImages.length - 7}
@@ -286,7 +346,7 @@ export function ProductPresentationCore({
                 />
               )}
 
-              {visibleImages.length > 1 && (
+              {(visibleImages.length > 1 || (visibleImages.length === 1 && mediaAddSlot)) && (
                 <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-xs text-white text-[11px] font-medium tracking-wider tabular-nums pointer-events-none">
                   {currentActiveImage + 1} / {visibleImages.length}
                 </div>
@@ -304,35 +364,46 @@ export function ProductPresentationCore({
               )}
             </div>
 
+            {galleryExtraSlot && (
+              <div className="mt-2.5 flex items-center justify-between" data-slot="gallery-extra">
+                {galleryExtraSlot}
+              </div>
+            )}
+
             {/* Horizontal Thumbnails (Mobile / < 960px) */}
-            {visibleImages.length > 1 && (
+            {(visibleImages.length > 1 || (visibleImages.length === 1 && mediaAddSlot)) && (
               <div className="flex min-[960px]:hidden gap-2 overflow-x-auto pt-3 pb-1 scrollbar-none">
                 {visibleImages.map((image, index) => {
                   const isSelected = currentActiveImage === index;
                   return (
-                    <button
-                      key={index + image.url}
-                      type="button"
-                      onClick={() => onActiveImageChange(index)}
-                      aria-label={`Фото ${index + 1}`}
-                      className={cn(
-                        "w-14 h-[70px] flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f7] dark:bg-[#1a1a1c] transition-all p-1 flex items-center justify-center cursor-pointer",
-                        isSelected
-                          ? "border border-graphite dark:border-white ring-1 ring-graphite/20 dark:ring-white/20 opacity-100"
-                          : "border border-transparent hover:border-border-soft dark:hover:border-white/20 opacity-70 hover:opacity-100"
-                      )}
-                    >
-                      <img
-                        src={image.url}
-                        alt=""
-                        className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal"
-                      />
-                    </button>
+                    <div key={index + image.url} className="relative group/thumb flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => onActiveImageChange(index)}
+                        aria-label={`Фото ${index + 1}`}
+                        className={cn(
+                          "w-14 h-[70px] flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f7] dark:bg-[#1a1a1c] transition-all p-1 flex items-center justify-center cursor-pointer",
+                          isSelected
+                            ? "border border-graphite dark:border-white ring-1 ring-graphite/20 dark:ring-white/20 opacity-100"
+                            : "border border-transparent hover:border-border-soft dark:hover:border-white/20 opacity-70 hover:opacity-100"
+                        )}
+                      >
+                        <img
+                          src={image.url}
+                          alt=""
+                          className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal"
+                        />
+                      </button>
+                      {renderThumbnailOverlay?.(image, index)}
+                    </div>
                   );
                 })}
+                {mediaAddSlot}
               </div>
             )}
           </div>
+            </>
+          )}
         </div>
 
         {/* RIGHT PURCHASE COLUMN: ~456px */}
@@ -358,9 +429,13 @@ export function ProductPresentationCore({
           ) : null}
 
           {/* TITLE */}
-          <h1 className="text-[26px] sm:text-[28px] min-[1200px]:text-[32px] leading-[32px] sm:leading-[34px] min-[1200px]:leading-[38px] font-serif text-graphite dark:text-white font-normal mt-1">
-            {product.name}
-          </h1>
+          {titleSlot ? (
+            titleSlot
+          ) : (
+            <h1 className="text-[26px] sm:text-[28px] min-[1200px]:text-[32px] leading-[32px] sm:leading-[34px] min-[1200px]:leading-[38px] font-serif text-graphite dark:text-white font-normal mt-1" data-slot="title">
+              {product.name}
+            </h1>
+          )}
 
           {/* COMPACT RATING */}
           {product.rating ? (
@@ -383,29 +458,38 @@ export function ProductPresentationCore({
           ) : null}
 
           {/* PRICE */}
-          <div className="mt-3.5 flex items-baseline gap-3">
-            {product.discountPrice ? (
-              <>
-                <span className="text-[26px] min-[1200px]:text-[28px] font-semibold text-red-600 dark:text-red-400">
-                  {formatPrice(product.discountPrice)}
+          {priceSlot ? (
+            priceSlot
+          ) : (
+            <div className="mt-3.5 flex items-baseline gap-3" data-slot="price">
+              {product.discountPrice ? (
+                <>
+                  <span className="text-[26px] min-[1200px]:text-[28px] font-semibold text-red-600 dark:text-red-400">
+                    {formatPrice(product.discountPrice)}
+                  </span>
+                  <span className="text-base text-ash line-through">
+                    {formatPrice(displayPrice)}
+                  </span>
+                </>
+              ) : (
+                <span className="text-[26px] min-[1200px]:text-[28px] font-semibold text-graphite dark:text-white">
+                  {displayPrice > 0 ? formatPrice(displayPrice) : (emptyPricePlaceholder || formatPrice(displayPrice))}
                 </span>
-                <span className="text-base text-ash line-through">
-                  {formatPrice(displayPrice)}
-                </span>
-              </>
-            ) : (
-              <span className="text-[26px] min-[1200px]:text-[28px] font-semibold text-graphite dark:text-white">
-                {formatPrice(displayPrice)}
-              </span>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* COLORS */}
-          {colors.length > 0 && (
+          {(requiresColor && (colors.length > 0 || Boolean(colorAddSlot))) && (
             <div className="mt-5 sm:mt-6">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm text-graphite dark:text-white">
-                  <span className="text-ash">Цвет:</span>{' '}
+                  <span className="text-ash">Цвет:</span>
+                  {colorLabelSuffix && (
+                    <span className={cn("font-medium", colorLabelSuffixClassName || "text-ash dark:text-gray-400")}>
+                      {colorLabelSuffix}
+                    </span>
+                  )}{' '}
                   <span className="font-medium">
                     {selectedColor?.name || 'Не выбран'}
                     {selectedColor?.shadeName ? ` (${selectedColor.shadeName})` : ''}
@@ -420,6 +504,7 @@ export function ProductPresentationCore({
                   const isSelected = selectedColorId === color.id;
                   const isWhiteOrLight = isLightColor(color.hex);
                   return (
+                    <div key={color.id} className="relative group/swatch">
                     <button
                       key={color.id}
                       type="button"
@@ -440,15 +525,13 @@ export function ProductPresentationCore({
                         <span
                           style={{ backgroundColor: color.hex }}
                           className={cn(
-                            "w-7 h-7 rounded-full transition-transform",
-                            isWhiteOrLight
-                              ? "border border-black/25 dark:border-white/30"
-                              : "border border-black/10 dark:border-white/15"
+                            "w-8 h-8 rounded-full transition-transform group-hover/swatch:scale-105",
+                            isWhiteOrLight && "border border-border-soft dark:border-white/20"
                           )}
                         />
                       ) : (
-                        <span className="w-7 h-7 rounded-full border border-border-soft dark:border-white/20 bg-ice dark:bg-white/10 flex items-center justify-center text-[10px] font-semibold text-graphite dark:text-white uppercase">
-                          {color.name.slice(0, 2)}
+                        <span className="w-8 h-8 rounded-full bg-ice dark:bg-[#2c2c2e] border border-border-soft dark:border-white/10 flex items-center justify-center text-[10px] text-ash">
+                          —
                         </span>
                       )}
                       {!color.hasInStock && (
@@ -460,27 +543,51 @@ export function ProductPresentationCore({
                         </span>
                       )}
                     </button>
+                    {onColorRemove && (
+                      <button
+                        type="button"
+                        aria-label={`Удалить цвет ${color.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onColorRemove(color.id);
+                        }}
+                        className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-white dark:bg-[#2c2c2e] border border-border-soft dark:border-white/20 shadow-sm flex items-center justify-center text-ash hover:text-red-500 hover:border-red-500 transition-colors z-10 cursor-pointer text-xs"
+                      >
+                        ×
+                      </button>
+                    )}
+                    </div>
                   );
                 })}
+                {colorAddSlot}
               </div>
             </div>
           )}
 
           {/* SIZES */}
-          {requiresSize && (
+          {(requiresSize && (sizes.length > 0 || Boolean(sizeAddSlot))) && (
             <div className="mt-5 sm:mt-6">
               <div className="flex items-center gap-3 mb-2 flex-wrap">
                 <p className="text-sm text-graphite dark:text-white">
-                  <span className="text-ash">Размер:</span>{' '}
+                  <span className="text-ash">Размер:</span>
+                  {sizeLabelSuffix && (
+                    <span className={cn("font-medium", sizeLabelSuffixClassName || "text-ash dark:text-gray-400")}>
+                      {sizeLabelSuffix}
+                    </span>
+                  )}{' '}
                   <span className="font-medium">{selectedSize?.label || 'Не выбран'}</span>
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setShowSizeChart(true)}
-                  className="text-xs text-ash hover:text-graphite dark:hover:text-white underline underline-offset-2 transition-colors cursor-pointer"
-                >
-                  Таблица размеров
-                </button>
+                {sizeChartSlot ? (
+                  sizeChartSlot
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowSizeChart(true)}
+                    className="text-xs text-ash hover:text-graphite dark:hover:text-white underline underline-offset-2 transition-colors cursor-pointer"
+                  >
+                    Таблица размеров
+                  </button>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 {sizes.map((sizeObj) => {
@@ -489,6 +596,7 @@ export function ProductPresentationCore({
                   const isNotOffered = sizeObj.state === 'NOT_OFFERED';
                   const isButtonDisabled = isProductUnavailable || Boolean(sizeObj.disabled);
                   return (
+                    <div key={sizeObj.id} className="relative group/size">
                     <button
                       key={sizeObj.id}
                       type="button"
@@ -516,8 +624,20 @@ export function ProductPresentationCore({
                     >
                       {sizeObj.label}
                     </button>
+                    {onSizeRemove && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onSizeRemove(sizeObj.id); }}
+                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/size:opacity-100 transition-opacity z-10 hover:scale-110 shadow"
+                        aria-label={`Удалить размер ${sizeObj.label}`}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                      </button>
+                    )}
+                    </div>
                   );
                 })}
+                {sizeAddSlot}
               </div>
               {sizeSelectionNotice && !isProductUnavailable && (
                 <p data-testid="size-selection-notice" className="mt-2 text-xs sm:text-sm text-amber-600 dark:text-amber-400 font-normal" role="status" aria-live="polite">
@@ -634,13 +754,17 @@ export function ProductPresentationCore({
             <h2 className="text-lg font-serif text-graphite dark:text-white mb-3">
               О вещи
             </h2>
-            <div className="text-sm text-graphite-light dark:text-white/80 leading-relaxed whitespace-pre-line space-y-3">
-              {product.description ? (
-                <p>{product.description}</p>
-              ) : (
-                <p className="text-ash italic">Описание товара уточняется.</p>
-              )}
-            </div>
+            {descriptionSlot ? (
+              descriptionSlot
+            ) : (
+              <div data-slot="description" className="text-sm text-graphite-light dark:text-white/80 leading-relaxed whitespace-pre-line space-y-3">
+                {product.description ? (
+                  <p>{product.description}</p>
+                ) : (
+                  <p className="text-ash italic">Добавить описание</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right: Состав и уход */}
@@ -648,33 +772,38 @@ export function ProductPresentationCore({
             <h2 className="text-lg font-serif text-graphite dark:text-white mb-3">
               Состав и уход
             </h2>
-            <div className="text-sm text-graphite-light dark:text-white/80 leading-relaxed space-y-2">
-              {product.materialComposition && product.materialComposition.length > 0 ? (
-                <p>
-                  <span className="font-medium text-graphite dark:text-white">Состав:</span>{' '}
-                  {product.materialComposition.map((mc) => `${mc.materialName || mc.material} — ${mc.percentage}%`).join(', ')}
-                </p>
-              ) : null}
-              {product.materials ? (
-                <p>
-                  <span className="font-medium text-graphite dark:text-white">Материал:</span> {product.materials}
-                </p>
-              ) : null}
-              {product.careInstructions ? (
-                <p>
-                  <span className="font-medium text-graphite dark:text-white">Уход:</span> {product.careInstructions}
-                </p>
-              ) : null}
-              {!product.materialComposition?.length && !product.materials && !product.careInstructions && (
-                <p className="text-ash italic">Информация о составе не указана.</p>
-              )}
-            </div>
+            {compositionSlot ? (
+              compositionSlot
+            ) : (
+              <div className="text-sm text-graphite-light dark:text-white/80 leading-relaxed space-y-2">
+                {compositionAddSlot}
+                {product.materialComposition && product.materialComposition.length > 0 ? (
+                  <p>
+                    <span className="font-medium text-graphite dark:text-white">Состав:</span>{' '}
+                    {product.materialComposition.map((mc) => `${mc.materialName || mc.material} — ${mc.percentage}%`).join(', ')}
+                  </p>
+                ) : null}
+                {product.materials ? (
+                  <p>
+                    <span className="font-medium text-graphite dark:text-white">Материал:</span> {product.materials}
+                  </p>
+                ) : null}
+                {product.careInstructions ? (
+                  <p>
+                    <span className="font-medium text-graphite dark:text-white">Уход:</span> {product.careInstructions}
+                  </p>
+                ) : null}
+                {!product.materialComposition?.length && !product.materials && !product.careInstructions && (
+                  <p className="text-ash italic">Информация о составе не указана.</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Lower Accordions */}
         <div className="border-t border-border-lighter dark:border-white/10">
-          {specs.length > 0 && (
+          {(specs.length > 0 || characteristicsAddSlot) && (
             <AccordionSection title="Характеристики" defaultOpen={false}>
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 text-sm py-1">
                 {specs.map((spec) => (
@@ -683,6 +812,7 @@ export function ProductPresentationCore({
                     <dd className="text-graphite dark:text-white font-medium text-right sm:text-left">{spec.value}</dd>
                   </div>
                 ))}
+                {characteristicsAddSlot}
               </dl>
             </AccordionSection>
           )}
@@ -749,11 +879,17 @@ export function ProductPresentationCore({
                       <th className="py-3.5 px-4 text-left font-semibold text-graphite dark:text-white whitespace-nowrap">
                         Размер
                       </th>
-                      {activeFields.map((field) => (
-                        <th key={field} className="py-3.5 px-4 text-left font-semibold text-graphite dark:text-white whitespace-nowrap">
-                          {getMeasurementMeta(field).label}
-                        </th>
-                      ))}
+                      {activeFields.map((field) => {
+                        const fieldDef = product.sizeChart?.fields?.find((f) => f.code === field);
+                        const label = fieldDef
+                          ? `${fieldDef.name}${fieldDef.unit ? `, ${fieldDef.unit}` : ''}`
+                          : getMeasurementMeta(field).label;
+                        return (
+                          <th key={field} className="py-3.5 px-4 text-left font-semibold text-graphite dark:text-white whitespace-nowrap">
+                            {label}
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-lighter dark:divide-white/10">
@@ -822,7 +958,7 @@ export function ProductPresentationCore({
           {/* Top Bar */}
           <div className="absolute top-4 inset-x-4 sm:inset-x-8 flex items-center justify-between z-20 pointer-events-none">
             <div className="text-white/80 text-xs sm:text-sm font-mono tracking-widest pointer-events-auto">
-              {visibleImages.length > 1 && (
+              {(visibleImages.length > 1 || (visibleImages.length === 1 && mediaAddSlot)) && (
                 <span>{currentActiveImage + 1} / {visibleImages.length}</span>
               )}
             </div>
@@ -840,7 +976,7 @@ export function ProductPresentationCore({
           </div>
 
           {/* Large Left Viewport Navigation Zone */}
-          {visibleImages.length > 1 && (
+          {(visibleImages.length > 1 || (visibleImages.length === 1 && mediaAddSlot)) && (
             <button
               type="button"
               onClick={handlePrevImage}
@@ -938,7 +1074,7 @@ export function ProductPresentationCore({
           </div>
 
           {/* Large Right Viewport Navigation Zone */}
-          {visibleImages.length > 1 && (
+          {(visibleImages.length > 1 || (visibleImages.length === 1 && mediaAddSlot)) && (
             <button
               type="button"
               onClick={handleNextImage}
@@ -952,7 +1088,7 @@ export function ProductPresentationCore({
           )}
 
           {/* Bottom Thumbnails Strip (Lightbox) */}
-          {visibleImages.length > 1 && (
+          {(visibleImages.length > 1 || (visibleImages.length === 1 && mediaAddSlot)) && (
             <div className="absolute bottom-4 inset-x-0 flex justify-center gap-2 px-4 overflow-x-auto scrollbar-none z-20">
               {visibleImages.map((img, idx) => {
                 const isSelected = idx === currentActiveImage;
@@ -977,6 +1113,7 @@ export function ProductPresentationCore({
                   </button>
                 );
               })}
+              {mediaAddSlot}
             </div>
           )}
         </div>,
