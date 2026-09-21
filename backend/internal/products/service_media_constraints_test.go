@@ -174,6 +174,7 @@ func TestUpdateProductForSeller_PreservesImageCropsAndMain(t *testing.T) {
 	// Now simulate wizard saving draft (e.g. updating description or variant prices)
 	desc := "Updated description from wizard"
 	sort0 := 0
+	trueVal := true
 	updateReq := products.UpdateProductRequest{
 		Description: &desc,
 		Images: []products.ProductImageRequest{
@@ -181,6 +182,7 @@ func TestUpdateProductForSeller_PreservesImageCropsAndMain(t *testing.T) {
 				ID:        &imgID,
 				ImageURL:  "https://storage.zamk.test/orig.jpg",
 				SortOrder: &sort0,
+				IsMain:    &trueVal,
 			},
 		},
 	}

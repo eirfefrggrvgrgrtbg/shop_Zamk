@@ -551,69 +551,21 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 	}
 
 
-	var images []ProductImage
+	var desiredMedia []DesiredProductImage
 	if req.Images != nil {
-		existingImages, err := s.repo.GetProductImages(ctx, p.ID)
-		if err != nil {
-			return Product{}, err
-		}
-		existingImageByUrl := make(map[string]ProductImage)
-		existingImageById := make(map[uuid.UUID]ProductImage)
-		for _, ei := range existingImages {
-			existingImageByUrl[ei.ImageURL] = ei
-			existingImageById[ei.ID] = ei
-		}
-
-		now := time.Now()
+		desiredMedia = make([]DesiredProductImage, len(req.Images))
 		for i, ir := range req.Images {
-			sortOrder := i
-			if ir.SortOrder != nil {
-				sortOrder = *ir.SortOrder
+			if ir.ID == nil || *ir.ID == uuid.Nil {
+				return Product{}, ErrInvalidMediaReference
 			}
-			img := ProductImage{
-				ID:        uuid.New(),
-				ProductID: p.ID,
-				ImageURL:  ir.ImageURL,
+			isMain := ir.IsMain != nil && *ir.IsMain
+			desiredMedia[i] = DesiredProductImage{
+				ID:        *ir.ID,
 				AltText:   ir.AltText,
-				SortOrder: sortOrder,
 				ColorID:   ir.ColorID,
-				CreatedAt: now,
+				IsMain:    isMain,
+				SortOrder: i,
 			}
-
-			// Match existing image by ID or ImageURL to preserve crop, rendition, object_key, and is_main
-			if ir.ID != nil && *ir.ID != uuid.Nil {
-				if existing, ok := existingImageById[*ir.ID]; ok {
-					img.ID = existing.ID
-					img.ObjectKey = existing.ObjectKey
-					img.Width = existing.Width
-					img.Height = existing.Height
-					img.CropX = existing.CropX
-					img.CropY = existing.CropY
-					img.CropWidth = existing.CropWidth
-					img.CropHeight = existing.CropHeight
-					img.RenditionURL = existing.RenditionURL
-					img.RenditionObjectKey = existing.RenditionObjectKey
-					img.IsMain = existing.IsMain
-				}
-			} else if existing, ok := existingImageByUrl[ir.ImageURL]; ok {
-				img.ID = existing.ID
-				img.ObjectKey = existing.ObjectKey
-				img.Width = existing.Width
-				img.Height = existing.Height
-				img.CropX = existing.CropX
-				img.CropY = existing.CropY
-				img.CropWidth = existing.CropWidth
-				img.CropHeight = existing.CropHeight
-				img.RenditionURL = existing.RenditionURL
-				img.RenditionObjectKey = existing.RenditionObjectKey
-				img.IsMain = existing.IsMain
-			}
-
-			if ir.IsMain != nil {
-				img.IsMain = *ir.IsMain
-			}
-
-			images = append(images, img)
 		}
 	}
 
@@ -774,46 +726,10 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		}
 	}
 
-	if req.Attributes != nil {
-		var pAttrs []ProductAttributeValue
-		for _, a := range req.Attributes {
-			pAttrs = append(pAttrs, ProductAttributeValue{
-				AttributeDefinitionID: a.AttributeDefinitionID,
-				EnumValueID:           a.EnumValueID,
-				TextValue:             a.TextValue,
-				NumberValue:           a.NumberValue,
-				BoolValue:             a.BoolValue,
-			})
-		}
-		p.Attributes = pAttrs
-	}
-	if req.MaterialComposition != nil {
-		var comps []ProductMaterialComposition
-		for _, c := range req.MaterialComposition {
-			comps = append(comps, ProductMaterialComposition{
-				MaterialID: c.MaterialID,
-				Percentage: c.Percentage,
-			})
-		}
-		p.MaterialComposition = comps
-	}
-	if req.SizeChartRows != nil && p.CategoryID != nil {
-		chart := ProductSizeChart{
-			ProductID: p.ID,
-			CategoryID: *p.CategoryID,
-		}
-		for _, r := range req.SizeChartRows {
-			chart.Rows = append(chart.Rows, ProductSizeChartRow{
-				SizeValueID:  r.SizeValueID,
-				Measurements: r.Measurements,
-			})
-		}
-		p.SizeChart = &chart
-	}
-
 	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
 
+		// Step 1: Lock seller & SKU check
 		if err := txRepo.LockSellerForUpdate(ctx, seller.ID); err != nil {
 			return err
 		}
@@ -836,46 +752,84 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			}
 		}
 
-		if modLog != nil {
-			if err := txRepo.UpdateProductStatus(ctx, p); err != nil {
-				return err
-			}
-			if err := txRepo.AddModerationLog(ctx, modLog); err != nil {
-				return err
-			}
-		}
-
-		if revision != nil {
-			revQuery := `INSERT INTO product_revisions (id, product_id, status, content_snapshot, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`
-			_, err := tx.Exec(ctx, revQuery, revision.ID, revision.ProductID, revision.Status, revision.ContentSnapshot, revision.CreatedAt, revision.UpdatedAt)
-			if err != nil {
-				return fmt.Errorf("failed to insert revision: %w", err)
-			}
-			
-			if modLog != nil {
-				// ContinueSelling=false -> hide it
-				updQuery := `UPDATE products SET live_revision_id = $1, status = $2, submitted_at = $3, updated_at = now() WHERE id = $4`
-				if _, err := tx.Exec(ctx, updQuery, revision.ID, StatusPendingModeration, p.SubmittedAt, p.ID); err != nil {
-					return fmt.Errorf("failed to link revision and update status: %w", err)
-				}
-			} else {
-				// ContinueSelling=true -> keep published
-				updQuery := `UPDATE products SET live_revision_id = $1, updated_at = now() WHERE id = $2`
-				if _, err := tx.Exec(ctx, updQuery, revision.ID, p.ID); err != nil {
-					return fmt.Errorf("failed to link revision to product: %w", err)
-				}
-			}
-		} else {
+		if revision == nil {
+			// Step 2: Update product row
 			if err := txRepo.UpdateProduct(ctx, p); err != nil {
 				return err
 			}
-		if req.Images != nil {
-			if err := txRepo.ReplaceProductImages(ctx, p.ID, images); err != nil {
-				return err
+
+			// Step 3: Merge variants
+			if req.Variants != nil {
+				if err := txRepo.MergeProductVariants(ctx, p.ID, variants); err != nil {
+					return err
+				}
+
+				// Update variant attributes
+				for _, v := range variants {
+					for _, reqV := range req.Variants {
+						if (reqV.SellerSKU != nil && v.SellerSKU != nil && *reqV.SellerSKU == *v.SellerSKU) || (reqV.SKU != nil && v.SKU != nil && *reqV.SKU == *v.SKU) {
+							if reqV.Attributes != nil {
+								var vAttrs []VariantAttributeValue
+								for _, a := range reqV.Attributes {
+									vAttrs = append(vAttrs, VariantAttributeValue{
+										AttributeDefinitionID: a.AttributeDefinitionID,
+										EnumValueID:           a.EnumValueID,
+										TextValue:             a.TextValue,
+										NumberValue:           a.NumberValue,
+										BoolValue:             a.BoolValue,
+									})
+								}
+								if err := txRepo.InsertVariantAttributeValues(ctx, v.ID, vAttrs); err != nil {
+									return err
+								}
+							}
+							break
+						}
+					}
+				}
+				p.Variants = variants
 			}
-		}
-			
-			// Update product attributes
+
+			// Step 4: Reconcile media
+			if req.Images != nil {
+				// Derive finalColorIDs from active variants
+				activeVariants, err := txRepo.GetProductVariants(ctx, p.ID)
+				if err != nil {
+					return err
+				}
+				finalColorIDs := make(map[uuid.UUID]bool)
+				for _, av := range activeVariants {
+					if av.ColorID != nil {
+						finalColorIDs[*av.ColorID] = true
+					}
+				}
+
+				for _, dm := range desiredMedia {
+					if dm.ColorID != nil && !finalColorIDs[*dm.ColorID] {
+						return ErrInvalidImageColor
+					}
+				}
+
+				if err := txRepo.ReconcileProductImagesTx(ctx, seller.ID, p.ID, desiredMedia); err != nil {
+					return err
+				}
+
+				refreshedImages, err := txRepo.GetProductImages(ctx, p.ID)
+				if err != nil {
+					return err
+				}
+				p.Images = refreshedImages
+
+				var mainURL, mainObjKey *string
+				err = tx.QueryRow(ctx, "SELECT main_image_url, main_image_object_key FROM products WHERE id = $1", p.ID).Scan(&mainURL, &mainObjKey)
+				if err != nil {
+					return err
+				}
+				p.MainImageURL = mainURL
+				p.MainImageObjectKey = mainObjKey
+			}
+
+			// Step 5: Update non-media subdocuments
 			if req.Attributes != nil {
 				var pAttrs []ProductAttributeValue
 				for _, a := range req.Attributes {
@@ -891,8 +845,7 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 					return err
 				}
 			}
-			
-			// Update composition
+
 			if req.MaterialComposition != nil {
 				var comps []ProductMaterialComposition
 				for _, c := range req.MaterialComposition {
@@ -905,8 +858,7 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 					return err
 				}
 			}
-			
-			// Update size chart
+
 			if req.SizeChartRows != nil && p.CategoryID != nil {
 				var rows []ProductSizeChartRow
 				for _, r := range req.SizeChartRows {
@@ -919,38 +871,39 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 					return err
 				}
 			}
-		}
-		
-		if req.Variants != nil && revision == nil {
-			if err := txRepo.MergeProductVariants(ctx, p.ID, variants); err != nil {
-				return err
-			}
-			
-			// Update variant attributes
-			for _, v := range variants {
-				for _, reqV := range req.Variants {
-					if (reqV.SellerSKU != nil && v.SellerSKU != nil && *reqV.SellerSKU == *v.SellerSKU) || (reqV.SKU != nil && v.SKU != nil && *reqV.SKU == *v.SKU) {
-						if reqV.Attributes != nil {
-							var vAttrs []VariantAttributeValue
-							for _, a := range reqV.Attributes {
-								vAttrs = append(vAttrs, VariantAttributeValue{
-									AttributeDefinitionID: a.AttributeDefinitionID,
-									EnumValueID:           a.EnumValueID,
-									TextValue:             a.TextValue,
-									NumberValue:           a.NumberValue,
-									BoolValue:             a.BoolValue,
-								})
-							}
-							if err := txRepo.InsertVariantAttributeValues(ctx, v.ID, vAttrs); err != nil {
-								return err
-							}
-						}
-						break
-					}
+
+			// Step 6: Moderation log / status writes
+			if modLog != nil {
+				if err := txRepo.UpdateProductStatus(ctx, p); err != nil {
+					return err
+				}
+				if err := txRepo.AddModerationLog(ctx, modLog); err != nil {
+					return err
 				}
 			}
-			p.Variants = variants
+		} else {
+			// revision != nil (published product revision flow)
+			revQuery := `INSERT INTO product_revisions (id, product_id, status, content_snapshot, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`
+			_, err := tx.Exec(ctx, revQuery, revision.ID, revision.ProductID, revision.Status, revision.ContentSnapshot, revision.CreatedAt, revision.UpdatedAt)
+			if err != nil {
+				return fmt.Errorf("failed to insert revision: %w", err)
+			}
+
+			if modLog != nil {
+				// ContinueSelling=false -> hide it
+				updQuery := `UPDATE products SET live_revision_id = $1, status = $2, submitted_at = $3, updated_at = now() WHERE id = $4`
+				if _, err := tx.Exec(ctx, updQuery, revision.ID, StatusPendingModeration, p.SubmittedAt, p.ID); err != nil {
+					return fmt.Errorf("failed to link revision and update status: %w", err)
+				}
+			} else {
+				// ContinueSelling=true -> keep published
+				updQuery := `UPDATE products SET live_revision_id = $1, updated_at = now() WHERE id = $2`
+				if _, err := tx.Exec(ctx, updQuery, revision.ID, p.ID); err != nil {
+					return fmt.Errorf("failed to link revision to product: %w", err)
+				}
+			}
 		}
+
 		return nil
 	})
 

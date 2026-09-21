@@ -273,6 +273,27 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusConflict, "SELLER_MULTIPLE_PRIMARY_BRANDS", "Seller has multiple active primary brands configured")
 			return
 		}
+		if errors.Is(err, ErrInvalidMediaReference) {
+			h.writeError(w, http.StatusBadRequest, "invalid_media_reference", "Invalid media reference")
+			return
+		}
+		if errors.Is(err, ErrInvalidMediaSet) {
+			h.writeError(w, http.StatusBadRequest, "invalid_media_set", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidImageColor) {
+			h.writeError(w, http.StatusBadRequest, "invalid_image_color", err.Error())
+			return
+		}
+		if errors.Is(err, ErrStagedMediaNotReady) {
+			h.writeError(w, http.StatusConflict, "media_not_ready", "Staged media is still uploading or not ready")
+			return
+		}
+		if errors.Is(err, ErrMediaIntegrityViolation) {
+			log.Printf("[ERROR] Media integrity violation for product %s: %v", productID, err)
+			h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update product")
+			return
+		}
 		if isDomainValidationError(err) {
 			h.writeError(w, http.StatusUnprocessableEntity, "validation_error", err.Error())
 			return

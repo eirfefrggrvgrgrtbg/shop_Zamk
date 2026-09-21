@@ -36,6 +36,7 @@ var (
 	ErrStagedMediaNotReady      = errors.New("staged media is not ready")
 	ErrMediaIntegrityViolation  = errors.New("media integrity violation")
 	ErrInvalidMediaSet          = errors.New("invalid media set")
+	ErrInvalidImageColor        = errors.New("image color does not match any product variant color")
 )
 
 type ValidationError struct {
