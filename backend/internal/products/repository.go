@@ -1288,6 +1288,26 @@ func (r *Repository) GetPrimaryBrandForSeller(ctx context.Context, sellerID uuid
 	return &brandIDs[0], nil
 }
 
+func (r *Repository) IsBrandAllowedForSeller(ctx context.Context, sellerID uuid.UUID, brandID uuid.UUID) (bool, error) {
+	var exists bool
+	query := `
+		SELECT EXISTS (
+			SELECT 1
+			FROM seller_brands sb
+			JOIN brands b ON b.id = sb.brand_id
+			WHERE sb.seller_id = $1
+			  AND sb.brand_id = $2
+			  AND sb.status = 'active'
+			  AND b.is_active = true
+		)
+	`
+	err := r.db.QueryRow(ctx, query, sellerID, brandID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 func (r *Repository) UpdateVariantPrice(ctx context.Context, variantID uuid.UUID, priceCents int64) error {
 	query := `UPDATE product_variants SET price_cents = $1, updated_at = now() WHERE id = $2`
 	_, err := r.db.Exec(ctx, query, priceCents, variantID)

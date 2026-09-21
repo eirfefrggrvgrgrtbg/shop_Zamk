@@ -36,8 +36,8 @@ func setupBlockATestDB(t *testing.T) (*postgres.Client, *products.Service, uuid.
 	var dbName string
 	err = db.Pool.QueryRow(ctx, "SELECT current_database()").Scan(&dbName)
 	require.NoError(t, err)
-	if !strings.Contains(dbName, "zamk_test") {
-		t.Fatalf("Refusing to run tests against non-test database: %s", dbName)
+	if dbName != "zamk_test" {
+		t.Fatalf("Refusing to run tests against non-test database: expected zamk_test, got %s", dbName)
 	}
 
 	testutil.AssertTestDatabase(t, db.Pool)

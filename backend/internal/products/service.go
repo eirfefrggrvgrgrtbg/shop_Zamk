@@ -417,10 +417,19 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 	if req.CategoryID != nil {
 		p.CategoryID = req.CategoryID
 	}
-	primaryBrandID, err := s.repo.GetPrimaryBrandForSeller(ctx, seller.ID)
-	if err == nil {
-		p.BrandID = primaryBrandID
+
+	if req.BrandID != nil {
+		allowed, err := s.repo.IsBrandAllowedForSeller(ctx, seller.ID, *req.BrandID)
+		if err != nil {
+			return Product{}, err
+		}
+		if !allowed {
+			return Product{}, errors.New("brand not authorized for this seller")
+		}
+		p.BrandID = req.BrandID
 	}
+	// If req.BrandID == nil, p.BrandID is preserved from the existing product record.
+
 	if req.Gender != nil {
 		p.Gender = req.Gender
 	}
@@ -747,8 +756,23 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				CreatedAt:  now,
 			}
 		}
-	}
+	} else if p.Status == StatusPendingModeration || p.Status == StatusInReview {
+		now := time.Now()
+		oldStatus := p.Status
+		p.Status = StatusDraft
+		p.SubmittedAt = nil
+		p.AssignedAdminUserID = nil
+		p.ReviewStartedAt = nil
 
+		modLog = &ProductModerationLog{
+			ID:         uuid.New(),
+			ProductID:  p.ID,
+			FromStatus: &oldStatus,
+			ToStatus:   StatusDraft,
+			Comment:    func(s string) *string { return &s }("Автоматический возврат в черновик при редактировании"),
+			CreatedAt:  now,
+		}
+	}
 
 	if req.Attributes != nil {
 		var pAttrs []ProductAttributeValue
