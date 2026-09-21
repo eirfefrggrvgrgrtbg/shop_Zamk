@@ -56,6 +56,9 @@ type ProductMediaCleanupJob struct {
 	Attempts      int
 	NextAttemptAt time.Time
 	LastError     *string
+	Generation    int64
+	LeaseToken    *uuid.UUID
+	LeaseUntil    *time.Time
 }
 
 // CreateOrGetStagedMedia inserts an 'uploading' staged media row while enforcing that
@@ -391,13 +394,166 @@ func (r *Repository) GetStagedMediaForUpdateForSellerProduct(ctx context.Context
 
 func (r *Repository) EnqueueMediaCleanup(ctx context.Context, objectKey string) error {
 	query := `
-		INSERT INTO product_media_cleanup_jobs (object_key, next_attempt_at)
-		VALUES ($1, NOW())
-		ON CONFLICT (object_key) DO NOTHING
+		INSERT INTO product_media_cleanup_jobs (object_key, next_attempt_at, generation)
+		VALUES ($1, NOW(), 1)
+		ON CONFLICT (object_key) DO UPDATE SET
+			generation = product_media_cleanup_jobs.generation + 1,
+			next_attempt_at = NOW()
 	`
 	_, err := r.db.Exec(ctx, query, objectKey)
 	if err != nil {
 		return fmt.Errorf("failed to enqueue media cleanup: %w", err)
+	}
+	return nil
+}
+
+type CleanupFinalizeResult string
+
+const (
+	CleanupFinalizeDeleted CleanupFinalizeResult = "deleted"
+	CleanupFinalizeSkipped CleanupFinalizeResult = "skipped_generation_changed"
+	CleanupFinalizeLost    CleanupFinalizeResult = "lost_lease"
+)
+
+func (r *Repository) ClaimMediaCleanupJob(ctx context.Context, leaseDuration time.Duration) (*ProductMediaCleanupJob, error) {
+	query := `
+		UPDATE product_media_cleanup_jobs
+		SET
+			lease_token = gen_random_uuid(),
+			lease_until = NOW() + make_interval(secs := $1)
+		WHERE id = (
+			SELECT id
+			FROM product_media_cleanup_jobs
+			WHERE next_attempt_at <= NOW()
+			  AND (lease_until IS NULL OR lease_until < NOW())
+			ORDER BY next_attempt_at ASC
+			FOR UPDATE SKIP LOCKED
+			LIMIT 1
+		)
+		RETURNING id, object_key, created_at, attempts, next_attempt_at, last_error, generation, lease_token, lease_until
+	`
+	var job ProductMediaCleanupJob
+	err := r.db.QueryRow(ctx, query, leaseDuration.Seconds()).Scan(
+		&job.ID, &job.ObjectKey, &job.CreatedAt, &job.Attempts, &job.NextAttemptAt,
+		&job.LastError, &job.Generation, &job.LeaseToken, &job.LeaseUntil,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil // no jobs available
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to claim media cleanup job: %w", err)
+	}
+	return &job, nil
+}
+
+func (r *Repository) ExpireStaleStagedMedia(ctx context.Context, uploadingStale time.Duration, readyStale time.Duration, consumedStale time.Duration, limit int) (int, error) {
+	query := `
+		WITH stale_batch AS (
+			SELECT id, status, object_key
+			FROM product_media_staging
+			WHERE (status = 'uploading' AND created_at < NOW() - make_interval(secs := $1))
+			   OR (status = 'ready' AND created_at < NOW() - make_interval(secs := $2))
+			   OR (status = 'consumed' AND consumed_at < NOW() - make_interval(secs := $3))
+			FOR UPDATE SKIP LOCKED
+			LIMIT $4
+		),
+		deleted AS (
+			DELETE FROM product_media_staging
+			WHERE id IN (SELECT id FROM stale_batch)
+			RETURNING id, status, object_key
+		),
+		enqueue AS (
+			INSERT INTO product_media_cleanup_jobs (object_key, next_attempt_at, generation)
+			SELECT object_key, NOW(), 1
+			FROM deleted
+			WHERE status IN ('uploading', 'ready')
+			ON CONFLICT (object_key) DO UPDATE SET
+				generation = product_media_cleanup_jobs.generation + 1,
+				next_attempt_at = NOW()
+		)
+		SELECT count(*) FROM deleted;
+	`
+	var count int
+	err := r.db.QueryRow(ctx, query, uploadingStale.Seconds(), readyStale.Seconds(), consumedStale.Seconds(), limit).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to expire stale staged media: %w", err)
+	}
+	return count, nil
+}
+
+func (r *Repository) FinalizeMediaCleanupSuccess(ctx context.Context, id uuid.UUID, generation int64, leaseToken uuid.UUID) (CleanupFinalizeResult, error) {
+	query := `
+		WITH locked AS (
+			SELECT id, generation, lease_token
+			FROM product_media_cleanup_jobs
+			WHERE id = $1 FOR UPDATE
+		),
+		deleted AS (
+			DELETE FROM product_media_cleanup_jobs
+			WHERE id = $1
+			  AND (SELECT generation FROM locked) = $2
+			  AND (SELECT lease_token FROM locked) = $3
+			RETURNING id
+		),
+		updated AS (
+			UPDATE product_media_cleanup_jobs
+			SET lease_token = NULL, lease_until = NULL, next_attempt_at = LEAST(next_attempt_at, NOW())
+			WHERE id = $1
+			  AND (SELECT generation FROM locked) != $2
+			  AND (SELECT lease_token FROM locked) = $3
+			RETURNING id
+		)
+		SELECT
+			CASE
+				WHEN (SELECT id FROM locked) IS NULL THEN 'lost_lease'
+				WHEN (SELECT lease_token FROM locked) IS NULL OR (SELECT lease_token FROM locked) != $3 THEN 'lost_lease'
+				WHEN (SELECT id FROM deleted) IS NOT NULL THEN 'deleted'
+				WHEN (SELECT id FROM updated) IS NOT NULL THEN 'skipped_generation_changed'
+				ELSE 'lost_lease'
+			END
+	`
+	var res string
+	err := r.db.QueryRow(ctx, query, id, generation, leaseToken).Scan(&res)
+	if err != nil {
+		return "", fmt.Errorf("failed to finalize media cleanup success: %w", err)
+	}
+	return CleanupFinalizeResult(res), nil
+}
+
+func (r *Repository) FinalizeMediaCleanupFailure(ctx context.Context, id uuid.UUID, generation int64, leaseToken uuid.UUID, errMessage string, backoff time.Duration) error {
+	query := `
+		WITH locked AS (
+			SELECT id, generation, lease_token
+			FROM product_media_cleanup_jobs
+			WHERE id = $1 FOR UPDATE
+		),
+		updated_same_gen AS (
+			UPDATE product_media_cleanup_jobs
+			SET attempts = attempts + 1,
+			    last_error = $4,
+			    next_attempt_at = NOW() + make_interval(secs := $5),
+			    lease_token = NULL,
+			    lease_until = NULL
+			WHERE id = $1
+			  AND (SELECT generation FROM locked) = $2
+			  AND (SELECT lease_token FROM locked) = $3
+			RETURNING id
+		),
+		updated_diff_gen AS (
+			UPDATE product_media_cleanup_jobs
+			SET lease_token = NULL,
+			    lease_until = NULL,
+			    next_attempt_at = LEAST(next_attempt_at, NOW())
+			WHERE id = $1
+			  AND (SELECT generation FROM locked) != $2
+			  AND (SELECT lease_token FROM locked) = $3
+			RETURNING id
+		)
+		SELECT 1
+	`
+	_, err := r.db.Exec(ctx, query, id, generation, leaseToken, errMessage, backoff.Seconds())
+	if err != nil {
+		return fmt.Errorf("failed to finalize media cleanup failure: %w", err)
 	}
 	return nil
 }

@@ -562,4 +562,505 @@ func TestProductMediaStaging(t *testing.T) {
 		})
 		require.ErrorIs(t, err, products.ErrProductNotEditable)
 	})
+
+	t.Run("Queue Acceptance Matrix", func(t *testing.T) {
+		qPrefix := fmt.Sprintf("%s/queue-matrix-%s", cleanupKeyPrefix, uuid.New())
+		t.Cleanup(func() {
+			cleanupCtx := context.Background()
+			if _, err := db.Pool.Exec(cleanupCtx, "DELETE FROM product_media_cleanup_jobs WHERE object_key LIKE $1", qPrefix+"%"); err != nil {
+				t.Errorf("cleanup failed for queue acceptance jobs: %v", err)
+			}
+		})
+
+		// A. first enqueue: generation == 1
+		keyA := fmt.Sprintf("%s/key-a.jpg", qPrefix)
+		err := repo.EnqueueMediaCleanup(ctx, keyA)
+		require.NoError(t, err)
+
+		var jobAId uuid.UUID
+		var genA int64
+		var attA int
+		var nextA time.Time
+		var errA *string
+		err = db.Pool.QueryRow(ctx, "SELECT id, generation, attempts, next_attempt_at, last_error FROM product_media_cleanup_jobs WHERE object_key = $1", keyA).
+			Scan(&jobAId, &genA, &attA, &nextA, &errA)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), genA, "first enqueue must have generation 1")
+		require.Equal(t, 0, attA, "first enqueue must have attempts 0")
+		require.Nil(t, errA, "first enqueue must have nil last_error")
+		require.True(t, nextA.Before(time.Now().Add(5*time.Second)), "first enqueue must be promptly eligible")
+
+		// B. duplicate enqueue same object_key: same DB row, generation == 2, next_attempt_at becomes promptly eligible
+		err = repo.EnqueueMediaCleanup(ctx, keyA)
+		require.NoError(t, err)
+
+		var jobBId uuid.UUID
+		var genB int64
+		var nextB time.Time
+		err = db.Pool.QueryRow(ctx, "SELECT id, generation, next_attempt_at FROM product_media_cleanup_jobs WHERE object_key = $1", keyA).
+			Scan(&jobBId, &genB, &nextB)
+		require.NoError(t, err)
+		require.Equal(t, jobAId, jobBId, "duplicate enqueue must maintain same DB row")
+		require.Equal(t, int64(2), genB, "duplicate enqueue must increment generation")
+		require.True(t, nextB.Before(time.Now().Add(5*time.Second)), "next_attempt_at must become promptly eligible")
+
+		// C. claim: lease_token set, lease_until set, second worker cannot claim same live lease
+		keyC := fmt.Sprintf("%s/key-c.jpg", qPrefix)
+		err = repo.EnqueueMediaCleanup(ctx, keyC)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = NOW() - interval '10 minutes' WHERE object_key = $1", keyC)
+		require.NoError(t, err)
+
+		jobC, err := repo.ClaimMediaCleanupJob(ctx, 5*time.Minute)
+		require.NoError(t, err)
+		require.NotNil(t, jobC)
+		require.Equal(t, keyC, jobC.ObjectKey)
+		require.NotNil(t, jobC.LeaseToken)
+		require.NotNil(t, jobC.LeaseUntil)
+		require.True(t, jobC.LeaseUntil.After(time.Now()), "lease_until must be in the future")
+
+		// Second worker cannot claim the same live lease
+		jobC2, err := repo.ClaimMediaCleanupJob(ctx, 5*time.Minute)
+		require.NoError(t, err)
+		if jobC2 != nil {
+			require.NotEqual(t, jobC.ID, jobC2.ID, "second worker must not claim same live leased row")
+		}
+
+		// D. re-enqueue while generation 1 is leased: generation becomes 2, original lease may remain until old worker finalizes
+		err = repo.EnqueueMediaCleanup(ctx, keyC)
+		require.NoError(t, err)
+
+		var genC2 int64
+		var leaseTokenC *uuid.UUID
+		var leaseUntilC *time.Time
+		err = db.Pool.QueryRow(ctx, "SELECT generation, lease_token, lease_until FROM product_media_cleanup_jobs WHERE id = $1", jobC.ID).
+			Scan(&genC2, &leaseTokenC, &leaseUntilC)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), genC2, "re-enqueue during active lease must advance generation to 2")
+		require.NotNil(t, leaseTokenC)
+		require.Equal(t, *jobC.LeaseToken, *leaseTokenC, "original lease token must remain active")
+		require.NotNil(t, leaseUntilC)
+
+		// E. old worker success with claimed generation 1:
+		// MUST NOT delete generation 2, returns CleanupFinalizeSkipped, lease released, job promptly eligible again
+		resE, err := repo.FinalizeMediaCleanupSuccess(ctx, jobC.ID, 1, *jobC.LeaseToken)
+		require.NoError(t, err)
+		require.Equal(t, products.CleanupFinalizeSkipped, resE, "old worker success must be skipped due to advanced generation")
+
+		var countC int
+		var leaseTokenAfterE *uuid.UUID
+		var nextAfterE time.Time
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*), lease_token, next_attempt_at FROM product_media_cleanup_jobs WHERE id = $1 GROUP BY lease_token, next_attempt_at", jobC.ID).
+			Scan(&countC, &leaseTokenAfterE, &nextAfterE)
+		require.NoError(t, err)
+		require.Equal(t, 1, countC, "generation 2 row must survive")
+		require.Nil(t, leaseTokenAfterE, "lease must be released")
+		require.True(t, nextAfterE.Before(time.Now().Add(5*time.Second)), "job must be promptly eligible again")
+
+		// F. claim generation 2 + success: row deleted
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = NOW() - interval '10 minutes' WHERE id = $1", jobC.ID)
+		require.NoError(t, err)
+
+		jobCGen2, err := repo.ClaimMediaCleanupJob(ctx, 5*time.Minute)
+		require.NoError(t, err)
+		require.NotNil(t, jobCGen2)
+		require.Equal(t, jobC.ID, jobCGen2.ID)
+		require.Equal(t, int64(2), jobCGen2.Generation)
+
+		resF, err := repo.FinalizeMediaCleanupSuccess(ctx, jobCGen2.ID, 2, *jobCGen2.LeaseToken)
+		require.NoError(t, err)
+		require.Equal(t, products.CleanupFinalizeDeleted, resF)
+
+		var countAfterF int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_cleanup_jobs WHERE id = $1", jobC.ID).Scan(&countAfterF)
+		require.NoError(t, err)
+		require.Equal(t, 0, countAfterF, "row must be deleted after successful finalization of matching generation")
+
+		// G. WRONG lease token on success: must NOT delete row, must return lost-lease/not-owned result
+		keyG := fmt.Sprintf("%s/key-g.jpg", qPrefix)
+		err = repo.EnqueueMediaCleanup(ctx, keyG)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = NOW() - interval '10 minutes' WHERE object_key = $1", keyG)
+		require.NoError(t, err)
+
+		jobG, err := repo.ClaimMediaCleanupJob(ctx, 5*time.Minute)
+		require.NoError(t, err)
+		require.NotNil(t, jobG)
+
+		wrongToken := uuid.New()
+		resG, err := repo.FinalizeMediaCleanupSuccess(ctx, jobG.ID, jobG.Generation, wrongToken)
+		require.NoError(t, err)
+		require.Equal(t, products.CleanupFinalizeLost, resG, "must return lost_lease on wrong token")
+
+		var countG int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_cleanup_jobs WHERE id = $1", jobG.ID).Scan(&countG)
+		require.NoError(t, err)
+		require.Equal(t, 1, countG, "row must not be deleted on wrong lease token")
+
+		// H. WRONG lease token on failure: must NOT change attempts/backoff/lease owned by another worker
+		var origAttemptsG int
+		var origNextG time.Time
+		var origLeaseG *uuid.UUID
+		err = db.Pool.QueryRow(ctx, "SELECT attempts, next_attempt_at, lease_token FROM product_media_cleanup_jobs WHERE id = $1", jobG.ID).
+			Scan(&origAttemptsG, &origNextG, &origLeaseG)
+		require.NoError(t, err)
+
+		err = repo.FinalizeMediaCleanupFailure(ctx, jobG.ID, jobG.Generation, wrongToken, "fake failure", 1*time.Hour)
+		require.NoError(t, err)
+
+		var afterAttemptsG int
+		var afterNextG time.Time
+		var afterLeaseG *uuid.UUID
+		err = db.Pool.QueryRow(ctx, "SELECT attempts, next_attempt_at, lease_token FROM product_media_cleanup_jobs WHERE id = $1", jobG.ID).
+			Scan(&afterAttemptsG, &afterNextG, &afterLeaseG)
+		require.NoError(t, err)
+		require.Equal(t, origAttemptsG, afterAttemptsG, "attempts must not change on wrong lease token")
+		require.Equal(t, origNextG.Unix(), afterNextG.Unix(), "backoff must not change on wrong lease token")
+		require.Equal(t, *origLeaseG, *afterLeaseG, "lease token must remain unchanged on wrong lease token")
+
+		// I. failure with SAME generation: attempts += 1, last_error saved, next_attempt_at reflects requested retry, lease cleared
+		err = repo.FinalizeMediaCleanupFailure(ctx, jobG.ID, jobG.Generation, *jobG.LeaseToken, "real failure", 30*time.Minute)
+		require.NoError(t, err)
+
+		var attemptsI int
+		var lastErrI *string
+		var nextI time.Time
+		var leaseI *uuid.UUID
+		err = db.Pool.QueryRow(ctx, "SELECT attempts, last_error, next_attempt_at, lease_token FROM product_media_cleanup_jobs WHERE id = $1", jobG.ID).
+			Scan(&attemptsI, &lastErrI, &nextI, &leaseI)
+		require.NoError(t, err)
+		require.Equal(t, origAttemptsG+1, attemptsI, "attempts must increment")
+		require.NotNil(t, lastErrI)
+		require.Equal(t, "real failure", *lastErrI, "last error must be recorded")
+		require.True(t, nextI.After(time.Now().Add(25*time.Minute)), "next_attempt_at must reflect backoff")
+		require.Nil(t, leaseI, "lease must be cleared on failure")
+
+		// J. failure while generation advanced:
+		// newer generation remains, old failure MUST NOT apply old backoff to newer enqueue, lease released, job promptly eligible
+		keyJ := fmt.Sprintf("%s/key-j.jpg", qPrefix)
+		err = repo.EnqueueMediaCleanup(ctx, keyJ)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = NOW() - interval '10 minutes' WHERE object_key = $1", keyJ)
+		require.NoError(t, err)
+
+		jobJ, err := repo.ClaimMediaCleanupJob(ctx, 5*time.Minute)
+		require.NoError(t, err)
+		require.NotNil(t, jobJ)
+		require.Equal(t, int64(1), jobJ.Generation)
+
+		// advance generation
+		err = repo.EnqueueMediaCleanup(ctx, keyJ)
+		require.NoError(t, err)
+
+		// old worker reports failure with gen 1 and large backoff (e.g. 24 hours)
+		err = repo.FinalizeMediaCleanupFailure(ctx, jobJ.ID, 1, *jobJ.LeaseToken, "old failure to discard", 24*time.Hour)
+		require.NoError(t, err)
+
+		var genJ int64
+		var attemptsJ int
+		var lastErrJ *string
+		var nextJ time.Time
+		var leaseJ *uuid.UUID
+		err = db.Pool.QueryRow(ctx, "SELECT generation, attempts, last_error, next_attempt_at, lease_token FROM product_media_cleanup_jobs WHERE id = $1", jobJ.ID).
+			Scan(&genJ, &attemptsJ, &lastErrJ, &nextJ, &leaseJ)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), genJ, "newer generation remains")
+		require.Equal(t, 0, attemptsJ, "attempts must not increment from old generation failure")
+		require.Nil(t, lastErrJ, "old failure error must not overwrite newer enqueue")
+		require.True(t, nextJ.Before(time.Now().Add(5*time.Second)), "old backoff must not apply; job must be promptly eligible")
+		require.Nil(t, leaseJ, "lease must be released")
+	})
+
+	t.Run("Real Re-Enqueue Concurrency Test", func(t *testing.T) {
+		concurPrefix := fmt.Sprintf("%s/concur-%s", cleanupKeyPrefix, uuid.New())
+		t.Cleanup(func() {
+			cleanupCtx := context.Background()
+			if _, err := db.Pool.Exec(cleanupCtx, "DELETE FROM product_media_cleanup_jobs WHERE object_key LIKE $1", concurPrefix+"%"); err != nil {
+				t.Errorf("cleanup failed for concurrency test jobs: %v", err)
+			}
+		})
+
+		concurKey := fmt.Sprintf("%s/concur-test.jpg", concurPrefix)
+		err := repo.EnqueueMediaCleanup(ctx, concurKey)
+		require.NoError(t, err)
+
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = NOW() - interval '10 minutes' WHERE object_key = $1", concurKey)
+		require.NoError(t, err)
+
+		job, err := repo.ClaimMediaCleanupJob(ctx, 1*time.Minute)
+		require.NoError(t, err)
+		require.NotNil(t, job)
+		require.Equal(t, concurKey, job.ObjectKey)
+		require.Equal(t, int64(1), job.Generation)
+
+		// Concurrent re-enqueue while lease is active
+		enqueueStarted := make(chan struct{})
+		enqueueDone := make(chan struct{})
+		var enqueueErr error
+
+		go func() {
+			close(enqueueStarted)
+			enqueueErr = repo.EnqueueMediaCleanup(ctx, concurKey)
+			close(enqueueDone)
+		}()
+
+		<-enqueueStarted
+		<-enqueueDone
+		require.NoError(t, enqueueErr)
+
+		// Old worker finalizes success with claimed generation 1
+		res, err := repo.FinalizeMediaCleanupSuccess(ctx, job.ID, 1, *job.LeaseToken)
+		require.NoError(t, err)
+		require.Equal(t, products.CleanupFinalizeSkipped, res, "old worker success must skip deletion")
+
+		// Verify row survives with generation 2, lease cleared, promptly eligible
+		var gen int64
+		var leaseToken *uuid.UUID
+		var nextAttempt time.Time
+		err = db.Pool.QueryRow(ctx, "SELECT generation, lease_token, next_attempt_at FROM product_media_cleanup_jobs WHERE id = $1", job.ID).
+			Scan(&gen, &leaseToken, &nextAttempt)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), gen, "row must survive with generation 2")
+		require.Nil(t, leaseToken, "lease must be released")
+		require.True(t, nextAttempt.Before(time.Now().Add(5*time.Second)), "job must be promptly eligible")
+
+		// Job becomes claimable again
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = NOW() - interval '10 minutes' WHERE id = $1", job.ID)
+		require.NoError(t, err)
+
+		jobClaimedAgain, err := repo.ClaimMediaCleanupJob(ctx, 1*time.Minute)
+		require.NoError(t, err)
+		require.NotNil(t, jobClaimedAgain)
+		require.Equal(t, job.ID, jobClaimedAgain.ID)
+		require.Equal(t, int64(2), jobClaimedAgain.Generation)
+
+		// Now finalize gen 2 succeeds and deletes
+		res2, err := repo.FinalizeMediaCleanupSuccess(ctx, jobClaimedAgain.ID, 2, *jobClaimedAgain.LeaseToken)
+		require.NoError(t, err)
+		require.Equal(t, products.CleanupFinalizeDeleted, res2)
+	})
+
+	t.Run("TTL Acceptance Matrix", func(t *testing.T) {
+		ttlPrefix := fmt.Sprintf("%s/ttl-matrix-%s", cleanupKeyPrefix, uuid.New())
+		sha64 := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+		t.Cleanup(func() {
+			cleanupCtx := context.Background()
+			if _, err := db.Pool.Exec(cleanupCtx, "DELETE FROM product_images WHERE object_key LIKE $1", ttlPrefix+"%"); err != nil {
+				t.Errorf("cleanup failed for test product_images: %v", err)
+			}
+			if _, err := db.Pool.Exec(cleanupCtx, "DELETE FROM product_media_staging WHERE object_key LIKE $1", ttlPrefix+"%"); err != nil {
+				t.Errorf("cleanup failed for test product_media_staging: %v", err)
+			}
+			if _, err := db.Pool.Exec(cleanupCtx, "DELETE FROM product_media_cleanup_jobs WHERE object_key LIKE $1", ttlPrefix+"%"); err != nil {
+				t.Errorf("cleanup failed for test product_media_cleanup_jobs: %v", err)
+			}
+		})
+
+		insertStaging := func(status products.ProductMediaStagingStatus, key string, createdAt time.Time, consumedAt *time.Time) uuid.UUID {
+			rowID := uuid.New()
+			q := `INSERT INTO product_media_staging (
+				id, seller_id, product_id, client_media_id, status,
+				object_key, content_sha256, byte_size, width, height,
+				image_url, created_at, consumed_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, 1024, 800, 600, 'http://test.jpg', $8, $9)`
+			_, err := db.Pool.Exec(ctx, q, rowID, sellerID, productID, uuid.New(), status, key, sha64, createdAt, consumedAt)
+			require.NoError(t, err)
+			return rowID
+		}
+
+		// A. stale uploading (>1h): row removed, cleanup job created
+		keyA := fmt.Sprintf("%s/stale-uploading.jpg", ttlPrefix)
+		idA := insertStaging(products.ProductMediaStagingUploading, keyA, time.Now().Add(-2*time.Hour), nil)
+
+		// B. fresh uploading (<1h): row untouched, NO cleanup job
+		keyB := fmt.Sprintf("%s/fresh-uploading.jpg", ttlPrefix)
+		idB := insertStaging(products.ProductMediaStagingUploading, keyB, time.Now().Add(-10*time.Minute), nil)
+
+		// C. stale ready (>24h): row removed, cleanup job created
+		keyC := fmt.Sprintf("%s/stale-ready.jpg", ttlPrefix)
+		idC := insertStaging(products.ProductMediaStagingReady, keyC, time.Now().Add(-25*time.Hour), nil)
+
+		// D. fresh ready (<24h): row untouched, NO cleanup job
+		keyD := fmt.Sprintf("%s/fresh-ready.jpg", ttlPrefix)
+		idD := insertStaging(products.ProductMediaStagingReady, keyD, time.Now().Add(-2*time.Hour), nil)
+
+		// E. stale consumed (>24h from consumed_at): staging metadata removed, NO cleanup job
+		keyE := fmt.Sprintf("%s/stale-consumed.jpg", ttlPrefix)
+		tConsumedE := time.Now().Add(-25 * time.Hour)
+		idE := insertStaging(products.ProductMediaStagingConsumed, keyE, time.Now().Add(-30*time.Hour), &tConsumedE)
+
+		// F. fresh consumed: untouched
+		keyF := fmt.Sprintf("%s/fresh-consumed.jpg", ttlPrefix)
+		tConsumedF := time.Now().Add(-1 * time.Hour)
+		idF := insertStaging(products.ProductMediaStagingConsumed, keyF, time.Now().Add(-10*time.Hour), &tConsumedF)
+
+		// G. consumed canonical safety:
+		// create canonical product_images row using the same object_key as consumed
+		// staging metadata may expire, but NO cleanup job may be created for that key
+		// canonical Product image remains intact
+		keyG := fmt.Sprintf("%s/consumed-canon.jpg", ttlPrefix)
+		tConsumedG := time.Now().Add(-25 * time.Hour)
+		idG := insertStaging(products.ProductMediaStagingConsumed, keyG, time.Now().Add(-30*time.Hour), &tConsumedG)
+		canonImgID := uuid.New()
+		_, err := db.Pool.Exec(ctx, `INSERT INTO product_images (id, product_id, image_url, object_key, sort_order, is_main)
+			VALUES ($1, $2, 'http://test-canon.jpg', $3, 0, false)`, canonImgID, productID, keyG)
+		require.NoError(t, err)
+
+		// H. TTL encounters object_key already present in cleanup queue: still one queue row, generation increments
+		keyH := fmt.Sprintf("%s/already-queued.jpg", ttlPrefix)
+		err = repo.EnqueueMediaCleanup(ctx, keyH)
+		require.NoError(t, err)
+		var genHBefore int64
+		err = db.Pool.QueryRow(ctx, "SELECT generation FROM product_media_cleanup_jobs WHERE object_key = $1", keyH).Scan(&genHBefore)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), genHBefore)
+		idH := insertStaging(products.ProductMediaStagingReady, keyH, time.Now().Add(-25*time.Hour), nil)
+
+		// Run TTL expiration batch
+		expiredCount, err := repo.ExpireStaleStagedMedia(ctx, 1*time.Hour, 24*time.Hour, 24*time.Hour, 50)
+		require.NoError(t, err)
+		// Expected expired: A (stale uploading), C (stale ready), E (stale consumed), G (stale consumed), H (stale ready) = 5 rows
+		require.Equal(t, 5, expiredCount)
+
+		// Assertions for A: removed from staging, present in cleanup jobs
+		var countStagingA int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_staging WHERE id = $1", idA).Scan(&countStagingA)
+		require.NoError(t, err)
+		require.Equal(t, 0, countStagingA, "stale uploading must be removed from staging")
+		var countJobA int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_cleanup_jobs WHERE object_key = $1", keyA).Scan(&countJobA)
+		require.NoError(t, err)
+		require.Equal(t, 1, countJobA, "stale uploading must have cleanup job created")
+
+		// Assertions for B: fresh uploading untouched in staging, NO cleanup job
+		var countStagingB int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_staging WHERE id = $1", idB).Scan(&countStagingB)
+		require.NoError(t, err)
+		require.Equal(t, 1, countStagingB, "fresh uploading must remain in staging")
+		var countJobB int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_cleanup_jobs WHERE object_key = $1", keyB).Scan(&countJobB)
+		require.NoError(t, err)
+		require.Equal(t, 0, countJobB, "fresh uploading must not have cleanup job")
+
+		// Assertions for C: stale ready removed from staging, cleanup job created
+		var countStagingC int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_staging WHERE id = $1", idC).Scan(&countStagingC)
+		require.NoError(t, err)
+		require.Equal(t, 0, countStagingC, "stale ready must be removed from staging")
+		var countJobC int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_cleanup_jobs WHERE object_key = $1", keyC).Scan(&countJobC)
+		require.NoError(t, err)
+		require.Equal(t, 1, countJobC, "stale ready must have cleanup job created")
+
+		// Assertions for D: fresh ready untouched in staging, NO cleanup job
+		var countStagingD int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_staging WHERE id = $1", idD).Scan(&countStagingD)
+		require.NoError(t, err)
+		require.Equal(t, 1, countStagingD, "fresh ready must remain in staging")
+		var countJobD int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_cleanup_jobs WHERE object_key = $1", keyD).Scan(&countJobD)
+		require.NoError(t, err)
+		require.Equal(t, 0, countJobD, "fresh ready must not have cleanup job")
+
+		// Assertions for E: stale consumed removed from staging, NO cleanup job
+		var countStagingE int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_staging WHERE id = $1", idE).Scan(&countStagingE)
+		require.NoError(t, err)
+		require.Equal(t, 0, countStagingE, "stale consumed must be removed from staging")
+		var countJobE int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_cleanup_jobs WHERE object_key = $1", keyE).Scan(&countJobE)
+		require.NoError(t, err)
+		require.Equal(t, 0, countJobE, "stale consumed must NOT create cleanup job")
+
+		// Assertions for F: fresh consumed untouched
+		var countStagingF int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_staging WHERE id = $1", idF).Scan(&countStagingF)
+		require.NoError(t, err)
+		require.Equal(t, 1, countStagingF, "fresh consumed must remain in staging")
+
+		// Assertions for G: consumed canonical safety
+		var countStagingG int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_staging WHERE id = $1", idG).Scan(&countStagingG)
+		require.NoError(t, err)
+		require.Equal(t, 0, countStagingG, "consumed staging metadata must expire")
+		var countJobG int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_cleanup_jobs WHERE object_key = $1", keyG).Scan(&countJobG)
+		require.NoError(t, err)
+		require.Equal(t, 0, countJobG, "NO cleanup job must be created for consumed key shared with canonical image")
+		var countCanonG int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_images WHERE id = $1", canonImgID).Scan(&countCanonG)
+		require.NoError(t, err)
+		require.Equal(t, 1, countCanonG, "canonical product image must remain intact")
+
+		// Assertions for H: TTL encounters existing cleanup job: still one queue row, generation increments
+		var countJobH int
+		var genHAfter int64
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*), generation FROM product_media_cleanup_jobs WHERE object_key = $1 GROUP BY generation", keyH).
+			Scan(&countJobH, &genHAfter)
+		require.NoError(t, err)
+		require.Equal(t, 1, countJobH, "still exactly one cleanup job row")
+		require.Equal(t, int64(2), genHAfter, "generation must increment to 2")
+		var countStagingH int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_staging WHERE id = $1", idH).Scan(&countStagingH)
+		require.NoError(t, err)
+		require.Equal(t, 0, countStagingH, "staging row must be deleted")
+
+		// I. concurrent TTL processors:
+		// same stale staging row is processed once, not double-deleted, queue intent is not duplicated/lost.
+		// Uses FOR UPDATE SKIP LOCKED path.
+		numConcurrentRows := 6
+		concurTTLKeys := make([]string, numConcurrentRows)
+		concurTTLRowIDs := make([]uuid.UUID, numConcurrentRows)
+		for i := 0; i < numConcurrentRows; i++ {
+			concurTTLKeys[i] = fmt.Sprintf("%s/concur-ttl-%d.jpg", ttlPrefix, i)
+			concurTTLRowIDs[i] = insertStaging(products.ProductMediaStagingUploading, concurTTLKeys[i], time.Now().Add(-2*time.Hour), nil)
+		}
+
+		numWorkers := 3
+		results := make(chan int, numWorkers)
+		errs := make(chan error, numWorkers)
+
+		for w := 0; w < numWorkers; w++ {
+			go func() {
+				c, e := repo.ExpireStaleStagedMedia(ctx, 1*time.Hour, 24*time.Hour, 24*time.Hour, 10)
+				if e != nil {
+					errs <- e
+					return
+				}
+				results <- c
+			}()
+		}
+
+		totalExpired := 0
+		for w := 0; w < numWorkers; w++ {
+			select {
+			case e := <-errs:
+				require.NoError(t, e)
+			case c := <-results:
+				totalExpired += c
+			}
+		}
+
+		require.Equal(t, numConcurrentRows, totalExpired, "concurrent TTL workers must process all rows exactly once without double-deletion")
+
+		// Verify all staging rows gone
+		for _, rid := range concurTTLRowIDs {
+			var cnt int
+			err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_staging WHERE id = $1", rid).Scan(&cnt)
+			require.NoError(t, err)
+			require.Equal(t, 0, cnt, "staged row must be deleted")
+		}
+
+		// Verify cleanup jobs created once per distinct object key
+		for _, k := range concurTTLKeys {
+			var cnt int
+			var g int64
+			err = db.Pool.QueryRow(ctx, "SELECT COUNT(*), generation FROM product_media_cleanup_jobs WHERE object_key = $1 GROUP BY generation", k).
+				Scan(&cnt, &g)
+			require.NoError(t, err)
+			require.Equal(t, 1, cnt, "cleanup job must exist exactly once")
+			require.Equal(t, int64(1), g, "generation must be 1")
+		}
+	})
 }
