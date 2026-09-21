@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
@@ -482,5 +483,83 @@ func TestProductMediaStaging(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, products.ProductMediaStagingConsumed, final.Status)
 		require.NotNil(t, final.ConsumedAt)
+	})
+
+	t.Run("12. ClaimStagedMediaSlotForSellerProduct transactional behavior", func(t *testing.T) {
+		clientMediaID := uuid.New()
+		sm := &products.ProductMediaStaging{
+			SellerID:      sellerID,
+			ProductID:     productID,
+			ClientMediaID: clientMediaID,
+			ObjectKey:     "claim_test.jpg",
+			ImageURL:      "http://claim_test.jpg",
+			ContentSHA256: strings.Repeat("f", 64),
+			ByteSize:      2048,
+			Width:         800,
+			Height:        1000,
+		}
+
+		// A. Valid claim in tx
+		err := db.RunInTx(ctx, func(tx pgx.Tx) error {
+			txRepo := repo.WithTx(tx)
+			res, err := txRepo.ClaimStagedMediaSlotForSellerProduct(ctx, sm, "active")
+			if err != nil {
+				return err
+			}
+			require.Equal(t, products.ProductMediaStagingUploading, res.Status)
+			require.Equal(t, clientMediaID, res.ClientMediaID)
+			return nil
+		})
+		require.NoError(t, err)
+
+		// B. Idempotent retry with same SHA in tx returns existing row
+		err = db.RunInTx(ctx, func(tx pgx.Tx) error {
+			txRepo := repo.WithTx(tx)
+			res, err := txRepo.ClaimStagedMediaSlotForSellerProduct(ctx, sm, "active")
+			if err != nil {
+				return err
+			}
+			require.Equal(t, products.ProductMediaStagingUploading, res.Status)
+			return nil
+		})
+		require.NoError(t, err)
+
+		// C. Retry with different SHA returns ErrStagedMediaConflict
+		smConflict := *sm
+		smConflict.ContentSHA256 = strings.Repeat("0", 64)
+		err = db.RunInTx(ctx, func(tx pgx.Tx) error {
+			txRepo := repo.WithTx(tx)
+			_, err := txRepo.ClaimStagedMediaSlotForSellerProduct(ctx, &smConflict, "active")
+			return err
+		})
+		require.ErrorIs(t, err, products.ErrStagedMediaConflict)
+
+		// D. Nonexistent product returns ErrProductNotFound
+		smNonexistent := *sm
+		smNonexistent.ProductID = uuid.New()
+		err = db.RunInTx(ctx, func(tx pgx.Tx) error {
+			txRepo := repo.WithTx(tx)
+			_, err := txRepo.ClaimStagedMediaSlotForSellerProduct(ctx, &smNonexistent, "active")
+			return err
+		})
+		require.ErrorIs(t, err, products.ErrProductNotFound)
+
+		// E. Foreign product returns ErrProductNotFound (no info leak)
+		smForeign := *sm
+		smForeign.ProductID = productIDOtherSeller
+		err = db.RunInTx(ctx, func(tx pgx.Tx) error {
+			txRepo := repo.WithTx(tx)
+			_, err := txRepo.ClaimStagedMediaSlotForSellerProduct(ctx, &smForeign, "active")
+			return err
+		})
+		require.ErrorIs(t, err, products.ErrProductNotFound)
+
+		// F. Blocked seller status returns ErrProductNotEditable
+		err = db.RunInTx(ctx, func(tx pgx.Tx) error {
+			txRepo := repo.WithTx(tx)
+			_, err := txRepo.ClaimStagedMediaSlotForSellerProduct(ctx, sm, "blocked")
+			return err
+		})
+		require.ErrorIs(t, err, products.ErrProductNotEditable)
 	})
 }

@@ -1,6 +1,10 @@
 package storage
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
+)
 
 var (
 	ErrInvalidMimeType  = errors.New("invalid mime type")
@@ -14,4 +18,6 @@ var (
 	ErrProductMediaTooSmall         = errors.New("Изображение слишком маленькое. Минимальный размер — 800×1000 пикселей.")
 	ErrInvalidCropParameters        = errors.New("invalid crop parameters")
 	ErrInvalidCropAspect            = errors.New("crop aspect ratio must be 4:5")
+	ErrStagedMediaConflict          = products.ErrStagedMediaConflict
+	ErrStagedMediaQuotaExceeded     = products.ErrStagedMediaQuotaExceeded
 )

@@ -3,6 +3,9 @@ package storage
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -13,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	_ "golang.org/x/image/webp"
+
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
@@ -20,6 +25,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
+
+type StageProductImageResponse struct {
+	StagedMediaID uuid.UUID `json:"stagedMediaId"`
+	ClientMediaID uuid.UUID `json:"clientMediaId"`
+	ImageURL      string    `json:"imageUrl"`
+	Status        string    `json:"status"`
+}
 
 type Service struct {
 	provider     Provider
@@ -177,6 +189,200 @@ func (s *Service) UploadSellerProductImage(ctx context.Context, userID, productI
 		SortOrder: opts.SortOrder,
 		IsMain:    opts.IsMain || prod.MainImageURL == nil,
 	}, nil
+}
+
+type validatedImageInfo struct {
+	fileBytes     []byte
+	size          int64
+	width         int
+	height        int
+	contentSHA256 string
+	canonicalExt  string
+	mimeType      string
+}
+
+func validateAndExtractImage(reader io.Reader, filename string, size int64, contentType string, maxSizeMB int64) (*validatedImageInfo, error) {
+	if ext := filepath.Ext(filename); ext != "" {
+		if err := validateImage(contentType, ext, size, maxSizeMB); err != nil {
+			return nil, err
+		}
+	} else if size > maxSizeMB*1024*1024 {
+		return nil, ErrFileTooLarge
+	}
+
+	buf := new(bytes.Buffer)
+	if _, err := buf.ReadFrom(reader); err != nil {
+		return nil, fmt.Errorf("failed to read image: %w", err)
+	}
+	fileBytes := buf.Bytes()
+	actualSize := int64(len(fileBytes))
+	if actualSize > maxSizeMB*1024*1024 {
+		return nil, ErrFileTooLarge
+	}
+
+	// Canonical image format must be derived strictly from uploaded bytes
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(fileBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image dimensions: %w", err)
+	}
+
+	var canonicalMIME, canonicalExt string
+	switch format {
+	case "jpeg":
+		canonicalMIME = "image/jpeg"
+		canonicalExt = ".jpg"
+	case "png":
+		canonicalMIME = "image/png"
+		canonicalExt = ".png"
+	case "webp":
+		canonicalMIME = "image/webp"
+		canonicalExt = ".webp"
+	default:
+		return nil, ErrInvalidMimeType
+	}
+
+	w := cfg.Width
+	h := cfg.Height
+
+	if w >= h {
+		return nil, ErrProductMediaPortraitRequired
+	}
+
+	const minWidth = 800
+	const minHeight = 1000
+	if w < minWidth || h < minHeight {
+		return nil, ErrProductMediaTooSmall
+	}
+
+	sha := sha256.Sum256(fileBytes)
+	contentSHA256 := hex.EncodeToString(sha[:])
+
+	return &validatedImageInfo{
+		fileBytes:     fileBytes,
+		size:          actualSize,
+		width:         w,
+		height:        h,
+		contentSHA256: contentSHA256,
+		canonicalExt:  canonicalExt,
+		mimeType:      canonicalMIME,
+	}, nil
+}
+
+func (s *Service) StageSellerProductImage(
+	ctx context.Context,
+	userID, productID, clientMediaID uuid.UUID,
+	reader io.Reader,
+	filename string,
+	size int64,
+	contentType string,
+	maxSizeMB int64,
+) (*StageProductImageResponse, error) {
+	// 1. Authenticate & resolve seller
+	seller, _, err := s.sellersRepo.GetSellerByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get seller profile: %w", err)
+	}
+
+	// 2. Validate product ownership and existence using owner-scoped lookup
+	// Both nonexistent and foreign products return ErrProductNotFound, preventing information leak.
+	prod, err := s.productsRepo.GetProductByIDForSeller(ctx, productID, seller.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Validate product editability
+	if !products.CanEditProduct(seller.Status, prod.Status) {
+		return nil, products.ErrProductNotEditable
+	}
+
+	// 4. Validate image bytes and extract metadata strictly from actual bytes
+	info, err := validateAndExtractImage(reader, filename, size, contentType, maxSizeMB)
+	if err != nil {
+		return nil, err
+	}
+
+	// 5. Candidate stagedMediaID, immutable object key + public URL
+	candidateStagedMediaID := uuid.New()
+	objectKey := fmt.Sprintf("products/%s/%s/staged/%s%s", seller.ID.String(), productID.String(), candidateStagedMediaID.String(), info.canonicalExt)
+	imageURL := s.provider.BuildPublicURL(objectKey)
+
+	// 6. Atomically claim staged media slot under short Product row lock (COMMIT happens before S3 upload)
+	stagingItem := &products.ProductMediaStaging{
+		ID:            candidateStagedMediaID,
+		SellerID:      seller.ID,
+		ProductID:     productID,
+		ClientMediaID: clientMediaID,
+		Status:        products.ProductMediaStagingUploading,
+		ObjectKey:     objectKey,
+		ImageURL:      imageURL,
+		ContentSHA256: info.contentSHA256,
+		ByteSize:      info.size,
+		Width:         info.width,
+		Height:        info.height,
+	}
+
+	var staged *products.ProductMediaStaging
+	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.productsRepo.WithTx(tx)
+		var claimErr error
+		staged, claimErr = txRepo.ClaimStagedMediaSlotForSellerProduct(ctx, stagingItem, seller.Status)
+		return claimErr
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 7. Resolve lifecycle state (S3 upload occurs OUTSIDE DB transaction)
+	switch staged.Status {
+	case products.ProductMediaStagingReady:
+		// Case B: Same content, already ready -> do not upload again
+		return &StageProductImageResponse{
+			StagedMediaID: staged.ID,
+			ClientMediaID: staged.ClientMediaID,
+			ImageURL:      staged.ImageURL,
+			Status:        string(staged.Status),
+		}, nil
+
+	case products.ProductMediaStagingConsumed:
+		// Case E: Already consumed by canonical media -> do not upload again
+		return &StageProductImageResponse{
+			StagedMediaID: staged.ID,
+			ClientMediaID: staged.ClientMediaID,
+			ImageURL:      staged.ImageURL,
+			Status:        string(staged.Status),
+		}, nil
+
+	case products.ProductMediaStagingUploading:
+		// Case A (new) or Case C (retry)
+		// 8. Upload to object storage using canonical byte-derived MIME type (outside DB transaction)
+		_, err = s.provider.UploadImage(ctx, bytes.NewReader(info.fileBytes), staged.ByteSize, staged.ObjectKey, info.mimeType)
+		if err != nil {
+			return nil, fmt.Errorf("failed to upload staged image: %w", err)
+		}
+
+		// 9. Mark ready using ownership-scoped mutation
+		if err = s.productsRepo.MarkStagedMediaReadyForSellerProduct(ctx, staged.ID, seller.ID, productID); err != nil {
+			if errors.Is(err, products.ErrStagedMediaNotFound) {
+				// Definite missing row: durably enqueue cleanup so newly uploaded S3 object is never untracked
+				if enqueueErr := s.productsRepo.EnqueueMediaCleanup(ctx, staged.ObjectKey); enqueueErr != nil {
+					return nil, fmt.Errorf("staged media row missing and failed to enqueue cleanup (%v): %w", enqueueErr, err)
+				}
+				return nil, fmt.Errorf("staged media row missing after upload (cleanup enqueued): %w", err)
+			}
+			return nil, fmt.Errorf("failed to mark staged media ready: %w", err)
+		}
+
+		// 10. Return success
+		return &StageProductImageResponse{
+			StagedMediaID: staged.ID,
+			ClientMediaID: staged.ClientMediaID,
+			ImageURL:      staged.ImageURL,
+			Status:        string(products.ProductMediaStagingReady),
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown staged media status: %s", staged.Status)
+	}
 }
 
 func (s *Service) UploadAdminBrandLogo(ctx context.Context, brandID uuid.UUID, reader io.Reader, filename string, size int64, contentType string, maxSizeMB int64) (*BrandLogoResponse, error) {

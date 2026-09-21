@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -114,6 +116,113 @@ func (h *Handler) UploadSellerProductImage(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "upload failed")
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) StageSellerProductImage(w http.ResponseWriter, r *http.Request) {
+	productIDStr := chi.URLParam(r, "id")
+	if productIDStr == "" {
+		productIDStr = chi.URLParam(r, "productId")
+	}
+	productID, err := uuid.Parse(productIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_product_id", "invalid product id")
+		return
+	}
+
+	sellerIDRaw := r.Context().Value("userID")
+	userID, ok := sellerIDRaw.(uuid.UUID)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "user id not found in context")
+		return
+	}
+
+	maxMemory := int64(h.cfg.UploadMaxSizeMB) * 1024 * 1024
+	if err := r.ParseMultipartForm(maxMemory); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "invalid multipart form: "+err.Error())
+		return
+	}
+
+	clientMediaIDStr := r.FormValue("clientMediaId")
+	if clientMediaIDStr == "" {
+		h.writeError(w, http.StatusBadRequest, "invalid_client_media_id", "clientMediaId is required")
+		return
+	}
+	clientMediaID, err := uuid.Parse(clientMediaIDStr)
+	if err != nil || clientMediaID == uuid.Nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_client_media_id", "clientMediaId must be a valid UUID")
+		return
+	}
+
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "image file is required")
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+
+	resp, err := h.service.StageSellerProductImage(
+		r.Context(),
+		userID,
+		productID,
+		clientMediaID,
+		file,
+		header.Filename,
+		header.Size,
+		contentType,
+		int64(h.cfg.UploadMaxSizeMB),
+	)
+	if err != nil {
+		if errors.Is(err, products.ErrProductNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Product not found")
+			return
+		}
+		if errors.Is(err, ErrProductNotOwned) || errors.Is(err, products.ErrUnauthorized) {
+			h.writeError(w, http.StatusForbidden, "forbidden", "Product does not belong to seller")
+			return
+		}
+		if errors.Is(err, products.ErrProductNotEditable) || errors.Is(err, ErrProductNotDraft) {
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
+			return
+		}
+		if errors.Is(err, sellers.ErrSellerNotFound) || errors.Is(err, products.ErrSellerNotFound) {
+			h.writeError(w, http.StatusForbidden, "forbidden", "seller profile not found")
+			return
+		}
+		if errors.Is(err, ErrStagedMediaConflict) || errors.Is(err, products.ErrStagedMediaConflict) {
+			h.writeError(w, http.StatusConflict, "staged_media_conflict", err.Error())
+			return
+		}
+		if errors.Is(err, ErrStagedMediaQuotaExceeded) || errors.Is(err, products.ErrStagedMediaQuotaExceeded) {
+			h.writeError(w, http.StatusBadRequest, "staged_media_quota_exceeded", err.Error())
+			return
+		}
+		if errors.Is(err, ErrProductMediaPortraitRequired) {
+			h.writeError(w, http.StatusBadRequest, "product_media_portrait_required", err.Error())
+			return
+		}
+		if errors.Is(err, ErrProductMediaTooSmall) {
+			h.writeError(w, http.StatusBadRequest, "product_media_too_small", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidMimeType) || errors.Is(err, ErrInvalidExtension) {
+			h.writeError(w, http.StatusBadRequest, "invalid_file_type", err.Error())
+			return
+		}
+		if errors.Is(err, ErrFileTooLarge) {
+			h.writeError(w, http.StatusBadRequest, "file_too_large", err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "failed to decode image") {
+			h.writeError(w, http.StatusBadRequest, "invalid_image_data", "failed to decode image dimensions")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "stage upload failed")
 		return
 	}
 
