@@ -133,8 +133,24 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prod, err := h.service.CreateProductForSeller(r.Context(), userID, req)
+	idempStr := r.Header.Get("Idempotency-Key")
+	var opts []CreateProductOptions
+	if idempStr != "" {
+		id, err := uuid.Parse(idempStr)
+		if err == nil {
+			opts = append(opts, CreateProductOptions{IdempotencyKey: &id})
+		} else {
+			h.writeError(w, http.StatusBadRequest, "invalid_idempotency_key", "Idempotency-Key must be a valid UUID")
+			return
+		}
+	}
+
+	prod, err := h.service.CreateProductForSeller(r.Context(), userID, req, opts...)
 	if err != nil {
+				if errors.Is(err, ErrIdempotencyKeyConflict) {
+			h.writeError(w, http.StatusConflict, "idempotency_conflict", "Конфликтующий запрос со старым ключом идемпотентности")
+			return
+		}
 		if errors.Is(err, ErrDuplicateSlug) {
 			h.writeError(w, http.StatusConflict, "duplicate_slug", "Product slug already exists")
 			return
@@ -245,6 +261,10 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, ErrInvalidStatusTransition) {
 			h.writeError(w, http.StatusUnprocessableEntity, "invalid_status", err.Error())
+			return
+		}
+				if errors.Is(err, ErrIdempotencyKeyConflict) {
+			h.writeError(w, http.StatusConflict, "idempotency_conflict", "Конфликтующий запрос со старым ключом идемпотентности")
 			return
 		}
 		if errors.Is(err, ErrDuplicateSlug) {

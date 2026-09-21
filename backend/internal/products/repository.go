@@ -1625,3 +1625,61 @@ func (r *Repository) ClearOtherMainImages(ctx context.Context, productID uuid.UU
 	_, err := r.db.Exec(ctx, query, productID, excludeImageID)
 	return err
 }
+
+func (r *Repository) CreateProductWithIdempotency(ctx context.Context, p *Product, idempotencyKey *uuid.UUID, requestHash *string) (bool, error) {
+	query := `
+		INSERT INTO products (
+			id, seller_id, category_id, brand_id, title, slug, description,
+			status, gender, color, material, care_instructions,
+			price_cents, old_price_cents, currency, main_image_url, main_image_object_key,
+			created_at, updated_at, create_idempotency_key, create_request_hash
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7,
+			$8, $9, $10, $11, $12,
+			$13, $14, $15, $16, $17,
+			$18, $19, $20, $21
+		)
+		ON CONFLICT (seller_id, create_idempotency_key) WHERE create_idempotency_key IS NOT NULL DO NOTHING
+		RETURNING id
+	`
+	var returnedID uuid.UUID
+	err := r.db.QueryRow(ctx, query,
+		p.ID, p.SellerID, p.CategoryID, p.BrandID, p.Title, p.Slug, p.Description,
+		p.Status, p.Gender, p.Color, p.Material, p.CareInstructions,
+		p.PriceCents, p.OldPriceCents, p.Currency, p.MainImageURL, p.MainImageObjectKey,
+		p.CreatedAt, p.UpdatedAt, idempotencyKey, requestHash,
+	).Scan(&returnedID)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		if strings.Contains(err.Error(), "SQLSTATE 23505") {
+			return false, ErrDuplicateSlug
+		}
+		return false, fmt.Errorf("failed to create product: %w", err)
+	}
+	return true, nil
+}
+
+type ProductCreateIdempotencyRecord struct {
+	ProductID   uuid.UUID
+	RequestHash *string
+}
+
+func (r *Repository) FindProductCreateIdempotency(ctx context.Context, sellerID uuid.UUID, idempotencyKey uuid.UUID) (*ProductCreateIdempotencyRecord, error) {
+	query := `SELECT id, create_request_hash FROM products WHERE seller_id = $1 AND create_idempotency_key = $2`
+	var id uuid.UUID
+	var hash *string
+	err := r.db.QueryRow(ctx, query, sellerID, idempotencyKey).Scan(&id, &hash)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to lookup product create idempotency: %w", err)
+	}
+	return &ProductCreateIdempotencyRecord{
+		ProductID:   id,
+		RequestHash: hash,
+	}, nil
+}

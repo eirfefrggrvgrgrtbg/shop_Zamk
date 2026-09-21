@@ -1,6 +1,10 @@
 package products
 
 import (
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -339,4 +343,203 @@ type VariantPriceUpdateRequest struct {
 	ID            uuid.UUID `json:"id" validate:"required"`
 	PriceCents    int64     `json:"priceCents" validate:"required,gt=0"`
 	OldPriceCents *int64    `json:"oldPriceCents,omitempty" validate:"omitempty,min=0"`
+}
+
+type NormalizedProductCreateRequest struct {
+	Title               string                              `json:"title"`
+	Slug                *string                             `json:"slug,omitempty"`
+	Description         *string                             `json:"description,omitempty"`
+	CategoryID          *string                             `json:"categoryId,omitempty"`
+	BrandID             *string                             `json:"brandId,omitempty"`
+	Gender              *string                             `json:"gender,omitempty"`
+	Color               *string                             `json:"color,omitempty"`
+	Material            *string                             `json:"material,omitempty"`
+	CareInstructions    *string                             `json:"careInstructions,omitempty"`
+	PriceCents          int64                               `json:"priceCents"`
+	OldPriceCents       *int64                              `json:"oldPriceCents,omitempty"`
+	Currency            string                              `json:"currency"`
+	MainImageURL        *string                             `json:"mainImageUrl,omitempty"`
+	Variants            []NormalizedVariantCreateRequest    `json:"variants,omitempty"`
+	Images              []NormalizedImageCreateRequest      `json:"images,omitempty"`
+	Attributes          []ProductAttributeValueRequest      `json:"attributes,omitempty"`
+	MaterialComposition []ProductMaterialCompositionRequest `json:"materialComposition,omitempty"`
+	SizeChartRows       []ProductSizeChartRowRequest        `json:"sizeChartRows,omitempty"`
+}
+
+type NormalizedVariantCreateRequest struct {
+	SellerSKU    *string                        `json:"sellerSku,omitempty"`
+	SKU          *string                        `json:"sku,omitempty"`
+	Size         *string                        `json:"size,omitempty"`
+	Color        *string                        `json:"color,omitempty"`
+	ColorID      *string                        `json:"colorId,omitempty"`
+	SizeValueID  *string                        `json:"sizeValueId,omitempty"`
+	ShadeName    *string                        `json:"shadeName,omitempty"`
+	OptionValues string                         `json:"optionValues,omitempty"`
+	PriceCents   *int64                         `json:"priceCents,omitempty"`
+	Attributes   []VariantAttributeValueRequest `json:"attributes,omitempty"`
+}
+
+type NormalizedImageCreateRequest struct {
+	ImageURL  string  `json:"imageUrl"`
+	AltText   *string `json:"altText,omitempty"`
+	SortOrder int     `json:"sortOrder"`
+	ColorID   *string `json:"colorId,omitempty"`
+}
+
+func (req *CreateProductRequest) NormalizeForHash() NormalizedProductCreateRequest {
+	normVariants := make([]NormalizedVariantCreateRequest, len(req.Variants))
+	for i, v := range req.Variants {
+		var colorID, sizeValueID, optValues string
+		if v.ColorID != nil {
+			colorID = v.ColorID.String()
+		}
+		if v.SizeValueID != nil {
+			sizeValueID = v.SizeValueID.String()
+		}
+		if v.OptionValues != nil {
+			bOpt, _ := json.Marshal(v.OptionValues)
+			optValues = string(bOpt)
+		}
+
+		var attrs []VariantAttributeValueRequest
+		if v.Attributes != nil {
+			attrs = make([]VariantAttributeValueRequest, len(v.Attributes))
+			copy(attrs, v.Attributes)
+			sort.Slice(attrs, func(x, y int) bool {
+				bX, _ := json.Marshal(attrs[x])
+				bY, _ := json.Marshal(attrs[y])
+				return string(bX) < string(bY)
+			})
+		}
+
+		var colorIDPtr, sizeValueIDPtr *string
+		if colorID != "" {
+			colorIDPtr = &colorID
+		}
+		if sizeValueID != "" {
+			sizeValueIDPtr = &sizeValueID
+		}
+
+		normVariants[i] = NormalizedVariantCreateRequest{
+			SellerSKU:    v.SellerSKU,
+			SKU:          v.SKU,
+			Size:         v.Size,
+			Color:        v.Color,
+			ColorID:      colorIDPtr,
+			SizeValueID:  sizeValueIDPtr,
+			ShadeName:    v.ShadeName,
+			OptionValues: optValues,
+			PriceCents:   v.PriceCents,
+			Attributes:   attrs,
+		}
+	}
+
+	sort.Slice(normVariants, func(i, j int) bool {
+		bI, _ := json.Marshal(normVariants[i])
+		bJ, _ := json.Marshal(normVariants[j])
+		return string(bI) < string(bJ)
+	})
+
+	normImages := make([]NormalizedImageCreateRequest, len(req.Images))
+	for i, img := range req.Images {
+		sortOrder := i
+		if img.SortOrder != nil {
+			sortOrder = *img.SortOrder
+		}
+		var colorIDPtr *string
+		if img.ColorID != nil {
+			cStr := img.ColorID.String()
+			colorIDPtr = &cStr
+		}
+		normImages[i] = NormalizedImageCreateRequest{
+			ImageURL:  img.ImageURL,
+			AltText:   img.AltText,
+			SortOrder: sortOrder,
+			ColorID:   colorIDPtr,
+		}
+	}
+
+	var catIDPtr, brandIDPtr *string
+	if req.CategoryID != nil {
+		cStr := req.CategoryID.String()
+		catIDPtr = &cStr
+	}
+	if req.BrandID != nil {
+		bStr := req.BrandID.String()
+		brandIDPtr = &bStr
+	}
+
+	var slugPtr *string
+	slugBase := req.Title
+	if req.Slug != nil && *req.Slug != "" {
+		slugBase = *req.Slug
+	}
+	sGen := generateSlug(slugBase)
+	slugPtr = &sGen
+
+	currency := req.Currency
+	if currency == "" {
+		currency = "RUB"
+	}
+
+	var normAttrs []ProductAttributeValueRequest
+	if req.Attributes != nil {
+		normAttrs = make([]ProductAttributeValueRequest, len(req.Attributes))
+		copy(normAttrs, req.Attributes)
+		sort.Slice(normAttrs, func(i, j int) bool {
+			bI, _ := json.Marshal(normAttrs[i])
+			bJ, _ := json.Marshal(normAttrs[j])
+			return string(bI) < string(bJ)
+		})
+	}
+
+	var normMats []ProductMaterialCompositionRequest
+	if req.MaterialComposition != nil {
+		normMats = make([]ProductMaterialCompositionRequest, len(req.MaterialComposition))
+		copy(normMats, req.MaterialComposition)
+		sort.Slice(normMats, func(i, j int) bool {
+			bI, _ := json.Marshal(normMats[i])
+			bJ, _ := json.Marshal(normMats[j])
+			return string(bI) < string(bJ)
+		})
+	}
+
+	var normSizes []ProductSizeChartRowRequest
+	if req.SizeChartRows != nil {
+		normSizes = make([]ProductSizeChartRowRequest, len(req.SizeChartRows))
+		copy(normSizes, req.SizeChartRows)
+		sort.Slice(normSizes, func(i, j int) bool {
+			bI, _ := json.Marshal(normSizes[i])
+			bJ, _ := json.Marshal(normSizes[j])
+			return string(bI) < string(bJ)
+		})
+	}
+
+	return NormalizedProductCreateRequest{
+		Title:               req.Title,
+		Slug:                slugPtr,
+		Description:         req.Description,
+		CategoryID:          catIDPtr,
+		BrandID:             brandIDPtr,
+		Gender:              req.Gender,
+		Color:               req.Color,
+		Material:            req.Material,
+		CareInstructions:    req.CareInstructions,
+		PriceCents:          req.PriceCents,
+		OldPriceCents:       req.OldPriceCents,
+		Currency:            currency,
+		MainImageURL:        req.MainImageURL,
+		Variants:            normVariants,
+		Images:              normImages,
+		Attributes:          normAttrs,
+		MaterialComposition: normMats,
+		SizeChartRows:       normSizes,
+	}
+}
+
+func (req *CreateProductRequest) NormalizedHash() string {
+	norm := req.NormalizeForHash()
+	b, _ := json.Marshal(norm)
+	hash := sha256.Sum256(b)
+	return fmt.Sprintf("%x", hash)
 }

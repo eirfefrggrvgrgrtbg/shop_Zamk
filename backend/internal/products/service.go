@@ -103,7 +103,9 @@ func IsPlaceholderBarcode(b string) bool {
 	return true
 }
 
-func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid.UUID, req CreateProductRequest) (Product, error) {
+type CreateProductOptions struct { IdempotencyKey *uuid.UUID }
+
+func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid.UUID, req CreateProductRequest, opts ...CreateProductOptions) (Product, error) {
 	if err := req.ValidateSKUs(); err != nil {
 		return Product{}, err
 	}
@@ -282,17 +284,61 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 		p.SizeChart = &chart
 	}
 
+	var idempotencyKey *uuid.UUID
+	var requestHash *string
+	if len(opts) > 0 && opts[0].IdempotencyKey != nil {
+		idempotencyKey = opts[0].IdempotencyKey
+		h := req.NormalizedHash()
+		requestHash = &h
+	}
+
 	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
-		
-		// Lock the seller to prevent concurrent SKU creation races
+
+		checkIdempotency := func() error {
+			if idempotencyKey == nil {
+				return nil
+			}
+			rec, err := txRepo.FindProductCreateIdempotency(ctx, seller.ID, *idempotencyKey)
+			if err != nil {
+				return err
+			}
+			if rec != nil {
+				if rec.RequestHash != nil && requestHash != nil && *rec.RequestHash == *requestHash {
+					p.ID = rec.ProductID
+					return ErrIdempotentSuccess
+				}
+				return ErrIdempotencyKeyConflict
+			}
+			return nil
+		}
+
+		// 1. Pre-lock idempotency fast path
+		if err := checkIdempotency(); err != nil {
+			return err
+		}
+
+		// 2. LockSellerForUpdate
 		if err := txRepo.LockSellerForUpdate(ctx, seller.ID); err != nil {
 			return err
 		}
-		
-		// Check for cross-product duplicate SKUs for this seller
+
+		// 3. SECOND idempotency lookup under/after seller lock (before DuplicateSKU check)
+		if err := checkIdempotency(); err != nil {
+			return err
+		}
+
+		// 4. ONLY if key still absent: run duplicate SKU validation
 		if len(skusToCheck) > 0 {
-			existing, err := txRepo.FindExistingSellerSKUs(ctx, seller.ID, skusToCheck, nil)
+			var excludeVariantIDs []uuid.UUID
+			existingVariants, err := txRepo.GetProductVariants(ctx, p.ID)
+			if err != nil {
+				return err
+			}
+			for _, ev := range existingVariants {
+				excludeVariantIDs = append(excludeVariantIDs, ev.ID)
+			}
+			existing, err := txRepo.FindExistingSellerSKUs(ctx, seller.ID, skusToCheck, excludeVariantIDs)
 			if err != nil {
 				return err
 			}
@@ -301,10 +347,18 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 			}
 		}
 
-		if err := txRepo.CreateProduct(ctx, p); err != nil {
+		// 5. Conflict-safe product insert
+		inserted, err := txRepo.CreateProductWithIdempotency(ctx, p, idempotencyKey, requestHash)
+		if err != nil {
 			return err
 		}
-		
+		if !inserted {
+			if err := checkIdempotency(); err != nil {
+				return err
+			}
+			return fmt.Errorf("failed to insert product without idempotency key conflict")
+		}
+
 		if p.Attributes != nil {
 			if err := txRepo.InsertProductAttributeValues(ctx, p.ID, p.Attributes); err != nil {
 				return err
@@ -342,6 +396,13 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 	})
 
 	if err != nil {
+		if errors.Is(err, ErrIdempotentSuccess) {
+			existingProd, fetchErr := s.repo.GetProductByIDForSeller(ctx, p.ID, seller.ID)
+			if fetchErr != nil {
+				return Product{}, fetchErr
+			}
+			return *existingProd, nil
+		}
 		return Product{}, err
 	}
 
@@ -514,7 +575,7 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				CreatedAt:    now,
 				UpdatedAt:    now,
 			}
-			
+
 			wasPlaceholder := false
 			if v.Barcode != nil && IsPlaceholderBarcode(*v.Barcode) {
 				wasPlaceholder = true
@@ -652,7 +713,7 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			}
 			p.SizeChart = &chart
 		}
-		
+
 		// For variants attributes
 		if req.Variants != nil {
 			for i, v := range p.Variants {
@@ -1072,7 +1133,7 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 	if err := s.validateCategorySchema(ctx, *p.CategoryID, pAttrs, vReqs, comps, sizeChartRows, false); err != nil {
 		return fmt.Errorf("moderation validation failed: %w", err)
 	}
-	
+
 	// Check variant prices and SKUs explicitly for moderation
 	if len(p.Variants) == 0 {
 		return ErrProductVariantsRequired
@@ -1468,7 +1529,7 @@ func (s *Service) UpdateVariantPricesForSeller(ctx context.Context, currentUserI
 	}
 
 
-	
+
 
 	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
@@ -1493,7 +1554,7 @@ func (s *Service) UpdateVariantPricesForSeller(ctx context.Context, currentUserI
 	if err != nil {
 		return Product{}, err
 	}
-	
+
 	updated, err := s.repo.GetProductByIDForSeller(ctx, productID, seller.ID)
 	if err != nil {
 		return Product{}, err
@@ -1538,11 +1599,11 @@ func (s *Service) validateMaterialComposition(ctx context.Context, comp []Produc
 
 
 func (s *Service) validateCategorySchema(
-	ctx context.Context, 
-	categoryID uuid.UUID, 
-	pAttrs []ProductAttributeValueRequest, 
-	vReqs []ProductVariantRequest, 
-	comps []ProductMaterialCompositionRequest, 
+	ctx context.Context,
+	categoryID uuid.UUID,
+	pAttrs []ProductAttributeValueRequest,
+	vReqs []ProductVariantRequest,
+	comps []ProductMaterialCompositionRequest,
 	sizeChartRows []ProductSizeChartRowRequest,
 	isDraft bool,
 ) error {
@@ -1642,7 +1703,7 @@ func (s *Service) validateCategorySchema(
 		if def.ValueSource == "MATERIAL_COMPOSITION" {
 			return fmt.Errorf("attribute %s is MATERIAL_COMPOSITION and should not be passed in generic attributes", a.AttributeDefinitionID)
 		}
-		
+
 		if err := s.validateGenericAttributeValue(ctx, def, a); err != nil {
 			return err
 		}
@@ -1710,13 +1771,13 @@ func (s *Service) validateCategorySchema(
 			if def.ValueSource == "VARIANT_COLOR" || def.ValueSource == "VARIANT_SIZE" {
 				return fmt.Errorf("attribute %s is %s and should not be passed in generic attributes", a.AttributeDefinitionID, def.ValueSource)
 			}
-			
+
 			if err := s.validateGenericAttributeValue(ctx, def, a); err != nil {
 				return err
 			}
 			vAttrMap[a.AttributeDefinitionID]++
 		}
-		
+
 		for id, def := range schemaMap {
 			if def.Scope == "VARIANT" {
 				if def.ValueSource == "VARIANT_COLOR" {
@@ -1761,7 +1822,7 @@ func (s *Service) validateCategorySchema(
 			}
 		}
 	}
-	
+
 	// Validate Size Chart
 	var requiredChart bool
 	err = s.dbPool.Pool.QueryRow(ctx, "SELECT size_chart_required FROM categories WHERE id = $1", categoryID).Scan(&requiredChart)
@@ -1777,7 +1838,7 @@ func (s *Service) validateCategorySchema(
 			return err
 		}
 		defer fieldRows.Close()
-		
+
 		schemaFields := make(map[string]bool)
 		for fieldRows.Next() {
 			var code string
@@ -1788,26 +1849,26 @@ func (s *Service) validateCategorySchema(
 			schemaFields[code] = req
 		}
 		fieldRows.Close() // Explicitly close
-		
+
 		seenSizes := make(map[uuid.UUID]bool)
 		for _, r := range sizeChartRows {
 			if seenSizes[r.SizeValueID] {
 				return fmt.Errorf("duplicate size row for size_value_id: %s", r.SizeValueID)
 			}
 			seenSizes[r.SizeValueID] = true
-			
+
 			var active bool
 			var sysID uuid.UUID
 			err := s.dbPool.Pool.QueryRow(ctx, "SELECT is_active, size_system_id FROM size_values WHERE id = $1", r.SizeValueID).Scan(&active, &sysID)
 			if err != nil || !active {
 				return fmt.Errorf("size_value_id %s is inactive or does not exist", r.SizeValueID)
 			}
-			
+
 			// Check allowed size system if configured
 			if len(allowedSizeSystems) > 0 && !allowedSizeSystems[sysID] {
 				return fmt.Errorf("size_value_id %s in size chart belongs to a size system not allowed for this category", r.SizeValueID)
 			}
-			
+
 			for code, req := range schemaFields {
 				if req {
 					if _, ok := r.Measurements[code]; !ok {
@@ -1815,7 +1876,7 @@ func (s *Service) validateCategorySchema(
 					}
 				}
 			}
-			
+
 			for k, v := range r.Measurements {
 				if _, ok := schemaFields[k]; !ok {
 					return fmt.Errorf("measurement %s is not valid for this category", k)
@@ -1918,7 +1979,7 @@ func (s *Service) GetCategoryAttributeSchema(ctx context.Context, categoryID uui
 		return nil, err
 	}
 	defer attrRows.Close()
-	
+
 	var attributes []map[string]interface{}
 	for attrRows.Next() {
 		var id uuid.UUID
@@ -1950,7 +2011,7 @@ func (s *Service) GetCategoryAttributeSchema(ctx context.Context, categoryID uui
 		return nil, err
 	}
 	defer sysRows.Close()
-	
+
 	var allowedSizeSystems []map[string]interface{}
 	for sysRows.Next() {
 		var id uuid.UUID
@@ -2109,7 +2170,7 @@ func (s *Service) UpdateProductPrices(ctx context.Context, currentUserID, produc
 		if !found {
 			return fmt.Errorf("variant %s does not belong to product %s", vUpdate.ID, productID)
 		}
-		
+
 		err := s.repo.UpdateVariantPrice(ctx, vUpdate.ID, vUpdate.PriceCents)
 		if err != nil {
 			return err
