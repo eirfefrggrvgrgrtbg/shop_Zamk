@@ -21,6 +21,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 )
 
@@ -36,7 +37,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	pgClient, err := postgres.NewClient(ctx, cfg.Postgres.DSN)
 	if err != nil {
@@ -155,6 +157,30 @@ func main() {
 		}
 	}()
 
+	var cleanupWorker *storage.MediaCleanupWorker
+	if cfg.Worker.MediaCleanupEnabled {
+		storageProvider, err := storage.NewS3Client(&cfg.S3)
+		if err != nil {
+			logger.Warn("failed to initialize storage provider for worker, skipping media cleanup", "error", err)
+		} else {
+			cleanupCfg := storage.MediaCleanupConfig{
+				LeaseDuration:      storage.DefaultCleanupLeaseDuration,
+				PollInterval:       time.Duration(cfg.Worker.MediaCleanupIntervalSeconds) * time.Second,
+				TTLSweepInterval:   time.Duration(cfg.Worker.MediaTTLSweepIntervalSeconds) * time.Second,
+				TTLSweepBatchSize:  cfg.Worker.MediaTTLSweepBatchLimit,
+				TTLUploadingMaxAge: storage.DefaultTTLUploadingMaxAge,
+				TTLReadyMaxAge:     storage.DefaultTTLReadyMaxAge,
+				TTLConsumedMaxAge:  storage.DefaultTTLConsumedMaxAge,
+			}
+			cleanupWorker = storage.NewMediaCleanupWorker(storageProvider, productsRepo, logger, cleanupCfg)
+			cleanupWorker.Start(ctx)
+		}
+	}
+
 	sig := <-shutdown
+	cancel()
 	logger.Info("shutting down worker", "signal", sig)
+	if cleanupWorker != nil {
+		cleanupWorker.Wait()
+	}
 }

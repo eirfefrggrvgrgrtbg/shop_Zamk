@@ -102,6 +102,10 @@ type WorkerConfig struct {
 	AuctionMaintenanceIntervalSecs int
 	AuctionMaintenanceBatchLimit   int
 	StockForecastIntervalSeconds   int
+	MediaCleanupEnabled            bool
+	MediaCleanupIntervalSeconds    int
+	MediaTTLSweepIntervalSeconds   int
+	MediaTTLSweepBatchLimit        int
 }
 
 type RateLimitConfig struct {
@@ -197,6 +201,10 @@ func Load() (*Config, error) {
 			AuctionMaintenanceIntervalSecs: getEnvAsInt("AUCTION_MAINTENANCE_INTERVAL_SECONDS", 300),
 			AuctionMaintenanceBatchLimit:   getEnvAsInt("AUCTION_MAINTENANCE_BATCH_LIMIT", 100),
 			StockForecastIntervalSeconds:   getEnvAsInt("WORKER_STOCK_FORECAST_INTERVAL_SECONDS", 21600),
+			MediaCleanupEnabled:            getEnvAsBool("MEDIA_CLEANUP_ENABLED", true),
+			MediaCleanupIntervalSeconds:    getEnvAsInt("MEDIA_CLEANUP_INTERVAL_SECONDS", 5),
+			MediaTTLSweepIntervalSeconds:   getEnvAsInt("MEDIA_TTL_SWEEP_INTERVAL_SECONDS", 600),
+			MediaTTLSweepBatchLimit:        getEnvAsInt("MEDIA_TTL_SWEEP_BATCH_LIMIT", 100),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:                        getEnvAsBool("RATE_LIMIT_ENABLED", true),
