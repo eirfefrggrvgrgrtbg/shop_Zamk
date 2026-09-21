@@ -1,7 +1,26 @@
 import { request } from './client';
-import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, SellerInventoryItem, SellerOrder, SellerReturn, SellerReturnDetailResponse, SellerReview, SellerBalance, PayoutBatchListResponse, LedgerListResponse, SellerWarning, SellerViolation, SellerSupply, CreateSupplyRequest, SellerSupplyUnitLabelsResponse } from './types';
+import type {
+  SellerMe,
+  UpdateSellerProfileRequest,
+  SellerProduct,
+  SellerInventoryItem,
+  SellerOrder,
+  SellerReturn,
+  SellerReturnDetailResponse,
+  SellerReview,
+  SellerBalance,
+  PayoutBatchListResponse,
+  LedgerListResponse,
+  SellerWarning,
+  SellerViolation,
+  SellerSupply,
+  CreateSupplyRequest,
+  SellerSupplyUnitLabelsResponse,
+  StageSellerProductImageResponse,
+  SellerProductPatchImageItem,
+} from './types';
 
-export type { SellerProduct };
+export type { SellerProduct, StageSellerProductImageResponse, SellerProductPatchImageItem };
 
 export const getSellerMe = async (): Promise<SellerMe> => {
   return request<SellerMe>('GET', '/seller/me');
@@ -27,6 +46,21 @@ export const getSellerProduct = async (id: string): Promise<SellerProduct> => {
 
 export const updateSellerProduct = async (id: string, input: any): Promise<SellerProduct> => {
   return request<SellerProduct>('PATCH', `/seller/products/${id}`, { body: input });
+};
+
+export const stageSellerProductImage = async (
+  productId: string,
+  clientMediaId: string,
+  file: File
+): Promise<StageSellerProductImageResponse> => {
+  const formData = new FormData();
+  formData.append('clientMediaId', clientMediaId);
+  formData.append('image', file);
+  return request<StageSellerProductImageResponse>(
+    'POST',
+    `/seller/products/${productId}/images/stage`,
+    { body: formData }
+  );
 };
 
 // P0 fix: was /images, backend route is /images/upload

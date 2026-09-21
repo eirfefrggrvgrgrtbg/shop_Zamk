@@ -127,6 +127,21 @@ export interface ProductImage {
   createdAt?: string;
 }
 
+export interface StageSellerProductImageResponse {
+  stagedMediaId: string;
+  clientMediaId: string;
+  imageUrl: string;
+  status: string;
+}
+
+export interface SellerProductPatchImageItem {
+  id: string;
+  isMain?: boolean;
+  colorId?: string | null;
+  altText?: string | null;
+  sortOrder?: number;
+}
+
 export interface ProductAttributeValue {
   id: string;
   productId?: string;
