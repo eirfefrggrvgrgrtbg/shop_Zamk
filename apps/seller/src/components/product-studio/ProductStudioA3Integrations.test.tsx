@@ -302,9 +302,9 @@ describe('ProductStudio PS.R4A.5A3 Integrations', () => {
       const modal = screen.getByTestId('photo-color-binding-modal');
       expect(modal).toBeTruthy();
 
-      // Change selection in row 0
-      const select0 = within(modal).getByTestId('photo-color-select-0') as HTMLSelectElement;
-      fireEvent.change(select0, { target: { value: 'col-black' } });
+      // Change selection for photo 0 to col-black
+      const blackTarget = within(modal).getByTestId('photo-bind-target-col-black');
+      fireEvent.click(blackTarget);
 
       // Click Cancel
       const cancelBtn = within(modal).getByTestId('photo-color-modal-cancel');
@@ -350,12 +350,15 @@ describe('ProductStudio PS.R4A.5A3 Integrations', () => {
       fireEvent.click(openBtn);
 
       const modal = screen.getByTestId('photo-color-binding-modal');
-      const select0 = within(modal).getByTestId('photo-color-select-0') as HTMLSelectElement;
-      const select1 = within(modal).getByTestId('photo-color-select-1') as HTMLSelectElement;
+      // Assign photo 0 to black (photo 0 selected by default)
+      const blackTarget = within(modal).getByTestId('photo-bind-target-col-black');
+      fireEvent.click(blackTarget);
 
-      // Assign photo 0 to black, photo 1 to white
-      fireEvent.change(select0, { target: { value: 'col-black' } });
-      fireEvent.change(select1, { target: { value: 'col-white' } });
+      // Select photo 1 on left, assign to white on right
+      const photoCard1 = within(modal).getByTestId('photo-card-1');
+      fireEvent.click(photoCard1);
+      const whiteTarget = within(modal).getByTestId('photo-bind-target-col-white');
+      fireEvent.click(whiteTarget);
 
       // Click submit
       const submitBtn = within(modal).getByTestId('photo-color-modal-submit');

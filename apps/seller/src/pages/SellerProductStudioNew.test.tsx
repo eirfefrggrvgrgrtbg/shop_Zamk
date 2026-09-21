@@ -162,13 +162,13 @@ describe('PS.R4A — Seller Product Studio Create Route Integration', () => {
     expect(sellerApi.updateSellerProduct).not.toHaveBeenCalled();
   });
 
-  // 9 & 10. edit route remains legacy existing component and /products unchanged
-  it('9 & 10. edit route and products list route remain legacy in App.tsx', () => {
+  // 9 & 10. edit route cutover to SellerProductStudioEdit and /products list unchanged
+  it('9 & 10. edit route routes to SellerProductStudioEdit and products list route remains in App.tsx', () => {
     const appPath = path.resolve(__dirname, '../App.tsx');
     const appContent = fs.readFileSync(appPath, 'utf-8');
 
-    expect(appContent).toContain("import SellerProductEdit from './pages/SellerProductEdit';");
-    expect(appContent).toContain('path="/products/:id/edit" element={<SellerProtectedRoute><SellerLayout><SellerProductEdit /></SellerLayout></SellerProtectedRoute>}');
+    expect(appContent).toContain("import SellerProductStudioEdit from './pages/SellerProductStudioEdit';");
+    expect(appContent).toContain('path="/products/:id/edit" element={<SellerProtectedRoute><SellerLayout><SellerProductStudioEdit /></SellerLayout></SellerProtectedRoute>}');
     expect(appContent).toContain('path="/products" element={<SellerProtectedRoute><SellerLayout><SellerProducts /></SellerLayout></SellerProtectedRoute>}');
   });
 

@@ -7,6 +7,7 @@ export interface ProductStudioSizeChartModalProps {
   isOpen: boolean;
   onClose: () => void;
   schema: SellerCategorySchema | null;
+  categoryName?: string;
   draftSizes?: Array<{ id: string; label: string }>;
   sizeChart?: ProductPresentationSizeChart;
   onSaveSizeChart: (sizeChart: ProductPresentationSizeChart) => void;
@@ -16,6 +17,7 @@ export function ProductStudioSizeChartModal({
   isOpen,
   onClose,
   schema,
+  categoryName,
   draftSizes = [],
   sizeChart,
   onSaveSizeChart,
@@ -153,8 +155,8 @@ export function ProductStudioSizeChartModal({
                 Таблица размеров и мерки
               </h2>
               <p className="text-xs text-ash mt-0.5">
-                {schema?.name
-                  ? `Категория: ${schema.name}. Заполните мерки готового изделия в сантиметрах.`
+                {(categoryName || schema?.name)
+                  ? `Категория: ${categoryName || schema?.name}. Заполните мерки готового изделия в сантиметрах.`
                   : 'Параметры изделия в сантиметрах.'}
               </p>
             </div>

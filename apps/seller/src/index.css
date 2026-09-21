@@ -39,6 +39,7 @@
 
 @layer base {
   :root {
+    --seller-shell-header-height: 56px;
     --shadow-glass: 0 16px 48px rgba(130, 158, 186, 0.07);
     --shadow-glass-strong: 0 24px 70px rgba(130, 158, 186, 0.12);
     --shadow-capsule: 0 20px 50px rgba(124, 156, 191, 0.08);

@@ -1,6 +1,8 @@
 import { request } from './client';
 import type { SellerMe, UpdateSellerProfileRequest, SellerProduct, SellerInventoryItem, SellerOrder, SellerReturn, SellerReturnDetailResponse, SellerReview, SellerBalance, PayoutBatchListResponse, LedgerListResponse, SellerWarning, SellerViolation, SellerSupply, CreateSupplyRequest, SellerSupplyUnitLabelsResponse } from './types';
 
+export type { SellerProduct };
+
 export const getSellerMe = async (): Promise<SellerMe> => {
   return request<SellerMe>('GET', '/seller/me');
 };

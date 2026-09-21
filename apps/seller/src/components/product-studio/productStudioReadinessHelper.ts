@@ -276,6 +276,20 @@ export function getCompositionCompleteness(draft: ProductStudioDraft): Compositi
 }
 
 /**
+ * Returns canonical product-level attributes for a category schema,
+ * excluding variant-axis and special material composition attributes.
+ */
+export function getCanonicalProductAttributes(schema?: SellerCategorySchema | null) {
+  return (schema?.attributes || []).filter(
+    (a) => a.scope === 'PRODUCT' && a.valueSource !== 'MATERIAL_COMPOSITION'
+  );
+}
+
+export function getCanonicalRequiredProductAttributes(schema?: SellerCategorySchema | null) {
+  return getCanonicalProductAttributes(schema).filter((a) => a.required);
+}
+
+/**
  * Unified canonical readiness evaluator for Product Studio (Visual and Form).
  */
 export function getProductStudioReadiness(
@@ -345,8 +359,7 @@ export function getProductStudioReadiness(
   }
 
   // 9. Characteristics (Schema category-driven required product attributes)
-  const requiredProductAttrs =
-    schema?.attributes?.filter((a) => a.scope === 'PRODUCT' && a.required) ?? [];
+  const requiredProductAttrs = getCanonicalRequiredProductAttributes(schema);
   const characteristicsNeeded = requiredProductAttrs.length > 0;
   const characteristicsSatisfied =
     !characteristicsNeeded ||

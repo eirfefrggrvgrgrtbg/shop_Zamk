@@ -2,10 +2,41 @@ import { useState, useEffect, useMemo } from 'react';
 import { useProductStudio } from '../../contexts/ProductStudioContext';
 import { ProductStudioSectionNav } from './ProductStudioSectionNav';
 import { SellerSurface } from '../SellerSurface';
-import { FileText, Image, Sliders, Layers, DollarSign, ShieldCheck, Folder } from 'lucide-react';
-import { isColorRequired, isSizeRequired, getSizeChartCompleteness, getOfferedSizes, getCompositionCompleteness } from './productStudioReadinessHelper';
-import { MIN_PRODUCT_IMAGES } from './productStudioMediaHelper';
+import {
+  FileText,
+  Image,
+  Sliders,
+  Layers,
+  DollarSign,
+  ShieldCheck,
+  Folder,
+  Link2,
+  Pencil,
+  Trash2,
+  Plus,
+  GripVertical,
+  CheckCircle,
+  AlertCircle,
+} from 'lucide-react';
+import {
+  isColorRequired,
+  isSizeRequired,
+  getSizeChartCompleteness,
+  getOfferedSizes,
+  getCompositionCompleteness,
+  getCanonicalProductAttributes,
+  getCanonicalRequiredProductAttributes,
+} from './productStudioReadinessHelper';
+import {
+  MIN_PRODUCT_IMAGES,
+  MAX_PRODUCT_IMAGES,
+  ALLOWED_IMAGE_MIME_TYPES,
+  validateImageFile,
+  getMediaProgressText,
+} from './productStudioMediaHelper';
 import { getSellerCategorySchema, type SellerCategorySchema } from '@zamk/api-client';
+import { cn } from '../../lib/utils';
+import { ProductStudioPhotoColorModal, getColorDisplayName } from './ProductStudioPhotoColorModal';
 import { ProductStudioCompositionModal } from './ProductStudioCompositionModal';
 import { ProductStudioCareModal } from './ProductStudioCareModal';
 import { ProductStudioCharacteristicsModal } from './ProductStudioCharacteristicsModal';
@@ -14,6 +45,7 @@ import { ProductStudioSizeChartModal } from './ProductStudioSizeChartModal';
 export function ProductStudioFormWorkspace() {
   const {
     activeSection,
+    setActiveSection,
     draft,
     updateDraft,
     setCategoryModalOpen,
@@ -21,12 +53,136 @@ export function ProductStudioFormWorkspace() {
     markTouched,
     isFieldAttention,
     setShowReadinessAttention,
+    categorySchema: contextCategorySchema,
+    createMediaUrl,
   } = useProductStudio();
-  const [categorySchema, setCategorySchema] = useState<SellerCategorySchema | null>(null);
+  const [localCategorySchema, setLocalCategorySchema] = useState<SellerCategorySchema | null>(null);
+  const categorySchema = contextCategorySchema || localCategorySchema;
   const [isCompositionModalOpen, setIsCompositionModalOpen] = useState(false);
   const [isCareModalOpen, setIsCareModalOpen] = useState(false);
   const [isCharacteristicsModalOpen, setIsCharacteristicsModalOpen] = useState(false);
   const [isSizeChartModalOpen, setIsSizeChartModalOpen] = useState(false);
+  const [isPhotoColorModalOpen, setIsPhotoColorModalOpen] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [isValidatingPhoto, setIsValidatingPhoto] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const imagesList = useMemo(() => draft.images || [], [draft.images]);
+
+  const handleAddMedia = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setMediaError(null);
+    setIsValidatingPhoto(true);
+
+    try {
+      const validation = await validateImageFile(file);
+      if (!validation.valid) {
+        setMediaError(validation.error || 'Недопустимый файл');
+        return;
+      }
+
+      const objectUrl = createMediaUrl(file);
+      const existingImages = draft.images || [];
+      const isFirst = existingImages.length === 0;
+      const newImage = {
+        id: `local-media-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        url: objectUrl,
+        isMain: isFirst,
+        sortOrder: existingImages.length,
+        colorId: null,
+      };
+
+      updateDraft({
+        images: [...existingImages, newImage],
+      });
+      markTouched('media');
+    } finally {
+      setIsValidatingPhoto(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleReplaceMedia = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setMediaError(null);
+    setIsValidatingPhoto(true);
+
+    try {
+      const validation = await validateImageFile(file);
+      if (!validation.valid) {
+        setMediaError(validation.error || 'Недопустимый файл');
+        return;
+      }
+
+      const objectUrl = createMediaUrl(file);
+      const existingImages = [...(draft.images || [])];
+      const targetOld = existingImages[index];
+
+      const replacedImage = {
+        id: `local-media-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        url: objectUrl,
+        isMain: index === 0,
+        sortOrder: index,
+        colorId: targetOld?.colorId ?? null,
+      };
+
+      existingImages[index] = replacedImage;
+      updateDraft({ images: existingImages });
+      markTouched('media');
+    } finally {
+      setIsValidatingPhoto(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleDeleteMedia = (index: number) => {
+    const existingImages = [...(draft.images || [])];
+    existingImages.splice(index, 1);
+    const reindexed = existingImages.map((img, idx) => ({
+      ...img,
+      isMain: idx === 0,
+      sortOrder: idx,
+    }));
+    updateDraft({ images: reindexed });
+    markTouched('media');
+  };
+
+  const handleSetAsCover = (index: number) => {
+    if (index === 0) return;
+    const existingImages = [...(draft.images || [])];
+    const [moved] = existingImages.splice(index, 1);
+    existingImages.unshift(moved);
+    const reindexed = existingImages.map((img, idx) => ({
+      ...img,
+      isMain: idx === 0,
+      sortOrder: idx,
+    }));
+    updateDraft({ images: reindexed });
+    markTouched('media');
+  };
+
+  const handleReorderMedia = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    const existingImages = [...(draft.images || [])];
+    if (fromIndex >= existingImages.length || toIndex >= existingImages.length) return;
+
+    const [moved] = existingImages.splice(fromIndex, 1);
+    existingImages.splice(toIndex, 0, moved);
+
+    const reindexed = existingImages.map((img, idx) => ({
+      ...img,
+      isMain: idx === 0,
+      sortOrder: idx,
+    }));
+
+    updateDraft({ images: reindexed });
+    markTouched('media');
+  };
 
   useEffect(() => {
     if (activeSection === 'review') {
@@ -36,13 +192,16 @@ export function ProductStudioFormWorkspace() {
 
   useEffect(() => {
     if (!draft.categoryId) {
-      setCategorySchema(null);
+      setLocalCategorySchema(null);
+      return;
+    }
+    if (contextCategorySchema) {
       return;
     }
     let isMounted = true;
     getSellerCategorySchema(draft.categoryId)
       .then((schema) => {
-        if (isMounted) setCategorySchema(schema);
+        if (isMounted) setLocalCategorySchema(schema);
       })
       .catch((err) => {
         console.error('Failed to load schema in Form Workspace:', err);
@@ -50,7 +209,7 @@ export function ProductStudioFormWorkspace() {
     return () => {
       isMounted = false;
     };
-  }, [draft.categoryId]);
+  }, [draft.categoryId, contextCategorySchema]);
 
   const colorNeeded = isColorRequired(draft, categorySchema);
   const sizeNeeded = isSizeRequired(draft, categorySchema);
@@ -74,8 +233,12 @@ export function ProductStudioFormWorkspace() {
   const isCharacteristicsAttention = isFieldAttention('characteristics');
   const isSizeChartAttention = isFieldAttention('sizeChart');
 
+  const productAttrs = useMemo(() => {
+    return getCanonicalProductAttributes(categorySchema);
+  }, [categorySchema]);
+
   const requiredProductAttrs = useMemo(() => {
-    return categorySchema?.attributes?.filter((a) => a.scope === 'PRODUCT' && a.required) || [];
+    return getCanonicalRequiredProductAttributes(categorySchema);
   }, [categorySchema]);
 
   const filledRequiredCharacteristicsCount = useMemo(() => {
@@ -95,6 +258,143 @@ export function ProductStudioFormWorkspace() {
     }).length;
   }, [requiredProductAttrs, draft.attributes]);
 
+  const categoryDisplayName = (draft.categoryName || categorySchema?.name || '').trim();
+
+  // Structured readiness summaries for Review section
+  const reviewSectionSummaries = useMemo(() => {
+    const blockers = new Set(readiness?.blockingFields || []);
+
+    // 1. Basics: Title, Category, Description
+    const titleOk = Boolean(draft.title?.trim());
+    const categoryOk = Boolean(draft.categoryId);
+    const descOk = Boolean(draft.description?.trim());
+    const basicsSatisfied = titleOk && categoryOk && descOk && !blockers.has('title') && !blockers.has('category') && !blockers.has('description');
+    const basicsDetails: string[] = [];
+    if (!titleOk) basicsDetails.push('Название не указано');
+    if (!categoryOk) basicsDetails.push('Категория не выбрана');
+    if (!descOk) basicsDetails.push('Описание не заполнено');
+    if (basicsDetails.length === 0) basicsDetails.push('Название, категория и описание заполнены');
+
+    // 2. Media: minimum 3 photos
+    const mediaCount = (draft.images || []).length;
+    const mediaSatisfied = mediaCount >= MIN_PRODUCT_IMAGES && !blockers.has('media');
+    const mediaDetails: string[] = [];
+    if (mediaCount < MIN_PRODUCT_IMAGES) {
+      mediaDetails.push(`Загружено ${mediaCount} из ${MIN_PRODUCT_IMAGES} фото (нужно минимум 3)`);
+    } else {
+      mediaDetails.push(`Загружено ${mediaCount} фото`);
+    }
+
+    // 3. Characteristics and composition
+    const compCompleteness = getCompositionCompleteness(draft);
+    const charsSatisfied =
+      compCompleteness.isComplete &&
+      !blockers.has('composition') &&
+      !blockers.has('characteristics');
+    const charsDetails: string[] = [];
+    if (!compCompleteness.isComplete) {
+      if ((draft.materialComposition || []).length === 0) {
+        charsDetails.push('Состав не указан');
+      } else if (!compCompleteness.allRowsValid) {
+        charsDetails.push('Не все строки состава корректно заполнены');
+      } else {
+        charsDetails.push(`Сумма долей состава ${compCompleteness.totalPercentage}% (должна быть ровно 100%)`);
+      }
+    } else {
+      charsDetails.push('Состав указан (100%)');
+    }
+    if (requiredProductAttrs.length > 0) {
+      if (filledRequiredCharacteristicsCount < requiredProductAttrs.length) {
+        charsDetails.push(`Характеристики: заполнено ${filledRequiredCharacteristicsCount} из ${requiredProductAttrs.length} обязательных`);
+      } else {
+        charsDetails.push(`Характеристики: заполнены все обязательные (${requiredProductAttrs.length})`);
+      }
+    }
+
+    // 4. Variants: color and size matrices, size chart
+    const variantsCount = (draft.variants || []).length;
+    const colorSatisfied = !colorNeeded || (draft.colors || []).length > 0;
+    const sizeSatisfied = !sizeNeeded || (draft.variants || []).some((v) => Boolean(v.sizeValueId || v.size));
+    const sizeChartSatisfied = !sizeChartCompleteness.isNeeded || sizeChartCompleteness.isComplete;
+    const variantsSatisfied =
+      colorSatisfied &&
+      sizeSatisfied &&
+      sizeChartSatisfied &&
+      !blockers.has('color') &&
+      !blockers.has('size') &&
+      !blockers.has('sizeChart');
+    const variantsDetails: string[] = [];
+    if (colorNeeded && (draft.colors || []).length === 0) {
+      variantsDetails.push('Не выбран ни один цвет');
+    }
+    if (sizeNeeded && !sizeSatisfied) {
+      variantsDetails.push('Не выбран ни один размер');
+    }
+    if (sizeChartCompleteness.isNeeded && !sizeChartCompleteness.isComplete) {
+      variantsDetails.push(`Таблица размеров: заполнено ${sizeChartCompleteness.filledRequiredCellCount} из ${sizeChartCompleteness.requiredCellCount} мерок`);
+    }
+    if (variantsDetails.length === 0) {
+      variantsDetails.push(`Сформировано вариантов: ${variantsCount}`);
+      if (sizeChartCompleteness.isNeeded) {
+        variantsDetails.push('Таблица размеров заполнена');
+      }
+    }
+
+    // 5. Pricing
+    const priceSatisfied = (draft.priceCents || 0) > 0 && !blockers.has('price');
+    const priceDetails: string[] = [];
+    if (!priceSatisfied) {
+      priceDetails.push('Цена не указана');
+    } else {
+      priceDetails.push(`Базовая цена: ${((draft.priceCents || 0) / 100).toLocaleString('ru-RU')} ₽`);
+    }
+
+    return [
+      {
+        id: 'basics',
+        title: 'Основное',
+        targetSection: 'basics' as const,
+        isSatisfied: basicsSatisfied,
+        details: basicsDetails,
+      },
+      {
+        id: 'media',
+        title: 'Медиа',
+        targetSection: 'media' as const,
+        isSatisfied: mediaSatisfied,
+        details: mediaDetails,
+      },
+      {
+        id: 'characteristics',
+        title: 'Характеристики и состав',
+        targetSection: 'characteristics' as const,
+        isSatisfied: charsSatisfied,
+        details: charsDetails,
+      },
+      {
+        id: 'variants',
+        title: 'Варианты и размеры',
+        targetSection: 'variants' as const,
+        isSatisfied: variantsSatisfied,
+        details: variantsDetails,
+      },
+      {
+        id: 'pricing',
+        title: 'Цена',
+        targetSection: 'pricing' as const,
+        isSatisfied: priceSatisfied,
+        details: priceDetails,
+      },
+    ];
+  }, [
+    readiness,
+    draft,
+    requiredProductAttrs,
+    filledRequiredCharacteristicsCount,
+    colorNeeded,
+    sizeNeeded,
+    sizeChartCompleteness,
+  ]);
 
   return (
     <div
@@ -251,24 +551,249 @@ export function ProductStudioFormWorkspace() {
             role="tabpanel"
             aria-labelledby="studio-section-tab-media"
             data-testid="studio-section-panel-media"
-            className="space-y-4"
+            className="space-y-6"
           >
-            <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-white/10">
-              <Image className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-                Медиа <span className={isMediaAttention ? "text-amber-600 dark:text-amber-400" : "text-gray-400 dark:text-gray-500"}>*</span>
-              </h2>
+            <div className="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-white/10">
+              <div className="flex items-center gap-2">
+                <Image className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                  Медиа <span className={isMediaAttention ? "text-amber-600 dark:text-amber-400" : "text-gray-400 dark:text-gray-500"}>*</span>
+                </h2>
+              </div>
+              <div className="flex items-center gap-3">
+                {draft.images && draft.images.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="form-bind-photos-to-colors-btn"
+                    disabled={!draft.colors || draft.colors.length === 0}
+                    title={!draft.colors || draft.colors.length === 0 ? "Сначала добавьте цвета" : "Привязать фото к цветам"}
+                    onClick={() => setIsPhotoColorModalOpen(true)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 text-xs font-medium py-1 transition-colors",
+                      !draft.colors || draft.colors.length === 0
+                        ? "text-gray-400 cursor-not-allowed"
+                        : "text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 cursor-pointer hover:underline"
+                    )}
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                    <span>Привязать фото к цветам</span>
+                    {(!draft.colors || draft.colors.length === 0) && (
+                      <span className="text-[11px] text-gray-400">(Сначала добавьте цвета)</span>
+                    )}
+                  </button>
+                )}
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400" data-testid="form-media-progress-badge">
+                  {getMediaProgressText(imagesList.length)}
+                </span>
+              </div>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Минимум {MIN_PRODUCT_IMAGES} фото · JPG, PNG, WebP · до 10 МБ. Вертикальное фото · минимум 800×1000 px.
-            </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500">
-              Лучше использовать формат 4:5 — фото лучше заполняет карточку товара.
-            </p>
+
+            <div className="space-y-1">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Минимум {MIN_PRODUCT_IMAGES} фото · JPG, PNG, WebP · до 10 МБ. Вертикальное фото · минимум 800×1000 px.
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Лучше использовать формат 4:5 — фото лучше заполняет карточку товара. Первая фотография является главной обложкой.
+              </p>
+            </div>
+
+            {mediaError && (
+              <div
+                data-testid="form-media-upload-error-banner"
+                className="p-3 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 text-xs text-red-600 dark:text-red-400 flex items-center justify-between"
+              >
+                <span>{mediaError}</span>
+                <button
+                  type="button"
+                  onClick={() => setMediaError(null)}
+                  className="text-red-500 hover:text-red-700 font-bold ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             {isMediaAttention && (
               <div className="p-3 rounded-lg border border-amber-300 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 text-xs text-amber-800 dark:text-amber-300 font-medium">
-                Нужно минимум 3 фото (загружено: {(draft.images || []).length})
+                Нужно минимум 3 фото (загружено: {imagesList.length})
               </div>
+            )}
+
+            {/* Media thumbnails grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4" data-testid="form-media-grid">
+              {imagesList.map((img, index) => {
+                const assignedColor = (draft.colors || []).find((c: any) => c.id === img.colorId);
+                const assignedColorName = assignedColor ? getColorDisplayName(assignedColor) : '';
+                const isCover = index === 0;
+                const isDragging = draggedIndex === index;
+                const isDragOver = dragOverIndex === index && draggedIndex !== index;
+
+                return (
+                  <div
+                    key={img.id || img.url || index}
+                    data-testid={`form-media-card-${index}`}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', String(index));
+                      e.dataTransfer.effectAllowed = 'move';
+                      setDraggedIndex(index);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverIndex !== index) {
+                        setDragOverIndex(index);
+                      }
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (draggedIndex !== null && draggedIndex !== index) {
+                        handleReorderMedia(draggedIndex, index);
+                      }
+                      setDraggedIndex(null);
+                      setDragOverIndex(null);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedIndex(null);
+                      setDragOverIndex(null);
+                    }}
+                    className={cn(
+                      "group relative flex flex-col rounded-xl border bg-gray-50 dark:bg-white/[0.02] overflow-hidden transition-all cursor-grab active:cursor-grabbing select-none",
+                      isDragging
+                        ? "opacity-40 scale-[0.98] border-dashed border-indigo-400 dark:border-indigo-600"
+                        : isDragOver
+                        ? "ring-2 ring-indigo-500 border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/30"
+                        : "border-gray-200 dark:border-white/10 hover:shadow-md"
+                    )}
+                  >
+                    {/* Image preview with 4:5 ratio */}
+                    <div className="relative aspect-[4/5] w-full bg-gray-100 dark:bg-white/5 overflow-hidden">
+                      <img
+                        src={img.url}
+                        alt={`Фото товара ${index + 1}`}
+                        className="w-full h-full object-cover pointer-events-none"
+                      />
+                      {/* Cover badge */}
+                      {isCover && (
+                        <span
+                          data-testid={`form-media-cover-badge-${index}`}
+                          className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm"
+                        >
+                          Обложка
+                        </span>
+                      )}
+                      {/* Drag handle affordance indicator */}
+                      <span
+                        data-testid={`form-media-drag-handle-${index}`}
+                        className="absolute top-2 right-2 p-1 rounded-md bg-black/40 text-white/80 backdrop-blur-xs opacity-60 group-hover:opacity-100 transition-opacity"
+                        title="Перетащите для изменения порядка"
+                      >
+                        <GripVertical className="w-3.5 h-3.5" />
+                      </span>
+                      {/* Color indicator badge */}
+                      {assignedColor && (
+                        <span
+                          data-testid={`form-media-color-badge-${index}`}
+                          title={`Цвет: ${assignedColorName}`}
+                          className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-black/60 text-white backdrop-blur-xs"
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full border border-white"
+                            style={{ backgroundColor: assignedColor.hex || '#000000' }}
+                          />
+                          <span className="truncate max-w-[60px]">{assignedColorName}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Controls toolbar */}
+                    <div
+                      className="p-1.5 flex items-center justify-between border-t border-gray-200/80 dark:border-white/10 bg-white dark:bg-[#1a1a1c]"
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <label
+                        data-testid={`form-media-replace-btn-${index}`}
+                        title="Заменить фото"
+                        aria-label="Заменить фото"
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer flex items-center justify-center"
+                      >
+                        <input
+                          type="file"
+                          accept={ALLOWED_IMAGE_MIME_TYPES.join(',')}
+                          className="hidden"
+                          onChange={(e) => handleReplaceMedia(e, index)}
+                        />
+                        <Pencil className="w-3.5 h-3.5" />
+                      </label>
+                      <button
+                        type="button"
+                        data-testid={`form-media-delete-btn-${index}`}
+                        onClick={() => handleDeleteMedia(index)}
+                        title="Удалить фото"
+                        aria-label="Удалить фото"
+                        className="p-1.5 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer flex items-center justify-center"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {!isCover && (
+                      <button
+                        type="button"
+                        data-testid={`form-media-make-cover-${index}`}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={() => handleSetAsCover(index)}
+                        className="w-full py-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 border-t border-gray-100 dark:border-white/5 transition-colors cursor-pointer"
+                      >
+                        Сделать обложкой
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Add photo card slot */}
+              {imagesList.length < MAX_PRODUCT_IMAGES && (
+                <label
+                  data-testid="form-media-add-card"
+                  className={cn(
+                    "aspect-[4/5] rounded-xl border-2 border-dashed flex flex-col items-center justify-center p-4 text-center cursor-pointer transition-colors group",
+                    isMediaAttention
+                      ? "border-amber-300 dark:border-amber-700/50 bg-amber-50/20 dark:bg-amber-950/10 hover:border-amber-400"
+                      : "border-gray-300 dark:border-white/20 hover:border-gray-500 dark:hover:border-white/50 bg-gray-50/50 dark:bg-white/[0.02]"
+                  )}
+                >
+                  <input
+                    type="file"
+                    accept={ALLOWED_IMAGE_MIME_TYPES.join(',')}
+                    className="hidden"
+                    onChange={handleAddMedia}
+                  />
+                  <div className={cn(
+                    "w-10 h-10 rounded-full flex items-center justify-center text-xl font-light mb-2 transition-transform group-hover:scale-110",
+                    isMediaAttention
+                      ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
+                      : "bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300"
+                  )}>
+                    <Plus className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-semibold text-gray-900 dark:text-white">
+                    Добавить фото
+                  </span>
+                  <span className="text-[10px] text-gray-400 mt-1">
+                    {imagesList.length} из {MAX_PRODUCT_IMAGES}
+                  </span>
+                </label>
+              )}
+            </div>
+
+            {isValidatingPhoto && (
+              <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
+                Проверка файла...
+              </p>
             )}
           </div>
         )}
@@ -369,8 +894,14 @@ export function ProductStudioFormWorkspace() {
                     ) : ''}
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {categorySchema
-                      ? `Категория: ${categorySchema.name}. Заполнено ${filledRequiredCharacteristicsCount} из ${requiredProductAttrs.length} обязательных.`
+                    {categoryDisplayName
+                      ? productAttrs.length === 0
+                        ? `Категория: ${categoryDisplayName}. Для данной категории нет дополнительных характеристик.`
+                        : `Категория: ${categoryDisplayName}. Заполнено ${filledRequiredCharacteristicsCount} из ${requiredProductAttrs.length} обязательных.`
+                      : categorySchema || draft.categoryId
+                      ? productAttrs.length === 0
+                        ? 'Для данной категории нет дополнительных характеристик.'
+                        : `Заполнено ${filledRequiredCharacteristicsCount} из ${requiredProductAttrs.length} обязательных.`
                       : 'Сначала выберите категорию товара.'}
                   </p>
                 </div>
@@ -557,31 +1088,124 @@ export function ProductStudioFormWorkspace() {
             role="tabpanel"
             aria-labelledby="studio-section-tab-review"
             data-testid="studio-section-panel-review"
-            className="space-y-4"
+            className="space-y-6"
           >
-            <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-white/10">
-              <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-                Проверка
-              </h2>
+            <div className="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-white/10">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                  Проверка готовности к публикации
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                {reviewSectionSummaries.some((s) => !s.isSatisfied) ? (
+                  <span
+                    data-testid="review-readiness-badge"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>Требует внимания: {reviewSectionSummaries.filter((s) => !s.isSatisfied).length} секц.</span>
+                  </span>
+                ) : (
+                  <span
+                    data-testid="review-readiness-badge"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>Карточка полностью заполнена</span>
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="rounded-lg bg-gray-50 dark:bg-white/[0.02] border border-gray-200/80 dark:border-white/10 p-4 space-y-2">
-              <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">
-                Назначение секции «Проверка»:
-              </p>
-              <ul className="text-xs text-gray-600 dark:text-gray-400 list-disc list-inside space-y-1">
-                <li>Оценка полноты заполнения карточки (readiness);</li>
-                <li>Выявление блокирующих ошибок для модерации;</li>
-                <li>Предупреждения и подсказки;</li>
-                <li>Отправка на модерацию.</li>
-              </ul>
-              <p className="text-xs text-indigo-600 dark:text-indigo-400 pt-1">
-                Проверка готовности карточки.
-              </p>
+
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Оценка полноты заполнения карточки (readiness). Для отправки товара на модерацию все обязательные поля должны быть заполнены.
+            </p>
+
+            {/* Structured review cards grid */}
+            <div className="space-y-3" data-testid="form-review-sections-list">
+              {reviewSectionSummaries.map((sec) => (
+                <div
+                  key={sec.id}
+                  data-testid={`review-section-card-${sec.id}`}
+                  className={cn(
+                    "p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors",
+                    sec.isSatisfied
+                      ? "border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.02]"
+                      : "border-amber-300 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10"
+                  )}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className={cn(
+                        "text-sm font-semibold",
+                        sec.isSatisfied ? "text-gray-900 dark:text-white" : "text-amber-900 dark:text-amber-200"
+                      )}>
+                        {sec.title}
+                      </h3>
+                      {sec.isSatisfied ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>Готово</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>Требует заполнения</span>
+                        </span>
+                      )}
+                    </div>
+                    <ul className="text-xs space-y-0.5">
+                      {sec.details.map((detail, idx) => (
+                        <li
+                          key={idx}
+                          className={cn(
+                            sec.isSatisfied
+                              ? "text-gray-500 dark:text-gray-400"
+                              : "text-amber-800 dark:text-amber-300"
+                          )}
+                        >
+                          • {detail}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <button
+                    type="button"
+                    data-testid={`review-fix-btn-${sec.id}`}
+                    onClick={() => {
+                      setActiveSection(sec.targetSection);
+                      if (sec.id === 'characteristics' && !draft.categoryId) {
+                        setCategoryModalOpen(true);
+                      }
+                    }}
+                    className={cn(
+                      "px-3.5 py-1.5 text-xs font-medium rounded-lg border transition-colors shrink-0 self-start sm:self-center",
+                      sec.isSatisfied
+                        ? "bg-white dark:bg-white/10 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/20"
+                        : "bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800 hover:bg-amber-100"
+                    )}
+                  >
+                    {sec.isSatisfied ? 'Изменить' : 'Исправить'}
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}
       </SellerSurface>
+
+      <ProductStudioPhotoColorModal
+        isOpen={isPhotoColorModalOpen}
+        onClose={() => setIsPhotoColorModalOpen(false)}
+        images={draft.images || []}
+        colors={draft.colors || []}
+        onSave={(updatedImages) => {
+          updateDraft({ images: updatedImages });
+          markTouched('media');
+        }}
+      />
 
       <ProductStudioCompositionModal
         isOpen={isCompositionModalOpen}
@@ -610,6 +1234,7 @@ export function ProductStudioFormWorkspace() {
           markTouched('characteristics');
         }}
         schema={categorySchema}
+        categoryName={categoryDisplayName}
         attributes={draft.attributes}
         onSave={(attributes) => {
           updateDraft({ attributes });
@@ -624,6 +1249,7 @@ export function ProductStudioFormWorkspace() {
           markTouched('sizeChart');
         }}
         schema={categorySchema}
+        categoryName={categoryDisplayName}
         draftSizes={offeredSizes.map((s) => ({ id: s.sizeValueId, label: s.sizeValueName }))}
         sizeChart={draft.sizeChart}
         onSaveSizeChart={(sizeChart) => {

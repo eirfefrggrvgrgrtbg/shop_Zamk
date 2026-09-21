@@ -585,11 +585,9 @@ describe('ProductStudioVisualWorkspace - In-Canvas Constructor', () => {
       });
 
       const modal = screen.getByTestId('photo-color-binding-modal');
-      const select0 = within(modal).getByTestId('photo-color-select-0') as HTMLSelectElement;
-      expect(select0.value).toBe('');
-
-      // Change selection to col-white
-      fireEvent.change(select0, { target: { value: 'col-white' } });
+      // Assign photo 0 (selected by default) to col-white
+      const whiteTarget = within(modal).getByTestId('photo-bind-target-col-white');
+      fireEvent.click(whiteTarget);
 
       // Save modal
       const saveBtn = within(modal).getByTestId('photo-color-modal-submit');

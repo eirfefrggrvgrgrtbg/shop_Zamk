@@ -5,6 +5,7 @@ import {
   type SellerCategorySchema,
   type SellerDictionaryValue,
 } from '@zamk/api-client/src/seller';
+import { getCanonicalProductAttributes } from './productStudioReadinessHelper';
 
 export interface ProductStudioAttributeItem {
   attributeDefinitionId?: string;
@@ -18,6 +19,7 @@ export interface ProductStudioCharacteristicsModalProps {
   isOpen: boolean;
   onClose: () => void;
   schema: SellerCategorySchema | null;
+  categoryName?: string;
   attributes?: ProductStudioAttributeItem[];
   onSave: (attributes: ProductStudioAttributeItem[]) => void;
 }
@@ -26,6 +28,7 @@ export function ProductStudioCharacteristicsModal({
   isOpen,
   onClose,
   schema,
+  categoryName,
   attributes = [],
   onSave,
 }: ProductStudioCharacteristicsModalProps) {
@@ -33,9 +36,7 @@ export function ProductStudioCharacteristicsModal({
   const [dictionaryValues, setDictionaryValues] = useState<Record<string, SellerDictionaryValue[]>>({});
   const [loadingDicts, setLoadingDicts] = useState<Record<string, boolean>>({});
 
-  const productAttrs = (schema?.attributes || []).filter(
-    (a) => a.scope === 'PRODUCT' && a.valueSource !== 'MATERIAL_COMPOSITION'
-  );
+  const productAttrs = getCanonicalProductAttributes(schema);
 
   // Load dictionary values for any DICTIONARY attribute
   useEffect(() => {
@@ -243,8 +244,10 @@ export function ProductStudioCharacteristicsModal({
               Характеристики товара
             </h2>
             <p className="text-xs text-ash mt-1 leading-relaxed">
-              {schema
-                ? `Категория: ${schema.name}. Заполните канонические свойства модели.`
+              {(categoryName || schema?.name)
+                ? `Категория: ${categoryName || schema?.name}. Заполните канонические свойства модели.`
+                : schema
+                ? 'Заполните канонические свойства модели.'
                 : 'Категория не выбрана.'}
             </p>
           </div>

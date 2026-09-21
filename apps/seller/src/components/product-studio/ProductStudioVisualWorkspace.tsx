@@ -12,7 +12,7 @@ import {
 import { Pencil, Info, Link2 } from "lucide-react";
 import { useProductStudio } from "../../contexts/ProductStudioContext";
 import { cn } from "../../lib/utils";
-import { ProductStudioPhotoColorModal } from "./ProductStudioPhotoColorModal";
+import { ProductStudioPhotoColorModal, getColorDisplayName } from "./ProductStudioPhotoColorModal";
 import { ProductStudioCompositionModal } from "./ProductStudioCompositionModal";
 import { ProductStudioCareModal } from "./ProductStudioCareModal";
 import { ProductStudioCharacteristicsModal } from "./ProductStudioCharacteristicsModal";
@@ -37,7 +37,12 @@ import {
   MAX_PRODUCT_IMAGES,
   ALLOWED_IMAGE_MIME_TYPES,
 } from "./productStudioMediaHelper";
-import { getSizeChartCompleteness, getOfferedSizes, getCompositionCompleteness } from "./productStudioReadinessHelper";
+import {
+  getSizeChartCompleteness,
+  getOfferedSizes,
+  getCompositionCompleteness,
+  getCanonicalRequiredProductAttributes,
+} from "./productStudioReadinessHelper";
 
 export function ProductStudioVisualWorkspace() {
   const {
@@ -48,6 +53,8 @@ export function ProductStudioVisualWorkspace() {
     setCategoryModalOpen,
     markTouched,
     isFieldAttention,
+    activeSizeSystemId,
+    setActiveSizeSystemId,
   } = useProductStudio();
 
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -86,7 +93,8 @@ export function ProductStudioVisualWorkspace() {
   const [categorySchema, setCategorySchema] = useState<SellerCategorySchema | null>(null);
   const [colorsList, setColorsList] = useState<SellerColor[]>([]);
   const [allowedSizeSystems, setAllowedSizeSystems] = useState<SellerSizeSystem[]>([]);
-  const [selectedSizeSystemId, setSelectedSizeSystemId] = useState<string | null>(null);
+  const selectedSizeSystemId = activeSizeSystemId;
+  const setSelectedSizeSystemId = setActiveSizeSystemId;
   const [sizeValuesList, setSizeValuesList] = useState<SellerSizeValue[]>([]);
   const [loadingSizes, setLoadingSizes] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
@@ -119,8 +127,10 @@ export function ProductStudioVisualWorkspace() {
         const allowed = schema.allowedSizeSystems || [];
         setAllowedSizeSystems(allowed);
         if (allowed.length > 0) {
-          const defaultSys = allowed.find((s: any) => s.isDefault) || allowed[0];
-          setSelectedSizeSystemId(defaultSys.id);
+          if (!activeSizeSystemId) {
+            const defaultSys = allowed.find((s: any) => s.isDefault) || allowed[0];
+            setSelectedSizeSystemId(defaultSys.id);
+          }
         } else {
           setSelectedSizeSystemId(null);
           setSizeValuesList([]);
@@ -136,7 +146,7 @@ export function ProductStudioVisualWorkspace() {
     return () => {
       isMounted = false;
     };
-  }, [draft.categoryId]);
+  }, [draft.categoryId, activeSizeSystemId, setSelectedSizeSystemId]);
 
   // Load size values when selectedSizeSystemId changes
   useEffect(() => {
@@ -492,7 +502,7 @@ export function ProductStudioVisualWorkspace() {
   const isSizeChartAttention = isFieldAttention("sizeChart");
 
   const requiredProductAttrs = useMemo(() => {
-    return categorySchema?.attributes?.filter((a) => a.scope === 'PRODUCT' && a.required) || [];
+    return getCanonicalRequiredProductAttributes(categorySchema);
   }, [categorySchema]);
 
   const filledRequiredCharacteristicsCount = useMemo(() => {
@@ -729,7 +739,7 @@ export function ProductStudioVisualWorkspace() {
     return (
       <span
         data-testid={`thumbnail-color-dot-${index}`}
-        title={`Цвет: ${assignedColor.name}`}
+        title={`Цвет: ${getColorDisplayName(assignedColor)}`}
         className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border border-white dark:border-black shadow-xs pointer-events-none z-10"
         style={{ backgroundColor: assignedColor.hex || "#000000" }}
       />
@@ -1459,6 +1469,7 @@ export function ProductStudioVisualWorkspace() {
           markTouched('characteristics');
         }}
         schema={categorySchema}
+        categoryName={draft.categoryName || categorySchema?.name}
         attributes={draft.attributes}
         onSave={(attributes) => {
           updateDraft({ attributes });
@@ -1473,6 +1484,7 @@ export function ProductStudioVisualWorkspace() {
           markTouched('sizeChart');
         }}
         schema={categorySchema}
+        categoryName={draft.categoryName || categorySchema?.name}
         draftSizes={offeredSizes.map((s) => ({ id: s.sizeValueId, label: s.sizeValueName }))}
         sizeChart={draft.sizeChart}
         onSaveSizeChart={(sizeChart) => {

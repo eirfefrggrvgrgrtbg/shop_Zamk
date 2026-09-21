@@ -1,12 +1,32 @@
 import { useState, useEffect } from 'react';
-import { X, Check } from 'lucide-react';
+import { X, Check, HelpCircle } from 'lucide-react';
 import type { ProductStudioImage } from '../../contexts/ProductStudioContext';
+import { cn } from '../../lib/utils';
+
+export function getColorDisplayName(c?: {
+  id?: string;
+  name?: string;
+  nameRu?: string;
+  colorName?: string;
+  code?: string;
+} | null): string {
+  if (!c) return 'Цвет без названия';
+  const name = (c.nameRu || c.name || c.colorName || '').trim();
+  return name || 'Цвет без названия';
+}
 
 export interface ProductStudioPhotoColorModalProps {
   isOpen: boolean;
   onClose: () => void;
   images: ProductStudioImage[];
-  colors: Array<{ id: string; name: string; hex?: string }>;
+  colors: Array<{
+    id: string;
+    name?: string;
+    nameRu?: string;
+    colorName?: string;
+    code?: string;
+    hex?: string;
+  }>;
   onSave: (updatedImages: ProductStudioImage[]) => void;
 }
 
@@ -19,6 +39,7 @@ export function ProductStudioPhotoColorModal({
 }: ProductStudioPhotoColorModalProps) {
   // Local pending assignments: map index -> colorId | null
   const [pendingAssignments, setPendingAssignments] = useState<Record<number, string | null>>({});
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>(0);
 
   useEffect(() => {
     if (isOpen) {
@@ -27,6 +48,7 @@ export function ProductStudioPhotoColorModal({
         initial[idx] = img.colorId ?? null;
       });
       setPendingAssignments(initial);
+      setSelectedPhotoIndex(0);
     }
   }, [isOpen, images]);
 
@@ -73,6 +95,10 @@ export function ProductStudioPhotoColorModal({
     onClose();
   };
 
+  const activePhoto = images[selectedPhotoIndex];
+  const activeColorId = activePhoto ? (pendingAssignments[selectedPhotoIndex] ?? null) : null;
+  const activeColor = activeColorId ? colors.find((c) => c.id === activeColorId) : null;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
@@ -80,7 +106,7 @@ export function ProductStudioPhotoColorModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-white dark:bg-[#1a1a1c] border border-border-soft dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+        className="w-full max-w-3xl bg-white dark:bg-[#1a1a1c] border border-border-soft dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -90,90 +116,261 @@ export function ProductStudioPhotoColorModal({
               Привязка фотографий к цветам
             </h2>
             <p className="text-xs text-ash mt-1 leading-relaxed">
-              Выберите, для какого цвета показывать каждое фото. Фото без привязки используются как общие.
+              Выберите фото в списке слева и укажите его принадлежность к цвету справа.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Закрыть"
-            className="p-1 rounded-lg text-ash hover:text-graphite dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer ml-3 shrink-0"
+            className="p-1.5 rounded-lg text-ash hover:text-graphite dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer ml-3 shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Summary Badges */}
-        <div className="px-5 py-2.5 bg-gray-50/80 dark:bg-white/[0.02] border-b border-border-soft dark:border-white/10 flex items-center gap-3 text-xs text-ash flex-wrap">
+        {/* Summary Badges Bar */}
+        <div
+          data-testid="photo-color-summary-bar"
+          className="px-5 py-2.5 bg-gray-50/80 dark:bg-white/[0.02] border-b border-border-soft dark:border-white/10 flex items-center gap-2.5 text-xs text-ash flex-wrap"
+        >
           <span className="font-medium text-graphite dark:text-white">
             Общие: <strong className="font-semibold">{generalCount}</strong>
           </span>
-          {colors.map((c) => (
-            <span key={c.id} className="flex items-center gap-1.5 font-medium text-graphite dark:text-white">
-              <span
-                className="w-2.5 h-2.5 rounded-full border border-black/10 dark:border-white/20 shrink-0 inline-block"
-                style={{ backgroundColor: c.hex || '#000000' }}
-              />
-              {c.name}: <strong className="font-semibold">{colorCounts[c.id] || 0}</strong>
-            </span>
-          ))}
+          {colors.map((c) => {
+            const displayName = getColorDisplayName(c);
+            return (
+              <span key={c.id} className="flex items-center gap-1.5 font-medium text-graphite dark:text-white">
+                <span className="text-gray-300 dark:text-gray-600">·</span>
+                <span
+                  className="w-2.5 h-2.5 rounded-full border border-black/10 dark:border-white/20 shrink-0 inline-block"
+                  style={{ backgroundColor: c.hex || '#000000' }}
+                />
+                <span>{displayName}: </span>
+                <strong className="font-semibold">{colorCounts[c.id] || 0}</strong>
+              </span>
+            );
+          })}
         </div>
 
-        {/* Photos List */}
-        <div className="p-5 overflow-y-auto space-y-3 flex-1">
-          {images.map((img, idx) => {
-            const currentVal = pendingAssignments[idx] ?? '';
-            return (
-              <div
-                key={img.id || img.url || idx}
-                data-testid={`photo-binding-row-${idx}`}
-                className="flex items-center justify-between gap-4 p-2.5 rounded-xl border border-border-soft/60 dark:border-white/5 bg-paper-light/50 dark:bg-white/[0.01]"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-12 h-14 rounded-lg overflow-hidden bg-black/5 dark:bg-white/5 shrink-0 border border-border-soft dark:border-white/10 flex items-center justify-center">
+        {/* Two-Column Workspace */}
+        <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden divide-y md:divide-y-0 md:divide-x divide-border-soft dark:divide-white/10">
+          {/* LEFT COLUMN: Photos List */}
+          <div className="w-full md:w-7/12 p-4 overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-semibold text-graphite dark:text-white">
+                Фотографии ({images.length})
+              </span>
+              <span className="text-[11px] text-ash">
+                Нажмите для выбора
+              </span>
+            </div>
+
+            {images.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-ash text-xs">
+                Нет фотографий товара
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {images.map((img, idx) => {
+                  const isSelected = selectedPhotoIndex === idx;
+                  const isCover = idx === 0;
+                  const assignedId = pendingAssignments[idx];
+                  const boundColor = assignedId ? colors.find((c) => c.id === assignedId) : null;
+                  const boundColorName = boundColor ? getColorDisplayName(boundColor) : null;
+
+                  return (
+                    <button
+                      key={img.id || img.url || idx}
+                      type="button"
+                      data-testid={`photo-card-${idx}`}
+                      onClick={() => setSelectedPhotoIndex(idx)}
+                      className={cn(
+                        "group relative rounded-xl border p-1.5 text-left transition-all cursor-pointer flex flex-col",
+                        isSelected
+                          ? "ring-2 ring-indigo-500 border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/20"
+                          : "border-border-soft dark:border-white/10 hover:border-gray-400 dark:hover:border-white/30 bg-paper-light/30 dark:bg-white/[0.01]"
+                      )}
+                    >
+                      <div className="relative aspect-[4/5] w-full rounded-lg bg-black/5 dark:bg-white/5 overflow-hidden">
+                        <img
+                          src={img.url}
+                          alt={`Фото ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        {isCover && (
+                          <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-xs">
+                            Обложка
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-1.5 px-0.5 flex items-center justify-between gap-1 text-[11px]">
+                        <span className="font-medium text-graphite dark:text-white truncate">
+                          Фото {idx + 1}
+                        </span>
+
+                        {boundColorName ? (
+                          <span
+                            data-testid={`photo-assigned-badge-${idx}`}
+                            className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 shrink-0"
+                            title={`Привязано: ${boundColorName}`}
+                          >
+                            <span
+                              className="w-1.5 h-1.5 rounded-full shrink-0"
+                              style={{ backgroundColor: boundColor?.hex || '#000000' }}
+                            />
+                            <span className="truncate max-w-[55px]">{boundColorName}</span>
+                          </span>
+                        ) : (
+                          <span
+                            data-testid={`photo-assigned-badge-${idx}`}
+                            className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 dark:bg-white/10 text-ash shrink-0"
+                          >
+                            Общее
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT COLUMN: Color Binding Targets */}
+          <div className="w-full md:w-5/12 p-5 overflow-y-auto flex flex-col bg-gray-50/50 dark:bg-white/[0.02]">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-ash mb-3">
+              Куда относится фото
+            </span>
+
+            {activePhoto ? (
+              <div className="flex flex-col flex-1">
+                {/* Active Photo Snippet */}
+                <div className="p-2.5 rounded-xl border border-border-soft dark:border-white/10 bg-white dark:bg-[#202024] flex items-center gap-3 mb-4">
+                  <div className="w-10 h-12 rounded-lg overflow-hidden bg-black/5 dark:bg-white/5 shrink-0 border border-border-soft dark:border-white/10">
                     <img
-                      src={img.url}
+                      src={activePhoto.url}
                       alt=""
                       className="w-full h-full object-cover"
                     />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-sm font-medium text-graphite dark:text-white block truncate">
-                      Фото {idx + 1}
-                    </span>
-                    {idx === 0 && (
-                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
-                        Обложка товара
-                      </span>
-                    )}
+                    <div className="text-xs font-semibold text-graphite dark:text-white truncate">
+                      Фото {selectedPhotoIndex + 1}
+                      {selectedPhotoIndex === 0 && ' (Обложка)'}
+                    </div>
+                    <div className="text-[11px] text-ash mt-0.5 truncate">
+                      {activeColor ? `Привязано к: ${getColorDisplayName(activeColor)}` : 'Общее фото'}
+                    </div>
                   </div>
                 </div>
 
-                <div className="shrink-0 w-44">
-                  <select
-                    data-testid={`photo-color-select-${idx}`}
-                    aria-label={`Цвет для фото ${idx + 1}`}
-                    value={currentVal}
-                    onChange={(e) => {
-                      const val = e.target.value ? e.target.value : null;
+                {/* Target Options */}
+                <span className="text-xs font-medium text-graphite dark:text-white mb-2">
+                  Выберите вариант привязки:
+                </span>
+
+                <div className="space-y-2 flex-1">
+                  {/* Option: General */}
+                  <button
+                    type="button"
+                    data-testid="photo-bind-target-general"
+                    onClick={() => {
                       setPendingAssignments((prev) => ({
                         ...prev,
-                        [idx]: val,
+                        [selectedPhotoIndex]: null,
                       }));
                     }}
-                    className="w-full text-xs font-medium bg-white dark:bg-[#202024] border border-border-soft dark:border-white/20 rounded-lg px-2.5 py-2 text-graphite dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                    className={cn(
+                      "w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer",
+                      activeColorId === null
+                        ? "border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-100 ring-1 ring-indigo-500 shadow-xs"
+                        : "border-border-soft dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20 bg-white dark:bg-[#202024] text-graphite dark:text-white"
+                    )}
                   >
-                    <option value="">Общее (все цвета)</option>
-                    {colors.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    <div>
+                      <div className="text-xs font-semibold">Общее (все цвета)</div>
+                      <div className="text-[11px] text-ash mt-0.5">
+                        Показывается для всех вариантов
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <span className="text-[11px] text-ash font-medium">
+                        {generalCount} фото
+                      </span>
+                      {activeColorId === null && (
+                        <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                          <Check className="w-3 h-3 stroke-[2.5]" />
+                        </span>
+                      )}
+                    </div>
+                  </button>
+
+                  {/* Options: Colors */}
+                  {colors.map((c) => {
+                    const isSelectedColor = activeColorId === c.id;
+                    const colorName = getColorDisplayName(c);
+                    const count = colorCounts[c.id] || 0;
+
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        data-testid={`photo-bind-target-${c.id}`}
+                        onClick={() => {
+                          setPendingAssignments((prev) => ({
+                            ...prev,
+                            [selectedPhotoIndex]: c.id,
+                          }));
+                        }}
+                        className={cn(
+                          "w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer",
+                          isSelectedColor
+                            ? "border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-100 ring-1 ring-indigo-500 shadow-xs"
+                            : "border-border-soft dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20 bg-white dark:bg-[#202024] text-graphite dark:text-white"
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className="w-3.5 h-3.5 rounded-full border border-black/10 dark:border-white/20 shrink-0 inline-block"
+                            style={{ backgroundColor: c.hex || '#000000' }}
+                          />
+                          <span className="text-xs font-semibold truncate">
+                            {colorName}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                          <span className="text-[11px] text-ash font-medium">
+                            {count} фото
+                          </span>
+                          {isSelectedColor && (
+                            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                              <Check className="w-3 h-3 stroke-[2.5]" />
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Helper text */}
+                <div className="mt-4 p-3 rounded-xl bg-gray-100/70 dark:bg-white/5 text-[11px] text-ash leading-relaxed flex items-start gap-2">
+                  <HelpCircle className="w-4 h-4 text-ash shrink-0 mt-0.5" />
+                  <span>
+                    Если фото подходит для всех вариантов (например, общая посадка или детали кроя), оставьте его в разделе «Общее».
+                  </span>
                 </div>
               </div>
-            );
-          })}
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-xs text-ash">
+                Выберите фотографию для настройки привязки
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer */}

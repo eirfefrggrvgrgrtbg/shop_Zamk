@@ -344,9 +344,9 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
       {/* Desktop Top Navigation Header */}
       <header
         data-testid="desktop-top-nav"
-        className="sticky top-0 z-30 bg-white border-b border-gray-200"
+        className="sticky top-0 z-30 bg-white border-b border-gray-200 h-[var(--seller-shell-header-height,56px)]"
       >
-        <div className="w-full px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14">
+        <div className="w-full px-4 sm:px-6 lg:px-8 flex items-center justify-between h-full">
           {/* Left: Mobile hamburger + Wordmark */}
           <div className="flex items-center gap-3">
             <button
@@ -528,7 +528,7 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full overflow-y-auto">
+      <main className="flex-1 w-full">
         {sellerStatus === 'pending' && (
           <div className="bg-yellow-50 p-4 text-sm text-yellow-800 border-b border-yellow-200">
             Магазин на проверке. Заполните профиль магазина. После проверки администратор активирует продавца.

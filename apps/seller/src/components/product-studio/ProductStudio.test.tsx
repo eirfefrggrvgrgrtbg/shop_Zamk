@@ -467,16 +467,14 @@ describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
     }
   });
 
-  // Requirement 12: no production route is changed
-  // Requirement 12: create route points to SellerProductStudioNew, edit remains legacy
-  it('12. /products/new routes to SellerProductStudioNew while edit and list remain unchanged in App.tsx', () => {
+  // Requirement 12: create and edit route points to Product Studio in App.tsx
+  it('12. /products/new and /products/:id/edit route to Product Studio in App.tsx', () => {
     const appPath = path.resolve(__dirname, '../../App.tsx');
     const appContent = fs.readFileSync(appPath, 'utf-8');
 
-    // Production routes: list and edit remain legacy, new points to SellerProductStudioNew
     expect(appContent).toContain('path="/products" element={<SellerProtectedRoute><SellerLayout><SellerProducts /></SellerLayout></SellerProtectedRoute>}');
     expect(appContent).toContain('path="/products/new" element={<SellerProtectedRoute><SellerLayout><SellerProductStudioNew /></SellerLayout></SellerProtectedRoute>}');
-    expect(appContent).toContain('path="/products/:id/edit" element={<SellerProtectedRoute><SellerLayout><SellerProductEdit /></SellerLayout></SellerProtectedRoute>}');
+    expect(appContent).toContain('path="/products/:id/edit" element={<SellerProtectedRoute><SellerLayout><SellerProductStudioEdit /></SellerLayout></SellerProtectedRoute>}');
   });
 });
 
@@ -842,14 +840,14 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
     }
   });
 
-  // 22. production route cutover for create only
-  it('22. production route cutover in App.tsx mounts SellerProductStudioNew on /products/new only', () => {
+  // 22. production route cutover in App.tsx mounts Studio components
+  it('22. production route cutover in App.tsx mounts SellerProductStudio components', () => {
     const appPath = path.resolve(__dirname, '../../App.tsx');
     const appContent = fs.readFileSync(appPath, 'utf-8');
 
     expect(appContent).toContain('path="/products" element={<SellerProtectedRoute><SellerLayout><SellerProducts /></SellerLayout></SellerProtectedRoute>}');
     expect(appContent).toContain('path="/products/new" element={<SellerProtectedRoute><SellerLayout><SellerProductStudioNew /></SellerLayout></SellerProtectedRoute>}');
-    expect(appContent).toContain('path="/products/:id/edit" element={<SellerProtectedRoute><SellerLayout><SellerProductEdit /></SellerLayout></SellerProtectedRoute>}');
+    expect(appContent).toContain('path="/products/:id/edit" element={<SellerProtectedRoute><SellerLayout><SellerProductStudioEdit /></SellerLayout></SellerProtectedRoute>}');
   });
 
   // 23. empty draft: Save disabled, Moderation disabled

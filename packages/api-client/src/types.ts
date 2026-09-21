@@ -106,6 +106,39 @@ export interface PublicDeliveryMethod {
   estimatedDaysMax?: number;
 }
 
+export interface ProductImage {
+  id: string;
+  productId?: string;
+  imageUrl?: string;
+  url?: string;
+  objectKey?: string;
+  renditionUrl?: string;
+  renditionObjectKey?: string;
+  altText?: string;
+  sortOrder: number;
+  colorId?: string | null;
+  width?: number;
+  height?: number;
+  cropX?: number;
+  cropY?: number;
+  cropWidth?: number;
+  cropHeight?: number;
+  isMain?: boolean;
+  createdAt?: string;
+}
+
+export interface ProductAttributeValue {
+  id: string;
+  productId?: string;
+  attributeDefinitionId: string;
+  enumValueId?: string | null;
+  textValue?: string | null;
+  numberValue?: number | null;
+  boolValue?: boolean | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ProductSummary {
   id: string;
   title: string;
@@ -115,10 +148,13 @@ export interface ProductSummary {
   oldPriceCents?: number;
   mainImageUrl?: string;
   categoryId?: string;
+  categoryName?: string;
   brandId?: string;
+  brandName?: string;
   sellerId?: string;
   sellerSlug?: string;
   sellerName?: string;
+  currency?: string;
   createdAt: string;
   status: string;
   inStock?: boolean;
@@ -132,13 +168,15 @@ export interface ProductSummary {
 
 export interface ProductDetail extends ProductSummary {
   description: string;
-  images: any[];
+  images: ProductImage[];
   variants?: ProductVariant[];
   material?: string;
   color?: string;
   materialComposition?: AdminProductMaterialComposition[];
   careInstructions?: string;
   sizeChart?: AdminProductSizeChart;
+  attributes?: ProductAttributeValue[];
+  gender?: string;
 }
 
 export interface ProductVariant {

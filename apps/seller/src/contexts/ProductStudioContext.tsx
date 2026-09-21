@@ -183,6 +183,8 @@ export interface ProductStudioContextValue extends ProductStudioState {
   isFieldAttention: (field: string) => boolean;
   readiness: ProductStudioReadiness;
   categorySchema: SellerCategorySchema | null;
+  activeSizeSystemId: string | null;
+  setActiveSizeSystemId: (id: string | null) => void;
   createMediaUrl: (file: File) => string;
   revokeMediaUrl: (url: string) => void;
 }
@@ -192,6 +194,8 @@ const ProductStudioContext = createContext<ProductStudioContextValue | undefined
 export interface ProductStudioProviderProps {
   entryMode: ProductStudioEntryMode;
   initialDraft?: Partial<ProductStudioDraft>;
+  initialCategorySchema?: SellerCategorySchema | null;
+  initialSizeSystemId?: string | null;
   children: React.ReactNode;
 }
 
@@ -204,6 +208,8 @@ const DEFAULT_DRAFT: ProductStudioDraft = {
 export function ProductStudioProvider({
   entryMode,
   initialDraft,
+  initialCategorySchema,
+  initialSizeSystemId,
   children,
 }: ProductStudioProviderProps) {
   const normalizedInitial: ProductStudioDraft = useMemo(() => {
@@ -240,7 +246,15 @@ export function ProductStudioProvider({
   }, [mediaRegistry]);
 
   // Load category schema when categoryId changes
-  const [categorySchema, setCategorySchema] = useState<SellerCategorySchema | null>(null);
+  const [categorySchema, setCategorySchema] = useState<SellerCategorySchema | null>(
+    initialCategorySchema || null
+  );
+
+  useEffect(() => {
+    if (initialCategorySchema !== undefined) {
+      setCategorySchema(initialCategorySchema);
+    }
+  }, [initialCategorySchema]);
 
   useEffect(() => {
     if (!state.draft.categoryId) {
@@ -259,6 +273,34 @@ export function ProductStudioProvider({
       isMounted = false;
     };
   }, [state.draft.categoryId]);
+
+  const [activeSizeSystemId, setActiveSizeSystemId] = useState<string | null>(
+    initialSizeSystemId !== undefined ? initialSizeSystemId : null
+  );
+
+  useEffect(() => {
+    if (initialSizeSystemId !== undefined) {
+      setActiveSizeSystemId(initialSizeSystemId);
+    }
+  }, [initialSizeSystemId]);
+
+  // In Create mode, when category schema loads or changes, initialize canonical default if unset
+  useEffect(() => {
+    if (entryMode === 'create') {
+      if (categorySchema?.allowedSizeSystems && categorySchema.allowedSizeSystems.length > 0) {
+        if (!activeSizeSystemId) {
+          const defaultSys =
+            categorySchema.allowedSizeSystems.find((s) => s.isDefault) ||
+            categorySchema.allowedSizeSystems[0];
+          if (defaultSys) {
+            setActiveSizeSystemId(defaultSys.id);
+          }
+        }
+      } else if (!state.draft.categoryId) {
+        setActiveSizeSystemId(null);
+      }
+    }
+  }, [categorySchema, entryMode, state.draft.categoryId, activeSizeSystemId]);
 
   const readiness = useMemo(() => {
     return getProductStudioReadiness(state.draft, categorySchema);
@@ -320,6 +362,8 @@ export function ProductStudioProvider({
       isFieldAttention,
       readiness,
       categorySchema,
+      activeSizeSystemId,
+      setActiveSizeSystemId,
       createMediaUrl,
       revokeMediaUrl,
     };
@@ -331,6 +375,8 @@ export function ProductStudioProvider({
     isFieldAttention,
     readiness,
     categorySchema,
+    activeSizeSystemId,
+    setActiveSizeSystemId,
     createMediaUrl,
     revokeMediaUrl,
   ]);

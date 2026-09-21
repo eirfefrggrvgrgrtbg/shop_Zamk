@@ -38,7 +38,7 @@ export function ProductStudioHeader() {
   return (
     <header
       data-testid="product-studio-header"
-      className="sticky top-0 z-40 w-full border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#121214] shadow-sm"
+      className="sticky top-[var(--seller-shell-header-height,56px)] z-20 w-full border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#121214] shadow-sm"
     >
       <div className="max-w-[1360px] mx-auto px-4 h-[56px] flex items-center justify-between">
         {/* LEFT: Context & Title */}
