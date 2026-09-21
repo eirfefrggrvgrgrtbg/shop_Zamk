@@ -3,8 +3,15 @@ import {
   getProductStudioReadiness,
   getSizeChartCompleteness,
 } from './productStudioReadinessHelper';
-import type { ProductStudioDraft } from '../../contexts/ProductStudioContext';
+import type { ProductStudioDraft, ProductStudioImage } from '../../contexts/ProductStudioContext';
 import type { SellerCategorySchema } from '@zamk/api-client/src/seller';
+import { createCanonicalProductStudioImage } from './productStudioMediaHelper';
+
+const mockImages: ProductStudioImage[] = [
+  createCanonicalProductStudioImage({ imageId: 'img-1', url: 'https://images.unsplash.com/1.jpg', isMain: true }),
+  createCanonicalProductStudioImage({ imageId: 'img-2', url: 'https://images.unsplash.com/2.jpg' }),
+  createCanonicalProductStudioImage({ imageId: 'img-3', url: 'https://images.unsplash.com/3.jpg' }),
+];
 
 describe('productStudioReadinessHelper', () => {
   const emptyDraft: ProductStudioDraft = {
@@ -37,11 +44,7 @@ describe('productStudioReadinessHelper', () => {
       categoryId: 'cat-1',
       priceCents: 1000,
       material: 'Хлопок',
-      images: [
-        { url: 'https://images.unsplash.com/1.jpg' },
-        { url: 'https://images.unsplash.com/2.jpg' },
-        { url: 'https://images.unsplash.com/3.jpg' },
-      ],
+      images: mockImages,
     };
     const r0 = getProductStudioReadiness(draft);
     expect(r0.blockingFields).toContain('description');
@@ -59,11 +62,7 @@ describe('productStudioReadinessHelper', () => {
       description: 'Отличная футболка',
       categoryId: 'cat-1',
       priceCents: 1000,
-      images: [
-        { url: 'https://images.unsplash.com/1.jpg' },
-        { url: 'https://images.unsplash.com/2.jpg' },
-        { url: 'https://images.unsplash.com/3.jpg' },
-      ],
+      images: mockImages,
     };
     const r0 = getProductStudioReadiness(draft);
     expect(r0.blockingFields).toContain('composition');
@@ -149,11 +148,7 @@ describe('productStudioReadinessHelper', () => {
       categoryId: 'cat-dress',
       priceCents: 500000,
       material: 'Шелк',
-      images: [
-        { url: 'https://images.unsplash.com/1.jpg' },
-        { url: 'https://images.unsplash.com/2.jpg' },
-        { url: 'https://images.unsplash.com/3.jpg' },
-      ],
+      images: mockImages,
       attributes: [],
     };
 
@@ -220,11 +215,7 @@ describe('productStudioReadinessHelper', () => {
       categoryId: 'cat-hoodie',
       priceCents: 350000,
       material: 'Хлопок',
-      images: [
-        { url: 'https://images.unsplash.com/1.jpg' },
-        { url: 'https://images.unsplash.com/2.jpg' },
-        { url: 'https://images.unsplash.com/3.jpg' },
-      ],
+      images: mockImages,
       colors: [{ id: 'col-1', name: 'Черный' }],
       variants: [],
     };
@@ -462,11 +453,7 @@ describe('productStudioReadinessHelper', () => {
       priceCents: 1000000,
       material: 'Полиэстер',
       materialComposition: [{ materialName: 'Полиэстер', percentage: 100 }],
-      images: [
-        { url: 'https://images.unsplash.com/1.jpg' },
-        { url: 'https://images.unsplash.com/2.jpg' },
-        { url: 'https://images.unsplash.com/3.jpg' },
-      ],
+      images: mockImages,
       colors: [],
       variants: [],
     };
@@ -516,7 +503,7 @@ describe('productStudioReadinessHelper', () => {
     // 1 image -> still blocker
     const r1 = getProductStudioReadiness({
       ...draft,
-      images: [{ url: 'https://images.unsplash.com/1.jpg' }],
+      images: [mockImages[0]],
     });
     expect(r1.blockingFields).toContain('media');
     expect(r1.fieldStatus.media.isSatisfied).toBe(false);
@@ -524,10 +511,7 @@ describe('productStudioReadinessHelper', () => {
     // 2 images -> still blocker
     const r2 = getProductStudioReadiness({
       ...draft,
-      images: [
-        { url: 'https://images.unsplash.com/1.jpg' },
-        { url: 'https://images.unsplash.com/2.jpg' },
-      ],
+      images: [mockImages[0], mockImages[1]],
     });
     expect(r2.blockingFields).toContain('media');
     expect(r2.fieldStatus.media.isSatisfied).toBe(false);
@@ -535,11 +519,7 @@ describe('productStudioReadinessHelper', () => {
     // 3 images -> media blocker clears
     const r3 = getProductStudioReadiness({
       ...draft,
-      images: [
-        { url: 'https://images.unsplash.com/1.jpg' },
-        { url: 'https://images.unsplash.com/2.jpg' },
-        { url: 'https://images.unsplash.com/3.jpg' },
-      ],
+      images: mockImages,
     });
     expect(r3.blockingFields).not.toContain('media');
     expect(r3.fieldStatus.media.isSatisfied).toBe(true);
@@ -553,11 +533,7 @@ describe('productStudioReadinessHelper', () => {
       priceCents: 150000,
       material: 'Хлопок',
       materialComposition: [{ materialName: 'Хлопок', percentage: 100 }],
-      images: [
-        { url: 'https://images.unsplash.com/1.jpg' },
-        { url: 'https://images.unsplash.com/2.jpg' },
-        { url: 'https://images.unsplash.com/3.jpg' },
-      ],
+      images: mockImages,
       colors: [{ id: 'col-black', name: 'Черный', hex: '#000000' }],
       variants: [{ id: 'var-1', sizeValueId: 'sz-m', priceCents: 150000 }],
     };
@@ -595,11 +571,7 @@ describe('productStudioReadinessHelper', () => {
       priceCents: 200000,
       material: 'Шерсть',
       materialComposition: [{ materialName: 'Шерсть', percentage: 100 }],
-      images: [
-        { url: 'https://images.unsplash.com/1.jpg' },
-        { url: 'https://images.unsplash.com/2.jpg' },
-        { url: 'https://images.unsplash.com/3.jpg' },
-      ],
+      images: mockImages,
       colors: [{ id: 'col-red', name: 'Красный', hex: '#ff0000' }],
       variants: [],
     };
@@ -629,11 +601,7 @@ describe('productStudioReadinessHelper', () => {
       priceCents: 500000,
       material: 'Серебро',
       materialComposition: [{ materialName: 'Серебро', percentage: 100 }],
-      images: [
-        { url: 'https://images.unsplash.com/1.jpg' },
-        { url: 'https://images.unsplash.com/2.jpg' },
-        { url: 'https://images.unsplash.com/3.jpg' },
-      ],
+      images: mockImages,
       colors: [],
       variants: [{ id: 'var-1', sizeValueId: 'sz-17', priceCents: 500000 }],
       sizeChart: { rows: [{ size: '17', measurements: {} }] },
@@ -664,11 +632,7 @@ describe('productStudioReadinessHelper', () => {
       priceCents: 300000,
       material: 'Полиэстер',
       materialComposition: [{ materialName: 'Полиэстер', percentage: 100 }],
-      images: [
-        { url: 'https://images.unsplash.com/1.jpg' },
-        { url: 'https://images.unsplash.com/2.jpg' },
-        { url: 'https://images.unsplash.com/3.jpg' },
-      ],
+      images: mockImages,
       colors: [],
       variants: [],
     };

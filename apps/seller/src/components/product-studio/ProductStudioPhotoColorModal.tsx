@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Check, HelpCircle } from 'lucide-react';
 import type { ProductStudioImage } from '../../contexts/ProductStudioContext';
+import { getProductStudioImageDisplayUrl } from './productStudioMediaHelper';
 import { cn } from '../../lib/utils';
 
 export function getColorDisplayName(c?: {
@@ -181,7 +182,7 @@ export function ProductStudioPhotoColorModal({
 
                   return (
                     <button
-                      key={img.id || img.url || idx}
+                      key={img.uiKey || idx}
                       type="button"
                       data-testid={`photo-card-${idx}`}
                       onClick={() => setSelectedPhotoIndex(idx)}
@@ -194,7 +195,7 @@ export function ProductStudioPhotoColorModal({
                     >
                       <div className="relative aspect-[4/5] w-full rounded-lg bg-black/5 dark:bg-white/5 overflow-hidden">
                         <img
-                          src={img.url}
+                          src={getProductStudioImageDisplayUrl(img)}
                           alt={`Фото ${idx + 1}`}
                           className="w-full h-full object-cover"
                         />
@@ -250,7 +251,7 @@ export function ProductStudioPhotoColorModal({
                 <div className="p-2.5 rounded-xl border border-border-soft dark:border-white/10 bg-white dark:bg-[#202024] flex items-center gap-3 mb-4">
                   <div className="w-10 h-12 rounded-lg overflow-hidden bg-black/5 dark:bg-white/5 shrink-0 border border-border-soft dark:border-white/10">
                     <img
-                      src={activePhoto.url}
+                      src={getProductStudioImageDisplayUrl(activePhoto)}
                       alt=""
                       className="w-full h-full object-cover"
                     />

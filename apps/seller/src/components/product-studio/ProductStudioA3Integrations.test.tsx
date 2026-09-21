@@ -10,6 +10,7 @@ import {
   useProductStudio,
   type ProductStudioDraft,
 } from '../../contexts/ProductStudioContext';
+import { getProductStudioImageDisplayUrl } from './productStudioMediaHelper';
 
 const mockColors = [
   { id: 'col-black', nameRu: 'Чёрный', hex: '#000000' },
@@ -132,7 +133,7 @@ describe('ProductStudio PS.R4A.5A3 Integrations', () => {
         expect(studioCtx?.draft?.images).toHaveLength(1);
       });
 
-      const uploadedBlobUrl = studioCtx!.draft!.images![0].url;
+      const uploadedBlobUrl = getProductStudioImageDisplayUrl(studioCtx!.draft!.images![0]);
       expect(uploadedBlobUrl).toContain('blob:');
       expect(createdUrls).toContain(uploadedBlobUrl);
       expect(revokedUrls).not.toContain(uploadedBlobUrl);
@@ -159,7 +160,7 @@ describe('ProductStudio PS.R4A.5A3 Integrations', () => {
 
       // URL is still not revoked and photo is rendered
       expect(revokedUrls).not.toContain(uploadedBlobUrl);
-      expect(studioCtx!.draft!.images![0].url).toBe(uploadedBlobUrl);
+      expect(getProductStudioImageDisplayUrl(studioCtx!.draft!.images![0])).toBe(uploadedBlobUrl);
       const mainImg = screen.getByTestId('main-product-image') as HTMLImageElement;
       expect(mainImg.src).toBe(uploadedBlobUrl);
     });
@@ -188,7 +189,7 @@ describe('ProductStudio PS.R4A.5A3 Integrations', () => {
         expect(studioCtx?.draft?.images).toHaveLength(1);
       });
 
-      const uploadedUrl = studioCtx!.draft!.images![0].url;
+      const uploadedUrl = getProductStudioImageDisplayUrl(studioCtx!.draft!.images![0]);
 
       // Remove the image
       studioCtx!.updateDraft({ images: [] });
@@ -222,7 +223,7 @@ describe('ProductStudio PS.R4A.5A3 Integrations', () => {
         expect(studioCtx?.draft?.images).toHaveLength(1);
       });
 
-      const uploadedUrl = studioCtx!.draft!.images![0].url;
+      const uploadedUrl = getProductStudioImageDisplayUrl(studioCtx!.draft!.images![0]);
       expect(revokedUrls).not.toContain(uploadedUrl);
 
       // Unmount entire provider
@@ -241,7 +242,13 @@ describe('ProductStudio PS.R4A.5A3 Integrations', () => {
       }
 
       const draftNoColors: Partial<ProductStudioDraft> = {
-        images: [{ url: 'https://cdn/1.jpg', isMain: true }],
+        images: [
+          {
+            uiKey: '1',
+            source: { kind: 'canonical', imageId: '1', url: 'https://cdn/1.jpg' },
+            isMain: true,
+          },
+        ],
         colors: [],
       };
 
@@ -269,7 +276,7 @@ describe('ProductStudio PS.R4A.5A3 Integrations', () => {
       expect(bindBtn.getAttribute('title')).toBe('Привязать фото к цветам');
     });
 
-    it('canceling binding modal does not mutate draft color assignments', async () => {
+    it('binding modal cancels draft assignments on Cancel', async () => {
       let studioCtx: ReturnType<typeof useProductStudio> | null = null;
       function ContextWatcher() {
         studioCtx = useProductStudio();
@@ -278,8 +285,18 @@ describe('ProductStudio PS.R4A.5A3 Integrations', () => {
 
       const initialDraft: Partial<ProductStudioDraft> = {
         images: [
-          { url: 'https://cdn/1.jpg', isMain: true, colorId: null },
-          { url: 'https://cdn/2.jpg', isMain: false, colorId: null },
+          {
+            uiKey: '1',
+            source: { kind: 'canonical', imageId: '1', url: 'https://cdn/1.jpg' },
+            isMain: true,
+            colorId: null,
+          },
+          {
+            uiKey: '2',
+            source: { kind: 'canonical', imageId: '2', url: 'https://cdn/2.jpg' },
+            isMain: false,
+            colorId: null,
+          },
         ],
         colors: [
           { id: 'col-black', name: 'Чёрный', hex: '#000000' },
@@ -328,8 +345,18 @@ describe('ProductStudio PS.R4A.5A3 Integrations', () => {
 
       const initialDraft: Partial<ProductStudioDraft> = {
         images: [
-          { url: 'https://cdn/1.jpg', isMain: true, colorId: null },
-          { url: 'https://cdn/2.jpg', isMain: false, colorId: null },
+          {
+            uiKey: '1',
+            source: { kind: 'canonical', imageId: '1', url: 'https://cdn/1.jpg' },
+            isMain: true,
+            colorId: null,
+          },
+          {
+            uiKey: '2',
+            source: { kind: 'canonical', imageId: '2', url: 'https://cdn/2.jpg' },
+            isMain: false,
+            colorId: null,
+          },
         ],
         colors: [
           { id: 'col-black', name: 'Чёрный', hex: '#000000' },

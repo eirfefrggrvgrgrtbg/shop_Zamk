@@ -82,9 +82,27 @@ describe("productStudioPresentationAdapter", () => {
       description: "",
       categoryId: "cat-1",
       images: [
-        { url: "img-3.jpg", sortOrder: 3, colorId: "c-black" },
-        { url: "img-1.jpg", sortOrder: 1, isMain: true, colorId: "c-white" },
-        { url: "img-2.jpg", sortOrder: 2, colorId: "c-black" },
+        {
+          uiKey: 'img-3',
+          sortOrder: 3,
+          colorId: 'c-black',
+          isMain: false,
+          source: { kind: 'canonical', imageId: 'img-3', url: 'img-3.jpg' },
+        },
+        {
+          uiKey: 'img-1',
+          sortOrder: 1,
+          isMain: true,
+          colorId: 'c-white',
+          source: { kind: 'canonical', imageId: 'img-1', url: 'img-1.jpg' },
+        },
+        {
+          uiKey: 'img-2',
+          sortOrder: 2,
+          colorId: 'c-black',
+          isMain: false,
+          source: { kind: 'canonical', imageId: 'img-2', url: 'img-2.jpg' },
+        },
       ],
     };
     const res = mapStudioDraftToPresentation(draftWithImages);

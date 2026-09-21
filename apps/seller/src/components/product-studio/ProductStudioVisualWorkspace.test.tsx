@@ -63,7 +63,13 @@ const baseDraft: Partial<ProductStudioDraft> = {
     { id: 'var-1', colorId: 'col-black', colorName: 'Чёрный', sizeValueId: 'sz-m', size: 'M', priceCents: 450000 },
   ],
   images: [
-    { id: 'img-1', url: 'https://images/1.jpg', colorId: 'col-black', sortOrder: 0 },
+    {
+      uiKey: 'img-1',
+      isMain: true,
+      colorId: 'col-black',
+      sortOrder: 0,
+      source: { kind: 'canonical', imageId: 'img-1', url: 'https://images/1.jpg' },
+    },
   ],
   materialComposition: [
     { materialName: 'Хлопок', percentage: 100 },
@@ -182,10 +188,12 @@ describe('ProductStudioVisualWorkspace - In-Canvas Constructor', () => {
       const file = new File(['test-image'], 'preview.png', { type: 'image/png' });
       fireEvent.change(fileInput, { target: { files: [file] } });
 
-      // Draft gains local media entry with blob URL
+      // Draft gains local media entry with blob URL and retains File
       await waitFor(() => {
         expect(currentCtx.draft.images).toHaveLength(1);
-        expect(currentCtx.draft.images[0].url).toContain('blob:');
+        expect(currentCtx.draft.images[0].source.kind).toBe('local');
+        expect(currentCtx.draft.images[0].source.previewUrl).toContain('blob:');
+        expect(currentCtx.draft.images[0].source.file).toBe(file);
       });
 
       // No network upload request occurred
@@ -561,7 +569,13 @@ describe('ProductStudioVisualWorkspace - In-Canvas Constructor', () => {
           initialDraft={{
             ...baseDraft,
             images: [
-              { id: 'img-1', url: 'https://images/1.jpg', colorId: null, sortOrder: 0 },
+              {
+                uiKey: 'img-1',
+                isMain: true,
+                colorId: null,
+                sortOrder: 0,
+                source: { kind: 'canonical', imageId: 'img-1', url: 'https://images/1.jpg' },
+              },
             ],
             colors: [
               { id: 'col-black', name: 'Чёрный', hex: '#000000' },

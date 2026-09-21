@@ -227,9 +227,27 @@ describe('ProductStudio Form Characteristics Category Display', () => {
       id: 'prod-media-test',
       title: 'Худи оверсайз',
       images: [
-        { id: 'img-1', url: 'https://example.com/photo1.jpg', isMain: true, sortOrder: 0, colorId: null },
-        { id: 'img-2', url: 'https://example.com/photo2.jpg', isMain: false, sortOrder: 1, colorId: null },
-        { id: 'img-3', url: 'https://example.com/photo3.jpg', isMain: false, sortOrder: 2, colorId: null },
+        {
+          uiKey: 'img-1',
+          source: { kind: 'canonical', imageId: 'img-1', url: 'https://example.com/photo1.jpg' },
+          isMain: true,
+          sortOrder: 0,
+          colorId: null,
+        },
+        {
+          uiKey: 'img-2',
+          source: { kind: 'canonical', imageId: 'img-2', url: 'https://example.com/photo2.jpg' },
+          isMain: false,
+          sortOrder: 1,
+          colorId: null,
+        },
+        {
+          uiKey: 'img-3',
+          source: { kind: 'canonical', imageId: 'img-3', url: 'https://example.com/photo3.jpg' },
+          isMain: false,
+          sortOrder: 2,
+          colorId: null,
+        },
       ],
     };
 
@@ -324,7 +342,12 @@ describe('ProductStudio Form Characteristics Category Display', () => {
           categoryName: 'Худи',
           priceCents: 100000,
           images: [
-            { id: 'img-1', url: 'https://example.com/photo1.jpg', isMain: true, sortOrder: 0 },
+            {
+              uiKey: 'img-1',
+              source: { kind: 'canonical', imageId: 'img-1', url: 'https://example.com/photo1.jpg' },
+              isMain: true,
+              sortOrder: 0,
+            },
           ], // Incomplete media
           materialComposition: [], // Incomplete composition
         }}
@@ -347,9 +370,21 @@ describe('ProductStudio Form Characteristics Category Display', () => {
   });
 
   describe('PS.R4B2.4 — Redesigned Photo-to-Color Binding UX and Form Media Grid', () => {
-    const mockImages = [
-      { id: 'img-1', url: 'https://example.com/p1.jpg', isMain: true, sortOrder: 0, colorId: null },
-      { id: 'img-2', url: 'https://example.com/p2.jpg', isMain: false, sortOrder: 1, colorId: null },
+    const mockImages: import('../../contexts/ProductStudioContext').ProductStudioImage[] = [
+      {
+        uiKey: 'img-1',
+        source: { kind: 'canonical', imageId: 'img-1', url: 'https://example.com/p1.jpg' },
+        isMain: true,
+        sortOrder: 0,
+        colorId: null,
+      },
+      {
+        uiKey: 'img-2',
+        source: { kind: 'canonical', imageId: 'img-2', url: 'https://example.com/p2.jpg' },
+        isMain: false,
+        sortOrder: 1,
+        colorId: null,
+      },
     ];
     const mockColors = [
       { id: 'col-black', name: 'Чёрный', hex: '#000000' },
@@ -415,8 +450,8 @@ describe('ProductStudio Form Characteristics Category Display', () => {
       // Submit modal
       fireEvent.click(screen.getByTestId('photo-color-modal-submit'));
       expect(onSaveMock).toHaveBeenCalledWith([
-        expect.objectContaining({ id: 'img-1', colorId: 'col-black' }),
-        expect.objectContaining({ id: 'img-2', colorId: null }),
+        expect.objectContaining({ uiKey: 'img-1', colorId: 'col-black' }),
+        expect.objectContaining({ uiKey: 'img-2', colorId: null }),
       ]);
     });
 
@@ -476,10 +511,34 @@ describe('ProductStudio Form Characteristics Category Display', () => {
       }
 
       const initialImages = [
-        { id: 'img-A', url: 'https://example.com/A.jpg', isMain: true, sortOrder: 0, colorId: null },
-        { id: 'img-B', url: 'https://example.com/B.jpg', isMain: false, sortOrder: 1, colorId: 'col-black' },
-        { id: 'img-C', url: 'https://example.com/C.jpg', isMain: false, sortOrder: 2, colorId: 'col-red' },
-        { id: 'img-D', url: 'https://example.com/D.jpg', isMain: false, sortOrder: 3, colorId: null },
+        {
+          uiKey: 'img-A',
+          source: { kind: 'canonical' as const, imageId: 'img-A', url: 'https://example.com/A.jpg' },
+          isMain: true,
+          sortOrder: 0,
+          colorId: null,
+        },
+        {
+          uiKey: 'img-B',
+          source: { kind: 'canonical' as const, imageId: 'img-B', url: 'https://example.com/B.jpg' },
+          isMain: false,
+          sortOrder: 1,
+          colorId: 'col-black',
+        },
+        {
+          uiKey: 'img-C',
+          source: { kind: 'canonical' as const, imageId: 'img-C', url: 'https://example.com/C.jpg' },
+          isMain: false,
+          sortOrder: 2,
+          colorId: 'col-red',
+        },
+        {
+          uiKey: 'img-D',
+          source: { kind: 'canonical' as const, imageId: 'img-D', url: 'https://example.com/D.jpg' },
+          isMain: false,
+          sortOrder: 3,
+          colorId: null,
+        },
       ];
 
       render(
@@ -522,10 +581,10 @@ describe('ProductStudio Form Characteristics Category Display', () => {
       const reordered = currentDraft!.images!;
 
       // Order: A, D, B, C
-      expect(reordered[0].id).toBe('img-A');
-      expect(reordered[1].id).toBe('img-D');
-      expect(reordered[2].id).toBe('img-B');
-      expect(reordered[3].id).toBe('img-C');
+      expect(reordered[0].uiKey).toBe('img-A');
+      expect(reordered[1].uiKey).toBe('img-D');
+      expect(reordered[2].uiKey).toBe('img-B');
+      expect(reordered[3].uiKey).toBe('img-C');
 
       // 4. Verify sortOrder normalization (0, 1, 2, 3) and isMain (only first is true)
       expect(reordered.map((img) => img.sortOrder)).toEqual([0, 1, 2, 3]);
@@ -541,7 +600,7 @@ describe('ProductStudio Form Characteristics Category Display', () => {
       fireEvent.click(makeCoverBtn);
 
       const afterCover = currentDraft!.images!;
-      expect(afterCover[0].id).toBe('img-B');
+      expect(afterCover[0].uiKey).toBe('img-B');
       expect(afterCover[0].isMain).toBe(true);
       expect(afterCover[0].colorId).toBe('col-black'); // color binding intact
       expect(afterCover.map((img) => img.sortOrder)).toEqual([0, 1, 2, 3]);
@@ -554,9 +613,21 @@ describe('ProductStudio Form Characteristics Category Display', () => {
         { id: 'col-red-id', nameRu: 'Красный', hex: '#ff0000' },
         { id: 'col-white-id', name: 'Белый', hex: '#ffffff' },
       ];
-      const testImages = [
-        { id: 'img-1', url: 'https://example.com/1.jpg', isMain: true, sortOrder: 0, colorId: 'col-red-id' },
-        { id: 'img-2', url: 'https://example.com/2.jpg', isMain: false, sortOrder: 1, colorId: null },
+      const testImages: import('../../contexts/ProductStudioContext').ProductStudioImage[] = [
+        {
+          uiKey: 'img-1',
+          source: { kind: 'canonical', imageId: 'img-1', url: 'https://example.com/1.jpg' },
+          isMain: true,
+          sortOrder: 0,
+          colorId: 'col-red-id',
+        },
+        {
+          uiKey: 'img-2',
+          source: { kind: 'canonical', imageId: 'img-2', url: 'https://example.com/2.jpg' },
+          isMain: false,
+          sortOrder: 1,
+          colorId: null,
+        },
       ];
 
       const onSaveMock = vi.fn();
@@ -599,8 +670,8 @@ describe('ProductStudio Form Characteristics Category Display', () => {
       fireEvent.click(screen.getByTestId('photo-color-modal-submit'));
 
       expect(onSaveMock).toHaveBeenCalledWith([
-        expect.objectContaining({ id: 'img-1', colorId: 'col-white-id' }),
-        expect.objectContaining({ id: 'img-2', colorId: null }),
+        expect.objectContaining({ uiKey: 'img-1', colorId: 'col-white-id' }),
+        expect.objectContaining({ uiKey: 'img-2', colorId: null }),
       ]);
     });
 

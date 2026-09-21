@@ -33,6 +33,7 @@ import {
 import {
   validateImageFile,
   getMediaProgressText,
+  createLocalProductStudioImage,
   MIN_PRODUCT_IMAGES,
   MAX_PRODUCT_IMAGES,
   ALLOWED_IMAGE_MIME_TYPES,
@@ -310,13 +311,13 @@ export function ProductStudioVisualWorkspace() {
 
       const existingImages = draft.images || [];
       const isFirst = existingImages.length === 0;
-      const newImage = {
-        id: `local-media-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        url: objectUrl,
+      const newImage = createLocalProductStudioImage({
+        file,
+        previewUrl: objectUrl,
         isMain: isFirst,
         sortOrder: existingImages.length,
         colorId: selectedColorId || null,
-      };
+      });
 
       updateDraft({
         images: [...existingImages, newImage],

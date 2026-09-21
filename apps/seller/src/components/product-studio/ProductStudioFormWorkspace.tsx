@@ -33,6 +33,8 @@ import {
   ALLOWED_IMAGE_MIME_TYPES,
   validateImageFile,
   getMediaProgressText,
+  createLocalProductStudioImage,
+  getProductStudioImageDisplayUrl,
 } from './productStudioMediaHelper';
 import { getSellerCategorySchema, type SellerCategorySchema } from '@zamk/api-client';
 import { cn } from '../../lib/utils';
@@ -87,13 +89,13 @@ export function ProductStudioFormWorkspace() {
       const objectUrl = createMediaUrl(file);
       const existingImages = draft.images || [];
       const isFirst = existingImages.length === 0;
-      const newImage = {
-        id: `local-media-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        url: objectUrl,
+      const newImage = createLocalProductStudioImage({
+        file,
+        previewUrl: objectUrl,
         isMain: isFirst,
         sortOrder: existingImages.length,
         colorId: null,
-      };
+      });
 
       updateDraft({
         images: [...existingImages, newImage],
@@ -123,13 +125,14 @@ export function ProductStudioFormWorkspace() {
       const existingImages = [...(draft.images || [])];
       const targetOld = existingImages[index];
 
-      const replacedImage = {
-        id: `local-media-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        url: objectUrl,
+      const replacedImage = createLocalProductStudioImage({
+        file,
+        previewUrl: objectUrl,
         isMain: index === 0,
         sortOrder: index,
         colorId: targetOld?.colorId ?? null,
-      };
+        altText: targetOld?.altText ?? null,
+      });
 
       existingImages[index] = replacedImage;
       updateDraft({ images: existingImages });
@@ -630,7 +633,7 @@ export function ProductStudioFormWorkspace() {
 
                 return (
                   <div
-                    key={img.id || img.url || index}
+                    key={img.uiKey || index}
                     data-testid={`form-media-card-${index}`}
                     draggable
                     onDragStart={(e) => {
@@ -672,7 +675,7 @@ export function ProductStudioFormWorkspace() {
                     {/* Image preview with 4:5 ratio */}
                     <div className="relative aspect-[4/5] w-full bg-gray-100 dark:bg-white/5 overflow-hidden">
                       <img
-                        src={img.url}
+                        src={getProductStudioImageDisplayUrl(img)}
                         alt={`Фото товара ${index + 1}`}
                         className="w-full h-full object-cover pointer-events-none"
                       />

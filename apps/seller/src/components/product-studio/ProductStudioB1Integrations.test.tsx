@@ -262,9 +262,21 @@ describe('PS.R4A.5B1 — Required Product Content + Canonical Characteristics UX
     categoryName: 'Худи',
     priceCents: 490000,
     images: [
-      { url: 'https://images/1.jpg' },
-      { url: 'https://images/2.jpg' },
-      { url: 'https://images/3.jpg' },
+      {
+        uiKey: '1',
+        isMain: true,
+        source: { kind: 'canonical', imageId: '1', url: 'https://images/1.jpg' },
+      },
+      {
+        uiKey: '2',
+        isMain: false,
+        source: { kind: 'canonical', imageId: '2', url: 'https://images/2.jpg' },
+      },
+      {
+        uiKey: '3',
+        isMain: false,
+        source: { kind: 'canonical', imageId: '3', url: 'https://images/3.jpg' },
+      },
     ],
     colors: [{ id: 'col-black', name: 'Черный' }],
     variants: [{ id: 'v-1', sizeValueId: 'sz-m', size: 'M', colorId: 'col-black', priceCents: 490000 }],

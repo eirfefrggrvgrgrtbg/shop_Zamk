@@ -1,3 +1,9 @@
+import type {
+  ProductStudioImage,
+  ProductStudioDraft,
+  ProductStudioVariant,
+} from '../../contexts/ProductStudioContext';
+
 export const MAX_PRODUCT_IMAGES = 8;
 export const MIN_PRODUCT_IMAGES = 3;
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -132,4 +138,208 @@ export function getMediaProgressText(count: number): string {
     return `Фото ${count} из ${MIN_PRODUCT_IMAGES} · готово`;
   }
   return `Фото ${MAX_PRODUCT_IMAGES} из ${MAX_PRODUCT_IMAGES} · максимум`;
+}
+
+/**
+ * Generate a standard UUID for client-side media identity.
+ */
+export function generateMediaUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
+ * Helper to get user-facing presentation URL for an image.
+ * canonical -> remote url
+ * local -> previewUrl
+ * staged -> previewUrl
+ */
+export function getProductStudioImageDisplayUrl(image?: ProductStudioImage | null): string {
+  if (!image) return '';
+  switch (image.source.kind) {
+    case 'canonical':
+      return image.source.url;
+    case 'local':
+    case 'staged':
+      return image.source.previewUrl;
+  }
+}
+
+/**
+ * Helper to get local preview URL to be revoked if present.
+ */
+export function getProductStudioImagePreviewUrl(image?: ProductStudioImage | null): string | null {
+  if (!image) return null;
+  switch (image.source.kind) {
+    case 'canonical':
+      return null;
+    case 'local':
+    case 'staged':
+      return image.source.previewUrl;
+  }
+}
+
+/**
+ * Creates a new local ProductStudioImage retaining the original File.
+ */
+export function createLocalProductStudioImage(params: {
+  file: File;
+  previewUrl: string;
+  colorId?: string | null;
+  isMain?: boolean;
+  sortOrder?: number;
+  altText?: string | null;
+}): ProductStudioImage {
+  const clientMediaId = generateMediaUUID();
+  return {
+    uiKey: clientMediaId,
+    colorId: params.colorId ?? null,
+    altText: params.altText ?? null,
+    isMain: Boolean(params.isMain),
+    sortOrder: params.sortOrder,
+    source: {
+      kind: 'local',
+      clientMediaId,
+      file: params.file,
+      previewUrl: params.previewUrl,
+    },
+  };
+}
+
+/**
+ * Creates a canonical ProductStudioImage from persisted image data.
+ */
+export function createCanonicalProductStudioImage(params: {
+  imageId: string;
+  url: string;
+  colorId?: string | null;
+  isMain?: boolean;
+  sortOrder?: number;
+  altText?: string | null;
+  uiKey?: string;
+}): ProductStudioImage {
+  return {
+    uiKey: params.uiKey || params.imageId,
+    colorId: params.colorId ?? null,
+    altText: params.altText ?? null,
+    isMain: Boolean(params.isMain),
+    sortOrder: params.sortOrder,
+    source: {
+      kind: 'canonical',
+      imageId: params.imageId,
+      url: params.url,
+    },
+  };
+}
+
+/**
+ * Semantic Media Dirty Check:
+ * Compares persisted/semantic image meaning between current and baseline drafts.
+ * Sequence, backend image identity (canonical), presentation order, colorId, isMain,
+ * altText, additions, and deletions are evaluated.
+ * Transient local->staged transition remains semantically dirty until canonical PATCH.
+ */
+export function isMediaSemanticallyDirty(
+  currentImages?: ProductStudioImage[],
+  baselineImages?: ProductStudioImage[]
+): boolean {
+  const current = currentImages || [];
+  const baseline = baselineImages || [];
+
+  if (current.length !== baseline.length) {
+    return true;
+  }
+
+  for (let i = 0; i < current.length; i++) {
+    const cur = current[i];
+    const base = baseline[i];
+
+    if (!cur?.source || !base?.source) {
+      if (cur !== base) return true;
+      continue;
+    }
+
+    if (cur.source.kind !== base.source.kind) {
+      return true;
+    }
+
+    if (cur.source.kind === 'canonical' && base.source.kind === 'canonical') {
+      if (cur.source.imageId !== base.source.imageId) {
+        return true;
+      }
+    } else if (cur.source.kind === 'local' || cur.source.kind === 'staged') {
+      if (cur.source.clientMediaId !== (base.source as any).clientMediaId) {
+        return true;
+      }
+    }
+
+    if (Boolean(cur.isMain) !== Boolean(base.isMain)) {
+      return true;
+    }
+    if ((cur.colorId ?? null) !== (base.colorId ?? null)) {
+      return true;
+    }
+    if ((cur.altText ?? null) !== (base.altText ?? null)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Extracts the set of distinct colorIds referenced across variants.
+ */
+export function getVariantColorDomain(variants?: ProductStudioVariant[]): Set<string> {
+  const domain = new Set<string>();
+  for (const v of variants || []) {
+    if (v.colorId) {
+      domain.add(v.colorId);
+    }
+  }
+  return domain;
+}
+
+/**
+ * Checks whether the set of active variant color IDs differs from baseline.
+ */
+export function hasVariantColorDomainChanged(
+  currentVariants?: ProductStudioVariant[],
+  baselineVariants?: ProductStudioVariant[]
+): boolean {
+  const currentSet = getVariantColorDomain(currentVariants);
+  const baselineSet = getVariantColorDomain(baselineVariants);
+  if (currentSet.size !== baselineSet.size) {
+    return true;
+  }
+  for (const cid of currentSet) {
+    if (!baselineSet.has(cid)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Determines whether images array must be included in Product PATCH request.
+ * Required if media is semantically dirty OR if the variant color domain changed
+ * (because backend validates image.colorId against final variants when images are sent).
+ */
+export function shouldIncludeImagesInPatch(
+  currentDraft: ProductStudioDraft,
+  baselineDraft: ProductStudioDraft
+): boolean {
+  if (isMediaSemanticallyDirty(currentDraft.images, baselineDraft.images)) {
+    return true;
+  }
+  if (hasVariantColorDomainChanged(currentDraft.variants, baselineDraft.variants)) {
+    return true;
+  }
+  return false;
 }

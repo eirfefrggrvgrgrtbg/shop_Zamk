@@ -7,6 +7,7 @@ import type {
   ProductPresentationSelectedVariant,
 } from "@zamk/shared";
 import type { ProductStudioDraft, ProductStudioVariant } from "../../contexts/ProductStudioContext";
+import { getProductStudioImageDisplayUrl } from "./productStudioMediaHelper";
 
 export const STUDIO_PREVIEW_PLACEHOLDER_IMAGE =
   "data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"900\" height=\"1200\" viewBox=\"0 0 900 1200\"><rect width=\"900\" height=\"1200\" fill=\"%23f1f5f9\"/><rect x=\"140\" y=\"220\" width=\"620\" height=\"760\" rx=\"42\" fill=\"none\" stroke=\"%23cbd5e1\" stroke-width=\"12\" stroke-dasharray=\"28 24\"/><text x=\"450\" y=\"610\" text-anchor=\"middle\" font-family=\"Arial,sans-serif\" font-size=\"38\" fill=\"%2364758b\">Нет изображения</text></svg>";
@@ -53,7 +54,7 @@ export function mapStudioDraftToPresentation(draft: ProductStudioDraft): StudioP
   });
 
   const visibleImages: ProductPresentationMediaItem[] = sortedImages.map((img) => ({
-    url: img.url,
+    url: getProductStudioImageDisplayUrl(img),
     colorId: img.colorId || undefined,
   }));
 

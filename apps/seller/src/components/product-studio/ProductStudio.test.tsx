@@ -249,10 +249,30 @@ describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
     const contextRef: ContextRef = { current: null };
 
     const initialMedia: ProductStudioImage[] = [
-      { id: 'm1', url: 'https://example.com/general-1.jpg', isMain: true, colorId: null },
-      { id: 'm2', url: 'https://example.com/general-2.jpg', colorId: undefined },
-      { id: 'm3', url: 'https://example.com/black-1.jpg', colorId: 'color-uuid-black' },
-      { id: 'm4', url: 'https://example.com/white-1.jpg', colorId: 'color-uuid-white' },
+      {
+        uiKey: 'm1',
+        isMain: true,
+        colorId: null,
+        source: { kind: 'canonical', imageId: 'm1', url: 'https://example.com/general-1.jpg' },
+      },
+      {
+        uiKey: 'm2',
+        isMain: false,
+        colorId: undefined,
+        source: { kind: 'canonical', imageId: 'm2', url: 'https://example.com/general-2.jpg' },
+      },
+      {
+        uiKey: 'm3',
+        isMain: false,
+        colorId: 'color-uuid-black',
+        source: { kind: 'canonical', imageId: 'm3', url: 'https://example.com/black-1.jpg' },
+      },
+      {
+        uiKey: 'm4',
+        isMain: false,
+        colorId: 'color-uuid-white',
+        source: { kind: 'canonical', imageId: 'm4', url: 'https://example.com/white-1.jpg' },
+      },
     ];
 
     render(
@@ -275,7 +295,12 @@ describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
       contextRef.current?.updateDraft({
         images: [
           ...initialMedia,
-          { id: 'm5', url: 'https://example.com/black-2.jpg', colorId: 'color-uuid-black' },
+          {
+            uiKey: 'm5',
+            isMain: false,
+            colorId: 'color-uuid-black',
+            source: { kind: 'canonical', imageId: 'm5', url: 'https://example.com/black-2.jpg' },
+          },
         ],
       });
     });
@@ -289,10 +314,34 @@ describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
     const contextRef: ContextRef = { current: null };
 
     const orderedMedia: ProductStudioImage[] = [
-      { id: 'm1', url: 'https://example.com/1.jpg', sortOrder: 1, colorId: null },
-      { id: 'm2', url: 'https://example.com/2.jpg', sortOrder: 2, colorId: 'color-black' },
-      { id: 'm3', url: 'https://example.com/3.jpg', sortOrder: 3, colorId: null },
-      { id: 'm4', url: 'https://example.com/4.jpg', sortOrder: 4, colorId: 'color-white' },
+      {
+        uiKey: 'm1',
+        sortOrder: 1,
+        isMain: true,
+        colorId: null,
+        source: { kind: 'canonical', imageId: 'm1', url: 'https://example.com/1.jpg' },
+      },
+      {
+        uiKey: 'm2',
+        sortOrder: 2,
+        isMain: false,
+        colorId: 'color-black',
+        source: { kind: 'canonical', imageId: 'm2', url: 'https://example.com/2.jpg' },
+      },
+      {
+        uiKey: 'm3',
+        sortOrder: 3,
+        isMain: false,
+        colorId: null,
+        source: { kind: 'canonical', imageId: 'm3', url: 'https://example.com/3.jpg' },
+      },
+      {
+        uiKey: 'm4',
+        sortOrder: 4,
+        isMain: false,
+        colorId: 'color-white',
+        source: { kind: 'canonical', imageId: 'm4', url: 'https://example.com/4.jpg' },
+      },
     ];
 
     render(
@@ -307,7 +356,7 @@ describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
     // Ordered single array check
     const images = contextRef.current?.draft.images;
     expect(Array.isArray(images)).toBe(true);
-    expect(images?.map((i: ProductStudioImage) => i.id)).toEqual(['m1', 'm2', 'm3', 'm4']);
+    expect(images?.map((i: ProductStudioImage) => i.uiKey)).toEqual(['m1', 'm2', 'm3', 'm4']);
 
     // Check no separate galleries per color exist in draft
     expect((contextRef.current?.draft as any).galleriesByColor).toBeUndefined();
@@ -488,9 +537,26 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
     description: 'Премиальная блуза из натурального шелка.',
     priceCents: 1800000, // 18 000 ₽
     images: [
-      { url: 'https://example.com/main.jpg', isMain: true, sortOrder: 1 },
-      { url: 'https://example.com/black.jpg', sortOrder: 2, colorId: 'col-black' },
-      { url: 'https://example.com/white.jpg', sortOrder: 3, colorId: 'col-white' },
+      {
+        uiKey: 'main',
+        isMain: true,
+        sortOrder: 1,
+        source: { kind: 'canonical', imageId: 'img-main', url: 'https://example.com/main.jpg' },
+      },
+      {
+        uiKey: 'black',
+        isMain: false,
+        sortOrder: 2,
+        colorId: 'col-black',
+        source: { kind: 'canonical', imageId: 'img-black', url: 'https://example.com/black.jpg' },
+      },
+      {
+        uiKey: 'white',
+        isMain: false,
+        sortOrder: 3,
+        colorId: 'col-white',
+        source: { kind: 'canonical', imageId: 'img-white', url: 'https://example.com/white.jpg' },
+      },
     ],
     variants: [
       { id: 'v1', colorId: 'col-black', colorName: 'Черный', colorHex: '#000000', sizeValueId: 'sz-s', size: 'S', sellerSku: 'SKU-BLK-S' },

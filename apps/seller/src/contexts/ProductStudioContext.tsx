@@ -3,6 +3,7 @@ import { getSellerCategorySchema, type SellerCategory, type SellerCategorySchema
 import { ProductStudioCategoryModal } from '../components/product-studio/ProductStudioCategoryModal';
 import { createStudioMediaRegistry, type StudioMediaRegistry } from '../components/product-studio/productStudioMediaSession';
 import { getProductStudioReadiness, type ProductStudioReadiness } from '../components/product-studio/productStudioReadinessHelper';
+import { getProductStudioImagePreviewUrl } from '../components/product-studio/productStudioMediaHelper';
 
 export type ProductStudioEntryMode = 'create' | 'edit';
 export type ProductStudioViewMode = 'visual' | 'form';
@@ -29,12 +30,33 @@ export const PRODUCT_STUDIO_SECTIONS: ProductStudioSectionMeta[] = [
   { id: 'review', label: 'Проверка' },
 ];
 
+export type ProductStudioImageSource =
+  | {
+      kind: 'canonical';
+      imageId: string;
+      url: string;
+    }
+  | {
+      kind: 'local';
+      clientMediaId: string;
+      file: File;
+      previewUrl: string;
+    }
+  | {
+      kind: 'staged';
+      clientMediaId: string;
+      stagedId: string;
+      stagedUrl: string;
+      previewUrl: string;
+    };
+
 export interface ProductStudioImage {
-  id?: string;
-  url: string;
-  isMain?: boolean;
-  sortOrder?: number;
+  uiKey: string;
   colorId?: string | null;
+  altText?: string | null;
+  isMain: boolean;
+  sortOrder?: number;
+  source: ProductStudioImageSource;
 }
 
 export interface ProductStudioVariant {
@@ -326,10 +348,17 @@ export function ProductStudioProvider({
   const updateDraft = useCallback((patch: Partial<ProductStudioDraft>) => {
     // If draft images are being updated and any registered URL was removed, revoke it
     if (patch.images && state.draft.images) {
-      const nextUrls = new Set(patch.images.map((img) => img.url));
+      const nextUrls = new Set<string>();
+      for (const img of patch.images) {
+        const previewUrl = getProductStudioImagePreviewUrl(img);
+        if (previewUrl) {
+          nextUrls.add(previewUrl);
+        }
+      }
       for (const prevImg of state.draft.images) {
-        if (prevImg.url && !nextUrls.has(prevImg.url)) {
-          mediaRegistry.revokeObjectUrl(prevImg.url);
+        const prevUrl = getProductStudioImagePreviewUrl(prevImg);
+        if (prevUrl && !nextUrls.has(prevUrl)) {
+          mediaRegistry.revokeObjectUrl(prevUrl);
         }
       }
     }

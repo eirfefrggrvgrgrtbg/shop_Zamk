@@ -209,25 +209,40 @@ describe('productStudioHydration mapper tests', () => {
 
     expect(draft.images).toHaveLength(3);
     expect(draft.images![0]).toEqual({
-      id: 'img-1',
-      url: 'https://cdn.example.com/img1.jpg',
+      uiKey: 'img-1',
       sortOrder: 0,
       colorId: 'col-red',
       isMain: true,
+      altText: null,
+      source: {
+        kind: 'canonical',
+        imageId: 'img-1',
+        url: 'https://cdn.example.com/img1.jpg',
+      },
     });
     expect(draft.images![1]).toEqual({
-      id: 'img-2',
-      url: 'https://cdn.example.com/img2.jpg',
+      uiKey: 'img-2',
       sortOrder: 1,
       colorId: 'col-white',
       isMain: false,
+      altText: null,
+      source: {
+        kind: 'canonical',
+        imageId: 'img-2',
+        url: 'https://cdn.example.com/img2.jpg',
+      },
     });
     expect(draft.images![2]).toEqual({
-      id: 'img-3',
-      url: 'https://cdn.example.com/img3.jpg',
+      uiKey: 'img-3',
       sortOrder: 1,
       colorId: null,
       isMain: false,
+      altText: null,
+      source: {
+        kind: 'canonical',
+        imageId: 'img-3',
+        url: 'https://cdn.example.com/img3.jpg',
+      },
     });
   });
 

@@ -70,16 +70,22 @@ export function hydrateProductStudioDraft({
   const images: ProductStudioImage[] = (product.images || [])
     .map((img: ProductImage, originalIndex: number) => {
       const url = img.imageUrl || img.url || '';
+      const imageId = img.id || '';
       return {
-        id: img.id,
-        url,
+        uiKey: imageId,
         sortOrder: typeof img.sortOrder === 'number' ? img.sortOrder : originalIndex,
         colorId: img.colorId || null,
         isMain: Boolean(img.isMain),
+        altText: img.altText ?? null,
+        source: {
+          kind: 'canonical' as const,
+          imageId,
+          url,
+        },
         originalIndex,
       };
     })
-    .sort((a: ProductStudioImage & { originalIndex: number }, b: ProductStudioImage & { originalIndex: number }) => {
+    .sort((a, b) => {
       const sortA = typeof a.sortOrder === 'number' ? a.sortOrder : a.originalIndex;
       const sortB = typeof b.sortOrder === 'number' ? b.sortOrder : b.originalIndex;
       if (sortA !== sortB) {
@@ -87,7 +93,7 @@ export function hydrateProductStudioDraft({
       }
       return a.originalIndex - b.originalIndex;
     })
-    .map(({ originalIndex: _, ...img }: ProductStudioImage & { originalIndex: number }) => img);
+    .map(({ originalIndex: _, ...img }) => img);
 
   // 3. Colors Hydration (Strictly canonical IDs)
   const referencedColorIds = new Set<string>();
