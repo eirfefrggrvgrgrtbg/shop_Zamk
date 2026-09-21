@@ -31,6 +31,11 @@ var (
 	ErrProductCompositionInvalid   = errors.New("material composition must total exactly 100%")
 	ErrProductSizeChartRequired    = errors.New("category requires a size chart")
 	ErrProductSizeChartIncomplete  = errors.New("missing required measurement in size chart row")
+
+	ErrInvalidMediaReference   = errors.New("invalid media reference")
+	ErrStagedMediaNotReady      = errors.New("staged media is not ready")
+	ErrMediaIntegrityViolation  = errors.New("media integrity violation")
+	ErrInvalidMediaSet          = errors.New("invalid media set")
 )
 
 type ValidationError struct {
