@@ -56,13 +56,14 @@ export function ProductStudioVisualWorkspace() {
     isFieldAttention,
     activeSizeSystemId,
     setActiveSizeSystemId,
+    selectedPreviewColorId: selectedColorId,
+    selectedPreviewSizeValueId: selectedSizeId,
+    setSelectedPreviewColorId: setSelectedColorId,
+    setSelectedPreviewSizeValueId: setSelectedSizeId,
   } = useProductStudio();
 
   const workspaceRef = useRef<HTMLDivElement>(null);
 
-  // Local preview selection state (purely Visual-local, not persisted, no router)
-  const [selectedColorId, setSelectedColorId] = useState<string | null>(null);
-  const [selectedSizeId, setSelectedSizeId] = useState<string | null>(null);
   const [activeImage, setActiveImage] = useState<number>(0);
 
   // Popover state

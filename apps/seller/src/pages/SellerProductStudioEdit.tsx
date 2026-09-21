@@ -8,6 +8,7 @@ import {
   getSellerDictionaryValues,
   type SellerCategorySchema,
   type SellerDictionaryValue,
+  type SellerColor,
 } from '@zamk/api-client/src/seller';
 import {
   ProductStudioProvider,
@@ -32,6 +33,8 @@ export default function SellerProductStudioEdit() {
   const [error, setError] = useState<ErrorState | null>(null);
   const [draft, setDraft] = useState<ProductStudioDraft | null>(null);
   const [categorySchema, setCategorySchema] = useState<SellerCategorySchema | null>(null);
+  const [canonicalColors, setCanonicalColors] = useState<SellerColor[]>([]);
+  const [dictionaryValuesMap, setDictionaryValuesMap] = useState<Record<string, SellerDictionaryValue[]>>({});
   const [resolvedSizeSystemId, setResolvedSizeSystemId] = useState<string | null>(null);
 
   const loadProductAndDependencies = useCallback(async () => {
@@ -129,6 +132,8 @@ export default function SellerProductStudioEdit() {
 
       setDraft(hydratedDraft);
       setCategorySchema(schema);
+      setCanonicalColors(colors);
+      setDictionaryValuesMap(dictMap);
       setResolvedSizeSystemId(sizeSystemResolution.systemId);
     } catch (err: any) {
       console.error('Failed to hydrate product studio edit:', err);
@@ -283,6 +288,8 @@ export default function SellerProductStudioEdit() {
       initialDraft={draft}
       initialCategorySchema={categorySchema}
       initialSizeSystemId={resolvedSizeSystemId}
+      canonicalColors={canonicalColors}
+      dictionaryValuesMap={dictionaryValuesMap}
     >
       <ProductStudio />
     </ProductStudioProvider>

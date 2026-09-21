@@ -4,13 +4,21 @@ import { ProductStudioVisualWorkspace } from "./ProductStudioVisualWorkspace";
 import { ProductStudioFormWorkspace } from "./ProductStudioFormWorkspace";
 
 export function ProductStudio() {
-  const { viewMode } = useProductStudio();
+  const { viewMode, isSaveInFlight } = useProductStudio();
 
   return (
     <div data-testid="product-studio-root" className="w-full">
       <ProductStudioHeader />
 
-      <div className="w-full">
+      <div
+        data-testid="studio-workspace-container"
+        aria-disabled={isSaveInFlight}
+        className={
+          isSaveInFlight
+            ? "w-full pointer-events-none opacity-60 select-none cursor-wait"
+            : "w-full"
+        }
+      >
         {viewMode === "visual" ? (
           <ProductStudioVisualWorkspace />
         ) : (
