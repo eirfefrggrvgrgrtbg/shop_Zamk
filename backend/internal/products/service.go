@@ -1016,6 +1016,13 @@ func (s *Service) DeleteSellerDraftProduct(ctx context.Context, currentUserID, p
 		return ErrSellerBlocked
 	}
 
+	if s.dbPool != nil {
+		return s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
+			txRepo := s.repo.WithTx(tx)
+			return txRepo.DeleteDraftProductTx(ctx, productID, seller.ID)
+		})
+	}
+
 	return s.repo.DeleteDraftProduct(ctx, productID, seller.ID)
 }
 

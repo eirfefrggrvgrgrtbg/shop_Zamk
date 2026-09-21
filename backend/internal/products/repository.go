@@ -226,16 +226,104 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 	return &p, nil
 }
 
-func (r *Repository) DeleteDraftProduct(ctx context.Context, productID, sellerID uuid.UUID) error {
-	query := `DELETE FROM products WHERE id = $1 AND seller_id = $2 AND status IN ('draft', 'rejected')`
-	res, err := r.db.Exec(ctx, query, productID, sellerID)
+func (r *Repository) ListProductMediaObjectKeysForCleanup(ctx context.Context, productID uuid.UUID) ([]string, error) {
+	query := `
+		SELECT DISTINCT key FROM (
+			SELECT object_key AS key FROM product_images WHERE product_id = $1 AND object_key IS NOT NULL AND object_key != ''
+			UNION
+			SELECT rendition_object_key AS key FROM product_images WHERE product_id = $1 AND rendition_object_key IS NOT NULL AND rendition_object_key != ''
+			UNION
+			SELECT object_key AS key FROM product_media_staging WHERE product_id = $1 AND object_key IS NOT NULL AND object_key != ''
+			UNION
+			SELECT main_image_object_key AS key FROM products WHERE id = $1 AND main_image_object_key IS NOT NULL AND main_image_object_key != ''
+		) t
+	`
+	rows, err := r.db.Query(ctx, query, productID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list product media keys for cleanup: %w", err)
+	}
+	defer rows.Close()
+
+	var keys []string
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, fmt.Errorf("failed to scan cleanup key: %w", err)
+		}
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating cleanup keys: %w", err)
+	}
+	return keys, nil
+}
+
+func (r *Repository) DeleteDraftProductTx(ctx context.Context, productID, sellerID uuid.UUID) error {
+	// 1. Resolve & lock product by productID + sellerID
+	var status string
+	err := r.db.QueryRow(ctx, "SELECT status FROM products WHERE id = $1 AND seller_id = $2 FOR UPDATE", productID, sellerID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrProductNotFound
+	} else if err != nil {
+		return fmt.Errorf("failed to lock product for deletion: %w", err)
+	}
+
+	// 2. Preserve existing business rule: only 'draft' or 'rejected' products can be deleted
+	if status != StatusDraft && status != StatusRejected {
+		return ErrProductNotFound
+	}
+
+	// 3. Collect DISTINCT object keys belonging to the product (canonical images, renditions, main image, and all staging rows)
+	keys, err := r.ListProductMediaObjectKeysForCleanup(ctx, productID)
+	if err != nil {
+		return err
+	}
+
+	// 4. Enqueue every non-empty object key into product_media_cleanup_jobs using the same transaction
+	for _, key := range keys {
+		if err := r.EnqueueMediaCleanup(ctx, key); err != nil {
+			return fmt.Errorf("failed to enqueue cleanup for key %q: %w", key, err)
+		}
+	}
+
+	// 5. Delete the product; cascades will clean up dependent rows (product_images, product_media_staging, etc.)
+	res, err := r.db.Exec(ctx, "DELETE FROM products WHERE id = $1 AND seller_id = $2", productID, sellerID)
 	if err != nil {
 		return fmt.Errorf("failed to delete product: %w", err)
 	}
 	if res.RowsAffected() == 0 {
 		return ErrProductNotFound
 	}
+
 	return nil
+}
+
+func (r *Repository) DeleteDraftProduct(ctx context.Context, productID, sellerID uuid.UUID) error {
+	if txer, ok := r.db.(interface {
+		Begin(context.Context) (pgx.Tx, error)
+	}); ok {
+		tx, err := txer.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to begin transaction for product delete: %w", err)
+		}
+		defer func() {
+			_ = tx.Rollback(ctx)
+		}()
+
+		txRepo := r.WithTx(tx)
+		if err := txRepo.DeleteDraftProductTx(ctx, productID, sellerID); err != nil {
+			return err
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("failed to commit product delete transaction: %w", err)
+		}
+		return nil
+	}
+
+	return r.DeleteDraftProductTx(ctx, productID, sellerID)
 }
 
 func (r *Repository) UpdateProductStatus(ctx context.Context, p *Product) error {
