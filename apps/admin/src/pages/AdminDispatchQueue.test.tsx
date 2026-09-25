@@ -69,13 +69,26 @@ describe('AdminDispatchQueue Page Component', () => {
     // Orders
     expect(screen.getByText(/1001/)).toBeDefined();
     expect(screen.getByText(/1002/)).toBeDefined();
-    expect(screen.getAllByText('Упакован (готов к отгрузке)')).toHaveLength(2);
-    expect(screen.getByText('2 поз. · 3 шт.')).toBeDefined();
-    expect(screen.getByText('1 поз. · 1 шт.')).toBeDefined();
+    expect(screen.getAllByText('Собран')).toHaveLength(2);
+    expect(screen.getByText('2 поз. · 3 ед.')).toBeDefined();
+    expect(screen.getByText('1 поз. · 1 ед.')).toBeDefined();
     expect(screen.getByText(/СДЭК Курьер/)).toBeDefined();
 
     // No financial fields or customer PII in DOM
     expect(screen.queryByText(/₽|руб|totalCents|priceCents|phone|address|email/i)).toBeNull();
+  });
+
+  it('renders tabs for packed queue and shipped archive', async () => {
+    vi.mocked(adminPickingApi.getAdminDispatchQueue).mockResolvedValue(sampleQueue);
+
+    render(
+      <MemoryRouter>
+        <AdminDispatchQueue />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('button', { name: /К отгрузке/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Отгружено/i })).toBeDefined();
   });
 
   it('navigates to /fulfillment/dispatch/:id when clicking action button', async () => {
@@ -87,10 +100,10 @@ describe('AdminDispatchQueue Page Component', () => {
       </MemoryRouter>
     );
 
-    const dispatchButtons = await screen.findAllByRole('button', { name: /Отгрузить/i });
-    expect(dispatchButtons).toHaveLength(2);
+    const openButtons = await screen.findAllByRole('button', { name: /Открыть/i });
+    expect(openButtons).toHaveLength(2);
 
-    fireEvent.click(dispatchButtons[0]);
+    fireEvent.click(openButtons[0]);
     expect(mockNavigate).toHaveBeenCalledWith('/fulfillment/dispatch/fulf-1111-2222');
   });
 

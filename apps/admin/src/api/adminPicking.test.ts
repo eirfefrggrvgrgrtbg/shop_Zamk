@@ -126,22 +126,23 @@ async function runTests() {
 
   console.log('1c. Testing getDispatchErrorMessage...');
   const dispatchTestCases = [
-    { code: 'dispatch_not_allowed', expected: 'Отгрузка недоступна для текущего статуса сборки или заказа (требуется статус «Упакован»)' },
-    { code: 'fulfillment_not_fully_picked', expected: 'Нельзя отгрузить: не все позиции сборки укомплектованы' },
-    { code: 'inventory_unit_state_conflict', expected: 'Конфликт состояния физических единиц (товар не находится на складе)' },
-    { code: 'insufficient_total_stock', expected: 'Недостаточно остатков на складе для списания' },
-    { code: 'insufficient_reserved_stock', expected: 'Недостаточно зарезервированного остатка для списания' },
-    { code: 'shipment_contradictory_state', expected: 'Отгрузка уже находится в противоречивом или завершенном статусе' },
-    { code: 'fulfillment_not_found', expected: 'Сборка не найдена' },
+    { code: 'dispatch_not_allowed', expected: 'Отгрузка недоступна: заказ не готов к отгрузке (требуется статус «Собран»).' },
+    { code: 'fulfillment_not_fully_picked', expected: 'Отгрузка недоступна: сборка заказа не завершена.' },
+    { code: 'inventory_unit_state_conflict', expected: 'Не удалось подтвердить отгрузку. Обновите данные и повторите попытку.' },
+    { code: 'insufficient_total_stock', expected: 'Не удалось подтвердить отгрузку. Обновите данные и повторите попытку.' },
+    { code: 'insufficient_reserved_stock', expected: 'Не удалось подтвердить отгрузку. Обновите данные и повторите попытку.' },
+    { code: 'invariant_violation', expected: 'Не удалось подтвердить отгрузку. Обновите данные и повторите попытку.' },
+    { code: 'shipment_contradictory_state', expected: 'Отгрузка уже находится в противоречивом или завершенном статусе.' },
+    { code: 'fulfillment_not_found', expected: 'Сборка не найдена.' },
   ];
   for (const tc of dispatchTestCases) {
     const err = new ApiError('Raw error message', tc.code, 409);
     assert.strictEqual(getDispatchErrorMessage(err), tc.expected);
   }
   const disp403 = new ApiError('Forbidden', 'forbidden', 403);
-  assert.strictEqual(getDispatchErrorMessage(disp403), 'Недостаточно прав для выполнения отгрузки');
+  assert.strictEqual(getDispatchErrorMessage(disp403), 'Недостаточно прав для подтверждения отгрузки.');
   const disp404 = new ApiError('Not found', 'not_found', 404);
-  assert.strictEqual(getDispatchErrorMessage(disp404), 'Сборка не найдена');
+  assert.strictEqual(getDispatchErrorMessage(disp404), 'Сборка не найдена.');
   console.log('✓ All getDispatchErrorMessage tests passed.');
 
   // 2. Mock Fetch tests for getAdminPickingOrder and scanPickingCode
@@ -681,7 +682,7 @@ async function runTests() {
       assert.strictEqual(err.status, 409);
       assert.strictEqual(
         getDispatchErrorMessage(err),
-        'Отгрузка недоступна для текущего статуса сборки или заказа (требуется статус «Упакован»)'
+        'Отгрузка недоступна: заказ не готов к отгрузке (требуется статус «Собран»).'
       );
     }
     console.log('✓ dispatchFulfillment tests passed.');

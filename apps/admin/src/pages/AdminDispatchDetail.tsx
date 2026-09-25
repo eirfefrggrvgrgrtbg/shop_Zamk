@@ -5,7 +5,6 @@ import {
   ArrowRight,
   CheckCircle2,
   AlertCircle,
-  AlertTriangle,
   Package,
   Truck,
   RefreshCw,
@@ -32,7 +31,12 @@ import { useAdminAuth } from '../contexts/AdminAuthContext';
 interface DispatchDisplayItem {
   orderItemId: string;
   title: string;
+  variantSize?: string | null;
+  variantColor?: string | null;
+  sku?: string | null;
+  barcode?: string | null;
   quantity: number;
+  pickedQuantity: number;
   allocationMode: 'serialized' | 'legacy';
   allocatedUnits: {
     inventoryUnitId: string;
@@ -40,6 +44,23 @@ interface DispatchDisplayItem {
     pickedAt?: string | null;
   }[];
 }
+
+const getWarehouseStatusLabel = (status: string): string => {
+  switch (status) {
+    case 'paid':
+      return 'Оплачен';
+    case 'assembling':
+      return 'Собирается';
+    case 'packed':
+      return 'Собран';
+    case 'shipped':
+      return 'Отгружен';
+    case 'delivered':
+      return 'Доставлен';
+    default:
+      return status;
+  }
+};
 
 export function AdminDispatchDetail() {
   const { id } = useParams<{ id: string }>();
@@ -90,6 +111,14 @@ export function AdminDispatchDetail() {
       const ctx = await getAdminDispatchContext(id).catch(() => null);
       if (ctx) setDispatchContext(ctx);
     } catch (err: any) {
+      if (err?.code === 'dispatch_not_allowed' || err?.status === 409) {
+        const refreshed = await getAdminDispatchContext(id).catch(() => null);
+        if (refreshed?.status === 'shipped') {
+          setDispatchContext(refreshed);
+          setShowConfirmModal(false);
+          return;
+        }
+      }
       const msg = getDispatchErrorMessage(err);
       setDispatchError(msg);
       setShowConfirmModal(false);
@@ -144,7 +173,7 @@ export function AdminDispatchDetail() {
     '';
 
   const isShipped = currentFulfillmentStatus === 'shipped';
-  const isPacked = currentFulfillmentStatus === 'packed' || (!isShipped && Boolean(dispatchContext?.packedAt));
+  const isPacked = currentFulfillmentStatus === 'packed';
 
   const shippedAtTimestamp =
     dispatchResult?.shippedAt;
@@ -172,17 +201,30 @@ export function AdminDispatchDetail() {
 
   const items: DispatchDisplayItem[] = (
     dispatchContext?.items && dispatchContext.items.length > 0
-      ? dispatchContext.items.map((i) => ({
-          orderItemId: i.orderItemId,
-          title: i.productTitle || 'Товар',
-          quantity: i.quantity,
-          allocationMode: (i.allocationMode as 'serialized' | 'legacy') || 'legacy',
-          allocatedUnits: (i.allocatedUnits || []).map((u) => ({
+      ? dispatchContext.items.map((i) => {
+          const allocUnits = (i.allocatedUnits || []).map((u) => ({
             inventoryUnitId: u.inventoryUnitId,
             unitCode: u.unitCode,
             pickedAt: u.pickedAt,
-          })),
-        }))
+          }));
+          const isSer = i.allocationMode === 'serialized';
+          const pickedQty = isSer
+            ? allocUnits.filter((u) => Boolean(u.pickedAt)).length || allocUnits.length
+            : i.quantity;
+
+          return {
+            orderItemId: i.orderItemId,
+            title: i.productTitle || 'Товар',
+            variantSize: i.variantSize,
+            variantColor: i.variantColor,
+            sku: i.sku,
+            barcode: i.barcode,
+            quantity: i.quantity,
+            pickedQuantity: pickedQty,
+            allocationMode: (i.allocationMode as 'serialized' | 'legacy') || 'legacy',
+            allocatedUnits: allocUnits,
+          };
+        })
       : []
   );
 
@@ -242,11 +284,11 @@ export function AdminDispatchDetail() {
             ) : isPacked ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
                 <Package className="w-3.5 h-3.5" />
-                Упакован (готов к отгрузке)
+                Собран
               </span>
             ) : (
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
-                {currentFulfillmentStatus || 'Не готов к отгрузке'}
+                {getWarehouseStatusLabel(currentFulfillmentStatus) || 'Не готов к отгрузке'}
               </span>
             )}
           </div>
@@ -273,7 +315,7 @@ export function AdminDispatchDetail() {
               <div>
                 <h3 className="text-lg font-bold text-gray-900">Отгрузка со склада выполнена</h3>
                 <p className="text-xs text-emerald-800 mt-0.5 font-medium">
-                  Сборка переведена в статус «Отгружен». Складские остатки списаны, товары переданы в доставку.
+                  Сборка переведена в статус «Отгружен». Товары переданы в доставку.
                   {formattedShippedAt && ` Время отгрузки: ${formattedShippedAt}.`}
                 </p>
                 {dispatchResult?.shipmentId && (
@@ -325,11 +367,11 @@ export function AdminDispatchDetail() {
             <CheckCircle2 className="w-7 h-7 text-blue-600 shrink-0" />
             <div>
               <h3 className="text-base font-bold text-gray-900">
-                Заказ упакован и готов к физической отгрузке
+                Заказ собран и готов к отгрузке
               </h3>
               <p className="text-xs text-blue-800 mt-0.5 font-medium">
-                Физическая идентификация завершена. Проверьте параметры доставки и подтвердите передачу курьеру.
-                {formattedPackedAt && ` Время упаковки: ${formattedPackedAt}.`}
+                Сборка завершена. Проверьте параметры доставки и подтвердите передачу курьеру.
+                {formattedPackedAt && ` Время сборки: ${formattedPackedAt}.`}
               </p>
             </div>
           </div>
@@ -338,11 +380,18 @@ export function AdminDispatchDetail() {
             Ожидает отгрузки
           </div>
         </div>
+      ) : currentFulfillmentStatus === 'assembling' ? (
+        <div className="p-5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center gap-3 text-sm">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+          <span>
+            Сборка находится в статусе «Собирается». Для выполнения отгрузки заказ должен быть в статусе «Собран».
+          </span>
+        </div>
       ) : (
         <div className="p-5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center gap-3 text-sm">
           <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
           <span>
-            Сборка находится в статусе «{currentFulfillmentStatus || 'Не определен'}». Для выполнения отгрузки сборка должна быть предварительно упакована.
+            Сборка находится в статусе «{getWarehouseStatusLabel(currentFulfillmentStatus) || 'Не определен'}». Для выполнения отгрузки заказ должен быть в статусе «Собран».
           </span>
         </div>
       )}
@@ -408,10 +457,10 @@ export function AdminDispatchDetail() {
         <div className="flex items-center justify-between border-b border-gray-100 pb-3">
           <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
             <Package className="w-5 h-5 text-indigo-600" />
-            Состав отгрузки ({items.length} поз., {totalQuantity} шт.)
+            Состав отгрузки ({items.length} поз., {totalQuantity} ед.)
           </h2>
           <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
-            Упаковка завершена
+            {isShipped ? 'Отгружен' : 'Сборка завершена'}
           </span>
         </div>
 
@@ -425,14 +474,36 @@ export function AdminDispatchDetail() {
                 className="p-4 rounded-xl border border-gray-200 bg-gray-50/50 space-y-3"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="space-y-0.5">
+                  <div className="space-y-1">
                     <div className="text-sm font-bold text-gray-900">{item.title}</div>
-                    <div className="text-xs text-gray-500">
-                      Тип учета: <span className="font-medium text-gray-700">{isSerialized ? 'Сериализованный (ZMU)' : 'Штучный (Legacy)'}</span>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                      {item.variantSize && (
+                        <span>
+                          Размер: <strong className="text-gray-700">{item.variantSize}</strong>
+                        </span>
+                      )}
+                      {item.variantColor && (
+                        <span>
+                          Цвет: <strong className="text-gray-700">{item.variantColor}</strong>
+                        </span>
+                      )}
+                      {item.sku && (
+                        <span>
+                          SKU: <strong className="font-mono text-gray-700">{item.sku}</strong>
+                        </span>
+                      )}
+                      {item.barcode && (
+                        <span>
+                          Штрихкод: <strong className="font-mono text-gray-700">{item.barcode}</strong>
+                        </span>
+                      )}
+                      <span>
+                        Тип учета: <strong className="text-gray-700">{isSerialized ? 'Сериализованный (ZMU)' : 'Штучный (Legacy)'}</strong>
+                      </span>
                     </div>
                   </div>
                   <div className="text-xs font-semibold text-gray-700 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shrink-0">
-                    Количество: <span className="text-gray-900 font-bold">{item.quantity} шт.</span>
+                    Отобрано: <span className="text-emerald-700 font-bold">{item.pickedQuantity}</span> из <span className="text-gray-900 font-bold">{item.quantity} шт.</span>
                   </div>
                 </div>
 
@@ -450,7 +521,7 @@ export function AdminDispatchDetail() {
                         >
                           <span className="font-semibold">{unit.unitCode}</span>
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
-                            <Check className="w-3 h-3" /> {isShipped ? 'Отгружена' : 'Готова'}
+                            <Check className="w-3 h-3" /> {isShipped ? 'Отгружена' : 'Собрана'}
                           </span>
                         </div>
                       ))}
@@ -470,42 +541,48 @@ export function AdminDispatchDetail() {
         </div>
       </div>
 
-      {/* Confirmation Action Card (when not yet shipped) */}
-      {!isShipped && (
-        <div className="bg-white border border-amber-200 rounded-xl p-6 shadow-sm space-y-4 bg-gradient-to-br from-white to-amber-50/30">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <h3 className="text-base font-bold text-gray-900">Подтверждение физической отгрузки</h3>
-              <p className="text-xs text-gray-600 leading-relaxed">
-                При подтверждении товары <strong>физически покидают склад ZAMK</strong>. Будут списаны складские остатки (total_stock, reserved_stock), и единицы перейдут в статус «Отгружен». Отменить действие невозможно.
-              </p>
+      {/* Confirmation Action Card (only when packed and not yet shipped) */}
+      {!isShipped && isPacked && (
+        canDispatch ? (
+          <div className="bg-white border border-indigo-200 rounded-xl p-6 shadow-sm space-y-4 bg-gradient-to-br from-white to-indigo-50/20">
+            <div className="flex items-start gap-3">
+              <Truck className="w-6 h-6 text-indigo-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-gray-900">Подтверждение отгрузки</h3>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  После подтверждения товар будет считаться физически покинувшим склад ZAMK. Статус сборки перейдет в «Отгружен».
+                </p>
+              </div>
             </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-indigo-100">
+              <div className="text-xs text-gray-500">
+                Передача курьеру службы доставки ZAMK.
+              </div>
+
+              <button
+                onClick={() => setShowConfirmModal(true)}
+                disabled={isDispatching}
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-bold rounded-xl transition-all shadow-sm shrink-0"
+              >
+                <Truck className="w-4 h-4" />
+                <span>Подтвердить отгрузку</span>
+              </button>
+            </div>
+
+            {/* Dispatch Error Banner */}
+            {dispatchError && (
+              <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center gap-3 text-sm">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                <span>{dispatchError}</span>
+              </div>
+            )}
           </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-amber-200/60">
-            <div className="text-xs text-gray-500">
-              Действие доступно администраторам склада с правами управления статусами заказов.
-            </div>
-
-            <button
-              onClick={() => setShowConfirmModal(true)}
-              disabled={!canDispatch || isDispatching || !isPacked}
-              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-amber-600 hover:bg-amber-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-bold rounded-xl transition-all shadow-sm shrink-0"
-            >
-              <Truck className="w-4 h-4" />
-              <span>Подтвердить отгрузку</span>
-            </button>
+        ) : (
+          <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-500">
+            Для подтверждения отгрузки требуется право warehouse.dispatch.
           </div>
-
-          {/* Dispatch Error Banner */}
-          {dispatchError && (
-            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center gap-3 text-sm">
-              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-              <span>{dispatchError}</span>
-            </div>
-          )}
-        </div>
+        )
       )}
 
       {/* Confirmation Modal */}
@@ -514,7 +591,7 @@ export function AdminDispatchDetail() {
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 border border-gray-100">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
                   <Truck className="w-5 h-5" />
                 </div>
                 <div>
@@ -530,13 +607,8 @@ export function AdminDispatchDetail() {
               </button>
             </div>
 
-            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-2">
-              <p className="font-bold">Вы подтверждаете передачу товаров со склада ZAMK в доставку:</p>
-              <ul className="list-disc list-inside space-y-1 text-amber-800">
-                <li>Складские остатки будут окончательно списаны</li>
-                <li>Статус сборки и отгрузки изменится на «Отгружен»</li>
-                <li>Товары будут считаться находящимися в пути к покупателю</li>
-              </ul>
+            <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200 text-sm text-indigo-950">
+              <p>После подтверждения товар будет считаться физически покинувшим склад ZAMK.</p>
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">
@@ -550,7 +622,7 @@ export function AdminDispatchDetail() {
               <button
                 onClick={handleConfirmDispatch}
                 disabled={isDispatching}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-sm font-bold text-white transition-colors shadow-sm disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-sm font-bold text-white transition-colors shadow-sm disabled:opacity-50"
               >
                 {isDispatching ? (
                   <>
@@ -560,7 +632,7 @@ export function AdminDispatchDetail() {
                 ) : (
                   <>
                     <Truck className="w-4 h-4" />
-                    <span>Да, подтвердить отгрузку</span>
+                    <span>Подтвердить отгрузку</span>
                   </>
                 )}
               </button>

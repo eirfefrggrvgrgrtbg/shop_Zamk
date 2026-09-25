@@ -367,31 +367,33 @@ export const dispatchFulfillment = async (fulfillmentId: string): Promise<Dispat
   return data;
 };
 
-export const getDispatchErrorMessage = (error: unknown, fallback = 'Произошла ошибка при отгрузке'): string => {
+export const getDispatchErrorMessage = (error: unknown, fallback = 'Не удалось подтвердить отгрузку'): string => {
   if (error instanceof ApiError) {
     switch (error.code) {
-      case 'dispatch_not_allowed':
-        return 'Отгрузка недоступна для текущего статуса сборки или заказа (требуется статус «Упакован»)';
       case 'fulfillment_not_fully_picked':
-        return 'Нельзя отгрузить: не все позиции сборки укомплектованы';
+        return 'Отгрузка недоступна: сборка заказа не завершена.';
+      case 'dispatch_not_allowed':
+        return 'Отгрузка недоступна: заказ не готов к отгрузке (требуется статус «Собран»).';
       case 'inventory_unit_state_conflict':
-        return 'Конфликт состояния физических единиц (товар не находится на складе)';
       case 'insufficient_total_stock':
-        return 'Недостаточно остатков на складе для списания';
       case 'insufficient_reserved_stock':
-        return 'Недостаточно зарезервированного остатка для списания';
+      case 'invariant_violation':
+        return 'Не удалось подтвердить отгрузку. Обновите данные и повторите попытку.';
       case 'shipment_contradictory_state':
-        return 'Отгрузка уже находится в противоречивом или завершенном статусе';
+        return 'Отгрузка уже находится в противоречивом или завершенном статусе.';
       case 'fulfillment_not_found':
-        return 'Сборка не найдена';
+        return 'Сборка не найдена.';
       default:
-        if (error.status === 403) return 'Недостаточно прав для выполнения отгрузки';
-        if (error.status === 404) return 'Сборка не найдена';
-        return error.message || fallback;
+        if (error.status === 403) return 'Недостаточно прав для подтверждения отгрузки.';
+        if (error.status === 404) return 'Сборка не найдена.';
+        return fallback;
     }
   }
   if (error instanceof Error) {
-    return error.message || fallback;
+    if ((error as any).status === 403 || error.message.includes('403')) {
+      return 'Недостаточно прав для подтверждения отгрузки.';
+    }
+    return fallback;
   }
   return fallback;
 };
