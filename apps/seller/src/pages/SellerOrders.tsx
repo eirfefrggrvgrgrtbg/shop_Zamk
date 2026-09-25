@@ -14,6 +14,10 @@ const currencyFormatter = new Intl.NumberFormat('ru-RU', {
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   awaiting_payment: { label: 'Ожидает оплаты', color: 'bg-yellow-100 text-yellow-800' },
   paid: { label: 'Оплачен', color: 'bg-emerald-100 text-emerald-800' },
+  assembling: { label: 'Собирается', color: 'bg-blue-100 text-blue-800' },
+  packed: { label: 'Собран', color: 'bg-indigo-100 text-indigo-800' },
+  shipped: { label: 'Отгружен', color: 'bg-blue-100 text-blue-800' },
+  delivered: { label: 'Доставлен', color: 'bg-emerald-100 text-emerald-800' },
   cancelled: { label: 'Отменён', color: 'bg-red-100 text-red-800' },
   has_return: { label: 'Есть возврат', color: 'bg-orange-100 text-orange-800' },
   fully_returned: { label: 'Возвращён', color: 'bg-rose-100 text-rose-800' },
@@ -186,6 +190,14 @@ export function SellerOrders() {
                         <tr>
                           <td colSpan={6} className="p-0 border-b border-gray-100 dark:border-white/5">
                             <div className="p-5 sm:p-6 bg-gray-50/60 dark:bg-black/20">
+                              {order.commercialStatus === 'shipped' && (
+                                <div className="mb-4 p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-900/40 text-blue-900 dark:text-blue-200 text-xs flex items-center gap-2.5" data-testid="shipped-observer-notice">
+                                  <Package className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                                  <span>
+                                    Заказ отгружен со склада ZAMK и передан в доставку. От продавца действий не требуется.
+                                  </span>
+                                </div>
+                              )}
                               <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
                                 <Package className="w-4 h-4 text-gray-400" />
                                 Ваши товары в заказе #{shortOrderId}
