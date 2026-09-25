@@ -41,22 +41,27 @@ export function ProductStudioCharacteristicsModal({
   // Load dictionary values for any DICTIONARY attribute
   useEffect(() => {
     if (!isOpen || !schema) return;
+    let isMounted = true;
 
     productAttrs.forEach((attr) => {
       if (attr.dictionaryId && !dictionaryValues[attr.dictionaryId] && !loadingDicts[attr.dictionaryId]) {
         setLoadingDicts((prev) => ({ ...prev, [attr.dictionaryId!]: true }));
         getSellerDictionaryValues(attr.dictionaryId)
           .then((vals) => {
-            setDictionaryValues((prev) => ({ ...prev, [attr.dictionaryId!]: vals || [] }));
+            if (isMounted) setDictionaryValues((prev) => ({ ...prev, [attr.dictionaryId!]: vals || [] }));
           })
           .catch(() => {
-            setDictionaryValues((prev) => ({ ...prev, [attr.dictionaryId!]: [] }));
+            if (isMounted) setDictionaryValues((prev) => ({ ...prev, [attr.dictionaryId!]: [] }));
           })
           .finally(() => {
-            setLoadingDicts((prev) => ({ ...prev, [attr.dictionaryId!]: false }));
+            if (isMounted) setLoadingDicts((prev) => ({ ...prev, [attr.dictionaryId!]: false }));
           });
       }
     });
+
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen, schema]);
 
   // Sync initial state on open

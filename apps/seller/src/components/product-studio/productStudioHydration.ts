@@ -97,14 +97,11 @@ export function hydrateProductStudioDraft({
 
   // 3. Colors Hydration (Strictly canonical IDs)
   const referencedColorIds = new Set<string>();
-  (product.variants || []).forEach((v: ProductVariant) => {
+  const activeVariants = (product.variants || []).filter((v: ProductVariant) => v.isActive !== false);
+
+  activeVariants.forEach((v: ProductVariant) => {
     if (v.colorId) {
       referencedColorIds.add(v.colorId);
-    }
-  });
-  (product.images || []).forEach((img: ProductImage) => {
-    if (img.colorId) {
-      referencedColorIds.add(img.colorId);
     }
   });
 
@@ -125,7 +122,7 @@ export function hydrateProductStudioDraft({
   }
 
   // 4. Variants Hydration (Preserve exact variant IDs)
-  const variants: ProductStudioVariant[] = (product.variants || []).map((v: ProductVariant) => {
+  const variants: ProductStudioVariant[] = activeVariants.map((v: ProductVariant) => {
     return {
       id: v.id,
       colorId: v.colorId || undefined,
@@ -136,7 +133,7 @@ export function hydrateProductStudioDraft({
       sellerSku: v.sellerSku || (v as any).sku || undefined,
       barcode: v.barcode || undefined,
       priceCents: typeof v.priceCents === 'number' ? v.priceCents : product.priceCents,
-      isActive: v.isActive !== false,
+      isActive: true,
     };
   });
 

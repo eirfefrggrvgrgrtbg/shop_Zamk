@@ -12,7 +12,9 @@ import {
   type ProductStudioImage,
 } from '../../contexts/ProductStudioContext';
 import { ProductStudio } from './ProductStudio';
-import { buildProductStudioUpdateRequest } from './productStudioSaveProduct';
+import { buildProductStudioUpdateRequest, isCanonicalVariantId } from './productStudioSaveProduct';
+import { addSizeToMatrix } from './productStudioMatrixHelper';
+import { hydrateProductStudioDraft } from './productStudioHydration';
 import type {
   SellerProduct,
   SellerCategorySchema,
@@ -25,6 +27,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
   const mockColors: SellerColor[] = [
     { id: 'col-black', code: 'BLACK', nameRu: 'Черный', hex: '#000000' },
     { id: 'col-white', code: 'WHITE', nameRu: 'Белый', hex: '#FFFFFF' },
+    { id: 'col-grey', code: 'GREY', nameRu: 'Серый', hex: '#888888' },
   ];
 
   const mockSchema: SellerCategorySchema = {
@@ -247,10 +250,66 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
           Add Local Image
         </button>
         <button
+          data-testid="test-add-local-image-no-color"
+          onClick={() => {
+            const fakeFile = new File(['bits-no-color'], 'no-color.jpg', { type: 'image/jpeg' });
+            const previewUrl = createMediaUrl(fakeFile);
+            const localImg: ProductStudioImage = {
+              uiKey: 'client-media-no-color-999',
+              colorId: undefined,
+              isMain: false,
+              sortOrder: (draft.images || []).length,
+              source: {
+                kind: 'local',
+                clientMediaId: '99999999-9999-4999-8999-999999999999',
+                file: fakeFile,
+                previewUrl,
+              },
+            };
+            updateDraft({ images: [...(draft.images || []), localImg] });
+          }}
+        >
+          Add Local Image No Color
+        </button>
+        <button
+          data-testid="test-add-local-image-with-color"
+          onClick={() => {
+            const fakeFile = new File(['bits-with-color'], 'with-color.jpg', { type: 'image/jpeg' });
+            const previewUrl = createMediaUrl(fakeFile);
+            const localImg: ProductStudioImage = {
+              uiKey: 'client-media-with-color-888',
+              colorId: 'col-black',
+              isMain: false,
+              sortOrder: (draft.images || []).length,
+              source: {
+                kind: 'local',
+                clientMediaId: '88888888-8888-4888-8888-888888888888',
+                file: fakeFile,
+                previewUrl,
+              },
+            };
+            updateDraft({ images: [...(draft.images || []), localImg] });
+          }}
+        >
+          Add Local Image With Color
+        </button>
+        <button
           data-testid="test-call-save"
           onClick={() => saveDraft && saveDraft()}
         >
           Call Save
+        </button>
+        <button
+          data-testid="test-add-size-matrix"
+          onClick={() => {
+            const updated = addSizeToMatrix(draft.variants || [], {
+              id: '8cc76d3c-1369-44ac-b4f4-e47629aca389',
+              label: 'M',
+            });
+            updateDraft({ variants: updated });
+          }}
+        >
+          Add Size To Matrix
         </button>
       </div>
     );
@@ -302,7 +361,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       expect(saveBtn.hasAttribute('disabled')).toBe(false);
     });
 
-    it('3. Create mode cannot execute Edit Save', async () => {
+    it('3. Create mode cannot execute Edit Save (PATCH)', async () => {
       const mockSaveProduct = vi.fn();
 
       renderTestStudio({
@@ -311,9 +370,9 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       });
 
       const saveBtn = screen.getByTestId('studio-header-save-btn');
-      expect(saveBtn.hasAttribute('disabled')).toBe(true);
-      expect(saveBtn.getAttribute('title')).toBe('Сохранение временно недоступно');
-      expect(screen.getByTestId('test-can-save').textContent).toBe('CANNOT_SAVE');
+      // Create mode has Create Save enabled, but it never executes Edit Save (PATCH)
+      expect(screen.getByTestId('test-can-save').textContent).toBe('CAN_SAVE');
+      expect(saveBtn.hasAttribute('disabled')).toBe(false);
 
       // Attempt click
       fireEvent.click(saveBtn);
@@ -446,9 +505,10 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
   describe('Suite 2: Staging Orchestration & Partial Failure', () => {
     it('7. one local image stages once and sends one PATCH', async () => {
       const mockStageImage = vi.fn().mockResolvedValue({
-        id: 'staged-1',
-        stagedUrl: 'https://cdn.example.com/staged-1.jpg',
+        stagedMediaId: 'staged-1',
+        imageUrl: 'https://cdn.example.com/staged-1.jpg',
         clientMediaId: 'client-media-123',
+        status: 'ready',
       });
       const mockSaveProduct = vi.fn().mockResolvedValue(sampleCanonicalProduct);
 
@@ -468,9 +528,10 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
 
     it('8. multiple locals: all stage -> one PATCH', async () => {
       const mockStageImage = vi.fn().mockImplementation(async (_pid, clientMediaId) => ({
-        id: `staged-${clientMediaId}`,
-        stagedUrl: `https://cdn.example.com/staged-${clientMediaId}.jpg`,
+        stagedMediaId: `staged-${clientMediaId}`,
+        imageUrl: `https://cdn.example.com/staged-${clientMediaId}.jpg`,
         clientMediaId,
+        status: 'ready',
       }));
       const mockSaveProduct = vi.fn().mockResolvedValue(sampleCanonicalProduct);
 
@@ -522,9 +583,10 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
           throw new Error('Upload error 500');
         }
         return {
-          id: `staged-${clientMediaId}`,
-          stagedUrl: `https://cdn.example.com/staged-${clientMediaId}.jpg`,
+          stagedMediaId: `staged-${clientMediaId}`,
+          imageUrl: `https://cdn.example.com/staged-${clientMediaId}.jpg`,
           clientMediaId,
+          status: 'ready',
         };
       });
       const mockSaveProduct = vi.fn();
@@ -589,9 +651,10 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
           throw new Error('Network error');
         }
         return {
-          id: `staged-${cid}`,
-          stagedUrl: `https://cdn.example.com/${cid}.jpg`,
+          stagedMediaId: `staged-${cid}`,
+          imageUrl: `https://cdn.example.com/${cid}.jpg`,
           clientMediaId: cid,
+          status: 'ready',
         };
       });
       const mockSaveProduct = vi.fn().mockResolvedValue(sampleCanonicalProduct);
@@ -666,9 +729,10 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
     it('15. PATCH failure preserves staged state, 16. retry does not re-stage, 24. exactly one PATCH, 29. previews kept, 31. retryable state', async () => {
       let patchShouldFail = true;
       const mockStageImage = vi.fn().mockImplementation(async (_pid, clientMediaId) => ({
-        id: `staged-${clientMediaId}`,
-        stagedUrl: `https://cdn.example.com/${clientMediaId}.jpg`,
+        stagedMediaId: `staged-${clientMediaId}`,
+        imageUrl: `https://cdn.example.com/${clientMediaId}.jpg`,
         clientMediaId,
+        status: 'ready',
       }));
 
       const mockSaveProduct = vi.fn().mockImplementation(async () => {
@@ -821,9 +885,10 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       };
 
       const mockStageImage = vi.fn().mockResolvedValue({
-        id: 'staged-uuid-abc',
-        stagedUrl: 'https://cdn.example.com/staged-abc.jpg',
+        stagedMediaId: 'staged-uuid-abc',
+        imageUrl: 'https://cdn.example.com/staged-abc.jpg',
         clientMediaId: 'client-media-123',
+        status: 'ready',
       });
       const mockSaveProduct = vi.fn().mockResolvedValue(updatedBackendResponse);
 
@@ -1134,8 +1199,68 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       expect(screen.getByTestId('test-preview-size').textContent).toBe('sz-m');
     });
 
-    it('Failure D.2: Visual preview selection resets to null if previously selected color is deleted in post-save product (no guessing)', async () => {
-      // Saved product only has white color:
+    it('Failure D.2: Visual preview selection resets to null if previously selected color is deleted and multiple colors remain (no guessing)', async () => {
+      // Saved product has white and grey colors (2 colors):
+      const productMultiColors: SellerProduct = {
+        ...sampleCanonicalProduct,
+        images: [
+          {
+            id: 'img-white-1',
+            imageUrl: 'https://cdn.example.com/img1.jpg',
+            sortOrder: 0,
+            colorId: 'col-white',
+            isMain: true,
+          },
+        ],
+        variants: [
+          {
+            id: 'var-white-1',
+            productId: 'prod-test-1',
+            colorId: 'col-white',
+            colorName: 'Белый',
+            colorHex: '#FFFFFF',
+            sizeValueId: 'sz-m',
+            size: 'M',
+            priceCents: 450000,
+            isActive: true,
+          },
+          {
+            id: 'var-grey-1',
+            productId: 'prod-test-1',
+            colorId: 'col-grey',
+            colorName: 'Серый',
+            colorHex: '#888888',
+            sizeValueId: 'sz-m',
+            size: 'M',
+            priceCents: 450000,
+            isActive: true,
+          },
+        ],
+      };
+
+      const mockPatch = vi.fn().mockResolvedValue(productMultiColors);
+      const mockGet = vi.fn().mockResolvedValue(productMultiColors);
+
+      renderTestStudio({ saveProductFn: mockPatch, getProductFn: mockGet });
+
+      // User selects black
+      fireEvent.click(screen.getByTestId('test-select-preview'));
+      expect(screen.getByTestId('test-preview-color').textContent).toBe('col-black');
+
+      // Save happens and black was removed, 2 colors remain
+      fireEvent.click(screen.getByTestId('test-mutate-title'));
+      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
+      });
+
+      // Selection resets cleanly to null (none), not guessed or auto-picked
+      expect(screen.getByTestId('test-preview-color').textContent).toBe('none');
+    });
+
+    it('Failure D.3: Visual preview clears selection if previously selected color is deleted even if exactly one color remains (PS.R4B3.1C4C3B2G)', async () => {
+      // Saved product only has white color (1 color):
       const productOnlyWhite: SellerProduct = {
         ...sampleCanonicalProduct,
         images: [
@@ -1171,7 +1296,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       fireEvent.click(screen.getByTestId('test-select-preview'));
       expect(screen.getByTestId('test-preview-color').textContent).toBe('col-black');
 
-      // Save happens and black was removed
+      // Save happens and black was removed, exactly 1 color remains
       fireEvent.click(screen.getByTestId('test-mutate-title'));
       fireEvent.click(screen.getByTestId('studio-header-save-btn'));
 
@@ -1179,8 +1304,460 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
       });
 
-      // Selection resets cleanly to null (none), not guessed or auto-picked
+      // Selection clears cleanly to null (none), no automatic selection
       expect(screen.getByTestId('test-preview-color').textContent).toBe('none');
+    });
+  });
+
+  /* ========================================================================
+   * SUITE 9: Canonical Variant ID Guard (PS.R4B3.1C4C3B2C1)
+   * ======================================================================== */
+  describe('Suite 9: Canonical Variant ID Guard (PS.R4B3.1C4C3B2C1)', () => {
+    describe('isCanonicalVariantId helper', () => {
+      it('1. accepts valid lowercase canonical UUID', () => {
+        expect(isCanonicalVariantId('f6380218-63b8-414e-8969-51f59962958e')).toBe(true);
+        expect(isCanonicalVariantId('00000000-0000-4000-8000-000000000999')).toBe(true);
+      });
+
+      it('2. accepts valid uppercase canonical UUID', () => {
+        expect(isCanonicalVariantId('F6380218-63B8-414E-8969-51F59962958E')).toBe(true);
+      });
+
+      it('3. rejects draft-var-* synthetic IDs', () => {
+        expect(isCanonicalVariantId('draft-var-1726947265891-x9a2k')).toBe(false);
+      });
+
+      it('4. rejects synthetic-* IDs', () => {
+        expect(isCanonicalVariantId('synthetic-v-1')).toBe(false);
+        expect(isCanonicalVariantId('synthetic-variant-123')).toBe(false);
+      });
+
+      it('5. rejects arbitrary local IDs', () => {
+        expect(isCanonicalVariantId('variant-local-123')).toBe(false);
+        expect(isCanonicalVariantId('local-1')).toBe(false);
+        expect(isCanonicalVariantId('var-1')).toBe(false);
+      });
+
+      it('6. rejects malformed UUID strings', () => {
+        expect(isCanonicalVariantId('not-a-uuid')).toBe(false);
+        expect(isCanonicalVariantId('12345678-1234-1234-1234-12345678901z')).toBe(false);
+        expect(isCanonicalVariantId('f6380218-63b8-414e-8969-51f59962958')).toBe(false); // short
+        expect(isCanonicalVariantId('f6380218-63b8-414e-8969-51f59962958eee')).toBe(false); // long
+      });
+
+      it('7. rejects undefined, null, or empty string IDs', () => {
+        expect(isCanonicalVariantId(undefined)).toBe(false);
+        expect(isCanonicalVariantId('')).toBe(false);
+        expect(isCanonicalVariantId('   ')).toBe(false);
+      });
+    });
+
+    describe('buildProductStudioUpdateRequest variant ID mapping', () => {
+      it('preserves valid canonical UUIDs and omits all non-UUID IDs in PATCH payload', () => {
+        const canonicalUuid1 = 'f6380218-63b8-414e-8969-51f59962958e';
+        const canonicalUuidUpper = '13096D70-C15D-41CE-B91C-59ABC18DB83B';
+
+        const mixedDraft: ProductStudioDraft = {
+          ...sampleInitialDraft,
+          variants: [
+            { id: canonicalUuid1, colorId: 'col-black', sizeValueId: 'sz-m' },
+            { id: canonicalUuidUpper, colorId: 'col-white', sizeValueId: 'sz-m' },
+            { id: 'draft-var-1726947265891-x9a2k', colorId: 'col-beige', sizeValueId: 'sz-m' },
+            { id: 'synthetic-v-2', colorId: 'col-black', sizeValueId: 'sz-l' },
+            { id: 'variant-local-123', colorId: 'col-white', sizeValueId: 'sz-l' },
+            { id: 'not-a-valid-uuid', colorId: 'col-beige', sizeValueId: 'sz-l' },
+            { id: undefined, colorId: 'col-black', sizeValueId: 'sz-s' },
+          ],
+        };
+
+        const payload = buildProductStudioUpdateRequest(mixedDraft, sampleInitialDraft);
+        expect(payload.variants).toBeDefined();
+        expect(payload.variants?.length).toBe(7);
+
+        // 1. Valid lowercase UUID preserved
+        expect(payload.variants?.[0].id).toBe(canonicalUuid1);
+        // 2. Valid uppercase UUID preserved
+        expect(payload.variants?.[1].id).toBe(canonicalUuidUpper);
+        // 3. draft-var-* omitted
+        expect(payload.variants?.[2].id).toBeUndefined();
+        // 4. synthetic-* omitted
+        expect(payload.variants?.[3].id).toBeUndefined();
+        // 5. arbitrary local ID omitted
+        expect(payload.variants?.[4].id).toBeUndefined();
+        // 6. malformed UUID omitted
+        expect(payload.variants?.[5].id).toBeUndefined();
+        // 7. undefined ID omitted
+        expect(payload.variants?.[6].id).toBeUndefined();
+
+        // Direct assertion: every emitted variants[].id, if present, matches canonical UUID format
+        const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        for (const v of payload.variants!) {
+          if (v.id !== undefined) {
+            expect(UUID_REGEX.test(v.id)).toBe(true);
+          }
+        }
+      });
+
+      it('PS.R4B3.1C4C3B3B-R2: Edit PATCH sends ONLY active tuples, preserving surviving UUIDs and omitting synthetic IDs', () => {
+        const canonicalUuidBlackM = '00000000-0000-4000-8000-000000000001';
+        const canonicalUuidBlackL = '00000000-0000-4000-8000-000000000002';
+
+        const workingDraft: ProductStudioDraft = {
+          ...sampleInitialDraft,
+          variants: [
+            {
+              id: canonicalUuidBlackM,
+              colorId: 'col-black',
+              sizeValueId: 'sz-m',
+              isActive: true,
+            },
+            {
+              id: canonicalUuidBlackL,
+              colorId: 'col-black',
+              sizeValueId: 'sz-l',
+              isActive: true,
+            },
+            {
+              id: 'draft-var-grey-l-12345',
+              colorId: 'col-grey',
+              sizeValueId: 'sz-l',
+              isActive: true,
+            },
+            // Grey/M is OFF (isActive: false)
+            {
+              id: 'draft-var-grey-m-67890',
+              colorId: 'col-grey',
+              sizeValueId: 'sz-m',
+              isActive: false,
+            },
+          ],
+        };
+
+        const payload = buildProductStudioUpdateRequest(workingDraft, sampleInitialDraft);
+        expect(payload.variants).toBeDefined();
+        expect(payload.variants).toHaveLength(3);
+
+        const pairs = payload.variants!.map((v) => `${v.colorId}:${v.sizeValueId}`);
+        expect(pairs).toContain('col-black:sz-m');
+        expect(pairs).toContain('col-black:sz-l');
+        expect(pairs).toContain('col-grey:sz-l');
+        expect(pairs).not.toContain('col-grey:sz-m');
+
+        // Surviving canonical UUIDs preserved
+        const blackM = payload.variants!.find((v) => v.colorId === 'col-black' && v.sizeValueId === 'sz-m');
+        expect(blackM?.id).toBe(canonicalUuidBlackM);
+        const blackL = payload.variants!.find((v) => v.colorId === 'col-black' && v.sizeValueId === 'sz-l');
+        expect(blackL?.id).toBe(canonicalUuidBlackL);
+
+        // Synthetic draft ID omitted from backend UUID field
+        const greyL = payload.variants!.find((v) => v.colorId === 'col-grey' && v.sizeValueId === 'sz-l');
+        expect(greyL?.id).toBeUndefined();
+      });
+    });
+
+    it('33. adding size to variant matrix generates draft-var-* IDs but PATCH payload omits synthetic IDs (no Go 400 invalid_request)', async () => {
+      // Canonical product matching real Safari failing product ecf7ea61-e4b6-43ca-999c-b857b2b4cf15
+      const canonicalExistingProduct: SellerProduct = {
+        ...sampleCanonicalProduct,
+        id: 'ecf7ea61-e4b6-43ca-999c-b857b2b4cf15',
+        title: 'wdwdwdw',
+        slug: 'wdwdwdw',
+        categoryId: 'c741aa40-4f5f-4b58-8581-5cfae5e77c16',
+        categoryName: 'Худи',
+        brandId: '77777777-7777-4777-8777-777777777777',
+        brandName: 'Dev Brand',
+        sellerId: '44444444-4444-4444-8444-444444444444',
+        status: 'draft',
+        priceCents: 121200,
+        currency: 'RUB',
+        material: 'Хлопок — 100%',
+        images: [],
+        variants: [
+          {
+            id: 'f6380218-63b8-414e-8969-51f59962958e',
+            productId: 'ecf7ea61-e4b6-43ca-999c-b857b2b4cf15',
+            colorId: 'col-black',
+            colorName: 'Черный',
+            barcode: 'ZMK-32a45fbf-a88',
+            isActive: true,
+          },
+          {
+            id: '13096d70-c15d-41ce-b91c-59abc18db83b',
+            productId: 'ecf7ea61-e4b6-43ca-999c-b857b2b4cf15',
+            colorId: 'col-white',
+            colorName: 'Белый',
+            barcode: 'ZMK-018dd708-151',
+            isActive: true,
+          },
+          {
+            id: '0b900cc5-1e52-44ca-bdc5-923efb2ee90e',
+            productId: 'ecf7ea61-e4b6-43ca-999c-b857b2b4cf15',
+            colorId: 'col-beige',
+            colorName: 'Бежевый',
+            barcode: 'ZMK-d2c96f99-908',
+            isActive: true,
+          },
+        ],
+        materialComposition: [
+          {
+            productId: 'ecf7ea61-e4b6-43ca-999c-b857b2b4cf15',
+            materialId: 'mat-cotton',
+            materialName: 'Хлопок',
+            percentage: 100,
+          },
+        ],
+      };
+
+      const hydratedDraft = hydrateProductStudioDraft({
+        product: canonicalExistingProduct,
+        categorySchema: mockSchema,
+        canonicalColors: [
+          ...mockColors,
+          { id: 'col-beige', code: 'BEIGE', nameRu: 'Бежевый', hex: '#F5F5DC' },
+        ],
+        dictionaryValuesMap: mockDictMap,
+      });
+
+      const mockCreateProduct = vi.fn();
+      let capturedPatchPayload: any = null;
+      const mockSaveProduct = vi.fn().mockImplementation(async (_id: string, payload: any) => {
+        capturedPatchPayload = payload;
+        return {
+          ...canonicalExistingProduct,
+          variants: (payload.variants || []).map((v: any, idx: number) => ({
+            id: v.id || `backend-generated-uuid-${idx}`,
+            productId: canonicalExistingProduct.id,
+            colorId: v.colorId,
+            sizeValueId: v.sizeValueId,
+            barcode: `ZMK-new-${idx}`,
+            isActive: true,
+          })),
+        };
+      });
+
+      const mockGetProduct = vi.fn().mockImplementation(async () => ({
+        ...canonicalExistingProduct,
+        variants: [
+          {
+            id: '0fac9197-87dc-4dd0-86c7-3472d5c25ebb',
+            productId: canonicalExistingProduct.id,
+            colorId: 'col-black',
+            colorName: 'Черный',
+            sizeValueId: '8cc76d3c-1369-44ac-b4f4-e47629aca389',
+            size: 'M',
+            barcode: 'ZMK-b8fe9a9a-05a',
+            isActive: true,
+          },
+        ],
+      }));
+
+      renderTestStudio({
+        initialDraft: hydratedDraft,
+        canonicalColors: [
+          ...mockColors,
+          { id: 'col-beige', code: 'BEIGE', nameRu: 'Бежевый', hex: '#F5F5DC' },
+        ],
+        createProductFn: mockCreateProduct,
+        saveProductFn: mockSaveProduct,
+        getProductFn: mockGetProduct,
+      });
+
+      // 1. Mutate variant matrix: add size 'M' (generates draft-var-* synthetic IDs)
+      fireEvent.click(screen.getByTestId('test-add-size-matrix'));
+      expect(screen.getByTestId('test-is-dirty').textContent).toBe('DIRTY');
+
+      // 2. Click Save
+      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
+      });
+
+      // 3. Exactly one PATCH, NO Create POST
+      expect(mockCreateProduct).not.toHaveBeenCalled();
+      expect(mockSaveProduct).toHaveBeenCalledTimes(1);
+      expect(mockGetProduct).toHaveBeenCalledTimes(1);
+
+      // 4. Verify captured PATCH payload has NO synthetic draft-var-* IDs
+      expect(capturedPatchPayload).toBeDefined();
+      expect(capturedPatchPayload.variants).toBeDefined();
+      expect(capturedPatchPayload.variants.length).toBeGreaterThan(0);
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      for (const variant of capturedPatchPayload.variants) {
+        expect(variant.id).toBeUndefined(); // Synthetic draft-var-* stripped!
+        if (variant.id !== undefined) {
+          expect(UUID_REGEX.test(variant.id)).toBe(true);
+        }
+      }
+      expect(JSON.stringify(capturedPatchPayload)).not.toContain('draft-var-');
+
+      // 5. Canonical GET refreshed state
+      expect(screen.getByTestId('test-is-dirty').textContent).toBe('CLEAN');
+    });
+  });
+
+  /* ========================================================================
+   * SUITE 10: Media Staging & Color Binding Guarantees (PS.R4B3.1C4C3B2D)
+   * ======================================================================== */
+  describe('Suite 10: Media Staging & Color Binding Guarantees (PS.R4B3.1C4C3B2D)', () => {
+    it('34. local image with colorId = undefined: staging is allowed, no choose color validation blocks persistence, stage occurs, PATCH succeeds and omits/nulls colorId', async () => {
+      let capturedPatchPayload: any = null;
+      const stagedRequests: Array<{ pid: string; cid: string }> = [];
+
+      const mockStageImage = vi.fn().mockImplementation(async (pid: string, cid: string, _file: File) => {
+        stagedRequests.push({ pid, cid });
+        return {
+          stagedMediaId: '00000000-0000-4000-8000-000000000088',
+          clientMediaId: cid,
+          imageUrl: 'https://storage.zamk.test/staged/no-color.jpg',
+          status: 'ready',
+        };
+      });
+
+      const mockSaveProduct = vi.fn().mockImplementation(async (_pid: string, payload: any) => {
+        capturedPatchPayload = payload;
+        return {
+          ...sampleCanonicalProduct,
+          images: [
+            ...(sampleCanonicalProduct.images || []),
+            {
+              id: '00000000-0000-4000-8000-000000000088',
+              productId: sampleCanonicalProduct.id,
+              imageUrl: 'https://storage.zamk.test/staged/no-color.jpg',
+              colorId: null,
+              isMain: false,
+              sortOrder: 1,
+            },
+          ],
+        };
+      });
+
+      const mockGetProduct = vi.fn().mockImplementation(async () => ({
+        ...sampleCanonicalProduct,
+        images: [
+          ...(sampleCanonicalProduct.images || []),
+          {
+            id: '00000000-0000-4000-8000-000000000088',
+            productId: sampleCanonicalProduct.id,
+            imageUrl: 'https://storage.zamk.test/staged/no-color.jpg',
+            colorId: null,
+            isMain: false,
+            sortOrder: 1,
+          },
+        ],
+      }));
+
+      renderTestStudio({
+        stageImageFn: mockStageImage,
+        saveProductFn: mockSaveProduct,
+        getProductFn: mockGetProduct,
+      });
+
+      // 1. Add local image with colorId = undefined
+      fireEvent.click(screen.getByTestId('test-add-local-image-no-color'));
+      expect(screen.getByTestId('test-is-dirty').textContent).toBe('DIRTY');
+      expect(screen.getByTestId('test-can-save').textContent).toBe('CAN_SAVE');
+
+      // 2. Click Save - verify no "choose color" blocks it
+      const saveBtn = screen.getByTestId('studio-header-save-btn');
+      expect(saveBtn.hasAttribute('disabled')).toBe(false);
+      fireEvent.click(saveBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
+      });
+
+      // 3. Staging occurred with exact clientMediaId
+      expect(mockStageImage).toHaveBeenCalledTimes(1);
+      expect(stagedRequests[0].cid).toBe('99999999-9999-4999-8999-999999999999');
+
+      // 4. Exactly one PATCH called
+      expect(mockSaveProduct).toHaveBeenCalledTimes(1);
+      expect(capturedPatchPayload).toBeDefined();
+      expect(capturedPatchPayload.images).toBeDefined();
+
+      // Find the staged image in patch payload
+      const patchImg = capturedPatchPayload.images.find(
+        (img: any) => img.id === '00000000-0000-4000-8000-000000000088'
+      );
+      expect(patchImg).toBeDefined();
+      // colorId is null or undefined (not bound to any color)
+      expect(patchImg.colorId).toBeNull();
+
+      // 5. Success state
+      expect(screen.getByTestId('test-is-dirty').textContent).toBe('CLEAN');
+      expect(screen.queryByTestId('studio-save-error-toast')).toBeNull();
+    });
+
+    it('35. local image with explicit colorId: preserves canonical colorId in PATCH payload', async () => {
+      let capturedPatchPayload: any = null;
+
+      const mockStageImage = vi.fn().mockImplementation(async (_pid: string, cid: string) => ({
+        stagedMediaId: '00000000-0000-4000-8000-000000000077',
+        clientMediaId: cid,
+        imageUrl: 'https://storage.zamk.test/staged/with-color.jpg',
+        status: 'ready',
+      }));
+
+      const mockSaveProduct = vi.fn().mockImplementation(async (_pid: string, payload: any) => {
+        capturedPatchPayload = payload;
+        return {
+          ...sampleCanonicalProduct,
+          images: [
+            ...(sampleCanonicalProduct.images || []),
+            {
+              id: '00000000-0000-4000-8000-000000000077',
+              productId: sampleCanonicalProduct.id,
+              imageUrl: 'https://storage.zamk.test/staged/with-color.jpg',
+              colorId: 'col-black',
+              isMain: false,
+              sortOrder: 1,
+            },
+          ],
+        };
+      });
+
+      const mockGetProduct = vi.fn().mockImplementation(async () => ({
+        ...sampleCanonicalProduct,
+        images: [
+          ...(sampleCanonicalProduct.images || []),
+          {
+            id: '00000000-0000-4000-8000-000000000077',
+            productId: sampleCanonicalProduct.id,
+            imageUrl: 'https://storage.zamk.test/staged/with-color.jpg',
+            colorId: 'col-black',
+            isMain: false,
+            sortOrder: 1,
+          },
+        ],
+      }));
+
+      renderTestStudio({
+        stageImageFn: mockStageImage,
+        saveProductFn: mockSaveProduct,
+        getProductFn: mockGetProduct,
+      });
+
+      // 1. Add local image with explicit colorId
+      fireEvent.click(screen.getByTestId('test-add-local-image-with-color'));
+      expect(screen.getByTestId('test-is-dirty').textContent).toBe('DIRTY');
+
+      // 2. Save
+      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
+      });
+
+      // 3. Staging and PATCH occurred
+      expect(mockStageImage).toHaveBeenCalledTimes(1);
+      expect(mockSaveProduct).toHaveBeenCalledTimes(1);
+
+      const patchImg = capturedPatchPayload.images.find(
+        (img: any) => img.id === '00000000-0000-4000-8000-000000000077'
+      );
+      expect(patchImg).toBeDefined();
+      expect(patchImg.colorId).toBe('col-black');
     });
   });
 });

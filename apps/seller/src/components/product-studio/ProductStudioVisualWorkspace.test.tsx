@@ -5,7 +5,11 @@ vi.mock('@zamk/api-client', async (importOriginal: any) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    getSellerColors: vi.fn().mockImplementation(() => Promise.resolve([{ id: 'col-white', nameRu: 'Белый', hexValue: '#ffffff' }, { id: 'col-black', nameRu: 'Чёрный', hexValue: '#000000' }])),
+    getSellerColors: vi.fn().mockImplementation(() => Promise.resolve([
+      { id: 'col-white', nameRu: 'Белый', hexValue: '#ffffff' },
+      { id: 'col-black', nameRu: 'Чёрный', hexValue: '#000000' },
+      { id: 'col-beige', nameRu: 'Бежевый', hexValue: '#f5f5dc' },
+    ])),
     getSellerCategories: vi.fn().mockImplementation(() => Promise.resolve([{ id: 'cat-clothing', name: 'Одежда', type: 'FASHION' }, { id: 'cat-shoes', name: 'Обувь', type: 'SHOES' }])),
     getSellerCategorySchema: vi.fn().mockImplementation(() => Promise.resolve({ id: 'sch-clothing', categoryId: 'cat-clothing', dimensionType: 'COLOR_AND_SIZE', name: 'Одежда', allowedSizeSystems: [{ id: 'sys-eu', name: 'EU' }], attributes: [{ id: 'attr-color', nameRu: 'Цвет', valueSource: 'VARIANT_COLOR' }, { id: 'attr-size', nameRu: 'Размер', valueSource: 'VARIANT_SIZE' }, { id: 'attr-season', nameRu: 'Сезон', valueSource: 'DICTIONARY' }] })),
     getSellerSizeValues: vi.fn().mockImplementation(() => Promise.resolve([{ id: 'sz-s', sizeSystemId: 'sys-eu', nameRu: 'S', value: 'S', sortOrder: 1 }, { id: 'sz-m', sizeSystemId: 'sys-eu', nameRu: 'M', value: 'M', sortOrder: 2 }, { id: 'sz-l', sizeSystemId: 'sys-eu', nameRu: 'L', value: 'L', sortOrder: 3 }])),
@@ -16,7 +20,11 @@ vi.mock('@zamk/api-client/src/seller', async (importOriginal: any) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    getSellerColors: vi.fn().mockImplementation(() => Promise.resolve([{ id: 'col-white', nameRu: 'Белый', hexValue: '#ffffff' }, { id: 'col-black', nameRu: 'Чёрный', hexValue: '#000000' }])),
+    getSellerColors: vi.fn().mockImplementation(() => Promise.resolve([
+      { id: 'col-white', nameRu: 'Белый', hexValue: '#ffffff' },
+      { id: 'col-black', nameRu: 'Чёрный', hexValue: '#000000' },
+      { id: 'col-beige', nameRu: 'Бежевый', hexValue: '#f5f5dc' },
+    ])),
     getSellerCategories: vi.fn().mockImplementation(() => Promise.resolve([{ id: 'cat-clothing', name: 'Одежда', type: 'FASHION' }, { id: 'cat-shoes', name: 'Обувь', type: 'SHOES' }])),
     getSellerCategorySchema: vi.fn().mockImplementation(() => Promise.resolve({ id: 'sch-clothing', categoryId: 'cat-clothing', dimensionType: 'COLOR_AND_SIZE', name: 'Одежда', allowedSizeSystems: [{ id: 'sys-eu', name: 'EU' }], attributes: [{ id: 'attr-color', nameRu: 'Цвет', valueSource: 'VARIANT_COLOR' }, { id: 'attr-size', nameRu: 'Размер', valueSource: 'VARIANT_SIZE' }, { id: 'attr-season', nameRu: 'Сезон', valueSource: 'DICTIONARY' }] })),
     getSellerSizeValues: vi.fn().mockImplementation(() => Promise.resolve([{ id: 'sz-s', sizeSystemId: 'sys-eu', nameRu: 'S', value: 'S', sortOrder: 1 }, { id: 'sz-m', sizeSystemId: 'sys-eu', nameRu: 'M', value: 'M', sortOrder: 2 }, { id: 'sz-l', sizeSystemId: 'sys-eu', nameRu: 'L', value: 'L', sortOrder: 3 }])),
@@ -505,6 +513,64 @@ describe('ProductStudioVisualWorkspace - In-Canvas Constructor', () => {
       expect(currentCtx.draft.variants).toHaveLength(1);
       expect(currentCtx.draft.variants[0].sizeValueId).toBe('sz-s');
     });
+
+    it('23b. UI Apply Regression: starting Black/M, adds White and Beige, maintains Cartesian closure, then removes White', async () => {
+      let currentCtx: any;
+      render(
+        <TestWrapper
+          initialDraft={{
+            ...baseDraft,
+            colors: [{ id: 'col-black', name: 'Чёрный', hex: '#000000' }],
+            variants: [
+              { id: 'var-black-m', colorId: 'col-black', sizeValueId: 'sz-m', size: 'M', isActive: true },
+            ],
+          }}
+          contextCallback={(ctx) => (currentCtx = ctx)}
+        />
+      );
+
+      // Open color manager popover
+      fireEvent.click(screen.getByLabelText('Управление цветами'));
+      await waitFor(() => {
+        expect(screen.getByTestId('color-popover')).toBeTruthy();
+      });
+
+      const colorPopover = screen.getByTestId('color-popover');
+      // Add White and Beige
+      fireEvent.click(within(colorPopover).getByText('Белый'));
+      fireEvent.click(within(colorPopover).getByText('Бежевый'));
+      fireEvent.click(within(colorPopover).getByRole('button', { name: 'Готово' }));
+
+      // Check colors: Black, White, Beige
+      expect(currentCtx.draft.colors).toHaveLength(3);
+      expect(currentCtx.draft.colors.map((c: any) => c.id).sort()).toEqual(['col-beige', 'col-black', 'col-white']);
+
+      // Check variants: Black/M, White/M, Beige/M (Cartesian closure)
+      expect(currentCtx.draft.variants).toHaveLength(3);
+      const blackM = currentCtx.draft.variants.find((v: any) => v.colorId === 'col-black');
+      const whiteM = currentCtx.draft.variants.find((v: any) => v.colorId === 'col-white');
+      const beigeM = currentCtx.draft.variants.find((v: any) => v.colorId === 'col-beige');
+
+      expect(blackM?.id).toBe('var-black-m'); // Preserves canonical active ID!
+      expect(whiteM?.sizeValueId).toBe('sz-m');
+      expect(beigeM?.sizeValueId).toBe('sz-m');
+
+      // Now remove White
+      fireEvent.click(screen.getByLabelText('Управление цветами'));
+      await waitFor(() => {
+        expect(screen.getByTestId('color-popover')).toBeTruthy();
+      });
+      const colorPopover2 = screen.getByTestId('color-popover');
+      fireEvent.click(within(colorPopover2).getByText('Белый'));
+      fireEvent.click(within(colorPopover2).getByRole('button', { name: 'Готово' }));
+
+      // Variants should now be Black/M and Beige/M only
+      expect(currentCtx.draft.colors).toHaveLength(2);
+      expect(currentCtx.draft.variants).toHaveLength(2);
+      expect(currentCtx.draft.variants.some((v: any) => v.colorId === 'col-white')).toBe(false);
+      expect(currentCtx.draft.variants.some((v: any) => v.colorId === 'col-black')).toBe(true);
+      expect(currentCtx.draft.variants.some((v: any) => v.colorId === 'col-beige')).toBe(true);
+    });
   });
 
   describe('F. Legacy Components Removed and Safety Invariants', () => {
@@ -720,6 +786,348 @@ describe('ProductStudioVisualWorkspace - In-Canvas Constructor', () => {
       await waitFor(() => {
         expect(screen.getByTestId('size-chart-modal')).toBeTruthy();
       });
+    });
+  });
+
+  describe('PS.R4B3.1C4C3B2G — Redesign Product Studio Preview Variant Selection', () => {
+    it('initializes both preview color and preview size as null even for single-color product', async () => {
+      let capturedCtx: any;
+      render(
+        <TestWrapper
+          initialDraft={baseDraft} // has exactly 1 color: 'col-black'
+          contextCallback={(ctx) => {
+            capturedCtx = ctx;
+          }}
+        >
+          <ProductStudioVisualWorkspace />
+        </TestWrapper>
+      );
+
+      // Context preview selections are both null initially
+      expect(capturedCtx.selectedPreviewColorId).toBeNull();
+      expect(capturedCtx.selectedPreviewSizeValueId).toBeNull();
+
+      // No "Сначала выберите цвет" notice
+      expect(screen.queryByText('Сначала выберите цвет')).toBeNull();
+
+      // CTA is always static preview text "Добавить в корзину" (never "Выберите цвет" or "Выберите размер")
+      expect(screen.getByText('Добавить в корзину')).toBeTruthy();
+      expect(screen.queryByText('Выберите цвет')).toBeNull();
+      expect(screen.queryByText('Выберите размер')).toBeNull();
+    });
+
+    it('implements complete test matrix for peer variant selection with disabled incompatible options (PS.R4B3.1C4C3B2G1)', async () => {
+      // Test matrix draft:
+      // Black / XXS
+      // Black / M
+      // White / M
+      // Red / XL
+      const matrixDraft: Partial<ProductStudioDraft> = {
+        ...baseDraft,
+        colors: [
+          { id: 'col-black', name: 'Черный', hex: '#000000' },
+          { id: 'col-white', name: 'Белый', hex: '#FFFFFF' },
+          { id: 'col-red', name: 'Красный', hex: '#FF0000' },
+        ],
+        variants: [
+          { id: 'v1', colorId: 'col-black', colorName: 'Черный', sizeValueId: 'sz-xxs', size: 'XXS', priceCents: 450000 },
+          { id: 'v2', colorId: 'col-black', colorName: 'Черный', sizeValueId: 'sz-m', size: 'M', priceCents: 450000 },
+          { id: 'v3', colorId: 'col-white', colorName: 'Белый', sizeValueId: 'sz-m', size: 'M', priceCents: 450000 },
+          { id: 'v4', colorId: 'col-red', colorName: 'Красный', sizeValueId: 'sz-xl', size: 'XL', priceCents: 450000 },
+        ],
+      };
+
+      let capturedCtx: any;
+      render(
+        <TestWrapper
+          initialDraft={matrixDraft}
+          contextCallback={(ctx) => {
+            capturedCtx = ctx;
+          }}
+        >
+          <ProductStudioVisualWorkspace />
+        </TestWrapper>
+      );
+
+      // 1. Initial: all 3 colors visible + enabled, all 3 sizes visible + enabled, no selection
+      expect(capturedCtx.selectedPreviewColorId).toBeNull();
+      expect(capturedCtx.selectedPreviewSizeValueId).toBeNull();
+
+      const btnBlack = screen.getByTestId('color-swatch-col-black') as HTMLButtonElement;
+      const btnWhite = screen.getByTestId('color-swatch-col-white') as HTMLButtonElement;
+      const btnRed = screen.getByTestId('color-swatch-col-red') as HTMLButtonElement;
+      const btnXXS = screen.getByTestId('size-button-XXS') as HTMLButtonElement;
+      const btnM = screen.getByTestId('size-button-M') as HTMLButtonElement;
+      const btnXL = screen.getByTestId('size-button-XL') as HTMLButtonElement;
+
+      expect(btnBlack.disabled).toBe(false);
+      expect(btnWhite.disabled).toBe(false);
+      expect(btnRed.disabled).toBe(false);
+      expect(btnXXS.disabled).toBe(false);
+      expect(btnM.disabled).toBe(false);
+      expect(btnXL.disabled).toBe(false);
+
+      // 2. Select XXS:
+      // Black visible + enabled, White visible + disabled, Red visible + disabled
+      // XXS selected, M and XL still visible + enabled
+      fireEvent.click(btnXXS);
+      expect(capturedCtx.selectedPreviewSizeValueId).toBe('sz-xxs');
+      expect(btnBlack.disabled).toBe(false);
+      expect(btnWhite.disabled).toBe(true);
+      expect(btnRed.disabled).toBe(true);
+      expect(btnXXS.disabled).toBe(false);
+      expect(btnM.disabled).toBe(false);
+      expect(btnXL.disabled).toBe(false);
+
+      // 8. Clicking disabled Red while XXS selected: no state change
+      fireEvent.click(btnRed);
+      expect(capturedCtx.selectedPreviewColorId).toBeNull();
+      expect(capturedCtx.selectedPreviewSizeValueId).toBe('sz-xxs');
+
+      // 3. Select M instead:
+      // Black visible + enabled, White visible + enabled, Red visible + disabled
+      fireEvent.click(btnM);
+      expect(capturedCtx.selectedPreviewSizeValueId).toBe('sz-m');
+      expect(btnBlack.disabled).toBe(false);
+      expect(btnWhite.disabled).toBe(false);
+      expect(btnRed.disabled).toBe(true);
+
+      // 4. Select XL:
+      // Black visible + disabled, White visible + disabled, Red visible + enabled
+      fireEvent.click(btnXL);
+      expect(capturedCtx.selectedPreviewSizeValueId).toBe('sz-xl');
+      expect(btnBlack.disabled).toBe(true);
+      expect(btnWhite.disabled).toBe(true);
+      expect(btnRed.disabled).toBe(false);
+
+      // 10. Toggle-off XL restores all colors to enabled
+      fireEvent.click(btnXL);
+      expect(capturedCtx.selectedPreviewSizeValueId).toBeNull();
+      expect(btnBlack.disabled).toBe(false);
+      expect(btnWhite.disabled).toBe(false);
+      expect(btnRed.disabled).toBe(false);
+
+      // 5. Select Black:
+      // XXS visible + enabled, M visible + enabled, XL visible + disabled
+      fireEvent.click(btnBlack);
+      expect(capturedCtx.selectedPreviewColorId).toBe('col-black');
+      expect(btnXXS.disabled).toBe(false);
+      expect(btnM.disabled).toBe(false);
+      expect(btnXL.disabled).toBe(true);
+
+      // 9. Clicking disabled XL while Black selected: no state change
+      fireEvent.click(btnXL);
+      expect(capturedCtx.selectedPreviewSizeValueId).toBeNull();
+      expect(capturedCtx.selectedPreviewColorId).toBe('col-black');
+
+      // 6. Select White:
+      // XXS visible + disabled, M visible + enabled, XL visible + disabled
+      fireEvent.click(btnWhite);
+      expect(capturedCtx.selectedPreviewColorId).toBe('col-white');
+      expect(btnXXS.disabled).toBe(true);
+      expect(btnM.disabled).toBe(false);
+      expect(btnXL.disabled).toBe(true);
+
+      // 7. Select Red:
+      // XXS visible + disabled, M visible + disabled, XL visible + enabled
+      fireEvent.click(btnRed);
+      expect(capturedCtx.selectedPreviewColorId).toBe('col-red');
+      expect(btnXXS.disabled).toBe(true);
+      expect(btnM.disabled).toBe(true);
+      expect(btnXL.disabled).toBe(false);
+
+      // 10. Toggle-off Red restores all sizes to enabled
+      fireEvent.click(btnRed);
+      expect(capturedCtx.selectedPreviewColorId).toBeNull();
+      expect(btnXXS.disabled).toBe(false);
+      expect(btnM.disabled).toBe(false);
+      expect(btnXL.disabled).toBe(false);
+
+      // 14 & 15. Preview interactions do not dirty draft or enable save
+      expect(capturedCtx.isDirty).toBe(false);
+    });
+  });
+
+  describe('PS.R4B3.1C4C3B3B-R3 — Final Variant Matrix UX (Visual)', () => {
+    it('1. no colors: color + visible', () => {
+      render(
+        <TestWrapper
+          initialDraft={{
+            ...baseDraft,
+            colors: [],
+            variants: [],
+          }}
+        />
+      );
+      const colorBtn = screen.getByTestId('color-manage-btn');
+      expect(colorBtn).toBeTruthy();
+      expect(within(colorBtn).getByText('+')).toBeTruthy();
+    });
+
+    it('2. colors exist: color + STILL visible', () => {
+      render(
+        <TestWrapper
+          initialDraft={{
+            ...baseDraft,
+            colors: [{ id: 'col-black', name: 'Чёрный', hex: '#000000' }],
+            variants: [{ id: 'v1', colorId: 'col-black', sizeValueId: 'sz-m', size: 'M' }],
+          }}
+        />
+      );
+      const colorBtn = screen.getByTestId('color-manage-btn');
+      expect(colorBtn).toBeTruthy();
+      expect(within(colorBtn).getByText('+')).toBeTruthy();
+    });
+
+    it('3. no Pencil management icon for color axis', () => {
+      render(
+        <TestWrapper
+          initialDraft={{
+            ...baseDraft,
+            colors: [{ id: 'col-black', name: 'Чёрный', hex: '#000000' }],
+            variants: [{ id: 'v1', colorId: 'col-black', sizeValueId: 'sz-m', size: 'M' }],
+          }}
+        />
+      );
+      const colorBtn = screen.getByTestId('color-manage-btn');
+      expect(colorBtn.querySelector('svg.lucide-pencil')).toBeNull();
+    });
+
+    it('4. no sizes: size + visible', () => {
+      render(
+        <TestWrapper
+          initialDraft={{
+            ...baseDraft,
+            colors: [{ id: 'col-black', name: 'Чёрный', hex: '#000000' }],
+            variants: [],
+          }}
+        />
+      );
+      const sizeBtn = screen.getByTestId('size-manage-btn');
+      expect(sizeBtn).toBeTruthy();
+      expect(within(sizeBtn).getByText('+')).toBeTruthy();
+    });
+
+    it('5. sizes exist: size + STILL visible', () => {
+      render(
+        <TestWrapper
+          initialDraft={{
+            ...baseDraft,
+            colors: [{ id: 'col-black', name: 'Чёрный', hex: '#000000' }],
+            variants: [{ id: 'v1', colorId: 'col-black', sizeValueId: 'sz-m', size: 'M' }],
+          }}
+        />
+      );
+      const sizeBtn = screen.getByTestId('size-manage-btn');
+      expect(sizeBtn).toBeTruthy();
+      expect(within(sizeBtn).getByText('+')).toBeTruthy();
+    });
+
+    it('6. no Pencil management icon for size axis', () => {
+      render(
+        <TestWrapper
+          initialDraft={{
+            ...baseDraft,
+            colors: [{ id: 'col-black', name: 'Чёрный', hex: '#000000' }],
+            variants: [{ id: 'v1', colorId: 'col-black', sizeValueId: 'sz-m', size: 'M' }],
+          }}
+        />
+      );
+      const sizeBtn = screen.getByTestId('size-manage-btn');
+      expect(sizeBtn.querySelector('svg.lucide-pencil')).toBeNull();
+    });
+
+    it('7. each + opens correct existing editor', async () => {
+      render(
+        <TestWrapper
+          initialDraft={{
+            ...baseDraft,
+            colors: [{ id: 'col-black', name: 'Чёрный', hex: '#000000' }],
+            variants: [{ id: 'v1', colorId: 'col-black', sizeValueId: 'sz-m', size: 'M' }],
+          }}
+        />
+      );
+      // Click color +
+      fireEvent.click(screen.getByTestId('color-manage-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('color-popover')).toBeTruthy();
+      });
+
+      // Click size +
+      fireEvent.click(screen.getByTestId('size-manage-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('size-popover')).toBeTruthy();
+      });
+    });
+  });
+
+  describe('PS.R4B3.1C4C3B3B-R3A — Visual Workspace Parity & Canonical Labels', () => {
+    it('1. color and size popovers are mutually exclusive in Visual workspace', async () => {
+      render(
+        <TestWrapper
+          initialDraft={{
+            ...baseDraft,
+            dimensionType: 'COLOR_AND_SIZE',
+            colors: [{ id: 'col-black', name: 'Чёрный', hex: '#000000' }],
+            variants: [{ id: 'v1', colorId: 'col-black', sizeValueId: 'sz-m', size: 'M' }],
+          }}
+        />
+      );
+
+      // Open color popover
+      fireEvent.click(screen.getByTestId('color-manage-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('color-popover')).toBeTruthy();
+      });
+      expect(screen.queryByTestId('size-popover')).toBeNull();
+
+      // Open size popover -> color popover must close
+      fireEvent.click(screen.getByTestId('size-manage-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('size-popover')).toBeTruthy();
+      });
+      expect(screen.queryByTestId('color-popover')).toBeNull();
+
+      // Press Escape -> size popover must close
+      fireEvent.keyDown(window, { key: 'Escape' });
+      await waitFor(() => {
+        expect(screen.queryByTestId('size-popover')).toBeNull();
+        expect(screen.queryByTestId('color-popover')).toBeNull();
+      });
+    });
+
+    it('2. size buttons and size popover options show canonical labels and never UUIDs', async () => {
+      render(
+        <TestWrapper
+          initialDraft={{
+            ...baseDraft,
+            dimensionType: 'COLOR_AND_SIZE',
+            colors: [{ id: 'col-black', name: 'Чёрный', hex: '#000000' }],
+            variants: [
+              // size contains raw UUID, but sizeValueId matches dictionary sz-m (which has value 'M')
+              { id: 'v1', colorId: 'col-black', sizeValueId: 'sz-m', size: '1ed6ddd3-bf7b-4029-9e8a-028fec3a4b95' },
+            ],
+          }}
+        />
+      );
+
+      // Size button should display M, never raw UUID
+      await waitFor(() => {
+        expect(screen.getByTestId('size-button-M')).toBeTruthy();
+      });
+      expect(screen.getByTestId('size-button-M').textContent?.trim()).toBe('M');
+      expect(screen.getByTestId('size-button-M').textContent).not.toContain('1ed6ddd3');
+
+      // Open size popover
+      fireEvent.click(screen.getByTestId('size-manage-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('size-popover')).toBeTruthy();
+      });
+
+      // Size option in popover shows S, M, L
+      const optionM = screen.getByTestId('visual-size-option-sz-m');
+      expect(optionM.textContent?.trim()).toBe('M');
+      expect(screen.getByTestId('size-popover').textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i);
     });
   });
 });

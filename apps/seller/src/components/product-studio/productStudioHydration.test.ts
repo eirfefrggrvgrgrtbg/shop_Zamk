@@ -310,6 +310,73 @@ describe('productStudioHydration mapper tests', () => {
     expect(draft.variants![1].sizeValueId).toBe('sz-l');
   });
 
+  it('hydrates active variants only: ignores inactive variants and does not resurrect their colors', () => {
+    const testColors: SellerColor[] = [
+      { id: 'col-black', code: 'BLACK', nameRu: 'Черный', hex: '#000000' },
+      { id: 'col-white', code: 'WHITE', nameRu: 'Белый', hex: '#FFFFFF' },
+      { id: 'col-beige', code: 'BEIGE', nameRu: 'Бежевый', hex: '#F5F5DC' },
+    ];
+
+    const productWithHistory: SellerProduct = {
+      ...sampleProduct,
+      images: [],
+      variants: [
+        {
+          id: 'var-black-m',
+          productId: 'prod-123',
+          colorId: 'col-black',
+          sizeValueId: 'sz-m',
+          size: 'M',
+          isActive: true,
+          priceCents: 122200,
+        },
+        {
+          id: 'var-white-m-inactive',
+          productId: 'prod-123',
+          colorId: 'col-white',
+          sizeValueId: 'sz-m',
+          size: 'M',
+          isActive: false,
+          priceCents: 99900,
+        },
+        {
+          id: 'var-beige-m-inactive',
+          productId: 'prod-123',
+          colorId: 'col-beige',
+          sizeValueId: 'sz-m',
+          size: 'M',
+          isActive: false,
+          priceCents: 88800,
+        },
+      ],
+    };
+
+    const draft = hydrateProductStudioDraft({
+      product: productWithHistory,
+      categorySchema: mockSchema,
+      canonicalColors: testColors,
+      dictionaryValuesMap: mockDictMap,
+    });
+
+    // Expected hydrated ProductStudioDraft:
+    // colors: Black only (No White, No Beige)
+    expect(draft.colors).toHaveLength(1);
+    expect(draft.colors?.[0]?.id).toBe('col-black');
+    expect(draft.colors?.some((c: any) => c.id === 'col-white')).toBe(false);
+    expect(draft.colors?.some((c: any) => c.id === 'col-beige')).toBe(false);
+
+    // variants: Black/M only (active only)
+    expect(draft.variants).toHaveLength(1);
+    expect(draft.variants?.[0]?.id).toBe('var-black-m');
+    expect(draft.variants?.[0]?.colorId).toBe('col-black');
+    expect(draft.variants?.[0]?.sizeValueId).toBe('sz-m');
+    expect(draft.variants?.[0]?.isActive).toBe(true);
+
+    // Inactive variants do not contribute to variants or colors
+    expect(draft.variants?.some((v) => v.id === 'var-white-m-inactive')).toBe(false);
+    expect(draft.variants?.some((v) => v.id === 'var-beige-m-inactive')).toBe(false);
+  });
+
   it('hydrates structured material composition and preserves legacy fallback if empty', () => {
     const draft = hydrateProductStudioDraft({
       product: sampleProduct,
@@ -470,6 +537,77 @@ describe('productStudioHydration mapper tests', () => {
         canonicalColors: mockColors,
       })
     ).toThrowError(/Data integrity error: product references attributeDefinitionId "attr-nonexistent-999" not found in category schema/);
+  });
+
+  it('PS.R4B3.1C4C3B3B-R2: Save + hydration sparse round trip preserves sparse matrix and never resurrects inactive/absent variants', () => {
+    const rawProduct: SellerProduct = {
+      id: 'prod-sparse-1',
+      title: 'Худи Оверсайз',
+      categoryId: 'cat-hoodies',
+      priceCents: 450000,
+      currency: 'RUB',
+      status: 'draft',
+      createdAt: '2026-09-20T10:00:00Z',
+      updatedAt: '2026-09-20T10:00:00Z',
+      variants: [
+        {
+          id: 'v-black-m',
+          productId: 'prod-sparse-1',
+          colorId: 'col-black',
+          colorName: 'Черный',
+          sizeValueId: 'sz-m',
+          size: 'M',
+          isActive: true,
+        },
+        {
+          id: 'v-black-l',
+          productId: 'prod-sparse-1',
+          colorId: 'col-black',
+          colorName: 'Черный',
+          sizeValueId: 'sz-l',
+          size: 'L',
+          isActive: true,
+        },
+        {
+          id: 'v-white-l',
+          productId: 'prod-sparse-1',
+          colorId: 'col-white',
+          colorName: 'Белый',
+          sizeValueId: 'sz-l',
+          size: 'L',
+          isActive: true,
+        },
+        // Inactive historical variant: White/M was deactivated and marked inactive: false
+        {
+          id: 'v-white-m-dead',
+          productId: 'prod-sparse-1',
+          colorId: 'col-white',
+          colorName: 'Белый',
+          sizeValueId: 'sz-m',
+          size: 'M',
+          isActive: false,
+        },
+      ],
+    } as any;
+
+    const draft = hydrateProductStudioDraft({
+      product: rawProduct,
+      categorySchema: mockSchema,
+      canonicalColors: mockColors,
+    });
+
+    // Active variants must strictly be Black/M, Black/L, White/L (3 total)
+    expect(draft.variants).toBeDefined();
+    expect(draft.variants!).toHaveLength(3);
+    expect(draft.variants!.every((v) => v.isActive !== false)).toBe(true);
+
+    const activeKeys = draft.variants!.map((v) => `${v.colorId}:${v.sizeValueId}`);
+    expect(activeKeys).toContain('col-black:sz-m');
+    expect(activeKeys).toContain('col-black:sz-l');
+    expect(activeKeys).toContain('col-white:sz-l');
+
+    // Dead / inactive White/M is NOT resurrected
+    expect(activeKeys).not.toContain('col-white:sz-m');
   });
 });
 

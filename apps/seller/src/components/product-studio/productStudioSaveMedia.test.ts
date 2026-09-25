@@ -55,9 +55,15 @@ describe('PS.R4B3.1C4C2B1 — Stage Client + Pure Edit Media Save Orchestration'
         const file = createTestFile('test.jpg', 'img-data');
         const res = await stageSellerProductImage('prod-abc', 'client-uuid-456', file);
 
-        // 1. Correct route
+        // 1. Correct route & method
         expect(capturedMethod).toBe('POST');
-        expect(capturedUrl).toContain('/seller/products/prod-abc/images/stage');
+        expect(capturedMethod).not.toBe('PUT');
+        expect(capturedMethod).not.toBe('GET');
+        expect(capturedMethod).not.toBe('PATCH');
+        expect(capturedUrl).toBe('http://127.0.0.1:8080/api/seller/products/prod-abc/images/stage');
+        expect(capturedUrl).not.toContain('/media/staging');
+        expect(capturedUrl).not.toContain('/seller/product/');
+        expect(capturedUrl).not.toContain('/image/stage');
 
         // 2. Multipart includes exact clientMediaId
         expect(capturedBody).toBeInstanceOf(FormData);
@@ -75,6 +81,43 @@ describe('PS.R4B3.1C4C2B1 — Stage Client + Pure Edit Media Save Orchestration'
           imageUrl: 'https://storage.zamk.test/staged/staged-uuid-123.jpg',
           status: 'ready',
         });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('stageSellerProductImage strict contract guarantees: POST only, /api/seller/products/:id/images/stage only', async () => {
+      let capturedMethod = '';
+      let capturedUrl = '';
+
+      const mockFetch = vi.fn().mockImplementation(async (url: string, init: RequestInit) => {
+        capturedUrl = url;
+        capturedMethod = init.method || '';
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+          json: async () => ({
+            stagedMediaId: '00000000-0000-4000-8000-000000000001',
+            clientMediaId: '00000000-0000-4000-8000-000000000002',
+            imageUrl: 'https://storage.zamk.test/staged/img.jpg',
+            status: 'ready',
+          }),
+        };
+      });
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = mockFetch;
+      try {
+        const file = createTestFile('check.png', 'binary-data');
+        const pid = 'fb5ff610-8c77-422f-9289-b0988a90b3ac';
+        const cid = '11111111-2222-4333-8444-555555555555';
+        await stageSellerProductImage(pid, cid, file);
+
+        expect(capturedMethod).toBe('POST');
+        expect(capturedUrl).toBe(`http://127.0.0.1:8080/api/seller/products/${pid}/images/stage`);
+        expect(capturedUrl.includes('/media/staging')).toBe(false);
+        expect(capturedUrl.includes('/images/upload')).toBe(false);
       } finally {
         globalThis.fetch = originalFetch;
       }

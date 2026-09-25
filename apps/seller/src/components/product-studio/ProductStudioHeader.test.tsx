@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 describe('ProductStudioHeader — Top Identity Block Layout Normalization', () => {
-  it('renders Row 1 (title + status badges), Row 2 (category), Row 3 (brand) in clean vertical hierarchy', () => {
+  it('renders Row 1 (title + status badges), Row 2 (prominent category control), Row 3 (brand) in clean vertical hierarchy', () => {
     render(
       <MemoryRouter>
         <ProductStudioProvider
@@ -52,20 +52,24 @@ describe('ProductStudioHeader — Top Identity Block Layout Normalization', () =
     expect(row1Container?.contains(entryBadge)).toBe(true);
     expect(row1Container?.contains(readinessBtn)).toBe(true);
 
-    // Row 2: Category chip on its own explicit row
-    const catBtn = screen.getByTestId('studio-header-category-btn');
-    expect(catBtn.textContent).toContain('Категория · Верхняя одежда / Тренчи');
-    const row2Container = catBtn.parentElement;
+    // Row 2: Prominent global category control on its own explicit row
+    const row2Container = screen.getByTestId('studio-global-category-row');
     expect(row2Container).not.toBeNull();
     expect(row2Container).not.toBe(row1Container);
-    expect(row2Container?.className).toContain('flex');
-    expect(row2Container?.className).toContain('items-center');
-    expect(row2Container?.className).toContain('min-w-0');
+    expect(row2Container.className).toContain('flex');
+    expect(row2Container.className).toContain('items-center');
+    expect(row2Container.className).toContain('min-w-0');
+
+    const catControl = screen.getByTestId('studio-global-category-control');
+    expect(catControl.textContent).toContain('Категория товара');
+    expect(catControl.textContent).toContain('Верхняя одежда / Тренчи');
+
+    const catBtn = screen.getByTestId('studio-header-category-btn');
+    expect(catBtn.textContent).toBe('Изменить');
 
     // Row 3: Brand line on its own explicit row below category
     const brandEl = screen.getByTestId('studio-header-subtitle');
     expect(brandEl.textContent).toBe('Бренд: Atelier Monochrome');
-    // Ensure brand is not hidden on any screen breakpoint
     expect(brandEl.className).not.toContain('hidden');
     expect(brandEl.className).toContain('truncate');
     const row3Container = brandEl.parentElement;
@@ -135,15 +139,20 @@ describe('ProductStudioHeader — Top Identity Block Layout Normalization', () =
     const titleEl = screen.getByTestId('studio-product-title');
     expect(titleEl.textContent).toBe('Новая футболка');
 
+    const catControl = screen.getByTestId('studio-global-category-control');
+    expect(catControl.textContent).toContain('Категория товара *');
+    expect(catControl.textContent).toContain('Выберите категорию товара');
+
     const catBtn = screen.getByTestId('studio-header-category-btn');
-    expect(catBtn.textContent).toContain('Категория * · Не выбрана');
+    expect(catBtn.textContent).toBe('Выбрать');
 
     const identityBlock = titleEl.parentElement?.parentElement;
     expect(identityBlock?.className).toContain('flex-col');
     expect(identityBlock?.children.length).toBe(2);
   });
 
-  it('ensures category button has truncation protection for long category paths', () => {
+  it('ensures category control has truncation protection for long category paths', () => {
+    const longPath = 'Одежда / Женская одежда / Верхняя одежда / Куртки и парки / Кожаные куртки';
     render(
       <MemoryRouter>
         <ProductStudioProvider
@@ -152,7 +161,7 @@ describe('ProductStudioHeader — Top Identity Block Layout Normalization', () =
             id: 'prod-3',
             title: 'Кожаная куртка',
             categoryId: 'cat-deep',
-            categoryName: 'Одежда / Женская одежда / Верхняя одежда / Куртки и парки / Кожаные куртки',
+            categoryName: longPath,
           }}
         >
           <ProductStudioHeader />
@@ -160,10 +169,119 @@ describe('ProductStudioHeader — Top Identity Block Layout Normalization', () =
       </MemoryRouter>
     );
 
-    const catBtn = screen.getByTestId('studio-header-category-btn');
-    expect(catBtn.className).toContain('truncate');
-    expect(catBtn.className).toContain('max-w-full');
-    const labelSpan = catBtn.querySelector('span');
-    expect(labelSpan?.className).toContain('truncate');
+    const catControl = screen.getByTestId('studio-global-category-control');
+    expect(catControl.className).toContain('truncate');
+    expect(catControl.className).toContain('max-w-full');
+
+    const labelSpan = screen.getByTestId('studio-header-category-label');
+    expect(labelSpan.className).toContain('truncate');
+    expect(labelSpan.getAttribute('title')).toBe(longPath);
+  });
+});
+
+describe('PS.R4B3.1C4C3B3C — Section 19: Prominent Global Category Control', () => {
+  it('19A. No category: prominent global category control visible with required indicator and "Выбрать" button', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider
+          entryMode="create"
+          initialDraft={{
+            title: 'Новый худи',
+            categoryId: '',
+            categoryName: '',
+          }}
+        >
+          <ProductStudioHeader />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    const catControl = screen.getByTestId('studio-global-category-control');
+    expect(catControl).toBeTruthy();
+    expect(catControl.textContent).toContain('Категория товара *');
+    expect(catControl.textContent).toContain('Выберите категорию товара');
+
+    const btn = screen.getByTestId('studio-header-category-btn');
+    expect(btn.textContent).toBe('Выбрать');
+  });
+
+  it('19B. Selected category: human-readable selected category path visible with "Изменить" button and never UUID', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider
+          entryMode="edit"
+          initialDraft={{
+            id: 'prod-h-1',
+            title: 'Худи Оверсайз',
+            categoryId: '123e4567-e89b-12d3-a456-426614174000',
+            categoryName: 'Одежда / Толстовки / Худи',
+          }}
+        >
+          <ProductStudioHeader />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    const catControl = screen.getByTestId('studio-global-category-control');
+    expect(catControl.textContent).toContain('Категория товара');
+    expect(catControl.textContent).toContain('Одежда / Толстовки / Худи');
+    expect(catControl.textContent).not.toContain('123e4567-e89b-12d3-a456-426614174000');
+
+    const btn = screen.getByTestId('studio-header-category-btn');
+    expect(btn.textContent).toBe('Изменить');
+  });
+
+  it('19C. Click: clicking "Выбрать" / "Изменить" opens canonical category modal', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider
+          entryMode="create"
+          initialDraft={{
+            title: 'Тест',
+            categoryId: '',
+          }}
+        >
+          <ProductStudioHeader />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    // Click "Выбрать"
+    fireEvent.click(screen.getByTestId('studio-header-category-btn'));
+
+    // Verify modal opened
+    expect(screen.getByTestId('category-search-input')).toBeTruthy();
+  });
+
+  it('19D. Selected category falls back safely without UUID display if categoryName equals UUID', () => {
+    render(
+      <MemoryRouter>
+        <ProductStudioProvider
+          entryMode="edit"
+          initialDraft={{
+            id: 'prod-h-2',
+            title: 'Худи',
+            categoryId: '123e4567-e89b-12d3-a456-426614174000',
+            categoryName: '123e4567-e89b-12d3-a456-426614174000',
+          }}
+          initialCategorySchema={{
+            id: 'sch-1',
+            name: 'Худи',
+            allowedSizeSystems: [],
+            attributes: [],
+            sizeChartFields: [],
+            sizeChartRequired: false,
+            slug: 'hoodie',
+          }}
+        >
+          <ProductStudioHeader />
+        </ProductStudioProvider>
+      </MemoryRouter>
+    );
+
+    const catControl = screen.getByTestId('studio-global-category-control');
+    expect(catControl.textContent).toContain('Худи');
+    expect(catControl.textContent).not.toContain('123e4567-e89b-12d3-a456-426614174000');
   });
 });

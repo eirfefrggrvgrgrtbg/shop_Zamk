@@ -26,6 +26,7 @@ import {
 import { getSellerProducts, getSellerMe } from '@zamk/api-client/src/seller';
 import { adaptProductList } from '../api/adapter';
 import { cn } from '../lib/utils';
+import { prepareAddProductNavigation } from '../components/product-studio/productStudioCreateSession';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
   style: 'currency',
@@ -281,6 +282,7 @@ export function SellerProducts() {
         action={
           <Link
             to="/products/new"
+            onClick={() => prepareAddProductNavigation()}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-gray-800"
           >
             <PackagePlus className="h-4 w-4" />
@@ -354,6 +356,7 @@ export function SellerProducts() {
               </p>
               <Link
                 to="/products/new"
+                onClick={() => prepareAddProductNavigation()}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white transition-colors hover:bg-gray-800"
               >
                 <PackagePlus className="h-4 w-4" />

@@ -56,6 +56,8 @@ export interface ProductPresentationColorOption {
   shadeName?: string;
   hex?: string;
   hasInStock: boolean;
+  state?: 'AVAILABLE' | 'UNAVAILABLE';
+  disabled?: boolean;
 }
 
 export type ProductPresentationSizeState =

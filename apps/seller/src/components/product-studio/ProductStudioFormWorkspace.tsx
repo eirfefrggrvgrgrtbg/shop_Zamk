@@ -1,23 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useProductStudio } from '../../contexts/ProductStudioContext';
 import { ProductStudioSectionNav } from './ProductStudioSectionNav';
 import { SellerSurface } from '../SellerSurface';
-import {
-  FileText,
-  Image,
-  Sliders,
-  Layers,
-  DollarSign,
-  ShieldCheck,
-  Folder,
-  Link2,
-  Pencil,
-  Trash2,
-  Plus,
-  GripVertical,
-  CheckCircle,
-  AlertCircle,
-} from 'lucide-react';
+import { FileText, Image, Sliders, Layers, DollarSign, ShieldCheck, Folder, Link2, Pencil, Trash2, Plus, GripVertical, CheckCircle, AlertCircle, X } from 'lucide-react';
 import {
   isColorRequired,
   isSizeRequired,
@@ -43,6 +29,36 @@ import { ProductStudioCompositionModal } from './ProductStudioCompositionModal';
 import { ProductStudioCareModal } from './ProductStudioCareModal';
 import { ProductStudioCharacteristicsModal } from './ProductStudioCharacteristicsModal';
 import { ProductStudioSizeChartModal } from './ProductStudioSizeChartModal';
+import {
+  reconcileProductStudioVariantMatrix,
+  resolveProductStudioDimensionType,
+  canDeactivateVariantTuple,
+  toggleProductStudioVariantTuple,
+  BLOCKED_LAST_CELL_TOOLTIP,
+} from './productStudioMatrixHelper';
+import { getSellerColors, getSellerSizeValues, type SellerColor, type SellerSizeValue } from '@zamk/api-client';
+
+const isUuid = (str?: string | null) =>
+  Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim()));
+
+function getCanonicalSizeLabel(
+  sizeValueId: string,
+  sizesList?: SellerSizeValue[] | null,
+  fallbackLabel?: string | null
+): string {
+  if (sizesList && sizesList.length > 0) {
+    const found = sizesList.find((s) => s.id === sizeValueId);
+    if (found && found.value && !isUuid(found.value)) {
+      return found.value;
+    }
+  }
+
+  if (fallbackLabel && fallbackLabel.trim() !== '' && !isUuid(fallbackLabel)) {
+    return fallbackLabel.trim();
+  }
+
+  return 'Размер недоступен';
+}
 
 export function ProductStudioFormWorkspace() {
   const {
@@ -56,6 +72,7 @@ export function ProductStudioFormWorkspace() {
     isFieldAttention,
     setShowReadinessAttention,
     categorySchema: contextCategorySchema,
+    activeSizeSystemId,
     createMediaUrl,
   } = useProductStudio();
   const [localCategorySchema, setLocalCategorySchema] = useState<SellerCategorySchema | null>(null);
@@ -225,7 +242,415 @@ export function ProductStudioFormWorkspace() {
   }, [draft, categorySchema]);
   const isSizeChartMissing = readiness?.blockingFields?.includes('sizeChart') ?? !sizeChartCompleteness.isComplete;
 
+
+
+  const effectiveDimensionType = resolveProductStudioDimensionType(
+    draft.dimensionType,
+    categorySchema?.dimensionType
+  );
+
+  const showColorEditor = effectiveDimensionType === 'COLOR_ONLY';
+  const showSizeEditor = effectiveDimensionType === 'SIZE_ONLY';
+
+  const [isFormColorPopoverOpen, setIsFormColorPopoverOpen] = useState(false);
+  const [pendingFormColorIds, setPendingFormColorIds] = useState<Set<string>>(new Set());
+  const [isFormSizePopoverOpen, setIsFormSizePopoverOpen] = useState(false);
+  const [pendingFormSizeIds, setPendingFormSizeIds] = useState<Set<string>>(new Set());
+
+  const [colorsList, setColorsList] = useState<SellerColor[]>([]);
+  const [sizesList, setSizesList] = useState<SellerSizeValue[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    getSellerColors()
+      .then((data) => {
+        if (isMounted) setColorsList(data || []);
+      })
+      .catch((err) => {
+        console.error('Failed to load seller colors in Form Workspace:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (activeSizeSystemId) {
+      getSellerSizeValues(activeSizeSystemId)
+        .then((data) => {
+          if (isMounted) setSizesList(data || []);
+        })
+        .catch((err) => {
+          console.error('Failed to load size values in Form Workspace:', err);
+        });
+    } else {
+      setSizesList([]);
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [activeSizeSystemId]);
+
+  const [sizePopoverAnchor, setSizePopoverAnchor] = useState<DOMRect | null>(null);
+  const [colorPopoverAnchor, setColorPopoverAnchor] = useState<DOMRect | null>(null);
+
+  const configuredColors = useMemo(() => {
+    const colorMap = new Map<string, { id: string; name: string; hex: string }>();
+
+    for (const c of draft.colors || []) {
+      if (c.id && !colorMap.has(c.id)) {
+        const found = colorsList.find((item) => item.id === c.id);
+        const name = found?.nameRu || c.name || (c as any)?.nameRu || 'Цвет';
+        const hex = found?.hex || c.hex || (c as any)?.hexValue || '#cccccc';
+        colorMap.set(c.id, { id: c.id, name, hex });
+      }
+    }
+
+    for (const v of draft.variants || []) {
+      if (v.colorId && !colorMap.has(v.colorId)) {
+        const found = colorsList.find((item) => item.id === v.colorId);
+        const name = found?.nameRu || v.colorName || 'Цвет';
+        const hex = found?.hex || v.colorHex || '#cccccc';
+        colorMap.set(v.colorId, { id: v.colorId, name, hex });
+      }
+    }
+
+    return Array.from(colorMap.values());
+  }, [draft.colors, draft.variants, colorsList]);
+
+  const configuredSizes = useMemo(() => {
+    const sizeIds = new Set<string>();
+    // Collect sizeValueIds for sizes that have at least one active variant
+    for (const v of draft.variants || []) {
+      if (v.isActive !== false && v.sizeValueId) {
+        sizeIds.add(v.sizeValueId);
+      }
+    }
+
+    const ids = Array.from(sizeIds);
+    if (sizesList && sizesList.length > 0) {
+      ids.sort((a, b) => {
+        const idxA = sizesList.findIndex((s) => s.id === a);
+        const idxB = sizesList.findIndex((s) => s.id === b);
+        if (idxA !== -1 && idxB !== -1) {
+          const orderA = sizesList[idxA].sortOrder ?? idxA;
+          const orderB = sizesList[idxB].sortOrder ?? idxB;
+          return orderA - orderB;
+        }
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return 0;
+      });
+    }
+
+    return ids.map((id) => {
+      const fallback = (draft.variants || []).find((v) => v.sizeValueId === id);
+      const label = getCanonicalSizeLabel(id, sizesList, fallback?.size);
+      return { id, label };
+    });
+  }, [draft.variants, sizesList]);
+
+  const activeVariants = useMemo(() => {
+    return (draft.variants || []).filter((v) => v.isActive !== false);
+  }, [draft.variants]);
+
+  const totalPossibleVariants = configuredColors.length * configuredSizes.length;
+  const activeVariantsInMatrix = useMemo(() => {
+    return activeVariants.filter((v) =>
+      configuredColors.some((c) => c.id === v.colorId) &&
+      configuredSizes.some((s) => s.id === v.sizeValueId)
+    ).length;
+  }, [activeVariants, configuredColors, configuredSizes]);
+
+  const handleOpenFormColorPopover = (e?: React.MouseEvent<HTMLElement>) => {
+    setIsFormSizePopoverOpen(false);
+    if (e) {
+      setColorPopoverAnchor(e.currentTarget.getBoundingClientRect());
+    }
+    setPendingFormColorIds(new Set(configuredColors.map((c) => c.id)));
+    setIsFormColorPopoverOpen(true);
+  };
+
+  const handleOpenFormSizePopover = (e?: React.MouseEvent<HTMLElement>) => {
+    setIsFormColorPopoverOpen(false);
+    if (e) {
+      setSizePopoverAnchor(e.currentTarget.getBoundingClientRect());
+    }
+    setPendingFormSizeIds(new Set(configuredSizes.map((s) => s.id)));
+    setIsFormSizePopoverOpen(true);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsFormColorPopoverOpen(false);
+        setIsFormSizePopoverOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleApplyFormColors = (selectedIds: string[]) => {
+    if (!effectiveDimensionType) return;
+    const nextColors = selectedIds.map((id) => {
+      const c = colorsList.find((c) => c.id === id);
+      return { id, name: c?.nameRu || (c as any)?.name || id, hex: c?.hex || (c as any)?.hexValue };
+    });
+    const currentSizes = configuredSizes.map((s) => ({ id: s.id, label: s.label }));
+
+    const updatedVariants = reconcileProductStudioVariantMatrix(
+      effectiveDimensionType,
+      nextColors,
+      currentSizes,
+      draft.variants || [],
+      configuredColors,
+      configuredSizes
+    );
+    updateDraft({ colors: nextColors, variants: updatedVariants });
+    markTouched('variants');
+    setIsFormColorPopoverOpen(false);
+  };
+
+  const handleApplyFormSizes = (selectedIds: string[]) => {
+    if (!effectiveDimensionType) return;
+    const nextSizes = selectedIds.map((id) => {
+      const fallback = (draft.variants || []).find((v) => v.sizeValueId === id);
+      const label = getCanonicalSizeLabel(id, sizesList, fallback?.size);
+      return { id, label };
+    });
+
+    if (sizesList && sizesList.length > 0) {
+      nextSizes.sort((a, b) => {
+        const idxA = sizesList.findIndex((s) => s.id === a.id);
+        const idxB = sizesList.findIndex((s) => s.id === b.id);
+        if (idxA !== -1 && idxB !== -1) {
+          const orderA = sizesList[idxA].sortOrder ?? idxA;
+          const orderB = sizesList[idxB].sortOrder ?? idxB;
+          return orderA - orderB;
+        }
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return 0;
+      });
+    }
+
+    const currentSizes = configuredSizes.map((s) => ({ id: s.id, label: s.label }));
+
+    const updatedVariants = reconcileProductStudioVariantMatrix(
+      effectiveDimensionType,
+      configuredColors,
+      nextSizes,
+      draft.variants || [],
+      configuredColors,
+      currentSizes
+    );
+    updateDraft({ variants: updatedVariants });
+    markTouched('variants');
+    setIsFormSizePopoverOpen(false);
+  };
+
+  const handleRemoveColor = (colorId: string) => {
+    if (!effectiveDimensionType) return;
+    const nextColors = configuredColors.filter((c) => c.id !== colorId);
+    handleApplyFormColors(nextColors.map((c) => c.id));
+  };
+
+  const handleRemoveSize = (sizeId: string) => {
+    if (!effectiveDimensionType) return;
+    const nextSizes = configuredSizes.filter((s) => s.id !== sizeId);
+    handleApplyFormSizes(nextSizes.map((s) => s.id));
+  };
+
+  const renderColorPopover = () => {
+    if (!isFormColorPopoverOpen) return null;
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    const popoverWidth = 288;
+    let left = colorPopoverAnchor ? colorPopoverAnchor.left : 100;
+    if (left < 16) left = 16;
+    if (left + popoverWidth > viewportWidth - 16) left = viewportWidth - popoverWidth - 16;
+    const top = colorPopoverAnchor ? colorPopoverAnchor.bottom + 8 : 100;
+
+    const content = (
+      <div
+        data-testid="form-color-popover"
+        style={{
+          position: 'fixed',
+          top: `${top}px`,
+          left: `${left}px`,
+          width: `${popoverWidth}px`,
+          zIndex: 9999,
+        }}
+        className="bg-white dark:bg-[#1a1a1c] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-medium text-sm text-gray-900 dark:text-white">
+            Выберите цвет
+          </h4>
+          <button
+            type="button"
+            onClick={() => setIsFormColorPopoverOpen(false)}
+            className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white"
+          >
+            Отмена
+          </button>
+        </div>
+        <div className="max-h-60 overflow-y-auto space-y-1 mb-3">
+          {colorsList.map((color) => {
+            const hex = color.hex || (color as any).hexValue || '#cccccc';
+            const isChecked = pendingFormColorIds.has(color.id);
+            return (
+              <label
+                key={color.id}
+                className="w-full flex items-center gap-3 px-2.5 py-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer text-left text-sm"
+              >
+                <input
+                  type="checkbox"
+                  data-testid={`form-color-option-${color.id}`}
+                  checked={isChecked}
+                  onChange={() => {
+                    const next = new Set(pendingFormColorIds);
+                    if (next.has(color.id)) next.delete(color.id);
+                    else next.add(color.id);
+                    setPendingFormColorIds(next);
+                  }}
+                  className="rounded border-gray-300 dark:border-white/20 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span
+                  className="w-5 h-5 rounded-full border border-gray-300 dark:border-white/20 shrink-0 shadow-sm"
+                  style={{ backgroundColor: hex }}
+                />
+                <span className="font-medium text-gray-900 dark:text-white truncate">
+                  {color.nameRu || (color as any).name || 'Цвет'}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          data-testid="form-color-popover-apply-btn"
+          onClick={() => handleApplyFormColors(Array.from(pendingFormColorIds))}
+          className="w-full h-9 bg-gray-900 text-white dark:bg-white dark:text-black rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer flex items-center justify-center"
+        >
+          Готово
+        </button>
+      </div>
+    );
+
+    if (typeof document !== 'undefined') {
+      return createPortal(content, document.body);
+    }
+    return content;
+  };
+
+  const renderSizePopover = () => {
+    if (!isFormSizePopoverOpen) return null;
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    const popoverWidth = 280;
+    let left = sizePopoverAnchor ? sizePopoverAnchor.right - popoverWidth : 100;
+    if (left < 16) left = 16;
+    if (left + popoverWidth > viewportWidth - 16) left = viewportWidth - popoverWidth - 16;
+    const top = sizePopoverAnchor ? sizePopoverAnchor.bottom + 8 : 100;
+
+    const content = (
+      <div
+        data-testid="form-size-popover"
+        style={{
+          position: 'fixed',
+          top: `${top}px`,
+          left: `${left}px`,
+          width: `${popoverWidth}px`,
+          zIndex: 9999,
+        }}
+        className="bg-white dark:bg-[#1a1a1c] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-medium text-sm text-gray-900 dark:text-white">
+            Выберите размер
+          </h4>
+          <button
+            type="button"
+            onClick={() => setIsFormSizePopoverOpen(false)}
+            className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white"
+          >
+            Отмена
+          </button>
+        </div>
+        <div className="max-h-60 overflow-y-auto space-y-1 mb-3">
+          {sizesList.map((size) => {
+            const isChecked = pendingFormSizeIds.has(size.id);
+            const displayLabel = size.value || (size as any).name || (size as any).nameRu;
+            const safeLabel = displayLabel && !isUuid(displayLabel) ? displayLabel : 'Размер недоступен';
+            return (
+              <label
+                key={size.id}
+                className="w-full flex items-center gap-3 px-2.5 py-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer text-left text-sm"
+              >
+                <input
+                  type="checkbox"
+                  data-testid={`form-size-option-${size.id}`}
+                  checked={isChecked}
+                  onChange={() => {
+                    const next = new Set(pendingFormSizeIds);
+                    if (next.has(size.id)) next.delete(size.id);
+                    else next.add(size.id);
+                    setPendingFormSizeIds(next);
+                  }}
+                  className="rounded border-gray-300 dark:border-white/20 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="font-medium text-gray-900 dark:text-white truncate">
+                  {safeLabel}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          data-testid="form-size-popover-apply-btn"
+          onClick={() => handleApplyFormSizes(Array.from(pendingFormSizeIds))}
+          className="w-full h-9 bg-gray-900 text-white dark:bg-white dark:text-black rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer flex items-center justify-center"
+        >
+          Готово
+        </button>
+      </div>
+    );
+
+    if (typeof document !== 'undefined') {
+      return createPortal(content, document.body);
+    }
+    return content;
+  };
+
+  const toggleMatrixCell = (colorId: string, sizeValueId: string, currentlyActive: boolean) => {
+    const color = configuredColors.find((c) => c.id === colorId);
+    const size = configuredSizes.find((s) => s.id === sizeValueId);
+    const result = toggleProductStudioVariantTuple(
+      draft.variants || [],
+      {
+        colorId,
+        colorName: color?.name,
+        colorHex: color?.hex,
+        sizeValueId,
+        size: size?.label,
+      },
+      currentlyActive
+    );
+
+    if (!result.allowed) {
+      return;
+    }
+
+    updateDraft({ variants: result.variants });
+    markTouched('variants');
+  };
+
   const isTitleAttention = isFieldAttention('title');
+
   const isCategoryAttention = isFieldAttention('category');
   const isPriceAttention = isFieldAttention('price');
   const isMediaAttention = isFieldAttention('media');
@@ -261,7 +686,12 @@ export function ProductStudioFormWorkspace() {
     }).length;
   }, [requiredProductAttrs, draft.attributes]);
 
-  const categoryDisplayName = (draft.categoryName || categorySchema?.name || '').trim();
+  const categoryDisplayName = (
+    draft.categoryPath ||
+    (!isUuid(draft.categoryName || '') ? draft.categoryName : '') ||
+    categorySchema?.name ||
+    ''
+  ).trim();
 
   // Structured readiness summaries for Review section
   const reviewSectionSummaries = useMemo(() => {
@@ -896,17 +1326,32 @@ export function ProductStudioFormWorkspace() {
                       <span className={isCharacteristicsAttention ? "text-amber-600 dark:text-amber-400" : "text-gray-400 dark:text-gray-500"}>*</span>
                     ) : ''}
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {categoryDisplayName
-                      ? productAttrs.length === 0
-                        ? `Категория: ${categoryDisplayName}. Для данной категории нет дополнительных характеристик.`
-                        : `Категория: ${categoryDisplayName}. Заполнено ${filledRequiredCharacteristicsCount} из ${requiredProductAttrs.length} обязательных.`
-                      : categorySchema || draft.categoryId
-                      ? productAttrs.length === 0
-                        ? 'Для данной категории нет дополнительных характеристик.'
-                        : `Заполнено ${filledRequiredCharacteristicsCount} из ${requiredProductAttrs.length} обязательных.`
-                      : 'Сначала выберите категорию товара.'}
-                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {categoryDisplayName
+                        ? productAttrs.length === 0
+                          ? `Категория: ${categoryDisplayName}. Для данной категории нет дополнительных характеристик.`
+                          : `Категория: ${categoryDisplayName}. Заполнено ${filledRequiredCharacteristicsCount} из ${requiredProductAttrs.length} обязательных.`
+                        : categorySchema || draft.categoryId
+                        ? productAttrs.length === 0
+                          ? 'Для данной категории нет дополнительных характеристик.'
+                          : `Заполнено ${filledRequiredCharacteristicsCount} из ${requiredProductAttrs.length} обязательных.`
+                        : 'Сначала выберите категорию товара.'}
+                    </p>
+                    {categoryDisplayName && (
+                      <button
+                        type="button"
+                        data-testid="form-characteristics-change-category-btn"
+                        onClick={() => {
+                          markTouched('category');
+                          setCategoryModalOpen(true);
+                        }}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer font-medium"
+                      >
+                        [Изменить]
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -991,8 +1436,365 @@ export function ProductStudioFormWorkspace() {
               </p>
             )}
 
+            {!effectiveDimensionType && (
+              <div className="p-4 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-center">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Укажите категорию товара для настройки вариантов.</p>
+              </div>
+            )}
+
+            {/* Structured Colors Editor */}
+            {showColorEditor && (
+              <div
+                data-testid="form-colors-editor-section"
+                className={`p-4 rounded-xl border space-y-3 ${
+                  isColorAttention
+                    ? 'border-amber-300 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10'
+                    : 'border-gray-200 dark:border-white/10'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3
+                      className={`text-sm font-semibold ${
+                        isColorAttention
+                          ? 'text-amber-800 dark:text-amber-300'
+                          : 'text-gray-900 dark:text-white'
+                      }`}
+                    >
+                      Цвета товара{' '}
+                      <span
+                        className={
+                          isColorAttention
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-gray-400 dark:text-gray-500'
+                        }
+                      >
+                        *
+                      </span>
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {configuredColors.length > 0
+                        ? `Выбрано цветов: ${configuredColors.length}`
+                        : 'Цвета не выбраны'}
+                    </p>
+                  </div>
+                  <div className="relative inline-flex items-center">
+                    <button
+                      type="button"
+                      data-testid="form-add-color-btn"
+                      onClick={(e) => {
+                        if (isFormColorPopoverOpen) {
+                          setIsFormColorPopoverOpen(false);
+                        } else {
+                          handleOpenFormColorPopover(e);
+                        }
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium rounded-md border transition-colors bg-white dark:bg-white/10 text-gray-800 dark:text-white border-gray-300 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/20 flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      {configuredColors.length > 0 ? 'Изменить цвета' : 'Добавить цвет'}
+                    </button>
+
+                    {renderColorPopover()}
+                  </div>
+                </div>
+
+                {configuredColors.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {configuredColors.map((color) => {
+                      const hex = color.hex || '#cccccc';
+                      return (
+                        <div
+                          key={color.id}
+                          data-testid={`form-color-chip-${color.id}`}
+                          className="inline-flex items-center gap-2 pl-2 pr-1.5 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-xs font-medium text-gray-900 dark:text-white"
+                        >
+                          <span
+                            className="w-3.5 h-3.5 rounded-full border border-black/10 dark:border-white/20 shrink-0"
+                            style={{ backgroundColor: hex }}
+                          />
+                          <span>{color.name}</span>
+                          <button
+                            type="button"
+                            data-testid={`form-remove-color-${color.id}`}
+                            aria-label={`Удалить цвет ${color.name}`}
+                            onClick={() => handleRemoveColor(color.id)}
+                            className="w-4 h-4 rounded hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400 hover:text-gray-700 dark:hover:text-white flex items-center justify-center transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Structured Sizes Editor */}
+            {showSizeEditor && (
+              <div
+                data-testid="form-sizes-editor-section"
+                className={`p-4 rounded-xl border space-y-3 ${
+                  isSizeAttention
+                    ? 'border-amber-300 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10'
+                    : 'border-gray-200 dark:border-white/10'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3
+                      className={`text-sm font-semibold ${
+                        isSizeAttention
+                          ? 'text-amber-800 dark:text-amber-300'
+                          : 'text-gray-900 dark:text-white'
+                      }`}
+                    >
+                      Размеры товара{' '}
+                      <span
+                        className={
+                          isSizeAttention
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-gray-400 dark:text-gray-500'
+                        }
+                      >
+                        *
+                      </span>
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {configuredSizes.length > 0
+                        ? `Выбрано размеров: ${configuredSizes.length}`
+                        : 'Размеры не выбраны'}
+                    </p>
+                  </div>
+                  <div className="relative inline-flex items-center">
+                    <button
+                      type="button"
+                      data-testid="form-add-size-btn"
+                      onClick={(e) => {
+                        if (isFormSizePopoverOpen) {
+                          setIsFormSizePopoverOpen(false);
+                        } else {
+                          handleOpenFormSizePopover(e);
+                        }
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium rounded-md border transition-colors bg-white dark:bg-white/10 text-gray-800 dark:text-white border-gray-300 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/20 flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      {configuredSizes.length > 0 ? 'Изменить размеры' : 'Добавить размер'}
+                    </button>
+
+                    {renderSizePopover()}
+                  </div>
+                </div>
+
+                {configuredSizes.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {configuredSizes.map((size) => (
+                      <div
+                        key={size.id}
+                        data-testid={`form-size-chip-${size.id}`}
+                        className="inline-flex items-center gap-2 pl-2.5 pr-1.5 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-xs font-medium text-gray-900 dark:text-white"
+                      >
+                        <span>{size.label}</span>
+                        <button
+                          type="button"
+                          data-testid={`form-remove-size-${size.id}`}
+                          aria-label={`Удалить размер ${size.label}`}
+                          onClick={() => handleRemoveSize(size.id)}
+                          className="w-4 h-4 rounded hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400 hover:text-gray-700 dark:hover:text-white flex items-center justify-center transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Matrix Editor for COLOR_AND_SIZE */}
+            {effectiveDimensionType === 'COLOR_AND_SIZE' ? (
+              <div
+                data-testid="form-matrix-editor-section"
+                className={`w-fit max-w-full p-4 rounded-xl border space-y-3 ${
+                  (isColorAttention || isSizeAttention)
+                    ? 'border-amber-300 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10'
+                    : 'border-gray-200 dark:border-white/10'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-4 mb-2">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h3 className={`text-sm font-semibold ${
+                      isColorAttention || isSizeAttention
+                        ? 'text-amber-800 dark:text-amber-300'
+                        : 'text-gray-900 dark:text-white'
+                    }`}>
+                      Матрица вариантов
+                    </h3>
+                    {totalPossibleVariants > 0 && (
+                      <span
+                        data-testid="matrix-active-count-badge"
+                        className="text-xs text-gray-500 dark:text-gray-400 font-normal"
+                      >
+                        ({activeVariantsInMatrix} из {totalPossibleVariants} активны)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto pb-2 max-w-full">
+                  <table className="border-collapse text-left inline-table">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-white/10">
+                        <th className="py-2.5 px-3 font-medium text-xs text-gray-500 w-[160px] min-w-[140px] max-w-[180px]">
+                          Цвет \ Размер
+                        </th>
+                        {configuredSizes.map((s) => (
+                          <th
+                            key={s.id}
+                            data-testid={`matrix-size-header-${s.id}`}
+                            className="py-2.5 px-2 font-medium text-xs text-gray-900 dark:text-white text-center w-[72px] min-w-[64px] max-w-[80px]"
+                          >
+                            {s.label}
+                          </th>
+                        ))}
+                        <th className="py-2.5 px-1.5 w-[44px] min-w-[40px] max-w-[48px] text-center">
+                          <button
+                            type="button"
+                            data-testid="matrix-add-size-btn"
+                            aria-label="Добавить размер"
+                            title="Добавить размер"
+                            onClick={(e) => {
+                              if (isFormSizePopoverOpen) setIsFormSizePopoverOpen(false);
+                              else handleOpenFormSizePopover(e);
+                            }}
+                            className="w-7 h-7 mx-auto flex items-center justify-center text-gray-500 hover:text-indigo-600 bg-gray-100 dark:bg-white/10 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-md transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {configuredColors.map((c) => (
+                        <tr
+                          key={c.id}
+                          className="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50/50 dark:hover:bg-white/[0.02]"
+                        >
+                          <td className="py-2.5 px-3 text-xs font-medium text-gray-900 dark:text-white w-[160px] min-w-[140px] max-w-[180px]">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="w-3.5 h-3.5 rounded-full border border-black/10 dark:border-white/20 shrink-0"
+                                style={{ backgroundColor: c.hex || '#ccc' }}
+                              />
+                              <span className="truncate">{c.name}</span>
+                            </div>
+                          </td>
+                          {configuredSizes.map((s) => {
+                            const isActive = activeVariants.some(
+                              (v) => v.colorId === c.id && v.sizeValueId === s.id
+                            );
+                            const isCellBlocked =
+                              isActive && !canDeactivateVariantTuple(activeVariants, c.id, s.id);
+                            return (
+                              <td
+                                key={s.id}
+                                className="py-2.5 px-2 text-center w-[72px] min-w-[64px] max-w-[80px]"
+                              >
+                                <button
+                                  type="button"
+                                  data-testid={`form-matrix-cell-${c.id}-${s.id}`}
+                                  aria-label={
+                                    isCellBlocked
+                                      ? BLOCKED_LAST_CELL_TOOLTIP
+                                      : isActive
+                                      ? `Отключить вариант ${c.name} ${s.label}`
+                                      : `Включить вариант ${c.name} ${s.label}`
+                                  }
+                                  title={isCellBlocked ? BLOCKED_LAST_CELL_TOOLTIP : undefined}
+                                  onClick={() => toggleMatrixCell(c.id, s.id, isActive)}
+                                  className={cn(
+                                    "w-7 h-7 rounded-md inline-flex items-center justify-center transition-colors",
+                                    isActive
+                                      ? isCellBlocked
+                                        ? "bg-indigo-600/80 text-white cursor-not-allowed"
+                                        : "bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer"
+                                      : "border border-gray-300 dark:border-white/20 bg-gray-50/50 dark:bg-white/5 text-gray-400 hover:border-gray-400 cursor-pointer"
+                                  )}
+                                >
+                                  {isActive && <CheckCircle className="w-4 h-4" />}
+                                </button>
+                              </td>
+                            );
+                          })}
+                          <td className="py-2.5 px-1.5 w-[44px] min-w-[40px] max-w-[48px]"></td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td className="py-2.5 px-3 w-[160px] min-w-[140px] max-w-[180px]">
+                          <button
+                            type="button"
+                            data-testid="matrix-add-color-btn"
+                            aria-label="Добавить цвет"
+                            title="Добавить цвет"
+                            onClick={(e) => {
+                              if (isFormColorPopoverOpen) setIsFormColorPopoverOpen(false);
+                              else handleOpenFormColorPopover(e);
+                            }}
+                            className="h-7 px-2.5 inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-gray-100 dark:bg-white/10 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-md transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Добавить цвет</span>
+                          </button>
+                        </td>
+                        <td colSpan={configuredSizes.length + 1}></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                {renderSizePopover()}
+                {renderColorPopover()}
+              </div>
+            ) : activeVariants.length > 0 ? (
+              <div
+                data-testid="form-variants-summary"
+                className="p-4 rounded-xl border border-gray-200 dark:border-white/10 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    Сформированные варианты ({activeVariants.length})
+                  </h4>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 pt-1">
+                  {activeVariants.map((v, i) => (
+                    <div
+                      key={v.id || i}
+                      data-testid={`form-variant-row-${v.id || i}`}
+                      className="px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 text-xs flex items-center gap-1.5 truncate"
+                    >
+                      {v.colorHex && (
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/10 dark:border-white/20"
+                          style={{ backgroundColor: v.colorHex }}
+                        />
+                      )}
+                      <span className="font-medium text-gray-900 dark:text-white truncate">
+                        {v.colorName || '—'}
+                      </span>
+                      <span className="text-gray-400 dark:text-gray-500">/</span>
+                      <span className="text-gray-600 dark:text-gray-300 truncate">
+                        {v.size || '—'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+
             {sizeChartCompleteness.isNeeded && (
-              <div className={`p-4 rounded-xl border space-y-2 mt-4 ${
+              <div className={`p-4 rounded-xl border space-y-2 mt-3 ${
                 isSizeChartAttention
                   ? 'border-amber-300 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10'
                   : 'border-gray-200 dark:border-white/10'

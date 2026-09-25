@@ -31,8 +31,18 @@ export const getSellerProducts = async (): Promise<SellerProduct[]> => {
   return res?.items || (Array.isArray(res) ? res : []);
 };
 
-export const createSellerProduct = async (input: any): Promise<SellerProduct> => {
-  return request<SellerProduct>('POST', '/seller/products', { body: input });
+export const createSellerProduct = async (
+  input: any,
+  options?: { idempotencyKey?: string }
+): Promise<SellerProduct> => {
+  const headers: Record<string, string> = {};
+  if (options?.idempotencyKey) {
+    headers['Idempotency-Key'] = options.idempotencyKey;
+  }
+  return request<SellerProduct>('POST', '/seller/products', {
+    body: input,
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
+  });
 };
 
 export const getSellerProduct = async (id: string): Promise<SellerProduct> => {

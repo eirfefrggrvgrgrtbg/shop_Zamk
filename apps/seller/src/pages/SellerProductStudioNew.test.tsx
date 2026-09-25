@@ -2,8 +2,8 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/react';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import fs from 'fs';
 import path from 'path';
 import * as sellerApi from '@zamk/api-client/src/seller';
@@ -212,5 +212,175 @@ describe('PS.R4A — Seller Product Studio Create Route Integration', () => {
 
     const header = screen.getByTestId('product-studio-header');
     expect(header.firstElementChild?.className).toContain('max-w-[1360px]');
+  });
+
+  // 15. Mount recovery with established productId routes to Edit
+  it('15. Mount recovery with established productId routes to Edit', async () => {
+    sessionStorage.setItem(
+      'zamk:product-studio:create-session:v1',
+      JSON.stringify({
+        version: 1,
+        clientCreateId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
+        createRequestSnapshot: { title: 'Recovered', priceCents: 100, currency: 'RUB' },
+        productId: 'prod-rec-123',
+        phase: 'identity_established',
+        createdAt: Date.now(),
+      })
+    );
+
+    const mockGet = vi.fn().mockResolvedValue({ id: 'prod-rec-123', title: 'Recovered' });
+    vi.spyOn(sellerApi, 'getSellerProduct').mockImplementation(mockGet);
+
+    render(
+      <MemoryRouter initialEntries={['/products/new']}>
+        <Routes>
+          <Route path="/products/new" element={<SellerProductStudioNew />} />
+          <Route path="/products/:id/edit" element={<div data-testid="edit-destination" />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('edit-destination')).toBeTruthy();
+    });
+
+    expect(mockGet).toHaveBeenCalledWith('prod-rec-123');
+    expect(sessionStorage.getItem('zamk:product-studio:create-session:v1')).toBeNull();
+  });
+
+  // 16. Mount recovery with pending snapshot replays POST with Idempotency-Key
+  it('16. Mount recovery with pending snapshot replays POST with Idempotency-Key', async () => {
+    sessionStorage.setItem(
+      'zamk:product-studio:create-session:v1',
+      JSON.stringify({
+        version: 1,
+        clientCreateId: 'bbbbbbbb-bbbb-4bbb-abbb-bbbbbbbbbbbb',
+        createRequestSnapshot: { title: 'Pending Crash', priceCents: 200, currency: 'RUB' },
+        phase: 'identity_pending',
+        createdAt: Date.now(),
+      })
+    );
+
+    const mockCreate = vi.fn().mockResolvedValue({ id: 'prod-rec-456' });
+    const mockGet = vi.fn().mockResolvedValue({ id: 'prod-rec-456', title: 'Pending Crash' });
+    vi.spyOn(sellerApi, 'createSellerProduct').mockImplementation(mockCreate);
+    vi.spyOn(sellerApi, 'getSellerProduct').mockImplementation(mockGet);
+
+    render(
+      <MemoryRouter initialEntries={['/products/new']}>
+        <Routes>
+          <Route path="/products/new" element={<SellerProductStudioNew />} />
+          <Route path="/products/:id/edit" element={<div data-testid="edit-destination" />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('edit-destination')).toBeTruthy();
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      { title: 'Pending Crash', priceCents: 200, currency: 'RUB' },
+      { idempotencyKey: 'bbbbbbbb-bbbb-4bbb-abbb-bbbbbbbbbbbb' }
+    );
+    expect(sessionStorage.getItem('zamk:product-studio:create-session:v1')).toBeNull();
+  });
+
+  // 17. Mount recovery error does not clear session and allows safe navigation back to products
+  it('17. Mount recovery error does not clear session and allows safe navigation back to products', async () => {
+    sessionStorage.setItem(
+      'zamk:product-studio:create-session:v1',
+      JSON.stringify({
+        version: 1,
+        clientCreateId: 'cccccccc-cccc-4ccc-accc-cccccccccccc',
+        createRequestSnapshot: { title: 'Pending Error', priceCents: 300, currency: 'RUB' },
+        phase: 'identity_pending',
+        createdAt: Date.now(),
+      })
+    );
+
+    const mockCreate = vi.fn().mockRejectedValue(new Error('Network error on mount recovery'));
+    vi.spyOn(sellerApi, 'createSellerProduct').mockImplementation(mockCreate);
+
+    render(
+      <MemoryRouter initialEntries={['/products/new']}>
+        <Routes>
+          <Route path="/products/new" element={<SellerProductStudioNew />} />
+          <Route path="/products" element={<div data-testid="products-list-routed" />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('studio-new-recovery-error')).toBeTruthy();
+    });
+
+    // Session is NOT cleared merely because recovery failed!
+    expect(sessionStorage.getItem('zamk:product-studio:create-session:v1')).toBeTruthy();
+
+    // Click "К списку товаров"
+    fireEvent.click(screen.getByTestId('studio-new-back-to-products'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('products-list-routed')).toBeTruthy();
+    });
+
+    // Session must STILL be preserved!
+    expect(sessionStorage.getItem('zamk:product-studio:create-session:v1')).toBeTruthy();
+  });
+
+  // 18. Completed session on mount clears session and renders fresh Studio
+  it('18. Completed session on mount clears session and renders fresh Studio without calling API', async () => {
+    sessionStorage.setItem(
+      'zamk:product-studio:create-session:v1',
+      JSON.stringify({
+        version: 1,
+        clientCreateId: 'dddddddd-dddd-4ddd-addd-dddddddddddd',
+        createRequestSnapshot: { title: 'Completed', priceCents: 400, currency: 'RUB' },
+        productId: 'prod-already-done-999',
+        phase: 'completed',
+        createdAt: Date.now(),
+      })
+    );
+
+    const mockCreate = vi.fn();
+    const mockGet = vi.fn();
+    vi.spyOn(sellerApi, 'createSellerProduct').mockImplementation(mockCreate);
+    vi.spyOn(sellerApi, 'getSellerProduct').mockImplementation(mockGet);
+
+    render(
+      <MemoryRouter initialEntries={['/products/new']}>
+        <SellerProductStudioNew />
+      </MemoryRouter>
+    );
+
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('zamk:product-studio:create-session:v1')).toBeNull();
+    expect(screen.getByTestId('product-studio-root')).toBeTruthy();
+  });
+
+  // 19. Malformed session on mount shows safe error and allows clean start
+  it('19. Malformed session on mount shows safe error and allows clean start', async () => {
+    sessionStorage.setItem('zamk:product-studio:create-session:v1', '{"broken": true}');
+
+    const mockCreate = vi.fn();
+    vi.spyOn(sellerApi, 'createSellerProduct').mockImplementation(mockCreate);
+
+    render(
+      <MemoryRouter initialEntries={['/products/new']}>
+        <SellerProductStudioNew />
+      </MemoryRouter>
+    );
+
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(screen.getByTestId('studio-new-recovery-error')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('studio-new-clear-malformed-session'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('product-studio-root')).toBeTruthy();
+    });
+    expect(sessionStorage.getItem('zamk:product-studio:create-session:v1')).toBeNull();
   });
 });

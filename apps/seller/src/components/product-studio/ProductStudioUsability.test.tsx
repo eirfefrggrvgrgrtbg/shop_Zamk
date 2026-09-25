@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ProductStudio } from './ProductStudio';
 import {
@@ -107,20 +107,24 @@ describe('PS.R4A.5A — Hero Builder Usability Integration', () => {
   });
 
   describe('1. Studio Toolbar Category Indicator & Modal Flow', () => {
-    it('renders "Категория * · Не выбрана" when category is not set', () => {
+    it('renders "Категория товара *" and "Выберите категорию товара" when category is not set', () => {
       render(<StudioTestHarness initialDraft={{ title: 'Тестовый товар' }} />);
-      const catBtn = screen.getByTestId('studio-header-category-btn');
-      expect(catBtn.textContent).toContain('Категория * · Не выбрана');
+      const catControl = screen.getByTestId('studio-global-category-control');
+      expect(catControl.textContent).toContain('Категория товара *');
+      expect(catControl.textContent).toContain('Выберите категорию товара');
+      expect(screen.getByTestId('studio-header-category-btn').textContent).toBe('Выбрать');
     });
 
-    it('renders "Категория · [Name]" when category is set', () => {
+    it('renders "Категория товара" and [Name] when category is set', () => {
       render(
         <StudioTestHarness
           initialDraft={{ categoryId: 'cat-jackets', categoryName: 'Куртки' }}
         />
       );
-      const catBtn = screen.getByTestId('studio-header-category-btn');
-      expect(catBtn.textContent).toContain('Категория · Куртки');
+      const catControl = screen.getByTestId('studio-global-category-control');
+      expect(catControl.textContent).toContain('Категория товара');
+      expect(catControl.textContent).toContain('Куртки');
+      expect(screen.getByTestId('studio-header-category-btn').textContent).toBe('Изменить');
     });
 
     it('opens category modal upon clicking category button', async () => {
@@ -128,8 +132,9 @@ describe('PS.R4A.5A — Hero Builder Usability Integration', () => {
       fireEvent.click(screen.getByTestId('studio-header-category-btn'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('category-modal')).toBeTruthy();
-        expect(screen.getByText('Выберите категорию товара')).toBeTruthy();
+        const modal = screen.getByTestId('category-modal');
+        expect(modal).toBeTruthy();
+        expect(within(modal).getByText('Выберите категорию товара')).toBeTruthy();
       });
     });
 

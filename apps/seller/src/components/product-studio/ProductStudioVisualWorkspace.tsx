@@ -9,7 +9,7 @@ import {
   type SellerSizeSystem,
   type SellerCategorySchema,
 } from "@zamk/api-client";
-import { Pencil, Info, Link2 } from "lucide-react";
+import { Info, Link2 } from "lucide-react";
 import { useProductStudio } from "../../contexts/ProductStudioContext";
 import { cn } from "../../lib/utils";
 import { ProductStudioPhotoColorModal, getColorDisplayName } from "./ProductStudioPhotoColorModal";
@@ -20,15 +20,15 @@ import { ProductStudioSizeChartModal } from "./ProductStudioSizeChartModal";
 import {
   mapStudioDraftToPresentation,
   computePresentationSizes,
+  computePresentationColors,
   findMatchingDraftVariant,
   mapToPresentationSelectedVariant,
   findFirstMediaIndexForColor,
+  getCanonicalSizeLabel,
 } from "./productStudioPresentationAdapter";
 import {
-  addColorToMatrix,
-  addSizeToMatrix,
-  removeColorFromMatrix,
-  removeSizeFromMatrix,
+  reconcileProductStudioVariantMatrix,
+  resolveProductStudioDimensionType,
 } from "./productStudioMatrixHelper";
 import {
   validateImageFile,
@@ -60,6 +60,7 @@ export function ProductStudioVisualWorkspace() {
     selectedPreviewSizeValueId: selectedSizeId,
     setSelectedPreviewColorId: setSelectedColorId,
     setSelectedPreviewSizeValueId: setSelectedSizeId,
+    categorySchema: contextCategorySchema,
   } = useProductStudio();
 
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -92,7 +93,8 @@ export function ProductStudioVisualWorkspace() {
   const [showMediaInfo, setShowMediaInfo] = useState(false);
 
   // Reference dictionaries
-  const [categorySchema, setCategorySchema] = useState<SellerCategorySchema | null>(null);
+  const [localCategorySchema, setLocalCategorySchema] = useState<SellerCategorySchema | null>(null);
+  const categorySchema = contextCategorySchema || localCategorySchema;
   const [colorsList, setColorsList] = useState<SellerColor[]>([]);
   const [allowedSizeSystems, setAllowedSizeSystems] = useState<SellerSizeSystem[]>([]);
   const selectedSizeSystemId = activeSizeSystemId;
@@ -115,7 +117,7 @@ export function ProductStudioVisualWorkspace() {
       setSizeValuesList([]);
       setAllowedSizeSystems([]);
       setSelectedSizeSystemId(null);
-      setCategorySchema(null);
+      setLocalCategorySchema(null);
       return;
     }
 
@@ -125,7 +127,7 @@ export function ProductStudioVisualWorkspace() {
     getSellerCategorySchema(draft.categoryId)
       .then((schema) => {
         if (!isMounted) return;
-        setCategorySchema(schema);
+        setLocalCategorySchema(schema);
         const allowed = schema.allowedSizeSystems || [];
         setAllowedSizeSystems(allowed);
         if (allowed.length > 0) {
@@ -189,10 +191,25 @@ export function ProductStudioVisualWorkspace() {
     hasVariants,
   } = useMemo(() => mapStudioDraftToPresentation(draft), [draft]);
 
-  // Derive presentation sizes given current preview color selection
+  const canonicalUniqueSizes = useMemo(() => {
+    return uniqueSizes.map((s) => {
+      const canonical = getCanonicalSizeLabel(s.id, sizeValuesList, s.label);
+      return {
+        id: s.id,
+        label: canonical !== 'Размер недоступен' ? canonical : s.label,
+      };
+    });
+  }, [uniqueSizes, sizeValuesList]);
+
+  // Derive presentation colors and sizes with bidirectional filtering
+  const visibleColors = useMemo(
+    () => computePresentationColors(draft, colors, selectedSizeId),
+    [draft, colors, selectedSizeId]
+  );
+
   const sizes = useMemo(
-    () => computePresentationSizes(draft, dimensionType, uniqueSizes, selectedColorId),
-    [draft, dimensionType, uniqueSizes, selectedColorId]
+    () => computePresentationSizes(draft, dimensionType, canonicalUniqueSizes, selectedColorId),
+    [draft, dimensionType, canonicalUniqueSizes, selectedColorId]
   );
 
   // Derive selected objects and matched variant
@@ -201,10 +218,21 @@ export function ProductStudioVisualWorkspace() {
     [colors, selectedColorId]
   );
 
-  const selectedSize = useMemo(
-    () => (selectedSizeId ? sizes.find((s) => s.id === selectedSizeId) || null : null),
-    [sizes, selectedSizeId]
-  );
+  const selectedSize = useMemo(() => {
+    if (!selectedSizeId) return null;
+    const found = sizes.find((s) => s.id === selectedSizeId);
+    if (found) return found;
+    const fallback = canonicalUniqueSizes.find((s) => s.id === selectedSizeId);
+    if (fallback) {
+      return {
+        id: fallback.id,
+        label: fallback.label,
+        state: "AVAILABLE" as const,
+        disabled: false,
+      };
+    }
+    return null;
+  }, [sizes, canonicalUniqueSizes, selectedSizeId]);
 
   const matchingVariant = useMemo(
     () => findMatchingDraftVariant(draft, dimensionType, selectedColorId, selectedSizeId),
@@ -223,9 +251,22 @@ export function ProductStudioVisualWorkspace() {
       : basePrice;
 
   // Derive resolution & required flags
-  const isExplicitOnlySize = draft.dimensionType === "ONLY_SIZE" || draft.dimensionType === "SIZE_ONLY";
-  const isExplicitOnlyColor = draft.dimensionType === "ONLY_COLOR" || draft.dimensionType === "COLOR_ONLY";
-  const isExplicitSingleVariant = draft.dimensionType === "SINGLE_VARIANT";
+  const effectiveDimensionType = useMemo(
+    () => resolveProductStudioDimensionType(draft.dimensionType, categorySchema?.dimensionType),
+    [draft.dimensionType, categorySchema?.dimensionType]
+  );
+
+  const isExplicitOnlySize =
+    effectiveDimensionType === "SIZE_ONLY" ||
+    draft.dimensionType === "ONLY_SIZE" ||
+    draft.dimensionType === "SIZE_ONLY";
+  const isExplicitOnlyColor =
+    effectiveDimensionType === "COLOR_ONLY" ||
+    draft.dimensionType === "ONLY_COLOR" ||
+    draft.dimensionType === "COLOR_ONLY";
+  const isExplicitSingleVariant =
+    effectiveDimensionType === "SINGLE_VARIANT" ||
+    draft.dimensionType === "SINGLE_VARIANT";
 
   const requiresColor = !isExplicitOnlySize && !isExplicitSingleVariant;
   const requiresSize = !isExplicitOnlyColor && !isExplicitSingleVariant;
@@ -244,48 +285,28 @@ export function ProductStudioVisualWorkspace() {
     }
   }, [dimensionType, selectedColorId, selectedSizeId, hasVariants]);
 
-  // Derive CTA text
-  const ctaText = useMemo(() => {
-    if (!hasVariants) return "Добавить в корзину";
-    if (dimensionType === "COLOR_AND_SIZE") {
-      if (!selectedColorId) return "Выберите цвет";
-      if (!selectedSizeId) return "Выберите размер";
-      return "Добавить в корзину";
-    }
-    if (dimensionType === "COLOR_ONLY") {
-      if (!selectedColorId) return "Выберите цвет";
-      return "Добавить в корзину";
-    }
-    if (dimensionType === "SIZE_ONLY") {
-      if (!selectedSizeId) return "Выберите размер";
-      return "Добавить в корзину";
-    }
-    return "Добавить в корзину";
-  }, [dimensionType, selectedColorId, selectedSizeId, hasVariants]);
+  // CTA text in Product Studio is always static preview text
+  const ctaText = "Добавить в корзину";
 
-  const sizeSelectionNotice =
-    dimensionType === "COLOR_AND_SIZE" && !selectedColorId
-      ? "Сначала выберите цвет"
-      : null;
-
-  // Handlers for local preview interactions
+  // Handlers for local preview interactions with toggle-off (deselect) support
   const handleColorChange = (colorId: string) => {
-    setSelectedColorId(colorId);
-
-    if (selectedSizeId) {
-      const isOffered = (draft.variants || []).some(
-        (v) => v.colorId === colorId && v.sizeValueId === selectedSizeId
-      );
-      if (!isOffered) {
-        setSelectedSizeId(null);
-      }
+    if (selectedColorId === colorId) {
+      setSelectedColorId(null);
+      return;
     }
+
+    setSelectedColorId(colorId);
 
     const targetIdx = findFirstMediaIndexForColor(visibleImages, colorId);
     setActiveImage(targetIdx);
   };
 
   const handleSizeChange = (sizeId: string) => {
+    if (selectedSizeId === sizeId) {
+      setSelectedSizeId(null);
+      return;
+    }
+
     setSelectedSizeId(sizeId);
   };
 
@@ -331,29 +352,12 @@ export function ProductStudioVisualWorkspace() {
 
   // Color popover open & atomic commit
   const handleOpenColorPopover = () => {
+    setIsSizePopoverOpen(false);
     setPendingSelectedColorIds(new Set((draft.colors || []).map((c: any) => c.id)));
     setIsColorPopoverOpen(true);
   };
 
   const handleApplyColors = () => {
-    const currentColors = draft.colors || [];
-    const removedColors = currentColors.filter((c: any) => !pendingSelectedColorIds.has(c.id));
-    const addedColors = colorsList.filter(
-      (c: any) => pendingSelectedColorIds.has(c.id) && !currentColors.some((dc: any) => dc.id === c.id)
-    );
-
-    let updatedVariants = draft.variants || [];
-    for (const c of removedColors) {
-      updatedVariants = removeColorFromMatrix(updatedVariants, c.id);
-    }
-    for (const c of addedColors) {
-      updatedVariants = addColorToMatrix(updatedVariants, {
-        id: c.id,
-        name: c.nameRu,
-        hex: c.hex || c.hexValue || "",
-      });
-    }
-
     const nextColors = colorsList
       .filter((c: any) => pendingSelectedColorIds.has(c.id))
       .map((c: any) => ({
@@ -362,16 +366,46 @@ export function ProductStudioVisualWorkspace() {
         hex: c.hex || c.hexValue || "",
       }));
 
+    const currentSizes = Array.from(
+      new Map(
+        (draft.variants || [])
+          .filter((v: any) => v.sizeValueId && v.isActive !== false)
+          .map((v: any) => {
+            const fallback = (draft.variants || []).find((dv) => dv.sizeValueId === v.sizeValueId);
+            const label = getCanonicalSizeLabel(v.sizeValueId, sizeValuesList, fallback?.size);
+            return [v.sizeValueId, { id: v.sizeValueId, label }];
+          })
+      ).values()
+    );
+
+    if (sizeValuesList && sizeValuesList.length > 0) {
+      currentSizes.sort((a, b) => {
+        const idxA = sizeValuesList.findIndex((s) => s.id === a.id);
+        const idxB = sizeValuesList.findIndex((s) => s.id === b.id);
+        if (idxA !== -1 && idxB !== -1) {
+          const orderA = sizeValuesList[idxA].sortOrder ?? idxA;
+          const orderB = sizeValuesList[idxB].sortOrder ?? idxB;
+          return orderA - orderB;
+        }
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return 0;
+      });
+    }
+
+    const updatedVariants = reconcileProductStudioVariantMatrix(
+      effectiveDimensionType || draft.dimensionType || 'COLOR_AND_SIZE',
+      nextColors,
+      currentSizes,
+      draft.variants || [],
+      (draft.colors || []) as any,
+      currentSizes
+    );
+
     updateDraft({
       colors: nextColors,
       variants: updatedVariants,
     });
-
-    if (selectedColorId && !pendingSelectedColorIds.has(selectedColorId)) {
-      setSelectedColorId(nextColors[0]?.id || null);
-    } else if (!selectedColorId && nextColors.length > 0) {
-      setSelectedColorId(nextColors[0].id);
-    }
 
     if (pendingSelectedColorIds.size === 0) {
       markTouched('color');
@@ -382,35 +416,65 @@ export function ProductStudioVisualWorkspace() {
 
   // Size popover open & atomic commit
   const handleOpenSizePopover = () => {
+    setIsColorPopoverOpen(false);
     setPendingSelectedSizeIds(
-      new Set((draft.variants || []).map((v: any) => v.sizeValueId).filter(Boolean) as string[])
+      new Set(
+        (draft.variants || [])
+          .filter((v: any) => v.isActive !== false && v.sizeValueId)
+          .map((v: any) => v.sizeValueId)
+      )
     );
     setIsSizePopoverOpen(true);
   };
 
   const handleApplySizes = () => {
-    const existingSizeIds = new Set(
-      (draft.variants || []).map((v: any) => v.sizeValueId).filter(Boolean) as string[]
-    );
-    const removedSizeIds = Array.from(existingSizeIds).filter(
-      (id) => !pendingSelectedSizeIds.has(id)
-    );
-    const addedSizeIds = Array.from(pendingSelectedSizeIds).filter(
-      (id) => !existingSizeIds.has(id)
-    );
+    const nextSizes = Array.from(pendingSelectedSizeIds).map((sId) => {
+      const fallback = (draft.variants || []).find((v) => v.sizeValueId === sId);
+      const label = getCanonicalSizeLabel(sId, sizeValuesList, fallback?.size);
+      return { id: sId, label };
+    });
 
-    let updatedVariants = draft.variants || [];
-    for (const sId of removedSizeIds) {
-      updatedVariants = removeSizeFromMatrix(updatedVariants, sId);
-    }
-    for (const sId of addedSizeIds) {
-      const svObj = sizeValuesList.find((s: any) => s.id === sId);
-      const label = svObj ? svObj.value : sId;
-      updatedVariants = addSizeToMatrix(updatedVariants, {
-        id: sId,
-        label,
+    if (sizeValuesList && sizeValuesList.length > 0) {
+      nextSizes.sort((a, b) => {
+        const idxA = sizeValuesList.findIndex((s) => s.id === a.id);
+        const idxB = sizeValuesList.findIndex((s) => s.id === b.id);
+        if (idxA !== -1 && idxB !== -1) {
+          const orderA = sizeValuesList[idxA].sortOrder ?? idxA;
+          const orderB = sizeValuesList[idxB].sortOrder ?? idxB;
+          return orderA - orderB;
+        }
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return 0;
       });
     }
+
+    const currentColors = (draft.colors || []).map((c: any) => ({
+      id: c.id,
+      name: c.nameRu || c.name,
+      hex: c.hex || c.hexValue || "",
+    }));
+
+    const currentActiveSizes = Array.from(
+      new Map(
+        (draft.variants || [])
+          .filter((v: any) => v.sizeValueId && v.isActive !== false)
+          .map((v: any) => {
+            const fallback = (draft.variants || []).find((dv) => dv.sizeValueId === v.sizeValueId);
+            const label = getCanonicalSizeLabel(v.sizeValueId, sizeValuesList, fallback?.size);
+            return [v.sizeValueId, { id: v.sizeValueId, label }];
+          })
+      ).values()
+    );
+
+    const updatedVariants = reconcileProductStudioVariantMatrix(
+      effectiveDimensionType || draft.dimensionType || 'COLOR_AND_SIZE',
+      currentColors,
+      nextSizes,
+      draft.variants || [],
+      currentColors,
+      currentActiveSizes
+    );
 
     updateDraft({
       variants: updatedVariants,
@@ -784,7 +848,7 @@ export function ProductStudioVisualWorkspace() {
           onActiveImageChange={handleActiveImageChange}
           displayPrice={displayPrice}
           emptyPricePlaceholder="Цена, ₽ *"
-          colors={colors}
+          colors={visibleColors}
           sizes={sizes}
           colorLabelSuffix={requiresColor ? " *" : ""}
           colorLabelSuffixClassName={isColorAttention ? "text-amber-600 dark:text-amber-400" : "text-ash dark:text-gray-400"}
@@ -802,7 +866,7 @@ export function ProductStudioVisualWorkspace() {
           isAddingToCart={false}
           isProductUnavailable={false}
           ctaText={ctaText}
-          sizeSelectionNotice={sizeSelectionNotice}
+          sizeSelectionNotice={null}
           refreshErrorNotice={null}
           sizeError=""
           titleSlot={titleSlot}
@@ -979,7 +1043,7 @@ export function ProductStudioVisualWorkspace() {
                     : "border-ash/50 text-ash hover:text-graphite hover:border-graphite"
                 )}
               >
-                {colors.length > 0 ? <Pencil className="w-4 h-4" /> : <span className="text-xl font-light leading-none">+</span>}
+                <span className="text-xl font-light leading-none">+</span>
               </button>
               {isColorAttention && (
                 <span data-testid="color-required-helper" className="text-xs text-amber-700 dark:text-amber-400 font-medium ml-2 shrink-0">
@@ -1069,7 +1133,7 @@ export function ProductStudioVisualWorkspace() {
                     : "border-ash/50 text-ash hover:text-graphite hover:border-graphite"
                 )}
               >
-                {sizes.length > 0 ? <Pencil className="w-4 h-4" /> : <span className="text-xl font-light leading-none">+</span>}
+                <span className="text-xl font-light leading-none">+</span>
               </button>
               {isSizeAttention && (
                 <span data-testid="size-required-helper" className="text-xs text-amber-700 dark:text-amber-400 font-medium ml-2 shrink-0">
@@ -1158,10 +1222,12 @@ export function ProductStudioVisualWorkspace() {
                         <div className="grid grid-cols-3 gap-1.5 max-h-60 overflow-y-auto mb-3">
                           {sizeValuesList.map((sv) => {
                             const isChecked = pendingSelectedSizeIds.has(sv.id);
+                            const label = getCanonicalSizeLabel(sv.id, sizeValuesList, sv.value);
                             return (
                               <button
                                 key={sv.id}
                                 type="button"
+                                data-testid={`visual-size-option-${sv.id}`}
                                 onClick={() => {
                                   const next = new Set(pendingSelectedSizeIds);
                                   if (next.has(sv.id)) next.delete(sv.id);
@@ -1174,7 +1240,7 @@ export function ProductStudioVisualWorkspace() {
                                     : "border-border-soft dark:border-white/10 text-graphite dark:text-white hover:border-graphite dark:hover:border-white"
                                 }`}
                               >
-                                {sv.value}
+                                {label}
                               </button>
                             );
                           })}

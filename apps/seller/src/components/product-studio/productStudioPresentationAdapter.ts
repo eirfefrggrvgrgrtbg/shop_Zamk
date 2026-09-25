@@ -22,6 +22,28 @@ export interface StudioPresentationModel {
   hasVariants: boolean;
 }
 
+export const isUuid = (str?: string | null): boolean =>
+  Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim()));
+
+export function getCanonicalSizeLabel(
+  sizeValueId: string,
+  sizesList?: Array<{ id: string; value?: string; nameRu?: string }> | null,
+  fallbackLabel?: string | null
+): string {
+  if (sizesList && sizesList.length > 0) {
+    const found = sizesList.find((s) => s.id === sizeValueId);
+    if (found && found.value && !isUuid(found.value)) {
+      return found.value;
+    }
+  }
+
+  if (fallbackLabel && fallbackLabel.trim() !== '' && !isUuid(fallbackLabel)) {
+    return fallbackLabel.trim();
+  }
+
+  return 'Размер недоступен';
+}
+
 /**
  * Pure adapter converting ProductStudioDraft into presentation data models for @zamk/shared.
  */
@@ -58,7 +80,7 @@ export function mapStudioDraftToPresentation(draft: ProductStudioDraft): StudioP
     colorId: img.colorId || undefined,
   }));
 
-  const variants = draft.variants || [];
+  const variants = (draft.variants || []).filter((v) => v.isActive !== false);
   const hasVariants = variants.length > 0;
 
   // Color options mapping from draft.colors and draft variants (keyed strictly by canonical colorId)
@@ -85,21 +107,23 @@ export function mapStudioDraftToPresentation(draft: ProductStudioDraft): StudioP
   }
   const colors = Array.from(colorMap.values());
 
-  // Size options mapping from draft variants (keyed by canonical sizeValueId)
   const sizeMap = new Map<string, { id: string; label: string }>();
-  for (const v of variants) {
+  for (const v of draft.variants || []) {
     if (v.sizeValueId && !sizeMap.has(v.sizeValueId)) {
+      const label = getCanonicalSizeLabel(v.sizeValueId, null, v.size);
       sizeMap.set(v.sizeValueId, {
         id: v.sizeValueId,
-        label: v.size || v.sizeValueId,
+        label,
       });
     }
   }
   const uniqueSizes = Array.from(sizeMap.values());
 
-  // Dimension type derivation
+  // Dimension type derivation: respect explicit draft.dimensionType if present and canonical
   let dimensionType: ProductPresentationDimensionType = "SINGLE_VARIANT";
-  if (colors.length > 0 && uniqueSizes.length > 0) {
+  if (draft.dimensionType && ["COLOR_AND_SIZE", "COLOR_ONLY", "SIZE_ONLY", "SINGLE_VARIANT"].includes(draft.dimensionType)) {
+    dimensionType = draft.dimensionType as ProductPresentationDimensionType;
+  } else if (colors.length > 0 && uniqueSizes.length > 0) {
     dimensionType = "COLOR_AND_SIZE";
   } else if (colors.length > 0) {
     dimensionType = "COLOR_ONLY";
@@ -147,10 +171,15 @@ export function mapStudioDraftToPresentation(draft: ProductStudioDraft): StudioP
 
 /**
  * Computes presentation size options given draft structure and current preview color selection.
- * Invariants:
- * - Before color selection in COLOR_AND_SIZE: all sizes are visible but disabled.
- * - After color selection: offered combinations become AVAILABLE; absent combinations become NOT_OFFERED.
- * - No SOLD_OUT is derived from draft (stock is warehouse truth, not draft truth).
+ * Presentation domain contract (PS.R4B3.1C4C3B2G1):
+ * - Always renders every configured product size (complete domain).
+ * - If dimensionType is COLOR_ONLY or SINGLE_VARIANT: returns [].
+ * - If dimensionType is SIZE_ONLY: all uniqueSizes are AVAILABLE and enabled.
+ * - If dimensionType is COLOR_AND_SIZE:
+ *   - If no selectedColorId: every size is AVAILABLE and enabled (disabled = false).
+ *   - If selectedColorId is set: a size S is enabled iff an existing current variant satisfies
+ *     variant.colorId === selectedColorId && variant.sizeValueId === S.
+ *     Otherwise size remains visible with state: 'UNAVAILABLE' (or 'NOT_OFFERED') and disabled: true.
  */
 export function computePresentationSizes(
   draft: ProductStudioDraft,
@@ -162,7 +191,7 @@ export function computePresentationSizes(
     return [];
   }
 
-  if (dimensionType === "SIZE_ONLY") {
+  if (dimensionType === "SIZE_ONLY" || !selectedColorId) {
     return uniqueSizes.map((s) => ({
       id: s.id,
       label: s.label,
@@ -171,28 +200,17 @@ export function computePresentationSizes(
     }));
   }
 
-  // COLOR_AND_SIZE
-  if (!selectedColorId) {
-    // Before color selection: all sizes visible but disabled
-    return uniqueSizes.map((s) => ({
-      id: s.id,
-      label: s.label,
-      state: "AVAILABLE",
-      disabled: true,
-    }));
-  }
-
-  // After color selection
+  // COLOR_AND_SIZE with selectedColorId: all sizes remain visible, incompatible become disabled
+  const variants = (draft.variants || []).filter((v) => v.isActive !== false);
   return uniqueSizes.map((s) => {
-    const isOffered = (draft.variants || []).some(
+    const isCompatible = variants.some(
       (v) => v.colorId === selectedColorId && v.sizeValueId === s.id
     );
-
     return {
       id: s.id,
       label: s.label,
-      state: isOffered ? "AVAILABLE" : "NOT_OFFERED",
-      disabled: !isOffered,
+      state: isCompatible ? "AVAILABLE" : "NOT_OFFERED",
+      disabled: !isCompatible,
     };
   });
 }
@@ -206,7 +224,7 @@ export function findMatchingDraftVariant(
   selectedColorId: string | null,
   selectedSizeId: string | null
 ): ProductStudioVariant | null {
-  const variants = draft.variants || [];
+  const variants = (draft.variants || []).filter((v) => v.isActive !== false);
 
   if (dimensionType === "COLOR_AND_SIZE") {
     if (!selectedColorId || !selectedSizeId) return null;
@@ -248,6 +266,41 @@ export function mapToPresentationSelectedVariant(
 }
 
 /**
+ * Computes presentation color options given draft structure and current preview size selection.
+ * Presentation domain contract (PS.R4B3.1C4C3B2G1):
+ * - Always renders every configured product color (complete domain).
+ * - If no selectedSizeId is set: every color is AVAILABLE and enabled (disabled = false).
+ * - If selectedSizeId is set: a color C is enabled iff an existing current variant satisfies
+ *   variant.colorId === C && variant.sizeValueId === selectedSizeId.
+ *   Otherwise color remains visible with state: 'UNAVAILABLE' and disabled: true.
+ */
+export function computePresentationColors(
+  draft: ProductStudioDraft,
+  allColors: ProductPresentationColorOption[],
+  selectedSizeId: string | null
+): ProductPresentationColorOption[] {
+  if (!selectedSizeId) {
+    return allColors.map((color) => ({
+      ...color,
+      state: "AVAILABLE" as const,
+      disabled: false,
+    }));
+  }
+
+  const variants = (draft.variants || []).filter((v) => v.isActive !== false);
+  return allColors.map((color) => {
+    const isCompatible = variants.some(
+      (v) => v.sizeValueId === selectedSizeId && v.colorId === color.id
+    );
+    return {
+      ...color,
+      state: (isCompatible ? "AVAILABLE" : "UNAVAILABLE") as "AVAILABLE" | "UNAVAILABLE",
+      disabled: !isCompatible,
+    };
+  });
+}
+
+/**
  * Focuses the first media item matching the given colorId.
  * Fallback to 0 (canonical/main media).
  */
@@ -258,4 +311,42 @@ export function findFirstMediaIndexForColor(
   if (!colorId) return 0;
   const index = images.findIndex((img) => img.colorId === colorId);
   return index !== -1 ? index : 0;
+}
+
+/**
+ * Extracts canonical unique color IDs available in the draft.
+ */
+export function getCanonicalColorIds(draft: ProductStudioDraft): string[] {
+  const colorIds = new Set<string>();
+  for (const c of draft.colors || []) {
+    if (c.id) {
+      colorIds.add(c.id);
+    }
+  }
+  for (const v of draft.variants || []) {
+    if (v.isActive !== false && v.colorId) {
+      colorIds.add(v.colorId);
+    }
+  }
+  return Array.from(colorIds);
+}
+
+/**
+ * Deterministically resolves the preview selectedColorId:
+ * - Does NOT auto-select when 1 color exists.
+ * - Preserves current selectedColorId if it is still valid in draft colors.
+ * - If invalid or not present: returns null.
+ */
+export function resolveDeterministicPreviewColorId(
+  draft: ProductStudioDraft,
+  currentColorId: string | null
+): string | null {
+  if (!currentColorId) {
+    return null;
+  }
+  const available = getCanonicalColorIds(draft);
+  if (available.includes(currentColorId)) {
+    return currentColorId;
+  }
+  return null;
 }

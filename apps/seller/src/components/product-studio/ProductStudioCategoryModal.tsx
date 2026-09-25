@@ -5,7 +5,7 @@ import { Search, Folder, ChevronRight, X } from 'lucide-react';
 export interface ProductStudioCategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectCategory: (category: SellerCategory) => void;
+  onSelectCategory: (category: SellerCategory, categoryPath?: string) => void;
   currentCategoryId?: string;
 }
 
@@ -66,14 +66,14 @@ export function ProductStudioCategoryModal({
     return categories.filter((c) => !isParent.has(c.id));
   }, [categories, isParent]);
 
-  const getPath = (cat: SellerCategory): string => {
+  const getPath = (cat: SellerCategory, separator: string = ' › '): string => {
     const parts = [cat.name];
     let curr = cat;
     while (curr.parentId && catMap.has(curr.parentId)) {
       curr = catMap.get(curr.parentId)!;
       parts.unshift(curr.name);
     }
-    return parts.join(' › ');
+    return parts.join(separator);
   };
 
   const getPathArray = (cat: SellerCategory): SellerCategory[] => {
@@ -177,7 +177,7 @@ export function ProductStudioCategoryModal({
                       <button
                         type="button"
                         onClick={() => {
-                          onSelectCategory(cat);
+                          onSelectCategory(cat, getPath(cat, ' / '));
                           onClose();
                         }}
                         data-testid={`category-leaf-${cat.id}`}
@@ -245,7 +245,7 @@ export function ProductStudioCategoryModal({
                         type="button"
                         onClick={() => {
                           if (leaf) {
-                            onSelectCategory(cat);
+                            onSelectCategory(cat, getPath(cat, ' / '));
                             onClose();
                           } else {
                             setActiveParentId(cat.id);

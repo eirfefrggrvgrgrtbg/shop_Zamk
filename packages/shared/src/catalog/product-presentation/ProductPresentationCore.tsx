@@ -503,6 +503,7 @@ export function ProductPresentationCore({
                 {colors.map((color) => {
                   const isSelected = selectedColorId === color.id;
                   const isWhiteOrLight = isLightColor(color.hex);
+                  const isColorDisabled = Boolean(color.disabled);
                   return (
                     <div key={color.id} className="relative group/swatch">
                     <button
@@ -513,11 +514,18 @@ export function ProductPresentationCore({
                       aria-checked={isSelected}
                       aria-label={color.name + (color.shadeName ? ` (${color.shadeName})` : '') + (!color.hasInStock ? ' (нет в наличии)' : '')}
                       title={color.name + (color.shadeName ? ` (${color.shadeName})` : '') + (!color.hasInStock ? ' (нет в наличии)' : '')}
-                      onClick={() => onColorChange(color.id)}
+                      disabled={isColorDisabled}
+                      data-state={color.state}
+                      onClick={() => {
+                        if (!isColorDisabled) {
+                          onColorChange(color.id);
+                        }
+                      }}
                       className={cn(
-                        "relative w-11 h-11 rounded-full flex items-center justify-center transition-colors cursor-pointer",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-graphite focus-visible:ring-offset-2",
-                        "hover:bg-ice/70 dark:hover:bg-white/5",
+                        "relative w-11 h-11 rounded-full flex items-center justify-center transition-colors",
+                        isColorDisabled
+                          ? "opacity-35 cursor-not-allowed"
+                          : "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-graphite focus-visible:ring-offset-2 hover:bg-ice/70 dark:hover:bg-white/5",
                         isSelected && "ring-1 ring-graphite dark:ring-white ring-offset-[3px] ring-offset-white dark:ring-offset-[#121214]"
                       )}
                     >
@@ -525,7 +533,8 @@ export function ProductPresentationCore({
                         <span
                           style={{ backgroundColor: color.hex }}
                           className={cn(
-                            "w-8 h-8 rounded-full transition-transform group-hover/swatch:scale-105",
+                            "w-8 h-8 rounded-full transition-transform",
+                            !isColorDisabled && "group-hover/swatch:scale-105",
                             isWhiteOrLight && "border border-border-soft dark:border-white/20"
                           )}
                         />

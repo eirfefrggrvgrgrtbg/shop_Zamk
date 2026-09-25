@@ -101,6 +101,7 @@ export interface OfferedSize {
 export function getOfferedSizes(draft: ProductStudioDraft): OfferedSize[] {
   const map = new Map<string, string>();
   for (const v of draft.variants || []) {
+    if (v.isActive === false) continue;
     const id = v.sizeValueId || v.size;
     if (id && !map.has(id)) {
       map.set(id, v.size || id);

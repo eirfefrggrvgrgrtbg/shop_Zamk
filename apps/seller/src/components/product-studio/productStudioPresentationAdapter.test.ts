@@ -2,9 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   mapStudioDraftToPresentation,
   computePresentationSizes,
+  computePresentationColors,
   findMatchingDraftVariant,
   mapToPresentationSelectedVariant,
   findFirstMediaIndexForColor,
+  getCanonicalColorIds,
+  resolveDeterministicPreviewColorId,
 } from "./productStudioPresentationAdapter";
 import type { ProductStudioDraft } from "../../contexts/ProductStudioContext";
 
@@ -99,52 +102,60 @@ describe("productStudioPresentationAdapter", () => {
         {
           uiKey: 'img-2',
           sortOrder: 2,
-          colorId: 'c-black',
           isMain: false,
           source: { kind: 'canonical', imageId: 'img-2', url: 'img-2.jpg' },
         },
       ],
     };
     const res = mapStudioDraftToPresentation(draftWithImages);
-    expect(res.visibleImages).toHaveLength(3);
-    expect(res.visibleImages[0].url).toBe("img-1.jpg");
+    expect(res.visibleImages.map((i) => i.url)).toEqual(["img-1.jpg", "img-2.jpg", "img-3.jpg"]);
     expect(res.visibleImages[0].colorId).toBe("c-white");
-    expect(res.visibleImages[1].url).toBe("img-2.jpg");
-    expect(res.visibleImages[2].url).toBe("img-3.jpg");
   });
 
-  it("identifies dimension type and extracts canonical colors and sizes", () => {
+  it("extracts colors and uniqueSizes keyed strictly by canonical IDs", () => {
+    const draft: ProductStudioDraft = {
+      title: "Худи",
+      description: "",
+      categoryId: "cat-1",
+      colors: [
+        { id: "c-black", name: "Черный", hex: "#000000" },
+        { id: "c-white", name: "Белый", hex: "#ffffff" },
+      ],
+      variants: [
+        { id: "v1", colorId: "c-black", sizeValueId: "s-m", size: "M" },
+        { id: "v2", colorId: "c-black", sizeValueId: "s-l", size: "L" },
+        { id: "v3", colorId: "c-white", sizeValueId: "s-m", size: "M" },
+      ],
+    };
+    const res = mapStudioDraftToPresentation(draft);
+    expect(res.colors).toHaveLength(2);
+    expect(res.colors.map((c) => c.id)).toEqual(["c-black", "c-white"]);
+    expect(res.colors.every((c) => c.hasInStock)).toBe(true);
+
+    expect(res.uniqueSizes).toHaveLength(2);
+    expect(res.uniqueSizes.map((s) => s.id)).toEqual(["s-m", "s-l"]);
+    expect(res.uniqueSizes.map((s) => s.label)).toEqual(["M", "L"]);
+  });
+
+  it("derives dimensionType correctly for all dimension modes", () => {
     // COLOR_AND_SIZE
-    const colorAndSizeDraft: ProductStudioDraft = {
+    const fullDraft: ProductStudioDraft = {
       title: "Худи",
       description: "",
       categoryId: "cat-1",
       variants: [
-        { id: "v1", colorId: "c1", colorName: "Черный", colorHex: "#000", sizeValueId: "s1", size: "S" },
-        { id: "v2", colorId: "c1", colorName: "Черный", colorHex: "#000", sizeValueId: "s2", size: "M" },
-        { id: "v3", colorId: "c2", colorName: "Белый", colorHex: "#fff", sizeValueId: "s1", size: "S" },
+        { id: "v1", colorId: "c-black", sizeValueId: "s-m", size: "M" },
       ],
     };
-    const casRes = mapStudioDraftToPresentation(colorAndSizeDraft);
-    expect(casRes.dimensionType).toBe("COLOR_AND_SIZE");
-    expect(casRes.colors).toEqual([
-      { id: "c1", name: "Черный", hex: "#000", hasInStock: true },
-      { id: "c2", name: "Белый", hex: "#fff", hasInStock: true },
-    ]);
-    expect(casRes.uniqueSizes).toEqual([
-      { id: "s1", label: "S" },
-      { id: "s2", label: "M" },
-    ]);
+    expect(mapStudioDraftToPresentation(fullDraft).dimensionType).toBe("COLOR_AND_SIZE");
 
     // COLOR_ONLY
     const colorOnlyDraft: ProductStudioDraft = {
-      title: "Помада",
+      title: "Шарф",
       description: "",
       categoryId: "cat-1",
-      variants: [
-        { id: "v1", colorId: "c1", colorName: "Красный", colorHex: "#f00" },
-        { id: "v2", colorId: "c2", colorName: "Розовый", colorHex: "#ffc0cb" },
-      ],
+      colors: [{ id: "c-red", name: "Красный" }],
+      variants: [{ id: "v1", colorId: "c-red" }],
     };
     expect(mapStudioDraftToPresentation(colorOnlyDraft).dimensionType).toBe("COLOR_ONLY");
 
@@ -181,7 +192,7 @@ describe("productStudioPresentationAdapter", () => {
     expect(mapStudioDraftToPresentation(emptyVariantsDraft).hasVariants).toBe(false);
   });
 
-  it("computes size matrix correctly: disabled before color, NOT_OFFERED for missing, NO fake SOLD_OUT", () => {
+  it("computes size matrix keeping all sizes visible: incompatible sizes are marked disabled (PS.R4B3.1C4C3B2G1)", () => {
     const draft: ProductStudioDraft = {
       title: "Худи",
       description: "",
@@ -197,29 +208,64 @@ describe("productStudioPresentationAdapter", () => {
       { id: "s2", label: "M" },
     ];
 
-    // Before color selection: all sizes visible but disabled
+    // Before color selection: all sizes are visible and enabled
     const beforeColor = computePresentationSizes(draft, "COLOR_AND_SIZE", uniqueSizes, null);
     expect(beforeColor).toEqual([
-      { id: "s1", label: "S", state: "AVAILABLE", disabled: true },
-      { id: "s2", label: "M", state: "AVAILABLE", disabled: true },
+      { id: "s1", label: "S", state: "AVAILABLE", disabled: false },
+      { id: "s2", label: "M", state: "AVAILABLE", disabled: false },
     ]);
 
-    // After selecting c1: both S and M are AVAILABLE and enabled
+    // After selecting c1: both S and M are compatible (enabled)
     const c1Sizes = computePresentationSizes(draft, "COLOR_AND_SIZE", uniqueSizes, "c1");
     expect(c1Sizes).toEqual([
       { id: "s1", label: "S", state: "AVAILABLE", disabled: false },
       { id: "s2", label: "M", state: "AVAILABLE", disabled: false },
     ]);
 
-    // After selecting c2: S is AVAILABLE, M is NOT_OFFERED
+    // After selecting c2: both S and M remain visible; S is enabled, M is disabled
     const c2Sizes = computePresentationSizes(draft, "COLOR_AND_SIZE", uniqueSizes, "c2");
     expect(c2Sizes).toEqual([
       { id: "s1", label: "S", state: "AVAILABLE", disabled: false },
       { id: "s2", label: "M", state: "NOT_OFFERED", disabled: true },
     ]);
+  });
 
-    // Verify no SOLD_OUT is produced anywhere
-    expect(c2Sizes.some((s) => s.state === "SOLD_OUT")).toBe(false);
+  it("computes color options keeping all colors visible: incompatible colors are marked disabled (PS.R4B3.1C4C3B2G1)", () => {
+    const draft: ProductStudioDraft = {
+      title: "Худи",
+      description: "",
+      categoryId: "cat-1",
+      variants: [
+        { id: "v1", colorId: "c-black", sizeValueId: "s-m", size: "M" },
+        { id: "v2", colorId: "c-black", sizeValueId: "s-l", size: "L" },
+        { id: "v3", colorId: "c-white", sizeValueId: "s-m", size: "M" }, // white only has M
+      ],
+    };
+    const allColors = [
+      { id: "c-black", name: "Черный", hasInStock: true },
+      { id: "c-white", name: "Белый", hasInStock: true },
+    ];
+
+    // No size selected -> all colors visible and enabled
+    const noSizeColors = computePresentationColors(draft, allColors, null);
+    expect(noSizeColors).toEqual([
+      { id: "c-black", name: "Черный", hasInStock: true, state: "AVAILABLE", disabled: false },
+      { id: "c-white", name: "Белый", hasInStock: true, state: "AVAILABLE", disabled: false },
+    ]);
+
+    // Size M selected -> both black and white offer M (both enabled)
+    const mColors = computePresentationColors(draft, allColors, "s-m");
+    expect(mColors).toEqual([
+      { id: "c-black", name: "Черный", hasInStock: true, state: "AVAILABLE", disabled: false },
+      { id: "c-white", name: "Белый", hasInStock: true, state: "AVAILABLE", disabled: false },
+    ]);
+
+    // Size L selected -> both black and white remain visible; black is enabled, white is disabled
+    const lColors = computePresentationColors(draft, allColors, "s-l");
+    expect(lColors).toEqual([
+      { id: "c-black", name: "Черный", hasInStock: true, state: "AVAILABLE", disabled: false },
+      { id: "c-white", name: "Белый", hasInStock: true, state: "UNAVAILABLE", disabled: true },
+    ]);
   });
 
   it("findFirstMediaIndexForColor correctly locates matching media or falls back to 0", () => {
@@ -260,5 +306,58 @@ describe("productStudioPresentationAdapter", () => {
     });
 
     expect(mapToPresentationSelectedVariant(null)).toBeNull();
+  });
+
+  describe("PS.R4B3.1C4C3B2G — Peer Preview Selection Model", () => {
+    it("0. getCanonicalColorIds extracts unique canonical color IDs from colors and variants", () => {
+      const draft: ProductStudioDraft = {
+        title: "Товар",
+        description: "",
+        categoryId: "cat-1",
+        colors: [{ id: "c-black", name: "Черный", hex: "#000000" }],
+        variants: [
+          { id: "v1", colorId: "c-black", sizeValueId: "s-1", size: "M" },
+          { id: "v2", colorId: "c-white", sizeValueId: "s-1", size: "M" },
+        ],
+      };
+      expect(getCanonicalColorIds(draft)).toEqual(["c-black", "c-white"]);
+    });
+
+    it("1. initial / null state -> resolveDeterministicPreviewColorId returns null even for 1 color", () => {
+      const singleColorDraft: ProductStudioDraft = {
+        title: "Товар",
+        description: "",
+        categoryId: "cat-1",
+        colors: [{ id: "c-black", name: "Черный", hex: "#000000" }],
+      };
+      expect(resolveDeterministicPreviewColorId(singleColorDraft, null)).toBeNull();
+    });
+
+    it("2. preserves current valid selectedColorId", () => {
+      const draft: ProductStudioDraft = {
+        title: "Товар",
+        description: "",
+        categoryId: "cat-1",
+        colors: [
+          { id: "c-black", name: "Черный", hex: "#000000" },
+          { id: "c-white", name: "Белый", hex: "#FFFFFF" },
+        ],
+      };
+      expect(resolveDeterministicPreviewColorId(draft, "c-white")).toBe("c-white");
+      expect(resolveDeterministicPreviewColorId(draft, "c-black")).toBe("c-black");
+    });
+
+    it("3. clears selection when previous selection is no longer valid", () => {
+      const draft: ProductStudioDraft = {
+        title: "Товар",
+        description: "",
+        categoryId: "cat-1",
+        colors: [
+          { id: "c-black", name: "Черный", hex: "#000000" },
+          { id: "c-white", name: "Белый", hex: "#FFFFFF" },
+        ],
+      };
+      expect(resolveDeterministicPreviewColorId(draft, "c-blue")).toBeNull();
+    });
   });
 });

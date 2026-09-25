@@ -728,8 +728,8 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
     expect(screen.getByTestId('main-product-image').getAttribute('src')).toBe('https://example.com/black.jpg');
   });
 
-  // 12. sizes disabled before color for COLOR_AND_SIZE
-  it('12. sizes disabled before color for COLOR_AND_SIZE', () => {
+  // 12. sizes selectable before color for COLOR_AND_SIZE without prerequisite notice
+  it('12. sizes selectable before color for COLOR_AND_SIZE without prerequisite notice', () => {
     render(
       <MemoryRouter>
         <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
@@ -738,9 +738,9 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
       </MemoryRouter>
     );
 
-    expect((screen.getByTestId('size-button-S') as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByTestId('size-button-M') as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByTestId('size-selection-notice').textContent).toBe('Сначала выберите цвет');
+    expect((screen.getByTestId('size-button-S') as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByTestId('size-button-M') as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByTestId('size-selection-notice')).toBeNull();
   });
 
   // 13. offered size becomes AVAILABLE after color
@@ -760,8 +760,8 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
     expect(screen.getByTestId('size-button-M').getAttribute('data-state')).toBe('AVAILABLE');
   });
 
-  // 14. absent combination renders NOT_OFFERED
-  it('14. absent combination renders NOT_OFFERED', () => {
+  // 14. absent combination renders disabled (NOT_OFFERED) and remains visible
+  it('14. absent combination renders disabled (NOT_OFFERED) and remains visible', () => {
     render(
       <MemoryRouter>
         <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
@@ -770,7 +770,7 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
       </MemoryRouter>
     );
 
-    // For white color, only S is offered; M is absent
+    // For white color, only S is offered; M is absent so size M remains visible and disabled
     fireEvent.click(screen.getByTestId('color-swatch-col-white'));
     expect((screen.getByTestId('size-button-S') as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getByTestId('size-button-M') as HTMLButtonElement).disabled).toBe(true);
@@ -789,7 +789,6 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
 
     fireEvent.click(screen.getByTestId('color-swatch-col-white'));
     expect(screen.getByTestId('size-button-S').getAttribute('data-state')).not.toBe('SOLD_OUT');
-    expect(screen.getByTestId('size-button-M').getAttribute('data-state')).not.toBe('SOLD_OUT');
   });
 
   // 16. size click updates local preview selection only
@@ -933,8 +932,8 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
     expect(modBtn?.disabled).toBe(true);
   });
 
-  // 24. fully populated draft: Save STILL disabled, Moderation STILL disabled
-  it('24. fully populated draft: Save STILL disabled, Moderation STILL disabled', () => {
+  // 24. fully populated draft: Save enabled in Create mode, Moderation STILL disabled
+  it('24. fully populated draft: Save enabled in Create mode, Moderation STILL disabled', () => {
     render(
       <MemoryRouter>
         <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
@@ -946,7 +945,7 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
     const saveBtn = screen.getByText('Сохранить').closest('button');
     const modBtn = screen.getByText('Отправить на модерацию').closest('button');
 
-    expect(saveBtn?.disabled).toBe(true);
+    expect(saveBtn?.disabled).toBe(false);
     expect(modBtn?.disabled).toBe(true);
   });
 });

@@ -15,6 +15,7 @@ import {
   getSellerViolations,
 } from '@zamk/api-client/src/seller';
 import type { SellerInventoryItem, SellerBalance, SellerOrder, SellerProduct, SellerReturn, SellerMe, SellerWarning, SellerViolation } from '@zamk/api-client/src/types';
+import { prepareAddProductNavigation } from '../components/product-studio/productStudioCreateSession';
 
 type DashboardState = {
   products: SellerProduct[];
@@ -222,7 +223,11 @@ export function SellerDashboard() {
                 </div>
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Начните продажи на ZAMK</h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto text-sm">Ваш профиль готов к работе. Добавьте свой первый товар, чтобы покупатели могли его найти.</p>
-                <Link to="/products/new" className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
+                <Link
+                  to="/products/new"
+                  onClick={() => prepareAddProductNavigation()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+                >
                   <PlusCircle className="w-4 h-4" />
                   Создать товар
                 </Link>

@@ -55,10 +55,20 @@ export interface ProductStudioUpdateRequestPayload {
   images?: SellerProductPatchImageItem[];
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * Pure builder: constructs ONE Product PATCH payload from working draft and baseline.
- * Uses canonical IDs directly from draft. Preserves accepted identity rules.
+ * Validates whether a variant ID represents a canonical backend UUID.
+ * Rule:
+ * - absent/empty => false
+ * - valid RFC-compatible UUID string (case-insensitive) => true
+ * - anything else (e.g. draft-var-*, synthetic-*, random strings) => false
  */
+export function isCanonicalVariantId(id?: string): boolean {
+  if (!id || typeof id !== 'string') return false;
+  return UUID_REGEX.test(id.trim());
+}
+
 export function buildProductStudioUpdateRequest(
   workingDraft: ProductStudioDraft,
   baselineDraft: ProductStudioDraft
@@ -110,14 +120,16 @@ export function buildProductStudioUpdateRequest(
   }
 
   if (workingDraft.variants && workingDraft.variants.length > 0) {
-    payload.variants = workingDraft.variants.map((v) => ({
-      id: v.id || undefined,
-      colorId: v.colorId || undefined,
-      sizeValueId: v.sizeValueId || undefined,
-      sellerSku: v.sellerSku ? v.sellerSku.trim() : undefined,
-      barcode: v.barcode ? v.barcode.trim() : undefined,
-      priceCents: typeof v.priceCents === 'number' ? v.priceCents : undefined,
-    }));
+    payload.variants = workingDraft.variants
+      .filter((v) => v.isActive !== false)
+      .map((v) => ({
+        id: isCanonicalVariantId(v.id) ? v.id : undefined,
+        colorId: v.colorId || undefined,
+        sizeValueId: v.sizeValueId || undefined,
+        sellerSku: v.sellerSku ? v.sellerSku.trim() : undefined,
+        barcode: v.barcode ? v.barcode.trim() : undefined,
+        priceCents: typeof v.priceCents === 'number' ? v.priceCents : undefined,
+      }));
   }
 
   if (workingDraft.materialComposition && workingDraft.materialComposition.length > 0) {

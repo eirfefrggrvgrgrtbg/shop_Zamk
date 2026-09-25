@@ -3,12 +3,14 @@ import { ArrowLeft, Save, Eye, Folder, Loader2, AlertCircle } from 'lucide-react
 import { useProductStudio } from '../../contexts/ProductStudioContext';
 import { ProductStudioViewToggle } from './ProductStudioViewToggle';
 import { statusLabels } from '../../lib/seller-products';
+import { isUuid } from './productStudioPresentationAdapter';
 
 export function ProductStudioHeader() {
   const {
     entryMode,
     draft,
     setCategoryModalOpen,
+    categorySchema,
     readiness,
     isFieldAttention,
     showReadinessAttention,
@@ -20,8 +22,23 @@ export function ProductStudioHeader() {
     clearSaveError,
     isSaveInFlight,
     isDirty,
+    markTouched,
   } = useProductStudio();
   const isCategoryAttention = isFieldAttention('category');
+  const hasCategory = Boolean(draft.categoryId);
+  const catCandidate = (
+    draft.categoryPath && !isUuid(draft.categoryPath.trim())
+      ? draft.categoryPath
+      : draft.categoryName && !isUuid(draft.categoryName.trim())
+      ? draft.categoryName
+      : categorySchema?.name && !isUuid(categorySchema.name.trim())
+      ? categorySchema.name
+      : ''
+  ).trim();
+  const displayCategory = catCandidate;
+  const categoryLabelText = hasCategory
+    ? displayCategory || 'Категория выбрана'
+    : 'Выберите категорию товара';
 
   const isCreate = entryMode === 'create';
   const displayTitle = draft.title?.trim()
@@ -42,13 +59,15 @@ export function ProductStudioHeader() {
     ? `Бренд: ${draft.brandName}`
     : null;
 
-  const isSaveAvailable = entryMode === 'edit' && Boolean(saveDraft);
+  const isSaveAvailable = Boolean(saveDraft);
 
   let saveButtonText = 'Сохранить';
   if (saveStatus === 'staging') {
     saveButtonText = 'Загрузка фото…';
   } else if (saveStatus === 'saving') {
     saveButtonText = 'Сохранение…';
+  } else if (saveStatus === 'identity_recovery_required') {
+    saveButtonText = 'Повторить попытку';
   }
 
   let saveButtonTitle = 'Сохранить';
@@ -58,14 +77,18 @@ export function ProductStudioHeader() {
     saveButtonTitle = 'Выполняется загрузка фотографий…';
   } else if (saveStatus === 'saving') {
     saveButtonTitle = 'Выполняется сохранение товара…';
+  } else if (saveStatus === 'identity_recovery_required') {
+    saveButtonTitle = saveError || 'Результат создания товара не подтвержден. Нажмите, чтобы повторить попытку';
   } else if (saveStatus === 'refresh_error') {
     saveButtonTitle = 'Товар сохранен. Обновите страницу';
-  } else if (!isDirty) {
-    saveButtonTitle = 'Нет несохраненных изменений';
   } else if (saveStatus === 'error') {
     saveButtonTitle = saveError || 'Ошибка сохранения. Нажмите, чтобы повторить';
+  } else if (entryMode === 'edit' && !isDirty) {
+    saveButtonTitle = 'Нет несохраненных изменений';
+  } else if (!canSave) {
+    saveButtonTitle = 'Заполните обязательные поля для сохранения';
   } else {
-    saveButtonTitle = 'Сохранить изменения';
+    saveButtonTitle = isCreate ? 'Сохранить товар' : 'Сохранить изменения';
   }
 
   return (
@@ -129,29 +152,61 @@ export function ProductStudioHeader() {
               </div>
             </div>
 
-            {/* Row 2: Category chip */}
-            <div className="flex items-center min-w-0">
-              <button
-                type="button"
-                onClick={() => setCategoryModalOpen(true)}
-                disabled={isSaveInFlight}
-                data-testid="studio-header-category-btn"
-                title={draft.categoryName ? 'Изменить категорию' : 'Выбрать категорию товара'}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors shrink-0 max-w-full truncate ${
-                  isSaveInFlight ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
-                } ${
-                  draft.categoryId
-                    ? 'bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/15'
-                    : isCategoryAttention
-                    ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700/50 hover:bg-amber-100 dark:hover:bg-amber-900/40'
-                    : 'bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/15'
+            {/* Row 2: Prominent Global Category Control */}
+            <div className="flex items-center min-w-0 my-0.5" data-testid="studio-global-category-row">
+              <div
+                data-testid="studio-global-category-control"
+                className={`inline-flex items-center justify-between gap-2.5 px-3 py-1 rounded-lg border text-xs transition-colors max-w-full truncate ${
+                  !hasCategory
+                    ? isCategoryAttention
+                      ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 ring-1 ring-amber-300/50'
+                      : 'border-amber-200 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300'
+                    : 'border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-white/[0.04] text-gray-800 dark:text-gray-200'
                 }`}
               >
-                <Folder className="w-3 h-3 shrink-0" />
-                <span className="truncate">
-                  {draft.categoryName ? `Категория · ${draft.categoryName}` : 'Категория * · Не выбрана'}
-                </span>
-              </button>
+                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                  <Folder
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      !hasCategory ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-400'
+                    }`}
+                  />
+                  <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 shrink-0">
+                    Категория товара{!hasCategory ? ' *' : ''}
+                  </span>
+                  <span className="text-gray-300 dark:text-gray-600 shrink-0">·</span>
+                  <span
+                    data-testid="studio-header-category-label"
+                    title={categoryLabelText}
+                    className={`text-xs truncate max-w-[200px] sm:max-w-[280px] md:max-w-[360px] ${
+                      !hasCategory
+                        ? 'text-amber-700 dark:text-amber-400 font-normal italic'
+                        : 'font-semibold text-gray-900 dark:text-white'
+                    }`}
+                  >
+                    {categoryLabelText}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    markTouched('category');
+                    setCategoryModalOpen(true);
+                  }}
+                  disabled={isSaveInFlight}
+                  data-testid="studio-header-category-btn"
+                  title={hasCategory ? 'Изменить категорию' : 'Выбрать категорию товара'}
+                  className={`px-2.5 py-0.5 rounded text-xs font-semibold transition-all shrink-0 ml-1 ${
+                    isSaveInFlight
+                      ? 'opacity-50 cursor-not-allowed'
+                      : !hasCategory
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-xs cursor-pointer'
+                      : 'bg-white dark:bg-white/10 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/15 cursor-pointer'
+                  }`}
+                >
+                  {hasCategory ? 'Изменить' : 'Выбрать'}
+                </button>
+              </div>
             </div>
 
             {/* Row 3: Brand line */}
@@ -223,6 +278,15 @@ export function ProductStudioHeader() {
               className="ml-2 underline font-semibold text-white hover:text-white/80 cursor-pointer text-xs"
             >
               Обновить страницу
+            </button>
+          ) : saveStatus === 'identity_recovery_required' ? (
+            <button
+              type="button"
+              data-testid="studio-identity-retry-btn"
+              onClick={() => saveDraft && saveDraft()}
+              className="ml-2 underline font-semibold text-white hover:text-white/80 cursor-pointer text-xs"
+            >
+              Повторить попытку
             </button>
           ) : (
             <button
