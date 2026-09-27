@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Package, ChevronRight, MapPin, Star, CheckCircle2, Circle, X } from 'lucide-react';
+import type { CustomerFulfillment } from '@zamk/api-client/src/types';
 import { Drawer } from '../components/ui/Drawer';
 import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
 import { formatVariantDetails, getCartItemImageUrl } from '../lib/variantSelection';
@@ -29,6 +30,8 @@ function OrdersContent() {
   const [orders, setOrders] = useState<any[]>([]);
   const [returnsMap, setReturnsMap] = useState<Record<string, any[]>>({});
   const [reviewsMap, setReviewsMap] = useState<Record<string, any>>({});
+  const [shipmentsMap, setShipmentsMap] = useState<Record<string, CustomerFulfillment[] | null>>({});
+  const [shipmentLoadingMap, setShipmentLoadingMap] = useState<Record<string, boolean>>({});
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPaying, setIsPaying] = useState(false);
@@ -53,7 +56,7 @@ function OrdersContent() {
           case 'paid': return 'Оплачен';
           case 'assembling': return 'Собирается';
           case 'packed': return 'Упакован';
-          case 'shipped': return 'Отправлен';
+          case 'shipped': return 'Передан в доставку';
           case 'delivered': return 'Доставлен';
           case 'cancelled': return 'Отменён';
           case 'returned': return 'Возврат';
@@ -149,6 +152,39 @@ function OrdersContent() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!selectedOrder) return;
+    const orderId = selectedOrder.rawId;
+    const isRelevant = selectedOrder.rawStatus === 'shipped' || selectedOrder.rawStatus === 'delivered';
+    if (!isRelevant) return;
+    if (shipmentsMap[orderId] !== undefined || shipmentLoadingMap[orderId]) return;
+
+    let isMounted = true;
+    setShipmentLoadingMap((prev) => ({ ...prev, [orderId]: true }));
+
+    (async () => {
+      try {
+        const { getCustomerOrderFulfillments } = await import('@zamk/api-client/src/customer');
+        const data = await getCustomerOrderFulfillments(orderId);
+        if (isMounted) {
+          setShipmentsMap((prev) => ({ ...prev, [orderId]: data }));
+        }
+      } catch {
+        if (isMounted) {
+          setShipmentsMap((prev) => ({ ...prev, [orderId]: null }));
+        }
+      } finally {
+        if (isMounted) {
+          setShipmentLoadingMap((prev) => ({ ...prev, [orderId]: false }));
+        }
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedOrder?.rawId, selectedOrder?.rawStatus]);
 
   return (
     <>
@@ -337,6 +373,18 @@ function OrdersContent() {
 
             {/* Контент Drawer'а */}
             <div className="py-6 space-y-7">
+              {/* Пояснение для заказа, переданного в доставку */}
+              {selectedOrder.rawStatus === 'shipped' && (
+                <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/70 dark:border-blue-800/40 space-y-1">
+                  <p className="text-[14px] font-medium text-graphite dark:text-white leading-snug">
+                    Заказ собран на складе ZAMK и передан в службу доставки.
+                  </p>
+                  <p className="text-[13px] text-graphite/70 dark:text-white/70">
+                    Следующий этап — доставка заказа.
+                  </p>
+                </div>
+              )}
+
               {/* Главный блок товара (Product-First Content) */}
               <div className="space-y-6">
                 {selectedOrder.items.map((item: any) => {
@@ -490,6 +538,90 @@ function OrdersContent() {
                     </div>
                   </div>
                 </div>
+
+                {/* Карточка отслеживания для переданных в доставку / доставленных заказов */}
+                {(selectedOrder.rawStatus === 'shipped' || selectedOrder.rawStatus === 'delivered') && (
+                  <div className="mt-3">
+                    {shipmentLoadingMap[selectedOrder.rawId] ? (
+                      <div className="p-4 rounded-2xl bg-graphite/[0.02] dark:bg-white/5 border border-border-lighter dark:border-white/10 flex items-center justify-center py-6">
+                        <div className="animate-spin w-5 h-5 border-2 border-graphite border-t-transparent rounded-full dark:border-white dark:border-t-transparent" />
+                      </div>
+                    ) : (() => {
+                      const fulfillments = shipmentsMap[selectedOrder.rawId];
+                      if (!fulfillments || fulfillments.length === 0) {
+                        return (
+                          <div className="p-3.5 rounded-2xl bg-graphite/[0.02] dark:bg-white/5 border border-border-lighter dark:border-white/10 text-[13.5px] text-graphite/60 dark:text-white/50">
+                            Данные отслеживания пока недоступны
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-4">
+                          {fulfillments.map((fulfillment, idx) => {
+                            const hasShippedAt = Boolean(fulfillment.shippedAt);
+                            const hasCarrier = Boolean(fulfillment.carrier);
+                            const hasTrackingNumber = Boolean(fulfillment.trackingNumber);
+                            const hasTrackingUrl = Boolean(fulfillment.trackingUrl);
+
+                            if (!hasShippedAt && !hasCarrier && !hasTrackingNumber && !hasTrackingUrl) {
+                              return (
+                                <div key={fulfillment.id} className="p-3.5 rounded-2xl bg-graphite/[0.02] dark:bg-white/5 border border-border-lighter dark:border-white/10 text-[13.5px] text-graphite/60 dark:text-white/50">
+                                  {fulfillments.length > 1 && <div className="font-medium text-graphite dark:text-white mb-2">Посылка {idx + 1}</div>}
+                                  Данные отслеживания пока недоступны
+                                </div>
+                              );
+                            }
+
+                            const formattedShippedDate = fulfillment.shippedAt
+                              ? new Date(fulfillment.shippedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+                              : null;
+
+                            return (
+                              <div key={fulfillment.id} className="p-4 rounded-2xl bg-graphite/[0.02] dark:bg-white/5 border border-border-lighter dark:border-white/10 space-y-2.5">
+                                {fulfillments.length > 1 && (
+                                  <div className="font-medium text-[14.5px] text-graphite dark:text-white mb-1.5 pb-2 border-b border-border-lighter/60 dark:border-white/5">
+                                    Посылка {idx + 1}
+                                  </div>
+                                )}
+                                {formattedShippedDate && (
+                                  <div className="flex justify-between items-center text-[13.5px]">
+                                    <span className="text-graphite/70 dark:text-white/60">Передан в доставку</span>
+                                    <span className="font-medium text-graphite dark:text-white">{formattedShippedDate}</span>
+                                  </div>
+                                )}
+                                {hasCarrier && (
+                                  <div className="flex justify-between items-center text-[13.5px]">
+                                    <span className="text-graphite/70 dark:text-white/60">Служба доставки</span>
+                                    <span className="font-medium text-graphite dark:text-white">{fulfillment.carrier}</span>
+                                  </div>
+                                )}
+                                {hasTrackingNumber && (
+                                  <div className="flex justify-between items-center text-[13.5px]">
+                                    <span className="text-graphite/70 dark:text-white/60">Трек-номер</span>
+                                    <span className="font-mono font-medium text-graphite dark:text-white">{fulfillment.trackingNumber}</span>
+                                  </div>
+                                )}
+                                {hasTrackingUrl && fulfillment.trackingUrl && (
+                                  <div className="pt-2 border-t border-border-lighter/60 dark:border-white/5">
+                                    <a
+                                      href={fulfillment.trackingUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center justify-center w-full py-2.5 px-4 rounded-xl bg-graphite dark:bg-white text-white dark:text-black text-[13.5px] font-medium hover:opacity-90 transition-opacity text-center shadow-sm"
+                                    >
+                                      Отследить посылку
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
 
               {/* Итоговая сводка стоимости */}

@@ -24,6 +24,11 @@ type CustomerFulfillmentResponse struct {
 	UpdatedAt       string            `json:"updatedAt"`
 	ShipmentID      *string           `json:"shipmentId,omitempty"`
 	ShipmentStatus  *string           `json:"shipmentStatus,omitempty"`
+	Carrier         *string           `json:"carrier,omitempty"`
+	TrackingNumber  *string           `json:"trackingNumber,omitempty"`
+	TrackingUrl     *string           `json:"trackingUrl,omitempty"`
+	ShippedAt       *string           `json:"shippedAt,omitempty"`
+	DeliveredAt     *string           `json:"deliveredAt,omitempty"`
 	Items           []FulfillmentItem `json:"items"`
 }
 

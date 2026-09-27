@@ -53,6 +53,11 @@ type Fulfillment struct {
 	DiscrepancyAt      *time.Time        `json:"discrepancyAt,omitempty"`
 	ShipmentStatus     *string           `json:"shipmentStatus,omitempty"`
 	ShipmentID         *uuid.UUID        `json:"shipmentId,omitempty"`
+	Carrier            *string           `json:"carrier,omitempty"`
+	TrackingNumber     *string           `json:"trackingNumber,omitempty"`
+	TrackingUrl        *string           `json:"trackingUrl,omitempty"`
+	ShippedAt          *time.Time        `json:"shippedAt,omitempty"`
+	DeliveredAt        *time.Time        `json:"deliveredAt,omitempty"`
 	DeliveryAddress    *string           `json:"deliveryAddress,omitempty"`
 	CustomerName       *string           `json:"customerName,omitempty"`
 	CustomerPhone      *string           `json:"customerPhone,omitempty"`

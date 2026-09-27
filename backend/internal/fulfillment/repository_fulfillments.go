@@ -138,7 +138,7 @@ func (r *Repository) ListAdminFulfillments(ctx context.Context, limit, offset in
 		SELECT 
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			f.packed_at,
-			s.status as shipment_status, s.id as shipment_id,
+			s.status as shipment_status, s.id as shipment_id, s.carrier, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
 			o.order_number, o.delivery_address, o.customer_name, o.customer_phone,
 			sel.brand_name as seller_name
 		FROM order_fulfillments f
@@ -168,7 +168,7 @@ func (r *Repository) ListAdminFulfillments(ctx context.Context, limit, offset in
 		if err := rows.Scan(
 			&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt,
 			&f.PackedAt,
-			&f.ShipmentStatus, &f.ShipmentID,
+			&f.ShipmentStatus, &f.ShipmentID, &f.Carrier, &f.TrackingNumber, &f.TrackingUrl, &f.ShippedAt, &f.DeliveredAt,
 			&f.OrderNumber, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
 			&f.SellerName,
 		); err != nil {
@@ -196,7 +196,7 @@ func (r *Repository) GetOrderFulfillmentsTx(ctx context.Context, tx pgx.Tx, orde
 		SELECT 
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			f.packed_at,
-			s.status as shipment_status, s.id as shipment_id,
+			s.status as shipment_status, s.id as shipment_id, s.carrier, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
 			o.order_number, o.delivery_address, o.customer_name, o.customer_phone,
 			sel.brand_name as seller_name
 		FROM order_fulfillments f
@@ -218,7 +218,7 @@ func (r *Repository) GetOrderFulfillmentsTx(ctx context.Context, tx pgx.Tx, orde
 		if err := rows.Scan(
 			&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt,
 			&f.PackedAt,
-			&f.ShipmentStatus, &f.ShipmentID,
+			&f.ShipmentStatus, &f.ShipmentID, &f.Carrier, &f.TrackingNumber, &f.TrackingUrl, &f.ShippedAt, &f.DeliveredAt,
 			&f.OrderNumber, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
 			&f.SellerName,
 		); err != nil {
@@ -238,7 +238,7 @@ func (r *Repository) GetAdminFulfillment(ctx context.Context, id uuid.UUID) (*Fu
 		SELECT 
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			f.packed_at,
-			s.status as shipment_status, s.id as shipment_id,
+			s.status as shipment_status, s.id as shipment_id, s.carrier, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
 			o.order_number, o.delivery_address, o.customer_name, o.customer_phone,
 			sel.brand_name as seller_name
 		FROM order_fulfillments f
@@ -251,7 +251,7 @@ func (r *Repository) GetAdminFulfillment(ctx context.Context, id uuid.UUID) (*Fu
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt,
 		&f.PackedAt,
-		&f.ShipmentStatus, &f.ShipmentID,
+		&f.ShipmentStatus, &f.ShipmentID, &f.Carrier, &f.TrackingNumber, &f.TrackingUrl, &f.ShippedAt, &f.DeliveredAt,
 		&f.OrderNumber, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
 		&f.SellerName,
 	)
@@ -275,7 +275,7 @@ func (r *Repository) GetAdminFulfillmentTx(ctx context.Context, tx pgx.Tx, id uu
 		SELECT 
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			f.packed_at,
-			s.status as shipment_status, s.id as shipment_id,
+			s.status as shipment_status, s.id as shipment_id, s.carrier, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
 			o.order_number, o.delivery_address, o.customer_name, o.customer_phone,
 			sel.brand_name as seller_name
 		FROM order_fulfillments f
@@ -288,7 +288,7 @@ func (r *Repository) GetAdminFulfillmentTx(ctx context.Context, tx pgx.Tx, id uu
 	err := tx.QueryRow(ctx, query, id).Scan(
 		&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt,
 		&f.PackedAt,
-		&f.ShipmentStatus, &f.ShipmentID,
+		&f.ShipmentStatus, &f.ShipmentID, &f.Carrier, &f.TrackingNumber, &f.TrackingUrl, &f.ShippedAt, &f.DeliveredAt,
 		&f.OrderNumber, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
 		&f.SellerName,
 	)
@@ -312,7 +312,7 @@ func (r *Repository) GetOrderFulfillments(ctx context.Context, orderID uuid.UUID
 		SELECT 
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			f.packed_at,
-			s.status as shipment_status, s.id as shipment_id,
+			s.status as shipment_status, s.id as shipment_id, s.carrier, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
 			o.order_number, o.delivery_address, o.customer_name, o.customer_phone,
 			sel.brand_name as seller_name
 		FROM order_fulfillments f
@@ -334,7 +334,7 @@ func (r *Repository) GetOrderFulfillments(ctx context.Context, orderID uuid.UUID
 		if err := rows.Scan(
 			&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt,
 			&f.PackedAt,
-			&f.ShipmentStatus, &f.ShipmentID,
+			&f.ShipmentStatus, &f.ShipmentID, &f.Carrier, &f.TrackingNumber, &f.TrackingUrl, &f.ShippedAt, &f.DeliveredAt,
 			&f.OrderNumber, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
 			&f.SellerName,
 		); err != nil {

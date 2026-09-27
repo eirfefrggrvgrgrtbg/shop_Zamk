@@ -345,7 +345,26 @@ export interface CustomerFulfillment {
   updatedAt: string;
   shipmentId?: string | null;
   shipmentStatus?: string | null;
+  carrier?: string | null;
+  trackingNumber?: string | null;
+  trackingUrl?: string | null;
+  shippedAt?: string | null;
+  deliveredAt?: string | null;
   items: CustomerFulfillmentItem[];
+}
+
+export interface CustomerShipment {
+  id: string;
+  orderId: string;
+  fulfillmentId?: string | null;
+  status: string;
+  carrier?: string | null;
+  trackingNumber?: string | null;
+  trackingUrl?: string | null;
+  shippedAt?: string | null;
+  deliveredAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ReturnItemRequest {

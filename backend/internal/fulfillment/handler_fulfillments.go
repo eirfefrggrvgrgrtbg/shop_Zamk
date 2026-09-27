@@ -113,6 +113,16 @@ func (h *Handler) GetCustomerOrderFulfillments(w http.ResponseWriter, r *http.Re
 			s := f.ShipmentID.String()
 			shipmentIDStr = &s
 		}
+		var shippedAtStr *string
+		if f.ShippedAt != nil {
+			s := f.ShippedAt.Format("2006-01-02T15:04:05Z07:00")
+			shippedAtStr = &s
+		}
+		var deliveredAtStr *string
+		if f.DeliveredAt != nil {
+			s := f.DeliveredAt.Format("2006-01-02T15:04:05Z07:00")
+			deliveredAtStr = &s
+		}
 
 		safeFulfillments = append(safeFulfillments, CustomerFulfillmentResponse{
 			ID:             f.ID.String(),
@@ -124,6 +134,11 @@ func (h *Handler) GetCustomerOrderFulfillments(w http.ResponseWriter, r *http.Re
 			UpdatedAt:      f.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			ShipmentID:     shipmentIDStr,
 			ShipmentStatus: f.ShipmentStatus,
+			Carrier:        f.Carrier,
+			TrackingNumber: f.TrackingNumber,
+			TrackingUrl:    f.TrackingUrl,
+			ShippedAt:      shippedAtStr,
+			DeliveredAt:    deliveredAtStr,
 			Items:          f.Items,
 		})
 	}

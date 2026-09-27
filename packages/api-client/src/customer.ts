@@ -8,6 +8,7 @@ import type {
   CustomerReturnListResponse,
   ReviewCreateRequest,
   CustomerFulfillment,
+  CustomerShipment,
   ReturnShipment,
   CreateReturnShipmentRequest,
   CDEKOffice,
@@ -56,6 +57,10 @@ export const getOrder = async (orderId: string): Promise<Order> => {
 export const getCustomerOrderFulfillments = async (orderId: string): Promise<CustomerFulfillment[]> => {
   const res = await request<any>('GET', `/customer/orders/${orderId}/fulfillments`);
   return res?.items || (Array.isArray(res) ? res : []);
+};
+
+export const getCustomerShipment = async (orderId: string): Promise<CustomerShipment> => {
+  return request<CustomerShipment>('GET', `/customer/orders/${orderId}/shipment`);
 };
 
 // P0 fix: was /pay, backend route is /payment
