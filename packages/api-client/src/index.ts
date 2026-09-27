@@ -7,3 +7,4 @@ export * from './public';
 export * from './customer';
 export * from './seller';
 export * from './admin';
+export * from './behavior';

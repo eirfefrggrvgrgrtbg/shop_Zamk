@@ -39,6 +39,7 @@ import { AuctionLotDetail } from './pages/AuctionLotDetail';
 import { AuctionWins } from './pages/AuctionWins';
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { startBehaviorTracking, stopBehaviorTracking } from './lib/behavior';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -47,6 +48,13 @@ function ScrollToTop() {
 }
 
 function App() {
+  useEffect(() => {
+    startBehaviorTracking();
+    return () => {
+      stopBehaviorTracking();
+    };
+  }, []);
+
   return (
     <ThemeProvider>
       <AuthProvider>
