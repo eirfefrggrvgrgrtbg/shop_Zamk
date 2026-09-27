@@ -92,6 +92,10 @@ func NewHandler(service *Service, refreshTTLDays int, cookieConfig CookieConfig)
 	}
 }
 
+func (h *Handler) Service() *Service {
+	return h.service
+}
+
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

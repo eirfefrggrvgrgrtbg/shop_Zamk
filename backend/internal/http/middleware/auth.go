@@ -100,3 +100,65 @@ func RequireSellerAccess() func(http.Handler) http.Handler {
 	return RequireRole("seller")
 }
 
+
+type SessionValidator interface {
+	ValidateSessionToken(ctx context.Context, rawRefreshToken string) (uuid.UUID, string, string, error)
+}
+
+func OptionalAuthMiddleware(tokenService *auth.TokenService, sessionValidator ...SessionValidator) func(http.Handler) http.Handler {
+	var validator SessionValidator
+	if len(sessionValidator) > 0 {
+		validator = sessionValidator[0]
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 1. Try Bearer token if present
+			authHeader := r.Header.Get("Authorization")
+			if authHeader != "" {
+				parts := strings.Split(authHeader, " ")
+				if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
+					tokenString := parts[1]
+					claims, err := tokenService.ValidateAccessToken(tokenString)
+					if err == nil {
+						if sub, ok := claims["sub"].(string); ok {
+							if userID, err := uuid.Parse(sub); err == nil {
+								email, _ := claims["email"].(string)
+								role, _ := claims["role"].(string)
+
+								ctx := context.WithValue(r.Context(), "userID", userID)
+								ctx = context.WithValue(ctx, "email", email)
+								ctx = context.WithValue(ctx, "role", role)
+								ctx = observability.WithActor(ctx, userID.String(), role)
+
+								next.ServeHTTP(w, r.WithContext(ctx))
+								return
+							}
+						}
+					}
+				}
+			}
+
+			// 2. Try cookie zamk_shop_session if present and validator provided
+			if validator != nil {
+				cookie, err := r.Cookie(auth.CookieShopSession)
+				if err == nil && cookie.Value != "" {
+					userID, email, role, err := validator.ValidateSessionToken(r.Context(), cookie.Value)
+					if err == nil {
+						ctx := context.WithValue(r.Context(), "userID", userID)
+						ctx = context.WithValue(ctx, "email", email)
+						ctx = context.WithValue(ctx, "role", role)
+						ctx = observability.WithActor(ctx, userID.String(), role)
+
+						next.ServeHTTP(w, r.WithContext(ctx))
+						return
+					}
+				}
+			}
+
+			// 3. Fallback: anonymous request (no identity attached)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+

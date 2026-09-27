@@ -16,6 +16,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auctions"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/audit"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/behavior"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
@@ -81,6 +82,7 @@ func New(
 	searchHandler *search.Handler,
 	auditHandler *audit.Handler,
 	deliveryHandler *delivery.Handler,
+	behaviorHandler *behavior.Handler,
 	suppliesHandler *supplies.Handler,
 	sellerAnalyticsHandler *selleranalytics.Handler,
 	testLabHandler *testlab.Handler,
@@ -658,6 +660,24 @@ func New(
 	r.Get("/api/public/products/{idOrSlug}/rating-summary", reviewsHandler.GetPublicRatingSummary)
 
 	_ = auditRepo
+	r.Route("/api/behavior", func(r chi.Router) {
+		r.Use(ratelimit.NewMiddleware(ratelimit.New(rdb.Client), cfg.RateLimit.Enabled, false, logger).Limit(ratelimit.Rule{
+			Group:  "behavior_ingestion",
+			Limit:  500, // Reasonable public rate limit
+			Window: time.Minute,
+			Key:    ratelimit.IPKey("behavior_events"),
+		}))
+
+		// Body Size Limit middleware (256 KiB)
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				req.Body = http.MaxBytesReader(w, req.Body, 256*1024)
+				next.ServeHTTP(w, req)
+			})
+		})
+
+		r.With(appMiddleware.OptionalAuthMiddleware(tokenService, authHandler.Service())).Post("/events", behaviorHandler.HandleIngest)
+	})
 
 	return r
 }

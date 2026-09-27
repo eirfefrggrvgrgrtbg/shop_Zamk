@@ -142,6 +142,32 @@ func (s *Service) Logout(ctx context.Context, rawRefreshToken string) error {
 	return s.authRepo.RevokeSession(ctx, session.ID)
 }
 
+func (s *Service) ValidateSessionToken(ctx context.Context, rawRefreshToken string) (uuid.UUID, string, string, error) {
+	hash := hashToken(rawRefreshToken)
+	session, err := s.authRepo.GetSessionByRefreshTokenHash(ctx, hash)
+	if err != nil {
+		return uuid.Nil, "", "", ErrInvalidToken
+	}
+
+	if session.RevokedAt != nil {
+		return uuid.Nil, "", "", ErrSessionRevoked
+	}
+	if time.Now().After(session.ExpiresAt) {
+		return uuid.Nil, "", "", ErrSessionExpired
+	}
+
+	user, err := s.userRepo.GetUserByID(ctx, session.UserID)
+	if err != nil {
+		return uuid.Nil, "", "", err
+	}
+
+	if user.Status != users.StatusActive {
+		return uuid.Nil, "", "", ErrUserBlocked
+	}
+
+	return user.ID, user.Email, user.Role, nil
+}
+
 func (s *Service) Me(ctx context.Context, userID uuid.UUID) (MeResponse, error) {
 	user, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
