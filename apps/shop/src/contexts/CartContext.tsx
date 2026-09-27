@@ -3,6 +3,7 @@ import type { Product } from '../types/catalog';
 import { useAuth } from './AuthContext';
 import { getCart, addToCart, updateCartItem as apiUpdateCartItem, removeFromCart as apiRemoveFromCart, clearCart as apiClearCart } from '@zamk/api-client/src/customer';
 import type { CartItem as ApiCartItem, Cart as ApiCart } from '@zamk/api-client/src/types';
+import { trackAddToCart, trackRemoveFromCart } from '../lib/behavior';
 
 export interface UIContextCartItem {
   id: string; // The cart item ID
@@ -112,32 +113,58 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     try {
       await addToCart({ productId, productVariantId, quantity });
       await fetchCart();
+      trackAddToCart({ productId, variantId: productVariantId, quantity });
     } catch (e: any) {
       throw e;
     }
   }, [isAuthenticated, openAuthModal, fetchCart]);
 
   const removeItem = useCallback(async (itemId: string) => {
+    const existing = items.find(i => i.id === itemId);
     try {
       await apiRemoveFromCart(itemId);
       await fetchCart();
+      if (existing) {
+        trackRemoveFromCart({
+          productId: existing.productId,
+          variantId: existing.productVariantId,
+          quantity: existing.quantity,
+        });
+      }
     } catch (e) {
       console.error(e);
     }
-  }, [fetchCart]);
+  }, [items, fetchCart]);
 
   const updateQuantity = useCallback(async (itemId: string, quantity: number) => {
     if (quantity <= 0) {
       await removeItem(itemId);
       return;
     }
+    const existing = items.find(i => i.id === itemId);
+    const prevQty = existing?.quantity ?? 0;
+    const delta = quantity - prevQty;
+
     try {
       await apiUpdateCartItem(itemId, quantity);
       await fetchCart();
+      if (existing && delta > 0) {
+        trackAddToCart({
+          productId: existing.productId,
+          variantId: existing.productVariantId,
+          quantity: delta,
+        });
+      } else if (existing && delta < 0) {
+        trackRemoveFromCart({
+          productId: existing.productId,
+          variantId: existing.productVariantId,
+          quantity: Math.abs(delta),
+        });
+      }
     } catch (e) {
       console.error(e);
     }
-  }, [fetchCart, removeItem]);
+  }, [items, fetchCart, removeItem]);
 
   const clearCart = useCallback(async () => {
     try {

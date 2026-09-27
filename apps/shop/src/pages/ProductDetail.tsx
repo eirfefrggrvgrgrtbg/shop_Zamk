@@ -9,6 +9,7 @@ import { PreviewPageMetadata } from '../components/PreviewPageMetadata';
 import { fetchProductById, fetchProductReviews, fetchProductPreviewByToken } from '../api/publicCatalog';
 import { recordProductView } from '@zamk/api-client/src/customer';
 import { isInsufficientStockError } from '@zamk/api-client/src/errors';
+import { trackProductView, trackVariantSelected } from '../lib/behavior';
 import {
   useVariantSelection,
   reconcileSelectionAfterStaleStock,
@@ -100,6 +101,7 @@ export function ProductDetail() {
   const { showToast } = useToast();
 
   const lastTrackedKeyRef = useRef<string | null>(null);
+  const lastTrackedProductIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Only record for authenticated customers on canonical published products (never preview)
@@ -118,6 +120,18 @@ export function ProductDetail() {
       console.debug('Failed to record product view', err);
     });
   }, [isAuthenticated, user?.id, product?.id, product?.isPreview]);
+
+  useEffect(() => {
+    // PERS.1D: Canonical behavioral event product_view for all visitors
+    if (isLoading || !product || product.isPreview || !product.id) {
+      return;
+    }
+    if (lastTrackedProductIdRef.current === product.id) {
+      return;
+    }
+    lastTrackedProductIdRef.current = product.id;
+    trackProductView(product.id);
+  }, [isLoading, product?.id, product?.isPreview]);
 
   const {
     dimensionType,
@@ -256,20 +270,31 @@ export function ProductDetail() {
 
     // Check if selected size remains buyable in new color (PDP.2B / PDP.2D2 Section 5)
     let nextSizeId: string | null = null;
+    let targetVariant: NonNullable<Product['variants']>[number] | undefined = undefined;
     if (selectedSizeId) {
-      const targetVariant = product?.variants?.find(
+      targetVariant = product?.variants?.find(
         v => v.isActive !== false &&
              getVariantColorId(v) === colorId &&
              getVariantSizeId(v) === selectedSizeId
       );
       if (isVariantBuyable(targetVariant)) {
         nextSizeId = selectedSizeId;
+      } else {
+        targetVariant = undefined;
       }
+    } else if (dimensionType === 'COLOR_ONLY') {
+      targetVariant = product?.variants?.find(
+        v => v.isActive !== false && getVariantColorId(v) === colorId
+      );
     }
 
     const nextParams = computeVariantUrlParams(searchParams, dimensionType, colorId, nextSizeId, product?.variants);
     if (!areSearchParamsEqual(nextParams, searchParams)) {
       setSearchParams(nextParams);
+    }
+
+    if (targetVariant?.id && targetVariant.id !== selectedVariant?.id) {
+      trackVariantSelected(product.id, targetVariant.id);
     }
   };
 
@@ -287,6 +312,23 @@ export function ProductDetail() {
     const nextParams = computeVariantUrlParams(searchParams, dimensionType, effColorId, sizeId, product?.variants);
     if (!areSearchParamsEqual(nextParams, searchParams)) {
       setSearchParams(nextParams);
+    }
+
+    let targetVariant: NonNullable<Product['variants']>[number] | undefined = undefined;
+    if (dimensionType === 'COLOR_AND_SIZE' && selectedColorId) {
+      targetVariant = product?.variants?.find(
+        v => v.isActive !== false &&
+             getVariantColorId(v) === selectedColorId &&
+             getVariantSizeId(v) === sizeId
+      );
+    } else if (dimensionType === 'SIZE_ONLY') {
+      targetVariant = product?.variants?.find(
+        v => v.isActive !== false && getVariantSizeId(v) === sizeId
+      );
+    }
+
+    if (targetVariant?.id && targetVariant.id !== selectedVariant?.id) {
+      trackVariantSelected(product.id, targetVariant.id);
     }
   };
 

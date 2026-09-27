@@ -4,6 +4,7 @@ import { mapFavoritesToCatalog } from '../api/publicCatalog';
 import { setAuthReturnPath } from '../components/account/CustomerProtectedRoute';
 import { useAuth } from './AuthContext';
 import type { Product } from '../types/catalog';
+import { trackFavoriteAdded, trackFavoriteRemoved } from '../lib/behavior';
 
 interface FavoritesContextType {
   favorites: Product[];
@@ -73,9 +74,11 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
     try {
       if (isFav) {
         await removeFavorite(productId);
+        trackFavoriteRemoved(productId);
       } else {
         await addFavorite(productId);
         await loadFavorites();
+        trackFavoriteAdded(productId);
       }
     } catch (err) {
       console.error('Failed to toggle favorite', err);

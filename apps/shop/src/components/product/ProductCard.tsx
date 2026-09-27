@@ -10,14 +10,27 @@ import { useCart } from '../../contexts/CartContext';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { fetchProductById } from '../../api/publicCatalog';
-import { useVariantSelection, isLightColor, type ProductVariantItem } from '../../lib/variantSelection';
+import {
+  useVariantSelection,
+  isLightColor,
+  getVariantColorId,
+  getVariantSizeId,
+  type ProductVariantItem,
+} from '../../lib/variantSelection';
+import { useCatalogImpression, trackVariantSelected } from '../../lib/behavior';
 
 interface ProductCardProps {
   product: Product;
   previewUrl?: string;
+  placement?: string;
 }
 
-export function ProductCard({ product, previewUrl }: ProductCardProps) {
+export function ProductCard({ product, previewUrl, placement = 'catalog_grid' }: ProductCardProps) {
+  const cardRef = useCatalogImpression<HTMLDivElement>({
+    productId: product.id,
+    placement,
+    disabled: Boolean(product.isPreview),
+  });
   const { user, openAuthModal } = useAuth();
   const { toggleFavorite, isFavorite } = useFavorites();
   const { showToast } = useToast();
@@ -89,6 +102,7 @@ export function ProductCard({ product, previewUrl }: ProductCardProps) {
       <div className="group relative flex flex-col items-center w-full transition-all duration-500 hover:-translate-y-2">
         {/* Фото Polaroid */}
         <div
+          ref={cardRef}
           className="relative w-full bg-white/5 dark:bg-zinc-800/5 backdrop-blur-xl p-3 pb-8 shadow-sm hover:shadow-lg dark:shadow-none rounded-2xl border border-white/20 dark:border-white/5 transition-shadow"
         >
           <div className="relative w-full aspect-[3/4] overflow-hidden rounded-[12px] bg-white/5 dark:bg-zinc-900/10 border border-white/10 dark:border-white/5">
@@ -273,6 +287,40 @@ function QuickBuyModalBody({
     selectSize,
   } = useVariantSelection(product.variants, product.sizeChart);
 
+  const handleSelectColor = (colorId: string) => {
+    selectColor(colorId);
+    let targetVariant: ProductVariantItem | undefined = undefined;
+    if (selectedSizeId) {
+      targetVariant = product.variants?.find(
+        v => v.isActive !== false && getVariantColorId(v) === colorId && getVariantSizeId(v) === selectedSizeId
+      );
+    } else if (dimensionType === 'COLOR_ONLY') {
+      targetVariant = product.variants?.find(
+        v => v.isActive !== false && getVariantColorId(v) === colorId
+      );
+    }
+    if (targetVariant?.id && targetVariant.id !== selectedVariant?.id) {
+      trackVariantSelected(product.id, targetVariant.id);
+    }
+  };
+
+  const handleSelectSize = (sizeId: string) => {
+    selectSize(sizeId);
+    let targetVariant: ProductVariantItem | undefined = undefined;
+    if (dimensionType === 'COLOR_AND_SIZE' && selectedColorId) {
+      targetVariant = product.variants?.find(
+        v => v.isActive !== false && getVariantColorId(v) === selectedColorId && getVariantSizeId(v) === sizeId
+      );
+    } else if (dimensionType === 'SIZE_ONLY') {
+      targetVariant = product.variants?.find(
+        v => v.isActive !== false && getVariantSizeId(v) === sizeId
+      );
+    }
+    if (targetVariant?.id && targetVariant.id !== selectedVariant?.id) {
+      trackVariantSelected(product.id, targetVariant.id);
+    }
+  };
+
   const colorImage = selectedColorId && product.images
     ? product.images.find(img => img.colorId === selectedColorId)?.url
     : undefined;
@@ -326,7 +374,7 @@ function QuickBuyModalBody({
                     aria-checked={isSelected}
                     aria-label={color.name + (!color.hasInStock ? ' (нет в наличии)' : '')}
                     title={color.name + (!color.hasInStock ? ' (нет в наличии)' : '')}
-                    onClick={() => selectColor(color.id)}
+                    onClick={() => handleSelectColor(color.id)}
                     className={cn(
                       "relative w-8 h-8 rounded-full transition-all duration-150 flex items-center justify-center",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
@@ -388,7 +436,7 @@ function QuickBuyModalBody({
                     data-state={sizeObj.state}
                     onClick={() => {
                       if (!sizeObj.disabled) {
-                        selectSize(sizeObj.id);
+                        handleSelectSize(sizeObj.id);
                       }
                     }}
                     className={cn(

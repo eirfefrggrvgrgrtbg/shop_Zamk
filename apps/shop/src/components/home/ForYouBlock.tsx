@@ -62,7 +62,7 @@ export function ForYouBlock() {
       <div className="flex gap-4 overflow-x-auto pb-4 hide-scrollbar">
         {products.map((product) => (
           <div key={product.id} className="w-[200px] md:w-[240px] flex-shrink-0">
-            <ProductCard product={product} />
+            <ProductCard product={product} placement="home_recommendations" />
           </div>
         ))}
       </div>

@@ -236,60 +236,127 @@ export const behaviorClient = new BehaviorEmitter();
 // Convenience tracking functions
 export const trackProductView = (
   productId: string,
-  options?: { placement?: string; route?: string }
+  placementOrOptions?: string | { placement?: string; route?: string }
 ): void => {
-  behaviorClient.emit('product_view', { productId, ...options });
+  try {
+    const opts = typeof placementOrOptions === 'string' ? { placement: placementOrOptions } : placementOrOptions;
+    behaviorClient.emit('product_view', { productId, ...opts });
+  } catch {
+    // Failure isolation: telemetry must never throw to caller
+  }
 };
 
 export const trackCatalogImpression = (
   productId: string,
-  options?: { placement?: string; route?: string }
+  placementOrOptions?: string | { placement?: string; route?: string }
 ): void => {
-  behaviorClient.emit('catalog_impression', { productId, ...options });
+  try {
+    const opts = typeof placementOrOptions === 'string' ? { placement: placementOrOptions } : placementOrOptions;
+    behaviorClient.emit('catalog_impression', { productId, ...opts });
+  } catch {
+    // Failure isolation
+  }
 };
 
 export const trackVariantSelected = (
   productId: string,
   variantId: string,
-  options?: { placement?: string; route?: string }
+  placementOrOptions?: string | { placement?: string; route?: string }
 ): void => {
-  behaviorClient.emit('product_variant_selected', { productId, variantId, ...options });
+  try {
+    const opts = typeof placementOrOptions === 'string' ? { placement: placementOrOptions } : placementOrOptions;
+    behaviorClient.emit('product_variant_selected', { productId, variantId, ...opts });
+  } catch {
+    // Failure isolation
+  }
 };
 
 export const trackFavoriteAdded = (
   productId: string,
-  options?: { placement?: string; route?: string }
+  placementOrOptions?: string | { placement?: string; route?: string }
 ): void => {
-  behaviorClient.emit('favorite_added', { productId, ...options });
+  try {
+    const opts = typeof placementOrOptions === 'string' ? { placement: placementOrOptions } : placementOrOptions;
+    behaviorClient.emit('favorite_added', { productId, ...opts });
+  } catch {
+    // Failure isolation
+  }
 };
 
 export const trackFavoriteRemoved = (
   productId: string,
-  options?: { placement?: string; route?: string }
+  placementOrOptions?: string | { placement?: string; route?: string }
 ): void => {
-  behaviorClient.emit('favorite_removed', { productId, ...options });
+  try {
+    const opts = typeof placementOrOptions === 'string' ? { placement: placementOrOptions } : placementOrOptions;
+    behaviorClient.emit('favorite_removed', { productId, ...opts });
+  } catch {
+    // Failure isolation
+  }
 };
 
-export const trackAddToCart = (
+export interface TrackCartOptions {
+  productId: string;
+  variantId: string;
+  quantity: number;
+  placement?: string;
+  route?: string;
+}
+
+export function trackAddToCart(options: TrackCartOptions): void;
+export function trackAddToCart(
   productId: string,
   variantId: string,
   quantity: number,
   options?: { placement?: string; route?: string }
-): void => {
-  behaviorClient.emit('add_to_cart', { productId, variantId, quantity, ...options });
-};
+): void;
+export function trackAddToCart(
+  productIdOrOpts: string | TrackCartOptions,
+  variantId?: string,
+  quantity?: number,
+  options?: { placement?: string; route?: string }
+): void {
+  try {
+    if (typeof productIdOrOpts === 'object') {
+      behaviorClient.emit('add_to_cart', productIdOrOpts);
+    } else if (variantId && typeof quantity === 'number') {
+      behaviorClient.emit('add_to_cart', { productId: productIdOrOpts, variantId, quantity, ...options });
+    }
+  } catch {
+    // Failure isolation
+  }
+}
 
-export const trackRemoveFromCart = (
+export function trackRemoveFromCart(options: TrackCartOptions): void;
+export function trackRemoveFromCart(
   productId: string,
   variantId: string,
   quantity: number,
   options?: { placement?: string; route?: string }
-): void => {
-  behaviorClient.emit('remove_from_cart', { productId, variantId, quantity, ...options });
-};
+): void;
+export function trackRemoveFromCart(
+  productIdOrOpts: string | TrackCartOptions,
+  variantId?: string,
+  quantity?: number,
+  options?: { placement?: string; route?: string }
+): void {
+  try {
+    if (typeof productIdOrOpts === 'object') {
+      behaviorClient.emit('remove_from_cart', productIdOrOpts);
+    } else if (variantId && typeof quantity === 'number') {
+      behaviorClient.emit('remove_from_cart', { productId: productIdOrOpts, variantId, quantity, ...options });
+    }
+  } catch {
+    // Failure isolation
+  }
+}
 
 export const trackCheckoutStarted = (options?: { placement?: string; route?: string }): void => {
-  behaviorClient.emit('checkout_started', options);
+  try {
+    behaviorClient.emit('checkout_started', options);
+  } catch {
+    // Failure isolation
+  }
 };
 
 export const flushBehaviorEvents = (): Promise<void> => {

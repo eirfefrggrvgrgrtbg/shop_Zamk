@@ -443,7 +443,7 @@ export function Catalog() {
               <>
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
                   {apiProducts.map((product) => (
-                    <ProductCard key={product.id} product={product} />
+                    <ProductCard key={product.id} product={product} placement="catalog_grid" />
                   ))}
                 </div>
                 {hasMore && (

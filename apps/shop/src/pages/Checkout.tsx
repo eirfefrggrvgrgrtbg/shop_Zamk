@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Check } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -11,6 +11,7 @@ import { getDeliveryMethods } from '@zamk/api-client/src/public';
 import type { PublicDeliveryMethod } from '@zamk/api-client/src/types';
 import { useAuth } from '../contexts/AuthContext';
 import { formatVariantDetails } from '../lib/variantSelection';
+import { trackCheckoutStarted } from '../lib/behavior';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -36,6 +37,14 @@ export function Checkout() {
 
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('new');
+
+  const hasTrackedCheckoutRef = useRef(false);
+  useEffect(() => {
+    if (!hasTrackedCheckoutRef.current) {
+      hasTrackedCheckoutRef.current = true;
+      trackCheckoutStarted();
+    }
+  }, []);
 
   useEffect(() => {
     if (pendingOrderId && !items.length) {

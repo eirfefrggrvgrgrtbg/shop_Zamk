@@ -49,7 +49,7 @@ function FavoritesContent() {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8 mt-8">
             {favorites.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard key={product.id} product={product} placement="favorites_grid" />
             ))}
           </div>
         )}
