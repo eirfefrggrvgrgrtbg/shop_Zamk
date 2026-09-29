@@ -220,6 +220,65 @@ func (r *Repository) DeleteProductEmbeddingIfMatch(
 	return tag.RowsAffected() > 0, nil
 }
 
+const (
+	DefaultProductBatchLimit = 50
+	MaxProductBatchLimit     = 500
+)
+
+// ListPublishedProductIDsAfter returns a bounded slice of published product IDs strictly greater than afterProductID.
+// Ordering is deterministically ORDER BY id ASC for keyset pagination.
+func (r *Repository) ListPublishedProductIDsAfter(ctx context.Context, afterProductID *uuid.UUID, limit int) ([]uuid.UUID, error) {
+	if limit <= 0 {
+		limit = DefaultProductBatchLimit
+	} else if limit > MaxProductBatchLimit {
+		limit = MaxProductBatchLimit
+	}
+
+	var query string
+	var args []any
+
+	if afterProductID != nil && *afterProductID != uuid.Nil {
+		query = `
+			SELECT id
+			FROM products
+			WHERE status = 'published' AND id > $1
+			ORDER BY id ASC
+			LIMIT $2
+		`
+		args = []any{*afterProductID, limit}
+	} else {
+		query = `
+			SELECT id
+			FROM products
+			WHERE status = 'published'
+			ORDER BY id ASC
+			LIMIT $1
+		`
+		args = []any{limit}
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query published product IDs: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan published product ID: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating published product IDs: %w", err)
+	}
+
+	return ids, nil
+}
+
+
 func validateUpsertParams(params UpsertProductEmbeddingParams) error {
 	if params.ProductID == uuid.Nil {
 		return ErrEmbeddingNilProductID

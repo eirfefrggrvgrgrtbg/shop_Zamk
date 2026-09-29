@@ -618,3 +618,240 @@ func TestEmbeddingRepository_DBIntegration(t *testing.T) {
 		}
 	})
 }
+
+func TestEmbeddingRepository_ListPublishedProductIDsAfter(t *testing.T) {
+	pool, repo := setupEmbeddingTestDB(t)
+	ctx := context.Background()
+
+	sellerUserID := uuid.New()
+	sellerID := uuid.New()
+	catID := uuid.New()
+
+	// Create 4 published products and 4 non-published products
+	pubIDs := []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	draftID := uuid.New()
+	pendingID := uuid.New()
+	rejectedID := uuid.New()
+	hiddenID := uuid.New()
+
+	allIDs := append([]uuid.UUID{}, pubIDs...)
+	allIDs = append(allIDs, draftID, pendingID, rejectedID, hiddenID)
+
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		for _, pid := range allIDs {
+			if _, err := pool.Exec(cleanupCtx, `DELETE FROM products WHERE id = $1`, pid); err != nil {
+				t.Errorf("cleanup product %s failed: %v", pid, err)
+			}
+		}
+		if _, err := pool.Exec(cleanupCtx, `DELETE FROM categories WHERE id = $1`, catID); err != nil {
+			t.Errorf("cleanup category %s failed: %v", catID, err)
+		}
+		if _, err := pool.Exec(cleanupCtx, `DELETE FROM sellers WHERE id = $1`, sellerID); err != nil {
+			t.Errorf("cleanup seller %s failed: %v", sellerID, err)
+		}
+		if _, err := pool.Exec(cleanupCtx, `DELETE FROM users WHERE id = $1`, sellerUserID); err != nil {
+			t.Errorf("cleanup user %s failed: %v", sellerUserID, err)
+		}
+		pool.Close()
+	})
+
+	// Seed prerequisite rows
+	_, err := pool.Exec(ctx, `INSERT INTO users (id, email, password_hash, status, role, name, first_name) VALUES ($1, $2, 'hash', 'active', 'seller', 'Name', 'Name')`,
+		sellerUserID, "test_emb_list_seller_"+sellerUserID.String()+"@test.com")
+	if err != nil {
+		t.Fatalf("failed to insert prerequisite user: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `INSERT INTO sellers (id, brand_name, slug, status) VALUES ($1, 'TestBrandList', $2, 'active')`,
+		sellerID, "test-emb-list-brand-"+sellerID.String())
+	if err != nil {
+		t.Fatalf("failed to insert prerequisite seller: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `INSERT INTO categories (id, name, slug) VALUES ($1, 'TestCategoryList', $2)`,
+		catID, "test-emb-list-cat-"+catID.String())
+	if err != nil {
+		t.Fatalf("failed to insert prerequisite category: %v", err)
+	}
+
+	// Insert published products
+	for _, pid := range pubIDs {
+		_, err = pool.Exec(ctx, `
+			INSERT INTO products (id, seller_id, category_id, title, slug, status, source, price_cents, currency)
+			VALUES ($1, $2, $3, 'Published Product', $4, 'published', 'api', 1000, 'RUB')
+		`, pid, sellerID, catID, "test-emb-list-prod-"+pid.String())
+		if err != nil {
+			t.Fatalf("failed to insert published fixture product %s: %v", pid, err)
+		}
+	}
+
+	// Insert non-published products
+	nonPubFixtures := []struct {
+		id     uuid.UUID
+		status string
+	}{
+		{draftID, "draft"},
+		{pendingID, "pending_moderation"},
+		{rejectedID, "rejected"},
+		{hiddenID, "hidden"},
+	}
+	for _, np := range nonPubFixtures {
+		_, err = pool.Exec(ctx, `
+			INSERT INTO products (id, seller_id, category_id, title, slug, status, source, price_cents, currency)
+			VALUES ($1, $2, $3, 'Non-published Product', $4, $5, 'api', 1000, 'RUB')
+		`, np.id, sellerID, catID, "test-emb-list-np-"+np.id.String(), np.status)
+		if err != nil {
+			t.Fatalf("failed to insert non-published fixture product %s (%s): %v", np.id, np.status, err)
+		}
+	}
+
+	// Query DB for exact ascending order of our 4 published IDs
+	rows, err := pool.Query(ctx, `SELECT id FROM products WHERE id = ANY($1) ORDER BY id ASC`, pubIDs)
+	if err != nil {
+		t.Fatalf("failed to query sorted published IDs: %v", err)
+	}
+	var sortedPubIDs []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("failed to scan sorted ID: %v", err)
+		}
+		sortedPubIDs = append(sortedPubIDs, id)
+	}
+	rows.Close()
+
+	if len(sortedPubIDs) != 4 {
+		t.Fatalf("expected 4 sorted published products, got %d", len(sortedPubIDs))
+	}
+
+	// 1. Returns only published products; non-published are completely ignored
+	t.Run("ExcludesNonPublishedProducts", func(t *testing.T) {
+		idSet := make(map[uuid.UUID]bool)
+		var cursor *uuid.UUID
+
+		for {
+			page, err := repo.ListPublishedProductIDsAfter(ctx, cursor, 500)
+			if err != nil {
+				t.Fatalf("unexpected error listing published product IDs: %v", err)
+			}
+			if len(page) == 0 {
+				break
+			}
+			for _, id := range page {
+				idSet[id] = true
+			}
+			last := page[len(page)-1]
+			cursor = &last
+		}
+
+		// Ensure all our published fixtures are present
+		for _, pubID := range pubIDs {
+			if !idSet[pubID] {
+				t.Errorf("expected published fixture %s to be present in result", pubID)
+			}
+		}
+
+		// Ensure NONE of our non-published fixtures are present
+		for _, np := range nonPubFixtures {
+			if idSet[np.id] {
+				t.Errorf("VIOLATION: non-published fixture %s with status %q was returned!", np.id, np.status)
+			}
+		}
+	})
+
+
+	// 2. Deterministic ORDER BY id ASC across all results
+	t.Run("DeterministicAscendingOrder", func(t *testing.T) {
+		ids, err := repo.ListPublishedProductIDsAfter(ctx, nil, 500)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		for i := 1; i < len(ids); i++ {
+			if ids[i].String() <= ids[i-1].String() {
+				t.Fatalf("ordering violation at index %d: %s <= %s", i, ids[i], ids[i-1])
+			}
+		}
+	})
+
+	// 3. Cursor pagination works across pages
+	t.Run("CursorPaginationAcrossPages", func(t *testing.T) {
+		// Keyset pagination starting from right before the first fixture ID
+		// Or starting from nil, traversing page by page
+		cursor := &sortedPubIDs[0]
+		page1, err := repo.ListPublishedProductIDsAfter(ctx, cursor, 2)
+		if err != nil {
+			t.Fatalf("unexpected error on page 1: %v", err)
+		}
+
+		if len(page1) == 0 {
+			t.Fatalf("expected non-empty page 1 after %s", *cursor)
+		}
+		for _, id := range page1 {
+			if id.String() <= cursor.String() {
+				t.Fatalf("keyset violation: id %s is not > cursor %s", id, *cursor)
+			}
+		}
+
+		lastID := page1[len(page1)-1]
+		page2, err := repo.ListPublishedProductIDsAfter(ctx, &lastID, 2)
+		if err != nil {
+			t.Fatalf("unexpected error on page 2: %v", err)
+		}
+		for _, id := range page2 {
+			if id.String() <= lastID.String() {
+				t.Fatalf("keyset violation on page 2: id %s is not > cursor %s", id, lastID)
+			}
+		}
+	})
+
+	// 4. Boundary checks: nil cursor, limit <= 0 defaults, limit capping
+	t.Run("BoundaryChecks", func(t *testing.T) {
+		// Nil cursor starts from beginning
+		fromStart, err := repo.ListPublishedProductIDsAfter(ctx, nil, 10)
+		if err != nil {
+			t.Fatalf("unexpected error with nil cursor: %v", err)
+		}
+		if len(fromStart) == 0 {
+			t.Fatalf("expected non-empty result from nil cursor")
+		}
+
+		// limit <= 0 normalizes to default (DefaultProductBatchLimit = 50)
+		defaultLimitIDs, err := repo.ListPublishedProductIDsAfter(ctx, nil, 0)
+		if err != nil {
+			t.Fatalf("unexpected error with limit 0: %v", err)
+		}
+		if len(defaultLimitIDs) == 0 {
+			t.Fatalf("expected non-empty result with default limit")
+		}
+
+		// limit > MaxProductBatchLimit is capped
+		cappedIDs, err := repo.ListPublishedProductIDsAfter(ctx, nil, 1000)
+		if err != nil {
+			t.Fatalf("unexpected error with oversized limit: %v", err)
+		}
+		if len(cappedIDs) > personalization.MaxProductBatchLimit {
+			t.Fatalf("expected at most %d items, got %d", personalization.MaxProductBatchLimit, len(cappedIDs))
+		}
+
+		// limit = 1 returns exactly 1 item
+		singleID, err := repo.ListPublishedProductIDsAfter(ctx, nil, 1)
+		if err != nil {
+			t.Fatalf("unexpected error with limit 1: %v", err)
+		}
+		if len(singleID) != 1 {
+			t.Fatalf("expected exactly 1 item, got %d", len(singleID))
+		}
+
+		// Maximum possible UUID returns empty slice
+		maxUUID := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+		emptyIDs, err := repo.ListPublishedProductIDsAfter(ctx, &maxUUID, 50)
+		if err != nil {
+			t.Fatalf("unexpected error with max UUID: %v", err)
+		}
+		if len(emptyIDs) != 0 {
+			t.Fatalf("expected 0 items after max UUID, got %d", len(emptyIDs))
+		}
+	})
+}
