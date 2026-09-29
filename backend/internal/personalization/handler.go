@@ -267,3 +267,28 @@ func (h *Handler) GetCustomerCatalog(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(resp)
 }
+
+// GetHomeRecommendations retrieves composed discovery recommendation blocks for the authenticated customer.
+func (h *Handler) GetHomeRecommendations(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value("userID")
+	if val == nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+
+	userID, ok := val.(uuid.UUID)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Invalid user context")
+		return
+	}
+
+	resp, err := h.service.GetHomeRecommendations(r.Context(), userID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get home recommendations")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}

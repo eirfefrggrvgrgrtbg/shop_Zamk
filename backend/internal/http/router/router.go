@@ -316,6 +316,7 @@ func New(
 		r.Get("/catalog", personalizationHandler.GetCustomerCatalog)
 		r.Get("/products/recently-viewed", personalizationHandler.GetRecentlyViewedProducts)
 		r.Get("/products/for-you", personalizationHandler.GetForYouProducts)
+		r.Get("/recommendations/home", personalizationHandler.GetHomeRecommendations)
 		r.Post("/products/{productId}/view", personalizationHandler.RecordProductView)
 
 		r.Get("/profile", usersHandler.GetProfile)

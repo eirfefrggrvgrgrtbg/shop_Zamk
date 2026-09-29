@@ -3,6 +3,7 @@ package personalization
 import (
 	"time"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/google/uuid"
 )
 
@@ -40,7 +41,29 @@ const (
 	DefaultNewProductsLimit = 12
 	MaxNewProductsLimit     = 50
 	LookbackNewProductsDays = 14
+
+	RecommendationBlockTypeForYou = "for_you"
+	RecommendationBlockTypePopular = "popular"
+	RecommendationBlockTypeNew     = "new"
+
+	RecommendationBlockTitleForYou = "Для вас"
+	RecommendationBlockTitlePopular = "Популярное"
+	RecommendationBlockTitleNew     = "Новинки"
+
+	TargetHomeRecommendationBlockSize = 12
 )
+
+// HomeRecommendationBlock represents a single discovery recommendation carousel block.
+type HomeRecommendationBlock struct {
+	Type  string                   `json:"type"`
+	Title string                   `json:"title"`
+	Items []products.PublicProduct `json:"items"`
+}
+
+// HomeRecommendationsResponse represents the composed discovery recommendation response for Home.
+type HomeRecommendationsResponse struct {
+	Blocks []HomeRecommendationBlock `json:"blocks"`
+}
 
 // CategoryAffinity captures an authenticated customer's category interest derived from
 // behavioral signals or specific provenances.

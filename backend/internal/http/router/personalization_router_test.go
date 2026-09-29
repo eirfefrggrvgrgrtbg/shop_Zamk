@@ -582,4 +582,47 @@ func TestPersonalization_CustomerProductViewRoute(t *testing.T) {
 		r.ServeHTTP(recCust, reqCust)
 		assert.Equal(t, http.StatusNotFound, recCust.Result().StatusCode)
 	})
+
+	// Home recommendation composer customer canonical route tests
+	getHomeRecs := func(token string) *http.Response {
+		req := httptest.NewRequest("GET", "/api/customer/recommendations/home", nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec.Result()
+	}
+
+	t.Run("Z11. home recommendations: anonymous -> 401", func(t *testing.T) {
+		res := getHomeRecs("")
+		assert.Equal(t, http.StatusUnauthorized, res.StatusCode)
+	})
+
+	t.Run("Z12. home recommendations: seller -> 403", func(t *testing.T) {
+		res := getHomeRecs(tokenSeller)
+		assert.Equal(t, http.StatusForbidden, res.StatusCode)
+	})
+
+	t.Run("Z13. home recommendations: admin -> 403", func(t *testing.T) {
+		res := getHomeRecs(tokenAdmin)
+		assert.Equal(t, http.StatusForbidden, res.StatusCode)
+	})
+
+	t.Run("Z14. home recommendations: customer -> 200", func(t *testing.T) {
+		res := getHomeRecs(tokenCustomerA)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("Z15. home recommendations: non-canonical routes return 404", func(t *testing.T) {
+		reqPub := httptest.NewRequest("GET", "/api/public/recommendations/home", nil)
+		recPub := httptest.NewRecorder()
+		r.ServeHTTP(recPub, reqPub)
+		assert.Equal(t, http.StatusNotFound, recPub.Result().StatusCode)
+
+		reqRoot := httptest.NewRequest("GET", "/api/recommendations/home", nil)
+		recRoot := httptest.NewRecorder()
+		r.ServeHTTP(recRoot, reqRoot)
+		assert.Equal(t, http.StatusNotFound, recRoot.Result().StatusCode)
+	})
 }
