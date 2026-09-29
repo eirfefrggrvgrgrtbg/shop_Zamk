@@ -613,10 +613,23 @@ func TestCustomerPreferenceProfile_Acceptance(t *testing.T) {
 			DO UPDATE SET last_viewed_at = $3, view_count = $4
 		`, userID, prodID, lastViewedAt, count)
 		require.NoError(t, err)
+
+		n := int(count)
+		if n <= 0 {
+			n = 1
+		}
+		for i := 0; i < n; i++ {
+			_, err = pgClient.Pool.Exec(ctx, `
+				INSERT INTO behavioral_events (id, event_type, source, user_id, product_id, occurred_at, received_at, metadata)
+				VALUES ($1, 'product_view', 'client', $2, $3, $4, $4, '{}'::jsonb)
+			`, uuid.New(), userID, prodID, lastViewedAt)
+			require.NoError(t, err)
+		}
 	}
 
 	defer func() {
 		if len(createdUserIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM behavioral_events WHERE user_id = ANY($1)", createdUserIDs)
 			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM customer_favorites WHERE user_id = ANY($1)", createdUserIDs)
 			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM customer_product_views WHERE user_id = ANY($1)", createdUserIDs)
 		}
@@ -1075,10 +1088,23 @@ func TestForYouCandidateEngine_Acceptance(t *testing.T) {
 			DO UPDATE SET last_viewed_at = $3, view_count = $4
 		`, userID, prodID, lastViewedAt, count)
 		require.NoError(t, err)
+
+		n := int(count)
+		if n <= 0 {
+			n = 1
+		}
+		for i := 0; i < n; i++ {
+			_, err = pgClient.Pool.Exec(ctx, `
+				INSERT INTO behavioral_events (id, event_type, source, user_id, product_id, occurred_at, received_at, metadata)
+				VALUES ($1, 'product_view', 'client', $2, $3, $4, $4, '{}'::jsonb)
+			`, uuid.New(), userID, prodID, lastViewedAt)
+			require.NoError(t, err)
+		}
 	}
 
 	defer func() {
 		if len(createdUserIDs) > 0 {
+			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM behavioral_events WHERE user_id = ANY($1)", createdUserIDs)
 			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM customer_favorites WHERE user_id = ANY($1)", createdUserIDs)
 			_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM customer_product_views WHERE user_id = ANY($1)", createdUserIDs)
 		}

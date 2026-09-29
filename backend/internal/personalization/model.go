@@ -16,8 +16,16 @@ type CustomerProductView struct {
 }
 
 const (
-	AffinityProvenanceFavorite = "favorite"
-	AffinityProvenanceViewed   = "viewed"
+	AffinityProvenanceFavorite  = "favorite"
+	AffinityProvenanceViewed    = "viewed"
+	AffinityProvenanceAggregate = "aggregate"
+
+	WeightProductView = 1
+	WeightFavorite    = 3
+	WeightOrderPaid   = 10
+
+	LookbackProductViewDays = 30
+	LookbackOrderPaidDays   = 180
 
 	DefaultProfileAffinityLimit = 5
 	MaxProfileAffinityLimit     = 20
@@ -27,27 +35,31 @@ const (
 )
 
 // CategoryAffinity captures an authenticated customer's category interest derived from
-// a specific signal source (favorites or views).
+// behavioral signals or specific provenances.
 type CategoryAffinity struct {
 	CategoryID           uuid.UUID  `json:"categoryId"`
 	DistinctProductCount int64      `json:"distinctProductCount"`
+	Score                int64      `json:"score"`
 	LatestInteractionAt  *time.Time `json:"latestInteractionAt,omitempty"`
 	Provenance           string     `json:"provenance"`
 }
 
 // BrandAffinity captures an authenticated customer's brand interest derived from
-// a specific signal source (favorites or views).
+// behavioral signals or specific provenances.
 type BrandAffinity struct {
 	BrandID              uuid.UUID  `json:"brandId"`
 	DistinctProductCount int64      `json:"distinctProductCount"`
+	Score                int64      `json:"score"`
 	LatestInteractionAt  *time.Time `json:"latestInteractionAt,omitempty"`
 	Provenance           string     `json:"provenance"`
 }
 
-// CustomerPreferenceProfile holds separately ranked category and brand affinities
-// for an authenticated customer without collapsing strong and soft signals into arbitrary scores.
+// CustomerPreferenceProfile holds aggregated category and brand affinities
+// for an authenticated customer derived deterministically from canonical behavioral signals.
 type CustomerPreferenceProfile struct {
 	UserID             uuid.UUID          `json:"userId"`
+	Categories         []CategoryAffinity `json:"categories"`
+	Brands             []BrandAffinity    `json:"brands"`
 	FavoriteCategories []CategoryAffinity `json:"favoriteCategories"`
 	FavoriteBrands     []BrandAffinity    `json:"favoriteBrands"`
 	ViewedCategories   []CategoryAffinity `json:"viewedCategories"`

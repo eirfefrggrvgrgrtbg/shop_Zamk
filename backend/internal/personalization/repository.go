@@ -250,7 +250,8 @@ func (r *Repository) GetSimilarProducts(ctx context.Context, productID uuid.UUID
 }
 
 // GetCustomerPreferenceProfile derives an authenticated customer's preference profile on read
-// from current favorites and product views without collapsing strong and soft signals into arbitrary scores.
+// deterministically from canonical behavioral events (product_view, favorite_added/favorite_removed, order_paid)
+// with fixed transparent weights (view=1 < favorite=3 < order_paid=10).
 func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uuid.UUID, limit int) (*CustomerPreferenceProfile, error) {
 	if limit <= 0 {
 		limit = DefaultProfileAffinityLimit
@@ -260,29 +261,171 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 
 	profile := &CustomerPreferenceProfile{
 		UserID:             userID,
+		Categories:         make([]CategoryAffinity, 0),
+		Brands:             make([]BrandAffinity, 0),
 		FavoriteCategories: make([]CategoryAffinity, 0),
 		FavoriteBrands:     make([]BrandAffinity, 0),
 		ViewedCategories:   make([]CategoryAffinity, 0),
 		ViewedBrands:       make([]BrandAffinity, 0),
 	}
 
-	// 1. Favorite Categories (Strong explicit preference)
-	// Ranked by distinct favorited products DESC, then trustworthy MAX(created_at) DESC, then category_id ASC.
-	favCatQuery := `
+	signalsCTE := fmt.Sprintf(`
+		WITH ranked_fav_events AS (
+			SELECT product_id, event_type, occurred_at,
+				   ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY occurred_at DESC, id DESC) AS rn
+			FROM behavioral_events
+			WHERE user_id = $1
+			  AND event_type IN ('favorite_added', 'favorite_removed')
+			  AND product_id IS NOT NULL
+		),
+		active_favs AS (
+			SELECT rfe.product_id, rfe.occurred_at
+			FROM ranked_fav_events rfe
+			WHERE rfe.rn = 1 AND rfe.event_type = 'favorite_added'
+
+			UNION ALL
+
+			SELECT cf.product_id, cf.created_at AS occurred_at
+			FROM customer_favorites cf
+			WHERE cf.user_id = $1
+			  AND NOT EXISTS (
+				  SELECT 1 FROM ranked_fav_events rfe
+				  WHERE rfe.product_id = cf.product_id
+			  )
+		),
+		signals AS (
+			-- 1. product_view: weak signal (weight 1), lookback 30 days
+			SELECT e.product_id, p.category_id, p.brand_id, e.occurred_at, %d AS weight, 'viewed' AS signal_type
+			FROM behavioral_events e
+			INNER JOIN products p ON e.product_id = p.id
+			WHERE e.user_id = $1
+			  AND e.event_type = 'product_view'
+			  AND e.product_id IS NOT NULL
+			  AND e.occurred_at >= now() - INTERVAL '%d days'
+
+			UNION ALL
+
+			-- 2. active favorite: medium signal (weight 3), current state
+			SELECT af.product_id, p.category_id, p.brand_id, af.occurred_at, %d AS weight, 'favorite' AS signal_type
+			FROM active_favs af
+			INNER JOIN products p ON af.product_id = p.id
+
+			UNION ALL
+
+			-- 3. order_paid: strong signal (weight 10), lookback 180 days
+			SELECT e.product_id, p.category_id, p.brand_id, e.occurred_at, %d AS weight, 'paid' AS signal_type
+			FROM behavioral_events e
+			INNER JOIN products p ON e.product_id = p.id
+			WHERE e.user_id = $1
+			  AND e.event_type = 'order_paid'
+			  AND e.product_id IS NOT NULL
+			  AND e.occurred_at >= now() - INTERVAL '%d days'
+		)
+	`, WeightProductView, LookbackProductViewDays, WeightFavorite, WeightOrderPaid, LookbackOrderPaidDays)
+
+	// 1. Unified Categories Profile (ranked by score DESC, then latest_interaction_at DESC, then category_id ASC)
+	catQuery := signalsCTE + `
 		SELECT
-			p.category_id,
-			COUNT(DISTINCT cf.product_id) AS distinct_product_count,
-			MAX(cf.created_at) AS latest_interaction_at
-		FROM customer_favorites cf
-		INNER JOIN products p ON cf.product_id = p.id
-		INNER JOIN categories c ON p.category_id = c.id
-		WHERE cf.user_id = $1
-		  AND p.category_id IS NOT NULL
-		GROUP BY p.category_id
+			s.category_id,
+			COUNT(DISTINCT s.product_id) AS distinct_product_count,
+			SUM(s.weight) AS score,
+			MAX(s.occurred_at) AS latest_interaction_at
+		FROM signals s
+		INNER JOIN categories c ON s.category_id = c.id
+		WHERE s.category_id IS NOT NULL
+		GROUP BY s.category_id
 		ORDER BY
-			COUNT(DISTINCT cf.product_id) DESC,
-			MAX(cf.created_at) DESC,
-			p.category_id ASC
+			SUM(s.weight) DESC,
+			MAX(s.occurred_at) DESC,
+			s.category_id ASC
+		LIMIT $2
+	`
+	catRows, err := r.db.Query(ctx, catQuery, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query customer category affinities: %w", err)
+	}
+	for catRows.Next() {
+		var catID uuid.UUID
+		var count int64
+		var score int64
+		var latest time.Time
+		if err := catRows.Scan(&catID, &count, &score, &latest); err != nil {
+			catRows.Close()
+			return nil, fmt.Errorf("failed to scan category affinity row: %w", err)
+		}
+		t := latest
+		profile.Categories = append(profile.Categories, CategoryAffinity{
+			CategoryID:           catID,
+			DistinctProductCount: count,
+			Score:                score,
+			LatestInteractionAt:  &t,
+			Provenance:           AffinityProvenanceAggregate,
+		})
+	}
+	catRows.Close()
+	if catRows.Err() != nil {
+		return nil, catRows.Err()
+	}
+
+	// 2. Unified Brands Profile (ranked by score DESC, then latest_interaction_at DESC, then brand_id ASC)
+	brandQuery := signalsCTE + `
+		SELECT
+			s.brand_id,
+			COUNT(DISTINCT s.product_id) AS distinct_product_count,
+			SUM(s.weight) AS score,
+			MAX(s.occurred_at) AS latest_interaction_at
+		FROM signals s
+		INNER JOIN brands b ON s.brand_id = b.id
+		WHERE s.brand_id IS NOT NULL
+		GROUP BY s.brand_id
+		ORDER BY
+			SUM(s.weight) DESC,
+			MAX(s.occurred_at) DESC,
+			s.brand_id ASC
+		LIMIT $2
+	`
+	brandRows, err := r.db.Query(ctx, brandQuery, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query customer brand affinities: %w", err)
+	}
+	for brandRows.Next() {
+		var brandID uuid.UUID
+		var count int64
+		var score int64
+		var latest time.Time
+		if err := brandRows.Scan(&brandID, &count, &score, &latest); err != nil {
+			brandRows.Close()
+			return nil, fmt.Errorf("failed to scan brand affinity row: %w", err)
+		}
+		t := latest
+		profile.Brands = append(profile.Brands, BrandAffinity{
+			BrandID:              brandID,
+			DistinctProductCount: count,
+			Score:                score,
+			LatestInteractionAt:  &t,
+			Provenance:           AffinityProvenanceAggregate,
+		})
+	}
+	brandRows.Close()
+	if brandRows.Err() != nil {
+		return nil, brandRows.Err()
+	}
+
+	// 3. Favorite Categories (for backward-compatible downstream consumers)
+	favCatQuery := signalsCTE + `
+		SELECT
+			s.category_id,
+			COUNT(DISTINCT s.product_id) AS distinct_product_count,
+			SUM(s.weight) AS score,
+			MAX(s.occurred_at) AS latest_interaction_at
+		FROM signals s
+		INNER JOIN categories c ON s.category_id = c.id
+		WHERE s.signal_type = 'favorite' AND s.category_id IS NOT NULL
+		GROUP BY s.category_id
+		ORDER BY
+			COUNT(DISTINCT s.product_id) DESC,
+			MAX(s.occurred_at) DESC,
+			s.category_id ASC
 		LIMIT $2
 	`
 	favCatRows, err := r.db.Query(ctx, favCatQuery, userID, limit)
@@ -292,8 +435,9 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 	for favCatRows.Next() {
 		var catID uuid.UUID
 		var count int64
+		var score int64
 		var latest time.Time
-		if err := favCatRows.Scan(&catID, &count, &latest); err != nil {
+		if err := favCatRows.Scan(&catID, &count, &score, &latest); err != nil {
 			favCatRows.Close()
 			return nil, fmt.Errorf("failed to scan favorite category row: %w", err)
 		}
@@ -301,6 +445,7 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 		profile.FavoriteCategories = append(profile.FavoriteCategories, CategoryAffinity{
 			CategoryID:           catID,
 			DistinctProductCount: count,
+			Score:                score,
 			LatestInteractionAt:  &t,
 			Provenance:           AffinityProvenanceFavorite,
 		})
@@ -310,23 +455,21 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 		return nil, favCatRows.Err()
 	}
 
-	// 2. Favorite Brands (Strong explicit preference)
-	// Ranked by distinct favorited products DESC, then trustworthy MAX(created_at) DESC, then brand_id ASC.
-	favBrandQuery := `
+	// 4. Favorite Brands (for backward-compatible downstream consumers)
+	favBrandQuery := signalsCTE + `
 		SELECT
-			p.brand_id,
-			COUNT(DISTINCT cf.product_id) AS distinct_product_count,
-			MAX(cf.created_at) AS latest_interaction_at
-		FROM customer_favorites cf
-		INNER JOIN products p ON cf.product_id = p.id
-		INNER JOIN brands b ON p.brand_id = b.id
-		WHERE cf.user_id = $1
-		  AND p.brand_id IS NOT NULL
-		GROUP BY p.brand_id
+			s.brand_id,
+			COUNT(DISTINCT s.product_id) AS distinct_product_count,
+			SUM(s.weight) AS score,
+			MAX(s.occurred_at) AS latest_interaction_at
+		FROM signals s
+		INNER JOIN brands b ON s.brand_id = b.id
+		WHERE s.signal_type = 'favorite' AND s.brand_id IS NOT NULL
+		GROUP BY s.brand_id
 		ORDER BY
-			COUNT(DISTINCT cf.product_id) DESC,
-			MAX(cf.created_at) DESC,
-			p.brand_id ASC
+			COUNT(DISTINCT s.product_id) DESC,
+			MAX(s.occurred_at) DESC,
+			s.brand_id ASC
 		LIMIT $2
 	`
 	favBrandRows, err := r.db.Query(ctx, favBrandQuery, userID, limit)
@@ -336,8 +479,9 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 	for favBrandRows.Next() {
 		var brandID uuid.UUID
 		var count int64
+		var score int64
 		var latest time.Time
-		if err := favBrandRows.Scan(&brandID, &count, &latest); err != nil {
+		if err := favBrandRows.Scan(&brandID, &count, &score, &latest); err != nil {
 			favBrandRows.Close()
 			return nil, fmt.Errorf("failed to scan favorite brand row: %w", err)
 		}
@@ -345,6 +489,7 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 		profile.FavoriteBrands = append(profile.FavoriteBrands, BrandAffinity{
 			BrandID:              brandID,
 			DistinctProductCount: count,
+			Score:                score,
 			LatestInteractionAt:  &t,
 			Provenance:           AffinityProvenanceFavorite,
 		})
@@ -354,24 +499,21 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 		return nil, favBrandRows.Err()
 	}
 
-	// 3. Viewed Categories (Soft behavioral signal)
-	// Distinct product count only (view_count is not used as affinity weight).
-	// Ties broken by MAX(last_viewed_at) DESC, then category_id ASC.
-	viewCatQuery := `
+	// 5. Viewed Categories (from product_view in behavioral_events, 30 days lookback)
+	viewCatQuery := signalsCTE + `
 		SELECT
-			p.category_id,
-			COUNT(DISTINCT cv.product_id) AS distinct_product_count,
-			MAX(cv.last_viewed_at) AS latest_interaction_at
-		FROM customer_product_views cv
-		INNER JOIN products p ON cv.product_id = p.id
-		INNER JOIN categories c ON p.category_id = c.id
-		WHERE cv.user_id = $1
-		  AND p.category_id IS NOT NULL
-		GROUP BY p.category_id
+			s.category_id,
+			COUNT(DISTINCT s.product_id) AS distinct_product_count,
+			SUM(s.weight) AS score,
+			MAX(s.occurred_at) AS latest_interaction_at
+		FROM signals s
+		INNER JOIN categories c ON s.category_id = c.id
+		WHERE s.signal_type = 'viewed' AND s.category_id IS NOT NULL
+		GROUP BY s.category_id
 		ORDER BY
-			COUNT(DISTINCT cv.product_id) DESC,
-			MAX(cv.last_viewed_at) DESC,
-			p.category_id ASC
+			COUNT(DISTINCT s.product_id) DESC,
+			MAX(s.occurred_at) DESC,
+			s.category_id ASC
 		LIMIT $2
 	`
 	viewCatRows, err := r.db.Query(ctx, viewCatQuery, userID, limit)
@@ -381,8 +523,9 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 	for viewCatRows.Next() {
 		var catID uuid.UUID
 		var count int64
+		var score int64
 		var latest time.Time
-		if err := viewCatRows.Scan(&catID, &count, &latest); err != nil {
+		if err := viewCatRows.Scan(&catID, &count, &score, &latest); err != nil {
 			viewCatRows.Close()
 			return nil, fmt.Errorf("failed to scan viewed category row: %w", err)
 		}
@@ -390,6 +533,7 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 		profile.ViewedCategories = append(profile.ViewedCategories, CategoryAffinity{
 			CategoryID:           catID,
 			DistinctProductCount: count,
+			Score:                score,
 			LatestInteractionAt:  &t,
 			Provenance:           AffinityProvenanceViewed,
 		})
@@ -399,24 +543,21 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 		return nil, viewCatRows.Err()
 	}
 
-	// 4. Viewed Brands (Soft behavioral signal)
-	// Distinct product count only (view_count is not used as affinity weight).
-	// Ties broken by MAX(last_viewed_at) DESC, then brand_id ASC.
-	viewBrandQuery := `
+	// 6. Viewed Brands (from product_view in behavioral_events, 30 days lookback)
+	viewBrandQuery := signalsCTE + `
 		SELECT
-			p.brand_id,
-			COUNT(DISTINCT cv.product_id) AS distinct_product_count,
-			MAX(cv.last_viewed_at) AS latest_interaction_at
-		FROM customer_product_views cv
-		INNER JOIN products p ON cv.product_id = p.id
-		INNER JOIN brands b ON p.brand_id = b.id
-		WHERE cv.user_id = $1
-		  AND p.brand_id IS NOT NULL
-		GROUP BY p.brand_id
+			s.brand_id,
+			COUNT(DISTINCT s.product_id) AS distinct_product_count,
+			SUM(s.weight) AS score,
+			MAX(s.occurred_at) AS latest_interaction_at
+		FROM signals s
+		INNER JOIN brands b ON s.brand_id = b.id
+		WHERE s.signal_type = 'viewed' AND s.brand_id IS NOT NULL
+		GROUP BY s.brand_id
 		ORDER BY
-			COUNT(DISTINCT cv.product_id) DESC,
-			MAX(cv.last_viewed_at) DESC,
-			p.brand_id ASC
+			COUNT(DISTINCT s.product_id) DESC,
+			MAX(s.occurred_at) DESC,
+			s.brand_id ASC
 		LIMIT $2
 	`
 	viewBrandRows, err := r.db.Query(ctx, viewBrandQuery, userID, limit)
@@ -426,8 +567,9 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 	for viewBrandRows.Next() {
 		var brandID uuid.UUID
 		var count int64
+		var score int64
 		var latest time.Time
-		if err := viewBrandRows.Scan(&brandID, &count, &latest); err != nil {
+		if err := viewBrandRows.Scan(&brandID, &count, &score, &latest); err != nil {
 			viewBrandRows.Close()
 			return nil, fmt.Errorf("failed to scan viewed brand row: %w", err)
 		}
@@ -435,6 +577,7 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 		profile.ViewedBrands = append(profile.ViewedBrands, BrandAffinity{
 			BrandID:              brandID,
 			DistinctProductCount: count,
+			Score:                score,
 			LatestInteractionAt:  &t,
 			Provenance:           AffinityProvenanceViewed,
 		})

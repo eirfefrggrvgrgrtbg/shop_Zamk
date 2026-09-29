@@ -146,6 +146,12 @@ func TestPersonalizationCatalog_A_Through_AA(t *testing.T) {
 	`, customerAffinityID, pSeedView1)
 	require.NoError(t, err)
 
+	_, err = pgClient.Pool.Exec(ctx, `
+		INSERT INTO behavioral_events (id, event_type, source, user_id, product_id, occurred_at, received_at, metadata)
+		VALUES ($1, 'product_view', 'client', $2, $3, now(), now(), '{}'::jsonb)
+	`, uuid.New(), customerAffinityID, pSeedView1)
+	require.NoError(t, err)
+
 	cat4ID := uuid.New()
 	brand4ID := uuid.New()
 	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO categories (id, name, slug, is_active, created_at, updated_at) VALUES ($1, 'Cat 4', $2, true, now(), now())`, cat4ID, "cat-"+cat4ID.String()[:8])
