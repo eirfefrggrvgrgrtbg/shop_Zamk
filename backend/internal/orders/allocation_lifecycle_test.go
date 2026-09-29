@@ -102,7 +102,7 @@ func setupAllocationLifecycleFixture(t *testing.T, ctx context.Context) *allocat
 	paymentsRepo := payments.NewRepository(db)
 	notifRepo := notifications.NewRepository(pgClient)
 	notifSvc := notifications.NewService(notifRepo, nil, nil)
-	paymentsSvc := payments.NewService(paymentsRepo, ordersRepo, invSvc, tbankProvider, pgClient, notifSvc, cfg)
+	paymentsSvc := payments.NewService(paymentsRepo, ordersRepo, invSvc, tbankProvider, pgClient, notifSvc, nil, cfg)
 
 	suffix := uuid.New().String()[:8]
 	sellerUserID := uuid.New()

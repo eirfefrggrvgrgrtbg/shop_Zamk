@@ -234,7 +234,7 @@ func TestInvalidWebhookHandler_ReturnsForbiddenWithoutOK(t *testing.T) {
 	// strict provider
 	strictProvider := NewTBankProvider("REAL_TERM", "REAL_PASS", "", "", "", true, "O", "hosted_form")
 	cfg := &config.Config{App: config.AppConfig{PaymentStuckPendingMinutes: 30}}
-	svcStrict := NewService(svc.repo, svc.ordersRepo, svc.inventorySvc, strictProvider, client, svc.notifSvc, cfg)
+	svcStrict := NewService(svc.repo, svc.ordersRepo, svc.inventorySvc, strictProvider, client, svc.notifSvc, nil, cfg)
 
 	h := NewHandler(svcStrict, "test")
 

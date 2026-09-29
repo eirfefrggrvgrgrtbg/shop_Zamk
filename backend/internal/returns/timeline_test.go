@@ -32,7 +32,7 @@ func TestReturnTimeline_ComprehensiveMatrix(t *testing.T) {
 
 	dbClient := &postgres.Client{Pool: pool}
 	repo := returns.NewRepository(pool)
-	svc := returns.NewService(repo, nil, nil, dbClient, nil, nil, 14, nil, nil, nil)
+	svc := returns.NewService(repo, nil, nil, dbClient, nil, nil, 14, nil, nil, nil, nil)
 
 	// Fixture IDs
 	customerUserID := uuid.New()
@@ -347,7 +347,7 @@ func TestReturnTimeline_CDEKOfficeLogistics(t *testing.T) {
 
 	dbClient := &postgres.Client{Pool: pool}
 	repo := returns.NewRepository(pool)
-	svc := returns.NewService(repo, nil, nil, dbClient, nil, nil, 14, nil, nil, nil)
+	svc := returns.NewService(repo, nil, nil, dbClient, nil, nil, 14, nil, nil, nil, nil)
 
 	userID := uuid.New()
 	sellerID := uuid.New()
@@ -424,7 +424,7 @@ func TestReturnTimeline_RejectedFixture(t *testing.T) {
 
 	dbClient := &postgres.Client{Pool: pool}
 	repo := returns.NewRepository(pool)
-	svc := returns.NewService(repo, nil, nil, dbClient, nil, nil, 14, nil, nil, nil)
+	svc := returns.NewService(repo, nil, nil, dbClient, nil, nil, 14, nil, nil, nil, nil)
 
 	userID := uuid.New()
 	sellerID := uuid.New()
@@ -499,7 +499,7 @@ func TestReturnTimeline_EqualTimestampTieBreak(t *testing.T) {
 
 	dbClient := &postgres.Client{Pool: pool}
 	repo := returns.NewRepository(pool)
-	svc := returns.NewService(repo, nil, nil, dbClient, nil, nil, 14, nil, nil, nil)
+	svc := returns.NewService(repo, nil, nil, dbClient, nil, nil, 14, nil, nil, nil, nil)
 
 	userID := uuid.New()
 	sellerID := uuid.New()
@@ -570,7 +570,7 @@ func TestReturnTimeline_RefundMatrix(t *testing.T) {
 
 	dbClient := &postgres.Client{Pool: pool}
 	repo := returns.NewRepository(pool)
-	svc := returns.NewService(repo, nil, nil, dbClient, nil, nil, 14, nil, nil, nil)
+	svc := returns.NewService(repo, nil, nil, dbClient, nil, nil, 14, nil, nil, nil, nil)
 
 	userID := uuid.New()
 	sellerID := uuid.New()

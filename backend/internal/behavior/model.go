@@ -33,3 +33,11 @@ type BehavioralEvent struct {
 	ReceivedAt  time.Time       `db:"received_at"`
 	Metadata    json.RawMessage `db:"metadata"`
 }
+
+var serverEventNamespace = uuid.MustParse("017e2e36-f13d-4c3e-b83b-93f5451a44c5")
+
+// DeterministicServerEventID generates a deterministic event ID based on business facts.
+func DeterministicServerEventID(eventType string, businessID1, businessID2 uuid.UUID) uuid.UUID {
+	name := eventType + ":" + businessID1.String() + ":" + businessID2.String()
+	return uuid.NewSHA1(serverEventNamespace, []byte(name))
+}

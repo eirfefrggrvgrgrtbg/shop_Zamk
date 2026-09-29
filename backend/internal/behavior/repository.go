@@ -2,9 +2,11 @@ package behavior
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type Repository struct {
@@ -34,8 +36,6 @@ func (r *Repository) InsertEvents(ctx context.Context, events []BehavioralEvent)
 		ON CONFLICT (id) DO NOTHING
 	`
 
-	// Start a transaction if needed, or just iterate. For performance on small batches, iterating is okay,
-	// but a transaction is cleaner.
 	tx, err := r.db.Pool.Begin(ctx)
 	if err != nil {
 		return 0, 0, err
@@ -63,6 +63,36 @@ func (r *Repository) InsertEvents(ctx context.Context, events []BehavioralEvent)
 
 	duplicates := len(events) - accepted
 	return accepted, duplicates, nil
+}
+
+// InsertEventsTx inserts events within an existing transaction.
+func (r *Repository) InsertEventsTx(ctx context.Context, tx pgx.Tx, events []BehavioralEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+	query := `
+		INSERT INTO behavioral_events (
+			id, event_type, source, visitor_id, user_id,
+			product_id, variant_id, category_id, order_id, return_id, order_item_id,
+			quantity, placement, route, occurred_at, received_at, metadata
+		) VALUES (
+			$1, $2, $3, $4, $5,
+			$6, $7, $8, $9, $10, $11,
+			$12, $13, $14, $15, $16, $17
+		)
+		ON CONFLICT (id) DO NOTHING
+	`
+	for _, e := range events {
+		_, err := tx.Exec(ctx, query,
+			e.ID, e.EventType, e.Source, e.VisitorID, e.UserID,
+			e.ProductID, e.VariantID, e.CategoryID, e.OrderID, e.ReturnID, e.OrderItemID,
+			e.Quantity, e.Placement, e.Route, e.OccurredAt, e.ReceivedAt, e.Metadata,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // VariantRecord represents an existing variant and its canonical product/category.
@@ -141,4 +171,40 @@ func (r *Repository) ValidateProductsAndVariants(ctx context.Context, variantIDs
 	}
 
 	return data, nil
+}
+
+// ProductBehaviorSnapshot represents a verified canonical product row and its nullable category_id.
+type ProductBehaviorSnapshot struct {
+	CategoryID *uuid.UUID
+}
+
+func (r *Repository) ResolveCategoriesTx(ctx context.Context, tx pgx.Tx, productIDs []uuid.UUID) (map[uuid.UUID]ProductBehaviorSnapshot, error) {
+	res := make(map[uuid.UUID]ProductBehaviorSnapshot, len(productIDs))
+	if len(productIDs) == 0 {
+		return res, nil
+	}
+	query := `SELECT id, category_id FROM products WHERE id = ANY($1)`
+	rows, err := tx.Query(ctx, query, productIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id uuid.UUID
+		var catID *uuid.UUID
+		if err := rows.Scan(&id, &catID); err != nil {
+			return nil, err
+		}
+		res[id] = ProductBehaviorSnapshot{CategoryID: catID}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, pid := range productIDs {
+		if _, ok := res[pid]; !ok {
+			return nil, fmt.Errorf("ResolveCategoriesTx: canonical product %s not found", pid)
+		}
+	}
+	return res, nil
 }

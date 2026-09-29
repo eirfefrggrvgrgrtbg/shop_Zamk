@@ -69,7 +69,7 @@ func newDispatchTruthFixture(t *testing.T, ctx context.Context) *dispatchTruthFi
 	db := postgresClient.Pool
 	repo := fulfillment.NewRepository(db)
 	ordersRepo := orders.NewRepository(db)
-	svc := fulfillment.NewService(repo, ordersRepo, postgresClient, nil, nil)
+	svc := fulfillment.NewService(repo, ordersRepo, postgresClient, nil, nil, nil)
 
 	f := &dispatchTruthFixture{
 		t:   t,

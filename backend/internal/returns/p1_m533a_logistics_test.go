@@ -333,11 +333,11 @@ func TestM533A_UnconfiguredProvider_ReturnsErrorAndNoPersist(t *testing.T) {
 	invSvc := inventory.NewService(nil, nil, fix.client)
 	payRepo := payments.NewRepository(fix.client.Pool)
 	cfg := &config.Config{App: config.AppConfig{PaymentStuckPendingMinutes: 30}}
-	paySvc := payments.NewService(payRepo, fix.ordersRepo, nil, nil, fix.client, nil, cfg)
+	paySvc := payments.NewService(payRepo, fix.ordersRepo, nil, nil, fix.client, nil, nil, cfg)
 	payoutRepo := payouts.NewRepository(fix.client.Pool)
 	payoutSvc := payouts.NewService(payoutRepo, fix.client, fix.returnsRepo, fix.ordersRepo, cfg, fix.notifSvc)
 
-	unconfiguredSvc := returns.NewService(fix.returnsRepo, fix.ordersRepo, invSvc, fix.client, payoutSvc, paySvc, 14, fix.notifSvc, nil, returns.NewCDEKProvider(config.CDEKConfig{}))
+	unconfiguredSvc := returns.NewService(fix.returnsRepo, fix.ordersRepo, invSvc, fix.client, payoutSvc, paySvc, 14, fix.notifSvc, nil, returns.NewCDEKProvider(config.CDEKConfig{}), nil)
 
 	_, err = unconfiguredSvc.CreateCustomerReturnShipment(ctx, fix.userID, retID, returns.CreateReturnShipmentRequest{
 		Method:         "cdek_office",

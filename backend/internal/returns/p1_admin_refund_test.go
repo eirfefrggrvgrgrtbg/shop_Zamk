@@ -30,8 +30,8 @@ func setupHTTPFixture(t *testing.T) (*postgres.Client, *Service) {
 
 	payRepo := payments.NewRepository(client.Pool)
 	cfg := &config.Config{App: config.AppConfig{PaymentStuckPendingMinutes: 30}}
-	paySvc := payments.NewService(payRepo, ordersRepo, nil, nil, client, nil, cfg)
-	svc := NewService(repo, ordersRepo, nil, client, nil, paySvc, 30, nil, nil, NewFakeLogisticsProvider())
+	paySvc := payments.NewService(payRepo, ordersRepo, nil, nil, client, nil, nil, cfg)
+	svc := NewService(repo, ordersRepo, nil, client, nil, paySvc, 30, nil, nil, NewFakeLogisticsProvider(), nil)
 
 	return client, svc
 }

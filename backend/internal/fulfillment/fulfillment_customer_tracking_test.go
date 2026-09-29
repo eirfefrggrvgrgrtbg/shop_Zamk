@@ -292,7 +292,7 @@ func TestCustomerMultiFulfillmentTracking(t *testing.T) {
 		require.NoError(t, err)
 
 		ordersRepo := orders.NewRepository(db)
-		svc := NewService(repo, ordersRepo, postgresClient, nil, nil)
+		svc := NewService(repo, ordersRepo, postgresClient, nil, nil, nil)
 		handler := NewHandler(svc)
 
 		req := httptest.NewRequest("GET", "/customer/orders/"+orderID.String()+"/fulfillments", nil)

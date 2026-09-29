@@ -128,7 +128,7 @@ func TestParallelConfirmReceiving_CreatesExactlyOneShipment(t *testing.T) {
 
 	repo := fulfillment.NewRepository(db.Pool)
 	ordersRepo := orders.NewRepository(db.Pool)
-	svc := fulfillment.NewService(repo, ordersRepo, db, &receivingTestMockPayoutsService{}, nil)
+	svc := fulfillment.NewService(repo, ordersRepo, db, &receivingTestMockPayoutsService{}, nil, nil)
 
 	// Ensure active receiving session exists
 	sess, err := svc.StartReceivingSession(ctx, &staffID, fulfillmentID)

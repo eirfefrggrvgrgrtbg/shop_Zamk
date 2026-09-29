@@ -40,7 +40,7 @@ func setupTestDB(t *testing.T) (*postgres.Client, *Service, *orders.Repository) 
 	}
 	notifSvc := notifications.NewService(notifRepo, nil, nil)
 
-	svc := NewService(paymentsRepo, ordersRepo, invSvc, tbankProvider, client, notifSvc, cfg)
+	svc := NewService(paymentsRepo, ordersRepo, invSvc, tbankProvider, client, notifSvc, nil, cfg)
 
 	return client, svc, ordersRepo
 }

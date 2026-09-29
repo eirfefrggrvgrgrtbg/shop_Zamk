@@ -45,7 +45,7 @@ func TestC10ShipmentGuardrails(t *testing.T) {
 	ordersRepo := orders.NewRepository(db.Pool)
 	
 	// Create service
-	svc := fulfillment.NewService(repo, ordersRepo, db, &mockPayoutsService{}, nil)
+	svc := fulfillment.NewService(repo, ordersRepo, db, &mockPayoutsService{}, nil, nil)
 
 	// Testing CreateShipment directly requires a full order with fulfillments
 	// Since creating an order in the database requires users, sellers, products, etc.

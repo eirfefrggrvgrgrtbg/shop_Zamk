@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -15,29 +16,32 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/behavior"
 )
 
 type Service struct {
-	repo         *Repository
-	ordersRepo   *orders.Repository
-	inventorySvc *inventory.Service
-	provider     Provider
-	db           *postgres.Client
-	notifSvc     *notifications.Service
-	cfg          *config.Config
-	logger       *slog.Logger
+	repo           *Repository
+	ordersRepo     *orders.Repository
+	inventorySvc   *inventory.Service
+	provider       Provider
+	db             *postgres.Client
+	notifSvc       *notifications.Service
+	cfg            *config.Config
+	logger         *slog.Logger
+	behaviorWriter behavior.EventWriter
 }
 
-func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *inventory.Service, provider Provider, db *postgres.Client, notifSvc *notifications.Service, cfg *config.Config) *Service {
+func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *inventory.Service, provider Provider, db *postgres.Client, notifSvc *notifications.Service, behaviorWriter behavior.EventWriter, cfg *config.Config) *Service {
 	return &Service{
-		repo:         repo,
-		ordersRepo:   ordersRepo,
-		inventorySvc: inventorySvc,
-		provider:     provider,
-		db:           db,
-		notifSvc:     notifSvc,
-		cfg:          cfg,
-		logger:       slog.Default(),
+		repo:           repo,
+		ordersRepo:     ordersRepo,
+		inventorySvc:   inventorySvc,
+		provider:       provider,
+		db:             db,
+		notifSvc:       notifSvc,
+		cfg:            cfg,
+		logger:         slog.Default(),
+		behaviorWriter: behaviorWriter,
 	}
 }
 
@@ -337,7 +341,8 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 			}
 
 			if isAuction {
-				if err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid"); err != nil {
+				updatedAt, err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid")
+				if err != nil {
 					return err
 				}
 				_, err = tx.Exec(ctx, `UPDATE auction_order_links SET status = 'paid', updated_at = now() WHERE order_id = $1`, order.ID)
@@ -380,10 +385,14 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 				if err := s.ordersRepo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
 					return err
 				}
+				if err := s.emitOrderPaidEventsTx(ctx, tx, order, updatedAt); err != nil {
+					return err
+				}
 
 			} else {
 				// 2. Normal Checkout Update Order
-				if err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid"); err != nil {
+				updatedAt, err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid")
+				if err != nil {
 					return err
 				}
 				if affected, err := s.ordersRepo.MarkOrderFulfillmentsStatusTx(ctx, tx, order.ID, "awaiting_payment", "paid"); err != nil {
@@ -438,6 +447,9 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 					ToStatus:   "paid",
 				}
 				if err := s.ordersRepo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
+					return err
+				}
+				if err := s.emitOrderPaidEventsTx(ctx, tx, order, updatedAt); err != nil {
 					return err
 				}
 
@@ -647,7 +659,8 @@ func (s *Service) ProcessMockPaymentAction(ctx context.Context, paymentID uuid.U
 			}
 
 			if isAuction {
-				if err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid"); err != nil {
+				updatedAt, err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid")
+				if err != nil {
 					return err
 				}
 				_, err = tx.Exec(ctx, `UPDATE auction_order_links SET status = 'paid', updated_at = now() WHERE order_id = $1`, order.ID)
@@ -670,8 +683,12 @@ func (s *Service) ProcessMockPaymentAction(ctx context.Context, paymentID uuid.U
 				if err := s.ordersRepo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
 					return err
 				}
+				if err := s.emitOrderPaidEventsTx(ctx, tx, order, updatedAt); err != nil {
+					return err
+				}
 			} else {
-				if err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid"); err != nil {
+				updatedAt, err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid")
+				if err != nil {
 					return err
 				}
 				if affected, err := s.ordersRepo.MarkOrderFulfillmentsStatusTx(ctx, tx, order.ID, "awaiting_payment", "paid"); err != nil {
@@ -736,6 +753,9 @@ func (s *Service) ProcessMockPaymentAction(ctx context.Context, paymentID uuid.U
 				_ = tx.QueryRow(ctx, `SELECT count(*) FROM order_items WHERE order_id = $1`, order.ID).Scan(&orderItemCount)
 				if orderItemCount > 0 && len(resIDs) == 0 {
 					return errors.New("cannot confirm payment: order has no active reservation")
+				}
+				if err := s.emitOrderPaidEventsTx(ctx, tx, order, updatedAt); err != nil {
+					return err
 				}
 
 				for _, rid := range resIDs {
@@ -979,4 +999,63 @@ func (s *Service) EnsureOrderInventoryHoldTx(ctx context.Context, tx pgx.Tx, use
 	}
 
 	return reacquired, reacquiredResID, allocationsCreatedCount, nil
+}
+
+func (s *Service) emitOrderPaidEventsTx(ctx context.Context, tx pgx.Tx, order *orders.Order, occurredAt time.Time) error {
+	if s.behaviorWriter == nil {
+		return nil
+	}
+
+	items, err := s.ordersRepo.GetOrderItemsTx(ctx, tx, order.ID)
+	if err != nil {
+		return err
+	}
+
+	var productIDs []uuid.UUID
+	for _, item := range items {
+		productIDs = append(productIDs, item.ProductID)
+	}
+
+	products, err := s.behaviorWriter.ResolveCategoriesTx(ctx, tx, productIDs)
+	if err != nil {
+		return err
+	}
+
+	var events []behavior.BehavioralEvent
+	receivedAt := time.Now().UTC()
+
+	for _, item := range items {
+		snap, ok := products[item.ProductID]
+		if !ok {
+			return fmt.Errorf("emitOrderPaidEventsTx: canonical product %s not found", item.ProductID)
+		}
+
+		qty := item.Quantity
+		var variantID *uuid.UUID
+		if item.ProductVariantID != uuid.Nil {
+			vid := item.ProductVariantID
+			variantID = &vid
+		}
+
+		eventID := behavior.DeterministicServerEventID("order_paid", order.ID, item.ID)
+
+		events = append(events, behavior.BehavioralEvent{
+			ID:          eventID,
+			EventType:   "order_paid",
+			Source:      behavior.SourceServer,
+			VisitorID:   nil,
+			UserID:      &order.UserID,
+			ProductID:   &item.ProductID,
+			VariantID:   variantID,
+			CategoryID:  snap.CategoryID,
+			OrderID:     &order.ID,
+			OrderItemID: &item.ID,
+			Quantity:    &qty,
+			OccurredAt:  occurredAt,
+			ReceivedAt:  receivedAt,
+			Metadata:    []byte(`{}`),
+		})
+	}
+
+	return s.behaviorWriter.InsertServerEventsTx(ctx, tx, events)
 }

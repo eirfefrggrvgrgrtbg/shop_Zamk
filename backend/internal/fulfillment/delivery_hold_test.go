@@ -56,7 +56,7 @@ func setupDeliveryHoldFixture(t *testing.T, ctx context.Context) *deliveryHoldFi
 	ordersRepo := orders.NewRepository(db)
 	payoutRepo := payouts.NewRepository(db)
 	payoutSvc := payouts.NewService(payoutRepo, client, nil, ordersRepo, nil, nil)
-	svc := fulfillment.NewService(repo, ordersRepo, client, payoutSvc, nil)
+	svc := fulfillment.NewService(repo, ordersRepo, client, payoutSvc, nil, nil)
 
 	sellerID := uuid.New()
 	_, err = db.Exec(ctx, `
@@ -380,7 +380,7 @@ func TestDeliverShipment_FinanceFailureAtomicity(t *testing.T) {
 			realPayouts:            f.payoutSvc,
 			failMarkOrderDelivered: true,
 		}
-		serviceWithFailingPayouts := fulfillment.NewService(f.repo, f.ordersRepo, f.client, mockPayouts, nil)
+		serviceWithFailingPayouts := fulfillment.NewService(f.repo, f.ordersRepo, f.client, mockPayouts, nil, nil)
 
 		priceCents := int64(4500)
 		qty := 1
@@ -429,7 +429,7 @@ func TestDeliverShipment_FinanceFailureAtomicity(t *testing.T) {
 			realPayouts:            f.payoutSvc,
 			failCreatePendingSales: true,
 		}
-		serviceWithFailingPayouts := fulfillment.NewService(f.repo, f.ordersRepo, f.client, mockPayouts, nil)
+		serviceWithFailingPayouts := fulfillment.NewService(f.repo, f.ordersRepo, f.client, mockPayouts, nil, nil)
 
 		priceCents := int64(2500)
 		qty := 1

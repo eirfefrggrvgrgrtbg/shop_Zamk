@@ -47,7 +47,7 @@ func setupTestService(t *testing.T) (*postgres.Client, *Service) {
 
 	repo := NewRepository(client.Pool)
 	cfg := &config.Config{App: config.AppConfig{PaymentStuckPendingMinutes: 30}}
-	svc := NewService(repo, orders.NewRepository(client.Pool), inventory.NewService(nil, nil, client), nil, client, notifications.NewService(nil, nil, nil), cfg)
+	svc := NewService(repo, orders.NewRepository(client.Pool), inventory.NewService(nil, nil, client), nil, client, notifications.NewService(nil, nil, nil), nil, cfg)
 
 	return client, svc
 }

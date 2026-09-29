@@ -104,8 +104,12 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 		cfg.TBank.TPayMode,
 	)
 
+	behaviorRepo := behavior.NewRepository(pgClient)
+	behaviorService := behavior.NewService(behaviorRepo)
+	behaviorHandler := behavior.NewHandler(behaviorService)
+
 	paymentsRepo := payments.NewRepository(pgClient.Pool)
-	paymentsService := payments.NewService(paymentsRepo, ordersRepo, inventoryService, tbankProvider, pgClient, notificationsService, cfg)
+	paymentsService := payments.NewService(paymentsRepo, ordersRepo, inventoryService, tbankProvider, pgClient, notificationsService, behaviorService, cfg)
 	paymentsHandler := payments.NewHandler(paymentsService, cfg.App.Env)
 
 	returnsRepo := returns.NewRepository(pgClient.Pool)
@@ -115,17 +119,13 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	payoutsHandler := payouts.NewHandler(payoutsService)
 
 	fulfillmentRepo := fulfillment.NewRepository(pgClient.Pool)
-	fulfillmentService := fulfillment.NewService(fulfillmentRepo, ordersRepo, pgClient, payoutsService, notificationsService)
+	fulfillmentService := fulfillment.NewService(fulfillmentRepo, ordersRepo, pgClient, payoutsService, notificationsService, behaviorService)
 	fulfillmentService.SetLogger(logger)
 	fulfillmentHandler := fulfillment.NewHandler(fulfillmentService)
 
 	deliveryRepo := delivery.NewRepository(pgClient)
 	deliveryService := delivery.NewService(deliveryRepo)
 	deliveryHandler := delivery.NewHandler(deliveryService)
-
-	behaviorRepo := behavior.NewRepository(pgClient)
-	behaviorService := behavior.NewService(behaviorRepo)
-	behaviorHandler := behavior.NewHandler(behaviorService)
 
 	suppliesRepo := supplies.NewRepository(pgClient.Pool)
 	suppliesService := supplies.NewService(pgClient.Pool, suppliesRepo)
@@ -145,7 +145,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	}
 
 	cdekProvider := returns.NewCDEKProvider(cfg.CDEK)
-	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, paymentsService, cfg.Worker.ReturnWindowDays, notificationsService, storageProvider, cdekProvider)
+	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, paymentsService, cfg.Worker.ReturnWindowDays, notificationsService, storageProvider, cdekProvider, behaviorService)
 	returnsHandler := returns.NewHandler(returnsService, cfg.App.Env)
 
 	// Staff RBAC

@@ -128,18 +128,34 @@ func (r *Repository) GetOrderForUpdateTx(ctx context.Context, tx pgx.Tx, id uuid
 	return &o, nil
 }
 
+
+type rowsQuerier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
+func (r *Repository) GetOrderItemsTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID) ([]OrderItem, error) {
+	if tx == nil {
+		return nil, errors.New("GetOrderItemsTx: tx is required")
+	}
+	return r.queryOrderItems(ctx, tx, orderID)
+}
+
 func (r *Repository) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]OrderItem, error) {
+	return r.queryOrderItems(ctx, r.db, orderID)
+}
+
+func (r *Repository) queryOrderItems(ctx context.Context, q rowsQuerier, orderID uuid.UUID) ([]OrderItem, error) {
 	query := `
 		SELECT id, order_id, product_id, product_variant_id, seller_id, title, product_slug, variant_size, variant_color, sku, image_url, price_cents, quantity, subtotal_price_cents, created_at
-		FROM order_items WHERE order_id = $1 ORDER BY created_at ASC
+		FROM order_items WHERE order_id = $1 ORDER BY created_at ASC, id ASC
 	`
-	rows, err := r.db.Query(ctx, query, orderID)
+	rows, err := q.Query(ctx, query, orderID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var items []OrderItem
+	items := make([]OrderItem, 0)
 	for rows.Next() {
 		var i OrderItem
 		if err := rows.Scan(&i.ID, &i.OrderID, &i.ProductID, &i.ProductVariantID, &i.SellerID, &i.Title, &i.ProductSlug, &i.VariantSize, &i.VariantColor, &i.Sku, &i.ImageURL, &i.PriceCents, &i.Quantity, &i.SubtotalPriceCents, &i.CreatedAt); err != nil {
@@ -147,8 +163,8 @@ func (r *Repository) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]Or
 		}
 		items = append(items, i)
 	}
-	if items == nil {
-		items = make([]OrderItem, 0)
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return items, nil
 }
@@ -610,10 +626,11 @@ func (r *Repository) GetSellerOrder(ctx context.Context, sellerID, orderID uuid.
 	return &o, nil
 }
 
-func (r *Repository) UpdateOrderStatusTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, status string) error {
-	query := `UPDATE orders SET status = $1, updated_at = now() WHERE id = $2`
-	_, err := tx.Exec(ctx, query, status, orderID)
-	return err
+func (r *Repository) UpdateOrderStatusTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, status string) (time.Time, error) {
+	query := `UPDATE orders SET status = $1, updated_at = now() WHERE id = $2 RETURNING updated_at`
+	var updatedAt time.Time
+	err := tx.QueryRow(ctx, query, status, orderID).Scan(&updatedAt)
+	return updatedAt, err
 }
 
 func (r *Repository) SetOrderCancelledTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID) error {

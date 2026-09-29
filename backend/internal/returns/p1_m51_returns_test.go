@@ -69,12 +69,12 @@ func setupM51Fixture(t *testing.T) *m51Fixture {
 
 	payRepo := payments.NewRepository(client.Pool)
 	cfg := &config.Config{App: config.AppConfig{PaymentStuckPendingMinutes: 30}}
-	paySvc := payments.NewService(payRepo, ordersRepo, nil, nil, client, nil, cfg)
+	paySvc := payments.NewService(payRepo, ordersRepo, nil, nil, client, nil, nil, cfg)
 	payoutRepo := payouts.NewRepository(client.Pool)
 	payoutSvc := payouts.NewService(payoutRepo, client, returnsRepo, ordersRepo, cfg, notifSvc)
 
 	windowDays := 14
-	svc := returns.NewService(returnsRepo, ordersRepo, invSvc, client, payoutSvc, paySvc, windowDays, notifSvc, nil, returns.NewFakeLogisticsProvider())
+	svc := returns.NewService(returnsRepo, ordersRepo, invSvc, client, payoutSvc, paySvc, windowDays, notifSvc, nil, returns.NewFakeLogisticsProvider(), nil)
 
 	fix := &m51Fixture{
 		client:      client,

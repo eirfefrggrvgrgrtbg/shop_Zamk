@@ -39,7 +39,7 @@ func setupPickingFixture(t *testing.T, ctx context.Context) *pickingFixture {
 	db := postgresClient.Pool
 	repo := fulfillment.NewRepository(db)
 	ordersRepo := orders.NewRepository(db)
-	svc := fulfillment.NewService(repo, ordersRepo, postgresClient, nil, nil) // Dependencies mocked/nil as this is a read model tes
+	svc := fulfillment.NewService(repo, ordersRepo, postgresClient, nil, nil, nil) // Dependencies mocked/nil as this is a read model tes
 
 	sellerID := uuid.New()
 	_, err = db.Exec(ctx, `

@@ -13,6 +13,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/behavior"
 )
 
 type payoutsService interface {
@@ -22,22 +23,24 @@ type payoutsService interface {
 }
 
 type Service struct {
-	repo       *Repository
-	ordersRepo *orders.Repository
-	db         *postgres.Client
-	payouts    payoutsService
-	notifSvc   *notifications.Service
-	logger     *slog.Logger
+	repo           *Repository
+	ordersRepo     *orders.Repository
+	db             *postgres.Client
+	payouts        payoutsService
+	notifSvc       *notifications.Service
+	logger         *slog.Logger
+	behaviorWriter behavior.EventWriter
 }
 
-func NewService(repo *Repository, ordersRepo *orders.Repository, db *postgres.Client, payouts payoutsService, notifSvc *notifications.Service) *Service {
+func NewService(repo *Repository, ordersRepo *orders.Repository, db *postgres.Client, payouts payoutsService, notifSvc *notifications.Service, behaviorWriter behavior.EventWriter) *Service {
 	return &Service{
-		repo:       repo,
-		ordersRepo: ordersRepo,
-		db:         db,
-		payouts:    payouts,
-		notifSvc:   notifSvc,
-		logger:     slog.Default(),
+		repo:           repo,
+		ordersRepo:     ordersRepo,
+		db:             db,
+		payouts:        payouts,
+		notifSvc:       notifSvc,
+		logger:         slog.Default(),
+		behaviorWriter: behaviorWriter,
 	}
 }
 
@@ -347,7 +350,7 @@ func (s *Service) UpdateShipmentStatus(ctx context.Context, adminID, shipmentID 
 						return err
 					}
 					if order.Status != newStatus {
-						if err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, newStatus); err != nil {
+						if _, err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, newStatus); err != nil {
 							return err
 						}
 						history := &orders.OrderStatusHistory{
@@ -438,7 +441,8 @@ func (s *Service) recalculateParentOrderStatusTx(ctx context.Context, tx pgx.Tx,
 	}
 
 	if order.Status != newStatus {
-		if err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, newStatus); err != nil {
+		updatedAt, err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, newStatus)
+		if err != nil {
 			return err
 		}
 		history := &orders.OrderStatusHistory{
@@ -451,6 +455,12 @@ func (s *Service) recalculateParentOrderStatusTx(ctx context.Context, tx pgx.Tx,
 		}
 		if err := s.ordersRepo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
 			return err
+		}
+
+		if newStatus == "delivered" {
+			if err := s.emitOrderDeliveredEventsTx(ctx, tx, order, updatedAt); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -488,4 +498,63 @@ func (s *Service) GetSellerShipment(ctx context.Context, userID, orderID uuid.UU
 	}
 	// Return limited details (filtering done in handler/dto mapping)
 	return s.repo.GetShipmentByOrderID(ctx, orderID)
+}
+
+func (s *Service) emitOrderDeliveredEventsTx(ctx context.Context, tx pgx.Tx, order *orders.Order, occurredAt time.Time) error {
+	if s.behaviorWriter == nil {
+		return nil
+	}
+
+	items, err := s.ordersRepo.GetOrderItemsTx(ctx, tx, order.ID)
+	if err != nil {
+		return err
+	}
+
+	var productIDs []uuid.UUID
+	for _, item := range items {
+		productIDs = append(productIDs, item.ProductID)
+	}
+
+	products, err := s.behaviorWriter.ResolveCategoriesTx(ctx, tx, productIDs)
+	if err != nil {
+		return err
+	}
+
+	var events []behavior.BehavioralEvent
+	receivedAt := time.Now().UTC()
+
+	for _, item := range items {
+		snap, ok := products[item.ProductID]
+		if !ok {
+			return fmt.Errorf("emitOrderDeliveredEventsTx: canonical product %s not found", item.ProductID)
+		}
+
+		qty := item.Quantity
+		var variantID *uuid.UUID
+		if item.ProductVariantID != uuid.Nil {
+			vid := item.ProductVariantID
+			variantID = &vid
+		}
+
+		eventID := behavior.DeterministicServerEventID("order_delivered", order.ID, item.ID)
+
+		events = append(events, behavior.BehavioralEvent{
+			ID:          eventID,
+			EventType:   "order_delivered",
+			Source:      behavior.SourceServer,
+			VisitorID:   nil,
+			UserID:      &order.UserID,
+			ProductID:   &item.ProductID,
+			VariantID:   variantID,
+			CategoryID:  snap.CategoryID,
+			OrderID:     &order.ID,
+			OrderItemID: &item.ID,
+			Quantity:    &qty,
+			OccurredAt:  occurredAt,
+			ReceivedAt:  receivedAt,
+			Metadata:    []byte(`{}`),
+		})
+	}
+
+	return s.behaviorWriter.InsertServerEventsTx(ctx, tx, events)
 }

@@ -120,7 +120,7 @@ func TestRecordDiscrepancy_PersistsResultWithoutShipment(t *testing.T) {
 
 	repo := fulfillment.NewRepository(db.Pool)
 	ordersRepo := orders.NewRepository(db.Pool)
-	svc := fulfillment.NewService(repo, ordersRepo, db, &receivingTestMockPayoutsService{}, notifSvc)
+	svc := fulfillment.NewService(repo, ordersRepo, db, &receivingTestMockPayoutsService{}, notifSvc, nil)
 
 	// Start active receiving session
 	sess, err := svc.StartReceivingSession(ctx, &staffID, fulfillmentID)

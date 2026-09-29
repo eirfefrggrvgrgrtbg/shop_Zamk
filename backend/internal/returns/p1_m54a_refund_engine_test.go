@@ -1644,7 +1644,7 @@ func TestM54A_PaymentCapacityAfterFailure(t *testing.T) {
 	ctx := context.Background()
 
 	payRepo := payments.NewRepository(fix.client.Pool)
-	paySvc := payments.NewService(payRepo, fix.ordersRepo, nil, nil, fix.client, nil, nil)
+	paySvc := payments.NewService(payRepo, fix.ordersRepo, nil, nil, fix.client, nil, nil, nil)
 
 	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 10) // OrderItem price = 1000 -> total 10000
 	payID := createSucceededPayment(t, fix, tOrd.orderID, 10000)

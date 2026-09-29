@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/behavior"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
@@ -47,9 +48,10 @@ type Service struct {
 	notifs            *notifications.Service
 	logisticsProvider ReturnLogisticsProvider
 	logger            *slog.Logger
+	behaviorWriter    behavior.EventWriter
 }
 
-func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *inventory.Service, db *postgres.Client, payouts payoutsService, payments paymentsService, windowDays int, notifs *notifications.Service, storageProvider storage.Provider, logisticsProvider ReturnLogisticsProvider) *Service {
+func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *inventory.Service, db *postgres.Client, payouts payoutsService, payments paymentsService, windowDays int, notifs *notifications.Service, storageProvider storage.Provider, logisticsProvider ReturnLogisticsProvider, behaviorWriter behavior.EventWriter) *Service {
 	return &Service{
 		storageProvider:   storageProvider,
 		repo:              repo,
@@ -58,6 +60,7 @@ func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *i
 		db:                db,
 		payouts:           payouts,
 		payments:          payments,
+		behaviorWriter:    behaviorWriter,
 		windowDays:        windowDays,
 		notifs:            notifs,
 		logisticsProvider: logisticsProvider,
@@ -408,6 +411,10 @@ func (s *Service) CreateReturn(ctx context.Context, userID, orderID uuid.UUID, r
 				OrderNumber: order.OrderNumber,
 				Items:       customerItems,
 			})
+
+			if err := s.emitReturnRequestedEventsTx(ctx, tx, ret, retItems); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -1269,4 +1276,75 @@ func (s *Service) AdvanceSimulatedReturnShipment(ctx context.Context, returnID u
 
 func (s *Service) GetReturnReceivingQueue(ctx context.Context) ([]AdminReturnReceivingQueueItem, error) {
 	return s.repo.GetReturnReceivingQueue(ctx)
+}
+
+func (s *Service) emitReturnRequestedEventsTx(ctx context.Context, tx pgx.Tx, ret *Return, items []ReturnItem) error {
+	if s.behaviorWriter == nil {
+		return nil
+	}
+
+	orderItems, err := s.ordersRepo.GetOrderItemsTx(ctx, tx, ret.OrderID)
+	if err != nil {
+		return err
+	}
+
+	orderItemMap := make(map[uuid.UUID]orders.OrderItem)
+	for _, oi := range orderItems {
+		orderItemMap[oi.ID] = oi
+	}
+
+	var productIDs []uuid.UUID
+	for _, item := range items {
+		oi, ok := orderItemMap[item.OrderItemID]
+		if !ok {
+			return fmt.Errorf("emitReturnRequestedEventsTx: missing order item %s for return item %s", item.OrderItemID, item.ID)
+		}
+		productIDs = append(productIDs, oi.ProductID)
+	}
+
+	products, err := s.behaviorWriter.ResolveCategoriesTx(ctx, tx, productIDs)
+	if err != nil {
+		return err
+	}
+
+	var events []behavior.BehavioralEvent
+	receivedAt := time.Now().UTC()
+
+	for _, item := range items {
+		oi := orderItemMap[item.OrderItemID]
+		snap, ok := products[oi.ProductID]
+		if !ok {
+			return fmt.Errorf("emitReturnRequestedEventsTx: canonical product %s not found", oi.ProductID)
+		}
+
+		qty := item.Quantity
+
+		var variantID *uuid.UUID
+		if oi.ProductVariantID != uuid.Nil {
+			vid := oi.ProductVariantID
+			variantID = &vid
+		}
+
+		eventID := behavior.DeterministicServerEventID("return_requested", ret.ID, item.ID)
+
+		events = append(events, behavior.BehavioralEvent{
+			ID:          eventID,
+			EventType:   "return_requested",
+			Source:      behavior.SourceServer,
+			VisitorID:   nil,
+			UserID:      &ret.UserID,
+			ProductID:   &oi.ProductID,
+			VariantID:   variantID,
+			CategoryID:  snap.CategoryID,
+			OrderID:     &ret.OrderID,
+			ReturnID:    &ret.ID,
+			OrderItemID: &oi.ID,
+			Quantity:    &qty,
+			OccurredAt:  ret.CreatedAt,
+			ReceivedAt:  receivedAt,
+			Metadata:    []byte(`{}`),
+		})
+	}
+
+	return s.behaviorWriter.InsertServerEventsTx(ctx, tx, events)
 }

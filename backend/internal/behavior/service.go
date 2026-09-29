@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type StructuralError struct {
@@ -22,6 +23,11 @@ func (e *StructuralError) Error() string {
 
 type Service struct {
 	repo *Repository
+}
+
+type EventWriter interface {
+	InsertServerEventsTx(ctx context.Context, tx pgx.Tx, events []BehavioralEvent) error
+	ResolveCategoriesTx(ctx context.Context, tx pgx.Tx, productIDs []uuid.UUID) (map[uuid.UUID]ProductBehaviorSnapshot, error)
 }
 
 func NewService(repo *Repository) *Service {
@@ -269,4 +275,21 @@ func (s *Service) cleanRoute(route *string) *string {
 		return nil
 	}
 	return &r
+}
+
+// InsertServerEventsTx handles inserting canonical server business events.
+func (s *Service) InsertServerEventsTx(ctx context.Context, tx pgx.Tx, events []BehavioralEvent) error {
+	for _, e := range events {
+		if !serverOnlyEvents[e.EventType] {
+			return fmt.Errorf("InsertServerEventsTx: %s is not a server-only event type", e.EventType)
+		}
+		if e.Source != SourceServer {
+			return fmt.Errorf("InsertServerEventsTx: source must be server")
+		}
+	}
+	return s.repo.InsertEventsTx(ctx, tx, events)
+}
+
+func (s *Service) ResolveCategoriesTx(ctx context.Context, tx pgx.Tx, productIDs []uuid.UUID) (map[uuid.UUID]ProductBehaviorSnapshot, error) {
+	return s.repo.ResolveCategoriesTx(ctx, tx, productIDs)
 }
