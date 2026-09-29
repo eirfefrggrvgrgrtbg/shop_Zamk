@@ -117,6 +117,229 @@ func (r *Repository) ListShipments(ctx context.Context, limit, offset int) ([]Sh
 	return list, nil
 }
 
+func (r *Repository) ListAdminShipments(ctx context.Context, limit, offset int) ([]AdminShipmentListItem, error) {
+	query := `
+		SELECT
+			s.id,
+			s.order_id,
+			o.order_number,
+			s.fulfillment_id,
+			of.status AS fulfillment_status,
+			of.seller_id,
+			sel.brand_name AS seller_name,
+			s.status,
+			s.carrier,
+			s.tracking_number,
+			s.tracking_url,
+			o.delivery_method_name,
+			COALESCE(item_counts.items_count, 0) AS items_count,
+			COALESCE(item_counts.units_count, 0) AS units_count,
+			of.packed_at,
+			s.shipped_at,
+			s.delivered_at,
+			s.created_at,
+			s.updated_at
+		FROM shipments s
+		JOIN orders o ON o.id = s.order_id
+		LEFT JOIN order_fulfillments of ON of.id = s.fulfillment_id
+		LEFT JOIN sellers sel ON sel.id = of.seller_id
+		LEFT JOIN LATERAL (
+			SELECT
+				COUNT(oi.id)::int AS items_count,
+				COALESCE(SUM(oi.quantity), 0)::int AS units_count
+			FROM order_items oi
+			WHERE (s.fulfillment_id IS NOT NULL AND oi.order_fulfillment_id = s.fulfillment_id)
+			   OR (s.fulfillment_id IS NULL AND oi.order_id = s.order_id)
+		) item_counts ON TRUE
+		ORDER BY s.created_at DESC, s.id DESC
+		LIMIT $1 OFFSET $2
+	`
+	rows, err := r.db.Query(ctx, query, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []AdminShipmentListItem
+	for rows.Next() {
+		var s AdminShipmentListItem
+		if err := rows.Scan(
+			&s.ID,
+			&s.OrderID,
+			&s.OrderNumber,
+			&s.FulfillmentID,
+			&s.FulfillmentStatus,
+			&s.SellerID,
+			&s.SellerName,
+			&s.Status,
+			&s.Carrier,
+			&s.TrackingNumber,
+			&s.TrackingUrl,
+			&s.DeliveryMethodName,
+			&s.ItemsCount,
+			&s.UnitsCount,
+			&s.PackedAt,
+			&s.ShippedAt,
+			&s.DeliveredAt,
+			&s.CreatedAt,
+			&s.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		s.ShipmentID = s.ID
+		list = append(list, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if list == nil {
+		list = make([]AdminShipmentListItem, 0)
+	}
+	return list, nil
+}
+
+func (r *Repository) GetAdminShipmentDetail(ctx context.Context, id uuid.UUID) (*AdminShipmentDetail, error) {
+	queryHeader := `
+		SELECT
+			s.id,
+			s.order_id,
+			o.order_number,
+			s.fulfillment_id,
+			of.status AS fulfillment_status,
+			of.seller_id,
+			sel.brand_name AS seller_name,
+			s.status,
+			s.carrier,
+			s.tracking_number,
+			s.tracking_url,
+			o.delivery_method_name,
+			o.customer_name,
+			o.customer_phone,
+			o.delivery_address,
+			of.packed_at,
+			s.shipped_at,
+			s.delivered_at,
+			s.created_at,
+			s.updated_at
+		FROM shipments s
+		JOIN orders o ON o.id = s.order_id
+		LEFT JOIN order_fulfillments of ON of.id = s.fulfillment_id
+		LEFT JOIN sellers sel ON sel.id = of.seller_id
+		WHERE s.id = $1
+	`
+	var d AdminShipmentDetail
+	err := r.db.QueryRow(ctx, queryHeader, id).Scan(
+		&d.ID,
+		&d.OrderID,
+		&d.OrderNumber,
+		&d.FulfillmentID,
+		&d.FulfillmentStatus,
+		&d.SellerID,
+		&d.SellerName,
+		&d.Status,
+		&d.Carrier,
+		&d.TrackingNumber,
+		&d.TrackingUrl,
+		&d.DeliveryMethodName,
+		&d.CustomerName,
+		&d.CustomerPhone,
+		&d.DeliveryAddress,
+		&d.PackedAt,
+		&d.ShippedAt,
+		&d.DeliveredAt,
+		&d.CreatedAt,
+		&d.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrShipmentNotFound
+		}
+		return nil, err
+	}
+	d.ShipmentID = d.ID
+
+	queryItems := `
+		SELECT
+			oi.id,
+			oi.product_id,
+			oi.product_variant_id,
+			oi.title,
+			NULLIF(COALESCE(NULLIF(oi.image_url, ''), img.image_url, NULLIF(p.main_image_url, '')), '') AS image_url,
+			NULLIF(COALESCE(NULLIF(oi.variant_color, ''), c.name_ru, NULLIF(pv.color, '')), '') AS variant_color,
+			NULLIF(COALESCE(NULLIF(oi.variant_size, ''), sv.value, NULLIF(pv.size, '')), '') AS variant_size,
+			NULLIF(COALESCE(NULLIF(oi.sku, ''), NULLIF(pv.sku, ''), NULLIF(pv.seller_sku, '')), '') AS sku,
+			oi.quantity
+		FROM order_items oi
+		LEFT JOIN products p ON p.id = oi.product_id
+		LEFT JOIN product_variants pv ON pv.id = oi.product_variant_id
+		LEFT JOIN colors c ON c.id = pv.color_id
+		LEFT JOIN size_values sv ON sv.id = pv.size_value_id
+		LEFT JOIN LATERAL (
+			SELECT COALESCE(pi.rendition_url, pi.image_url) AS image_url
+			FROM product_images pi
+			WHERE pi.product_id = oi.product_id
+			  AND (
+				(pv.color_id IS NOT NULL AND pi.color_id = pv.color_id)
+				OR pi.color_id IS NULL
+			  )
+			ORDER BY
+			  CASE
+				WHEN pv.color_id IS NOT NULL AND pi.color_id = pv.color_id THEN 1
+				WHEN pi.color_id IS NULL THEN 2
+				ELSE 3
+			  END ASC,
+			  pi.sort_order ASC,
+			  pi.created_at ASC
+			LIMIT 1
+		) img ON TRUE
+		WHERE ($1::uuid IS NOT NULL AND oi.order_fulfillment_id = $1)
+		   OR ($1::uuid IS NULL AND oi.order_id = $2)
+		ORDER BY oi.created_at ASC, oi.id ASC
+	`
+	rows, err := r.db.Query(ctx, queryItems, d.FulfillmentID, d.OrderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []AdminShipmentItem
+	unitsCount := 0
+	for rows.Next() {
+		var it AdminShipmentItem
+		var variantID uuid.UUID
+		if err := rows.Scan(
+			&it.OrderItemID,
+			&it.ProductID,
+			&variantID,
+			&it.ProductTitle,
+			&it.ImageURL,
+			&it.VariantColor,
+			&it.VariantSize,
+			&it.SKU,
+			&it.Quantity,
+		); err != nil {
+			return nil, err
+		}
+		if variantID != uuid.Nil {
+			v := variantID
+			it.VariantID = &v
+		}
+		unitsCount += it.Quantity
+		items = append(items, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = make([]AdminShipmentItem, 0)
+	}
+
+	d.Items = items
+	d.ItemsCount = len(items)
+	d.UnitsCount = unitsCount
+	return &d, nil
+}
+
 type LockedShipmentContext struct {
 	Shipment          *Shipment
 	OrderStatus       string

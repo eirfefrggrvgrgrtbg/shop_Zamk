@@ -30,17 +30,80 @@ type ShipmentEvent struct {
 	CreatedAt   time.Time  `json:"createdAt"`
 }
 
+type AdminShipmentListItem struct {
+	ID                 uuid.UUID  `json:"id"`
+	ShipmentID         uuid.UUID  `json:"shipmentId"`
+	OrderID            uuid.UUID  `json:"orderId"`
+	OrderNumber        *string    `json:"orderNumber,omitempty"`
+	FulfillmentID      *uuid.UUID `json:"fulfillmentId,omitempty"`
+	FulfillmentStatus  *string    `json:"fulfillmentStatus,omitempty"`
+	SellerID           *uuid.UUID `json:"sellerId,omitempty"`
+	SellerName         *string    `json:"sellerName,omitempty"`
+	Status             string     `json:"status"`
+	Carrier            *string    `json:"carrier"`
+	TrackingNumber     *string    `json:"trackingNumber"`
+	TrackingUrl        *string    `json:"trackingUrl"`
+	DeliveryMethodName *string    `json:"deliveryMethodName,omitempty"`
+	ItemsCount         int        `json:"itemsCount"`
+	UnitsCount         int        `json:"unitsCount"`
+	PackedAt           *time.Time `json:"packedAt,omitempty"`
+	ShippedAt          *time.Time `json:"shippedAt"`
+	DeliveredAt        *time.Time `json:"deliveredAt"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	UpdatedAt          time.Time  `json:"updatedAt"`
+}
+
+type AdminShipmentItem struct {
+	OrderItemID  uuid.UUID  `json:"orderItemId"`
+	ProductID    uuid.UUID  `json:"productId"`
+	VariantID    *uuid.UUID `json:"variantId,omitempty"`
+	ProductTitle string     `json:"productTitle"`
+	ImageURL     *string    `json:"imageUrl,omitempty"`
+	VariantColor *string    `json:"variantColor,omitempty"`
+	VariantSize  *string    `json:"variantSize,omitempty"`
+	SKU          *string    `json:"sku,omitempty"`
+	Quantity     int        `json:"quantity"`
+}
+
+type AdminShipmentDetail struct {
+	ID                 uuid.UUID           `json:"id"`
+	ShipmentID         uuid.UUID           `json:"shipmentId"`
+	OrderID            uuid.UUID           `json:"orderId"`
+	OrderNumber        *string             `json:"orderNumber,omitempty"`
+	FulfillmentID      *uuid.UUID          `json:"fulfillmentId,omitempty"`
+	FulfillmentStatus  *string             `json:"fulfillmentStatus,omitempty"`
+	SellerID           *uuid.UUID          `json:"sellerId,omitempty"`
+	SellerName         *string             `json:"sellerName,omitempty"`
+	Status             string              `json:"status"`
+	Carrier            *string             `json:"carrier"`
+	TrackingNumber     *string             `json:"trackingNumber"`
+	TrackingUrl        *string             `json:"trackingUrl"`
+	DeliveryMethodName *string             `json:"deliveryMethodName,omitempty"`
+	CustomerName       *string             `json:"customerName,omitempty"`
+	CustomerPhone      *string             `json:"customerPhone,omitempty"`
+	DeliveryAddress    *string             `json:"deliveryAddress,omitempty"`
+	ItemsCount         int                 `json:"itemsCount"`
+	UnitsCount         int                 `json:"unitsCount"`
+	Items              []AdminShipmentItem `json:"items"`
+	PackedAt           *time.Time          `json:"packedAt,omitempty"`
+	ShippedAt          *time.Time          `json:"shippedAt"`
+	DeliveredAt        *time.Time          `json:"deliveredAt"`
+	CreatedAt          time.Time           `json:"createdAt"`
+	UpdatedAt          time.Time           `json:"updatedAt"`
+}
+
 type Fulfillment struct {
-	ID                uuid.UUID         `json:"id"`
-	OrderID           uuid.UUID         `json:"orderId"`
-	SellerID          uuid.UUID         `json:"sellerId"`
-	SellerName        *string           `json:"sellerName,omitempty"`
-	Status            string            `json:"status"`
-	SubtotalCents     int64             `json:"subtotalCents"`
-	CommissionBps     int               `json:"commissionBps"`
-	SellerAmountCents int64             `json:"sellerAmountCents"`
-	CreatedAt         time.Time         `json:"createdAt"`
-	UpdatedAt         time.Time         `json:"updatedAt"`
+	ID                 uuid.UUID         `json:"id"`
+	FulfillmentID      uuid.UUID         `json:"fulfillmentId"`
+	OrderID            uuid.UUID         `json:"orderId"`
+	SellerID           uuid.UUID         `json:"sellerId"`
+	SellerName         *string           `json:"sellerName,omitempty"`
+	Status             string            `json:"status"`
+	SubtotalCents      int64             `json:"subtotalCents"`
+	CommissionBps      int               `json:"commissionBps"`
+	SellerAmountCents  int64             `json:"sellerAmountCents"`
+	CreatedAt          time.Time         `json:"createdAt"`
+	UpdatedAt          time.Time         `json:"updatedAt"`
 	OrderNumber        *string           `json:"orderNumber,omitempty"`
 	ReceivingCode      *string           `json:"receivingCode,omitempty"`
 	ReceivingQRToken   *string           `json:"receivingQrToken,omitempty"`
@@ -58,9 +121,12 @@ type Fulfillment struct {
 	TrackingUrl        *string           `json:"trackingUrl,omitempty"`
 	ShippedAt          *time.Time        `json:"shippedAt,omitempty"`
 	DeliveredAt        *time.Time        `json:"deliveredAt,omitempty"`
+	DeliveryMethodName *string           `json:"deliveryMethodName,omitempty"`
 	DeliveryAddress    *string           `json:"deliveryAddress,omitempty"`
 	CustomerName       *string           `json:"customerName,omitempty"`
 	CustomerPhone      *string           `json:"customerPhone,omitempty"`
+	ItemsCount         int               `json:"itemsCount"`
+	UnitsCount         int               `json:"unitsCount"`
 	Items              []FulfillmentItem `json:"items"`
 }
 

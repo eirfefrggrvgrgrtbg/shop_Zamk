@@ -97,12 +97,15 @@ type DispatchQueueItem struct {
 	FulfillmentID      uuid.UUID  `json:"fulfillmentId"`
 	OrderID            uuid.UUID  `json:"orderId"`
 	OrderNumber        string     `json:"orderNumber"`
+	SellerID           uuid.UUID  `json:"sellerId"`
+	SellerName         *string    `json:"sellerName,omitempty"`
 	Status             string     `json:"status"`
 	OrderStatus        string     `json:"orderStatus"`
 	PackedAt           *time.Time `json:"packedAt,omitempty"`
 	CreatedAt          time.Time  `json:"createdAt"`
 	DeliveryMethodName *string    `json:"deliveryMethodName,omitempty"`
 	ItemsCount         int        `json:"itemsCount"`
+	UnitsCount         int        `json:"unitsCount"`
 	TotalQuantity      int        `json:"totalQuantity"`
 	ShipmentID         *uuid.UUID `json:"shipmentId,omitempty"`
 	ShipmentStatus     *string    `json:"shipmentStatus,omitempty"`

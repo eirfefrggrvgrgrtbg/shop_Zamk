@@ -475,6 +475,8 @@ func (r *Repository) GetDispatchQueue(ctx context.Context) ([]DispatchQueueItem,
 			of.id AS fulfillment_id,
 			o.id AS order_id,
 			COALESCE(o.order_number, SUBSTRING(o.id::text, 1, 8)) AS order_number,
+			of.seller_id,
+			sel.brand_name AS seller_name,
 			of.status,
 			o.status AS order_status,
 			of.packed_at,
@@ -487,6 +489,7 @@ func (r *Repository) GetDispatchQueue(ctx context.Context) ([]DispatchQueueItem,
 			s.carrier AS shipment_carrier
 		FROM order_fulfillments of
 		JOIN orders o ON o.id = of.order_id
+		JOIN sellers sel ON sel.id = of.seller_id
 		JOIN order_items oi ON oi.order_fulfillment_id = of.id
 		LEFT JOIN shipments s ON (
 			s.fulfillment_id = of.id
@@ -499,7 +502,7 @@ func (r *Repository) GetDispatchQueue(ctx context.Context) ([]DispatchQueueItem,
 		WHERE of.status = 'packed'
 		  AND o.status IN ('assembling', 'packed')
 		  AND (s.status IS NULL OR s.status IN ('pending', 'assembling', 'packed'))
-		GROUP BY of.id, o.id, o.order_number, of.status, o.status, of.packed_at, of.created_at, o.delivery_method_name, s.id, s.status, s.carrier
+		GROUP BY of.id, o.id, o.order_number, of.seller_id, sel.brand_name, of.status, o.status, of.packed_at, of.created_at, o.delivery_method_name, s.id, s.status, s.carrier
 		HAVING COALESCE(SUM(oi.quantity), 0) > 0
 		ORDER BY COALESCE(of.packed_at, of.created_at) ASC, of.created_at ASC
 	`
@@ -516,6 +519,8 @@ func (r *Repository) GetDispatchQueue(ctx context.Context) ([]DispatchQueueItem,
 			&item.FulfillmentID,
 			&item.OrderID,
 			&item.OrderNumber,
+			&item.SellerID,
+			&item.SellerName,
 			&item.Status,
 			&item.OrderStatus,
 			&item.PackedAt,
@@ -529,6 +534,7 @@ func (r *Repository) GetDispatchQueue(ctx context.Context) ([]DispatchQueueItem,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan dispatch queue item: %w", err)
 		}
+		item.UnitsCount = item.TotalQuantity
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {

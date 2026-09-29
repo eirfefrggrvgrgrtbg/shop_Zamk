@@ -133,13 +133,23 @@ func (r *Repository) GetFulfillmentItemsTx(ctx context.Context, tx pgx.Tx, fulfi
 	return items, nil
 }
 
+func populateFulfillmentItemCounts(f *Fulfillment) {
+	f.FulfillmentID = f.ID
+	f.ItemsCount = len(f.Items)
+	units := 0
+	for _, it := range f.Items {
+		units += it.Quantity
+	}
+	f.UnitsCount = units
+}
+
 func (r *Repository) ListAdminFulfillments(ctx context.Context, limit, offset int, status *string) ([]Fulfillment, error) {
 	query := `
 		SELECT 
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			f.packed_at,
 			s.status as shipment_status, s.id as shipment_id, s.carrier, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
-			o.order_number, o.delivery_address, o.customer_name, o.customer_phone,
+			o.order_number, o.delivery_method_name, o.delivery_address, o.customer_name, o.customer_phone,
 			sel.brand_name as seller_name
 		FROM order_fulfillments f
 		JOIN orders o ON o.id = f.order_id
@@ -169,11 +179,12 @@ func (r *Repository) ListAdminFulfillments(ctx context.Context, limit, offset in
 			&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt,
 			&f.PackedAt,
 			&f.ShipmentStatus, &f.ShipmentID, &f.Carrier, &f.TrackingNumber, &f.TrackingUrl, &f.ShippedAt, &f.DeliveredAt,
-			&f.OrderNumber, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
+			&f.OrderNumber, &f.DeliveryMethodName, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
 			&f.SellerName,
 		); err != nil {
 			return nil, err
 		}
+		f.FulfillmentID = f.ID
 		list = append(list, f)
 	}
 	if list == nil {
@@ -186,6 +197,7 @@ func (r *Repository) ListAdminFulfillments(ctx context.Context, limit, offset in
 			return nil, err
 		}
 		list[i].Items = items
+		populateFulfillmentItemCounts(&list[i])
 	}
 
 	return list, nil
@@ -197,7 +209,7 @@ func (r *Repository) GetOrderFulfillmentsTx(ctx context.Context, tx pgx.Tx, orde
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			f.packed_at,
 			s.status as shipment_status, s.id as shipment_id, s.carrier, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
-			o.order_number, o.delivery_address, o.customer_name, o.customer_phone,
+			o.order_number, o.delivery_method_name, o.delivery_address, o.customer_name, o.customer_phone,
 			sel.brand_name as seller_name
 		FROM order_fulfillments f
 		JOIN orders o ON o.id = f.order_id
@@ -219,11 +231,12 @@ func (r *Repository) GetOrderFulfillmentsTx(ctx context.Context, tx pgx.Tx, orde
 			&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt,
 			&f.PackedAt,
 			&f.ShipmentStatus, &f.ShipmentID, &f.Carrier, &f.TrackingNumber, &f.TrackingUrl, &f.ShippedAt, &f.DeliveredAt,
-			&f.OrderNumber, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
+			&f.OrderNumber, &f.DeliveryMethodName, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
 			&f.SellerName,
 		); err != nil {
 			return nil, err
 		}
+		f.FulfillmentID = f.ID
 		list = append(list, f)
 	}
 	if list == nil {
@@ -239,7 +252,7 @@ func (r *Repository) GetAdminFulfillment(ctx context.Context, id uuid.UUID) (*Fu
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			f.packed_at,
 			s.status as shipment_status, s.id as shipment_id, s.carrier, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
-			o.order_number, o.delivery_address, o.customer_name, o.customer_phone,
+			o.order_number, o.delivery_method_name, o.delivery_address, o.customer_name, o.customer_phone,
 			sel.brand_name as seller_name
 		FROM order_fulfillments f
 		JOIN orders o ON o.id = f.order_id
@@ -252,7 +265,7 @@ func (r *Repository) GetAdminFulfillment(ctx context.Context, id uuid.UUID) (*Fu
 		&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt,
 		&f.PackedAt,
 		&f.ShipmentStatus, &f.ShipmentID, &f.Carrier, &f.TrackingNumber, &f.TrackingUrl, &f.ShippedAt, &f.DeliveredAt,
-		&f.OrderNumber, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
+		&f.OrderNumber, &f.DeliveryMethodName, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
 		&f.SellerName,
 	)
 	if err != nil {
@@ -266,6 +279,7 @@ func (r *Repository) GetAdminFulfillment(ctx context.Context, id uuid.UUID) (*Fu
 	if err != nil {
 		return nil, err
 	}
+	populateFulfillmentItemCounts(&f)
 
 	return &f, nil
 }
@@ -276,7 +290,7 @@ func (r *Repository) GetAdminFulfillmentTx(ctx context.Context, tx pgx.Tx, id uu
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			f.packed_at,
 			s.status as shipment_status, s.id as shipment_id, s.carrier, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
-			o.order_number, o.delivery_address, o.customer_name, o.customer_phone,
+			o.order_number, o.delivery_method_name, o.delivery_address, o.customer_name, o.customer_phone,
 			sel.brand_name as seller_name
 		FROM order_fulfillments f
 		JOIN orders o ON o.id = f.order_id
@@ -289,7 +303,7 @@ func (r *Repository) GetAdminFulfillmentTx(ctx context.Context, tx pgx.Tx, id uu
 		&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt,
 		&f.PackedAt,
 		&f.ShipmentStatus, &f.ShipmentID, &f.Carrier, &f.TrackingNumber, &f.TrackingUrl, &f.ShippedAt, &f.DeliveredAt,
-		&f.OrderNumber, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
+		&f.OrderNumber, &f.DeliveryMethodName, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
 		&f.SellerName,
 	)
 	if err != nil {
@@ -303,6 +317,7 @@ func (r *Repository) GetAdminFulfillmentTx(ctx context.Context, tx pgx.Tx, id uu
 	if err != nil {
 		return nil, err
 	}
+	populateFulfillmentItemCounts(&f)
 
 	return &f, nil
 }
@@ -313,7 +328,7 @@ func (r *Repository) GetOrderFulfillments(ctx context.Context, orderID uuid.UUID
 			f.id, f.order_id, f.seller_id, f.status, f.subtotal_cents, f.commission_bps, f.seller_amount_cents, f.created_at, f.updated_at,
 			f.packed_at,
 			s.status as shipment_status, s.id as shipment_id, s.carrier, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at,
-			o.order_number, o.delivery_address, o.customer_name, o.customer_phone,
+			o.order_number, o.delivery_method_name, o.delivery_address, o.customer_name, o.customer_phone,
 			sel.brand_name as seller_name
 		FROM order_fulfillments f
 		JOIN orders o ON o.id = f.order_id
@@ -335,11 +350,12 @@ func (r *Repository) GetOrderFulfillments(ctx context.Context, orderID uuid.UUID
 			&f.ID, &f.OrderID, &f.SellerID, &f.Status, &f.SubtotalCents, &f.CommissionBps, &f.SellerAmountCents, &f.CreatedAt, &f.UpdatedAt,
 			&f.PackedAt,
 			&f.ShipmentStatus, &f.ShipmentID, &f.Carrier, &f.TrackingNumber, &f.TrackingUrl, &f.ShippedAt, &f.DeliveredAt,
-			&f.OrderNumber, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
+			&f.OrderNumber, &f.DeliveryMethodName, &f.DeliveryAddress, &f.CustomerName, &f.CustomerPhone,
 			&f.SellerName,
 		); err != nil {
 			return nil, err
 		}
+		f.FulfillmentID = f.ID
 		list = append(list, f)
 	}
 	if list == nil {
@@ -352,6 +368,7 @@ func (r *Repository) GetOrderFulfillments(ctx context.Context, orderID uuid.UUID
 			return nil, err
 		}
 		list[i].Items = items
+		populateFulfillmentItemCounts(&list[i])
 	}
 
 	return list, nil
