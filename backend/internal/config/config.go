@@ -21,6 +21,7 @@ type Config struct {
 	RateLimit     RateLimitConfig
 	CDEK          CDEKConfig
 	Observability ObservabilityConfig
+	OpenAI        OpenAIConfig
 }
 
 type AppConfig struct {
@@ -125,6 +126,11 @@ type CDEKConfig struct {
 	ClientID     string
 	ClientSecret string
 	APIBaseURL   string
+}
+
+type OpenAIConfig struct {
+	APIKey  string
+	BaseURL string
 }
 
 type ObservabilityConfig = observability.Config
@@ -232,6 +238,10 @@ func Load() (*Config, error) {
 			DBSlowQueryThresholdMs: getEnvAsInt("DB_SLOW_QUERY_THRESHOLD_MS", 250),
 			RedisSlowOpThresholdMs: getEnvAsInt("REDIS_SLOW_OPERATION_THRESHOLD_MS", 50),
 			MigrationsPath:         getEnv("MIGRATIONS_PATH", "migrations"),
+		},
+		OpenAI: OpenAIConfig{
+			APIKey:  getEnv("OPENAI_API_KEY", ""),
+			BaseURL: getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		},
 	}
 
