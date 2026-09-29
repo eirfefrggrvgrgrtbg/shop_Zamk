@@ -126,34 +126,11 @@ func (s *Service) GetForYouProducts(ctx context.Context, userID uuid.UUID, limit
 		return nil, fmt.Errorf("failed to get customer preference profile: %w", err)
 	}
 
-	if len(profile.FavoriteCategories) == 0 &&
-		len(profile.FavoriteBrands) == 0 &&
-		len(profile.ViewedCategories) == 0 &&
-		len(profile.ViewedBrands) == 0 {
+	if len(profile.Categories) == 0 && len(profile.Brands) == 0 {
 		return []products.PublicProduct{}, nil
 	}
 
-	favCatIDs := make([]uuid.UUID, 0, len(profile.FavoriteCategories))
-	for _, a := range profile.FavoriteCategories {
-		favCatIDs = append(favCatIDs, a.CategoryID)
-	}
-
-	favBrandIDs := make([]uuid.UUID, 0, len(profile.FavoriteBrands))
-	for _, a := range profile.FavoriteBrands {
-		favBrandIDs = append(favBrandIDs, a.BrandID)
-	}
-
-	viewedCatIDs := make([]uuid.UUID, 0, len(profile.ViewedCategories))
-	for _, a := range profile.ViewedCategories {
-		viewedCatIDs = append(viewedCatIDs, a.CategoryID)
-	}
-
-	viewedBrandIDs := make([]uuid.UUID, 0, len(profile.ViewedBrands))
-	for _, a := range profile.ViewedBrands {
-		viewedBrandIDs = append(viewedBrandIDs, a.BrandID)
-	}
-
-	prods, err := s.repo.GetForYouProducts(ctx, userID, favCatIDs, favBrandIDs, viewedCatIDs, viewedBrandIDs, limit)
+	prods, err := s.repo.GetForYouProducts(ctx, userID, profile.Categories, profile.Brands, limit)
 	if err != nil {
 		return nil, err
 	}

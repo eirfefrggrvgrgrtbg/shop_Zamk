@@ -591,12 +591,14 @@ func (r *Repository) GetCustomerPreferenceProfile(ctx context.Context, userID uu
 }
 
 // GetForYouProducts retrieves personalized storefront product recommendations for the authenticated customer
-// based on deterministic tiers derived from customer preference profile (favorites and views).
-// Currently favorited products are excluded. Returned products are storefront-eligible under CAT.1A.
+// ranked by deterministic affinity score (category affinity score + brand affinity score) derived from
+// the customer preference profile (product_view = 1, favorite = 3, order_paid = 10).
+// Storefront eligibility and exclusion of currently favorited products are preserved.
 func (r *Repository) GetForYouProducts(
 	ctx context.Context,
 	userID uuid.UUID,
-	favCatIDs, favBrandIDs, viewedCatIDs, viewedBrandIDs []uuid.UUID,
+	categories []CategoryAffinity,
+	brands []BrandAffinity,
 	limit int,
 ) ([]products.Product, error) {
 	if limit <= 0 {
@@ -605,25 +607,31 @@ func (r *Repository) GetForYouProducts(
 		limit = MaxForYouLimit
 	}
 
-	if len(favCatIDs) == 0 && len(favBrandIDs) == 0 && len(viewedCatIDs) == 0 && len(viewedBrandIDs) == 0 {
+	if len(categories) == 0 && len(brands) == 0 {
 		return []products.Product{}, nil
 	}
 
-	// Ensure non-nil slices for pgx array binding
-	if favCatIDs == nil {
-		favCatIDs = []uuid.UUID{}
+	catIDs := make([]uuid.UUID, len(categories))
+	catScores := make([]int64, len(categories))
+	for i, c := range categories {
+		catIDs[i] = c.CategoryID
+		catScores[i] = c.Score
 	}
-	if favBrandIDs == nil {
-		favBrandIDs = []uuid.UUID{}
-	}
-	if viewedCatIDs == nil {
-		viewedCatIDs = []uuid.UUID{}
-	}
-	if viewedBrandIDs == nil {
-		viewedBrandIDs = []uuid.UUID{}
+
+	brandIDs := make([]uuid.UUID, len(brands))
+	brandScores := make([]int64, len(brands))
+	for i, b := range brands {
+		brandIDs[i] = b.BrandID
+		brandScores[i] = b.Score
 	}
 
 	query := fmt.Sprintf(`
+		WITH profile_cats AS (
+			SELECT cat_id, score FROM unnest($2::uuid[], $3::bigint[]) AS t(cat_id, score)
+		),
+		profile_brands AS (
+			SELECT brand_id, score FROM unnest($4::uuid[], $5::bigint[]) AS t(brand_id, score)
+		)
 		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
 			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
 			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
@@ -632,63 +640,32 @@ func (r *Repository) GetForYouProducts(
 			s.slug, s.brand_name
 		FROM products p
 		INNER JOIN sellers s ON p.seller_id = s.id
+		LEFT JOIN profile_cats pc ON p.category_id = pc.cat_id
+		LEFT JOIN profile_brands pb ON p.brand_id = pb.brand_id
 		WHERE p.status = 'published'
 		  AND s.status = 'active'
 		  AND %s >= %d
 		  AND p.id NOT IN (
-		      SELECT product_id FROM customer_favorites WHERE user_id = $1
+		      SELECT product_id FROM customer_favorites cf WHERE user_id = $1
+		      AND NOT EXISTS (
+		          SELECT 1 FROM (
+		              SELECT product_id, event_type,
+		                     ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY occurred_at DESC, id DESC) AS rn
+		              FROM behavioral_events
+		              WHERE user_id = $1 AND event_type IN ('favorite_added', 'favorite_removed') AND product_id IS NOT NULL
+		          ) rfe WHERE rfe.product_id = cf.product_id AND rfe.rn = 1 AND rfe.event_type = 'favorite_removed'
+		      )
+		      UNION
+		      SELECT product_id FROM (
+		          SELECT product_id, event_type,
+		                 ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY occurred_at DESC, id DESC) AS rn
+		          FROM behavioral_events
+		          WHERE user_id = $1 AND event_type IN ('favorite_added', 'favorite_removed') AND product_id IS NOT NULL
+		      ) rfe WHERE rfe.rn = 1 AND rfe.event_type = 'favorite_added'
 		  )
-		  AND (
-		      array_position($2::uuid[], p.category_id) IS NOT NULL
-		      OR array_position($3::uuid[], p.brand_id) IS NOT NULL
-		      OR array_position($4::uuid[], p.category_id) IS NOT NULL
-		      OR array_position($5::uuid[], p.brand_id) IS NOT NULL
-		  )
+		  AND (pc.score IS NOT NULL OR pb.score IS NOT NULL)
 		ORDER BY
-		  -- 1. Provenance Tier (Tier 1..6)
-		  CASE
-		    -- TIER 1: matches BOTH favorite category AND favorite brand
-		    WHEN array_position($2::uuid[], p.category_id) IS NOT NULL AND array_position($3::uuid[], p.brand_id) IS NOT NULL THEN 1
-		    -- TIER 2: matches favorite brand
-		    WHEN array_position($3::uuid[], p.brand_id) IS NOT NULL THEN 2
-		    -- TIER 3: matches favorite category
-		    WHEN array_position($2::uuid[], p.category_id) IS NOT NULL THEN 3
-		    -- TIER 4: matches BOTH viewed category AND viewed brand
-		    WHEN array_position($4::uuid[], p.category_id) IS NOT NULL AND array_position($5::uuid[], p.brand_id) IS NOT NULL THEN 4
-		    -- TIER 5: matches viewed brand
-		    WHEN array_position($5::uuid[], p.brand_id) IS NOT NULL THEN 5
-		    -- TIER 6: matches viewed category
-		    WHEN array_position($4::uuid[], p.category_id) IS NOT NULL THEN 6
-		    ELSE 999
-		  END ASC,
-
-		  -- 2. Primary Profile Rank within tier (lower rank index = stronger affinity)
-		  CASE
-		    WHEN array_position($2::uuid[], p.category_id) IS NOT NULL AND array_position($3::uuid[], p.brand_id) IS NOT NULL
-		      THEN array_position($2::uuid[], p.category_id)
-		    WHEN array_position($3::uuid[], p.brand_id) IS NOT NULL
-		      THEN array_position($3::uuid[], p.brand_id)
-		    WHEN array_position($2::uuid[], p.category_id) IS NOT NULL
-		      THEN array_position($2::uuid[], p.category_id)
-		    WHEN array_position($4::uuid[], p.category_id) IS NOT NULL AND array_position($5::uuid[], p.brand_id) IS NOT NULL
-		      THEN array_position($4::uuid[], p.category_id)
-		    WHEN array_position($5::uuid[], p.brand_id) IS NOT NULL
-		      THEN array_position($5::uuid[], p.brand_id)
-		    WHEN array_position($4::uuid[], p.category_id) IS NOT NULL
-		      THEN array_position($4::uuid[], p.category_id)
-		    ELSE 999
-		  END ASC,
-
-		  -- 3. Secondary Profile Rank (for Tiers 1 and 4 matching both category and brand)
-		  CASE
-		    WHEN array_position($2::uuid[], p.category_id) IS NOT NULL AND array_position($3::uuid[], p.brand_id) IS NOT NULL
-		      THEN array_position($3::uuid[], p.brand_id)
-		    WHEN array_position($4::uuid[], p.category_id) IS NOT NULL AND array_position($5::uuid[], p.brand_id) IS NOT NULL
-		      THEN array_position($5::uuid[], p.brand_id)
-		    ELSE 0
-		  END ASC,
-
-		  -- 4. Storefront-safe tie-breakers
+		  (COALESCE(pc.score, 0) + COALESCE(pb.score, 0)) DESC,
 		  p.average_rating DESC NULLS LAST,
 		  p.reviews_count DESC,
 		  p.published_at DESC NULLS LAST,
@@ -696,7 +673,7 @@ func (r *Repository) GetForYouProducts(
 		LIMIT $6
 	`, products.CanonicalProductFreeStockSQL("p.id"), products.MinStorefrontFreeSellableUnits)
 
-	rows, err := r.db.Query(ctx, query, userID, favCatIDs, favBrandIDs, viewedCatIDs, viewedBrandIDs, limit)
+	rows, err := r.db.Query(ctx, query, userID, catIDs, catScores, brandIDs, brandScores, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get for-you products: %w", err)
 	}

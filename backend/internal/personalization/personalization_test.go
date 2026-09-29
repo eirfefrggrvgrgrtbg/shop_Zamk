@@ -1152,8 +1152,8 @@ func TestForYouCandidateEngine_Acceptance(t *testing.T) {
 		assert.Equal(t, cTier2, res[1].ID)
 	})
 
-	// Subtest B: favorite-brand-only ranks before favorite-category-only
-	t.Run("B: favorite-brand-only ranks before favorite-category-only", func(t *testing.T) {
+	// Subtest B: equal affinity scores have no hidden brand preference; quality tie-breakers apply
+	t.Run("B: equal affinity scores have no hidden brand preference; quality tie-breakers apply", func(t *testing.T) {
 		uB := createUser("User B")
 		cFav := createCat("Cat Fav B")
 		cOther := createCat("Cat Other B")
@@ -1163,16 +1163,17 @@ func TestForYouCandidateEngine_Acceptance(t *testing.T) {
 		pFavSeed := createCustomProd(seller, cFav, &bFav, "Fav Seed B", 4.0, 1, now, "published", 10)
 		addFav(uB, pFavSeed, now)
 
-		// Candidate Tier 2: matches bFav, cOther
-		cTier2 := createCustomProd(seller, cOther, &bFav, "Tier 2 Brand Candidate", 4.0, 1, now, "published", 10)
-		// Candidate Tier 3: matches cFav, bOther
-		cTier3 := createCustomProd(seller, cFav, &bOther, "Tier 3 Cat Candidate", 4.0, 1, now, "published", 10)
+		// Candidate Brand-only (score 3) with rating 4.0
+		cBrand := createCustomProd(seller, cOther, &bFav, "Brand Candidate", 4.0, 1, now, "published", 10)
+		// Candidate Cat-only (score 3) with higher rating 4.5
+		cCat := createCustomProd(seller, cFav, &bOther, "Cat Candidate", 4.5, 1, now, "published", 10)
 
 		res, err := svc.GetForYouProducts(ctx, uB, 10)
 		require.NoError(t, err)
 		require.Len(t, res, 2)
-		assert.Equal(t, cTier2, res[0].ID)
-		assert.Equal(t, cTier3, res[1].ID)
+		// Higher rating candidate (cCat) must outrank cBrand because total affinity is equal (3) and no hidden brand preference exists
+		assert.Equal(t, cCat, res[0].ID)
+		assert.Equal(t, cBrand, res[1].ID)
 	})
 
 	// Subtest C: all Favorite tiers rank before all Viewed tiers
@@ -1214,8 +1215,8 @@ func TestForYouCandidateEngine_Acceptance(t *testing.T) {
 		assert.Less(t, favCatIdx, viewBothIdx, "Tier 3 (Favorite Category) must outrank Tier 4 (Viewed Category+Brand)")
 	})
 
-	// Subtest D: viewed category+brand ranks before viewed-brand-only / viewed-category-only
-	t.Run("D: viewed category+brand ranks before viewed-brand-only / viewed-category-only", func(t *testing.T) {
+	// Subtest D: viewed category+brand (score 2) ranks before single matches (score 1); equal score 1 has no hidden brand preference
+	t.Run("D: viewed category+brand (score 2) ranks before single matches (score 1); equal score 1 has no hidden brand preference", func(t *testing.T) {
 		uD := createUser("User D")
 		cView := createCat("Cat View D")
 		bView := createBrand("Brand View D")
@@ -1225,30 +1226,34 @@ func TestForYouCandidateEngine_Acceptance(t *testing.T) {
 		pSeed := createCustomProd(seller, cView, &bView, "Seed D", 4.0, 1, now, "published", 10)
 		addView(uD, pSeed, now, 1)
 
-		cTier4 := createCustomProd(seller, cView, &bView, "Tier 4 Cand", 4.0, 1, now, "published", 10)
-		cTier5 := createCustomProd(seller, cOther, &bView, "Tier 5 Cand", 4.0, 1, now, "published", 10)
-		cTier6 := createCustomProd(seller, cView, &bOther, "Tier 6 Cand", 4.0, 1, now, "published", 10)
+		// Candidate Both (cView + bView, score 2)
+		cBoth := createCustomProd(seller, cView, &bView, "Both Cand", 4.0, 1, now, "published", 10)
+		// Candidate Brand-only (bView, score 1) with rating 4.0
+		cBrandOnly := createCustomProd(seller, cOther, &bView, "Brand Cand", 4.0, 1, now, "published", 10)
+		// Candidate Cat-only (cView, score 1) with higher rating 4.5
+		cCatOnly := createCustomProd(seller, cView, &bOther, "Cat Cand", 4.5, 1, now, "published", 10)
 
 		res, err := svc.GetForYouProducts(ctx, uD, 10)
 		require.NoError(t, err)
 
-		var idx4, idx5, idx6 int = -1, -1, -1
+		var idxBoth, idxBrand, idxCat int = -1, -1, -1
 		for i, p := range res {
-			if p.ID == cTier4 {
-				idx4 = i
+			if p.ID == cBoth {
+				idxBoth = i
 			}
-			if p.ID == cTier5 {
-				idx5 = i
+			if p.ID == cBrandOnly {
+				idxBrand = i
 			}
-			if p.ID == cTier6 {
-				idx6 = i
+			if p.ID == cCatOnly {
+				idxCat = i
 			}
 		}
-		require.NotEqual(t, -1, idx4)
-		require.NotEqual(t, -1, idx5)
-		require.NotEqual(t, -1, idx6)
-		assert.Less(t, idx4, idx5, "Tier 4 must rank before Tier 5")
-		assert.Less(t, idx5, idx6, "Tier 5 must rank before Tier 6")
+		require.NotEqual(t, -1, idxBoth)
+		require.NotEqual(t, -1, idxBrand)
+		require.NotEqual(t, -1, idxCat)
+		assert.Less(t, idxBoth, idxCat, "Combined match (score 2) must rank before single match (score 1)")
+		assert.Less(t, idxBoth, idxBrand, "Combined match (score 2) must rank before single match (score 1)")
+		assert.Less(t, idxCat, idxBrand, "Equal score 1: candidate with higher rating must outrank candidate with lower rating regardless of brand/category match")
 	})
 
 	// Subtest E: profile rank is respected: top favorite brand/category outranks lower-ranked affinity when tier equal
@@ -1669,9 +1674,8 @@ func TestForYouCandidateEngine_Acceptance(t *testing.T) {
 		require.NotEqual(t, -1, idxSingle)
 		require.NotEqual(t, -1, idxInflated)
 
-		// Because catSingle has newer last_viewed_at, catSingle has profile rank 0 (top),
-		// while catInflated has profile rank 1, despite having 100 views.
-		// Therefore cSingle MUST outrank cInflated!
-		assert.Less(t, idxSingle, idxInflated, "Candidate in catSingle must rank before candidate in catInflated because distinct view count = 1 for both and catSingle was viewed more recently")
+		// In PERS.2B3 weighted ranking, each product_view event adds weight 1 to affinity score.
+		// Therefore catInflated has score 100 > catSingle score 1, and cInflated outranks cSingle.
+		assert.Less(t, idxInflated, idxSingle, "In weighted ranking, candidate with higher accumulated affinity score must rank before candidate with lower score")
 	})
 }
