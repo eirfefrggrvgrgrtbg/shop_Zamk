@@ -2,6 +2,7 @@ package router_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -18,8 +19,10 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/app"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/personalization"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 )
 
 func setupPersonalizationRouterTestEnv(t *testing.T) (context.Context, http.Handler, func(), *postgres.Client, *auth.TokenService) {
@@ -453,6 +456,43 @@ func TestPersonalization_CustomerProductViewRoute(t *testing.T) {
 		// Restore original stock
 		_, err = pgClient.Pool.Exec(ctx, "UPDATE inventory_items SET total_stock = 5 WHERE product_id = $1", publishedProdID)
 		require.NoError(t, err)
+	})
+
+	t.Run("T2. similar products: contract, target exclusion, default limit, and max limit clamp", func(t *testing.T) {
+		// Default limit = 8
+		reqDef := httptest.NewRequest("GET", fmt.Sprintf("/api/public/products/%s/similar", publishedProdID), nil)
+		recDef := httptest.NewRecorder()
+		r.ServeHTTP(recDef, reqDef)
+		require.Equal(t, http.StatusOK, recDef.Code)
+		assert.Equal(t, "application/json", recDef.Header().Get("Content-Type"))
+
+		var respDef struct {
+			Items      []products.PublicProduct `json:"items"`
+			TotalCount int                      `json:"totalCount"`
+		}
+		err := json.Unmarshal(recDef.Body.Bytes(), &respDef)
+		require.NoError(t, err)
+		assert.Equal(t, len(respDef.Items), respDef.TotalCount)
+		assert.True(t, respDef.TotalCount <= personalization.DefaultSimilarProductsLimit)
+
+		for _, item := range respDef.Items {
+			assert.NotEqual(t, publishedProdID, item.ID, "target product must never be in similar items")
+		}
+
+		// limit > 50 clamped to MaxSimilarProductsLimit
+		reqClamp := httptest.NewRequest("GET", fmt.Sprintf("/api/public/products/%s/similar?limit=999", publishedProdID), nil)
+		recClamp := httptest.NewRecorder()
+		r.ServeHTTP(recClamp, reqClamp)
+		require.Equal(t, http.StatusOK, recClamp.Code)
+
+		var respClamp struct {
+			Items      []products.PublicProduct `json:"items"`
+			TotalCount int                      `json:"totalCount"`
+		}
+		err = json.Unmarshal(recClamp.Body.Bytes(), &respClamp)
+		require.NoError(t, err)
+		assert.Equal(t, len(respClamp.Items), respClamp.TotalCount)
+		assert.True(t, respClamp.TotalCount <= personalization.MaxSimilarProductsLimit)
 	})
 
 	// For you candidate engine customer route auth tests

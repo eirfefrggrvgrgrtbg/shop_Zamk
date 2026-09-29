@@ -181,6 +181,12 @@ func (r *Repository) GetStorefrontProduct(ctx context.Context, productID uuid.UU
 // ranked by deterministic relevance tiers (Tier 1: same brand, Tier 2: other/any brand)
 // and closeness (absolute price distance, rating, reviews count, published_at, id).
 func (r *Repository) GetSimilarProducts(ctx context.Context, productID uuid.UUID, limit int) ([]products.Product, error) {
+	if limit <= 0 {
+		limit = DefaultSimilarProductsLimit
+	} else if limit > MaxSimilarProductsLimit {
+		limit = MaxSimilarProductsLimit
+	}
+
 	source, err := r.GetStorefrontProduct(ctx, productID)
 	if err != nil {
 		return nil, err

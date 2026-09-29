@@ -152,11 +152,11 @@ func (h *Handler) GetSimilarProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := 8
+	limit := DefaultSimilarProductsLimit
 	limitStr := r.URL.Query().Get("limit")
 	if limitStr != "" {
 		parsedLimit, err := strconv.Atoi(limitStr)
-		if err == nil && parsedLimit > 0 && parsedLimit <= 50 {
+		if err == nil && parsedLimit > 0 && parsedLimit <= MaxSimilarProductsLimit {
 			limit = parsedLimit
 		}
 	}

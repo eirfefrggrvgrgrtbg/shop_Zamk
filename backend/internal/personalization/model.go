@@ -42,6 +42,9 @@ const (
 	MaxNewProductsLimit     = 50
 	LookbackNewProductsDays = 14
 
+	DefaultSimilarProductsLimit = 8
+	MaxSimilarProductsLimit     = 50
+
 	RecommendationBlockTypeForYou = "for_you"
 	RecommendationBlockTypePopular = "popular"
 	RecommendationBlockTypeNew     = "new"
