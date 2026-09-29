@@ -179,6 +179,35 @@ func (h *Handler) GetSimilarProducts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetPopularProducts retrieves popular storefront products ranked by 30-day order_paid quantity.
+func (h *Handler) GetPopularProducts(w http.ResponseWriter, r *http.Request) {
+	limit := DefaultPopularLimit
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr != "" {
+		parsedLimit, err := strconv.Atoi(limitStr)
+		if err == nil && parsedLimit > 0 {
+			if parsedLimit > MaxPopularLimit {
+				limit = MaxPopularLimit
+			} else {
+				limit = parsedLimit
+			}
+		}
+	}
+
+	items, err := h.service.GetPopularProducts(r.Context(), limit)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get popular products")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items":      items,
+		"totalCount": len(items),
+	})
+}
+
 // GetCustomerCatalog returns the catalog for the authenticated customer, applying personalized default ordering when sort is default.
 func (h *Handler) GetCustomerCatalog(w http.ResponseWriter, r *http.Request) {
 	val := r.Context().Value("userID")

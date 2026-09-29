@@ -144,3 +144,26 @@ func (s *Service) GetForYouProducts(ctx context.Context, userID uuid.UUID, limit
 	}
 	return pubItems, nil
 }
+
+// GetPopularProducts returns popular storefront products ranked by order_paid quantity in the last 30 days.
+func (s *Service) GetPopularProducts(ctx context.Context, limit int) ([]products.PublicProduct, error) {
+	if limit <= 0 {
+		limit = DefaultPopularLimit
+	} else if limit > MaxPopularLimit {
+		limit = MaxPopularLimit
+	}
+
+	prods, err := s.repo.GetPopularProducts(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	var pubItems []products.PublicProduct
+	for _, p := range prods {
+		pubItems = append(pubItems, products.MapToPublicProduct(p))
+	}
+	if pubItems == nil {
+		pubItems = []products.PublicProduct{}
+	}
+	return pubItems, nil
+}

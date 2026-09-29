@@ -704,3 +704,77 @@ func (r *Repository) GetForYouProducts(
 
 	return results, nil
 }
+
+// GetPopularProducts retrieves storefront products ranked by order_paid quantity in the last 30 days.
+func (r *Repository) GetPopularProducts(ctx context.Context, limit int) ([]products.Product, error) {
+	if limit <= 0 {
+		limit = DefaultPopularLimit
+	} else if limit > MaxPopularLimit {
+		limit = MaxPopularLimit
+	}
+
+	query := fmt.Sprintf(`
+		WITH popular_sales AS (
+			SELECT
+				e.product_id,
+				SUM(e.quantity) AS paid_quantity
+			FROM behavioral_events e
+			WHERE e.event_type = 'order_paid'
+			  AND e.product_id IS NOT NULL
+			  AND e.quantity IS NOT NULL
+			  AND e.quantity > 0
+			  AND e.occurred_at >= now() - INTERVAL '%d days'
+			GROUP BY e.product_id
+		)
+		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
+			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
+			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
+			p.average_rating, p.reviews_count,
+			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment,
+			s.slug, s.brand_name
+		FROM popular_sales ps
+		INNER JOIN products p ON ps.product_id = p.id
+		INNER JOIN sellers s ON p.seller_id = s.id
+		WHERE p.status = 'published'
+		  AND s.status = 'active'
+		  AND %s >= %d
+		ORDER BY
+		  ps.paid_quantity DESC,
+		  p.average_rating DESC NULLS LAST,
+		  p.reviews_count DESC,
+		  p.published_at DESC NULLS LAST,
+		  p.id ASC
+		LIMIT $1
+	`, LookbackPopularDays, products.CanonicalProductFreeStockSQL("p.id"), products.MinStorefrontFreeSellableUnits)
+
+	rows, err := r.db.Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get popular products: %w", err)
+	}
+	defer rows.Close()
+
+	var results []products.Product
+	for rows.Next() {
+		var p products.Product
+		if err := rows.Scan(
+			&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
+			&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
+			&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
+			&p.AverageRating, &p.ReviewsCount,
+			&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
+			&p.SellerSlug, &p.SellerName,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, p)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	if results == nil {
+		results = []products.Product{}
+	}
+
+	return results, nil
+}

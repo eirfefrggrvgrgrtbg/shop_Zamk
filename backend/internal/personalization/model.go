@@ -32,6 +32,10 @@ const (
 
 	DefaultForYouLimit = 12
 	MaxForYouLimit     = 24
+
+	DefaultPopularLimit = 12
+	MaxPopularLimit     = 50
+	LookbackPopularDays = 30
 )
 
 // CategoryAffinity captures an authenticated customer's category interest derived from

@@ -494,4 +494,48 @@ func TestPersonalization_CustomerProductViewRoute(t *testing.T) {
 		res := getForYou(tokenCustomerA, "customer_id="+uuid.New().String())
 		assert.Equal(t, http.StatusOK, res.StatusCode)
 	})
+
+	// Popular products public canonical route tests
+	getPopularPublic := func(token string) *http.Response {
+		req := httptest.NewRequest("GET", "/api/public/products/popular", nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec.Result()
+	}
+
+	t.Run("Z1. popular canonical route: anonymous -> 200", func(t *testing.T) {
+		res := getPopularPublic("")
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("Z2. popular canonical route: customer -> 200", func(t *testing.T) {
+		res := getPopularPublic(tokenCustomerA)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("Z3. popular canonical route: seller -> 200", func(t *testing.T) {
+		res := getPopularPublic(tokenSeller)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("Z4. popular canonical route: admin -> 200", func(t *testing.T) {
+		res := getPopularPublic(tokenAdmin)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("Z5. non-canonical routes return 404", func(t *testing.T) {
+		reqAlias := httptest.NewRequest("GET", "/api/public/popular", nil)
+		recAlias := httptest.NewRecorder()
+		r.ServeHTTP(recAlias, reqAlias)
+		assert.Equal(t, http.StatusNotFound, recAlias.Result().StatusCode)
+
+		reqCust := httptest.NewRequest("GET", "/api/customer/products/popular", nil)
+		reqCust.Header.Set("Authorization", "Bearer "+tokenCustomerA)
+		recCust := httptest.NewRecorder()
+		r.ServeHTTP(recCust, reqCust)
+		assert.Equal(t, http.StatusNotFound, recCust.Result().StatusCode)
+	})
 }
