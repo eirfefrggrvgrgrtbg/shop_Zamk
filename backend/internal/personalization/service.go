@@ -167,3 +167,27 @@ func (s *Service) GetPopularProducts(ctx context.Context, limit int) ([]products
 	}
 	return pubItems, nil
 }
+
+// GetNewProducts returns storefront products published within the last 14 days,
+// ranked strictly by published_at DESC, then product_id ASC.
+func (s *Service) GetNewProducts(ctx context.Context, limit int) ([]products.PublicProduct, error) {
+	if limit <= 0 {
+		limit = DefaultNewProductsLimit
+	} else if limit > MaxNewProductsLimit {
+		limit = MaxNewProductsLimit
+	}
+
+	prods, err := s.repo.GetNewProducts(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	var pubItems []products.PublicProduct
+	for _, p := range prods {
+		pubItems = append(pubItems, products.MapToPublicProduct(p))
+	}
+	if pubItems == nil {
+		pubItems = []products.PublicProduct{}
+	}
+	return pubItems, nil
+}

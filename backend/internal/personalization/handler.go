@@ -208,6 +208,35 @@ func (h *Handler) GetPopularProducts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetNewProducts retrieves new storefront products published within the last 14 days.
+func (h *Handler) GetNewProducts(w http.ResponseWriter, r *http.Request) {
+	limit := DefaultNewProductsLimit
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr != "" {
+		parsedLimit, err := strconv.Atoi(limitStr)
+		if err == nil && parsedLimit > 0 {
+			if parsedLimit > MaxNewProductsLimit {
+				limit = MaxNewProductsLimit
+			} else {
+				limit = parsedLimit
+			}
+		}
+	}
+
+	items, err := h.service.GetNewProducts(r.Context(), limit)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get new products")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items":      items,
+		"totalCount": len(items),
+	})
+}
+
 // GetCustomerCatalog returns the catalog for the authenticated customer, applying personalized default ordering when sort is default.
 func (h *Handler) GetCustomerCatalog(w http.ResponseWriter, r *http.Request) {
 	val := r.Context().Value("userID")

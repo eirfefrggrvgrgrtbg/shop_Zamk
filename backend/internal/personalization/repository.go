@@ -772,6 +772,63 @@ func (r *Repository) GetPopularProducts(ctx context.Context, limit int) ([]produ
 		return nil, rows.Err()
 	}
 
+	return results, nil
+}
+
+// GetNewProducts retrieves storefront products published within the last 14 days,
+// ranked strictly by published_at DESC, then product_id ASC.
+func (r *Repository) GetNewProducts(ctx context.Context, limit int) ([]products.Product, error) {
+	if limit <= 0 {
+		limit = DefaultNewProductsLimit
+	} else if limit > MaxNewProductsLimit {
+		limit = MaxNewProductsLimit
+	}
+
+	query := fmt.Sprintf(`
+		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
+			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
+			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
+			p.average_rating, p.reviews_count,
+			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment,
+			s.slug, s.brand_name
+		FROM products p
+		INNER JOIN sellers s ON p.seller_id = s.id
+		WHERE p.status = 'published'
+		  AND s.status = 'active'
+		  AND %s >= %d
+		  AND p.published_at IS NOT NULL
+		  AND p.published_at >= now() - INTERVAL '%d days'
+		ORDER BY
+		  p.published_at DESC,
+		  p.id ASC
+		LIMIT $1
+	`, products.CanonicalProductFreeStockSQL("p.id"), products.MinStorefrontFreeSellableUnits, LookbackNewProductsDays)
+
+	rows, err := r.db.Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get new products: %w", err)
+	}
+	defer rows.Close()
+
+	var results []products.Product
+	for rows.Next() {
+		var p products.Product
+		if err := rows.Scan(
+			&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,
+			&p.Status, &p.Source, &p.Gender, &p.Color, &p.Material, &p.CareInstructions,
+			&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
+			&p.AverageRating, &p.ReviewsCount,
+			&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
+			&p.SellerSlug, &p.SellerName,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, p)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
 	if results == nil {
 		results = []products.Product{}
 	}

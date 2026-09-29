@@ -264,6 +264,7 @@ func New(
 		r.Get("/product-previews/{token}", productsHandler.GetProductPreviewByToken)
 		r.Get("/direct-sale", productsHandler.GetDirectSaleProducts)
 		r.Get("/products/popular", personalizationHandler.GetPopularProducts)
+		r.Get("/products/new", personalizationHandler.GetNewProducts)
 		r.Get("/products/{productId}/similar", personalizationHandler.GetSimilarProducts)
 		r.Get("/products/{idOrSlug}", productsHandler.GetPublicProduct)
 		r.Get("/sellers/{idOrSlug}", productsHandler.GetPublicSellerStore)

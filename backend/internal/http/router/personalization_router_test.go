@@ -538,4 +538,48 @@ func TestPersonalization_CustomerProductViewRoute(t *testing.T) {
 		r.ServeHTTP(recCust, reqCust)
 		assert.Equal(t, http.StatusNotFound, recCust.Result().StatusCode)
 	})
+
+	// New products public canonical route tests
+	getNewPublic := func(token string) *http.Response {
+		req := httptest.NewRequest("GET", "/api/public/products/new", nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec.Result()
+	}
+
+	t.Run("Z6. new products canonical route: anonymous -> 200", func(t *testing.T) {
+		res := getNewPublic("")
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("Z7. new products canonical route: customer -> 200", func(t *testing.T) {
+		res := getNewPublic(tokenCustomerA)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("Z8. new products canonical route: seller -> 200", func(t *testing.T) {
+		res := getNewPublic(tokenSeller)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("Z9. new products canonical route: admin -> 200", func(t *testing.T) {
+		res := getNewPublic(tokenAdmin)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+	})
+
+	t.Run("Z10. new products non-canonical routes return 404", func(t *testing.T) {
+		reqAlias := httptest.NewRequest("GET", "/api/public/new", nil)
+		recAlias := httptest.NewRecorder()
+		r.ServeHTTP(recAlias, reqAlias)
+		assert.Equal(t, http.StatusNotFound, recAlias.Result().StatusCode)
+
+		reqCust := httptest.NewRequest("GET", "/api/customer/products/new", nil)
+		reqCust.Header.Set("Authorization", "Bearer "+tokenCustomerA)
+		recCust := httptest.NewRecorder()
+		r.ServeHTTP(recCust, reqCust)
+		assert.Equal(t, http.StatusNotFound, recCust.Result().StatusCode)
+	})
 }
