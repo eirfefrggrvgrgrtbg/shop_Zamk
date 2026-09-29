@@ -153,6 +153,21 @@ export const getCustomerForYou = async (limit = 12): Promise<{ items: ProductSum
   return { items: res?.items || [], totalCount: res?.totalCount ?? (res?.items?.length || 0) };
 };
 
+export interface HomeRecommendationBlock {
+  type: 'for_you' | 'popular' | 'new';
+  title: string;
+  items: ProductSummary[];
+}
+
+export interface HomeRecommendationsResponse {
+  blocks: HomeRecommendationBlock[];
+}
+
+export const getCustomerHomeRecommendations = async (): Promise<HomeRecommendationsResponse> => {
+  const res = await request<HomeRecommendationsResponse>('GET', '/customer/recommendations/home');
+  return { blocks: res?.blocks || [] };
+};
+
 export const getCustomerCatalog = async (params?: any): Promise<{ items: ProductSummary[]; totalCount: number }> => {
   const res = await request<{ items: ProductSummary[]; totalCount: number }>('GET', '/customer/catalog', { params });
   return { ...res, items: res?.items || [] };

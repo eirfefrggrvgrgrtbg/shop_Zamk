@@ -152,6 +152,35 @@ export async function fetchForYouProducts(limit = 12): Promise<{ items: UIProduc
   }
 }
 
+export interface UIHomeRecommendationBlock {
+  type: 'for_you' | 'popular' | 'new';
+  title: string;
+  items: UIProduct[];
+}
+
+export interface UIHomeRecommendationsResponse {
+  blocks: UIHomeRecommendationBlock[];
+}
+
+export async function fetchHomeRecommendations(): Promise<UIHomeRecommendationsResponse> {
+  const { getCustomerHomeRecommendations } = await import('@zamk/api-client/src/customer');
+  try {
+    const res = await getCustomerHomeRecommendations();
+    const blocks: UIHomeRecommendationBlock[] = [];
+    for (const b of (res.blocks || [])) {
+      const items = await mapFavoritesToCatalog(b.items || []);
+      blocks.push({
+        type: b.type,
+        title: b.title,
+        items,
+      });
+    }
+    return { blocks };
+  } catch (error) {
+    return { blocks: [] };
+  }
+}
+
 export async function fetchSimilarProducts(productId: string, limit = 8): Promise<{ items: UIProduct[], totalCount: number }> {
   try {
     const res = await getSimilarProducts(productId, limit);

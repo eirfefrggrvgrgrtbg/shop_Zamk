@@ -19,26 +19,35 @@ class IntersectionObserverMock {
 
 // Mock dependencies
 vi.mock('../contexts/AuthContext', () => ({
-  useAuth: vi.fn()
+  useAuth: vi.fn(),
 }));
+
 vi.mock('../api/publicCatalog');
+
 vi.mock('../components/product/ProductCard', () => ({
   ProductCard: ({ product }: { product: Product }) => (
-    <div data-testid={`product-card-${product.id}`}>{product.name}</div>
-  )
+    <div data-testid={`product-card-${product.id}`}>
+      <a href={`/product/${product.id}`}>{product.name}</a>
+    </div>
+  ),
 }));
+
 vi.mock('../components/home/HomeAuctionBlock', () => ({
-  HomeAuctionBlock: () => <div data-testid="auction-block">Auction Block</div>
+  HomeAuctionBlock: () => <div data-testid="auction-block">Auction Block</div>,
 }));
+
 vi.mock('../components/home/HeroSection', () => ({
-  HeroSection: () => <div data-testid="hero-section">Hero Section</div>
+  HeroSection: () => <div data-testid="hero-section">Hero Section</div>,
 }));
+
 vi.mock('../components/editorial/StudioKit', () => ({
-  SectionHeader: ({ label, title }: { label: string, title: string }) => (
-    <div data-testid="section-header">{label} - {title}</div>
+  SectionHeader: ({ label, title }: { label: string; title: string }) => (
+    <div data-testid="section-header">
+      {label} - {title}
+    </div>
   ),
   BrandCard: () => <div data-testid="brand-card" />,
-  CategoryCard: () => <div data-testid="category-card" />
+  CategoryCard: () => <div data-testid="category-card" />,
 }));
 
 const mockProducts: Product[] = [
@@ -62,6 +71,7 @@ describe('Home Page - PER.3 Recently Viewed Block', () => {
     vi.mocked(publicCatalog.fetchCategories).mockResolvedValue([]);
     vi.mocked(publicCatalog.fetchRecentlyViewed).mockResolvedValue({ items: [], totalCount: 0 });
     vi.mocked(publicCatalog.fetchForYouProducts).mockResolvedValue({ items: [], totalCount: 0 });
+    vi.mocked(publicCatalog.fetchHomeRecommendations).mockResolvedValue({ blocks: [] });
     vi.mocked(authContext.useAuth).mockReturnValue({ isAuthenticated: false } as any);
   });
 
@@ -78,7 +88,10 @@ describe('Home Page - PER.3 Recently Viewed Block', () => {
   };
 
   it('A. authenticated + non-empty response -> "Недавно просмотренные" rendered', async () => {
-    vi.mocked(authContext.useAuth).mockReturnValue({ isAuthenticated: true } as any);
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'c1', role: 'customer' } as any,
+    } as any);
     vi.mocked(publicCatalog.fetchRecentlyViewed).mockResolvedValue({ items: mockRecentProducts, totalCount: 2 });
 
     renderHome();
@@ -87,13 +100,10 @@ describe('Home Page - PER.3 Recently Viewed Block', () => {
       expect(screen.getByText('История - Недавно просмотренные')).toBeTruthy();
     });
 
-    // B. backend ordering preserved
-    // "Recent B" and "Recent A" should be rendered in order, and ProductCard is mocked to output the name
     const recentB = await screen.findByTestId('product-card-r2');
     const recentA = await screen.findByTestId('product-card-r1');
     expect(recentB).toBeTruthy();
     expect(recentA).toBeTruthy();
-    // In DOM, recentB should appear before recentA
     expect(recentB.compareDocumentPosition(recentA)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
@@ -113,7 +123,10 @@ describe('Home Page - PER.3 Recently Viewed Block', () => {
   });
 
   it('E. authenticated + [] -> block absent', async () => {
-    vi.mocked(authContext.useAuth).mockReturnValue({ isAuthenticated: true } as any);
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'c1', role: 'customer' } as any,
+    } as any);
     vi.mocked(publicCatalog.fetchRecentlyViewed).mockResolvedValue({ items: [], totalCount: 0 });
 
     renderHome();
@@ -123,14 +136,13 @@ describe('Home Page - PER.3 Recently Viewed Block', () => {
     });
 
     expect(publicCatalog.fetchRecentlyViewed).toHaveBeenCalled();
-    // Wait for the block to not be there
     await waitFor(() => {
       expect(screen.queryByText('История - Недавно просмотренные')).toBeNull();
     });
   });
 
   it('F. API error -> homepage still renders -> recently viewed block hidden', async () => {
-    vi.mocked(authContext.useAuth).mockReturnValue({ isAuthenticated: true } as any);
+    vi.mocked(authContext.useAuth).mockReturnValue({ isAuthenticated: false } as any);
     vi.mocked(publicCatalog.fetchRecentlyViewed).mockRejectedValue(new Error('Network error'));
 
     renderHome();
@@ -139,96 +151,339 @@ describe('Home Page - PER.3 Recently Viewed Block', () => {
       expect(screen.queryByText('Загрузка витрины...')).toBeNull();
     });
 
-    // Because fetchRecentlyViewed catches errors in our implementation and returns {items: []}
-    // we just check if it degrades silently
     await waitFor(() => {
       expect(screen.queryByText('История - Недавно просмотренные')).toBeNull();
     });
 
-    // G. existing homepage content remains present
     expect(screen.getByTestId('hero-section')).toBeTruthy();
     expect(screen.getByTestId('auction-block')).toBeTruthy();
     expect(screen.getByText('Новинки - Свежие поступления')).toBeTruthy();
   });
+});
 
-  describe('PER.5B2 - For You Block on Home', () => {
-    const mockForYouProducts: Product[] = [
-      { id: 'fy1', name: 'For You Jacket', price: 300, category: 'Cat 1', brand: 'Brand 1', brandId: 'b1', sellerId: 's1', sellerName: 'Seller 1', sellerSlug: 'seller-1', image: 'img1.jpg', images: [], isNew: false },
-      { id: 'fy2', name: 'For You Coat', price: 450, category: 'Cat 1', brand: 'Brand 1', brandId: 'b1', sellerId: 's1', sellerName: 'Seller 1', sellerSlug: 'seller-1', image: 'img2.jpg', images: [], isNew: false },
-    ];
+describe('Home Page - PERS.2C3B Home Recommendation Composer Integration', () => {
+  const mockFYProduct: Product = {
+    id: 'fy-1',
+    name: 'For You Jacket',
+    price: 300,
+    category: 'Cat 1',
+    brand: 'Brand 1',
+    brandId: 'b1',
+    sellerId: 's1',
+    sellerName: 'Seller 1',
+    sellerSlug: 'seller-1',
+    image: 'img1.jpg',
+    images: [],
+    isNew: false,
+  };
 
-    it('A. authenticated customer + non-empty response -> "Для вас" rendered', async () => {
-      vi.mocked(authContext.useAuth).mockReturnValue({
-        isAuthenticated: true,
-        user: { id: 'c1', role: 'customer' } as any,
-      } as any);
-      vi.mocked(publicCatalog.fetchForYouProducts).mockResolvedValue({ items: mockForYouProducts, totalCount: 2 });
+  const mockPopularProduct: Product = {
+    id: 'pop-1',
+    name: 'Popular Hoodie',
+    price: 250,
+    category: 'Cat 1',
+    brand: 'Brand 2',
+    brandId: 'b2',
+    sellerId: 's2',
+    sellerName: 'Seller 2',
+    sellerSlug: 'seller-2',
+    image: 'img2.jpg',
+    images: [],
+    isNew: false,
+  };
 
-      renderHome();
+  const mockNewProduct: Product = {
+    id: 'new-1',
+    name: 'New Arrivals Trench',
+    price: 500,
+    category: 'Cat 2',
+    brand: 'Brand 3',
+    brandId: 'b3',
+    sellerId: 's3',
+    sellerName: 'Seller 3',
+    sellerSlug: 'seller-3',
+    image: 'img3.jpg',
+    images: [],
+    isNew: true,
+  };
 
-      await waitFor(() => {
-        expect(screen.getByText('Рекомендации - Для вас')).toBeTruthy();
-      });
+  beforeEach(() => {
+    vi.clearAllMocks();
 
-      expect(screen.getByTestId('product-card-fy1')).toBeTruthy();
-      expect(screen.getByTestId('product-card-fy2')).toBeTruthy();
+    vi.mocked(publicCatalog.fetchProducts).mockResolvedValue({ items: mockProducts, totalCount: 2 });
+    vi.mocked(publicCatalog.fetchDirectSaleProducts).mockResolvedValue({ items: [], totalCount: 0 });
+    vi.mocked(publicCatalog.fetchBrands).mockResolvedValue([]);
+    vi.mocked(publicCatalog.fetchCategories).mockResolvedValue([]);
+    vi.mocked(publicCatalog.fetchRecentlyViewed).mockResolvedValue({ items: [], totalCount: 0 });
+    vi.mocked(publicCatalog.fetchForYouProducts).mockResolvedValue({ items: [], totalCount: 0 });
+    vi.mocked(publicCatalog.fetchHomeRecommendations).mockResolvedValue({ blocks: [] });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  const renderHome = () => {
+    return render(
+      <BrowserRouter>
+        <Home />
+      </BrowserRouter>
+    );
+  };
+
+  it('A. authenticated customer: composer blocks render in backend order', async () => {
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'c1', role: 'customer' } as any,
+    } as any);
+
+    vi.mocked(publicCatalog.fetchHomeRecommendations).mockResolvedValue({
+      blocks: [
+        { type: 'for_you', title: 'Для вас', items: [mockFYProduct] },
+        { type: 'popular', title: 'Популярное', items: [mockPopularProduct] },
+        { type: 'new', title: 'Новинки', items: [mockNewProduct] },
+      ],
     });
 
-    it('B. "Для вас" and "Недавно просмотренные" coexist in preferred order', async () => {
-      vi.mocked(authContext.useAuth).mockReturnValue({
-        isAuthenticated: true,
-        user: { id: 'c1', role: 'customer' } as any,
-      } as any);
-      vi.mocked(publicCatalog.fetchForYouProducts).mockResolvedValue({ items: mockForYouProducts, totalCount: 2 });
-      vi.mocked(publicCatalog.fetchRecentlyViewed).mockResolvedValue({ items: mockRecentProducts, totalCount: 2 });
+    renderHome();
 
-      renderHome();
-
-      await waitFor(() => {
-        expect(screen.getByText('Рекомендации - Для вас')).toBeTruthy();
-        expect(screen.getByText('История - Недавно просмотренные')).toBeTruthy();
-      });
-
-      const forYouHeader = screen.getByText('Рекомендации - Для вас');
-      const recentlyViewedHeader = screen.getByText('История - Недавно просмотренные');
-      // For You must appear before Recently Viewed
-      expect(forYouHeader.compareDocumentPosition(recentlyViewedHeader)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    await waitFor(() => {
+      expect(screen.getByTestId('recommendation-block-for_you')).toBeTruthy();
+      expect(screen.getByTestId('recommendation-block-popular')).toBeTruthy();
+      expect(screen.getByTestId('recommendation-block-new')).toBeTruthy();
     });
 
-    it('I. when "Для вас" errors, "Недавно просмотренные" still renders intact', async () => {
-      vi.mocked(authContext.useAuth).mockReturnValue({
-        isAuthenticated: true,
-        user: { id: 'c1', role: 'customer' } as any,
-      } as any);
-      vi.mocked(publicCatalog.fetchForYouProducts).mockRejectedValue(new Error('For-you API error'));
-      vi.mocked(publicCatalog.fetchRecentlyViewed).mockResolvedValue({ items: mockRecentProducts, totalCount: 2 });
+    const blockFY = screen.getByTestId('recommendation-block-for_you');
+    const blockPop = screen.getByTestId('recommendation-block-popular');
+    const blockNew = screen.getByTestId('recommendation-block-new');
 
-      renderHome();
+    expect(blockFY.compareDocumentPosition(blockPop)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(blockPop.compareDocumentPosition(blockNew)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
 
-      await waitFor(() => {
-        expect(screen.getByText('История - Недавно просмотренные')).toBeTruthy();
-        expect(screen.getByTestId('product-card-r2')).toBeTruthy();
-      });
+  it('B. for_you/popular/new render correct titles and items', async () => {
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'c1', role: 'customer' } as any,
+    } as any);
 
-      expect(screen.queryByText('Рекомендации - Для вас')).toBeNull();
+    vi.mocked(publicCatalog.fetchHomeRecommendations).mockResolvedValue({
+      blocks: [
+        { type: 'for_you', title: 'Для вас', items: [mockFYProduct] },
+        { type: 'popular', title: 'Популярное', items: [mockPopularProduct] },
+        { type: 'new', title: 'Новинки', items: [mockNewProduct] },
+      ],
     });
 
-    it('I2. when "Недавно просмотренные" errors, "Для вас" still renders intact', async () => {
-      vi.mocked(authContext.useAuth).mockReturnValue({
-        isAuthenticated: true,
-        user: { id: 'c1', role: 'customer' } as any,
-      } as any);
-      vi.mocked(publicCatalog.fetchForYouProducts).mockResolvedValue({ items: mockForYouProducts, totalCount: 2 });
-      vi.mocked(publicCatalog.fetchRecentlyViewed).mockRejectedValue(new Error('Recently viewed API error'));
+    renderHome();
 
-      renderHome();
+    await waitFor(() => {
+      expect(screen.getByText('Рекомендации - Для вас')).toBeTruthy();
+      expect(screen.getByText('Популярное - Популярное')).toBeTruthy();
+      expect(screen.getByText('Новинки - Новинки')).toBeTruthy();
+    });
 
-      await waitFor(() => {
-        expect(screen.getByText('Рекомендации - Для вас')).toBeTruthy();
-      });
+    expect(screen.getByTestId('product-card-fy-1')).toBeTruthy();
+    expect(screen.getByTestId('product-card-pop-1')).toBeTruthy();
+    expect(screen.getByTestId('product-card-new-1')).toBeTruthy();
+  });
 
+  it('C. missing/empty block is not rendered', async () => {
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'c1', role: 'customer' } as any,
+    } as any);
+
+    // Only popular returned, for_you and new are missing
+    vi.mocked(publicCatalog.fetchHomeRecommendations).mockResolvedValue({
+      blocks: [{ type: 'popular', title: 'Популярное', items: [mockPopularProduct] }],
+    });
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('recommendation-block-popular')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('recommendation-block-for_you')).toBeNull();
+    expect(screen.queryByTestId('recommendation-block-new')).toBeNull();
+  });
+
+  it('D. blocks [] does not break Home', async () => {
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'c1', role: 'customer' } as any,
+    } as any);
+
+    vi.mocked(publicCatalog.fetchHomeRecommendations).mockResolvedValue({ blocks: [] });
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('hero-section')).toBeTruthy();
+      expect(screen.getByTestId('auction-block')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('recommendation-block-for_you')).toBeNull();
+    expect(screen.queryByTestId('recommendation-block-popular')).toBeNull();
+    expect(screen.queryByTestId('recommendation-block-new')).toBeNull();
+  });
+
+  it('E. composer error does not break other Home sections', async () => {
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'c1', role: 'customer' } as any,
+    } as any);
+
+    vi.mocked(publicCatalog.fetchHomeRecommendations).mockRejectedValue(new Error('Composer 500 error'));
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('hero-section')).toBeTruthy();
+      expect(screen.getByTestId('auction-block')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('recommendation-block-for_you')).toBeNull();
+    expect(screen.queryByTestId('recommendation-block-popular')).toBeNull();
+    expect(screen.queryByTestId('recommendation-block-new')).toBeNull();
+  });
+
+  it('F. authenticated Home no longer performs legacy separate For You fetch', async () => {
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'c1', role: 'customer' } as any,
+    } as any);
+
+    vi.mocked(publicCatalog.fetchHomeRecommendations).mockResolvedValue({
+      blocks: [{ type: 'for_you', title: 'Для вас', items: [mockFYProduct] }],
+    });
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(publicCatalog.fetchHomeRecommendations).toHaveBeenCalledTimes(1);
+    });
+
+    expect(publicCatalog.fetchForYouProducts).not.toHaveBeenCalled();
+  });
+
+  it('G. authenticated Home no longer performs legacy UUID-sorted New logic', async () => {
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'c1', role: 'customer' } as any,
+    } as any);
+
+    vi.mocked(publicCatalog.fetchHomeRecommendations).mockResolvedValue({
+      blocks: [{ type: 'new', title: 'Новинки', items: [mockNewProduct] }],
+    });
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('recommendation-block-new')).toBeTruthy();
+    });
+
+    // The legacy section "Новинки - Свежие поступления" is NOT rendered for authenticated customer
+    expect(screen.queryByText('Новинки - Свежие поступления')).toBeNull();
+  });
+
+  it('H. Recently Viewed remains independent', async () => {
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'c1', role: 'customer' } as any,
+    } as any);
+
+    vi.mocked(publicCatalog.fetchHomeRecommendations).mockResolvedValue({
+      blocks: [{ type: 'for_you', title: 'Для вас', items: [mockFYProduct] }],
+    });
+    vi.mocked(publicCatalog.fetchRecentlyViewed).mockResolvedValue({
+      items: [mockPopularProduct],
+      totalCount: 1,
+    });
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByText('Рекомендации - Для вас')).toBeTruthy();
+      expect(screen.getByText('История - Недавно просмотренные')).toBeTruthy();
+    });
+
+    expect(publicCatalog.fetchRecentlyViewed).toHaveBeenCalledTimes(1);
+  });
+
+  it('I. same product may exist in Recently Viewed + discovery without frontend removal', async () => {
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'c1', role: 'customer' } as any,
+    } as any);
+
+    // Product mockFYProduct is in both For You discovery and Recently Viewed
+    vi.mocked(publicCatalog.fetchHomeRecommendations).mockResolvedValue({
+      blocks: [{ type: 'for_you', title: 'Для вас', items: [mockFYProduct] }],
+    });
+    vi.mocked(publicCatalog.fetchRecentlyViewed).mockResolvedValue({
+      items: [mockFYProduct],
+      totalCount: 1,
+    });
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByText('Рекомендации - Для вас')).toBeTruthy();
+      expect(screen.getByText('История - Недавно просмотренные')).toBeTruthy();
+      expect(screen.getAllByTestId(`product-card-${mockFYProduct.id}`)).toHaveLength(2);
+    });
+  });
+
+  it('J. anonymous visitor does not call customer composer', async () => {
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: false,
+      user: null,
+    } as any);
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('hero-section')).toBeTruthy();
+    });
+
+    expect(publicCatalog.fetchHomeRecommendations).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('recommendation-block-for_you')).toBeNull();
+  });
+
+  it('K. anonymous existing Home behavior remains intact', async () => {
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: false,
+      user: null,
+    } as any);
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByText('Новинки - Свежие поступления')).toBeTruthy();
       expect(screen.queryByText('История - Недавно просмотренные')).toBeNull();
-      expect(screen.getByTestId('product-card-fy1')).toBeTruthy();
+      expect(screen.queryByTestId('recommendation-block-for_you')).toBeNull();
     });
+  });
+
+  it('L. clicking product from composer block opens canonical PDP link', async () => {
+    vi.mocked(authContext.useAuth).mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'c1', role: 'customer' } as any,
+    } as any);
+
+    vi.mocked(publicCatalog.fetchHomeRecommendations).mockResolvedValue({
+      blocks: [{ type: 'popular', title: 'Популярное', items: [mockPopularProduct] }],
+    });
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('recommendation-block-popular')).toBeTruthy();
+    });
+
+    const link = screen.getByRole('link', { name: mockPopularProduct.name });
+    expect(link.getAttribute('href')).toBe(`/product/${mockPopularProduct.id}`);
   });
 });

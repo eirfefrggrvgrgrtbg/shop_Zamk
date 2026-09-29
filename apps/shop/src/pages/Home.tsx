@@ -5,11 +5,12 @@ import { motion } from 'framer-motion';
 import { BrandCard, CategoryCard, SectionHeader } from '../components/editorial/StudioKit';
 import { ProductCard } from '../components/product/ProductCard';
 import { Button } from '../components/ui/Button';
-import { fetchBrands, fetchCategories, fetchProducts, fetchDirectSaleProducts } from '../api/publicCatalog';
+import { fetchBrands, fetchCategories, fetchProducts, fetchDirectSaleProducts, fetchHomeRecommendations, type UIHomeRecommendationBlock } from '../api/publicCatalog';
 import { HeroSection } from '../components/home/HeroSection';
 import { HomeAuctionBlock } from '../components/home/HomeAuctionBlock';
-import { ForYouBlock } from '../components/home/ForYouBlock';
+import { RecommendationBlock } from '../components/home/RecommendationBlock';
 import { RecentlyViewedBlock } from '../components/home/RecentlyViewedBlock';
+import { useAuth } from '../contexts/AuthContext';
 import type { Brand, Category, Product } from '../types/catalog';
 
 const reveal = {
@@ -28,10 +29,14 @@ function EmptyHomeSection({ text }: { text: string }) {
 }
 
 export function Home() {
+  const { isAuthenticated, user } = useAuth();
+  const isCustomer = isAuthenticated && (!user?.role || user?.role === 'customer');
+
   const [products, setProducts] = useState<Product[]>([]);
   const [directSaleProducts, setDirectSaleProducts] = useState<Product[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [discoveryBlocks, setDiscoveryBlocks] = useState<UIHomeRecommendationBlock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -74,10 +79,37 @@ export function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isCustomer) {
+      setDiscoveryBlocks([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchHomeRecommendations()
+      .then((res) => {
+        if (!cancelled) {
+          setDiscoveryBlocks(res.blocks || []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDiscoveryBlocks([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isCustomer]);
+
   const featuredProducts = products.slice(0, 4);
-  const recentProducts = [...products]
-    .sort((left, right) => Number(right.id > left.id) - Number(left.id > right.id))
-    .slice(0, 4);
+  const recentProducts = isCustomer
+    ? []
+    : [...products]
+        .sort((left, right) => Number(right.id > left.id) - Number(left.id > right.id))
+        .slice(0, 4);
 
   return (
     <div className="relative z-10 min-h-screen pb-20">
@@ -133,22 +165,27 @@ export function Home() {
               <EmptyHomeSection text="Коллекции пока не подключены" />
             </motion.section>
 
-            <ForYouBlock />
+            {isCustomer &&
+              discoveryBlocks.map((block) => (
+                <RecommendationBlock key={block.type} block={block} />
+              ))}
 
             <RecentlyViewedBlock />
 
-            <motion.section {...reveal}>
-              <SectionHeader label="Новинки" title="Свежие поступления" />
-              {recentProducts.length > 0 ? (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
-                  {recentProducts.map((product) => (
-                    <ProductCard key={product.id} product={product} />
-                  ))}
-                </div>
-              ) : (
-                <EmptyHomeSection text="Нет данных" />
-              )}
-            </motion.section>
+            {!isCustomer && (
+              <motion.section {...reveal}>
+                <SectionHeader label="Новинки" title="Свежие поступления" />
+                {recentProducts.length > 0 ? (
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+                    {recentProducts.map((product) => (
+                      <ProductCard key={product.id} product={product} />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyHomeSection text="Нет данных" />
+                )}
+              </motion.section>
+            )}
 
             {directSaleProducts.length > 0 && (
               <motion.section {...reveal} className="glass-panel p-7 md:p-10 relative overflow-hidden">
