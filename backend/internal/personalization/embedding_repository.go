@@ -178,6 +178,48 @@ func (r *Repository) UpsertProductEmbedding(ctx context.Context, params UpsertPr
 	return nil
 }
 
+// DeleteProductEmbeddingIfMatch conditionally deletes a product embedding only if all spec and hash fields match exactly.
+// Returns true if a matching row was deleted, or false if no matching row existed (e.g. replaced by a newer worker).
+func (r *Repository) DeleteProductEmbeddingIfMatch(
+	ctx context.Context,
+	productID uuid.UUID,
+	provider string,
+	model string,
+	dimensions int,
+	inputSchemaVersion int,
+	contentHash string,
+) (bool, error) {
+	if productID == uuid.Nil {
+		return false, ErrEmbeddingNilProductID
+	}
+
+	query := `
+		DELETE FROM product_embeddings
+		WHERE product_id = $1
+		  AND provider = $2
+		  AND model = $3
+		  AND dimensions = $4
+		  AND input_schema_version = $5
+		  AND content_hash = $6
+	`
+
+	tag, err := r.db.Exec(
+		ctx,
+		query,
+		productID,
+		strings.TrimSpace(provider),
+		strings.TrimSpace(model),
+		dimensions,
+		inputSchemaVersion,
+		strings.TrimSpace(contentHash),
+	)
+	if err != nil {
+		return false, fmt.Errorf("failed to conditionally delete product embedding: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
 func validateUpsertParams(params UpsertProductEmbeddingParams) error {
 	if params.ProductID == uuid.Nil {
 		return ErrEmbeddingNilProductID

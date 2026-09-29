@@ -546,4 +546,75 @@ func TestEmbeddingRepository_DBIntegration(t *testing.T) {
 		// Furthermore, even if the database has 1536 floats in `embedding`, the metadata query selects only:
 		// (product_id, provider, model, dimensions, input_schema_version, content_hash, generated_at).
 	})
+
+	// X. Conditional delete repository method:
+	// exact matching spec/hash deletes; mismatching hash/spec leaves row untouched
+	t.Run("X_ConditionalDelete_ExactMatchDeletes_MismatchLeavesUntouched", func(t *testing.T) {
+		exactHash := strings.Repeat("e", 64)
+		params := personalization.UpsertProductEmbeddingParams{
+			ProductID:          product1ID,
+			Provider:           "openai",
+			Model:              "text-embedding-3-small",
+			Dimensions:         1536,
+			InputSchemaVersion: 1,
+			ContentHash:        exactHash,
+			Embedding:          makeValidFloatVector(1536),
+		}
+		if err := repo.UpsertProductEmbedding(ctx, params); err != nil {
+			t.Fatalf("failed to setup embedding: %v", err)
+		}
+
+		// 1. Mismatching hash -> does NOT delete
+		deleted, err := repo.DeleteProductEmbeddingIfMatch(ctx, product1ID, "openai", "text-embedding-3-small", 1536, 1, strings.Repeat("f", 64))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if deleted {
+			t.Fatalf("expected deleted=false on hash mismatch")
+		}
+		// Confirm row still exists
+		meta, err := repo.GetProductEmbeddingMetadata(ctx, product1ID)
+		if err != nil || meta == nil {
+			t.Fatalf("expected row to remain in DB on hash mismatch")
+		}
+
+		// 2. Mismatching model -> does NOT delete
+		deleted, err = repo.DeleteProductEmbeddingIfMatch(ctx, product1ID, "openai", "wrong-model", 1536, 1, exactHash)
+		if err != nil || deleted {
+			t.Fatalf("expected deleted=false on model mismatch")
+		}
+
+		// 3. Mismatching provider -> does NOT delete
+		deleted, err = repo.DeleteProductEmbeddingIfMatch(ctx, product1ID, "wrong-provider", "text-embedding-3-small", 1536, 1, exactHash)
+		if err != nil || deleted {
+			t.Fatalf("expected deleted=false on provider mismatch")
+		}
+
+		// 4. Mismatching dimensions -> does NOT delete
+		deleted, err = repo.DeleteProductEmbeddingIfMatch(ctx, product1ID, "openai", "text-embedding-3-small", 512, 1, exactHash)
+		if err != nil || deleted {
+			t.Fatalf("expected deleted=false on dimensions mismatch")
+		}
+
+		// 5. Mismatching schema version -> does NOT delete
+		deleted, err = repo.DeleteProductEmbeddingIfMatch(ctx, product1ID, "openai", "text-embedding-3-small", 1536, 2, exactHash)
+		if err != nil || deleted {
+			t.Fatalf("expected deleted=false on schema mismatch")
+		}
+
+		// 6. Exact match -> DELETES row
+		deleted, err = repo.DeleteProductEmbeddingIfMatch(ctx, product1ID, "openai", "text-embedding-3-small", 1536, 1, exactHash)
+		if err != nil {
+			t.Fatalf("unexpected error on exact delete: %v", err)
+		}
+		if !deleted {
+			t.Fatalf("expected deleted=true on exact match")
+		}
+
+		// Confirm row is now gone
+		meta, err = repo.GetProductEmbeddingMetadata(ctx, product1ID)
+		if !errors.Is(err, personalization.ErrEmbeddingNotFound) || meta != nil {
+			t.Fatalf("expected ErrEmbeddingNotFound after successful conditional delete")
+		}
+	})
 }
