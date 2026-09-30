@@ -301,6 +301,10 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusBadRequest, "invalid_media_set", err.Error())
 			return
 		}
+		if errors.Is(err, ErrInvalidMediaMode) {
+			h.writeError(w, http.StatusBadRequest, "invalid_media_mode", err.Error())
+			return
+		}
 		if errors.Is(err, ErrInvalidImageColor) {
 			h.writeError(w, http.StatusBadRequest, "invalid_image_color", err.Error())
 			return
@@ -431,7 +435,23 @@ func (h *Handler) SubmitForModeration(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, ErrProductMediaRequired) {
-			h.writeError(w, http.StatusUnprocessableEntity, "product_media_required", "Загрузите хотя бы одну фотографию товара в разделе «Фото».")
+			h.writeError(w, http.StatusUnprocessableEntity, "product_media_required", "Загрузите не менее 3 фотографий товара в разделе «Фото».")
+			return
+		}
+		if errors.Is(err, ErrMissingColorImages) {
+			h.writeError(w, http.StatusUnprocessableEntity, "missing_color_images", "Каждый активный цвет товара должен содержать хотя бы одну фотографию в разделе «Фото».")
+			return
+		}
+		if errors.Is(err, ErrInvalidMediaMode) {
+			h.writeError(w, http.StatusUnprocessableEntity, "invalid_media_mode", "Товар не может содержать смесь общих и цветных фотографий.")
+			return
+		}
+		if errors.Is(err, ErrInvalidImageColor) {
+			h.writeError(w, http.StatusUnprocessableEntity, "invalid_image_color", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidMediaSet) {
+			h.writeError(w, http.StatusBadRequest, "invalid_media_set", err.Error())
 			return
 		}
 		if errors.Is(err, ErrProductMediaNotReady) {

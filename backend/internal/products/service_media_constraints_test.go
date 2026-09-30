@@ -100,7 +100,7 @@ func TestModerationSubmission_MediaValidation(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "at least one image is required")
 
-	// 4. Add an image without crop/rendition
+	// 4. Add an image without crop/rendition, plus 2 valid images to meet the >= 3 images requirement
 	repo := products.NewRepository(db.Pool)
 	img1 := &products.ProductImage{
 		ID:        uuid.New(),
@@ -111,7 +111,25 @@ func TestModerationSubmission_MediaValidation(t *testing.T) {
 	err = repo.AddProductImage(ctx, img1)
 	require.NoError(t, err)
 
-	// Attempt submit -> fails because image lacks rendition
+	img2 := &products.ProductImage{
+		ID:        uuid.New(),
+		ProductID: p.ID,
+		ImageURL:  "https://storage.zamk.test/orig2.jpg",
+		IsMain:    false,
+	}
+	require.NoError(t, repo.AddProductImage(ctx, img2))
+	require.NoError(t, repo.UpdateProductImageCrop(ctx, img2.ID, 0, 0, 1.0, 1.0, "https://storage.zamk.test/rend2.jpg", "rend2.jpg"))
+
+	img3 := &products.ProductImage{
+		ID:        uuid.New(),
+		ProductID: p.ID,
+		ImageURL:  "https://storage.zamk.test/orig3.jpg",
+		IsMain:    false,
+	}
+	require.NoError(t, repo.AddProductImage(ctx, img3))
+	require.NoError(t, repo.UpdateProductImageCrop(ctx, img3.ID, 0, 0, 1.0, 1.0, "https://storage.zamk.test/rend3.jpg", "rend3.jpg"))
+
+	// Attempt submit -> fails because image 1 lacks rendition
 	err = svc.SubmitProductToModeration(ctx, sellerUserID, p.ID, products.SubmitProductModerationRequest{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "all images must have explicit 4:5 renditions")
@@ -230,7 +248,7 @@ func TestSubmitProductToModeration_TypedErrors(t *testing.T) {
 	err = svc.SubmitProductToModeration(ctx, sellerUserID, p2.ID, products.SubmitProductModerationRequest{})
 	assert.ErrorIs(t, err, products.ErrProductMediaRequired)
 
-	// 3. Image without crop
+	// 3. Image without crop (with 2 other cropped images to satisfy count >= 3)
 	repo := products.NewRepository(db.Pool)
 	imgID := uuid.New()
 	err = repo.AddProductImage(ctx, &products.ProductImage{
@@ -240,6 +258,25 @@ func TestSubmitProductToModeration_TypedErrors(t *testing.T) {
 		IsMain:    false,
 	})
 	require.NoError(t, err)
+
+	imgHelper1 := uuid.New()
+	require.NoError(t, repo.AddProductImage(ctx, &products.ProductImage{
+		ID:        imgHelper1,
+		ProductID: p2.ID,
+		ImageURL:  "https://storage.zamk.test/h1.jpg",
+		IsMain:    false,
+	}))
+	require.NoError(t, repo.UpdateProductImageCrop(ctx, imgHelper1, 0, 0, 1.0, 1.0, "https://storage.zamk.test/rend_h1.jpg", "rend_h1.jpg"))
+
+	imgHelper2 := uuid.New()
+	require.NoError(t, repo.AddProductImage(ctx, &products.ProductImage{
+		ID:        imgHelper2,
+		ProductID: p2.ID,
+		ImageURL:  "https://storage.zamk.test/h2.jpg",
+		IsMain:    false,
+	}))
+	require.NoError(t, repo.UpdateProductImageCrop(ctx, imgHelper2, 0, 0, 1.0, 1.0, "https://storage.zamk.test/rend_h2.jpg", "rend_h2.jpg"))
+
 	err = svc.SubmitProductToModeration(ctx, sellerUserID, p2.ID, products.SubmitProductModerationRequest{})
 	assert.ErrorIs(t, err, products.ErrProductMediaNotReady)
 

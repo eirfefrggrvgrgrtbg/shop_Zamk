@@ -608,7 +608,7 @@ func TestProductMediaStaging(t *testing.T) {
 		keyC := fmt.Sprintf("%s/key-c.jpg", qPrefix)
 		err = repo.EnqueueMediaCleanup(ctx, keyC)
 		require.NoError(t, err)
-		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = NOW() - interval '10 minutes' WHERE object_key = $1", keyC)
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = '1970-01-01 00:00:00' WHERE object_key = $1", keyC)
 		require.NoError(t, err)
 
 		jobC, err := repo.ClaimMediaCleanupJob(ctx, 5*time.Minute)
@@ -784,7 +784,7 @@ func TestProductMediaStaging(t *testing.T) {
 		err := repo.EnqueueMediaCleanup(ctx, concurKey)
 		require.NoError(t, err)
 
-		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = NOW() - interval '10 minutes' WHERE object_key = $1", concurKey)
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = '1970-01-01 00:00:00' WHERE object_key = $1", concurKey)
 		require.NoError(t, err)
 
 		job, err := repo.ClaimMediaCleanupJob(ctx, 1*time.Minute)

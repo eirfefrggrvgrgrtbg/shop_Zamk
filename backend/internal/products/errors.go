@@ -39,6 +39,8 @@ var (
 	ErrMediaIntegrityViolation  = errors.New("media integrity violation")
 	ErrInvalidMediaSet          = errors.New("invalid media set")
 	ErrInvalidImageColor        = errors.New("image color does not match any product variant color")
+	ErrInvalidMediaMode         = errors.New("invalid media mode: product cannot mix generic and color-specific images")
+	ErrMissingColorImages       = errors.New("every active product color must have at least one image")
 )
 
 type ValidationError struct {

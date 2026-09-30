@@ -141,6 +141,10 @@ func TestPATCHMediaMatrix(t *testing.T) {
 	})
 
 	t.Run("2_and_20_explicit_empty_images_clears_all_and_sets_main_null", func(t *testing.T) {
+		_, _ = db.Pool.Exec(ctx, "DELETE FROM product_media_cleanup_jobs WHERE object_key IN ('obj1.jpg', 'rend1.jpg')")
+		t.Cleanup(func() {
+			_, _ = db.Pool.Exec(context.Background(), "DELETE FROM product_media_cleanup_jobs WHERE object_key IN ('obj1.jpg', 'rend1.jpg')")
+		})
 		p := createDraftWithVariant(&colorID1)
 		imgID := uuid.New()
 		rendKey := "rend1.jpg"
@@ -271,6 +275,10 @@ func TestPATCHMediaMatrix(t *testing.T) {
 	})
 
 	t.Run("7_8_9_mixed_set_and_omitted_canonical_with_rendition_cleanup", func(t *testing.T) {
+		_, _ = db.Pool.Exec(ctx, "DELETE FROM product_media_cleanup_jobs WHERE object_key IN ('drop.jpg', 'rend-drop.jpg')")
+		t.Cleanup(func() {
+			_, _ = db.Pool.Exec(context.Background(), "DELETE FROM product_media_cleanup_jobs WHERE object_key IN ('drop.jpg', 'rend-drop.jpg')")
+		})
 		p := createDraftWithVariant(&colorID1)
 		existingImg1 := uuid.New()
 		existingImg2ToDrop := uuid.New()
@@ -661,11 +669,15 @@ func TestCrossSubdocumentRollback_TestA(t *testing.T) {
 	require.NoError(t, err)
 
 	catID := uuid.New()
-	_, err = db.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug, size_chart_required) VALUES ($1, 'Rollback Cat A', $2, false)", catID, "cat-"+catID.String())
-	require.NoError(t, err)
+	origKey := fmt.Sprintf("orig_a_%s.jpg", catID.String())
+	newKey := fmt.Sprintf("new_stg_a_%s.jpg", catID.String())
 	t.Cleanup(func() {
+		db.Pool.Exec(context.Background(), "DELETE FROM product_media_cleanup_jobs WHERE object_key IN ($1, $2)", origKey, newKey)
 		db.Pool.Exec(context.Background(), "DELETE FROM categories WHERE id = $1", catID)
 	})
+
+	_, err = db.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug, size_chart_required) VALUES ($1, 'Rollback Cat A', $2, false)", catID, "cat-"+catID.String())
+	require.NoError(t, err)
 
 	slug := "p-rb-a-" + uuid.New().String()
 	p, err := svc.CreateProductForSeller(ctx, sellerUserID, products.CreateProductRequest{
@@ -677,13 +689,13 @@ func TestCrossSubdocumentRollback_TestA(t *testing.T) {
 
 	// Prepare initial canonical image
 	oldImgID := uuid.New()
-	insertCanonicalImage(t, ctx, db.Pool, oldImgID, p.ID, "orig_a.jpg", 0, true, nil, nil)
-	_, err = db.Pool.Exec(ctx, "UPDATE products SET main_image_url = 'https://storage.zamk.test/orig_a.jpg', main_image_object_key = 'orig_a.jpg' WHERE id = $1", p.ID)
+	insertCanonicalImage(t, ctx, db.Pool, oldImgID, p.ID, origKey, 0, true, nil, nil)
+	_, err = db.Pool.Exec(ctx, "UPDATE products SET main_image_url = 'https://storage.zamk.test/' || $2, main_image_object_key = $2 WHERE id = $1", p.ID, origKey)
 	require.NoError(t, err)
 
 	// Prepare new ready staging row
 	newStagedID := uuid.New()
-	insertStagingRow(t, ctx, db.Pool, newStagedID, sellerID, p.ID, "ready", "new_stg_a.jpg")
+	insertStagingRow(t, ctx, db.Pool, newStagedID, sellerID, p.ID, "ready", newKey)
 
 	// We pass:
 	// - Images: replace oldImg with newStagedID (which would succeed in Step 4 and queue cleanup for orig_a.jpg)
@@ -726,9 +738,9 @@ func TestCrossSubdocumentRollback_TestA(t *testing.T) {
 	assert.Equal(t, "ready", stgStatus, "Staging row must remain ready due to rollback")
 	assert.Nil(t, consumedAt, "consumed_at must be nil")
 
-	// 3. Cleanup jobs: cleanup for orig_a.jpg was NOT enqueued
+	// 3. Cleanup jobs: cleanup for origKey was NOT enqueued
 	var cleanupCount int
-	err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_cleanup_jobs WHERE object_key = 'orig_a.jpg'").Scan(&cleanupCount)
+	err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_cleanup_jobs WHERE object_key = $1", origKey).Scan(&cleanupCount)
 	require.NoError(t, err)
 	assert.Equal(t, 0, cleanupCount, "Cleanup job must be rolled back")
 
@@ -736,8 +748,8 @@ func TestCrossSubdocumentRollback_TestA(t *testing.T) {
 	var mainURL, mainKey *string
 	err = db.Pool.QueryRow(ctx, "SELECT main_image_url, main_image_object_key FROM products WHERE id = $1", p.ID).Scan(&mainURL, &mainKey)
 	require.NoError(t, err)
-	assert.Equal(t, "https://storage.zamk.test/orig_a.jpg", *mainURL)
-	assert.Equal(t, "orig_a.jpg", *mainKey)
+	assert.Equal(t, "https://storage.zamk.test/"+origKey, *mainURL)
+	assert.Equal(t, origKey, *mainKey)
 }
 
 func TestCrossSubdocumentRollback_TestB(t *testing.T) {
@@ -856,21 +868,27 @@ func TestMediaIndistinguishableSecurity(t *testing.T) {
 
 	foreignProductID := uuid.New()
 	foreignSellerID := uuid.New()
-	_, err = db.Pool.Exec(ctx, "INSERT INTO sellers (id, brand_name, slug, status, contact_email) VALUES ($1, 'Foreign Brand Sec', $2, 'active', 'foreignsec@test.com')", foreignSellerID, "f-brand-"+foreignSellerID.String())
-	require.NoError(t, err)
-	_, err = db.Pool.Exec(ctx, "INSERT INTO products (id, seller_id, title, slug, status, price_cents, currency) VALUES ($1, $2, 'Foreign Prod Sec', $3, 'draft', 1000, 'RUB')", foreignProductID, foreignSellerID, "f-prod-sec-"+foreignProductID.String())
-	require.NoError(t, err)
+	fSecStgKey := fmt.Sprintf("f-sec-stg-%s.jpg", foreignProductID.String())
+	fSecCanKey := fmt.Sprintf("f-sec-can-%s.jpg", foreignProductID.String())
+
 	t.Cleanup(func() {
+		db.Pool.Exec(context.Background(), "DELETE FROM product_media_cleanup_jobs WHERE object_key IN ($1, $2)", fSecStgKey, fSecCanKey)
 		db.Pool.Exec(context.Background(), "DELETE FROM product_media_staging WHERE seller_id = $1", foreignSellerID)
 		db.Pool.Exec(context.Background(), "DELETE FROM product_images WHERE product_id = $1", foreignProductID)
 		db.Pool.Exec(context.Background(), "DELETE FROM products WHERE id = $1", foreignProductID)
 		db.Pool.Exec(context.Background(), "DELETE FROM sellers WHERE id = $1", foreignSellerID)
 	})
+
+	_, err = db.Pool.Exec(ctx, "INSERT INTO sellers (id, brand_name, slug, status, contact_email) VALUES ($1, 'Foreign Brand Sec', $2, 'active', 'foreignsec@test.com')", foreignSellerID, "f-brand-"+foreignSellerID.String())
+	require.NoError(t, err)
+	_, err = db.Pool.Exec(ctx, "INSERT INTO products (id, seller_id, title, slug, status, price_cents, currency) VALUES ($1, $2, 'Foreign Prod Sec', $3, 'draft', 1000, 'RUB')", foreignProductID, foreignSellerID, "f-prod-sec-"+foreignProductID.String())
+	require.NoError(t, err)
+
 	foreignStagedID := uuid.New()
-	insertStagingRow(t, ctx, db.Pool, foreignStagedID, foreignSellerID, foreignProductID, "ready", "f-sec-stg.jpg")
+	insertStagingRow(t, ctx, db.Pool, foreignStagedID, foreignSellerID, foreignProductID, "ready", fSecStgKey)
 
 	foreignCanID := uuid.New()
-	insertCanonicalImage(t, ctx, db.Pool, foreignCanID, foreignProductID, "f-sec-can.jpg", 0, true, nil, nil)
+	insertCanonicalImage(t, ctx, db.Pool, foreignCanID, foreignProductID, fSecCanKey, 0, true, nil, nil)
 
 	nonexistentID := uuid.New()
 

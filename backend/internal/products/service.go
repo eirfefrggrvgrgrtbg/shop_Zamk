@@ -851,26 +851,46 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				p.Variants = variants
 			}
 
-			// Step 4: Reconcile media
+			// Determine finalActiveVariants from database (strictly is_active == true)
+			dbVariants, err := txRepo.GetProductVariants(ctx, p.ID)
+			if err != nil {
+				return err
+			}
+			var finalActiveVariants []ProductVariant
+			for _, v := range dbVariants {
+				if v.IsActive {
+					finalActiveVariants = append(finalActiveVariants, v)
+				}
+			}
+
+			// Determine finalImages
+			var finalImages []DesiredProductImage
 			if req.Images != nil {
-				// Derive finalColorIDs from active variants
-				activeVariants, err := txRepo.GetProductVariants(ctx, p.ID)
+				finalImages = desiredMedia
+			} else {
+				dbImages, err := txRepo.GetProductImages(ctx, p.ID)
 				if err != nil {
 					return err
 				}
-				finalColorIDs := make(map[uuid.UUID]bool)
-				for _, av := range activeVariants {
-					if av.ColorID != nil {
-						finalColorIDs[*av.ColorID] = true
+				finalImages = make([]DesiredProductImage, len(dbImages))
+				for i, img := range dbImages {
+					finalImages[i] = DesiredProductImage{
+						ID:        img.ID,
+						AltText:   img.AltText,
+						ColorID:   img.ColorID,
+						IsMain:    img.IsMain,
+						SortOrder: img.SortOrder,
 					}
 				}
+			}
 
-				for _, dm := range desiredMedia {
-					if dm.ColorID != nil && !finalColorIDs[*dm.ColorID] {
-						return ErrInvalidImageColor
-					}
-				}
+			// Validate final media state
+			if err := validateFinalProductMediaState(finalActiveVariants, finalImages); err != nil {
+				return err
+			}
 
+			// Step 4: Reconcile media
+			if req.Images != nil {
 				if err := txRepo.ReconcileProductImagesTx(ctx, seller.ID, p.ID, desiredMedia); err != nil {
 					return err
 				}
@@ -944,6 +964,49 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			}
 		} else {
 			// revision != nil (published product revision flow)
+			var revActiveVariants []ProductVariant
+			if req.Variants != nil {
+				for _, v := range variants {
+					if v.IsActive {
+						revActiveVariants = append(revActiveVariants, v)
+					}
+				}
+			} else {
+				dbVariants, err := txRepo.GetProductVariants(ctx, p.ID)
+				if err != nil {
+					return err
+				}
+				for _, v := range dbVariants {
+					if v.IsActive {
+						revActiveVariants = append(revActiveVariants, v)
+					}
+				}
+			}
+
+			var revImages []DesiredProductImage
+			if req.Images != nil {
+				revImages = desiredMedia
+			} else {
+				dbImages, err := txRepo.GetProductImages(ctx, p.ID)
+				if err != nil {
+					return err
+				}
+				revImages = make([]DesiredProductImage, len(dbImages))
+				for i, img := range dbImages {
+					revImages[i] = DesiredProductImage{
+						ID:        img.ID,
+						AltText:   img.AltText,
+						ColorID:   img.ColorID,
+						IsMain:    img.IsMain,
+						SortOrder: img.SortOrder,
+					}
+				}
+			}
+
+			if err := validateFinalProductMediaState(revActiveVariants, revImages); err != nil {
+				return err
+			}
+
 			revQuery := `INSERT INTO product_revisions (id, product_id, status, content_snapshot, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`
 			_, err := tx.Exec(ctx, revQuery, revision.ID, revision.ProductID, revision.Status, revision.ContentSnapshot, revision.CreatedAt, revision.UpdatedAt)
 			if err != nil {
@@ -1065,8 +1128,8 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 		return ErrProductCategoryRequired
 	}
 
-	if len(p.Images) == 0 {
-		return ErrProductMediaRequired
+	if len(p.Images) < 3 {
+		return fmt.Errorf("%w: at least 3 images are required for moderation, got %d", ErrProductMediaRequired, len(p.Images))
 	}
 
 	hasMain := false
@@ -1080,6 +1143,40 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 	}
 	if !hasMain {
 		return ErrProductMainImageMissing
+	}
+
+	desiredImages := make([]DesiredProductImage, len(p.Images))
+	for i, img := range p.Images {
+		desiredImages[i] = DesiredProductImage{
+			ID:        img.ID,
+			AltText:   img.AltText,
+			ColorID:   img.ColorID,
+			IsMain:    img.IsMain,
+			SortOrder: img.SortOrder,
+		}
+	}
+	if err := validateFinalProductMediaState(p.Variants, desiredImages); err != nil {
+		return err
+	}
+
+	activeColors := make(map[uuid.UUID]bool)
+	for _, v := range p.Variants {
+		if v.IsActive && v.ColorID != nil && *v.ColorID != uuid.Nil {
+			activeColors[*v.ColorID] = true
+		}
+	}
+	if len(activeColors) > 0 {
+		colorImageCounts := make(map[uuid.UUID]int)
+		for _, img := range p.Images {
+			if img.ColorID != nil {
+				colorImageCounts[*img.ColorID]++
+			}
+		}
+		for cID := range activeColors {
+			if colorImageCounts[cID] == 0 {
+				return ErrMissingColorImages
+			}
+		}
 	}
 
 	var pAttrs []ProductAttributeValueRequest
