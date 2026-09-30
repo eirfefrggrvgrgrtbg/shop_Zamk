@@ -136,6 +136,53 @@ func TestMediaFinalState_Matrix(t *testing.T) {
 	})
 
 	// ==========================================
+	// GENERAL_GALLERY Tests (with and without colors)
+	// ==========================================
+	t.Run("C1_one_active_color_all_generic_images_PASS", func(t *testing.T) {
+		sku := "sku-blk-gen-" + uuid.New().String()
+		p := createDraft([]products.ProductVariantRequest{
+			{SellerSKU: &sku, ColorID: &colorBlackID, PriceCents: ptr(int64(2500))},
+		})
+		staged1 := stageImage(p.ID)
+		staged2 := stageImage(p.ID)
+
+		updReq := products.UpdateProductRequest{
+			Images: []products.ProductImageRequest{
+				{ID: &staged1, IsMain: &isMainTrue, ColorID: nil},
+				{ID: &staged2, IsMain: &isMainFalse, ColorID: nil},
+			},
+		}
+		pUpdated, err := svc.UpdateProductForSeller(ctx, sellerUserID, p.ID, updReq)
+		require.NoError(t, err)
+		assert.Len(t, pUpdated.Images, 2)
+		assert.Nil(t, pUpdated.Images[0].ColorID)
+		assert.Nil(t, pUpdated.Images[1].ColorID)
+	})
+
+	t.Run("C2_two_active_colors_all_generic_images_PASS", func(t *testing.T) {
+		sku1 := "sku-b-gen-" + uuid.New().String()
+		sku2 := "sku-y-gen-" + uuid.New().String()
+		p := createDraft([]products.ProductVariantRequest{
+			{SellerSKU: &sku1, ColorID: &colorBlackID, PriceCents: ptr(int64(2500))},
+			{SellerSKU: &sku2, ColorID: &colorYellowID, PriceCents: ptr(int64(2500))},
+		})
+		staged1 := stageImage(p.ID)
+		staged2 := stageImage(p.ID)
+
+		updReq := products.UpdateProductRequest{
+			Images: []products.ProductImageRequest{
+				{ID: &staged1, IsMain: &isMainTrue, ColorID: nil},
+				{ID: &staged2, IsMain: &isMainFalse, ColorID: nil},
+			},
+		}
+		pUpdated, err := svc.UpdateProductForSeller(ctx, sellerUserID, p.ID, updReq)
+		require.NoError(t, err)
+		assert.Len(t, pUpdated.Images, 2)
+		assert.Nil(t, pUpdated.Images[0].ColorID)
+		assert.Nil(t, pUpdated.Images[1].ColorID)
+	})
+
+	// ==========================================
 	// COLORWAY_GALLERIES Tests
 	// ==========================================
 	t.Run("C_one_active_color_all_images_that_color_PASS", func(t *testing.T) {
@@ -424,6 +471,22 @@ func TestMediaFinalState_Matrix(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("P2_GENERAL_with_active_colors_gte_3_moderation_PASS", func(t *testing.T) {
+		skuB := "sku-p2b-" + uuid.New().String()
+		skuY := "sku-p2y-" + uuid.New().String()
+		p := createDraft([]products.ProductVariantRequest{
+			{SellerSKU: &skuB, ColorID: &colorBlackID, PriceCents: ptr(int64(2500))},
+			{SellerSKU: &skuY, ColorID: &colorYellowID, PriceCents: ptr(int64(2500))},
+		})
+		// 3 generic images (color_id == nil) on a 2-color product
+		_ = addCanonicalCroppedImage(p.ID, true, nil, 0)
+		_ = addCanonicalCroppedImage(p.ID, false, nil, 1)
+		_ = addCanonicalCroppedImage(p.ID, false, nil, 2)
+
+		err := svc.SubmitProductToModeration(ctx, sellerUserID, p.ID, products.SubmitProductModerationRequest{})
+		require.NoError(t, err, "GENERAL gallery mode must be valid for moderation on products with color dimension")
+	})
+
 	t.Run("Q_COLORWAY_total_gte_3_but_active_color_has_0_missing_color_images", func(t *testing.T) {
 		skuB := "sku-qb-" + uuid.New().String()
 		skuY := "sku-qy-" + uuid.New().String()
@@ -455,6 +518,32 @@ func TestMediaFinalState_Matrix(t *testing.T) {
 
 		err := svc.SubmitProductToModeration(ctx, sellerUserID, p.ID, products.SubmitProductModerationRequest{})
 		require.NoError(t, err)
+	})
+
+	// ==========================================
+	// GENERAL Gallery Color Mutation Robustness
+	// ==========================================
+	t.Run("M_GENERAL_removes_or_adds_colors_without_invalidating_generic_images", func(t *testing.T) {
+		skuB := "sku-mb-" + uuid.New().String()
+		skuY := "sku-my-" + uuid.New().String()
+		p := createDraft([]products.ProductVariantRequest{
+			{SellerSKU: &skuB, ColorID: &colorBlackID, PriceCents: ptr(int64(2500))},
+			{SellerSKU: &skuY, ColorID: &colorYellowID, PriceCents: ptr(int64(2500))},
+		})
+		_ = addCanonicalCroppedImage(p.ID, true, nil, 0)
+		_ = addCanonicalCroppedImage(p.ID, false, nil, 1)
+
+		// Removing Yellow variant while keeping generic images (images: nil) must SUCCEED
+		updReq := products.UpdateProductRequest{
+			Variants: []products.ProductVariantRequest{
+				{SellerSKU: &skuB, ColorID: &colorBlackID, PriceCents: ptr(int64(2500))},
+			},
+			Images: nil, // Omitted
+		}
+		pUpdated, err := svc.UpdateProductForSeller(ctx, sellerUserID, p.ID, updReq)
+		require.NoError(t, err)
+		assert.Len(t, pUpdated.Images, 2)
+		assert.Nil(t, pUpdated.Images[0].ColorID)
 	})
 
 	// ==========================================
@@ -509,7 +598,19 @@ func TestMediaFinalState_Matrix(t *testing.T) {
 		_, err := db.Pool.Exec(ctx, "UPDATE products SET status = 'published' WHERE id = $1", p.ID)
 		require.NoError(t, err)
 
-		// W. Revision cannot bypass hybrid validation
+		// W1. Revision can switch to GENERAL gallery (generic images on product with colors)
+		stagedGen1 := stageImage(p.ID)
+		stagedGen2 := stageImage(p.ID)
+		revReqGen := products.UpdateProductRequest{
+			Images: []products.ProductImageRequest{
+				{ID: &stagedGen1, IsMain: &isMainTrue, ColorID: nil},
+				{ID: &stagedGen2, IsMain: &isMainFalse, ColorID: nil},
+			},
+		}
+		_, err = svc.UpdateProductForSeller(ctx, sellerUserID, p.ID, revReqGen)
+		require.NoError(t, err, "Revision must support GENERAL_GALLERY for products with colors")
+
+		// W2. Revision cannot bypass hybrid validation
 		stagedHybrid1 := stageImage(p.ID)
 		stagedHybrid2 := stageImage(p.ID)
 		revReqHybrid := products.UpdateProductRequest{

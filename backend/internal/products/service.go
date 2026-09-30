@@ -1159,22 +1159,36 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 		return err
 	}
 
-	activeColors := make(map[uuid.UUID]bool)
-	for _, v := range p.Variants {
-		if v.IsActive && v.ColorID != nil && *v.ColorID != uuid.Nil {
-			activeColors[*v.ColorID] = true
+	// In COLORWAY_GALLERIES mode (where images are color-specific),
+	// every active color must have at least one image.
+	// In GENERAL_GALLERY mode (all images are generic),
+	// per-color coverage is not required.
+	isColorway := false
+	for _, img := range p.Images {
+		if img.ColorID != nil && *img.ColorID != uuid.Nil {
+			isColorway = true
+			break
 		}
 	}
-	if len(activeColors) > 0 {
-		colorImageCounts := make(map[uuid.UUID]int)
-		for _, img := range p.Images {
-			if img.ColorID != nil {
-				colorImageCounts[*img.ColorID]++
+
+	if isColorway {
+		activeColors := make(map[uuid.UUID]bool)
+		for _, v := range p.Variants {
+			if v.IsActive && v.ColorID != nil && *v.ColorID != uuid.Nil {
+				activeColors[*v.ColorID] = true
 			}
 		}
-		for cID := range activeColors {
-			if colorImageCounts[cID] == 0 {
-				return ErrMissingColorImages
+		if len(activeColors) > 0 {
+			colorImageCounts := make(map[uuid.UUID]int)
+			for _, img := range p.Images {
+				if img.ColorID != nil && *img.ColorID != uuid.Nil {
+					colorImageCounts[*img.ColorID]++
+				}
+			}
+			for cID := range activeColors {
+				if colorImageCounts[cID] == 0 {
+					return ErrMissingColorImages
+				}
 			}
 		}
 	}
