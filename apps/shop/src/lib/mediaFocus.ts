@@ -75,3 +75,94 @@ export function findMediaIndexForColor(
   // Last-resort fallback: first image in gallery
   return 0;
 }
+
+/**
+ * CATALOG VARIANTS.3C-R1: Presentation Media Modes
+ *
+ * Exactly TWO presentation modes:
+ * - GENERAL_GALLERY: All usable product images are generic (colorId == null).
+ *   Color selection does not change gallery.
+ * - COLORWAY_GALLERIES: Product has at least one color-specific image (colorId != null).
+ *   Each colorway has its own isolated gallery. Generic images are legacy/non-canonical
+ *   and NEVER shown in customer presentation.
+ */
+export type PresentationMediaMode = 'GENERAL_GALLERY' | 'COLORWAY_GALLERIES';
+
+export function derivePresentationMediaMode(
+  images?: GalleryMediaItem[] | null
+): PresentationMediaMode {
+  if (!images || images.length === 0) {
+    return 'GENERAL_GALLERY';
+  }
+  const hasColorSpecific = images.some((img) => Boolean(img.colorId));
+  return hasColorSpecific ? 'COLORWAY_GALLERIES' : 'GENERAL_GALLERY';
+}
+
+/**
+ * Determines the deterministic default colorway to preview in COLORWAY_GALLERIES
+ * mode when no color has been explicitly selected yet:
+ * 1. colorId of canonical/main image if it has a colorId
+ * 2. first colorway containing a canonical/primary image
+ * 3. first colorway by existing stable media order
+ */
+export function getDeterministicDefaultColorId(
+  images?: GalleryMediaItem[] | null,
+  canonicalMainImageUrl?: string | null
+): string | null {
+  if (!images || images.length === 0) return null;
+
+  // 1. colorId of canonical/main image if it has a colorId
+  if (canonicalMainImageUrl) {
+    const mainImg = images.find((img) => img.url === canonicalMainImageUrl && Boolean(img.colorId));
+    if (mainImg?.colorId) {
+      return mainImg.colorId;
+    }
+  }
+
+  // 2. First colorway containing a canonical/primary image or by stable media order
+  const firstColorImage = images.find((img) => Boolean(img.colorId));
+  return firstColorImage?.colorId || null;
+}
+
+/**
+ * CATALOG VARIANTS.3C-R1: Stable Fashion Gallery Filtering
+ *
+ * Mode A (GENERAL_GALLERY):
+ *   Returns all generic product images (image.colorId == null).
+ *   Color selection does NOT alter the gallery.
+ *
+ * Mode B (COLORWAY_GALLERIES):
+ *   No hybrid presentation: generic images are strictly excluded.
+ *   - If selectedColorId is set: returns ONLY images tagged with selectedColorId.
+ *   - If selectedColorId is null: returns ONLY images of the deterministic default colorway.
+ *   - If the active colorway has 0 own images: returns neutral placeholder.
+ *     NEVER falls back to generic images or another colorway's images.
+ */
+export function getVisibleGalleryImages(
+  allImages: GalleryMediaItem[] | undefined | null,
+  selectedColorId: string | null | undefined,
+  defaultFallbackImage: GalleryMediaItem = { url: 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image' },
+  canonicalMainImageUrl?: string | null
+): GalleryMediaItem[] {
+  const images = allImages && allImages.length > 0 ? allImages : [defaultFallbackImage];
+  const mode = derivePresentationMediaMode(images);
+
+  if (mode === 'GENERAL_GALLERY') {
+    const genericImages = images.filter((img) => !img.colorId);
+    return genericImages.length > 0 ? genericImages : [defaultFallbackImage];
+  }
+
+  // Mode B: COLORWAY_GALLERIES
+  const activeColorId = selectedColorId || getDeterministicDefaultColorId(images, canonicalMainImageUrl);
+
+  if (activeColorId) {
+    const colorImages = images.filter((img) => img.colorId === activeColorId);
+    if (colorImages.length > 0) {
+      return colorImages;
+    }
+  }
+
+  // If active colorway has 0 own images, show neutral placeholder.
+  // NEVER show generic images or another colorway's images.
+  return [defaultFallbackImage];
+}

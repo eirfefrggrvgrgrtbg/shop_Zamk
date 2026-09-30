@@ -227,15 +227,15 @@ export function ProductPresentationCore({
   return (
     <>
       <div className="grid grid-cols-1 min-[960px]:grid-cols-[1fr_420px] lg:grid-cols-[1fr_460px] min-[1200px]:grid-cols-[704px_500px] gap-6 lg:gap-8 min-[1200px]:gap-14 items-start">
-        {/* LEFT GALLERY: Up to ~704px on desktop */}
+        {/* GALLERY: Stable fashion geometry without vertical left rail */}
         <div
-          className="w-full flex flex-col min-[960px]:flex-row gap-4 min-[1200px]:gap-6 items-start outline-none"
+          className="w-full flex flex-col gap-3 items-start outline-none"
           tabIndex={visibleImages.length > 1 ? 0 : undefined}
           onKeyDown={handleGalleryKeyDown}
           aria-label="Галерея товара"
         >
           {visibleImages.length === 0 ? (
-            <div className="flex-1 w-full max-w-[520px] mx-auto min-[960px]:mx-0">
+            <div className="w-full max-w-[520px] mx-auto min-[960px]:mx-0">
               {emptyMediaSlot ? (
                 emptyMediaSlot
               ) : mediaAddSlot ? (
@@ -254,155 +254,122 @@ export function ProductPresentationCore({
               )}
             </div>
           ) : (
-            <>
-          {/* Vertical Thumbnail Rail (Desktop) */}
-          {(visibleImages.length > 1 || (visibleImages.length === 1 && mediaAddSlot)) && (
-            <div className="hidden min-[960px]:flex flex-col gap-2.5 w-16 min-[1200px]:w-[72px] flex-shrink-0 max-h-[680px] overflow-y-auto scrollbar-none">
-              {visibleImages.map((image, index) => {
-                const isSelected = currentActiveImage === index;
-                return (
-                  <div key={index + image.url} className="relative group/thumb flex-shrink-0">
+            <div className="w-full max-w-[520px] mx-auto min-[960px]:mx-0 flex flex-col gap-3">
+              {/* Main Stage */}
+              <div
+                data-testid="pdp-main-stage"
+                className="group relative bg-[#f5f5f7] dark:bg-[#1a1a1c] border border-black/5 dark:border-white/5 rounded-xl overflow-hidden w-full aspect-[4/5] max-h-[640px] flex items-center justify-center select-none"
+              >
+                <img
+                  key={currentImageUrl}
+                  src={currentImageUrl}
+                  alt={product.name}
+                  data-testid="main-product-image"
+                  className="w-full h-full object-contain mix-blend-multiply dark:mix-blend-normal transition-opacity duration-200 pointer-events-none"
+                />
+
+                {visibleImages.length > 1 ? (
+                  <div className="absolute inset-0 flex pointer-events-none">
                     <button
                       type="button"
-                      data-testid={`pdp-thumbnail-${index}`}
-                      onClick={() => onActiveImageChange(index)}
-                      aria-label={`Фото ${index + 1}`}
-                      className={cn(
-                        "w-16 h-20 min-[1200px]:w-[72px] min-[1200px]:h-[90px] flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f7] dark:bg-[#1a1a1c] transition-all p-1 flex items-center justify-center cursor-pointer",
-                        isSelected
-                          ? "border border-graphite dark:border-white ring-1 ring-graphite/20 dark:ring-white/20 opacity-100"
-                          : "border border-transparent hover:border-border-soft dark:hover:border-white/20 opacity-70 hover:opacity-100"
-                      )}
+                      onClick={handlePrevImage}
+                      aria-label="Предыдущее фото"
+                      className="w-[28%] h-full cursor-w-resize pointer-events-auto relative flex items-center justify-start pl-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-graphite dark:focus-visible:ring-white"
                     >
-                      <img
-                        src={image.url}
-                        alt=""
-                        className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal"
-                      />
+                      <span className="w-9 h-9 rounded-full bg-white/85 dark:bg-black/75 text-graphite dark:text-white shadow-sm flex items-center justify-center opacity-75 hover:opacity-100 transition-opacity backdrop-blur-xs">
+                        <ChevronLeft className="w-5 h-5 -ml-0.5" />
+                      </span>
                     </button>
-                    {renderThumbnailOverlay?.(image, index)}
+
+                    <button
+                      ref={mainImageTriggerRef}
+                      type="button"
+                      onClick={() => setIsLightboxOpen(true)}
+                      aria-label="Открыть изображение на полный экран"
+                      className="w-[44%] h-full cursor-zoom-in pointer-events-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-graphite dark:focus-visible:ring-white"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={handleNextImage}
+                      aria-label="Следующее фото"
+                      className="w-[28%] h-full cursor-e-resize pointer-events-auto relative flex items-center justify-end pr-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-graphite dark:focus-visible:ring-white"
+                    >
+                      <span className="w-9 h-9 rounded-full bg-white/85 dark:bg-black/75 text-graphite dark:text-white shadow-sm flex items-center justify-center opacity-75 hover:opacity-100 transition-opacity backdrop-blur-xs">
+                        <ChevronRight className="w-5 h-5 -mr-0.5" />
+                      </span>
+                    </button>
                   </div>
-                );
-              })}
-              {mediaAddSlot}
-              {visibleImages.length > 7 && (
-                <span className="text-[10px] text-ash text-center font-medium pt-0.5">
-                  +{visibleImages.length - 7}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Main Stage */}
-          <div className="flex-1 w-full max-w-[520px] mx-auto min-[960px]:mx-0">
-            <div className="group relative bg-[#f5f5f7] dark:bg-[#1a1a1c] border border-black/5 dark:border-white/5 rounded-xl overflow-hidden w-full aspect-[4/5] max-h-[640px] flex items-center justify-center select-none">
-              <img
-                key={currentImageUrl}
-                src={currentImageUrl}
-                alt={product.name}
-                data-testid="main-product-image"
-                className="w-full h-full object-contain mix-blend-multiply dark:mix-blend-normal transition-opacity duration-200 pointer-events-none"
-              />
-
-              {visibleImages.length > 1 ? (
-                <div className="absolute inset-0 flex">
-                  <button
-                    type="button"
-                    onClick={handlePrevImage}
-                    aria-label="Предыдущее фото"
-                    className="w-[28%] h-full cursor-w-resize relative flex items-center justify-start pl-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-graphite dark:focus-visible:ring-white"
-                  >
-                    <span className="w-9 h-9 rounded-full bg-white/80 dark:bg-black/70 text-graphite dark:text-white shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-90 transition-opacity backdrop-blur-xs pointer-events-none">
-                      <ChevronLeft className="w-5 h-5 -ml-0.5" />
-                    </span>
-                  </button>
-
+                ) : (
                   <button
                     ref={mainImageTriggerRef}
                     type="button"
                     onClick={() => setIsLightboxOpen(true)}
                     aria-label="Открыть изображение на полный экран"
-                    className="w-[44%] h-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-graphite dark:focus-visible:ring-white"
+                    className="absolute inset-0 w-full h-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-graphite dark:focus-visible:ring-white"
                   />
+                )}
 
-                  <button
-                    type="button"
-                    onClick={handleNextImage}
-                    aria-label="Следующее фото"
-                    className="w-[28%] h-full cursor-e-resize relative flex items-center justify-end pr-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-graphite dark:focus-visible:ring-white"
-                  >
-                    <span className="w-9 h-9 rounded-full bg-white/80 dark:bg-black/70 text-graphite dark:text-white shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-90 transition-opacity backdrop-blur-xs pointer-events-none">
-                      <ChevronRight className="w-5 h-5 -mr-0.5" />
-                    </span>
-                  </button>
+                {(visibleImages.length > 1 || (visibleImages.length === 1 && mediaAddSlot)) && (
+                  <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-xs text-white text-[11px] font-medium tracking-wider tabular-nums pointer-events-none">
+                    {currentActiveImage + 1} / {visibleImages.length}
+                  </div>
+                )}
+
+                {product.isNew && (
+                  <span className="absolute top-3.5 left-3.5 px-2.5 py-0.5 rounded bg-graphite text-white dark:bg-white dark:text-black text-[11px] font-semibold uppercase tracking-wider shadow-xs pointer-events-none">
+                    Новинка
+                  </span>
+                )}
+                {product.discountPrice && (
+                  <span className="absolute top-3.5 right-3.5 px-2.5 py-0.5 rounded bg-red-600 text-white text-[11px] font-semibold uppercase tracking-wider shadow-xs pointer-events-none">
+                    -{Math.round((1 - product.discountPrice / product.price) * 100)}%
+                  </span>
+                )}
+              </div>
+
+              {galleryExtraSlot && (
+                <div className="mt-1 flex items-center justify-between" data-slot="gallery-extra">
+                  {galleryExtraSlot}
                 </div>
-              ) : (
-                <button
-                  ref={mainImageTriggerRef}
-                  type="button"
-                  onClick={() => setIsLightboxOpen(true)}
-                  aria-label="Открыть изображение на полный экран"
-                  className="absolute inset-0 w-full h-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-graphite dark:focus-visible:ring-white"
-                />
               )}
 
+              {/* Horizontal Thumbnails (Below Main Stage on Desktop + Mobile) */}
               {(visibleImages.length > 1 || (visibleImages.length === 1 && mediaAddSlot)) && (
-                <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-xs text-white text-[11px] font-medium tracking-wider tabular-nums pointer-events-none">
-                  {currentActiveImage + 1} / {visibleImages.length}
+                <div
+                  data-testid="pdp-thumbnails-container"
+                  className="flex gap-2 overflow-x-auto pt-1 pb-1 scrollbar-none w-full"
+                >
+                  {visibleImages.map((image, index) => {
+                    const isSelected = currentActiveImage === index;
+                    return (
+                      <div key={index + image.url} className="relative group/thumb flex-shrink-0">
+                        <button
+                          type="button"
+                          data-testid={`pdp-thumbnail-${index}`}
+                          onClick={() => onActiveImageChange(index)}
+                          aria-label={`Фото ${index + 1}`}
+                          className={cn(
+                            "w-14 h-[70px] sm:w-16 sm:h-20 min-[1200px]:w-[72px] min-[1200px]:h-[90px] flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f7] dark:bg-[#1a1a1c] transition-all p-1 flex items-center justify-center cursor-pointer",
+                            isSelected
+                              ? "border border-graphite dark:border-white ring-1 ring-graphite/20 dark:ring-white/20 opacity-100"
+                              : "border border-transparent hover:border-border-soft dark:hover:border-white/20 opacity-70 hover:opacity-100"
+                          )}
+                        >
+                          <img
+                            src={image.url}
+                            alt=""
+                            className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal"
+                          />
+                        </button>
+                        {renderThumbnailOverlay?.(image, index)}
+                      </div>
+                    );
+                  })}
+                  {mediaAddSlot}
                 </div>
-              )}
-
-              {product.isNew && (
-                <span className="absolute top-3.5 left-3.5 px-2.5 py-0.5 rounded bg-graphite text-white dark:bg-white dark:text-black text-[11px] font-semibold uppercase tracking-wider shadow-xs pointer-events-none">
-                  Новинка
-                </span>
-              )}
-              {product.discountPrice && (
-                <span className="absolute top-3.5 right-3.5 px-2.5 py-0.5 rounded bg-red-600 text-white text-[11px] font-semibold uppercase tracking-wider shadow-xs pointer-events-none">
-                  -{Math.round((1 - product.discountPrice / product.price) * 100)}%
-                </span>
               )}
             </div>
-
-            {galleryExtraSlot && (
-              <div className="mt-2.5 flex items-center justify-between" data-slot="gallery-extra">
-                {galleryExtraSlot}
-              </div>
-            )}
-
-            {/* Horizontal Thumbnails (Mobile / < 960px) */}
-            {(visibleImages.length > 1 || (visibleImages.length === 1 && mediaAddSlot)) && (
-              <div className="flex min-[960px]:hidden gap-2 overflow-x-auto pt-3 pb-1 scrollbar-none">
-                {visibleImages.map((image, index) => {
-                  const isSelected = currentActiveImage === index;
-                  return (
-                    <div key={index + image.url} className="relative group/thumb flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => onActiveImageChange(index)}
-                        aria-label={`Фото ${index + 1}`}
-                        className={cn(
-                          "w-14 h-[70px] flex-shrink-0 rounded-lg overflow-hidden bg-[#f5f5f7] dark:bg-[#1a1a1c] transition-all p-1 flex items-center justify-center cursor-pointer",
-                          isSelected
-                            ? "border border-graphite dark:border-white ring-1 ring-graphite/20 dark:ring-white/20 opacity-100"
-                            : "border border-transparent hover:border-border-soft dark:hover:border-white/20 opacity-70 hover:opacity-100"
-                        )}
-                      >
-                        <img
-                          src={image.url}
-                          alt=""
-                          className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal"
-                        />
-                      </button>
-                      {renderThumbnailOverlay?.(image, index)}
-                    </div>
-                  );
-                })}
-                {mediaAddSlot}
-              </div>
-            )}
-          </div>
-            </>
           )}
         </div>
 

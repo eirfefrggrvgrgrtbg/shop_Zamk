@@ -291,9 +291,9 @@ describe('SHOP PDP.2D2 — Variant Deep-Link URL State Integration', () => {
     // URL should remain completely clean
     expect(latestLocation.search).toBe('');
 
-    // Active image remains index 0 (general photo)
+    // In COLORWAY_GALLERIES mode, clean load previews deterministic default colorway (Black)
     const mainImg = screen.getByTestId('main-product-image');
-    expect(mainImg.getAttribute('src')).toBe('https://example.com/dress-general.jpg');
+    expect(mainImg.getAttribute('src')).toBe('https://example.com/dress-black-1.jpg');
   });
 
   it('2. Explicit color click: pushes ?color=<COLOR_ID> and focuses matching media', async () => {
@@ -415,21 +415,22 @@ describe('SHOP PDP.2D2 — Variant Deep-Link URL State Integration', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
       expect(screen.getByTestId('main-product-image').getAttribute('src')).toBe('https://example.com/dress-black-1.jpg');
+      expect(screen.getByTestId('color-swatch-color-black').getAttribute('aria-checked')).toBe('true');
     });
 
-    // Customer clicks thumbnail index 0 (general photo)
+    // Customer clicks thumbnail index 1 (dress-black-2) within Black colorway gallery
+    const thumb1 = screen.getByTestId('pdp-thumbnail-1');
+    fireEvent.click(thumb1);
+
+    let mainImg = screen.getByTestId('main-product-image');
+    expect(mainImg.getAttribute('src')).toBe('https://example.com/dress-black-2.jpg');
+
+    // Customer clicks back to thumbnail index 0 (dress-black-1)
     const thumb0 = screen.getByTestId('pdp-thumbnail-0');
     fireEvent.click(thumb0);
 
-    let mainImg = screen.getByTestId('main-product-image');
-    expect(mainImg.getAttribute('src')).toBe('https://example.com/dress-general.jpg');
-
-    // Customer clicks thumbnail index 2 (dress-black-2)
-    const thumb2 = screen.getByTestId('pdp-thumbnail-2');
-    fireEvent.click(thumb2);
-
     mainImg = screen.getByTestId('main-product-image');
-    expect(mainImg.getAttribute('src')).toBe('https://example.com/dress-black-2.jpg');
+    expect(mainImg.getAttribute('src')).toBe('https://example.com/dress-black-1.jpg');
   });
 
   it('8. Invalid color in URL: replaced to clean URL without crashing', async () => {
@@ -643,8 +644,8 @@ describe('SHOP PDP.2D2 — Variant Deep-Link URL State Integration', () => {
 
     await waitFor(() => {
       expect(latestLocation.search).toBe('');
-      // Main image returns to index 0 (general)
-      expect(screen.getByTestId('main-product-image').getAttribute('src')).toBe('https://example.com/dress-general.jpg');
+      // In COLORWAY_GALLERIES mode, returns to deterministic default preview colorway (dress-black-1.jpg)
+      expect(screen.getByTestId('main-product-image').getAttribute('src')).toBe('https://example.com/dress-black-1.jpg');
     });
 
     // Step 5: Simulate Browser Forward -> URL returns to ?color=color-white

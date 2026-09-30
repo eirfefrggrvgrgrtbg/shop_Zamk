@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   findMediaIndexForColor,
   deduplicateGalleryImages,
+  getVisibleGalleryImages,
+  derivePresentationMediaMode,
+  getDeterministicDefaultColorId,
   type GalleryMediaItem,
 } from './mediaFocus';
 
@@ -108,6 +111,107 @@ describe('SHOP PDP.2E1 Color-Aware Media Focus Logic (mediaFocus.ts)', () => {
       const result = deduplicateGalleryImages([], null);
       expect(result).toHaveLength(1);
       expect(result[0].url).toContain('placehold.co');
+    });
+  });
+
+  describe('CATALOG VARIANTS.3C-R1: Two Media Modes & getVisibleGalleryImages', () => {
+    const fullMixedCatalog: GalleryMediaItem[] = [
+      { url: 'https://example.com/general-1.jpg' },
+      { url: 'https://example.com/white-1.jpg', colorId: 'color-white' },
+      { url: 'https://example.com/white-2.jpg', colorId: 'color-white' },
+      { url: 'https://example.com/black-1.jpg', colorId: 'color-black' },
+      { url: 'https://example.com/black-2.jpg', colorId: 'color-black' },
+      { url: 'https://example.com/black-3.jpg', colorId: 'color-black' },
+      { url: 'https://example.com/red-1.jpg', colorId: 'color-red' },
+    ];
+
+    it('A. only generic images => GENERAL_GALLERY', () => {
+      const genericOnly: GalleryMediaItem[] = [
+        { url: 'https://example.com/gen-1.jpg' },
+        { url: 'https://example.com/gen-2.jpg' },
+      ];
+      expect(derivePresentationMediaMode(genericOnly)).toBe('GENERAL_GALLERY');
+    });
+
+    it('B. at least one color image => COLORWAY_GALLERIES', () => {
+      expect(derivePresentationMediaMode(fullMixedCatalog)).toBe('COLORWAY_GALLERIES');
+    });
+
+    it('C & H. mixed legacy data does NOT mix generic + color imagery in COLORWAY_GALLERIES', () => {
+      const result = getVisibleGalleryImages(fullMixedCatalog, 'color-white');
+      expect(result.some((img) => !img.colorId)).toBe(false);
+      expect(result.every((img) => img.colorId === 'color-white')).toBe(true);
+    });
+
+    it('D. common gallery unchanged by color click in GENERAL_GALLERY mode', () => {
+      const genericCatalog: GalleryMediaItem[] = [
+        { url: 'https://example.com/gen-1.jpg' },
+        { url: 'https://example.com/gen-2.jpg' },
+      ];
+      const resNull = getVisibleGalleryImages(genericCatalog, null);
+      const resColor = getVisibleGalleryImages(genericCatalog, 'color-red');
+      expect(resNull).toEqual(genericCatalog);
+      expect(resColor).toEqual(genericCatalog);
+    });
+
+    it('F. Black shows Black only', () => {
+      const result = getVisibleGalleryImages(fullMixedCatalog, 'color-black');
+      expect(result).toHaveLength(3);
+      expect(result.every((img) => img.colorId === 'color-black')).toBe(true);
+      expect(result.some((img) => img.colorId === 'color-red')).toBe(false);
+      expect(result.some((img) => img.colorId === 'color-white')).toBe(false);
+      expect(result.some((img) => !img.colorId)).toBe(false);
+    });
+
+    it('G. Yellow shows Yellow only', () => {
+      const yellowCatalog: GalleryMediaItem[] = [
+        ...fullMixedCatalog,
+        { url: 'https://example.com/yellow-1.jpg', colorId: 'color-yellow' },
+      ];
+      const result = getVisibleGalleryImages(yellowCatalog, 'color-yellow');
+      expect(result).toHaveLength(1);
+      expect(result[0].url).toBe('https://example.com/yellow-1.jpg');
+    });
+
+    it('I & J. color with no images in COLORWAY mode => neutral placeholder (never generic, never other color)', () => {
+      const result = getVisibleGalleryImages(fullMixedCatalog, 'color-green');
+      expect(result).toHaveLength(1);
+      expect(result[0].url).toContain('placehold.co');
+      expect(result.some((img) => img.colorId === 'color-red')).toBe(false);
+      expect(result.some((img) => img.colorId === 'color-black')).toBe(false);
+      expect(result.some((img) => img.url === 'https://example.com/general-1.jpg')).toBe(false);
+    });
+
+    it('K & L. no color selected in COLORWAY mode does NOT merge colorways; previews deterministic default colorway', () => {
+      // White is the first colorway in fullMixedCatalog
+      const result = getVisibleGalleryImages(fullMixedCatalog, null);
+      expect(result).toHaveLength(2);
+      expect(result.every((img) => img.colorId === 'color-white')).toBe(true);
+      expect(result.some((img) => img.colorId === 'color-black')).toBe(false);
+
+      // If canonical main image is black-2, default colorway becomes black
+      const resultWithMain = getVisibleGalleryImages(
+        fullMixedCatalog,
+        null,
+        undefined,
+        'https://example.com/black-2.jpg'
+      );
+      expect(resultWithMain).toHaveLength(3);
+      expect(resultWithMain.every((img) => img.colorId === 'color-black')).toBe(true);
+    });
+
+    it('preserves initial sorted order of images within colorway', () => {
+      const orderedBlack: GalleryMediaItem[] = [
+        { url: 'https://example.com/black-front.jpg', colorId: 'color-black' },
+        { url: 'https://example.com/black-back.jpg', colorId: 'color-black' },
+        { url: 'https://example.com/black-detail.jpg', colorId: 'color-black' },
+      ];
+      const result = getVisibleGalleryImages(orderedBlack, 'color-black');
+      expect(result.map((img) => img.url)).toEqual([
+        'https://example.com/black-front.jpg',
+        'https://example.com/black-back.jpg',
+        'https://example.com/black-detail.jpg',
+      ]);
     });
   });
 });

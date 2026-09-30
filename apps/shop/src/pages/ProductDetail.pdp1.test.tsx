@@ -463,7 +463,7 @@ describe('SHOP PDP.1 Canonical Geometry & Information Hierarchy', () => {
     expect(singleTrigger).toBeTruthy();
   });
 
-  it('10. gallery media belongs to the product as a whole and survives color changes without resetting index', async () => {
+  it('10. gallery media filters to selected colorway and resets index on color changes', async () => {
     const multiColorProduct: Product = {
       ...mockApparelProduct,
       images: [
@@ -512,30 +512,30 @@ describe('SHOP PDP.1 Canonical Geometry & Information Hierarchy', () => {
       expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
     });
 
-    // All 4 photos are present in one product-level stream
-    expect(screen.getByText('1 / 4')).toBeTruthy();
+    // In COLORWAY_GALLERIES mode, initial clean load previews deterministic default colorway (Black: 2 photos)
+    expect(screen.getByText('1 / 2')).toBeTruthy();
+    expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-black-1.jpg');
 
-    // Navigate to photo 3
+    // Navigate to photo 2 of Black
     const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
     fireEvent.click(nextBtn);
-    fireEvent.click(nextBtn);
-    expect(screen.getByText('3 / 4')).toBeTruthy();
-    expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-red-1.jpg');
+    expect(screen.getByText('2 / 2')).toBeTruthy();
+    expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-black-2.jpg');
 
-    // Switch color to Красный: focuses first red photo (photo 3)
+    // Switch color to Красный: gallery filters to red photos only, resetting active image to 0
     const redColorBtn = screen.getByRole('radio', { name: /Красный/i });
     fireEvent.click(redColorBtn);
 
-    // Active image focuses first Красный photo (photo 3) and total count remains 4
-    expect(screen.getByText('3 / 4')).toBeTruthy();
+    // Active image resets to first Красный photo and total count is 2
+    expect(screen.getByText('1 / 2')).toBeTruthy();
     expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-red-1.jpg');
 
-    // Switch back to Чёрный: focuses first black photo (photo 1)
+    // Switch back to Чёрный: gallery filters to black photos only, resetting active image to 0
     const blackColorBtn = screen.getByRole('radio', { name: /Чёрный/i });
     fireEvent.click(blackColorBtn);
 
-    // Active image focuses first Чёрный photo (photo 1) while total count remains 4
-    expect(screen.getByText('1 / 4')).toBeTruthy();
+    // Active image resets to first Чёрный photo and total count is 2
+    expect(screen.getByText('1 / 2')).toBeTruthy();
     expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-black-1.jpg');
   });
 
@@ -815,7 +815,7 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     expect(notice.textContent).toBe('Размер L недоступен в белом цвете');
   });
 
-  it('switching colors while retaining or clearing size preserves gallery media stream and active image', async () => {
+  it('switching colors while retaining or clearing size filters gallery to colorway and resets index', async () => {
     const multiMediaProduct: Product = {
       ...mockMultiColorSizeProduct,
       images: [
@@ -842,32 +842,31 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     // Advance gallery to photo 2
     const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
     fireEvent.click(nextBtn);
-    expect(screen.getByText('2 / 3')).toBeTruthy();
+    expect(screen.getByText('2 / 2')).toBeTruthy();
     expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-2.jpg');
 
     // Select size S
     const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
     fireEvent.click(sizeSBtn);
 
-    // Switch color to Белый (S is sold out in White; focuses White photo at 3 / 3)
+    // Switch color to Белый (S is sold out in White; White has 1 photo)
     const whiteColorRadio = screen.getByRole('radio', { name: /Белый/i });
     fireEvent.click(whiteColorRadio);
 
-    // Size S was cleared with notice, and gallery image focuses White photo at 3 / 3
-    expect(screen.getByText('3 / 3')).toBeTruthy();
+    // Size S was cleared with notice, and gallery image displays White photo (dress-3.jpg)
     expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-3.jpg');
 
     // Select size M (buyable; size selection does not affect active image)
     const sizeMBtn = screen.getByRole('button', { name: /^Размер M/i });
     fireEvent.click(sizeMBtn);
-    expect(screen.getByText('3 / 3')).toBeTruthy();
+    expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-3.jpg');
 
-    // Switch back to Чёрный (M is buyable in Black, size retained; focuses first Black photo at 1 / 3)
+    // Switch back to Чёрный (M is buyable in Black, size retained; focuses first Black photo at 1 / 2)
     const blackColorRadio = screen.getByRole('radio', { name: /Чёрный/i });
     fireEvent.click(blackColorRadio);
 
-    // Gallery image focuses first Black photo at 1 / 3 while size M remains selected
-    expect(screen.getByText('1 / 3')).toBeTruthy();
+    // Gallery image focuses first Black photo at 1 / 2 while size M remains selected
+    expect(screen.getByText('1 / 2')).toBeTruthy();
     expect((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src).toContain('dress-1.jpg');
   });
 
@@ -1418,10 +1417,10 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       const unselectedLabels = screen.getAllByText('Не выбран');
       expect(unselectedLabels.length).toBeGreaterThan(0);
 
-      // Active image remains the first GENERAL hero photo (index 0, '1 / 5')
-      expect(screen.getByText('1 / 5')).toBeTruthy();
+      // In COLORWAY_GALLERIES mode, initial clean load previews deterministic default colorway (Black: 2 photos)
+      expect(screen.getByText('1 / 2')).toBeTruthy();
       const mainImg = screen.getByAltText('Платье с цветной галереей') as HTMLImageElement;
-      expect(mainImg.src).toContain('general-hero.jpg');
+      expect(mainImg.src).toContain('black-1.jpg');
     });
 
     it('2. Explicit BLACK click: focuses first BLACK-tagged image', async () => {
@@ -1439,15 +1438,16 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
       });
 
-      // Initially on photo 1 (general hero)
-      expect(screen.getByText('1 / 5')).toBeTruthy();
+      // Initially previews deterministic default colorway (Black: 1 / 2)
+      expect(screen.getByText('1 / 2')).toBeTruthy();
 
       // Explicitly click Чёрный swatch
       const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
       fireEvent.click(blackSwatch);
 
-      // Jumps to photo 2 (black-1.jpg)
-      expect(screen.getByText('2 / 5')).toBeTruthy();
+      // Remains on photo 1 of 2 (black-1.jpg) with swatch checked
+      expect(screen.getByText('1 / 2')).toBeTruthy();
+      expect(blackSwatch.getAttribute('aria-checked')).toBe('true');
       const mainImg = screen.getByAltText('Платье с цветной галереей') as HTMLImageElement;
       expect(mainImg.src).toContain('black-1.jpg');
     });
@@ -1471,13 +1471,12 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
       fireEvent.click(whiteSwatch);
 
-      // Jumps to photo 3 (white-1.jpg)
-      expect(screen.getByText('3 / 5')).toBeTruthy();
+      // Shows White photo (white-1.jpg)
       const mainImg = screen.getByAltText('Платье с цветной галереей') as HTMLImageElement;
       expect(mainImg.src).toContain('white-1.jpg');
     });
 
-    it('4. Gallery content count and order does not change after color selection', async () => {
+    it('4. Gallery content filters to selected colorway', async () => {
       vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
 
       render(
@@ -1492,27 +1491,23 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
       });
 
-      // Select White: active jumps to photo 3
-      const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
-      fireEvent.click(whiteSwatch);
-      expect(screen.getByText('3 / 5')).toBeTruthy();
+      // Select Black: gallery filters to 2 Black photos
+      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackSwatch);
+      expect(screen.getByText('1 / 2')).toBeTruthy();
 
-      // Total count remains 5 in thumbnail strip and counter badge
       const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
       fireEvent.click(nextBtn);
-      expect(screen.getByText('4 / 5')).toBeTruthy();
+      expect(screen.getByText('2 / 2')).toBeTruthy();
       expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('black-2.jpg');
 
+      // Next wraps back to first black photo
       fireEvent.click(nextBtn);
-      expect(screen.getByText('5 / 5')).toBeTruthy();
-      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('general-fabric.jpg');
-
-      fireEvent.click(nextBtn);
-      expect(screen.getByText('1 / 5')).toBeTruthy();
-      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('general-hero.jpg');
+      expect(screen.getByText('1 / 2')).toBeTruthy();
+      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('black-1.jpg');
     });
 
-    it('5. After BLACK focus, user can manually navigate to WHITE/general images', async () => {
+    it('5. User stays strictly within current color images during navigation', async () => {
       vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
 
       render(
@@ -1527,19 +1522,19 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
       });
 
-      // Focus Black (photo 2)
+      // Focus Black (photo 1 of 2)
       const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
       fireEvent.click(blackSwatch);
-      expect(screen.getByText('2 / 5')).toBeTruthy();
+      expect(screen.getByText('1 / 2')).toBeTruthy();
 
-      // Browse to White photo (photo 3)
+      // Next stays in Black (photo 2 of 2)
       const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
       fireEvent.click(nextBtn);
-      expect(screen.getByText('3 / 5')).toBeTruthy();
-      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('white-1.jpg');
+      expect(screen.getByText('2 / 2')).toBeTruthy();
+      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('black-2.jpg');
     });
 
-    it('6. Re-click current BLACK: returns to first BLACK-tagged image', async () => {
+    it('6. Re-click current BLACK: resets to first BLACK-tagged image', async () => {
       vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(multiMediaColorProduct);
 
       render(
@@ -1556,20 +1551,18 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
 
       const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
       fireEvent.click(blackSwatch);
-      expect(screen.getByText('2 / 5')).toBeTruthy();
+      expect(screen.getByText('1 / 2')).toBeTruthy();
 
-      // Browse forward to photo 5 (general fabric)
+      // Browse forward to photo 2
       const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
-      fireEvent.click(nextBtn); // 3
-      fireEvent.click(nextBtn); // 4
-      fireEvent.click(nextBtn); // 5
-      expect(screen.getByText('5 / 5')).toBeTruthy();
+      fireEvent.click(nextBtn);
+      expect(screen.getByText('2 / 2')).toBeTruthy();
 
       // Re-click current Black swatch
       fireEvent.click(blackSwatch);
 
-      // Focus returns to first Black image (photo 2, 2 / 5)
-      expect(screen.getByText('2 / 5')).toBeTruthy();
+      // Focus returns to first Black image (photo 1, 1 / 2)
+      expect(screen.getByText('1 / 2')).toBeTruthy();
       expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('black-1.jpg');
     });
 
@@ -1588,18 +1581,19 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
       });
 
-      // User first moves to photo 3 (White)
-      const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
-      fireEvent.click(whiteSwatch);
-      expect(screen.getByText('3 / 5')).toBeTruthy();
+      // User first selects Black (1 / 2)
+      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackSwatch);
+      expect(screen.getByText('1 / 2')).toBeTruthy();
 
       // User selects Зелёный (has no tagged images, but general images exist)
       const greenSwatch = screen.getByRole('radio', { name: /Зелёный/i });
       fireEvent.click(greenSwatch);
 
-      // Focuses first GENERAL image (photo 1, general-hero.jpg)
-      expect(screen.getByText('1 / 5')).toBeTruthy();
-      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('general-hero.jpg');
+      // Falls back to neutral placeholder (never generic image or another colorway)
+      const currentImg = screen.getByAltText('Платье с цветной галереей') as HTMLImageElement;
+      expect(currentImg.src).toContain('placehold.co');
+      expect(currentImg.src).not.toContain('general-hero.jpg');
     });
 
     it('8. Size selection: does not affect active image', async () => {
@@ -1617,18 +1611,18 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
       });
 
-      // Go to photo 3 (White)
-      const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
-      fireEvent.click(whiteSwatch);
-      expect(screen.getByText('3 / 5')).toBeTruthy();
+      // Select Black (1 / 2)
+      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackSwatch);
+      expect(screen.getByText('1 / 2')).toBeTruthy();
 
       // Select size M
       const sizeMBtn = screen.getByRole('button', { name: /^Размер M/i });
       fireEvent.click(sizeMBtn);
 
-      // Still photo 3
-      expect(screen.getByText('3 / 5')).toBeTruthy();
-      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('white-1.jpg');
+      // Still photo 1 of 2
+      expect(screen.getByText('1 / 2')).toBeTruthy();
+      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('black-1.jpg');
     });
 
     it('9. PDP.2B size-retention color logic still works while media focus also occurs', async () => {
@@ -1658,8 +1652,8 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
       fireEvent.click(whiteSwatch);
 
-      // Media focused to White photo (photo 3)
-      expect(screen.getByText('3 / 5')).toBeTruthy();
+      // Media focused to White photo (white-1.jpg)
+      expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('white-1.jpg');
       // Size S was cleared with contextual notice
       expect(screen.getByRole('status').textContent).toBe('Размер S недоступен в белом цвете');
 
@@ -1671,8 +1665,8 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       const blackSwatchAgain = screen.getByRole('radio', { name: /Чёрный/i });
       fireEvent.click(blackSwatchAgain);
 
-      // Media focused to first Black photo (photo 2)
-      expect(screen.getByText('2 / 5')).toBeTruthy();
+      // Media focused to first Black photo (1 / 2)
+      expect(screen.getByText('1 / 2')).toBeTruthy();
       // Size M is retained
       const sizeMBtnAfter = screen.getByRole('button', { name: /^Размер M/i });
       expect(sizeMBtnAfter.getAttribute('aria-pressed')).toBe('true');
@@ -1708,20 +1702,19 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       // Select Black color first
       const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
       fireEvent.click(blackSwatch);
-      expect(screen.getByText('2 / 5')).toBeTruthy();
+      expect(screen.getByText('1 / 2')).toBeTruthy();
 
-      // Move to photo 4 (black-2.jpg)
+      // Move to photo 2 (black-2.jpg)
       const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
-      fireEvent.click(nextBtn); // 3
-      fireEvent.click(nextBtn); // 4
-      expect(screen.getByText('4 / 5')).toBeTruthy();
+      fireEvent.click(nextBtn);
+      expect(screen.getByText('2 / 2')).toBeTruthy();
 
       // Select size S
       const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
       fireEvent.click(sizeSBtn);
 
-      // Still photo 4
-      expect(screen.getByText('4 / 5')).toBeTruthy();
+      // Still photo 2
+      expect(screen.getByText('2 / 2')).toBeTruthy();
 
       // Click Add to Cart -> triggers stale stock recovery
       const addBtn = screen.getByRole('button', { name: /Добавить в корзину/i });
@@ -1731,8 +1724,8 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(publicCatalog.fetchProductById).toHaveBeenCalledTimes(2);
       });
 
-      // Active image MUST still be photo 4 (4 / 5) - not refocused to photo 1 or photo 2!
-      expect(screen.getByText('4 / 5')).toBeTruthy();
+      // Active image MUST still be photo 2 (2 / 2) - not refocused to photo 1!
+      expect(screen.getByText('2 / 2')).toBeTruthy();
       expect(((screen.getByAltText('Платье с цветной галереей') as HTMLImageElement).src)).toContain('black-2.jpg');
     });
 
@@ -1751,18 +1744,22 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Платье с цветной галереей' })).toBeTruthy();
       });
 
-      // On initial load: thumbnail 1 is active
-      const thumb1 = screen.getAllByRole('button', { name: 'Фото 1' })[0];
+      // Click Black: shows 2 Black photos
+      const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
+      fireEvent.click(blackSwatch);
+
+      expect(screen.getByText('1 / 2')).toBeTruthy();
+      const thumb0 = screen.getAllByRole('button', { name: 'Фото 1' })[0];
+      expect(thumb0.className).toContain('border-graphite');
+
+      // Next photo
+      const nextBtn = screen.getByRole('button', { name: 'Следующее фото' });
+      fireEvent.click(nextBtn);
+
+      expect(screen.getByText('2 / 2')).toBeTruthy();
+      const thumb1 = screen.getAllByRole('button', { name: 'Фото 2' })[0];
       expect(thumb1.className).toContain('border-graphite');
-
-      // Click White: focuses photo 3
-      const whiteSwatch = screen.getByRole('radio', { name: /Белый/i });
-      fireEvent.click(whiteSwatch);
-
-      expect(screen.getByText('3 / 5')).toBeTruthy();
-      const thumb3 = screen.getAllByRole('button', { name: 'Фото 3' })[0];
-      expect(thumb3.className).toContain('border-graphite');
-      expect(thumb1.className).not.toContain('border-graphite');
+      expect(thumb0.className).not.toContain('border-graphite');
     });
 
     it('12. Single-image product remains correct', async () => {
@@ -1881,17 +1878,18 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
       });
 
-      // Move to blue photo (photo 2)
+      // Move to blue photo
       const blueSwatch = screen.getByRole('radio', { name: /Синий/i });
       fireEvent.click(blueSwatch);
-      expect(screen.getByText('2 / 2')).toBeTruthy();
+      expect(((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src)).toContain('blue-1.jpg');
 
-      // Click Жёлтый (no yellow photos and no uncolored photos) -> falls back to photo 1 (index 0)
+      // Click Жёлтый (no yellow photos and no uncolored photos) -> falls back to safe placeholder, never another color's image
       const yellowSwatch = screen.getByRole('radio', { name: /Жёлтый/i });
       fireEvent.click(yellowSwatch);
 
-      expect(screen.getByText('1 / 2')).toBeTruthy();
-      expect(((screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement).src)).toContain('red-1.jpg');
+      const mainImg = screen.getByAltText('Шёлковое вечернее платье') as HTMLImageElement;
+      expect(mainImg.src).not.toContain('blue-1.jpg');
+      expect(mainImg.src).not.toContain('red-1.jpg');
     });
   });
 });

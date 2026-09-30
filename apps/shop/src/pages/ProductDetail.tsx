@@ -27,6 +27,7 @@ import {
 import {
   findMediaIndexForColor,
   deduplicateGalleryImages,
+  getVisibleGalleryImages,
 } from '../lib/mediaFocus';
 import { SimilarProductsBlock } from '../components/product/SimilarProductsBlock';
 import { ProductPresentationCore, formatReviewsCount } from '@zamk/shared';
@@ -157,14 +158,37 @@ export function ProductDetail() {
 
   const defaultImage = { url: 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image' };
 
-  // Product-level media stream: photos belong to the product as a whole.
-  // One stable, ordered media collection without filtering by selectedColor or selectedVariant.
-  const visibleImages: GalleryMediaItem[] = useMemo(() => {
+  // Base deduplicated media stream
+  const allImages: GalleryMediaItem[] = useMemo(() => {
     return deduplicateGalleryImages(product?.images, product?.image, defaultImage);
   }, [product?.images, product?.image]);
 
+  // CATALOG VARIANTS.3C-R1: Two Media Modes + Stable Fashion Gallery
+  // When a color is selected in COLORWAY_GALLERIES mode, gallery contains ONLY that color's images.
+  // When no color is selected in COLORWAY_GALLERIES mode, previews deterministic default colorway.
+  // In GENERAL_GALLERY mode, contains common generic images.
+  const visibleImages: GalleryMediaItem[] = useMemo(() => {
+    return getVisibleGalleryImages(allImages, selectedColorId, defaultImage, product?.image);
+  }, [allImages, selectedColorId, product?.image]);
+
   // Track last focused color to avoid re-focusing when manually browsing thumbnails
   const lastFocusedColorRef = useRef<string | null | undefined>(undefined);
+
+  // Reset active image whenever selectedColorId changes
+  const prevSelectedColorIdRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (prevSelectedColorIdRef.current !== undefined && prevSelectedColorIdRef.current !== selectedColorId) {
+      setActiveImage(0);
+    }
+    prevSelectedColorIdRef.current = selectedColorId;
+  }, [selectedColorId]);
+
+  // Safeguard: ensure activeImage never points beyond visibleImages
+  useEffect(() => {
+    if (activeImage >= visibleImages.length) {
+      setActiveImage(0);
+    }
+  }, [visibleImages.length, activeImage]);
 
   // Synchronize state with URL search params (on load, Back/Forward, or shared link)
   useEffect(() => {
@@ -188,12 +212,11 @@ export function ProductDetail() {
         restoreSelection(validated.targetColorId, validated.targetSizeId, nextNotice);
       }
 
-      // Media focus: URL-restored color represents explicit color intent (PDP.2D2 Section 15)
+      // Media focus: URL-restored color represents explicit color intent (PDP.2D2 Section 15 / VARIANTS.3C)
       // Focus media only if the explicit color changed from what was last focused
       if (lastFocusedColorRef.current !== validated.targetColorId) {
         lastFocusedColorRef.current = validated.targetColorId;
-        const targetIndex = findMediaIndexForColor(visibleImages, validated.targetColorId);
-        setActiveImage(targetIndex);
+        setActiveImage(0);
       }
     } else if (dimensionType === 'COLOR_AND_SIZE' && validated.hasExplicitSizeIntent && validated.targetSizeId) {
       if (
@@ -271,10 +294,9 @@ export function ProductDetail() {
     setRefreshErrorNotice(null);
     if (sizeError) setSizeError('');
 
-    // Color-aware media focus (PDP.2E1):
-    // Focus the first image matching selected color, or fallback to general image, or fallback to index 0.
-    const targetIndex = findMediaIndexForColor(visibleImages, colorId);
-    setActiveImage(targetIndex);
+    // CATALOG VARIANTS.3C: Color-Specific Gallery Filtering
+    // Switching color resets active image to the canonical first image of the selected colorway.
+    setActiveImage(0);
     lastFocusedColorRef.current = colorId;
 
     // Check if selected size remains buyable in new color (PDP.2B / PDP.2D2 Section 5)
