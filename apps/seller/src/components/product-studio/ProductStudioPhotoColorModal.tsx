@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Check, HelpCircle } from 'lucide-react';
 import type { ProductStudioImage } from '../../contexts/ProductStudioContext';
-import { getProductStudioImageDisplayUrl } from './productStudioMediaHelper';
+import { getProductStudioImageDisplayUrl, type ProductStudioMediaMode } from './productStudioMediaHelper';
 import { cn } from '../../lib/utils';
 
 export function getColorDisplayName(c?: {
@@ -20,6 +20,7 @@ export interface ProductStudioPhotoColorModalProps {
   isOpen: boolean;
   onClose: () => void;
   images: ProductStudioImage[];
+  mediaMode?: ProductStudioMediaMode;
   colors: Array<{
     id: string;
     name?: string;
@@ -35,6 +36,7 @@ export function ProductStudioPhotoColorModal({
   isOpen,
   onClose,
   images,
+  mediaMode,
   colors,
   onSave,
 }: ProductStudioPhotoColorModalProps) {
@@ -46,7 +48,7 @@ export function ProductStudioPhotoColorModal({
     if (isOpen) {
       const initial: Record<number, string | null> = {};
       images.forEach((img, idx) => {
-        initial[idx] = img.colorId ?? null;
+        initial[idx] = img.isUnassigned ? null : (img.colorId ?? null);
       });
       setPendingAssignments(initial);
       setSelectedPhotoIndex(0);
@@ -88,10 +90,15 @@ export function ProductStudioPhotoColorModal({
   });
 
   const handleApply = () => {
-    const updatedImages = images.map((img, idx) => ({
-      ...img,
-      colorId: pendingAssignments[idx] ?? null,
-    }));
+    const updatedImages = images.map((img, idx) => {
+      const assigned = pendingAssignments[idx] ?? null;
+      const isUnassigned = mediaMode === 'COLORWAY' ? !assigned : false;
+      return {
+        ...img,
+        colorId: assigned,
+        isUnassigned,
+      };
+    });
     onSave(updatedImages);
     onClose();
   };
@@ -136,7 +143,8 @@ export function ProductStudioPhotoColorModal({
           className="px-5 py-2.5 bg-gray-50/80 dark:bg-white/[0.02] border-b border-border-soft dark:border-white/10 flex items-center gap-2.5 text-xs text-ash flex-wrap"
         >
           <span className="font-medium text-graphite dark:text-white">
-            Общие: <strong className="font-semibold">{generalCount}</strong>
+            {mediaMode === 'COLORWAY' ? 'Нераспределённые: ' : 'Общие: '}
+            <strong className="font-semibold">{generalCount}</strong>
           </span>
           {colors.map((c) => {
             const displayName = getColorDisplayName(c);
@@ -228,7 +236,7 @@ export function ProductStudioPhotoColorModal({
                             data-testid={`photo-assigned-badge-${idx}`}
                             className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 dark:bg-white/10 text-ash shrink-0"
                           >
-                            Общее
+                            {mediaMode === 'COLORWAY' ? 'Не распределено' : 'Общее'}
                           </span>
                         )}
                       </div>
@@ -262,7 +270,11 @@ export function ProductStudioPhotoColorModal({
                       {selectedPhotoIndex === 0 && ' (Обложка)'}
                     </div>
                     <div className="text-[11px] text-ash mt-0.5 truncate">
-                      {activeColor ? `Привязано к: ${getColorDisplayName(activeColor)}` : 'Общее фото'}
+                      {activeColor
+                        ? `Привязано к: ${getColorDisplayName(activeColor)}`
+                        : mediaMode === 'COLORWAY'
+                        ? 'Не распределено'
+                        : 'Общее фото'}
                     </div>
                   </div>
                 </div>
@@ -273,7 +285,7 @@ export function ProductStudioPhotoColorModal({
                 </span>
 
                 <div className="space-y-2 flex-1">
-                  {/* Option: General */}
+                  {/* Option: General / Unassigned */}
                   <button
                     type="button"
                     data-testid="photo-bind-target-general"
@@ -291,9 +303,13 @@ export function ProductStudioPhotoColorModal({
                     )}
                   >
                     <div>
-                      <div className="text-xs font-semibold">Общее (все цвета)</div>
+                      <div className="text-xs font-semibold">
+                        {mediaMode === 'COLORWAY' ? 'Не распределено' : 'Общее (все цвета)'}
+                      </div>
                       <div className="text-[11px] text-ash mt-0.5">
-                        Показывается для всех вариантов
+                        {mediaMode === 'COLORWAY'
+                          ? 'Не привязано ни к одному цвету'
+                          : 'Показывается для всех вариантов'}
                       </div>
                     </div>
 

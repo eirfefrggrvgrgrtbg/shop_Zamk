@@ -1648,6 +1648,15 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       }));
 
       renderTestStudio({
+        initialDraft: {
+          ...sampleInitialDraft,
+          images: [
+            {
+              ...sampleInitialDraft.images![0],
+              colorId: null,
+            },
+          ],
+        },
         stageImageFn: mockStageImage,
         saveProductFn: mockSaveProduct,
         getProductFn: mockGetProduct,

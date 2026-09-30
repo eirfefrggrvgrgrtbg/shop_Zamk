@@ -9,7 +9,7 @@ import {
   type SellerSizeSystem,
   type SellerCategorySchema,
 } from "@zamk/api-client";
-import { Info, Link2 } from "lucide-react";
+import { Info, Link2, AlertTriangle } from "lucide-react";
 import { useProductStudio } from "../../contexts/ProductStudioContext";
 import { cn } from "../../lib/utils";
 import { ProductStudioPhotoColorModal, getColorDisplayName } from "./ProductStudioPhotoColorModal";
@@ -34,6 +34,13 @@ import {
   validateImageFile,
   getMediaProgressText,
   createLocalProductStudioImage,
+  deriveProductStudioMediaMode,
+  transitionMediaToColorway,
+  transitionMediaToGeneral,
+  resolveLegacyMixedMedia,
+  reconcileMediaOnColorRemoval,
+  isImageUnassigned,
+  type ProductStudioMediaMode,
   MIN_PRODUCT_IMAGES,
   MAX_PRODUCT_IMAGES,
   ALLOWED_IMAGE_MIME_TYPES,
@@ -86,6 +93,8 @@ export function ProductStudioVisualWorkspace() {
 
   // Modals state
   const [isPhotoColorModalOpen, setIsPhotoColorModalOpen] = useState(false);
+  const [isConfirmToColorwayOpen, setIsConfirmToColorwayOpen] = useState(false);
+  const [isConfirmToGeneralOpen, setIsConfirmToGeneralOpen] = useState(false);
   const [isCompositionModalOpen, setIsCompositionModalOpen] = useState(false);
   const [isCareModalOpen, setIsCareModalOpen] = useState(false);
   const [isCharacteristicsModalOpen, setIsCharacteristicsModalOpen] = useState(false);
@@ -271,6 +280,12 @@ export function ProductStudioVisualWorkspace() {
   const requiresColor = !isExplicitOnlySize && !isExplicitSingleVariant;
   const requiresSize = !isExplicitOnlyColor && !isExplicitSingleVariant;
 
+  const mediaMode: ProductStudioMediaMode = draft.mediaMode || deriveProductStudioMediaMode(draft.images);
+  const unassignedImagesCount = useMemo(
+    () => (draft.images || []).filter((img) => isImageUnassigned(img, mediaMode)).length,
+    [draft.images, mediaMode]
+  );
+
   const isResolved = useMemo(() => {
     if (!hasVariants) return false;
     switch (dimensionType) {
@@ -333,12 +348,31 @@ export function ProductStudioVisualWorkspace() {
 
       const existingImages = draft.images || [];
       const isFirst = existingImages.length === 0;
+
+      let newImageColorId: string | null = null;
+      let newImageIsUnassigned = false;
+
+      if (mediaMode === 'COLORWAY') {
+        const isColorActive = selectedColorId && (draft.colors || []).some((c: any) => c.id === selectedColorId);
+        if (isColorActive) {
+          newImageColorId = selectedColorId;
+          newImageIsUnassigned = false;
+        } else {
+          newImageColorId = null;
+          newImageIsUnassigned = true;
+        }
+      } else {
+        newImageColorId = null;
+        newImageIsUnassigned = false;
+      }
+
       const newImage = createLocalProductStudioImage({
         file,
         previewUrl: objectUrl,
         isMain: isFirst,
         sortOrder: existingImages.length,
-        colorId: selectedColorId || null,
+        colorId: newImageColorId,
+        isUnassigned: newImageIsUnassigned,
       });
 
       updateDraft({
@@ -402,9 +436,13 @@ export function ProductStudioVisualWorkspace() {
       currentSizes
     );
 
+    const nextColorIds = new Set(nextColors.map((c: any) => c.id));
+    const reconciledImages = reconcileMediaOnColorRemoval(draft.images, nextColorIds, mediaMode);
+
     updateDraft({
       colors: nextColors,
       variants: updatedVariants,
+      images: reconciledImages,
     });
 
     if (pendingSelectedColorIds.size === 0) {
@@ -799,17 +837,30 @@ export function ProductStudioVisualWorkspace() {
   );
 
   const renderMediaThumbnailOverlay = (image: ProductPresentationMediaItem, index: number) => {
-    const assignedColor = (draft.colors || []).find((c: any) => c.id === image.colorId);
-    if (!image.colorId || !assignedColor) return null;
+    const isUnassigned = (draft.images || [])[index]?.isUnassigned;
+    if (mediaMode === 'COLORWAY' && (isUnassigned || !image.colorId)) {
+      return (
+        <span
+          data-testid={`thumbnail-unassigned-dot-${index}`}
+          title="Нераспределённая фотография"
+          className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border border-white dark:border-black shadow-xs pointer-events-none z-10"
+        />
+      );
+    }
 
-    return (
-      <span
-        data-testid={`thumbnail-color-dot-${index}`}
-        title={`Цвет: ${getColorDisplayName(assignedColor)}`}
-        className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border border-white dark:border-black shadow-xs pointer-events-none z-10"
-        style={{ backgroundColor: assignedColor.hex || "#000000" }}
-      />
-    );
+    const assignedColor = (draft.colors || []).find((c: any) => c.id === image.colorId);
+    if (image.colorId && assignedColor) {
+      return (
+        <span
+          data-testid={`thumbnail-color-dot-${index}`}
+          title={`Цвет: ${getColorDisplayName(assignedColor)}`}
+          className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border border-white dark:border-black shadow-xs pointer-events-none z-10"
+          style={{ backgroundColor: assignedColor.hex || "#000000" }}
+        />
+      );
+    }
+
+    return null;
   };
 
   const safeActiveImage = activeImage < visibleImages.length ? activeImage : 0;
@@ -837,6 +888,69 @@ export function ProductStudioVisualWorkspace() {
               className="text-red-500 hover:text-red-700 font-bold ml-2"
             >
               ✕
+            </button>
+          </div>
+        )}
+
+        {mediaMode === 'LEGACY_MIXED' && (
+          <div
+            data-testid="legacy-mixed-banner"
+            className="mb-4 p-4 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 dark:text-amber-200"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="text-sm font-medium">
+                Фотографии товара нужно привести к одному режиму перед сохранением.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                data-testid="resolve-to-general-btn"
+                onClick={() => {
+                  const resolved = resolveLegacyMixedMedia(draft.images || [], 'GENERAL');
+                  updateDraft({ images: resolved, mediaMode: 'GENERAL' });
+                  markTouched('media');
+                }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-neutral-800 border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-neutral-700 transition-colors cursor-pointer"
+              >
+                Объединить в общую галерею
+              </button>
+              <button
+                type="button"
+                data-testid="resolve-to-colorway-btn"
+                onClick={() => {
+                  const resolved = resolveLegacyMixedMedia(draft.images || [], 'COLORWAY');
+                  updateDraft({ images: resolved, mediaMode: 'COLORWAY' });
+                  markTouched('media');
+                }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer"
+              >
+                Разложить по цветам
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mediaMode === 'COLORWAY' && unassignedImagesCount > 0 && (
+          <div
+            data-testid="unassigned-photos-banner"
+            className="mb-4 p-3 rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50/70 dark:bg-amber-950/20 flex items-center justify-between gap-2 text-amber-800 dark:text-amber-300 text-xs"
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+              <span>
+                Нераспределённые фотографии: {unassignedImagesCount}. Их нужно привязать к цветам перед сохранением.
+              </span>
+            </div>
+            <button
+              type="button"
+              data-testid="unassigned-banner-bind-btn"
+              onClick={() => setIsPhotoColorModalOpen(true)}
+              disabled={!draft.colors || draft.colors.length === 0}
+              className="px-2.5 py-1 rounded-md border border-amber-300 dark:border-amber-700/60 bg-white dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 font-semibold text-xs hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors shadow-2xs shrink-0 cursor-pointer"
+            >
+              Распределить
             </button>
           </div>
         )}
@@ -976,8 +1090,65 @@ export function ProductStudioVisualWorkspace() {
             </label>
           }
           galleryExtraSlot={
-            draft.images && draft.images.length > 0 ? (
-              <div className="flex items-center gap-2">
+            ((draft.images && draft.images.length > 0) || (draft.colors && draft.colors.length > 0)) ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <div
+                  data-testid="media-mode-switcher"
+                  className="inline-flex items-center rounded-lg bg-black/5 dark:bg-white/10 p-0.5 text-xs font-medium"
+                >
+                  <button
+                    type="button"
+                    data-testid="media-mode-general-btn"
+                    onClick={() => {
+                      if (mediaMode === 'GENERAL') return;
+                      if ((draft.images || []).length > 0) {
+                        setIsConfirmToGeneralOpen(true);
+                      } else {
+                        updateDraft({ mediaMode: 'GENERAL' });
+                        markTouched('media');
+                      }
+                    }}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors cursor-pointer",
+                      mediaMode === 'GENERAL'
+                        ? "bg-white dark:bg-neutral-800 text-graphite dark:text-white shadow-xs font-semibold"
+                        : "text-ash hover:text-graphite dark:hover:text-white"
+                    )}
+                  >
+                    Общая галерея
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="media-mode-colorway-btn"
+                    disabled={!draft.colors || draft.colors.length === 0}
+                    title={
+                      !draft.colors || draft.colors.length === 0
+                        ? "Добавьте цвет товара, чтобы использовать фотографии по цветам."
+                        : "Фотографии по цветам"
+                    }
+                    onClick={() => {
+                      if (!draft.colors || draft.colors.length === 0) return;
+                      if (mediaMode === 'COLORWAY') return;
+                      if ((draft.images || []).length > 0) {
+                        setIsConfirmToColorwayOpen(true);
+                      } else {
+                        updateDraft({ mediaMode: 'COLORWAY' });
+                        markTouched('media');
+                      }
+                    }}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md transition-colors",
+                      !draft.colors || draft.colors.length === 0
+                        ? "text-ash/40 opacity-50 cursor-not-allowed"
+                        : mediaMode === 'COLORWAY'
+                        ? "bg-white dark:bg-neutral-800 text-graphite dark:text-white shadow-xs font-semibold cursor-pointer"
+                        : "text-ash hover:text-graphite dark:hover:text-white cursor-pointer"
+                    )}
+                  >
+                    Фотографии по цветам
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   data-testid="bind-photos-to-colors-btn"
@@ -985,16 +1156,32 @@ export function ProductStudioVisualWorkspace() {
                   title={!draft.colors || draft.colors.length === 0 ? "Сначала добавьте цвета" : "Привязать фото к цветам"}
                   onClick={() => setIsPhotoColorModalOpen(true)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 text-xs font-medium py-1 transition-colors",
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all select-none",
                     !draft.colors || draft.colors.length === 0
-                      ? "text-ash/60 cursor-not-allowed"
-                      : "text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 cursor-pointer hover:underline"
+                      ? "border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] text-ash/40 dark:text-white/20 cursor-not-allowed"
+                      : mediaMode === 'COLORWAY' && unassignedImagesCount > 0
+                      ? "border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-400 shadow-2xs cursor-pointer font-semibold"
+                      : "border-slate-200 dark:border-white/10 bg-white dark:bg-neutral-800 text-graphite dark:text-white hover:bg-slate-50 dark:hover:bg-neutral-700 hover:border-slate-300 dark:hover:border-white/20 shadow-2xs cursor-pointer"
                   )}
                 >
-                  <Link2 className="w-3.5 h-3.5" />
+                  <Link2
+                    className={cn(
+                      "w-3.5 h-3.5 shrink-0",
+                      !draft.colors || draft.colors.length === 0
+                        ? "text-ash/30 dark:text-white/20"
+                        : mediaMode === 'COLORWAY' && unassignedImagesCount > 0
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-indigo-600 dark:text-indigo-400"
+                    )}
+                  />
                   <span>Привязать фото к цветам</span>
+                  {mediaMode === 'COLORWAY' && unassignedImagesCount > 0 && (
+                    <span className="ml-0.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-200/80 dark:bg-amber-800/80 text-amber-900 dark:text-amber-100 leading-none">
+                      {unassignedImagesCount}
+                    </span>
+                  )}
                   {(!draft.colors || draft.colors.length === 0) && (
-                    <span className="text-[11px] text-ash/80">(Сначала добавьте цвета)</span>
+                    <span className="text-[11px] text-ash/60 dark:text-white/30 font-normal">(Сначала добавьте цвета)</span>
                   )}
                 </button>
               </div>
@@ -1504,8 +1691,10 @@ export function ProductStudioVisualWorkspace() {
         onClose={() => setIsPhotoColorModalOpen(false)}
         images={draft.images || []}
         colors={draft.colors || []}
+        mediaMode={mediaMode}
         onSave={(updatedImages) => {
-          updateDraft({ images: updatedImages });
+          const nextMode = mediaMode === 'GENERAL' ? 'COLORWAY' : mediaMode;
+          updateDraft({ images: updatedImages, mediaMode: nextMode });
           markTouched('media');
         }}
       />
@@ -1560,6 +1749,88 @@ export function ProductStudioVisualWorkspace() {
           markTouched('sizeChart');
         }}
       />
+
+      {isConfirmToColorwayOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          data-testid="confirm-to-colorway-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        >
+          <div className="bg-white dark:bg-[#1a1a1c] border border-border-soft dark:border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <h3 className="text-lg font-semibold text-graphite dark:text-white">
+              Переключить на фотографии по цветам?
+            </h3>
+            <p className="text-sm text-ash dark:text-gray-300">
+              Фотографии нужно будет распределить по цветам.
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                data-testid="confirm-to-colorway-cancel"
+                onClick={() => setIsConfirmToColorwayOpen(false)}
+                className="px-4 py-2 text-sm font-medium rounded-lg text-ash hover:text-graphite dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-to-colorway-submit"
+                onClick={() => {
+                  const transitioned = transitionMediaToColorway(draft.images || []);
+                  updateDraft({ images: transitioned, mediaMode: 'COLORWAY' });
+                  markTouched('media');
+                  setIsConfirmToColorwayOpen(false);
+                }}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-graphite text-white dark:bg-white dark:text-black hover:opacity-90 transition-opacity cursor-pointer"
+              >
+                Переключить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isConfirmToGeneralOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          data-testid="confirm-to-general-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        >
+          <div className="bg-white dark:bg-[#1a1a1c] border border-border-soft dark:border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <h3 className="text-lg font-semibold text-graphite dark:text-white">
+              Переключить на общую галерею?
+            </h3>
+            <p className="text-sm text-ash dark:text-gray-300">
+              Фотографии разных цветов будут объединены в одну общую галерею.
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                data-testid="confirm-to-general-cancel"
+                onClick={() => setIsConfirmToGeneralOpen(false)}
+                className="px-4 py-2 text-sm font-medium rounded-lg text-ash hover:text-graphite dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-to-general-submit"
+                onClick={() => {
+                  const transitioned = transitionMediaToGeneral(draft.images || []);
+                  updateDraft({ images: transitioned, mediaMode: 'GENERAL' });
+                  markTouched('media');
+                  setIsConfirmToGeneralOpen(false);
+                }}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-graphite text-white dark:bg-white dark:text-black hover:opacity-90 transition-opacity cursor-pointer"
+              >
+                Переключить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

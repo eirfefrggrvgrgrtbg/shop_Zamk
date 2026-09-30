@@ -194,6 +194,38 @@ export function buildProductStudioUpdateRequest(
   return payload;
 }
 
+import {
+  deriveProductStudioMediaMode,
+  MAX_PRODUCT_IMAGES,
+} from './productStudioMediaHelper';
+
+/**
+ * Returns a seller-facing reason why media prevents saving the draft, or null if save is allowed.
+ * Adheres to invariant:
+ * - In LEGACY_MIXED: save blocked until mode is resolved.
+ * - In COLORWAY: save blocked while unassigned images or images without colorId exist.
+ * - Images count > 8: save blocked.
+ */
+export function getProductStudioMediaSaveBlockReason(
+  draft: ProductStudioDraft
+): string | null {
+  const mode = draft.mediaMode || deriveProductStudioMediaMode(draft.images);
+  if (mode === 'LEGACY_MIXED') {
+    return 'Фотографии товара нужно привести к одному режиму перед сохранением';
+  }
+  const images = draft.images || [];
+  if (images.length > MAX_PRODUCT_IMAGES) {
+    return 'Превышено максимальное количество фотографий';
+  }
+  if (mode === 'COLORWAY') {
+    const hasUnassigned = images.some((img) => img.isUnassigned || !img.colorId);
+    if (hasUnassigned) {
+      return 'Распределите все фотографии по цветам перед сохранением';
+    }
+  }
+  return null;
+}
+
 /**
  * Checks whether a draft is structurally eligible for draft persistence.
  * Note: Moderation readiness (3+ photos, 100% composition, etc.) is separate.
@@ -212,6 +244,9 @@ export function isProductStudioSaveEligible(draft: ProductStudioDraft): boolean 
     if (hasNegativePrice) {
       return false;
     }
+  }
+  if (getProductStudioMediaSaveBlockReason(draft) !== null) {
+    return false;
   }
   return true;
 }

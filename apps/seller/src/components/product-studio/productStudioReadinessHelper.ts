@@ -1,6 +1,9 @@
 import type { ProductStudioDraft } from '../../contexts/ProductStudioContext';
 import type { SellerCategorySchema } from '@zamk/api-client/src/seller';
-import { MIN_PRODUCT_IMAGES } from './productStudioMediaHelper';
+import {
+  MIN_PRODUCT_IMAGES,
+  deriveProductStudioMediaMode,
+} from './productStudioMediaHelper';
 
 export type ProductStudioBlockerField =
   | 'title'
@@ -326,7 +329,50 @@ export function getProductStudioReadiness(
 
   // 4. Media
   const mediaCount = draft.images?.length ?? 0;
-  const mediaSatisfied = mediaCount >= MIN_PRODUCT_IMAGES;
+  const mediaMode = draft.mediaMode || deriveProductStudioMediaMode(draft.images);
+  let mediaSatisfied = false;
+
+  if (mediaMode === 'LEGACY_MIXED') {
+    mediaSatisfied = false;
+    warnings.push('Фотографии товара нужно привести к одному режиму');
+  } else if (mediaMode === 'COLORWAY') {
+    const images = draft.images || [];
+    const hasUnassigned = images.some((img) => img.isUnassigned || !img.colorId);
+
+    // Active colors domain
+    const activeColorMap = new Map<string, string>();
+    for (const c of draft.colors || []) {
+      if (c.id) {
+        activeColorMap.set(c.id, c.name || (c as any).nameRu || c.id);
+      }
+    }
+    for (const v of draft.variants || []) {
+      if (v.isActive !== false && v.colorId && !activeColorMap.has(v.colorId)) {
+        activeColorMap.set(v.colorId, v.colorName || v.colorId);
+      }
+    }
+
+    const missingColors: string[] = [];
+    for (const [cId, cName] of activeColorMap.entries()) {
+      const hasPhoto = images.some((img) => !img.isUnassigned && img.colorId === cId);
+      if (!hasPhoto) {
+        missingColors.push(cName);
+      }
+    }
+
+    if (hasUnassigned) {
+      warnings.push('Распределите все фотографии по цветам');
+    }
+    if (missingColors.length > 0) {
+      warnings.push(`Добавьте хотя бы одно фото для каждого цвета: ${missingColors.join(', ')}`);
+    }
+
+    mediaSatisfied = mediaCount >= MIN_PRODUCT_IMAGES && !hasUnassigned && missingColors.length === 0;
+  } else {
+    // GENERAL
+    mediaSatisfied = mediaCount >= MIN_PRODUCT_IMAGES;
+  }
+
   if (!mediaSatisfied) {
     blockingFields.push('media');
   }

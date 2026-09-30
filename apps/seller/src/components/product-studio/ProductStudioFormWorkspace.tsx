@@ -106,12 +106,14 @@ export function ProductStudioFormWorkspace() {
       const objectUrl = createMediaUrl(file);
       const existingImages = draft.images || [];
       const isFirst = existingImages.length === 0;
+      const currentMode = draft.mediaMode || 'GENERAL';
       const newImage = createLocalProductStudioImage({
         file,
         previewUrl: objectUrl,
         isMain: isFirst,
         sortOrder: existingImages.length,
         colorId: null,
+        isUnassigned: currentMode === 'COLORWAY',
       });
 
       updateDraft({
@@ -145,10 +147,11 @@ export function ProductStudioFormWorkspace() {
       const replacedImage = createLocalProductStudioImage({
         file,
         previewUrl: objectUrl,
-        isMain: index === 0,
-        sortOrder: index,
-        colorId: targetOld?.colorId ?? null,
-        altText: targetOld?.altText ?? null,
+        isMain: targetOld.isMain,
+        sortOrder: targetOld.sortOrder,
+        colorId: targetOld.colorId ?? null,
+        altText: targetOld.altText,
+        isUnassigned: targetOld.isUnassigned,
       });
 
       existingImages[index] = replacedImage;
@@ -1002,16 +1005,27 @@ export function ProductStudioFormWorkspace() {
                     title={!draft.colors || draft.colors.length === 0 ? "Сначала добавьте цвета" : "Привязать фото к цветам"}
                     onClick={() => setIsPhotoColorModalOpen(true)}
                     className={cn(
-                      "inline-flex items-center gap-1.5 text-xs font-medium py-1 transition-colors",
+                      "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all select-none",
                       !draft.colors || draft.colors.length === 0
-                        ? "text-gray-400 cursor-not-allowed"
-                        : "text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 cursor-pointer hover:underline"
+                        ? "border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] text-gray-400 cursor-not-allowed"
+                        : (draft.mediaMode === 'COLORWAY' && (draft.images || []).some(img => !img.colorId || img.isUnassigned))
+                        ? "border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-400 shadow-2xs cursor-pointer font-semibold"
+                        : "border-gray-200 dark:border-white/10 bg-white dark:bg-neutral-800 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-neutral-700 hover:border-gray-300 dark:hover:border-white/20 shadow-2xs cursor-pointer"
                     )}
                   >
-                    <Link2 className="w-3.5 h-3.5" />
+                    <Link2
+                      className={cn(
+                        "w-3.5 h-3.5 shrink-0",
+                        !draft.colors || draft.colors.length === 0
+                          ? "text-gray-300 dark:text-white/20"
+                          : (draft.mediaMode === 'COLORWAY' && (draft.images || []).some(img => !img.colorId || img.isUnassigned))
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-indigo-600 dark:text-indigo-400"
+                      )}
+                    />
                     <span>Привязать фото к цветам</span>
                     {(!draft.colors || draft.colors.length === 0) && (
-                      <span className="text-[11px] text-gray-400">(Сначала добавьте цвета)</span>
+                      <span className="text-[11px] text-gray-400 font-normal">(Сначала добавьте цвета)</span>
                     )}
                   </button>
                 )}
@@ -2006,8 +2020,10 @@ export function ProductStudioFormWorkspace() {
         onClose={() => setIsPhotoColorModalOpen(false)}
         images={draft.images || []}
         colors={draft.colors || []}
+        mediaMode={draft.mediaMode || 'GENERAL'}
         onSave={(updatedImages) => {
-          updateDraft({ images: updatedImages });
+          const nextMode = (draft.mediaMode || 'GENERAL') === 'GENERAL' ? 'COLORWAY' : draft.mediaMode;
+          updateDraft({ images: updatedImages, mediaMode: nextMode });
           markTouched('media');
         }}
       />

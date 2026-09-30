@@ -2,7 +2,11 @@ import type {
   ProductStudioDraft,
   ProductStudioImage,
 } from '../../contexts/ProductStudioContext';
-import { shouldIncludeImagesInPatch } from './productStudioMediaHelper';
+import {
+  shouldIncludeImagesInPatch,
+  deriveProductStudioMediaMode,
+  type ProductStudioMediaMode,
+} from './productStudioMediaHelper';
 import type { SellerProductPatchImageItem } from '@zamk/api-client';
 
 export type StageImageFn = (
@@ -130,21 +134,54 @@ export async function stagePendingProductStudioImages({
  * Allowed sources at PATCH-build time: canonical and staged.
  * Forbidden: local (throws descriptive error).
  * Array index order defines final product image sequence.
+ *
+ * Invariants:
+ * - In LEGACY_MIXED: throws error, cannot serialize until resolved.
+ * - If any image is UNASSIGNED: throws error, cannot serialize.
+ * - In COLORWAY: all images must have a non-null colorId.
+ * - In GENERAL: all images are serialized with colorId = null (no hybrid ever).
  */
 export function mapProductStudioImagesToPatchPayload(
-  images: ProductStudioImage[]
+  images: ProductStudioImage[],
+  mediaMode?: ProductStudioMediaMode
 ): SellerProductPatchImageItem[] {
+  const mode = mediaMode || deriveProductStudioMediaMode(images);
+  if (mode === 'LEGACY_MIXED') {
+    throw new Error('Cannot build media PATCH payload: product is in LEGACY_MIXED media mode');
+  }
+
   return images.map((img) => {
     if (img.source.kind === 'local') {
       throw new Error(
         `Cannot build media PATCH payload: image with uiKey "${img.uiKey}" is still local and has not been staged`
       );
     }
+    if (img.isUnassigned) {
+      throw new Error(
+        `Cannot build media PATCH payload: image with uiKey "${img.uiKey}" is unassigned`
+      );
+    }
     const id = img.source.kind === 'canonical' ? img.source.imageId : img.source.stagedId;
+
+    if (mode === 'COLORWAY') {
+      if (!img.colorId) {
+        throw new Error(
+          `Cannot build media PATCH payload: image with uiKey "${img.uiKey}" missing colorId in COLORWAY mode`
+        );
+      }
+      return {
+        id,
+        isMain: Boolean(img.isMain),
+        colorId: img.colorId,
+        altText: img.altText ?? null,
+      };
+    }
+
+    // GENERAL mode: all images strictly colorId = null
     return {
       id,
       isMain: Boolean(img.isMain),
-      colorId: img.colorId ?? null,
+      colorId: null,
       altText: img.altText ?? null,
     };
   });
@@ -169,5 +206,6 @@ export function buildProductPatchMediaPayload(
   if (images.length === 0) {
     return [];
   }
-  return mapProductStudioImagesToPatchPayload(images);
+  const mode = currentDraft.mediaMode || deriveProductStudioMediaMode(images);
+  return mapProductStudioImagesToPatchPayload(images, mode);
 }

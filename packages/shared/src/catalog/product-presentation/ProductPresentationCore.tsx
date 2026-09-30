@@ -235,7 +235,7 @@ export function ProductPresentationCore({
           aria-label="Галерея товара"
         >
           {visibleImages.length === 0 ? (
-            <div className="w-full max-w-[520px] mx-auto min-[960px]:mx-0">
+            <div className="w-full max-w-[520px] mx-auto min-[960px]:mx-0 flex flex-col gap-3">
               {emptyMediaSlot ? (
                 emptyMediaSlot
               ) : mediaAddSlot ? (
@@ -250,6 +250,12 @@ export function ProductPresentationCore({
                     data-testid="main-product-image"
                     className="w-full h-full object-contain mix-blend-multiply dark:mix-blend-normal transition-opacity duration-200 pointer-events-none"
                   />
+                </div>
+              )}
+
+              {galleryExtraSlot && (
+                <div className="mt-1 flex items-center justify-between" data-slot="gallery-extra">
+                  {galleryExtraSlot}
                 </div>
               )}
             </div>

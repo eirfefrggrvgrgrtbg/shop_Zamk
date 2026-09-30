@@ -16,6 +16,7 @@ import type {
   ProductStudioVariant,
 } from '../../contexts/ProductStudioContext';
 import type { ProductStudioAttributeItem } from './ProductStudioCharacteristicsModal';
+import { deriveProductStudioMediaMode } from './productStudioMediaHelper';
 
 export interface HydrateProductStudioDraftParams {
   product: SellerProduct;
@@ -226,6 +227,7 @@ export function hydrateProductStudioDraft({
     priceCents,
     oldPriceCents,
     images,
+    mediaMode: deriveProductStudioMediaMode(images),
     colors,
     dimensionType,
     variants,

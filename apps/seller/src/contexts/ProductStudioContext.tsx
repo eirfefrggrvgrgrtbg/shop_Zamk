@@ -11,7 +11,12 @@ import {
 import { ProductStudioCategoryModal } from '../components/product-studio/ProductStudioCategoryModal';
 import { createStudioMediaRegistry, type StudioMediaRegistry } from '../components/product-studio/productStudioMediaSession';
 import { getProductStudioReadiness, type ProductStudioReadiness } from '../components/product-studio/productStudioReadinessHelper';
-import { getProductStudioImagePreviewUrl } from '../components/product-studio/productStudioMediaHelper';
+import {
+  getProductStudioImagePreviewUrl,
+  deriveProductStudioMediaMode,
+  reconcileMediaOnColorRemoval,
+  type ProductStudioMediaMode,
+} from '../components/product-studio/productStudioMediaHelper';
 import {
   isProductStudioSaveEligible,
   orchestrateProductStudioEditSave,
@@ -70,6 +75,7 @@ export interface ProductStudioImage {
   altText?: string | null;
   isMain: boolean;
   sortOrder?: number;
+  isUnassigned?: boolean;
   source: ProductStudioImageSource;
 }
 
@@ -105,6 +111,7 @@ export interface ProductStudioDraft {
   oldPriceCents?: number;
   currency?: string;
   images?: ProductStudioImage[];
+  mediaMode?: ProductStudioMediaMode;
   variants?: ProductStudioVariant[];
   attributes?: Array<{ attributeDefinitionId?: string; name?: string; code?: string; value?: any; dictionaryValueId?: string }>;
   materialComposition?: Array<{ materialId?: string; materialName?: string; percentage?: number; material?: string }>;
@@ -117,6 +124,7 @@ export interface ProductStudioState {
   activeSection: ProductStudioSection;
   draft: ProductStudioDraft;
   initialDraft: ProductStudioDraft;
+  mediaMode: ProductStudioMediaMode;
   isDirty: boolean;
   editingField: string | null;
   isCategoryModalOpen: boolean;
@@ -166,9 +174,28 @@ function productStudioReducer(
       };
 
     case 'UPDATE_DRAFT': {
+      let updatedImages = action.payload.images !== undefined ? action.payload.images : state.draft.images;
+      let effectiveMode = action.payload.mediaMode || state.draft.mediaMode || deriveProductStudioMediaMode(updatedImages);
+
+      const nextColors = action.payload.colors !== undefined ? action.payload.colors : state.draft.colors;
+      const hasActiveColors = Boolean(nextColors && nextColors.length > 0);
+
+      // If colors are updated and images were not explicitly provided in payload:
+      if (action.payload.colors !== undefined && action.payload.images === undefined && effectiveMode === 'COLORWAY') {
+        const activeColorIds = new Set<string>((action.payload.colors || []).map((c: any) => String(c.id)));
+        updatedImages = reconcileMediaOnColorRemoval(updatedImages, activeColorIds, effectiveMode);
+      }
+
+      // If trying to switch to COLORWAY without any colors and without colored images, keep GENERAL:
+      if (action.payload.mediaMode === 'COLORWAY' && !hasActiveColors && !(updatedImages || []).some((img) => img.colorId)) {
+        effectiveMode = 'GENERAL';
+      }
+
       const updatedDraft = {
         ...state.draft,
         ...action.payload,
+        images: updatedImages,
+        mediaMode: effectiveMode,
       };
       const nextColorId = resolveDeterministicPreviewColorId(
         updatedDraft,
@@ -189,6 +216,7 @@ function productStudioReducer(
       return {
         ...state,
         draft: updatedDraft,
+        mediaMode: effectiveMode,
         selectedPreviewColorId: nextColorId,
         selectedPreviewSizeValueId: nextSizeId,
         isDirty: computeIsDirty(updatedDraft, state.initialDraft),
@@ -298,6 +326,7 @@ function productStudioReducer(
       return {
         ...state,
         draft: JSON.parse(JSON.stringify(state.initialDraft)),
+        mediaMode: state.initialDraft.mediaMode || 'GENERAL',
         selectedPreviewColorId: null,
         selectedPreviewSizeValueId: null,
         isDirty: false,
@@ -401,11 +430,20 @@ export function ProductStudioProvider({
   children,
 }: ProductStudioProviderProps) {
   const normalizedInitial: ProductStudioDraft = useMemo(() => {
-    return {
+    const raw: ProductStudioDraft = {
       ...DEFAULT_DRAFT,
       ...initialDraft,
     };
+    const effectiveMode =
+      initialDraft?.mediaMode ||
+      deriveProductStudioMediaMode(raw.images || []);
+    return {
+      ...raw,
+      mediaMode: effectiveMode,
+    };
   }, [initialDraft]);
+
+  const initialMediaMode = normalizedInitial.mediaMode || 'GENERAL';
 
   const [state, dispatch] = useReducer(productStudioReducer, {
     entryMode,
@@ -413,6 +451,7 @@ export function ProductStudioProvider({
     activeSection: 'basics',
     draft: { ...normalizedInitial },
     initialDraft: { ...normalizedInitial },
+    mediaMode: initialMediaMode,
     isDirty: false,
     editingField: null,
     isCategoryModalOpen: false,
@@ -720,6 +759,7 @@ export function ProductStudioProvider({
   const contextValue = useMemo<ProductStudioContextValue>(() => {
     return {
       ...state,
+      mediaMode: state.draft.mediaMode || state.mediaMode || 'GENERAL',
       isSaveInFlight,
       canSave,
       saveDraft: (entryMode === 'edit' || entryMode === 'create') ? saveDraft : undefined,

@@ -934,9 +934,16 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
 
   // 24. fully populated draft: Save enabled in Create mode, Moderation STILL disabled
   it('24. fully populated draft: Save enabled in Create mode, Moderation STILL disabled', () => {
+    const fullyPopulatedDraft = {
+      ...sampleColorAndSizeDraft,
+      images: sampleColorAndSizeDraft.images?.map((img, idx) => ({
+        ...img,
+        colorId: idx === 0 ? 'col-black' : img.colorId,
+      })),
+    };
     render(
       <MemoryRouter>
-        <ProductStudioProvider entryMode="create" initialDraft={sampleColorAndSizeDraft}>
+        <ProductStudioProvider entryMode="create" initialDraft={fullyPopulatedDraft}>
           <ProductStudio />
         </ProductStudioProvider>
       </MemoryRouter>

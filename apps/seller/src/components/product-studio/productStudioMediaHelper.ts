@@ -195,6 +195,7 @@ export function createLocalProductStudioImage(params: {
   isMain?: boolean;
   sortOrder?: number;
   altText?: string | null;
+  isUnassigned?: boolean;
 }): ProductStudioImage {
   const clientMediaId = generateMediaUUID();
   return {
@@ -203,6 +204,7 @@ export function createLocalProductStudioImage(params: {
     altText: params.altText ?? null,
     isMain: Boolean(params.isMain),
     sortOrder: params.sortOrder,
+    isUnassigned: Boolean(params.isUnassigned),
     source: {
       kind: 'local',
       clientMediaId,
@@ -223,6 +225,7 @@ export function createCanonicalProductStudioImage(params: {
   sortOrder?: number;
   altText?: string | null;
   uiKey?: string;
+  isUnassigned?: boolean;
 }): ProductStudioImage {
   return {
     uiKey: params.uiKey || params.imageId,
@@ -230,6 +233,7 @@ export function createCanonicalProductStudioImage(params: {
     altText: params.altText ?? null,
     isMain: Boolean(params.isMain),
     sortOrder: params.sortOrder,
+    isUnassigned: Boolean(params.isUnassigned),
     source: {
       kind: 'canonical',
       imageId: params.imageId,
@@ -242,13 +246,19 @@ export function createCanonicalProductStudioImage(params: {
  * Semantic Media Dirty Check:
  * Compares persisted/semantic image meaning between current and baseline drafts.
  * Sequence, backend image identity (canonical), presentation order, colorId, isMain,
- * altText, additions, and deletions are evaluated.
+ * isUnassigned, altText, additions, and deletions are evaluated.
  * Transient local->staged transition remains semantically dirty until canonical PATCH.
  */
 export function isMediaSemanticallyDirty(
   currentImages?: ProductStudioImage[],
-  baselineImages?: ProductStudioImage[]
+  baselineImages?: ProductStudioImage[],
+  currentMode?: ProductStudioMediaMode,
+  baselineMode?: ProductStudioMediaMode
 ): boolean {
+  if (currentMode && baselineMode && currentMode !== baselineMode) {
+    return true;
+  }
+
   const current = currentImages || [];
   const baseline = baselineImages || [];
 
@@ -280,6 +290,9 @@ export function isMediaSemanticallyDirty(
     }
 
     if (Boolean(cur.isMain) !== Boolean(base.isMain)) {
+      return true;
+    }
+    if (Boolean(cur.isUnassigned) !== Boolean(base.isUnassigned)) {
       return true;
     }
     if ((cur.colorId ?? null) !== (base.colorId ?? null)) {
@@ -327,15 +340,166 @@ export function hasVariantColorDomainChanged(
 }
 
 /**
+ * Canonical frontend media modes for Product Studio.
+ */
+export type ProductStudioMediaMode = 'GENERAL' | 'COLORWAY' | 'LEGACY_MIXED';
+
+/**
+ * Derives canonical Product Studio media mode from image assignments.
+ *
+ * Rules:
+ * - 0 images => GENERAL
+ * - all images colorId == null => GENERAL
+ * - all images colorId != null => COLORWAY
+ * - some null + some non-null => LEGACY_MIXED
+ */
+export function deriveProductStudioMediaMode(
+  images?: ProductStudioImage[]
+): ProductStudioMediaMode {
+  const list = images || [];
+  if (list.length === 0) {
+    return 'GENERAL';
+  }
+  let hasGeneric = false;
+  let hasColored = false;
+
+  for (const img of list) {
+    if (img.colorId != null && img.colorId !== '') {
+      hasColored = true;
+    } else {
+      hasGeneric = true;
+    }
+  }
+
+  if (hasGeneric && hasColored) {
+    return 'LEGACY_MIXED';
+  }
+  if (hasColored) {
+    return 'COLORWAY';
+  }
+  return 'GENERAL';
+}
+
+/**
+ * Transition GENERAL -> COLORWAY
+ * Existing generic photos become client-side UNASSIGNED (colorId: null, isUnassigned: true).
+ * Global order preserved, global isMain preserved.
+ */
+export function transitionMediaToColorway(
+  images?: ProductStudioImage[]
+): ProductStudioImage[] {
+  return (images || []).map((img) => ({
+    ...img,
+    colorId: null,
+    isUnassigned: true,
+  }));
+}
+
+/**
+ * Transition COLORWAY -> GENERAL
+ * All images have colorId cleared to null, isUnassigned cleared to false.
+ * Global order preserved, global isMain preserved.
+ */
+export function transitionMediaToGeneral(
+  images?: ProductStudioImage[]
+): ProductStudioImage[] {
+  return (images || []).map((img) => ({
+    ...img,
+    colorId: null,
+    isUnassigned: false,
+  }));
+}
+
+/**
+ * Resolve LEGACY_MIXED
+ * Target A: GENERAL => all colorId = null, isUnassigned = false
+ * Target B: COLORWAY => existing colored images keep colorId (isUnassigned: false), generic become UNASSIGNED (colorId: null, isUnassigned: true)
+ */
+export function resolveLegacyMixedMedia(
+  images: ProductStudioImage[] | undefined,
+  targetMode: 'GENERAL' | 'COLORWAY'
+): ProductStudioImage[] {
+  const list = images || [];
+  if (targetMode === 'GENERAL') {
+    return transitionMediaToGeneral(list);
+  }
+  return list.map((img) => {
+    if (img.colorId != null && img.colorId !== '') {
+      return {
+        ...img,
+        isUnassigned: false,
+      };
+    }
+    return {
+      ...img,
+      colorId: null,
+      isUnassigned: true,
+    };
+  });
+}
+
+/**
+ * Reconcile media when colors are removed in COLORWAY mode.
+ * Any image whose colorId is no longer in activeColorIds becomes UNASSIGNED (colorId: null, isUnassigned: true).
+ * In GENERAL mode, images are unaffected.
+ */
+export function reconcileMediaOnColorRemoval(
+  images: ProductStudioImage[] | undefined,
+  activeColorIds: Set<string>,
+  mode: ProductStudioMediaMode
+): ProductStudioImage[] {
+  const list = images || [];
+  if (mode !== 'COLORWAY') {
+    return list;
+  }
+  return list.map((img) => {
+    if (img.colorId && !activeColorIds.has(img.colorId)) {
+      return {
+        ...img,
+        colorId: null,
+        isUnassigned: true,
+      };
+    }
+    return img;
+  });
+}
+
+/**
+ * Checks whether an image is considered unassigned in the context of a given mode.
+ */
+export function isImageUnassigned(
+  img: ProductStudioImage,
+  mode?: ProductStudioMediaMode,
+  activeColorIds?: Set<string>
+): boolean {
+  if (mode === 'GENERAL') {
+    return false;
+  }
+  if (img.isUnassigned) {
+    return true;
+  }
+  if (mode === 'COLORWAY') {
+    if (!img.colorId) return true;
+    if (activeColorIds && !activeColorIds.has(img.colorId)) return true;
+  }
+  return false;
+}
+
+/**
  * Determines whether images array must be included in Product PATCH request.
- * Required if media is semantically dirty OR if the variant color domain changed
+ * Required if media is semantically dirty, if media mode changed, or if the variant color domain changed
  * (because backend validates image.colorId against final variants when images are sent).
  */
 export function shouldIncludeImagesInPatch(
   currentDraft: ProductStudioDraft,
   baselineDraft: ProductStudioDraft
 ): boolean {
-  if (isMediaSemanticallyDirty(currentDraft.images, baselineDraft.images)) {
+  const currentMode = currentDraft.mediaMode || deriveProductStudioMediaMode(currentDraft.images);
+  const baselineMode = baselineDraft.mediaMode || deriveProductStudioMediaMode(baselineDraft.images);
+  if (currentMode !== baselineMode) {
+    return true;
+  }
+  if (isMediaSemanticallyDirty(currentDraft.images, baselineDraft.images, currentMode, baselineMode)) {
     return true;
   }
   if (hasVariantColorDomainChanged(currentDraft.variants, baselineDraft.variants)) {

@@ -425,7 +425,7 @@ describe('PS.R4B3.1C4C2B1 — Stage Client + Pure Edit Media Save Orchestration'
       const staged: ProductStudioImage = {
         uiKey: 'client-staged-1',
         isMain: true,
-        colorId: null,
+        colorId: 'col-white',
         altText: 'Side',
         source: {
           kind: 'staged',
@@ -446,7 +446,7 @@ describe('PS.R4B3.1C4C2B1 — Stage Client + Pure Edit Media Save Orchestration'
       expect(payload[0]).toEqual({
         id: 'staged-uuid-888',
         isMain: true,
-        colorId: null,
+        colorId: 'col-white',
         altText: 'Side',
       });
 

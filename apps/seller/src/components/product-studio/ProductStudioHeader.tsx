@@ -4,6 +4,7 @@ import { useProductStudio } from '../../contexts/ProductStudioContext';
 import { ProductStudioViewToggle } from './ProductStudioViewToggle';
 import { statusLabels } from '../../lib/seller-products';
 import { isUuid } from './productStudioPresentationAdapter';
+import { getProductStudioMediaSaveBlockReason } from './productStudioSaveProduct';
 
 export function ProductStudioHeader() {
   const {
@@ -86,7 +87,8 @@ export function ProductStudioHeader() {
   } else if (entryMode === 'edit' && !isDirty) {
     saveButtonTitle = 'Нет несохраненных изменений';
   } else if (!canSave) {
-    saveButtonTitle = 'Заполните обязательные поля для сохранения';
+    const mediaBlockReason = getProductStudioMediaSaveBlockReason(draft);
+    saveButtonTitle = mediaBlockReason || 'Заполните обязательные поля для сохранения';
   } else {
     saveButtonTitle = isCreate ? 'Сохранить товар' : 'Сохранить изменения';
   }
