@@ -146,27 +146,29 @@ describe('SHOP PDP.2D2 — variantUrlState Unit Tests', () => {
       expect(validated.sanitizedSearchParams.has('size')).toBe(false);
     });
 
-    it('sanitizes invalid color UUID: removes color and size params', () => {
+    it('sanitizes invalid color UUID: removes color and retains valid size param', () => {
       const params = new URLSearchParams(`color=unknown-color-uuid&size=${sizeMId}`);
       const validated = validateVariantUrlState(sampleVariants, params);
 
       expect(validated.targetColorId).toBeNull();
-      expect(validated.targetSizeId).toBeNull();
+      expect(validated.targetSizeId).toBe(sizeMId);
       expect(validated.hasExplicitColorIntent).toBe(false);
+      expect(validated.hasExplicitSizeIntent).toBe(true);
       expect(validated.needsReplace).toBe(true);
       expect(validated.sanitizedSearchParams.has('color')).toBe(false);
-      expect(validated.sanitizedSearchParams.has('size')).toBe(false);
+      expect(validated.sanitizedSearchParams.get('size')).toBe(sizeMId);
     });
 
-    it('sanitizes size-only URL on COLOR_AND_SIZE product without guessing color', () => {
-      // Standalone size param must NOT guess color
+    it('preserves valid size-first URL on COLOR_AND_SIZE product without guessing color', () => {
+      // Standalone size param must preserve size-first selection without guessing color (VARIANTS.3B)
       const params = new URLSearchParams(`size=${sizeMId}`);
       const validated = validateVariantUrlState(sampleVariants, params);
 
       expect(validated.targetColorId).toBeNull();
-      expect(validated.targetSizeId).toBeNull();
-      expect(validated.needsReplace).toBe(true);
-      expect(validated.sanitizedSearchParams.has('size')).toBe(false);
+      expect(validated.targetSizeId).toBe(sizeMId);
+      expect(validated.hasExplicitSizeIntent).toBe(true);
+      expect(validated.needsReplace).toBe(false);
+      expect(validated.sanitizedSearchParams.get('size')).toBe(sizeMId);
     });
   });
 

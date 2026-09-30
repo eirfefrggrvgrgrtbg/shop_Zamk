@@ -116,17 +116,20 @@ describe('Canonical Shop Variant Selection Model (PV.2B)', () => {
     expect(redSizes[0].disabled).toBe(false);
     expect(redSizes[1].label).toBe('XL');
     expect(redSizes[1].inStock).toBe(false);
-    expect(redSizes[1].disabled).toBe(true);
+    expect(redSizes[1].disabled).toBe(false);
+    expect(redSizes[1].state).toBe('SOLD_OUT');
 
     // Sizes for White
     const whiteSizes = getSizeOptions(hoodieVariants, whiteColorId, 'COLOR_AND_SIZE');
     expect(whiteSizes).toHaveLength(2);
     expect(whiteSizes[0].label).toBe('L');
     expect(whiteSizes[0].inStock).toBe(false);
-    expect(whiteSizes[0].disabled).toBe(true);
+    expect(whiteSizes[0].disabled).toBe(false);
+    expect(whiteSizes[0].state).toBe('SOLD_OUT');
     expect(whiteSizes[1].label).toBe('XL');
     expect(whiteSizes[1].inStock).toBe(false);
-    expect(whiteSizes[1].disabled).toBe(true);
+    expect(whiteSizes[1].disabled).toBe(false);
+    expect(whiteSizes[1].state).toBe('SOLD_OUT');
   });
 
   it('B. Red/L resolves exact Red/L variant id and is buyable', () => {
@@ -146,10 +149,11 @@ describe('Canonical Shop Variant Selection Model (PV.2B)', () => {
     expect(state.selectedVariant?.id).toBe(varRedXLId);
     expect(state.ctaText).toBe('Нет в наличии');
 
-    // Also verify that the size option in UI is disabled
+    // Also verify that the size option in UI is marked SOLD_OUT
     const redSizes = getSizeOptions(hoodieVariants, redColorId, 'COLOR_AND_SIZE');
     const xlOption = redSizes.find(s => s.id === sizeXLId);
-    expect(xlOption?.disabled).toBe(true);
+    expect(xlOption?.state).toBe('SOLD_OUT');
+    expect(xlOption?.inStock).toBe(false);
   });
 
   it('D. White/L and White/XL are unavailable and cannot resolve as buyable', () => {
@@ -651,13 +655,13 @@ describe('SHOP PDP.2B — Variant Selection State Hardening', () => {
       expect(s.accessibleLabel).toBe('Размер S');
 
       expect(m.state).toBe('SOLD_OUT');
-      expect(m.disabled).toBe(true);
+      expect(m.disabled).toBe(false);
       expect(m.inStock).toBe(false);
       expect(m.variantId).toBe('var-red-m');
       expect(m.accessibleLabel).toBe('Размер M, закончился');
 
       expect(l.state).toBe('NOT_OFFERED');
-      expect(l.disabled).toBe(true);
+      expect(l.disabled).toBe(false);
       expect(l.inStock).toBe(false);
       expect(l.variantId).toBeUndefined();
       expect(l.accessibleLabel).toBe('Размер L, не представлен в красном цвете');
@@ -670,7 +674,7 @@ describe('SHOP PDP.2B — Variant Selection State Hardening', () => {
       const l = sizes.find((x) => x.label === 'L')!;
 
       expect(s.state).toBe('NOT_OFFERED');
-      expect(s.disabled).toBe(true);
+      expect(s.disabled).toBe(false);
       expect(s.inStock).toBe(false);
       expect(s.variantId).toBeUndefined();
       expect(s.accessibleLabel).toBe('Размер S, не представлен в белом цвете');
@@ -682,30 +686,33 @@ describe('SHOP PDP.2B — Variant Selection State Hardening', () => {
       expect(m.accessibleLabel).toBe('Размер M');
 
       expect(l.state).toBe('SOLD_OUT');
-      expect(l.disabled).toBe(true);
+      expect(l.disabled).toBe(false);
       expect(l.inStock).toBe(false);
       expect(l.variantId).toBe('var-white-l');
       expect(l.accessibleLabel).toBe('Размер L, закончился');
     });
 
-    it('5. Disabled SOLD_OUT and NOT_OFFERED sizes cannot be selected via selectSize', () => {
+    it('5. Incompatible size click transitions to size-first selection and clears color', () => {
       const { result } = renderHook(() =>
         useVariantSelection(asymVariants, undefined, 'c-red', 's-s')
       );
 
-      // Attempt to select SOLD_OUT M (s-m is sold out in red)
+      // Attempt to select SOLD_OUT M (s-m is sold out in red) -> selects M, clears red
       act(() => {
         result.current.selectSize('s-m');
       });
-      // Should reject change
-      expect(result.current.selectedSizeId).toBe('s-s');
+      expect(result.current.selectedSizeId).toBe('s-m');
+      expect(result.current.selectedColorId).toBeNull();
 
-      // Attempt to select NOT_OFFERED L (s-l is not offered in red)
+      // Attempt to select NOT_OFFERED L (s-l is not offered in red) -> selects L, clears red
+      act(() => {
+        result.current.selectColor('c-red');
+      });
       act(() => {
         result.current.selectSize('s-l');
       });
-      // Should reject change
-      expect(result.current.selectedSizeId).toBe('s-s');
+      expect(result.current.selectedSizeId).toBe('s-l');
+      expect(result.current.selectedColorId).toBeNull();
     });
 
     it('6. Switching colors preserves stable size matrix count and order', () => {
@@ -725,14 +732,15 @@ describe('SHOP PDP.2B — Variant Selection State Hardening', () => {
       expect(updatedSizeLabels.length).toBe(initialSizeLabels.length);
     });
 
-    it('7. When color is not yet selected, all sizes in universe are rendered with disabled=true and appropriate label', () => {
+    it('7. When color is not yet selected, all sizes in universe are rendered with disabled=false and appropriate label', () => {
       const sizes = getSizeOptions(asymVariants, null);
       expect(sizes.map((s) => s.label)).toEqual(['S', 'M', 'L']);
       sizes.forEach((s) => {
-        expect(s.disabled).toBe(true);
-        expect(s.state).toBe('AVAILABLE');
-        expect(s.accessibleLabel).toBe(`Размер ${s.label}`);
+        expect(s.disabled).toBe(false);
       });
+      expect(sizes.find((s) => s.label === 'S')?.state).toBe('AVAILABLE');
+      expect(sizes.find((s) => s.label === 'M')?.state).toBe('AVAILABLE');
+      expect(sizes.find((s) => s.label === 'L')?.state).toBe('SOLD_OUT');
     });
 
     it('8. SIZE_ONLY product: sizes are either AVAILABLE or SOLD_OUT (no NOT_OFFERED)', () => {
@@ -803,7 +811,7 @@ describe('SHOP PDP.2B — Variant Selection State Hardening', () => {
       ];
       const sizes = getSizeOptions(v, 'c2'); // c2 has no variants
       expect(sizes[0].state).toBe('NOT_OFFERED');
-      expect(sizes[0].disabled).toBe(true);
+      expect(sizes[0].disabled).toBe(false);
     });
 
     it('14. Invariant: variant exists + isActive: true + inStock: true => AVAILABLE', () => {
@@ -1098,9 +1106,9 @@ describe('SHOP PDP.2B — Variant Selection State Hardening', () => {
       expect(result.current.canAddToCart).toBe(false);
       expect(result.current.ctaText).toBe('Выберите цвет');
 
-      // All sizes are disabled until a color is chosen
+      // All sizes are interactive for size-first selection
       result.current.sizes.forEach((s) => {
-        expect(s.disabled).toBe(true);
+        expect(s.disabled).toBe(false);
       });
     });
 
@@ -1115,7 +1123,7 @@ describe('SHOP PDP.2B — Variant Selection State Hardening', () => {
       expect(result.current.ctaText).toBe('Выберите цвет');
     });
 
-    it('3. In COLOR_AND_SIZE, calling selectSize before color is selected is ignored', () => {
+    it('3. In COLOR_AND_SIZE, calling selectSize before color is selected allows size-first selection', () => {
       const { result } = renderHook(() => useVariantSelection(colorAndSizeVariants));
 
       act(() => {
@@ -1123,7 +1131,7 @@ describe('SHOP PDP.2B — Variant Selection State Hardening', () => {
       });
 
       expect(result.current.selectedColorId).toBeNull();
-      expect(result.current.selectedSizeId).toBeNull();
+      expect(result.current.selectedSizeId).toBe('sz-s');
       expect(result.current.selectedVariant).toBeNull();
       expect(result.current.ctaText).toBe('Выберите цвет');
     });

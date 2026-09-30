@@ -253,9 +253,9 @@ describe('SHOP PDP.1 Canonical Geometry & Information Hierarchy', () => {
     const disabledBtn = screen.getByRole('button', { name: 'Выберите цвет' });
     expect(disabledBtn.hasAttribute('disabled')).toBe(true);
 
-    // Select size S is disabled before color selection
+    // Select size S is interactive before color selection (VARIANTS.3B)
     const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
-    expect(sizeSBtn.hasAttribute('disabled')).toBe(true);
+    expect(sizeSBtn.hasAttribute('disabled')).toBe(false);
 
     // Select color Чёрный
     const blackSwatch = screen.getByRole('radio', { name: /Чёрный/i });
@@ -723,9 +723,9 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     const whiteColorRadio = screen.getByRole('radio', { name: /Белый/i });
     fireEvent.click(whiteColorRadio);
 
-    // Size S must be cleared, NOT selected, but still visible and disabled
+    // Size S must be cleared, NOT selected, but still visible and marked SOLD_OUT
     expect(sizeSBtn.getAttribute('aria-pressed')).toBe('false');
-    expect(sizeSBtn.hasAttribute('disabled')).toBe(true);
+    expect(sizeSBtn.getAttribute('data-state')).toBe('SOLD_OUT');
 
     // No other size must be auto-selected (M must not be pressed)
     const sizeMBtn = screen.getByRole('button', { name: /^Размер M/i });
@@ -803,9 +803,8 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
     const whiteColorRadio = screen.getByRole('radio', { name: /Белый/i });
     fireEvent.click(whiteColorRadio);
 
-    // Size L remains visible in the stable matrix, but disabled as NOT_OFFERED
+    // Size L remains visible in the stable matrix, marked as NOT_OFFERED
     expect(sizeLBtn.getAttribute('aria-pressed')).toBe('false');
-    expect(sizeLBtn.hasAttribute('disabled')).toBe(true);
     expect(sizeLBtn.getAttribute('data-state')).toBe('NOT_OFFERED');
 
     const sizeSBtn = screen.getByRole('button', { name: /^Размер S/i });
@@ -969,7 +968,6 @@ describe('SHOP PDP.2B Variant Selection State Hardening', () => {
       });
 
       // Size S remains visible in the stable matrix, but transitioned in-place to SOLD_OUT
-      expect(sizeSBtn.hasAttribute('disabled')).toBe(true);
       expect(sizeSBtn.getAttribute('data-state')).toBe('SOLD_OUT');
       expect(sizeSBtn.getAttribute('aria-label')).toBe('Размер S, закончился');
 

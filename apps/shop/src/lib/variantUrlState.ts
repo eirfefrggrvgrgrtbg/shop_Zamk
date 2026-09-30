@@ -112,18 +112,30 @@ export function validateVariantUrlState(
       } else {
         sanitized.delete('color');
         if (sizeParam) {
-          sanitized.delete('size');
+          const matchingSizeVariant = activeVariants.find(v => matchesSize(v, sizeParam));
+          if (matchingSizeVariant) {
+            targetSizeId = getVariantSizeId(matchingSizeVariant);
+            hasExplicitSizeIntent = true;
+          } else {
+            sanitized.delete('size');
+          }
         }
+        needsReplace = true;
+        targetColorId = null;
+      }
+    } else if (sizeParam) {
+      const matchingSizeVariant = activeVariants.find(v => matchesSize(v, sizeParam));
+      if (matchingSizeVariant) {
+        targetSizeId = getVariantSizeId(matchingSizeVariant);
+        hasExplicitSizeIntent = true;
+        targetColorId = null;
+        hasExplicitColorIntent = false;
+      } else {
+        sanitized.delete('size');
         needsReplace = true;
         targetColorId = null;
         targetSizeId = null;
       }
-    } else if (sizeParam) {
-      // COLOR_AND_SIZE product with only sizeParam: must NOT guess color
-      sanitized.delete('size');
-      needsReplace = true;
-      targetColorId = null;
-      targetSizeId = null;
     }
   } else if (dimensionType === 'SIZE_ONLY') {
     if (colorParam) {

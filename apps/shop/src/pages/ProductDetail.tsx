@@ -195,6 +195,15 @@ export function ProductDetail() {
         const targetIndex = findMediaIndexForColor(visibleImages, validated.targetColorId);
         setActiveImage(targetIndex);
       }
+    } else if (dimensionType === 'COLOR_AND_SIZE' && validated.hasExplicitSizeIntent && validated.targetSizeId) {
+      if (
+        selectedColorId !== null ||
+        validated.targetSizeId !== selectedSizeId ||
+        (validated.notice !== null && validated.notice !== sizeSelectionNotice)
+      ) {
+        const nextNotice = validated.notice !== null ? validated.notice : sizeSelectionNotice;
+        restoreSelection(null, validated.targetSizeId, nextNotice);
+      }
     } else if (dimensionType === 'SIZE_ONLY' && validated.hasExplicitSizeIntent) {
       if (
         validated.targetSizeId !== selectedSizeId ||
@@ -300,31 +309,41 @@ export function ProductDetail() {
 
   const handleSizeChange = (sizeId: string) => {
     if (isProductUnavailable) return;
-    if (dimensionType === 'COLOR_AND_SIZE' && !selectedColorId) return;
     selectSize(sizeId);
     if (sizeError) setSizeError('');
     setRefreshErrorNotice(null);
 
-    const effColorId = (dimensionType === 'COLOR_AND_SIZE' || dimensionType === 'COLOR_ONLY')
-      ? selectedColorId
-      : null;
-
-    const nextParams = computeVariantUrlParams(searchParams, dimensionType, effColorId, sizeId, product?.variants);
-    if (!areSearchParamsEqual(nextParams, searchParams)) {
-      setSearchParams(nextParams);
-    }
-
+    let nextColorId: string | null = null;
     let targetVariant: NonNullable<Product['variants']>[number] | undefined = undefined;
-    if (dimensionType === 'COLOR_AND_SIZE' && selectedColorId) {
-      targetVariant = product?.variants?.find(
-        v => v.isActive !== false &&
-             getVariantColorId(v) === selectedColorId &&
-             getVariantSizeId(v) === sizeId
-      );
+
+    if (dimensionType === 'COLOR_AND_SIZE') {
+      if (selectedColorId) {
+        targetVariant = product?.variants?.find(
+          v => v.isActive !== false &&
+               getVariantColorId(v) === selectedColorId &&
+               getVariantSizeId(v) === sizeId
+        );
+        if (isVariantBuyable(targetVariant)) {
+          nextColorId = selectedColorId;
+        } else {
+          // Incompatible size click (Section 8) -> clear color, select size
+          nextColorId = null;
+          targetVariant = undefined;
+        }
+      } else {
+        // Size selected first (Section 4)
+        nextColorId = null;
+        targetVariant = undefined;
+      }
     } else if (dimensionType === 'SIZE_ONLY') {
       targetVariant = product?.variants?.find(
         v => v.isActive !== false && getVariantSizeId(v) === sizeId
       );
+    }
+
+    const nextParams = computeVariantUrlParams(searchParams, dimensionType, nextColorId, sizeId, product?.variants);
+    if (!areSearchParamsEqual(nextParams, searchParams)) {
+      setSearchParams(nextParams);
     }
 
     if (targetVariant?.id && targetVariant.id !== selectedVariant?.id) {
@@ -420,7 +439,19 @@ export function ProductDetail() {
 
 
   const getDisplayPrice = () => {
-    return selectedVariant?.priceCents ? selectedVariant.priceCents / 100 : product.price;
+    if (selectedVariant?.priceCents) {
+      return selectedVariant.priceCents / 100;
+    }
+    if (selectedColorId && product?.variants) {
+      const colorVariants = product.variants.filter(
+        v => v.isActive !== false && getVariantColorId(v) === selectedColorId && Boolean(v.priceCents)
+      );
+      if (colorVariants.length > 0) {
+        const minPrice = Math.min(...colorVariants.map(v => v.priceCents!));
+        return minPrice / 100;
+      }
+    }
+    return product?.price ?? 0;
   };
 
   const hasReviews = (product.reviewsCount ?? (reviews ? reviews.length : 0)) > 0;

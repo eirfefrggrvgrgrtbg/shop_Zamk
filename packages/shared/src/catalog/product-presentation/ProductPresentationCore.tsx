@@ -504,6 +504,7 @@ export function ProductPresentationCore({
                   const isSelected = selectedColorId === color.id;
                   const isWhiteOrLight = isLightColor(color.hex);
                   const isColorDisabled = Boolean(color.disabled);
+                  const isUnavailable = color.state === 'UNAVAILABLE';
                   return (
                     <div key={color.id} className="relative group/swatch">
                     <button
@@ -512,10 +513,10 @@ export function ProductPresentationCore({
                       role="radio"
                       data-testid={`color-swatch-${color.id}`}
                       aria-checked={isSelected}
-                      aria-label={color.name + (color.shadeName ? ` (${color.shadeName})` : '') + (!color.hasInStock ? ' (нет в наличии)' : '')}
-                      title={color.name + (color.shadeName ? ` (${color.shadeName})` : '') + (!color.hasInStock ? ' (нет в наличии)' : '')}
+                      aria-label={color.accessibleLabel || color.name + (color.shadeName ? ` (${color.shadeName})` : '') + (!color.hasInStock || isUnavailable ? ' (нет в наличии)' : '')}
+                      title={color.accessibleLabel || color.name + (color.shadeName ? ` (${color.shadeName})` : '') + (!color.hasInStock || isUnavailable ? ' (нет в наличии)' : '')}
                       disabled={isColorDisabled}
-                      data-state={color.state}
+                      data-state={color.state || (color.hasInStock ? 'AVAILABLE' : 'UNAVAILABLE')}
                       onClick={() => {
                         if (!isColorDisabled) {
                           onColorChange(color.id);
@@ -525,7 +526,9 @@ export function ProductPresentationCore({
                         "relative w-11 h-11 rounded-full flex items-center justify-center transition-colors",
                         isColorDisabled
                           ? "opacity-35 cursor-not-allowed"
-                          : "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-graphite focus-visible:ring-offset-2 hover:bg-ice/70 dark:hover:bg-white/5",
+                          : isUnavailable
+                            ? "opacity-40 hover:opacity-80 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-graphite focus-visible:ring-offset-2 hover:bg-ice/70 dark:hover:bg-white/5"
+                            : "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-graphite focus-visible:ring-offset-2 hover:bg-ice/70 dark:hover:bg-white/5",
                         isSelected && "ring-1 ring-graphite dark:ring-white ring-offset-[3px] ring-offset-white dark:ring-offset-[#121214]"
                       )}
                     >
@@ -543,7 +546,7 @@ export function ProductPresentationCore({
                           —
                         </span>
                       )}
-                      {!color.hasInStock && (
+                      {(!color.hasInStock || isUnavailable) && (
                         <span
                           aria-hidden="true"
                           className="absolute inset-0 flex items-center justify-center pointer-events-none"
@@ -625,9 +628,9 @@ export function ProductPresentationCore({
                         isSelected
                           ? "bg-graphite text-white dark:bg-white dark:text-black border border-graphite dark:border-white shadow-xs"
                           : isSoldOut
-                            ? "border border-border-lighter/60 dark:border-white/10 text-ash/50 dark:text-white/30 cursor-not-allowed line-through bg-ice/30 dark:bg-white/[0.02]"
+                            ? cn("border border-border-lighter/60 dark:border-white/10 text-ash/50 dark:text-white/30 line-through bg-ice/30 dark:bg-white/[0.02]", isButtonDisabled ? "cursor-not-allowed" : "cursor-pointer hover:border-graphite/40 dark:hover:border-white/40")
                             : isNotOffered
-                              ? "border border-dashed border-border-lighter/70 dark:border-white/10 text-ash/35 dark:text-white/20 cursor-not-allowed bg-transparent"
+                              ? cn("border border-dashed border-border-lighter/70 dark:border-white/10 text-ash/35 dark:text-white/20 bg-transparent", isButtonDisabled ? "cursor-not-allowed" : "cursor-pointer hover:border-graphite/40 dark:hover:border-white/40")
                               : "bg-white dark:bg-transparent border border-border-soft dark:border-white/20 text-graphite dark:text-white hover:bg-[#fafafb] dark:hover:bg-white/5 hover:border-graphite/40 dark:hover:border-white/40"
                       )}
                     >

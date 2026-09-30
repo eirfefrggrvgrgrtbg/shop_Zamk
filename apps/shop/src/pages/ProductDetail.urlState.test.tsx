@@ -494,7 +494,7 @@ describe('SHOP PDP.2D2 — Variant Deep-Link URL State Integration', () => {
     });
   });
 
-  it('11. Standalone size without color on COLOR_AND_SIZE product: stripped via replace', async () => {
+  it('11. Standalone size without color on COLOR_AND_SIZE product: preserved as valid size-first intent', async () => {
     vi.mocked(publicCatalog.fetchProductById).mockResolvedValueOnce(mockColorAndSizeProduct);
 
     renderProductDetail('/product/prod-dress-100?size=S');
@@ -503,9 +503,9 @@ describe('SHOP PDP.2D2 — Variant Deep-Link URL State Integration', () => {
       expect(screen.getByRole('heading', { level: 1, name: 'Шёлковое вечернее платье' })).toBeTruthy();
     });
 
-    // Size stripped without guessing color
+    // Size S preserved as valid size-first selection
     await waitFor(() => {
-      expect(latestLocation.search).toBe('');
+      expect(latestLocation.search).toBe('?size=S');
     });
   });
 

@@ -58,6 +58,7 @@ export interface ProductPresentationColorOption {
   hasInStock: boolean;
   state?: 'AVAILABLE' | 'UNAVAILABLE';
   disabled?: boolean;
+  accessibleLabel?: string;
 }
 
 export type ProductPresentationSizeState =
