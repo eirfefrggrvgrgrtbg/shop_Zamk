@@ -25,6 +25,7 @@ vi.mock('../api/adminShipments', async () => {
   return {
     ...actual,
     getAdminShipments: vi.fn(),
+    getAdminShipment: vi.fn(),
     deliverAdminShipment: vi.fn(),
   };
 });
@@ -188,6 +189,41 @@ const sampleShipments: adminShipmentsApi.AdminShipmentView[] = [
   },
 ];
 
+const mockGetAdminShipmentDetail = (id: string): adminShipmentsApi.AdminShipmentView => {
+  const found = sampleShipments.find((s) => s.id === id);
+  if (!found) {
+    throw new Error('Отправление не найдено');
+  }
+  return {
+    ...found,
+    customerName: 'Иван Иванов',
+    customerPhone: '+7 (999) 111-22-33',
+    deliveryAddress: 'г. Москва, ул. Арбат, д. 10',
+    items: [
+      {
+        orderItemId: `item-1-${id}`,
+        productId: 'prod-1',
+        variantId: 'var-1',
+        productTitle: 'Шерстяное пальто',
+        imageUrl: 'https://example.com/coat.jpg',
+        variantColor: 'Черный',
+        variantSize: 'M',
+        quantity: 1,
+      },
+      {
+        orderItemId: `item-2-${id}`,
+        productId: 'prod-2',
+        variantId: 'var-2',
+        productTitle: 'Шелковый шарф',
+        imageUrl: null,
+        variantColor: null,
+        variantSize: null,
+        quantity: 2,
+      },
+    ],
+  };
+};
+
 describe('formatTransitDuration helper', () => {
   it('formats less than 1 minute', () => {
     const start = '2026-09-20T10:00:00Z';
@@ -215,13 +251,13 @@ describe('formatTransitDuration helper', () => {
 
   it('formats days and hours (>= 24 hours)', () => {
     const start = '2026-09-20T10:00:00Z';
-    const end = '2026-09-22T14:00:00Z'; // 52 hours = 2 days 4 hours
+    const end = '2026-09-22T14:00:00Z';
     expect(formatTransitDuration(start, end)).toBe('В пути: 2 дн. 4 ч.');
   });
 
   it('formats exact days without trailing 0 hours', () => {
     const start = '2026-09-20T10:00:00Z';
-    const end = '2026-09-22T10:00:00Z'; // 48 hours = exactly 2 days
+    const end = '2026-09-22T10:00:00Z';
     expect(formatTransitDuration(start, end)).toBe('В пути: 2 дн.');
   });
 
@@ -238,6 +274,9 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
     vi.clearAllMocks();
     vi.mocked(adminPickingApi.getAdminDispatchQueue).mockResolvedValue(sampleDispatchQueue);
     vi.mocked(adminShipmentsApi.getAdminShipments).mockResolvedValue(sampleShipments);
+    vi.mocked(adminShipmentsApi.getAdminShipment).mockImplementation(async (id: string) =>
+      mockGetAdminShipmentDetail(id)
+    );
   });
 
   it('A & B: renders 4 lifecycle tabs with accurate counts and defaults to "К отправке"', async () => {
@@ -275,14 +314,12 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
       </MemoryRouter>
     );
 
-    // C: Packed fulfillments appear ONLY in "К отправке"
     expect(await screen.findByText('ORD-100209')).toBeDefined();
     expect(screen.getByText('ORD-100210')).toBeDefined();
     expect(screen.queryByText('ORD-100301')).toBeNull();
     expect(screen.queryByText('ORD-100401')).toBeNull();
     expect(screen.queryByText('ORD-100501')).toBeNull();
 
-    // D: Shipped shipments appear ONLY in "В пути"
     fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
     expect(screen.getByText('ORD-100301')).toBeDefined();
     expect(screen.getByText('ORD-100302')).toBeDefined();
@@ -290,7 +327,6 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
     expect(screen.queryByText('ORD-100401')).toBeNull();
     expect(screen.queryByText('ORD-100501')).toBeNull();
 
-    // E: Delivered shipments appear ONLY in "Доставлены"
     fireEvent.click(screen.getByTestId('shipments-tab-delivered'));
     expect(screen.getByText('ORD-100401')).toBeDefined();
     expect(screen.getByText('ORD-100402')).toBeDefined();
@@ -298,7 +334,6 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
     expect(screen.queryByText('ORD-100301')).toBeNull();
     expect(screen.queryByText('ORD-100501')).toBeNull();
 
-    // F: Failed and cancelled shipments appear ONLY in "Проблемы"
     fireEvent.click(screen.getByTestId('shipments-tab-problems'));
     expect(screen.getByText('ORD-100501')).toBeDefined();
     expect(screen.getByText('ORD-100502')).toBeDefined();
@@ -314,22 +349,18 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
       </MemoryRouter>
     );
 
-    // G & H: orderNumber primary and sellerName secondary shown
     expect(await screen.findByText('ORD-100209')).toBeDefined();
     expect(screen.getByText('Studio One')).toBeDefined();
 
-    // I: null sellerName -> "Продавец"
     expect(screen.getByText('ORD-100210')).toBeDefined();
     expect(screen.getByText('Продавец')).toBeDefined();
 
-    // J: UUIDs are not rendered in list text
     const pageText = screen.getByTestId('admin-shipments-page').textContent || '';
     expect(pageText).not.toContain('fulf-uuid-1111-aaaa');
     expect(pageText).not.toContain('ord-uuid-1111-aaaa');
     expect(pageText).not.toContain('seller-uuid-1111');
     expect(pageText).not.toContain('seller-uuid-2222');
 
-    // Also verify on "В пути" tab
     fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
     const inTransitText = screen.getByTestId('admin-shipments-page').textContent || '';
     expect(inTransitText).not.toContain('ship-uuid-shipped-1');
@@ -348,12 +379,10 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
     await screen.findByText('ORD-100209');
     fireEvent.click(screen.getByTestId('shipments-tab-delivered'));
 
-    // ORD-100401 has carrier 'СДЭК' and tracking 'TRK-401-DELIV'
     const table = screen.getByRole('table');
     expect(within(table).getByText('СДЭК')).toBeDefined();
     expect(within(table).getByText('TRK-401-DELIV')).toBeDefined();
 
-    // ORD-100402 has missing carrier and tracking -> fallbacks
     expect(within(table).getByText('Служба не указана')).toBeDefined();
     expect(within(table).getByText('Трек не указан')).toBeDefined();
   });
@@ -365,14 +394,12 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
       </MemoryRouter>
     );
 
-    // K & M: "К отправке" shows itemsCount, unitsCount, deliveryMethodName, packedAt, and deterministic FIFO sort (oldest packed first)
     expect(await screen.findByText('2 позиции')).toBeDefined();
     expect(screen.getByText('3 единицы')).toBeDefined();
     expect(screen.getByText('1 позиция')).toBeDefined();
     expect(screen.getByText('1 единица')).toBeDefined();
     expect(screen.getByText('СДЭК Курьер')).toBeDefined();
 
-    // Verify FIFO sort on "К отправке": ORD-100209 (packed 09:30) appears before ORD-100210 (packed 12:00)
     const rows = screen.getAllByRole('row');
     expect(rows[1].textContent).toContain('ORD-100209');
     expect(rows[2].textContent).toContain('ORD-100210');
@@ -386,7 +413,6 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
     });
     expect(screen.getByText(formattedPackedAt)).toBeDefined();
 
-    // L: "В пути" shows carrier, trackingNumber, and shippedAt
     fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
     const inTransitTable = screen.getByRole('table');
     expect(within(inTransitTable).getByText('СДЭК')).toBeDefined();
@@ -395,7 +421,6 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
     expect(within(inTransitTable).getByText('BXB-998877')).toBeDefined();
     expect(within(inTransitTable).getByText('4 единицы')).toBeDefined();
 
-    // N: "Доставлены" shows deliveredAt and derived transit duration ("В пути: 2 дн. 4 ч." for ORD-100401 and "В пути: 4 ч. 18 мин." for ORD-100402)
     fireEvent.click(screen.getByTestId('shipments-tab-delivered'));
     const formattedDeliveredAt = new Date('2026-09-22T14:00:00Z').toLocaleString('ru-RU', {
       day: '2-digit',
@@ -418,19 +443,15 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
       </MemoryRouter>
     );
 
-    // "К отправке" has "Действие" header and action links
     expect(await screen.findByText('ORD-100209')).toBeDefined();
     expect(screen.getByRole('columnheader', { name: 'Действие' })).toBeDefined();
 
-    // "В пути" has "Действие" header and action buttons
     fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
     expect(screen.getByRole('columnheader', { name: 'Действие' })).toBeDefined();
 
-    // "Доставлены" does NOT have "Действие" header
     fireEvent.click(screen.getByTestId('shipments-tab-delivered'));
     expect(screen.queryByRole('columnheader', { name: 'Действие' })).toBeNull();
 
-    // "Проблемы" does NOT have "Действие" header
     fireEvent.click(screen.getByTestId('shipments-tab-problems'));
     expect(screen.queryByRole('columnheader', { name: 'Действие' })).toBeNull();
   });
@@ -452,22 +473,18 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
       </MemoryRouter>
     );
 
-    // O: Packed action links to existing dispatch flow (/fulfillment/dispatch/:id)
     const dispatchLinks = await screen.findAllByRole('link', { name: /Перейти к отгрузке/i });
     expect(dispatchLinks).toHaveLength(2);
     expect(dispatchLinks[0].getAttribute('href')).toBe('/fulfillment/dispatch/fulf-uuid-1111-aaaa');
 
-    // P: Delivery confirmation on "В пути" opens modal and invokes deliverAdminShipment
     fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
     const deliverButtons = screen.getAllByRole('button', { name: /Подтвердить доставку/i });
     expect(deliverButtons).toHaveLength(2);
 
-    // Clicking second button (ORD-100302 is newer shippedAt, so index 1 is ORD-100301)
     fireEvent.click(deliverButtons[1]);
     expect(screen.getByText('Подтвердить доставку?')).toBeDefined();
     expect(screen.getAllByText('TRK-301-CDEK').length).toBeGreaterThanOrEqual(2);
 
-    // Confirm inside modal
     const modalConfirmBtns = screen.getAllByRole('button', { name: /Подтвердить доставку/i });
     fireEvent.click(modalConfirmBtns[modalConfirmBtns.length - 1]);
 
@@ -475,12 +492,10 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
       expect(adminShipmentsApi.deliverAdminShipment).toHaveBeenCalledWith('ship-uuid-shipped-1');
     });
 
-    // Q: Delivered rows have NO operational delivery button
     fireEvent.click(screen.getByTestId('shipments-tab-delivered'));
     expect(screen.queryByRole('button', { name: /Подтвердить доставку/i })).toBeNull();
     expect(screen.queryByRole('link', { name: /Перейти к отгрузке/i })).toBeNull();
 
-    // R: Problem rows do not invent recovery action
     fireEvent.click(screen.getByTestId('shipments-tab-problems'));
     expect(screen.queryByRole('button', { name: /Подтвердить доставку/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Повторить|Восстановить|Переотправить/i })).toBeNull();
@@ -495,44 +510,36 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
 
     expect(await screen.findByText('ORD-100209')).toBeDefined();
 
-    // On "К отправке": placeholder is "Заказ или продавец" and carrier select is hidden
     const searchInputToDispatch = screen.getByPlaceholderText('Заказ или продавец');
     expect(searchInputToDispatch).toBeDefined();
     expect(screen.queryByLabelText('Служба доставки')).toBeNull();
 
-    // S: Search by order number on "К отправке"
     fireEvent.change(searchInputToDispatch, { target: { value: '100210' } });
     expect(screen.getByText('ORD-100210')).toBeDefined();
     expect(screen.queryByText('ORD-100209')).toBeNull();
 
-    // V: Clearing filters restores rows
     fireEvent.click(screen.getByRole('button', { name: 'Сбросить' }));
     expect(screen.getByText('ORD-100209')).toBeDefined();
     expect(screen.getByText('ORD-100210')).toBeDefined();
 
-    // On "В пути": placeholder is "Заказ или трек-номер" and carrier select is visible
     fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
     const searchInputInTransit = screen.getByPlaceholderText('Заказ или трек-номер');
     expect(searchInputInTransit).toBeDefined();
     expect(screen.getByLabelText('Служба доставки')).toBeDefined();
 
-    // T: Search by tracking number on "В пути"
     fireEvent.change(searchInputInTransit, { target: { value: 'bxb-998877' } });
     expect(screen.getByText('ORD-100302')).toBeDefined();
     expect(screen.queryByText('ORD-100301')).toBeNull();
 
-    // U: Carrier filter on "В пути"
     fireEvent.click(screen.getByRole('button', { name: 'Сбросить' }));
     const carrierSelect = screen.getByLabelText('Служба доставки');
     fireEvent.change(carrierSelect, { target: { value: 'СДЭК' } });
     expect(screen.getByText('ORD-100301')).toBeDefined();
     expect(screen.queryByText('ORD-100302')).toBeNull();
 
-    // W: Zero filtered result -> "Ничего не найдено"
     fireEvent.change(searchInputInTransit, { target: { value: 'NON-EXISTENT-99999' } });
     expect(screen.getByText('Ничего не найдено')).toBeDefined();
 
-    // Clicking "Сбросить фильтры" inside empty state restores rows
     fireEvent.click(screen.getByRole('button', { name: 'Сбросить фильтры' }));
     expect(screen.getByText('ORD-100301')).toBeDefined();
     expect(screen.getByText('ORD-100302')).toBeDefined();
@@ -541,12 +548,12 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
   it('X & Y: enforces PII boundary in list and uses exact problem status labels without inventing failure reasons', async () => {
     const shipmentsWithExtraFields: adminShipmentsApi.AdminShipmentView[] = [
       {
-        ...sampleShipments[4], // failed
+        ...sampleShipments[4],
         customerName: 'Секретный Покупатель',
         customerPhone: '+79991112233',
         deliveryAddress: 'г. Москва, ул. Тайная, д. 42, кв. 10',
       },
-      sampleShipments[5], // cancelled
+      sampleShipments[5],
     ];
     vi.mocked(adminShipmentsApi.getAdminShipments).mockResolvedValue(shipmentsWithExtraFields);
 
@@ -559,14 +566,12 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
     expect(await screen.findByText('ORD-100209')).toBeDefined();
     fireEvent.click(screen.getByTestId('shipments-tab-problems'));
 
-    // Y: Exact problem status labels ("Ошибка доставки", "Отправка отменена"), no fabricated failure reasons
     expect(screen.getByText('Ошибка доставки')).toBeDefined();
     expect(screen.getByText('Отправка отменена')).toBeDefined();
 
     const pageText = screen.getByTestId('admin-shipments-page').textContent || '';
     expect(pageText).not.toMatch(/утеряна|повреждена|возвращается курьером|причина отмены/i);
 
-    // X: No recipient PII appears in list
     expect(pageText).not.toContain('Секретный Покупатель');
     expect(pageText).not.toContain('+79991112233');
     expect(pageText).not.toContain('ул. Тайная');
@@ -616,5 +621,450 @@ describe('AdminShipments Outbound Workspace (SHIPMENTS UX.3C1)', () => {
     expect(mapped.itemsCount).toBe(2);
     expect(mapped.unitsCount).toBe(3);
     expect(mapped.deliveryMethodName).toBe('СДЭК Курьер');
+  });
+});
+
+describe('Shipment Read-Only Detail Drawer (SHIPMENTS UX.3D1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(adminPickingApi.getAdminDispatchQueue).mockResolvedValue(sampleDispatchQueue);
+    vi.mocked(adminShipmentsApi.getAdminShipments).mockResolvedValue(sampleShipments);
+    vi.mocked(adminShipmentsApi.getAdminShipment).mockImplementation(async (id: string) =>
+      mockGetAdminShipmentDetail(id)
+    );
+  });
+
+  it('A, B, C, D: opens drawer for shipped, delivered, problem rows, and NOT for packed fulfillments', async () => {
+    render(
+      <MemoryRouter>
+        <AdminShipments />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('ORD-100209')).toBeDefined();
+
+    // D: Packed row in "К отправке" does NOT open shipment drawer
+    const packedRow = screen.getByText('ORD-100209').closest('tr');
+    expect(packedRow).toBeDefined();
+    fireEvent.click(packedRow!);
+    expect(screen.queryByTestId('shipment-detail-drawer')).toBeNull();
+    expect(adminShipmentsApi.getAdminShipment).not.toHaveBeenCalled();
+
+    // A: Shipped row opens drawer
+    fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
+    const shippedRow = (await screen.findByText('ORD-100301')).closest('tr');
+    fireEvent.click(shippedRow!);
+
+    expect(await screen.findByTestId('shipment-detail-drawer')).toBeDefined();
+    expect(adminShipmentsApi.getAdminShipment).toHaveBeenCalledWith('ship-uuid-shipped-1');
+
+    // Close drawer via close button
+    fireEvent.click(screen.getByTestId('shipment-drawer-close'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('shipment-detail-drawer')).toBeNull();
+    });
+
+    // B: Delivered row opens drawer
+    fireEvent.click(screen.getByTestId('shipments-tab-delivered'));
+    const deliveredRow = (await screen.findByText('ORD-100401')).closest('tr');
+    fireEvent.click(deliveredRow!);
+
+    expect(await screen.findByTestId('shipment-detail-drawer')).toBeDefined();
+    expect(adminShipmentsApi.getAdminShipment).toHaveBeenCalledWith('ship-uuid-delivered-1');
+
+    // Close drawer via backdrop click
+    fireEvent.click(screen.getByTestId('shipment-drawer-backdrop'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('shipment-detail-drawer')).toBeNull();
+    });
+
+    // C: Failed/Problem row opens drawer
+    fireEvent.click(screen.getByTestId('shipments-tab-problems'));
+    const failedRow = (await screen.findByText('ORD-100501')).closest('tr');
+    fireEvent.click(failedRow!);
+
+    expect(await screen.findByTestId('shipment-detail-drawer')).toBeDefined();
+    expect(adminShipmentsApi.getAdminShipment).toHaveBeenCalledWith('ship-uuid-failed-1');
+  });
+
+  it('Keyboard accessibility: opens drawer on Enter or Space key press on shipment row', async () => {
+    render(
+      <MemoryRouter>
+        <AdminShipments />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('ORD-100209');
+    fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
+
+    const shippedRow = (await screen.findByText('ORD-100301')).closest('tr');
+    expect(shippedRow).toBeDefined();
+
+    // Trigger via Enter key
+    fireEvent.keyDown(shippedRow!, { key: 'Enter' });
+    expect(await screen.findByTestId('shipment-detail-drawer')).toBeDefined();
+    expect(adminShipmentsApi.getAdminShipment).toHaveBeenCalledWith('ship-uuid-shipped-1');
+
+    // Close via Escape key
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByTestId('shipment-detail-drawer')).toBeNull();
+    });
+  });
+
+  it('Action buttons in row do NOT trigger drawer opening (event propagation stopped)', async () => {
+    render(
+      <MemoryRouter>
+        <AdminShipments />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('ORD-100209');
+    fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
+
+    await screen.findByText('ORD-100301');
+    const deliverBtns = screen.getAllByRole('button', { name: /Подтвердить доставку/i });
+    expect(deliverBtns.length).toBeGreaterThan(0);
+
+    // Clicking "Подтвердить доставку" opens the confirmation modal, NOT the drawer
+    fireEvent.click(deliverBtns[0]);
+    expect(screen.getByText('Подтвердить доставку?')).toBeDefined();
+    expect(screen.queryByTestId('shipment-detail-drawer')).toBeNull();
+    expect(adminShipmentsApi.getAdminShipment).not.toHaveBeenCalled();
+  });
+
+  it('E, F, G, H: Header renders orderNumber primary, sellerName secondary (or fallback "Продавец"), correct badge, and hides UUID heading', async () => {
+    render(
+      <MemoryRouter>
+        <AdminShipments />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('ORD-100209');
+    fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
+
+    // Open ORD-100301 (has sellerName: Atelier Nord)
+    const shippedRow = (await screen.findByText('ORD-100301')).closest('tr');
+    fireEvent.click(shippedRow!);
+
+    const drawer = await screen.findByTestId('shipment-detail-drawer');
+    const heading = within(drawer).getByRole('heading', { level: 2 });
+    expect(heading.textContent).toBe('ORD-100301');
+    expect(within(drawer).getByText('Atelier Nord')).toBeDefined();
+    expect(within(drawer).getByTestId('shipment-drawer-status-badge').textContent).toBe('В пути');
+
+    // H: No UUID in drawer heading
+    expect(heading.textContent).not.toContain('ship-uuid-shipped-1');
+    expect(heading.textContent).not.toContain('ord-uuid-3333');
+
+    // Close drawer
+    fireEvent.click(screen.getByTestId('shipment-drawer-close'));
+
+    // Open ORD-100302 (null sellerName -> fallback "Продавец")
+    const shippedRow2 = (await screen.findByText('ORD-100302')).closest('tr');
+    fireEvent.click(shippedRow2!);
+
+    const drawer2 = await screen.findByTestId('shipment-detail-drawer');
+    expect(within(drawer2).getByRole('heading', { level: 2 }).textContent).toBe('ORD-100302');
+    expect(within(drawer2).getByText('Продавец')).toBeDefined();
+  });
+
+  it('Current State summary block: renders accurate canonical state text without invented reasons', async () => {
+    render(
+      <MemoryRouter>
+        <AdminShipments />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('ORD-100209');
+
+    // 1. Shipped
+    fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
+    fireEvent.click((await screen.findByText('ORD-100301')).closest('tr')!);
+    expect(
+      within(await screen.findByTestId('shipment-drawer-current-state')).getByText(
+        'Отправление передано в доставку'
+      )
+    ).toBeDefined();
+    fireEvent.click(screen.getByTestId('shipment-drawer-close'));
+
+    // 2. Delivered
+    fireEvent.click(screen.getByTestId('shipments-tab-delivered'));
+    fireEvent.click((await screen.findByText('ORD-100401')).closest('tr')!);
+    expect(
+      within(await screen.findByTestId('shipment-drawer-current-state')).getByText(
+        'Отправление доставлено'
+      )
+    ).toBeDefined();
+    fireEvent.click(screen.getByTestId('shipment-drawer-close'));
+
+    // 3. Failed
+    fireEvent.click(screen.getByTestId('shipments-tab-problems'));
+    fireEvent.click((await screen.findByText('ORD-100501')).closest('tr')!);
+    expect(
+      within(await screen.findByTestId('shipment-drawer-current-state')).getByText(
+        'Доставка не завершена'
+      )
+    ).toBeDefined();
+    fireEvent.click(screen.getByTestId('shipment-drawer-close'));
+
+    // 4. Cancelled
+    fireEvent.click((await screen.findByText('ORD-100502')).closest('tr')!);
+    expect(
+      within(await screen.findByTestId('shipment-drawer-current-state')).getByText(
+        'Отправка отменена'
+      )
+    ).toBeDefined();
+  });
+
+  it('I, J, K, L: Delivery block renders carrier, tracking, tracking URL link, timestamps, and missing fallbacks', async () => {
+    render(
+      <MemoryRouter>
+        <AdminShipments />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('ORD-100209');
+    fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
+
+    // Open ORD-100301 (has full carrier, tracking, and safe URL)
+    fireEvent.click((await screen.findByText('ORD-100301')).closest('tr')!);
+    const deliveryBlock = await screen.findByTestId('shipment-drawer-delivery');
+
+    expect(within(deliveryBlock).getByText('Служба доставки')).toBeDefined();
+    expect(within(deliveryBlock).getByText('СДЭК')).toBeDefined();
+    expect(within(deliveryBlock).getByText('TRK-301-CDEK')).toBeDefined();
+
+    // K: Tracking URL is safe external link
+    const trackLink = within(deliveryBlock).getByRole('link', { name: /Отследить/i });
+    expect(trackLink.getAttribute('href')).toBe('https://cdek.ru/track/TRK-301-CDEK');
+    expect(trackLink.getAttribute('target')).toBe('_blank');
+
+    // Close and open ORD-100402 with missing carrier and tracking
+    fireEvent.click(screen.getByTestId('shipment-drawer-close'));
+    fireEvent.click(screen.getByTestId('shipments-tab-delivered'));
+    fireEvent.click((await screen.findByText('ORD-100402')).closest('tr')!);
+
+    const fallbackDeliveryBlock = await screen.findByTestId('shipment-drawer-delivery');
+    expect(within(fallbackDeliveryBlock).getByText('Не указана')).toBeDefined();
+    expect(within(fallbackDeliveryBlock).getAllByText('Не указан')).toHaveLength(2);
+  });
+
+  it('M, N, O, P: Contents block displays product items, quantity, clean variant attributes, and summary counts', async () => {
+    render(
+      <MemoryRouter>
+        <AdminShipments />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('ORD-100209');
+    fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
+    fireEvent.click((await screen.findByText('ORD-100301')).closest('tr')!);
+
+    const contents = await screen.findByTestId('shipment-drawer-contents');
+
+    // P: itemsCount & unitsCount summary (ORD-100301 has 2 items, 4 units)
+    expect(within(contents).getByText(/2 позиции · 4 единицы/i)).toBeDefined();
+
+    // M: product title, image, and quantity
+    expect(within(contents).getByText('Шерстяное пальто')).toBeDefined();
+    expect(within(contents).getByText('1 шт.')).toBeDefined();
+    const coatImg = within(contents).getByRole('img', { name: 'Шерстяное пальто' });
+    expect(coatImg.getAttribute('src')).toBe('https://example.com/coat.jpg');
+
+    // N: color + size
+    expect(within(contents).getByText('Черный · M')).toBeDefined();
+
+    // O: item 2 has missing color and size -> does NOT render empty separator
+    expect(within(contents).getByText('Шелковый шарф')).toBeDefined();
+    expect(within(contents).getByText('2 шт.')).toBeDefined();
+    const contentsText = contents.textContent || '';
+    expect(contentsText).not.toContain('undefined');
+    expect(contentsText).not.toContain('null');
+  });
+
+  it('Q & R: Recipient PII is displayed exclusively inside drawer and never leaks to list', async () => {
+    render(
+      <MemoryRouter>
+        <AdminShipments />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('ORD-100209');
+    fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
+
+    // Before opening drawer: PII does NOT exist anywhere in document
+    expect(screen.queryByText('Иван Иванов')).toBeNull();
+    expect(screen.queryByText('+7 (999) 111-22-33')).toBeNull();
+    expect(screen.queryByText('г. Москва, ул. Арбат, д. 10')).toBeNull();
+
+    // Open drawer
+    fireEvent.click((await screen.findByText('ORD-100301')).closest('tr')!);
+
+    // Q: Recipient details exist inside recipient section
+    const recipientSection = await screen.findByTestId('shipment-drawer-recipient');
+    expect(within(recipientSection).getByText('Иван Иванов')).toBeDefined();
+    expect(within(recipientSection).getByText('+7 (999) 111-22-33')).toBeDefined();
+    expect(within(recipientSection).getByText('г. Москва, ул. Арбат, д. 10')).toBeDefined();
+
+    // Close drawer
+    fireEvent.click(screen.getByTestId('shipment-drawer-close'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('shipment-detail-drawer')).toBeNull();
+    });
+
+    // R: List remains strictly PII-free
+    const listText = screen.getByTestId('admin-shipments-page').textContent || '';
+    expect(listText).not.toContain('Иван Иванов');
+    expect(listText).not.toContain('+7 (999) 111-22-33');
+    expect(listText).not.toContain('ул. Арбат');
+  });
+
+  it('S, T, U: Timeline displays exact canonical timestamps, does not fake delivered timestamp, and marks exception for problem states', async () => {
+    render(
+      <MemoryRouter>
+        <AdminShipments />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('ORD-100209');
+
+    // Shipped shipment
+    fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
+    fireEvent.click((await screen.findByText('ORD-100301')).closest('tr')!);
+
+    const timelineShipped = await screen.findByTestId('shipment-drawer-timeline');
+    expect(within(timelineShipped).getByText('Упаковано')).toBeDefined();
+    expect(within(timelineShipped).getByText('Передано в доставку')).toBeDefined();
+    expect(within(timelineShipped).getByText('Доставлено')).toBeDefined();
+
+    // T: Shipped shipment has NOT been delivered -> does not fake deliveredAt
+    expect(within(timelineShipped).getByText('Не доставлено')).toBeDefined();
+    expect(screen.queryByTestId('shipment-drawer-timeline-exception')).toBeNull();
+
+    // Close and open Failed shipment
+    fireEvent.click(screen.getByTestId('shipment-drawer-close'));
+    fireEvent.click(screen.getByTestId('shipments-tab-problems'));
+    fireEvent.click((await screen.findByText('ORD-100501')).closest('tr')!);
+
+    // U: Exception block shown without fabricating reasons
+    const exceptionBlock = await screen.findByTestId('shipment-drawer-timeline-exception');
+    expect(within(exceptionBlock).getByText('Ошибка доставки')).toBeDefined();
+    expect(within(exceptionBlock).getByText('Доставка не завершена')).toBeDefined();
+    expect(exceptionBlock.textContent).not.toMatch(/утеряна|повреждена|курьер/i);
+  });
+
+  it('V & W: Technical section is collapsed by default and contains shipmentId, fulfillmentId, orderId', async () => {
+    render(
+      <MemoryRouter>
+        <AdminShipments />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('ORD-100209');
+    fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
+    fireEvent.click((await screen.findByText('ORD-100301')).closest('tr')!);
+
+    const techSection = await screen.findByTestId('shipment-drawer-technical');
+    const detailsEl = techSection.querySelector('details');
+    expect(detailsEl).toBeDefined();
+
+    // V: Collapsed by default
+    expect(detailsEl?.hasAttribute('open')).toBe(false);
+
+    // W: Contains required IDs
+    expect(within(techSection).getByText('ship-uuid-shipped-1')).toBeDefined();
+    expect(within(techSection).getByText('fulf-uuid-3333')).toBeDefined();
+    expect(within(techSection).getByText('ord-uuid-3333')).toBeDefined();
+
+    // Copy button
+    const copyBtns = within(techSection).getAllByTitle(/Скопировать/i);
+    expect(copyBtns.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('X & Y: Handles loading and error states with a retry button', async () => {
+    let rejectPromise: ((err: Error) => void) | null = null;
+    vi.mocked(adminShipmentsApi.getAdminShipment).mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectPromise = reject;
+        })
+    );
+
+    render(
+      <MemoryRouter>
+        <AdminShipments />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('ORD-100209');
+    fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
+    fireEvent.click((await screen.findByText('ORD-100301')).closest('tr')!);
+
+    // X: Loading state rendered
+    expect(screen.getByTestId('shipment-drawer-loading')).toBeDefined();
+
+    // Trigger rejection
+    rejectPromise!(new Error('Network failure'));
+
+    // Y: Error state rendered with retry button
+    expect(await screen.findByTestId('shipment-drawer-error')).toBeDefined();
+    expect(screen.getByText('Не удалось загрузить данные отправления')).toBeDefined();
+
+    const retryBtn = screen.getByRole('button', { name: /Повторить попытку/i });
+    expect(retryBtn).toBeDefined();
+
+    // Retry invokes getAdminShipment again
+    vi.mocked(adminShipmentsApi.getAdminShipment).mockResolvedValueOnce(
+      mockGetAdminShipmentDetail('ship-uuid-shipped-1')
+    );
+    fireEvent.click(retryBtn);
+
+    expect(await screen.findByTestId('shipment-drawer-delivery')).toBeDefined();
+  });
+
+  it('Z & AA: Opening and closing drawer preserves tab, search, and carrier filter state', async () => {
+    render(
+      <MemoryRouter>
+        <AdminShipments />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('ORD-100209');
+
+    // Switch tab to "В пути"
+    fireEvent.click(screen.getByTestId('shipments-tab-in_transit'));
+
+    // Type in search query
+    const searchInput = screen.getByPlaceholderText('Заказ или трек-номер');
+    fireEvent.change(searchInput, { target: { value: '301' } });
+
+    // Select carrier filter
+    const carrierSelect = screen.getByLabelText('Служба доставки');
+    fireEvent.change(carrierSelect, { target: { value: 'СДЭК' } });
+
+    expect(screen.getByText('ORD-100301')).toBeDefined();
+    expect(screen.queryByText('ORD-100302')).toBeNull();
+
+    // Open drawer
+    fireEvent.click(screen.getByText('ORD-100301').closest('tr')!);
+    expect(await screen.findByTestId('shipment-detail-drawer')).toBeDefined();
+
+    // Close drawer
+    fireEvent.click(screen.getByTestId('shipment-drawer-close'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('shipment-detail-drawer')).toBeNull();
+    });
+
+    // AA: Tab, search query, and carrier filter remain completely intact!
+    expect(screen.getByTestId('shipments-tab-in_transit').getAttribute('aria-selected')).toBe(
+      'true'
+    );
+    expect((screen.getByPlaceholderText('Заказ или трек-номер') as HTMLInputElement).value).toBe(
+      '301'
+    );
+    expect((screen.getByLabelText('Служба доставки') as HTMLSelectElement).value).toBe('СДЭК');
+    expect(screen.getByText('ORD-100301')).toBeDefined();
+    expect(screen.queryByText('ORD-100302')).toBeNull();
   });
 });

@@ -26,6 +26,7 @@ import { getAdminDispatchQueue } from '../api/adminPicking';
 import type { DispatchQueueItem } from '../api/adminPicking';
 import { formatOrderNumber } from '../utils/orderFormatters';
 import { PermissionGuard } from '../components/PermissionGuard';
+import { AdminShipmentDetailDrawer } from '../components/shipments/AdminShipmentDetailDrawer';
 
 export type ShipmentLifecycleTab = 'to_dispatch' | 'in_transit' | 'delivered' | 'problems';
 
@@ -122,6 +123,8 @@ export function AdminShipments() {
   const [deliveryTarget, setDeliveryTarget] = useState<AdminShipmentView | null>(null);
   const [isDelivering, setIsDelivering] = useState(false);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
+
+  const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -639,7 +642,20 @@ export function AdminShipments() {
                       const trackingDisplay = shipment.trackingNumber?.trim() || 'Трек не указан';
 
                       return (
-                        <tr key={shipment.id} className="hover:bg-gray-50/60 transition-colors">
+                        <tr
+                          key={shipment.id}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`Открыть детали отправления ${displayOrderNumber}`}
+                          onClick={() => setSelectedShipmentId(shipment.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSelectedShipmentId(shipment.id);
+                            }
+                          }}
+                          className="hover:bg-gray-50/80 cursor-pointer transition-colors focus:outline-hidden focus:bg-indigo-50/40"
+                        >
                           <td className="px-5 py-4">
                             <div className="text-sm font-bold text-gray-900">{displayOrderNumber}</div>
                             <div className="text-xs text-gray-500 font-medium mt-0.5">
@@ -724,7 +740,11 @@ export function AdminShipments() {
                           {hasActionColumn && (
                             <td className="px-5 py-4 whitespace-nowrap text-right text-xs">
                               {isShipmentEligibleForDelivery(shipment.status) ? (
-                                <div className="inline-flex items-center justify-end gap-2">
+                                <div
+                                  className="inline-flex items-center justify-end gap-2"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) => e.stopPropagation()}
+                                >
                                   {isSafeExternalUrl(shipment.trackingUrl) && (
                                     <a
                                       href={shipment.trackingUrl}
@@ -875,6 +895,13 @@ export function AdminShipments() {
           </div>
         </div>
       )}
+
+      {/* Shipment Read-Only Detail Drawer */}
+      <AdminShipmentDetailDrawer
+        shipmentId={selectedShipmentId}
+        isOpen={Boolean(selectedShipmentId)}
+        onClose={() => setSelectedShipmentId(null)}
+      />
     </div>
   );
 }
