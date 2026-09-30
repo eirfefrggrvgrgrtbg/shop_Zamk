@@ -8,23 +8,37 @@ import {
 } from '@zamk/api-client/src/admin';
 import type { AdminShipmentDeliveryResult } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
-import type { AdminShipment } from '@zamk/api-client/src/types';
+import type { AdminShipment, AdminShipmentItem } from '@zamk/api-client/src/types';
 
-export type { AdminShipmentDeliveryResult };
+export type { AdminShipmentDeliveryResult, AdminShipmentItem };
 
 export interface AdminShipmentView {
   id: string;
+  shipmentId: string;
   orderId: string;
+  orderNumber?: string | null;
+  orderStatus?: string;
   fulfillmentId?: string | null;
+  fulfillmentStatus?: string;
+  sellerId?: string;
+  sellerName?: string | null;
   status: string;
   statusLabel: string;
   carrier?: string;
   trackingNumber?: string;
   trackingUrl?: string;
+  deliveryMethodName?: string | null;
+  itemsCount: number;
+  unitsCount: number;
+  packedAt?: string | null;
   shippedAt?: string;
   deliveredAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  deliveryAddress?: string | null;
+  items?: AdminShipmentItem[];
 }
 
 export interface ShipmentCreateInput {
@@ -52,6 +66,16 @@ const shipmentStatusLabels: Record<string, string> = {
   cancelled: 'Отменен',
 };
 
+const shipmentWorkspaceStatusLabels: Record<string, string> = {
+  pending: 'Ожидает',
+  assembling: 'В сборке',
+  packed: 'Готово к отправке',
+  shipped: 'В пути',
+  delivered: 'Доставлено',
+  failed: 'Ошибка доставки',
+  cancelled: 'Отправка отменена',
+};
+
 const shipmentStatuses = ['pending', 'assembling', 'packed', 'shipped', 'delivered', 'failed', 'cancelled'];
 const genericEditableShipmentStatuses = ['pending', 'assembling', 'packed', 'failed', 'cancelled'];
 
@@ -72,20 +96,40 @@ export const getShipmentStatusLabel = (status: string): string => {
   return shipmentStatusLabels[status] ?? status;
 };
 
+export const getShipmentWorkspaceStatusLabel = (status: string): string => {
+  return shipmentWorkspaceStatusLabels[status] ?? getShipmentStatusLabel(status);
+};
+
 export const mapAdminShipment = (shipment: AdminShipment): AdminShipmentView => {
   return {
     id: shipment.id,
+    shipmentId: shipment.shipmentId || shipment.id,
     orderId: shipment.orderId,
+    orderNumber: shipment.orderNumber,
+    orderStatus: shipment.orderStatus,
     fulfillmentId: shipment.fulfillmentId,
+    fulfillmentStatus: shipment.fulfillmentStatus,
+    sellerId: shipment.sellerId,
+    sellerName: shipment.sellerName,
     status: shipment.status,
     statusLabel: getShipmentStatusLabel(shipment.status),
     carrier: shipment.carrier,
     trackingNumber: shipment.trackingNumber,
     trackingUrl: shipment.trackingUrl,
+    deliveryMethodName: shipment.deliveryMethodName,
+    itemsCount: shipment.itemsCount ?? (shipment.items ? shipment.items.length : 0),
+    unitsCount:
+      shipment.unitsCount ??
+      (shipment.items ? shipment.items.reduce((sum, item) => sum + item.quantity, 0) : 0),
+    packedAt: shipment.packedAt,
     shippedAt: shipment.shippedAt,
     deliveredAt: shipment.deliveredAt,
     createdAt: shipment.createdAt,
     updatedAt: shipment.updatedAt,
+    customerName: shipment.customerName,
+    customerPhone: shipment.customerPhone,
+    deliveryAddress: shipment.deliveryAddress,
+    items: shipment.items,
   };
 };
 

@@ -1185,18 +1185,44 @@ export interface AdminPaymentDetail {
   problems: PaymentProblem[];
 }
 
+export interface AdminShipmentItem {
+  orderItemId: string;
+  productId: string;
+  variantId?: string | null;
+  productTitle: string;
+  imageUrl?: string | null;
+  variantColor?: string | null;
+  variantSize?: string | null;
+  sku?: string | null;
+  quantity: number;
+}
+
 export interface AdminShipment {
   id: string;
+  shipmentId?: string;
   orderId: string;
+  orderNumber?: string | null;
+  orderStatus?: string;
   fulfillmentId?: string | null;
+  fulfillmentStatus?: string;
+  sellerId?: string;
+  sellerName?: string | null;
   status: string;
   carrier?: string;
   trackingNumber?: string;
   trackingUrl?: string;
+  deliveryMethodName?: string | null;
+  itemsCount?: number;
+  unitsCount?: number;
+  packedAt?: string | null;
   shippedAt?: string;
   deliveredAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  deliveryAddress?: string | null;
+  items?: AdminShipmentItem[];
 }
 
 export interface AdminAllocatedUnit {
@@ -1224,6 +1250,7 @@ export interface AdminFulfillmentItem {
 
 export interface AdminFulfillment {
   id: string;
+  fulfillmentId?: string;
   orderId: string;
   orderNumber?: string | null;
   sellerId: string;
@@ -1248,6 +1275,9 @@ export interface AdminFulfillment {
   customerName?: string | null;
   customerPhone?: string | null;
   deliveryAddress?: string | null;
+  deliveryMethodName?: string | null;
+  itemsCount?: number;
+  unitsCount?: number;
   items: AdminFulfillmentItem[];
 }
 
@@ -1291,12 +1321,15 @@ export interface AdminDispatchQueueItem {
   fulfillmentId: string;
   orderId: string;
   orderNumber: string;
+  sellerId?: string;
+  sellerName?: string | null;
   status: string;
   orderStatus: string;
   packedAt?: string | null;
   createdAt: string;
   deliveryMethodName?: string | null;
   itemsCount: number;
+  unitsCount?: number;
   totalQuantity: number;
   shipmentId?: string | null;
   shipmentStatus?: string | null;

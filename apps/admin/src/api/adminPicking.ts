@@ -453,12 +453,15 @@ export interface DispatchQueueItem {
   fulfillmentId: string;
   orderId: string;
   orderNumber: string;
+  sellerId?: string;
+  sellerName?: string | null;
   status: string;
   orderStatus: string;
   packedAt?: string | null;
   createdAt: string;
   deliveryMethodName?: string | null;
   itemsCount: number;
+  unitsCount?: number;
   totalQuantity: number;
   shipmentId?: string | null;
   shipmentStatus?: string | null;
