@@ -1,4 +1,5 @@
 import { SellerProduct, SellerProductSize, SellerProductStatus } from '../lib/seller-products';
+import { formatVariantLabel } from '../lib/seller-variants';
 
 function mapStatus(apiStatus: string): SellerProductStatus {
   const allowed: SellerProductStatus[] = ['draft', 'pending_moderation', 'in_review', 'approved', 'published', 'rejected', 'hidden', 'blocked', 'out_of_stock'];
@@ -13,14 +14,14 @@ export function adaptProductList(apiProducts: any[]): SellerProduct[] {
     let sizes: SellerProductSize[] = [];
     if (p.variants && Array.isArray(p.variants)) {
       sizes = p.variants.map((v: any) => ({
-        size: v.size || 'Единый',
+        size: formatVariantLabel(v),
         stock: v.availableStock ?? v.totalStock ?? ((v.inStock === true) ? 1 : 0)
       }));
     }
 
     if (sizes.length === 0) {
       const directStock = p.availableStock ?? p.totalStock ?? (p.inStock ? 1 : 0);
-      sizes = [{ size: 'Единый', stock: directStock }];
+      sizes = [{ size: 'Единый вариант', stock: directStock }];
     }
 
     let price = (p.priceCents || 0) / 100;
@@ -61,7 +62,9 @@ export function adaptProductList(apiProducts: any[]): SellerProduct[] {
       sizes: sizes,
       updatedAt: new Date(p.updatedAt || p.createdAt).toLocaleString('ru-RU'),
       rejectionReason: p.moderationComment,
-      _raw: p // keep raw data just in case
+      actualVisibility: p.actualVisibility,
+      storefrontUrl: typeof p.storefrontUrl === 'string' && p.storefrontUrl.trim() !== '' ? p.storefrontUrl : undefined,
+      visibilityReasons: Array.isArray(p.visibilityReasons) ? p.visibilityReasons : undefined
     };
   });
 }

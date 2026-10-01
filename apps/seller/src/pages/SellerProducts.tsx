@@ -4,12 +4,14 @@ import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import {
   AlertTriangle,
   BarChart3,
+  ExternalLink,
   Eye,
   Edit2,
   PackagePlus,
   Search,
   ShoppingBag,
   Sparkles,
+  Send,
 } from 'lucide-react';
 import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 import {
@@ -19,11 +21,12 @@ import {
   SellerDrawer,
 } from '../components/SellerSurface';
 import {
+  getStorefrontStatusInfo,
   statusLabels,
   type SellerProduct,
   type SellerProductStatus,
 } from '../lib/seller-products';
-import { getSellerProducts, getSellerMe } from '@zamk/api-client/src/seller';
+import { getSellerProducts, getSellerMe, submitSellerProductModeration } from '@zamk/api-client/src/seller';
 import { adaptProductList } from '../api/adapter';
 import { cn } from '../lib/utils';
 import { prepareAddProductNavigation } from '../components/product-studio/productStudioCreateSession';
@@ -49,6 +52,7 @@ const statusFilterOptions: Array<{ value: SellerProductStatus | 'all'; label: st
   { value: 'hidden', label: statusLabels.hidden },
   { value: 'blocked', label: statusLabels.blocked },
   { value: 'out_of_stock', label: statusLabels.out_of_stock },
+  { value: 'archived', label: statusLabels.archived },
 ];
 
 function ProductBadge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'good' | 'warning' | 'danger' | 'info' }) {
@@ -73,7 +77,8 @@ function getStatusTone(status: SellerProductStatus) {
     rejected: 'danger',
     hidden: 'warning',
     blocked: 'danger',
-    out_of_stock: 'warning'
+    out_of_stock: 'warning',
+    archived: 'neutral',
   };
 
   return tones[status] || 'neutral';
@@ -100,9 +105,33 @@ function ProductAvatar({ product }: { product: SellerProduct }) {
   );
 }
 
-function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct; sellerStatus: string }) {
+function ProductDetailPanel({
+  product,
+  sellerStatus,
+  onProductUpdated,
+}: {
+  product: SellerProduct;
+  sellerStatus: string;
+  onProductUpdated?: () => Promise<void> | void;
+}) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const totalStock = product.sizes.reduce((sum, item) => sum + (item.stock || 0), 0);
   const isApprovedAndNoStock = product.status === 'approved' && totalStock === 0;
+
+  const handleSubmitModeration = async () => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await submitSellerProductModeration(product.id);
+      await onProductUpdated?.();
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Не удалось отправить товар на модерацию');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="flex flex-col justify-between h-full space-y-6">
@@ -117,9 +146,6 @@ function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct;
               {isApprovedAndNoStock && (
                 <ProductBadge tone="warning">Требуется поставка</ProductBadge>
               )}
-              {totalStock > 0 && (
-                <ProductBadge tone="good">В наличии ({totalStock} шт.)</ProductBadge>
-              )}
             </div>
             {product.status === 'rejected' && product.rejectionReason && (
               <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3.5 text-sm text-red-800 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-200">
@@ -130,7 +156,7 @@ function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct;
           </div>
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3.5 dark:border-white/10 dark:bg-white/[0.02]">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Цена</p>
             <p className="mt-1.5 text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(product.price)}</p>
@@ -141,13 +167,24 @@ function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct;
               {totalStock > 0 ? `${totalStock} шт. на складе` : 'Ожидается поставка'}
             </p>
           </div>
+          <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3.5 dark:border-white/10 dark:bg-white/[0.02]">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Продажа</p>
+            {(() => {
+              const sf = getStorefrontStatusInfo(product);
+              return (
+                <p className={cn('mt-1.5 text-sm', sf.toneClass)}>
+                  {sf.label}
+                </p>
+              );
+            })()}
+          </div>
         </div>
 
         <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50/50 p-3.5 dark:border-white/10 dark:bg-white/[0.02]">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Варианты (SKU)</p>
           <div className="mt-2.5 flex flex-col gap-1.5">
-            {product.sizes.map((item) => (
-              <div key={item.size} className="flex justify-between items-center rounded-md border border-gray-200/70 bg-white dark:bg-white/[0.03] px-3 py-2 text-sm text-gray-800 dark:border-white/10 dark:text-white/80">
+            {product.sizes.map((item, idx) => (
+              <div key={`${item.size}-${idx}`} className="flex justify-between items-center rounded-md border border-gray-200/70 bg-white dark:bg-white/[0.03] px-3 py-2 text-sm text-gray-800 dark:border-white/10 dark:text-white/80">
                 <span>{item.size}</span>
                 <span className="text-gray-500 font-medium">ZAMK: {item.stock} шт.</span>
               </div>
@@ -161,36 +198,98 @@ function ProductDetailPanel({ product, sellerStatus }: { product: SellerProduct;
           </div>
         )}
 
-        <p className="mt-4 text-sm leading-relaxed text-gray-600 dark:text-gray-400 line-clamp-3">{product.description}</p>
+        {product.description && product.description.trim() ? (
+          <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50/50 p-3.5 dark:border-white/10 dark:bg-white/[0.02]">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Описание</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-gray-600 dark:text-gray-400 line-clamp-3 whitespace-pre-line">
+              {product.description}
+            </p>
+          </div>
+        ) : null}
       </div>
       
-      <div className="pt-4 border-t border-gray-100 dark:border-white/10">
+      <div className="pt-4 border-t border-gray-100 dark:border-white/10 space-y-3">
+        {submitError && (
+          <div
+            data-testid="submit-error-message"
+            className="rounded-lg border border-red-200 bg-red-50 p-3.5 text-sm text-red-800 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-200"
+          >
+            {submitError}
+          </div>
+        )}
+
         {sellerStatus === 'blocked' || sellerStatus === 'archived' ? (
           <div className="rounded-lg border border-red-200 bg-red-50 p-3.5 text-sm text-red-800 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-200">
             Действия недоступны из-за статуса магазина.
           </div>
         ) : (
-          <Link 
-            to={`/products/${product.id}/edit`}
-            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-900 shadow-sm transition-colors hover:bg-gray-50 hover:border-gray-300 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-          >
-            {['pending_moderation', 'in_review', 'approved', 'published', 'hidden', 'blocked'].includes(product.status) ? (
+          <div className="flex flex-col gap-2">
+            {product.status === 'draft' ? (
               <>
-                <Eye className="h-4 w-4 text-gray-500" />
-                Просмотр товара
+                <Link
+                  to={`/products/${product.id}/edit`}
+                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+                >
+                  <Edit2 className="h-4 w-4" />
+                  Продолжить заполнение
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleSubmitModeration}
+                  disabled={isSubmitting}
+                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-900 shadow-sm transition-colors hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+                >
+                  <Send className="h-4 w-4 text-gray-500" />
+                  {isSubmitting ? 'Отправка...' : 'Отправить на модерацию'}
+                </button>
               </>
             ) : product.status === 'rejected' ? (
-              <>
-                <AlertTriangle className="h-4 w-4 text-red-500" />
+              <Link
+                to={`/products/${product.id}/edit`}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-red-700"
+              >
+                <AlertTriangle className="h-4 w-4" />
                 Исправить карточку
-              </>
+              </Link>
+            ) : product.status === 'published' ? (
+              product.storefrontUrl && product.storefrontUrl.trim() ? (
+                <>
+                  <a
+                    href={product.storefrontUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Открыть в магазине
+                  </a>
+                  <Link
+                    to={`/products/${product.id}/edit`}
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-900 shadow-sm transition-colors hover:bg-gray-50 hover:border-gray-300 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+                  >
+                    <Edit2 className="h-4 w-4 text-gray-500" />
+                    Редактировать карточку
+                  </Link>
+                </>
+              ) : (
+                <Link
+                  to={`/products/${product.id}/edit`}
+                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+                >
+                  <Edit2 className="h-4 w-4" />
+                  Редактировать карточку
+                </Link>
+              )
             ) : (
-              <>
-                <Edit2 className="h-4 w-4 text-gray-500" />
-                Продолжить заполнение
-              </>
+              <Link
+                to={`/products/${product.id}/edit`}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-900 shadow-sm transition-colors hover:bg-gray-50 hover:border-gray-300 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+              >
+                <Eye className="h-4 w-4 text-gray-500" />
+                Открыть карточку
+              </Link>
             )}
-          </Link>
+          </div>
         )}
       </div>
     </div>
@@ -400,23 +499,22 @@ export function SellerProducts() {
                             <td className="px-4 py-3.5 text-gray-700 dark:text-gray-300">{product.sizes.length} SKU</td>
                             <td className="px-4 py-3.5 font-medium text-gray-900 dark:text-white">{formatCurrency(product.price)}</td>
                             <td className="px-4 py-3.5">
-                              <div className="flex flex-col gap-1 items-start">
-                                <ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge>
-                                {(product.status === 'published' || product.status === 'approved') && (!product.sizes?.length || product.sizes.every(s => (s.stock || 0) === 0)) && (
-                                  <ProductBadge tone="warning">Требуется поставка</ProductBadge>
-                                )}
-                                {(product.sizes?.reduce((sum, s) => sum + (s.stock || 0), 0) || 0) > 0 && (
-                                  <ProductBadge tone="good">В наличии ({product.sizes.reduce((sum, s) => sum + (s.stock || 0), 0)} шт.)</ProductBadge>
-                                )}
-                              </div>
+                              <ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge>
                             </td>
                             <td className="px-4 py-3.5 text-gray-500 dark:text-gray-400">
                               {(() => {
                                 const total = product.sizes?.reduce((sum, s) => sum + (s.stock || 0), 0) || 0;
+                                const needsSupply = (product.status === 'approved' || product.status === 'published') && total === 0;
+
                                 return total > 0 ? (
                                   <span className="font-semibold text-emerald-600 dark:text-emerald-400">{total} шт.</span>
                                 ) : (
-                                  <span>Нет на складе</span>
+                                  <div className="flex flex-col gap-0.5 items-start">
+                                    <span>Нет на складе</span>
+                                    {needsSupply && (
+                                      <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Требуется поставка</span>
+                                    )}
+                                  </div>
                                 );
                               })()}
                             </td>
@@ -442,7 +540,11 @@ export function SellerProducts() {
                 data-testid="seller-product-drawer"
               >
                 {selectedProduct && (
-                  <ProductDetailPanel product={selectedProduct} sellerStatus={sellerStatus} />
+                  <ProductDetailPanel
+                    product={selectedProduct}
+                    sellerStatus={sellerStatus}
+                    onProductUpdated={() => loadData(true)}
+                  />
                 )}
               </SellerDrawer>
             </>
