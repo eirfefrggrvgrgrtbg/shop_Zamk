@@ -1013,7 +1013,7 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 		`)
 	}
 
-	queryBuilder.WriteString(fmt.Sprintf(" WHERE p.status = 'published' AND s.status = 'active' AND %s >= %d", CanonicalProductFreeStockSQL("p.id"), MinStorefrontFreeSellableUnits))
+	queryBuilder.WriteString(fmt.Sprintf(" WHERE %s", CanonicalStorefrontEligibilitySQL("p", "s")))
 
 	if filter.Query != nil && *filter.Query != "" {
 		queryBuilder.WriteString(fmt.Sprintf(" AND (p.title ILIKE $%d OR p.description ILIKE $%d OR b.name ILIKE $%d OR c.name ILIKE $%d OR s.brand_name ILIKE $%d)", argID, argID, argID, argID, argID))
@@ -1225,8 +1225,8 @@ func (r *Repository) GetPublishedProductBySlugOrID(ctx context.Context, idOrSlug
 			s.slug, s.brand_name
 		FROM products p
 		INNER JOIN sellers s ON p.seller_id = s.id
-		WHERE (p.slug = $1 OR p.id::text = $1) AND p.status = 'published' AND s.status = 'active' AND %s >= %d
-	`, CanonicalProductFreeStockSQL("p.id"), MinStorefrontFreeSellableUnits)
+		WHERE (p.slug = $1 OR p.id::text = $1) AND %s
+	`, CanonicalStorefrontEligibilitySQL("p", "s"))
 	var p Product
 	err := r.db.QueryRow(ctx, query, idOrSlug).Scan(
 		&p.ID, &p.SellerID, &p.CategoryID, &p.BrandID, &p.Title, &p.Slug, &p.Description,

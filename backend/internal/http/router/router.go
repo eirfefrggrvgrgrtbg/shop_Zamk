@@ -19,6 +19,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/behavior"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/merchandising"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/delivery"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
@@ -89,6 +90,11 @@ func New(
 	obs ...*observability.Provider,
 ) *chi.Mux {
 	r := chi.NewRouter()
+
+	merchRepo := merchandising.NewRepository(pg.Pool)
+	merchSvc := merchandising.NewService(merchRepo, pg.Pool)
+	merchHandler := merchandising.NewHandler(merchSvc)
+
 
 	var obsProvider *observability.Provider
 	if len(obs) > 0 && obs[0] != nil {
@@ -263,6 +269,9 @@ func New(
 		r.Get("/products", productsHandler.ListPublicProducts)
 		r.Get("/product-previews/{token}", productsHandler.GetProductPreviewByToken)
 		r.Get("/direct-sale", productsHandler.GetDirectSaleProducts)
+		r.Get("/collections", merchHandler.ListPublicCollections)
+		r.Get("/collections/{slug}", merchHandler.GetPublicCollection)
+
 		r.Get("/products/popular", personalizationHandler.GetPopularProducts)
 		r.Get("/products/new", personalizationHandler.GetNewProducts)
 		r.Get("/products/{productId}/similar", personalizationHandler.GetSimilarProducts)
@@ -500,6 +509,16 @@ func New(
 		r.With(perm("categories.create")).Post("/categories", catalogHandler.CreateCategory)
 		r.With(perm("brands.read")).Get("/brands", catalogHandler.ListBrands)
 		r.With(perm("brands.create")).Post("/brands", catalogHandler.CreateBrand)
+
+		// Merchandising
+		r.Route("/merchandising", func(r chi.Router) {
+			r.With(perm("storefront.manage")).Get("/collections", merchHandler.ListAdminCollections)
+			r.With(perm("storefront.manage")).Post("/collections", merchHandler.CreateCollection)
+			r.With(perm("storefront.manage")).Get("/collections/{id}", merchHandler.GetAdminCollection)
+			r.With(perm("storefront.manage")).Patch("/collections/{id}", merchHandler.UpdateCollection)
+			r.With(perm("storefront.manage")).Put("/collections/{id}/items", merchHandler.ReplaceCollectionItems)
+		})
+
 		r.With(uploadLimit, perm("brands.update")).Post("/brands/{id}/logo/upload", storageHandler.UploadAdminBrandLogo)
 
 		// Products
