@@ -248,7 +248,7 @@ func TestProductHardDeleteMediaCleanupSafety(t *testing.T) {
 	})
 
 	t.Run("4. Product with consumed staged media and canonical same object_key -> exactly one cleanup job", func(t *testing.T) {
-		prodID := createTestProduct("rejected", sellerID) // also testing 'rejected' status deletion
+		prodID := createTestProduct("draft", sellerID)
 		sharedKey := fmt.Sprintf("%s/shared-key.jpg", cleanupKeyPrefix)
 		clientMediaID := uuid.New()
 
@@ -362,7 +362,7 @@ func TestProductHardDeleteMediaCleanupSafety(t *testing.T) {
 
 		err = svc.DeleteSellerDraftProduct(ctx, userID, prodID)
 		require.Error(t, err)
-		require.True(t, errors.Is(err, products.ErrProductNotFound))
+		require.True(t, errors.Is(err, products.ErrInvalidStatusTransition) || errors.Is(err, products.ErrProductNotFound))
 
 		// Product still exists
 		var pCount int

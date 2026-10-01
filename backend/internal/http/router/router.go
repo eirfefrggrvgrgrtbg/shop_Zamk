@@ -369,6 +369,7 @@ func New(
 		r.Get("/{id}", productsHandler.GetSellerProduct)
 		r.Patch("/{id}", productsHandler.UpdateProduct)
 		r.Delete("/{id}", productsHandler.DeleteDraftProduct)
+		r.Post("/{id}/archive", productsHandler.ArchiveSellerProduct)
 		r.Post("/{id}/submit-moderation", productsHandler.SubmitForModeration)
 		r.Get("/{id}/moderation-history", productsHandler.GetModerationHistory)
 		r.With(uploadLimit).Post("/{id}/images/upload", storageHandler.UploadSellerProductImage)

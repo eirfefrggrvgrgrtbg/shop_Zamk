@@ -1103,6 +1103,51 @@ func (s *Service) DeleteSellerDraftProduct(ctx context.Context, currentUserID, p
 	return s.repo.DeleteDraftProduct(ctx, productID, seller.ID)
 }
 
+func (s *Service) ArchiveSellerProduct(ctx context.Context, currentUserID, productID uuid.UUID) error {
+	seller, err := s.getSellerForUser(ctx, currentUserID)
+	if err != nil {
+		return err
+	}
+
+	if seller.Status == sellers.StatusBlocked || seller.Status == sellers.StatusArchived {
+		return ErrSellerBlocked
+	}
+
+	return s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.repo.WithTx(tx)
+
+		// 1. Resolve & lock product
+		var status string
+		err := txRepo.db.QueryRow(ctx, "SELECT status FROM products WHERE id = $1 AND seller_id = $2 FOR UPDATE", productID, seller.ID).Scan(&status)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrProductNotFound
+		} else if err != nil {
+			return fmt.Errorf("failed to lock product for archiving: %w", err)
+		}
+
+		// 2. Validate state transition via explicit allowlist
+		if status == StatusArchived {
+			return nil // Idempotent
+		}
+
+		switch status {
+		case StatusDraft, StatusRejected, StatusApproved, StatusPublished, StatusOutOfStock:
+			// Allowed to archive
+		default:
+			// Forbidden: StatusPendingModeration, StatusInReview, StatusHidden, StatusBlocked, etc.
+			return fmt.Errorf("%w: cannot archive product from status %q", ErrInvalidStatusTransition, status)
+		}
+
+		// 3. Update status
+		_, err = txRepo.db.Exec(ctx, "UPDATE products SET status = $1, updated_at = now() WHERE id = $2", StatusArchived, productID)
+		if err != nil {
+			return fmt.Errorf("failed to update product status to archived: %w", err)
+		}
+
+		return nil
+	})
+}
+
 func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, productID uuid.UUID, req SubmitProductModerationRequest) error {
 	seller, err := s.getSellerForUser(ctx, currentUserID)
 	if err != nil {

@@ -270,9 +270,35 @@ func (r *Repository) DeleteDraftProductTx(ctx context.Context, productID, seller
 		return fmt.Errorf("failed to lock product for deletion: %w", err)
 	}
 
-	// 2. Preserve existing business rule: only 'draft' or 'rejected' products can be deleted
-	if status != StatusDraft && status != StatusRejected {
-		return ErrProductNotFound
+	// 2. Canonical hard-delete rule: status MUST equal 'draft'
+	if status != StatusDraft {
+		return fmt.Errorf("%w: only draft products can be hard deleted", ErrInvalidStatusTransition)
+	}
+
+	// 2a. Guard: ensure product is genuinely disposable (zero physical/business/audit history)
+	var hasHistory bool
+	err = r.db.QueryRow(ctx, `
+		SELECT (
+			EXISTS (SELECT 1 FROM inventory_items WHERE product_id = $1) OR
+			EXISTS (SELECT 1 FROM stock_movements WHERE product_id = $1) OR
+			EXISTS (SELECT 1 FROM order_items WHERE product_id = $1) OR
+			EXISTS (SELECT 1 FROM product_reviews WHERE product_id = $1) OR
+			EXISTS (SELECT 1 FROM product_moderation_logs WHERE product_id = $1) OR
+			EXISTS (SELECT 1 FROM product_revisions WHERE product_id = $1) OR
+			EXISTS (SELECT 1 FROM customer_favorites WHERE product_id = $1) OR
+			EXISTS (SELECT 1 FROM customer_product_views WHERE product_id = $1) OR
+			EXISTS (SELECT 1 FROM cart_items WHERE product_id = $1) OR
+			EXISTS (SELECT 1 FROM seller_supply_items WHERE variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)) OR
+			EXISTS (SELECT 1 FROM supply_receiving_items WHERE variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)) OR
+			EXISTS (SELECT 1 FROM inventory_units WHERE product_variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)) OR
+			EXISTS (SELECT 1 FROM inventory_reconciliation_sessions WHERE product_variant_id IN (SELECT id FROM product_variants WHERE product_id = $1))
+		) AS has_history
+	`, productID).Scan(&hasHistory)
+	if err != nil {
+		return fmt.Errorf("failed to check product history: %w", err)
+	}
+	if hasHistory {
+		return ErrProductNotDisposable
 	}
 
 	// 3. Collect DISTINCT object keys belonging to the product (canonical images, renditions, main image, and all staging rows)

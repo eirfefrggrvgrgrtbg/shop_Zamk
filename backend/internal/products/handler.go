@@ -343,8 +343,16 @@ func (h *Handler) DeleteDraftProduct(w http.ResponseWriter, r *http.Request) {
 
 	err := h.service.DeleteSellerDraftProduct(r.Context(), userID, productID)
 	if err != nil {
+		if errors.Is(err, ErrProductNotDisposable) {
+			h.writeError(w, http.StatusConflict, "product_not_disposable", "Product cannot be deleted because it has history (inventory, orders, etc.). Archive it instead.")
+			return
+		}
+		if errors.Is(err, ErrInvalidStatusTransition) {
+			h.writeError(w, http.StatusConflict, "invalid_status", "Only draft products can be hard deleted")
+			return
+		}
 		if errors.Is(err, ErrProductNotFound) {
-			h.writeError(w, http.StatusNotFound, "not_found", "Product not found or not in draft/rejected state")
+			h.writeError(w, http.StatusNotFound, "not_found", "Product not found")
 			return
 		}
 		if errors.Is(err, ErrSellerBlocked) {
@@ -356,6 +364,37 @@ func (h *Handler) DeleteDraftProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) ArchiveSellerProduct(w http.ResponseWriter, r *http.Request) {
+	userID, ok := h.getUserID(w, r)
+	if !ok {
+		return
+	}
+	productID, ok := h.parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+
+	err := h.service.ArchiveSellerProduct(r.Context(), userID, productID)
+	if err != nil {
+		if errors.Is(err, ErrProductNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Product not found")
+			return
+		}
+		if errors.Is(err, ErrSellerBlocked) {
+			h.writeError(w, http.StatusForbidden, "seller_blocked", "Магазин заблокирован или архивирован. Действие недоступно.")
+			return
+		}
+		if errors.Is(err, ErrInvalidStatusTransition) {
+			h.writeError(w, http.StatusConflict, "invalid_transition", "Cannot archive this product from its current status")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to archive product")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *Handler) GetModerationHistory(w http.ResponseWriter, r *http.Request) {

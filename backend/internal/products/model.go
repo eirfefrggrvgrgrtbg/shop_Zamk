@@ -16,6 +16,7 @@ const (
 	StatusHidden            = "hidden"
 	StatusBlocked           = "blocked"
 	StatusOutOfStock        = "out_of_stock"
+	StatusArchived          = "archived"
 )
 
 type Product struct {

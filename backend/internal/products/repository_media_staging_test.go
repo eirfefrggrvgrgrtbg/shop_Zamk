@@ -563,13 +563,64 @@ func TestProductMediaStaging(t *testing.T) {
 		require.ErrorIs(t, err, products.ErrProductNotEditable)
 	})
 
+	type ambientJobState struct {
+		generation    int64
+		attempts      int
+		nextAttemptAt time.Time
+		leaseToken    *uuid.UUID
+	}
+
+	captureAmbientState := func(t *testing.T, prefix string) (map[uuid.UUID]ambientJobState, int) {
+		t.Helper()
+		jobs := make(map[uuid.UUID]ambientJobState)
+		rows, err := db.Pool.Query(ctx, "SELECT id, generation, attempts, next_attempt_at, lease_token FROM product_media_cleanup_jobs WHERE object_key NOT LIKE $1", prefix+"%")
+		require.NoError(t, err)
+		defer rows.Close()
+		for rows.Next() {
+			var id uuid.UUID
+			var st ambientJobState
+			err := rows.Scan(&id, &st.generation, &st.attempts, &st.nextAttemptAt, &st.leaseToken)
+			require.NoError(t, err)
+			jobs[id] = st
+		}
+		var stgCount int
+		err = db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_staging WHERE object_key NOT LIKE $1", prefix+"%").Scan(&stgCount)
+		require.NoError(t, err)
+		return jobs, stgCount
+	}
+
+	assertAmbientUnchanged := func(t *testing.T, prefix string, origJobs map[uuid.UUID]ambientJobState, origStgCount int) {
+		t.Helper()
+		for id, orig := range origJobs {
+			var curr ambientJobState
+			err := db.Pool.QueryRow(ctx, "SELECT generation, attempts, next_attempt_at, lease_token FROM product_media_cleanup_jobs WHERE id = $1", id).
+				Scan(&curr.generation, &curr.attempts, &curr.nextAttemptAt, &curr.leaseToken)
+			require.NoError(t, err, "ambient cleanup job %s must not be deleted", id)
+			require.Equal(t, orig.generation, curr.generation, "ambient cleanup job %s generation must not be mutated", id)
+			require.Equal(t, orig.attempts, curr.attempts, "ambient cleanup job %s attempts must not be mutated", id)
+			require.Equal(t, orig.nextAttemptAt.Unix(), curr.nextAttemptAt.Unix(), "ambient cleanup job %s next_attempt_at must not be mutated", id)
+			if orig.leaseToken == nil {
+				require.Nil(t, curr.leaseToken, "ambient cleanup job %s must not be leased", id)
+			} else {
+				require.NotNil(t, curr.leaseToken, "ambient cleanup job %s lease token must not be lost", id)
+				require.Equal(t, *orig.leaseToken, *curr.leaseToken, "ambient cleanup job %s lease token must not be changed", id)
+			}
+		}
+		var currStgCount int
+		err := db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM product_media_staging WHERE object_key NOT LIKE $1", prefix+"%").Scan(&currStgCount)
+		require.NoError(t, err)
+		require.Equal(t, origStgCount, currStgCount, "ambient staging rows count must remain unchanged")
+	}
+
 	t.Run("Queue Acceptance Matrix", func(t *testing.T) {
 		qPrefix := fmt.Sprintf("%s/queue-matrix-%s", cleanupKeyPrefix, uuid.New())
+		origJobs, origStg := captureAmbientState(t, qPrefix)
 		t.Cleanup(func() {
 			cleanupCtx := context.Background()
 			if _, err := db.Pool.Exec(cleanupCtx, "DELETE FROM product_media_cleanup_jobs WHERE object_key LIKE $1", qPrefix+"%"); err != nil {
 				t.Errorf("cleanup failed for queue acceptance jobs: %v", err)
 			}
+			assertAmbientUnchanged(t, qPrefix, origJobs, origStg)
 		})
 
 		// A. first enqueue: generation == 1
@@ -619,12 +670,20 @@ func TestProductMediaStaging(t *testing.T) {
 		require.NotNil(t, jobC.LeaseUntil)
 		require.True(t, jobC.LeaseUntil.After(time.Now()), "lease_until must be in the future")
 
-		// Second worker cannot claim the same live lease
+		// Second worker cannot claim the same live lease; claim a second owned test job
+		keyC2Other := fmt.Sprintf("%s/key-c2-other.jpg", qPrefix)
+		err = repo.EnqueueMediaCleanup(ctx, keyC2Other)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = '1970-01-01 00:00:01' WHERE object_key = $1", keyC2Other)
+		require.NoError(t, err)
+
 		jobC2, err := repo.ClaimMediaCleanupJob(ctx, 5*time.Minute)
 		require.NoError(t, err)
-		if jobC2 != nil {
-			require.NotEqual(t, jobC.ID, jobC2.ID, "second worker must not claim same live leased row")
-		}
+		require.NotNil(t, jobC2)
+		require.Equal(t, keyC2Other, jobC2.ObjectKey)
+		require.NotEqual(t, jobC.ID, jobC2.ID, "second worker must not claim same live leased row")
+		_, err = repo.FinalizeMediaCleanupSuccess(ctx, jobC2.ID, jobC2.Generation, *jobC2.LeaseToken)
+		require.NoError(t, err)
 
 		// D. re-enqueue while generation 1 is leased: generation becomes 2, original lease may remain until old worker finalizes
 		err = repo.EnqueueMediaCleanup(ctx, keyC)
@@ -658,7 +717,7 @@ func TestProductMediaStaging(t *testing.T) {
 		require.True(t, nextAfterE.Before(time.Now().Add(5*time.Second)), "job must be promptly eligible again")
 
 		// F. claim generation 2 + success: row deleted
-		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = NOW() - interval '10 minutes' WHERE id = $1", jobC.ID)
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = '1970-01-01 00:00:02' WHERE id = $1", jobC.ID)
 		require.NoError(t, err)
 
 		jobCGen2, err := repo.ClaimMediaCleanupJob(ctx, 5*time.Minute)
@@ -680,12 +739,13 @@ func TestProductMediaStaging(t *testing.T) {
 		keyG := fmt.Sprintf("%s/key-g.jpg", qPrefix)
 		err = repo.EnqueueMediaCleanup(ctx, keyG)
 		require.NoError(t, err)
-		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = NOW() - interval '10 minutes' WHERE object_key = $1", keyG)
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = '1970-01-01 00:00:03' WHERE object_key = $1", keyG)
 		require.NoError(t, err)
 
 		jobG, err := repo.ClaimMediaCleanupJob(ctx, 5*time.Minute)
 		require.NoError(t, err)
 		require.NotNil(t, jobG)
+		require.Equal(t, keyG, jobG.ObjectKey)
 
 		wrongToken := uuid.New()
 		resG, err := repo.FinalizeMediaCleanupSuccess(ctx, jobG.ID, jobG.Generation, wrongToken)
@@ -740,7 +800,7 @@ func TestProductMediaStaging(t *testing.T) {
 		keyJ := fmt.Sprintf("%s/key-j.jpg", qPrefix)
 		err = repo.EnqueueMediaCleanup(ctx, keyJ)
 		require.NoError(t, err)
-		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = NOW() - interval '10 minutes' WHERE object_key = $1", keyJ)
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = '1970-01-01 00:00:04' WHERE object_key = $1", keyJ)
 		require.NoError(t, err)
 
 		jobJ, err := repo.ClaimMediaCleanupJob(ctx, 5*time.Minute)
@@ -773,11 +833,13 @@ func TestProductMediaStaging(t *testing.T) {
 
 	t.Run("Real Re-Enqueue Concurrency Test", func(t *testing.T) {
 		concurPrefix := fmt.Sprintf("%s/concur-%s", cleanupKeyPrefix, uuid.New())
+		origJobs, origStg := captureAmbientState(t, concurPrefix)
 		t.Cleanup(func() {
 			cleanupCtx := context.Background()
 			if _, err := db.Pool.Exec(cleanupCtx, "DELETE FROM product_media_cleanup_jobs WHERE object_key LIKE $1", concurPrefix+"%"); err != nil {
 				t.Errorf("cleanup failed for concurrency test jobs: %v", err)
 			}
+			assertAmbientUnchanged(t, concurPrefix, origJobs, origStg)
 		})
 
 		concurKey := fmt.Sprintf("%s/concur-test.jpg", concurPrefix)
@@ -824,8 +886,8 @@ func TestProductMediaStaging(t *testing.T) {
 		require.Nil(t, leaseToken, "lease must be released")
 		require.True(t, nextAttempt.Before(time.Now().Add(5*time.Second)), "job must be promptly eligible")
 
-		// Job becomes claimable again
-		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = NOW() - interval '10 minutes' WHERE id = $1", job.ID)
+		// Job becomes claimable again in historical window
+		_, err = db.Pool.Exec(ctx, "UPDATE product_media_cleanup_jobs SET next_attempt_at = '1970-01-01 00:00:05' WHERE id = $1", job.ID)
 		require.NoError(t, err)
 
 		jobClaimedAgain, err := repo.ClaimMediaCleanupJob(ctx, 1*time.Minute)
@@ -843,6 +905,7 @@ func TestProductMediaStaging(t *testing.T) {
 	t.Run("TTL Acceptance Matrix", func(t *testing.T) {
 		ttlPrefix := fmt.Sprintf("%s/ttl-matrix-%s", cleanupKeyPrefix, uuid.New())
 		sha64 := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+		origJobs, origStg := captureAmbientState(t, ttlPrefix)
 
 		t.Cleanup(func() {
 			cleanupCtx := context.Background()
@@ -855,7 +918,17 @@ func TestProductMediaStaging(t *testing.T) {
 			if _, err := db.Pool.Exec(cleanupCtx, "DELETE FROM product_media_cleanup_jobs WHERE object_key LIKE $1", ttlPrefix+"%"); err != nil {
 				t.Errorf("cleanup failed for test product_media_cleanup_jobs: %v", err)
 			}
+			assertAmbientUnchanged(t, ttlPrefix, origJobs, origStg)
 		})
+
+		baseTime := time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC)
+		uploadingCutoff := baseTime.Add(1 * time.Hour)
+		readyCutoff := baseTime.Add(24 * time.Hour)
+		consumedCutoff := baseTime.Add(24 * time.Hour)
+
+		uploadingStale := time.Since(uploadingCutoff)
+		readyStale := time.Since(readyCutoff)
+		consumedStale := time.Since(consumedCutoff)
 
 		insertStaging := func(status products.ProductMediaStagingStatus, key string, createdAt time.Time, consumedAt *time.Time) uuid.UUID {
 			rowID := uuid.New()
@@ -871,37 +944,37 @@ func TestProductMediaStaging(t *testing.T) {
 
 		// A. stale uploading (>1h): row removed, cleanup job created
 		keyA := fmt.Sprintf("%s/stale-uploading.jpg", ttlPrefix)
-		idA := insertStaging(products.ProductMediaStagingUploading, keyA, time.Now().Add(-2*time.Hour), nil)
+		idA := insertStaging(products.ProductMediaStagingUploading, keyA, baseTime, nil)
 
 		// B. fresh uploading (<1h): row untouched, NO cleanup job
 		keyB := fmt.Sprintf("%s/fresh-uploading.jpg", ttlPrefix)
-		idB := insertStaging(products.ProductMediaStagingUploading, keyB, time.Now().Add(-10*time.Minute), nil)
+		idB := insertStaging(products.ProductMediaStagingUploading, keyB, baseTime.Add(2*time.Hour), nil)
 
 		// C. stale ready (>24h): row removed, cleanup job created
 		keyC := fmt.Sprintf("%s/stale-ready.jpg", ttlPrefix)
-		idC := insertStaging(products.ProductMediaStagingReady, keyC, time.Now().Add(-25*time.Hour), nil)
+		idC := insertStaging(products.ProductMediaStagingReady, keyC, baseTime, nil)
 
 		// D. fresh ready (<24h): row untouched, NO cleanup job
 		keyD := fmt.Sprintf("%s/fresh-ready.jpg", ttlPrefix)
-		idD := insertStaging(products.ProductMediaStagingReady, keyD, time.Now().Add(-2*time.Hour), nil)
+		idD := insertStaging(products.ProductMediaStagingReady, keyD, baseTime.Add(25*time.Hour), nil)
 
 		// E. stale consumed (>24h from consumed_at): staging metadata removed, NO cleanup job
 		keyE := fmt.Sprintf("%s/stale-consumed.jpg", ttlPrefix)
-		tConsumedE := time.Now().Add(-25 * time.Hour)
-		idE := insertStaging(products.ProductMediaStagingConsumed, keyE, time.Now().Add(-30*time.Hour), &tConsumedE)
+		tConsumedE := baseTime
+		idE := insertStaging(products.ProductMediaStagingConsumed, keyE, baseTime, &tConsumedE)
 
 		// F. fresh consumed: untouched
 		keyF := fmt.Sprintf("%s/fresh-consumed.jpg", ttlPrefix)
-		tConsumedF := time.Now().Add(-1 * time.Hour)
-		idF := insertStaging(products.ProductMediaStagingConsumed, keyF, time.Now().Add(-10*time.Hour), &tConsumedF)
+		tConsumedF := baseTime.Add(25 * time.Hour)
+		idF := insertStaging(products.ProductMediaStagingConsumed, keyF, baseTime, &tConsumedF)
 
 		// G. consumed canonical safety:
 		// create canonical product_images row using the same object_key as consumed
 		// staging metadata may expire, but NO cleanup job may be created for that key
 		// canonical Product image remains intact
 		keyG := fmt.Sprintf("%s/consumed-canon.jpg", ttlPrefix)
-		tConsumedG := time.Now().Add(-25 * time.Hour)
-		idG := insertStaging(products.ProductMediaStagingConsumed, keyG, time.Now().Add(-30*time.Hour), &tConsumedG)
+		tConsumedG := baseTime
+		idG := insertStaging(products.ProductMediaStagingConsumed, keyG, baseTime, &tConsumedG)
 		canonImgID := uuid.New()
 		_, err := db.Pool.Exec(ctx, `INSERT INTO product_images (id, product_id, image_url, object_key, sort_order, is_main)
 			VALUES ($1, $2, 'http://test-canon.jpg', $3, 0, false)`, canonImgID, productID, keyG)
@@ -915,10 +988,10 @@ func TestProductMediaStaging(t *testing.T) {
 		err = db.Pool.QueryRow(ctx, "SELECT generation FROM product_media_cleanup_jobs WHERE object_key = $1", keyH).Scan(&genHBefore)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), genHBefore)
-		idH := insertStaging(products.ProductMediaStagingReady, keyH, time.Now().Add(-25*time.Hour), nil)
+		idH := insertStaging(products.ProductMediaStagingReady, keyH, baseTime, nil)
 
-		// Run TTL expiration batch
-		expiredCount, err := repo.ExpireStaleStagedMedia(ctx, 1*time.Hour, 24*time.Hour, 24*time.Hour, 50)
+		// Run TTL expiration batch using isolated historical cutoffs
+		expiredCount, err := repo.ExpireStaleStagedMedia(ctx, uploadingStale, readyStale, consumedStale, 50)
 		require.NoError(t, err)
 		// Expected expired: A (stale uploading), C (stale ready), E (stale consumed), G (stale consumed), H (stale ready) = 5 rows
 		require.Equal(t, 5, expiredCount)
@@ -1014,7 +1087,7 @@ func TestProductMediaStaging(t *testing.T) {
 		concurTTLRowIDs := make([]uuid.UUID, numConcurrentRows)
 		for i := 0; i < numConcurrentRows; i++ {
 			concurTTLKeys[i] = fmt.Sprintf("%s/concur-ttl-%d.jpg", ttlPrefix, i)
-			concurTTLRowIDs[i] = insertStaging(products.ProductMediaStagingUploading, concurTTLKeys[i], time.Now().Add(-2*time.Hour), nil)
+			concurTTLRowIDs[i] = insertStaging(products.ProductMediaStagingUploading, concurTTLKeys[i], baseTime, nil)
 		}
 
 		numWorkers := 3
@@ -1023,7 +1096,7 @@ func TestProductMediaStaging(t *testing.T) {
 
 		for w := 0; w < numWorkers; w++ {
 			go func() {
-				c, e := repo.ExpireStaleStagedMedia(ctx, 1*time.Hour, 24*time.Hour, 24*time.Hour, 10)
+				c, e := repo.ExpireStaleStagedMedia(ctx, uploadingStale, readyStale, consumedStale, 10)
 				if e != nil {
 					errs <- e
 					return

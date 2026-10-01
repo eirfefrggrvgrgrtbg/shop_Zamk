@@ -63,6 +63,8 @@ func CalculateActualVisibility(p *Product) VisibilityResult {
 		reasonsMap["product_hidden"] = true
 	} else if p.Status == StatusBlocked {
 		reasonsMap["product_blocked"] = true
+	} else if p.Status == StatusArchived {
+		reasonsMap["product_archived"] = true
 	} else if p.Status != StatusPublished {
 		reasonsMap["moderation_required"] = true
 	}
@@ -90,6 +92,7 @@ func CalculateActualVisibility(p *Product) VisibilityResult {
 		"seller_inactive",
 		"product_hidden",
 		"product_blocked",
+		"product_archived",
 		"moderation_required",
 		"no_active_variants",
 		"invalid_price",
