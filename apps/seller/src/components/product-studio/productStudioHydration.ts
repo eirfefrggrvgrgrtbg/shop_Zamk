@@ -23,7 +23,7 @@ import {
 
 export interface HydrateProductStudioDraftParams {
   product: SellerProduct;
-  categorySchema: SellerCategorySchema;
+  categorySchema?: SellerCategorySchema | null;
   canonicalColors: SellerColor[];
   dictionaryValuesMap?: Record<string, SellerDictionaryValue[]>;
 }
@@ -158,6 +158,15 @@ export function hydrateProductStudioDraft({
   const attributes: ProductStudioAttributeItem[] = (product.attributes || []).map((attr: ProductAttributeValue) => {
     const def = schemaAttrs.find((a: any) => a.id === attr.attributeDefinitionId);
     if (!def) {
+      if (!categorySchema) {
+        return {
+          attributeDefinitionId: attr.attributeDefinitionId,
+          code: (attr as any).code || '',
+          name: (attr as any).nameRu || (attr as any).name || '',
+          dictionaryValueId: attr.enumValueId || undefined,
+          value: attr.textValue ?? attr.numberValue ?? attr.boolValue ?? undefined,
+        };
+      }
       throw new Error(
         `Data integrity error: product references attributeDefinitionId "${attr.attributeDefinitionId}" not found in category schema`
       );
@@ -276,9 +285,13 @@ export function hydrateProductStudioDraft({
  */
 export async function resolveSizeSystemForProduct(
   sizeValueIds: string[],
-  categorySchema: SellerCategorySchema,
+  categorySchema: SellerCategorySchema | null | undefined,
   fetchSizeValues: (systemId: string) => Promise<SellerSizeValue[]>
 ): Promise<{ systemId: string | null; error?: string }> {
+  if (!categorySchema) {
+    return { systemId: null };
+  }
+
   const allowedSystems = categorySchema?.allowedSizeSystems || [];
 
   if (sizeValueIds.length === 0) {

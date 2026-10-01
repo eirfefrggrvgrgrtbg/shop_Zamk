@@ -58,6 +58,14 @@ export const updateSellerProduct = async (id: string, input: any): Promise<Selle
   return request<SellerProduct>('PATCH', `/seller/products/${id}`, { body: input });
 };
 
+export const deleteSellerProduct = async (id: string): Promise<void> => {
+  return request<void>('DELETE', `/seller/products/${id}`);
+};
+
+export const archiveSellerProduct = async (id: string): Promise<void> => {
+  return request<void>('POST', `/seller/products/${id}/archive`);
+};
+
 export const stageSellerProductImage = async (
   productId: string,
   clientMediaId: string,

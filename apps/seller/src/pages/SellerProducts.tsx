@@ -26,10 +26,18 @@ import {
   type SellerProduct,
   type SellerProductStatus,
 } from '../lib/seller-products';
-import { getSellerProducts, getSellerMe, submitSellerProductModeration } from '@zamk/api-client/src/seller';
+import {
+  getSellerProducts,
+  getSellerMe,
+  submitSellerProductModeration,
+  deleteSellerProduct,
+  archiveSellerProduct,
+} from '@zamk/api-client/src/seller';
 import { adaptProductList } from '../api/adapter';
 import { cn } from '../lib/utils';
 import { prepareAddProductNavigation } from '../components/product-studio/productStudioCreateSession';
+import { ProductActionMenu } from '../components/ProductActionMenu';
+import { ProductLifecycleModal } from '../components/ProductLifecycleModal';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
   style: 'currency',
@@ -109,13 +117,24 @@ function ProductDetailPanel({
   product,
   sellerStatus,
   onProductUpdated,
+  onRequestDelete,
+  onRequestArchive,
+  onOpenEdit,
+  lifecycleError,
+  isNotDisposableError,
 }: {
   product: SellerProduct;
   sellerStatus: string;
   onProductUpdated?: () => Promise<void> | void;
+  onRequestDelete?: (product: SellerProduct) => void;
+  onRequestArchive?: (product: SellerProduct) => void;
+  onOpenEdit?: (product: SellerProduct) => void;
+  lifecycleError?: string | null;
+  isNotDisposableError?: boolean;
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isDrawerMenuOpen, setIsDrawerMenuOpen] = useState(false);
 
   const totalStock = product.sizes.reduce((sum, item) => sum + (item.stock || 0), 0);
   const isApprovedAndNoStock = product.status === 'approved' && totalStock === 0;
@@ -136,25 +155,58 @@ function ProductDetailPanel({
   return (
     <div className="flex flex-col justify-between h-full space-y-6">
       <div>
-        <div className="flex items-start gap-4">
-          <ProductAvatar product={product} />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-mono uppercase tracking-wider text-gray-500 dark:text-gray-400">{product.sku}</p>
-            <h2 className="mt-1 text-xl font-semibold tracking-tight text-gray-900 dark:text-white line-clamp-2">{product.title}</h2>
-            <div className="mt-2.5 flex flex-wrap gap-2">
-              <ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge>
-              {isApprovedAndNoStock && (
-                <ProductBadge tone="warning">Требуется поставка</ProductBadge>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-4 min-w-0 flex-1">
+            <ProductAvatar product={product} />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-mono uppercase tracking-wider text-gray-500 dark:text-gray-400">{product.sku}</p>
+              <h2 className="mt-1 text-xl font-semibold tracking-tight text-gray-900 dark:text-white line-clamp-2">{product.title}</h2>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                <ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge>
+                {isApprovedAndNoStock && (
+                  <ProductBadge tone="warning">Требуется поставка</ProductBadge>
+                )}
+              </div>
+              {product.status === 'rejected' && product.rejectionReason && (
+                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3.5 text-sm text-red-800 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-200">
+                  <span className="mb-1 block font-medium">Причина отклонения:</span>
+                  {product.rejectionReason}
+                </div>
               )}
             </div>
-            {product.status === 'rejected' && product.rejectionReason && (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3.5 text-sm text-red-800 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-200">
-                <span className="mb-1 block font-medium">Причина отклонения:</span>
-                {product.rejectionReason}
-              </div>
+          </div>
+
+          <ProductActionMenu
+            product={product}
+            sellerStatus={sellerStatus}
+            variant="drawer"
+            isOpen={isDrawerMenuOpen}
+            onToggle={() => setIsDrawerMenuOpen(!isDrawerMenuOpen)}
+            onClose={() => setIsDrawerMenuOpen(false)}
+            onOpenEdit={onOpenEdit}
+            onRequestDelete={onRequestDelete}
+            onRequestArchive={onRequestArchive}
+          />
+        </div>
+
+        {lifecycleError && (
+          <div
+            data-testid="lifecycle-error-message"
+            className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3.5 text-sm text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-200 flex flex-col gap-2"
+          >
+            <span>{lifecycleError}</span>
+            {isNotDisposableError && product.status === 'draft' && onRequestArchive && (
+              <button
+                type="button"
+                data-testid="lifecycle-error-archive-cta"
+                onClick={() => onRequestArchive(product)}
+                className="self-start text-xs font-semibold text-amber-900 dark:text-amber-100 underline hover:no-underline cursor-pointer"
+              >
+                Отправить в архив
+              </button>
             )}
           </div>
-        </div>
+        )}
 
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3.5 dark:border-white/10 dark:bg-white/[0.02]">
@@ -280,6 +332,10 @@ function ProductDetailPanel({
                   Редактировать карточку
                 </Link>
               )
+            ) : product.status === 'archived' ? (
+              <div className="text-center py-2 text-sm text-gray-500 dark:text-gray-400">
+                Товар находится в архиве.
+              </div>
             ) : (
               <Link
                 to={`/products/${product.id}/edit`}
@@ -305,6 +361,12 @@ export function SellerProducts() {
   const [status, setStatus] = useState<SellerProductStatus | 'all'>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sellerStatus, setSellerStatus] = useState<string>('active');
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [modalType, setModalType] = useState<'delete' | 'archive' | null>(null);
+  const [targetProduct, setTargetProduct] = useState<SellerProduct | null>(null);
+  const [isSubmittingLifecycle, setIsSubmittingLifecycle] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+  const [isNotDisposableError, setIsNotDisposableError] = useState(false);
 
   const loadData = useCallback(async (silent = false) => {
     try {
@@ -352,6 +414,125 @@ export function SellerProducts() {
   const approvedCount = products.filter((product) => product.status === 'approved' || product.status === 'published').length;
   const revenue = products.reduce((sum, product) => sum + product.revenue, 0);
 
+  const handleOpenEdit = useCallback((p: SellerProduct) => {
+    navigate(`/products/${p.id}/edit`);
+  }, [navigate]);
+
+  const handleRequestDelete = useCallback((product: SellerProduct) => {
+    setLifecycleError(null);
+    setIsNotDisposableError(false);
+    setTargetProduct(product);
+    setModalType('delete');
+  }, []);
+
+  const handleRequestArchive = useCallback((product: SellerProduct) => {
+    setLifecycleError(null);
+    setIsNotDisposableError(false);
+    setTargetProduct(product);
+    setModalType('archive');
+  }, []);
+
+  const handleConfirmDelete = async () => {
+    if (!targetProduct || isSubmittingLifecycle) return;
+    setIsSubmittingLifecycle(true);
+    const deletedId = targetProduct.id;
+    try {
+      await deleteSellerProduct(deletedId);
+      setProducts((prev) => prev.filter((p) => p.id !== deletedId));
+      setSelectedId((prev) => (prev === deletedId ? null : prev));
+      setModalType(null);
+      setTargetProduct(null);
+      setLifecycleError(null);
+      setIsNotDisposableError(false);
+      loadData(true);
+    } catch (err: any) {
+      setTargetProduct(null);
+      const code = err?.code || '';
+      const msg = err?.message || '';
+      if (
+        code === 'product_not_disposable' ||
+        code === 'PRODUCT_NOT_DISPOSABLE' ||
+        msg.includes('disposable') ||
+        (err?.status === 409 && msg.includes('history'))
+      ) {
+        setIsNotDisposableError(true);
+        setLifecycleError(
+          'Этот черновик нельзя удалить: с товаром уже связаны складские или другие операции. Его можно отправить в архив.'
+        );
+        setModalType(null);
+      } else if (
+        code === 'invalid_status' ||
+        code === 'INVALID_STATUS' ||
+        (err?.status === 409 && msg.includes('draft'))
+      ) {
+        setLifecycleError('Статус товара изменился. Обновите список и попробуйте снова.');
+        setModalType(null);
+        loadData(true);
+      } else if (err?.status === 404 || code === 'not_found') {
+        setLifecycleError('Товар не найден.');
+        setModalType(null);
+        setSelectedId((prev) => (prev === deletedId ? null : prev));
+        loadData(true);
+      } else {
+        setLifecycleError(msg || 'Не удалось удалить товар');
+        setModalType(null);
+      }
+    } finally {
+      setIsSubmittingLifecycle(false);
+    }
+  };
+
+  const handleConfirmArchive = async () => {
+    if (!targetProduct || isSubmittingLifecycle) return;
+    setIsSubmittingLifecycle(true);
+    const archivedId = targetProduct.id;
+    try {
+      await archiveSellerProduct(archivedId);
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === archivedId
+            ? {
+                ...p,
+                status: 'archived',
+                actualVisibility: false,
+                storefrontUrl: undefined,
+              }
+            : p
+        )
+      );
+      setModalType(null);
+      setTargetProduct(null);
+      setLifecycleError(null);
+      setIsNotDisposableError(false);
+      loadData(true);
+    } catch (err: any) {
+      const code = err?.code || '';
+      const msg = err?.message || '';
+      if (
+        code === 'invalid_transition' ||
+        code === 'INVALID_TRANSITION' ||
+        err?.status === 409
+      ) {
+        setLifecycleError('Статус товара изменился, поэтому действие больше недоступно.');
+        setModalType(null);
+        loadData(true);
+      } else if (code === 'seller_blocked' || code === 'SELLER_BLOCKED' || err?.status === 403) {
+        setLifecycleError(msg || 'Магазин заблокирован или архивирован. Действие недоступно.');
+        setModalType(null);
+      } else if (err?.status === 404 || code === 'not_found') {
+        setLifecycleError('Товар не найден.');
+        setModalType(null);
+        setSelectedId((prev) => (prev === archivedId ? null : prev));
+        loadData(true);
+      } else {
+        setLifecycleError(msg || 'Не удалось переместить товар в архив');
+        setModalType(null);
+      }
+    } finally {
+      setIsSubmittingLifecycle(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <SellerPageFrame variant="wide">
@@ -389,6 +570,22 @@ export function SellerProducts() {
           </Link>
         }
       />
+
+      {lifecycleError && !selectedProduct && (
+        <div
+          data-testid="page-lifecycle-error-banner"
+          className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3.5 text-sm text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-200 flex items-center justify-between"
+        >
+          <span>{lifecycleError}</span>
+          <button
+            type="button"
+            onClick={() => setLifecycleError(null)}
+            className="text-xs text-amber-700 hover:text-amber-900 font-medium cursor-pointer"
+          >
+            Закрыть
+          </button>
+        </div>
+      )}
 
         <section className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
           <SellerKpiCard
@@ -476,6 +673,7 @@ export function SellerProducts() {
                         <th className="px-4 py-3.5">Статус</th>
                         <th className="px-4 py-3.5">Склад ZAMK</th>
                         <th className="px-4 py-3.5 text-right">Наличие</th>
+                        <th className="px-4 py-3.5 text-right w-12"><span className="sr-only">Действия</span></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-white/5">
@@ -525,6 +723,20 @@ export function SellerProducts() {
                                 <span className="text-gray-400 dark:text-gray-500">Недоступен</span>
                               )}
                             </td>
+                            <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                              <ProductActionMenu
+                                product={product}
+                                sellerStatus={sellerStatus}
+                                variant="row"
+                                isOpen={openMenuId === product.id}
+                                onToggle={() => setOpenMenuId(openMenuId === product.id ? null : product.id)}
+                                onClose={() => setOpenMenuId(null)}
+                                onOpenEdit={handleOpenEdit}
+                                onOpenDrawer={(p) => setSelectedId(p.id)}
+                                onRequestDelete={handleRequestDelete}
+                                onRequestArchive={handleRequestArchive}
+                              />
+                            </td>
                           </tr>
                         );
                       })}
@@ -544,11 +756,52 @@ export function SellerProducts() {
                     product={selectedProduct}
                     sellerStatus={sellerStatus}
                     onProductUpdated={() => loadData(true)}
+                    onRequestDelete={handleRequestDelete}
+                    onRequestArchive={handleRequestArchive}
+                    onOpenEdit={handleOpenEdit}
+                    lifecycleError={lifecycleError}
+                    isNotDisposableError={isNotDisposableError}
                   />
                 )}
               </SellerDrawer>
             </>
           )}
+
+      <ProductLifecycleModal
+        isOpen={Boolean(modalType && targetProduct)}
+        onClose={() => {
+          if (!isSubmittingLifecycle) {
+            setModalType(null);
+            setTargetProduct(null);
+          }
+        }}
+        onConfirm={modalType === 'delete' ? handleConfirmDelete : handleConfirmArchive}
+        title={
+          modalType === 'delete'
+            ? 'Удалить черновик?'
+            : targetProduct?.status === 'published'
+            ? 'Снять товар с продажи?'
+            : 'Переместить товар в архив?'
+        }
+        body={
+          modalType === 'delete'
+            ? 'Карточка будет удалена без возможности восстановления.'
+            : targetProduct?.status === 'published'
+            ? 'Товар исчезнет из магазина. Остатки и история операций сохранятся.'
+            : 'Товар останется в истории, но больше не будет использоваться для продажи.'
+        }
+        confirmLabel={
+          modalType === 'delete'
+            ? 'Удалить'
+            : targetProduct?.status === 'published'
+            ? 'Снять с продажи'
+            : 'В архив'
+        }
+        isDestructive={modalType === 'delete'}
+        isLoading={isSubmittingLifecycle}
+        confirmTestId={modalType === 'delete' ? 'confirm-delete-btn' : 'confirm-archive-btn'}
+        cancelTestId="cancel-lifecycle-btn"
+      />
     </SellerPageFrame>
   );
 }

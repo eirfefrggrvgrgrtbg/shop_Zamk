@@ -308,6 +308,15 @@ export const getSafeErrorMessage = (code?: string, fallback?: string): string =>
     case 'product_required_attribute_missing':
     case 'PRODUCT_REQUIRED_ATTRIBUTE_MISSING':
       return fallback || 'Заполните обязательные характеристики товара в разделе «Характеристики».';
+    case 'product_not_disposable':
+    case 'PRODUCT_NOT_DISPOSABLE':
+      return 'Этот черновик нельзя удалить: с товаром уже связаны складские или другие операции. Его можно отправить в архив.';
+    case 'invalid_status':
+    case 'INVALID_STATUS':
+      return 'Статус товара изменился. Обновите список и попробуйте снова.';
+    case 'invalid_transition':
+    case 'INVALID_TRANSITION':
+      return 'Статус товара изменился, поэтому действие больше недоступно.';
     case 'insufficient_permissions':
       return 'Недостаточно прав для выполнения действия.';
     case 'invalid_request':

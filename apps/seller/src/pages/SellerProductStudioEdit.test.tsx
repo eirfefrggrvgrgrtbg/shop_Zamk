@@ -654,4 +654,189 @@ describe('SellerProductStudioEdit Page', () => {
     // Ensure "undefined" is never present in text content
     expect(screen.queryByText(/undefined/)).toBeNull();
   });
+
+  it('16. Truthful error message: does not duplicate "Не удалось загрузить товар" when loader throws error with message', async () => {
+    vi.mocked(sellerApi.getSellerProduct).mockRejectedValueOnce(
+      new Error('Не удалось загрузить схему категории')
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/products/24758527-bdf4-4c9d-8332-d6fdbdcc2a97/edit']}>
+        <Routes>
+          <Route path="/products/:id/edit" element={<SellerProductStudioEdit />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('studio-edit-error-500')).toBeTruthy();
+    });
+
+    const errorContainer = screen.getByTestId('studio-edit-error-500');
+    expect(within(errorContainer).getByRole('heading', { level: 2 }).textContent).toBe(
+      'Не удалось загрузить товар'
+    );
+    expect(within(errorContainer).getByText('Не удалось загрузить схему категории')).toBeTruthy();
+  });
+
+  it('17. Draft product with categoryId = null loads into Product Studio with empty characteristics instead of fatal error', async () => {
+    const draftWithoutCategory: SellerProduct = {
+      ...sampleProduct,
+      id: 'fb29640a-09dc-4d58-a9c3-e1fb49217ed5',
+      title: 'усам',
+      categoryId: undefined,
+      categoryName: undefined,
+      attributes: [],
+      variants: [],
+    };
+
+    vi.mocked(sellerApi.getSellerProduct).mockResolvedValueOnce(draftWithoutCategory);
+
+    render(
+      <MemoryRouter initialEntries={['/products/fb29640a-09dc-4d58-a9c3-e1fb49217ed5/edit']}>
+        <Routes>
+          <Route path="/products/:id/edit" element={<SellerProductStudioEdit />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('product-studio-root')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('studio-edit-error-500')).toBeNull();
+    expect(sellerApi.getSellerCategorySchema).not.toHaveBeenCalled();
+  });
+
+  it('18. Product with category having empty attributes and size systems (Dev Category) loads into Product Studio', async () => {
+    const draftDevCategory: SellerProduct = {
+      ...sampleProduct,
+      id: '937fb5d1-8585-3dba-bb51-4c36b78ee623',
+      title: 'Draft Sweater',
+      categoryId: '66666666-6666-4666-8666-666666666666',
+      categoryName: 'Dev Category',
+      attributes: [],
+      variants: [],
+    };
+
+    const emptyCategorySchema: SellerCategorySchema = {
+      id: '66666666-6666-4666-8666-666666666666',
+      name: 'Dev Category',
+      slug: 'dev-category',
+      attributes: null as any,
+      allowedSizeSystems: null as any,
+      sizeChartFields: null as any,
+      sizeChartRequired: false,
+    };
+
+    vi.mocked(sellerApi.getSellerProduct).mockResolvedValueOnce(draftDevCategory);
+    vi.mocked(sellerApi.getSellerCategorySchema).mockResolvedValueOnce(emptyCategorySchema);
+
+    render(
+      <MemoryRouter initialEntries={['/products/937fb5d1-8585-3dba-bb51-4c36b78ee623/edit']}>
+        <Routes>
+          <Route path="/products/:id/edit" element={<SellerProductStudioEdit />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('product-studio-root')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('studio-edit-error-500')).toBeNull();
+  });
+
+  it('19. Category schema 404 error propagates truthfully to error page and does NOT silently hydrate with null schema', async () => {
+    const draftWithBrokenCategory: SellerProduct = {
+      ...sampleProduct,
+      id: 'prod-broken-cat',
+      title: 'Broken Cat Product',
+      categoryId: 'cat-nonexistent',
+      categoryName: 'Удаленная категория',
+      attributes: [],
+      variants: [],
+    };
+
+    vi.mocked(sellerApi.getSellerProduct).mockResolvedValueOnce(draftWithBrokenCategory);
+    vi.mocked(sellerApi.getSellerCategorySchema).mockRejectedValueOnce({
+      status: 404,
+      code: 'not_found',
+      message: 'Category not found',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/products/prod-broken-cat/edit']}>
+        <Routes>
+          <Route path="/products/:id/edit" element={<SellerProductStudioEdit />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('studio-edit-error-404')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('product-studio-root')).toBeNull();
+  });
+
+  it('20. Category schema 500/network error propagates truthfully to error page and does NOT silently hydrate with null schema', async () => {
+    const draftWithFailingCategory: SellerProduct = {
+      ...sampleProduct,
+      id: 'prod-failing-cat',
+      title: 'Failing Cat Product',
+      categoryId: 'cat-server-error',
+      categoryName: 'Сбой сервера',
+      attributes: [],
+      variants: [],
+    };
+
+    vi.mocked(sellerApi.getSellerProduct).mockResolvedValueOnce(draftWithFailingCategory);
+    vi.mocked(sellerApi.getSellerCategorySchema).mockRejectedValueOnce(
+      new Error('Сетевой сбой при загрузке схемы категории')
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/products/prod-failing-cat/edit']}>
+        <Routes>
+          <Route path="/products/:id/edit" element={<SellerProductStudioEdit />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('studio-edit-error-500')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('product-studio-root')).toBeNull();
+    const errorContainer = screen.getByTestId('studio-edit-error-500');
+    expect(within(errorContainer).getByText('Сетевой сбой при загрузке схемы категории')).toBeTruthy();
+  });
+
+  it('21. Candidate product 24758527-bdf4-4c9d-8332-d6fdbdcc2a97 with full category schema loads successfully', async () => {
+    const candidateProduct: SellerProduct = {
+      ...sampleProduct,
+      id: '24758527-bdf4-4c9d-8332-d6fdbdcc2a97',
+      title: 'худифсвмыаываа',
+      categoryId: 'c741aa40-4f5f-4b58-8581-5cfae5e77c16',
+      categoryName: 'Худи',
+    };
+
+    vi.mocked(sellerApi.getSellerProduct).mockResolvedValueOnce(candidateProduct);
+    vi.mocked(sellerApi.getSellerCategorySchema).mockResolvedValueOnce(mockSchema);
+
+    render(
+      <MemoryRouter initialEntries={['/products/24758527-bdf4-4c9d-8332-d6fdbdcc2a97/edit']}>
+        <Routes>
+          <Route path="/products/:id/edit" element={<SellerProductStudioEdit />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('product-studio-root')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('studio-edit-error-500')).toBeNull();
+  });
 });

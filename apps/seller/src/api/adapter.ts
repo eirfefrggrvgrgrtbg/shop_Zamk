@@ -2,7 +2,7 @@ import { SellerProduct, SellerProductSize, SellerProductStatus } from '../lib/se
 import { formatVariantLabel } from '../lib/seller-variants';
 
 function mapStatus(apiStatus: string): SellerProductStatus {
-  const allowed: SellerProductStatus[] = ['draft', 'pending_moderation', 'in_review', 'approved', 'published', 'rejected', 'hidden', 'blocked', 'out_of_stock'];
+  const allowed: SellerProductStatus[] = ['draft', 'pending_moderation', 'in_review', 'approved', 'published', 'rejected', 'hidden', 'blocked', 'out_of_stock', 'archived'];
   if (allowed.includes(apiStatus as SellerProductStatus)) {
     return apiStatus as SellerProductStatus;
   }

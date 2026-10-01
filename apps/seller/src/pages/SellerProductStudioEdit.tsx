@@ -70,14 +70,10 @@ export default function SellerProductStudioEdit() {
         getSellerColors(),
       ]);
 
-      if (!schema) {
-        throw new Error('Не удалось загрузить схему категории');
-      }
-
       // 3. Fetch canonical dictionary values strictly for all dictionary attributes in schema
       const dictMap: Record<string, SellerDictionaryValue[]> = {};
       const dictIdsToFetch = new Set<string>();
-      (schema.attributes || []).forEach((a) => {
+      (schema?.attributes || []).forEach((a) => {
         if (a.dictionaryId) {
           dictIdsToFetch.add(a.dictionaryId);
         }
@@ -107,19 +103,23 @@ export default function SellerProductStudioEdit() {
         )
       );
 
-      const sizeSystemResolution = await resolveSizeSystemForProduct(
-        sizeValueIds,
-        schema,
-        getSellerSizeValues
-      );
+      let resolvedSystemId: string | null = null;
+      if (schema) {
+        const sizeSystemResolution = await resolveSizeSystemForProduct(
+          sizeValueIds,
+          schema,
+          getSellerSizeValues
+        );
 
-      if (sizeSystemResolution.error) {
-        setError({
-          type: 'integrity',
-          message: sizeSystemResolution.error,
-        });
-        setLoading(false);
-        return;
+        if (sizeSystemResolution.error) {
+          setError({
+            type: 'integrity',
+            message: sizeSystemResolution.error,
+          });
+          setLoading(false);
+          return;
+        }
+        resolvedSystemId = sizeSystemResolution.systemId;
       }
 
       // 5. Hydrate ProductStudioDraft (strictly validates references)
@@ -134,7 +134,7 @@ export default function SellerProductStudioEdit() {
       setCategorySchema(schema);
       setCanonicalColors(colors);
       setDictionaryValuesMap(dictMap);
-      setResolvedSizeSystemId(sizeSystemResolution.systemId);
+      setResolvedSizeSystemId(resolvedSystemId);
     } catch (err: any) {
       console.error('Failed to hydrate product studio edit:', err);
 
@@ -159,7 +159,10 @@ export default function SellerProductStudioEdit() {
       } else {
         setError({
           type: '500',
-          message: 'Не удалось загрузить товар',
+          message:
+            err?.message && err.message !== 'Не удалось загрузить товар'
+              ? err.message
+              : 'Произошла ошибка при загрузке данных с сервера. Попробуйте еще раз.',
         });
       }
     } finally {
