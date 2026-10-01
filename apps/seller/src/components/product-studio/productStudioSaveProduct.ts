@@ -209,18 +209,34 @@ import {
 export function getProductStudioMediaSaveBlockReason(
   draft: ProductStudioDraft
 ): string | null {
-  const mode = draft.mediaMode || deriveProductStudioMediaMode(draft.images);
+  const images = draft.images || [];
+  const mode = draft.mediaMode || deriveProductStudioMediaMode(images, draft.colors, draft.variants);
   if (mode === 'LEGACY_MIXED') {
     return 'Фотографии товара нужно привести к одному режиму перед сохранением';
   }
-  const images = draft.images || [];
   if (images.length > MAX_PRODUCT_IMAGES) {
-    return 'Превышено максимальное количество фотографий';
+    return `Удалите лишние фотографии: можно сохранить не более ${MAX_PRODUCT_IMAGES}`;
   }
   if (mode === 'COLORWAY') {
     const hasUnassigned = images.some((img) => img.isUnassigned || !img.colorId);
     if (hasUnassigned) {
       return 'Распределите все фотографии по цветам перед сохранением';
+    }
+    const activeColorIds = new Set<string>();
+    for (const c of draft.colors || []) {
+      if (c.id) activeColorIds.add(c.id);
+    }
+    for (const v of draft.variants || []) {
+      if (v.isActive !== false && v.colorId) {
+        activeColorIds.add(v.colorId);
+      }
+    }
+    if (activeColorIds.size === 0) {
+      return 'Для режима фотографий по цветам добавьте хотя бы один цвет товара';
+    }
+    const hasInvalidColor = images.some((img) => img.colorId && !activeColorIds.has(img.colorId));
+    if (hasInvalidColor) {
+      return 'Некоторые фотографии привязаны к недействительным цветам';
     }
   }
   return null;
@@ -289,6 +305,12 @@ export async function orchestrateProductStudioEditSave({
   onError,
   onRefreshError,
 }: OrchestrateEditSaveParams): Promise<void> {
+  const mediaBlockReason = getProductStudioMediaSaveBlockReason(draft);
+  if (mediaBlockReason) {
+    onError(mediaBlockReason);
+    return;
+  }
+
   // 1. Staging phase
   onStagingStart();
 

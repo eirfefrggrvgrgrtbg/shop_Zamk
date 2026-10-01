@@ -2,6 +2,7 @@ import type { ProductStudioDraft } from '../../contexts/ProductStudioContext';
 import type { SellerCategorySchema } from '@zamk/api-client/src/seller';
 import {
   MIN_PRODUCT_IMAGES,
+  MAX_PRODUCT_IMAGES,
   deriveProductStudioMediaMode,
 } from './productStudioMediaHelper';
 
@@ -367,10 +368,18 @@ export function getProductStudioReadiness(
       warnings.push(`Добавьте хотя бы одно фото для каждого цвета: ${missingColors.join(', ')}`);
     }
 
-    mediaSatisfied = mediaCount >= MIN_PRODUCT_IMAGES && !hasUnassigned && missingColors.length === 0;
+    mediaSatisfied =
+      mediaCount >= MIN_PRODUCT_IMAGES &&
+      mediaCount <= MAX_PRODUCT_IMAGES &&
+      !hasUnassigned &&
+      missingColors.length === 0;
   } else {
     // GENERAL
-    mediaSatisfied = mediaCount >= MIN_PRODUCT_IMAGES;
+    mediaSatisfied = mediaCount >= MIN_PRODUCT_IMAGES && mediaCount <= MAX_PRODUCT_IMAGES;
+  }
+
+  if (mediaCount > MAX_PRODUCT_IMAGES) {
+    warnings.push(`Удалите лишние фотографии: можно сохранить не более ${MAX_PRODUCT_IMAGES}`);
   }
 
   if (!mediaSatisfied) {

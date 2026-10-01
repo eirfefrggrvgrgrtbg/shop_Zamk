@@ -137,7 +137,10 @@ export function getMediaProgressText(count: number): string {
   if (count < MAX_PRODUCT_IMAGES) {
     return `Фото ${count} из ${MIN_PRODUCT_IMAGES} · готово`;
   }
-  return `Фото ${MAX_PRODUCT_IMAGES} из ${MAX_PRODUCT_IMAGES} · максимум`;
+  if (count === MAX_PRODUCT_IMAGES) {
+    return `Фото ${MAX_PRODUCT_IMAGES} из ${MAX_PRODUCT_IMAGES} · максимум`;
+  }
+  return `Фото ${count} из ${MAX_PRODUCT_IMAGES}`;
 }
 
 /**
@@ -347,31 +350,48 @@ export type ProductStudioMediaMode = 'GENERAL' | 'COLORWAY' | 'LEGACY_MIXED';
 /**
  * Derives canonical Product Studio media mode from image assignments.
  *
- * Rules:
- * - 0 images => GENERAL
- * - all images colorId == null => GENERAL
- * - all images colorId != null => COLORWAY
- * - some null + some non-null => LEGACY_MIXED
+ * NOTE: Intended primarily for persisted / hydrated initial state.
+ * At runtime, once Seller has chosen a mode (e.g. COLORWAY), unassigned photos
+ * (isUnassigned: true) are an editing sub-state of COLORWAY, NOT a reason to bounce
+ * back to LEGACY_MIXED.
  */
 export function deriveProductStudioMediaMode(
-  images?: ProductStudioImage[]
+  images?: ProductStudioImage[],
+  _colors?: Array<{ id: string; [key: string]: any }>,
+  _variants?: Array<{ colorId?: string; isActive?: boolean; [key: string]: any }>,
+  currentMode?: ProductStudioMediaMode
 ): ProductStudioMediaMode {
+  if (currentMode && currentMode !== 'LEGACY_MIXED') {
+    return currentMode;
+  }
+
   const list = images || [];
   if (list.length === 0) {
     return 'GENERAL';
   }
+
+  const allGeneric = list.every(
+    (img) => (img.colorId == null || img.colorId === '') && !img.isUnassigned
+  );
+  if (allGeneric) {
+    return 'GENERAL';
+  }
+
   let hasGeneric = false;
   let hasColored = false;
+  let hasUnassigned = false;
 
   for (const img of list) {
-    if (img.colorId != null && img.colorId !== '') {
+    if (img.isUnassigned) {
+      hasUnassigned = true;
+    } else if (img.colorId != null && img.colorId !== '') {
       hasColored = true;
     } else {
       hasGeneric = true;
     }
   }
 
-  if (hasGeneric && hasColored) {
+  if (hasUnassigned || (hasGeneric && hasColored)) {
     return 'LEGACY_MIXED';
   }
   if (hasColored) {
@@ -381,15 +401,17 @@ export function deriveProductStudioMediaMode(
 }
 
 /**
- * Normalizes global `isMain` cover flag across Product Studio images:
- * - GENERAL mode:
- *   The first image (index 0) is the cover (isMain: true). All others have isMain: false.
- * - COLORWAY mode:
- *   Active colors in order + images inside each color in order.
- *   The first image of the first active color gallery that has photos is the candidate cover (isMain: true).
- *   If no active color has photos, but unassigned photos exist, the first unassigned photo is the cover.
- *   All other images have isMain: false.
- * - Exactly one image has isMain: true whenever images array is non-empty.
+ * Normalizes global `isMain` cover flag and sortOrder across Product Studio images
+ * according to the canonical 2C3 contract:
+ * FIRST PHOTO IN CANONICAL ORDER = COVER.
+ *
+ * Required algorithm:
+ * 1. establish deterministic canonical order
+ * 2. normalize sortOrder (0, 1, 2, ...)
+ * 3. choose canonical first image
+ * 4. set exactly that image isMain = true
+ * 5. set all other images false
+ * For zero images: no isMain.
  */
 export function normalizeProductStudioCovers(
   images: ProductStudioImage[],
@@ -401,13 +423,13 @@ export function normalizeProductStudioCovers(
     return [];
   }
 
-  const effectiveMode = mediaMode || deriveProductStudioMediaMode(images);
+  const effectiveMode = mediaMode || deriveProductStudioMediaMode(images, colors, variants, mediaMode);
   let candidateCover: ProductStudioImage | null = null;
 
   if (effectiveMode === 'GENERAL') {
     candidateCover = images[0];
   } else {
-    // COLORWAY mode:
+    // COLORWAY or LEGACY_MIXED:
     // 1. Build canonical sequence of active colors
     const orderedColorIds: string[] = [];
     for (const c of colors || []) {
@@ -429,7 +451,7 @@ export function normalizeProductStudioCovers(
       }
     }
 
-    // 2. Find first image of the first active color with photos
+    // 2. First image of the first active color gallery with photos
     for (const cId of orderedColorIds) {
       const found = images.find((img) => img.colorId === cId && !img.isUnassigned);
       if (found) {
@@ -438,23 +460,19 @@ export function normalizeProductStudioCovers(
       }
     }
 
-    // 3. Fallback: if no active color has photos
+    // 3. Fallback: if no active color has photos, use first unassigned photo
     if (!candidateCover) {
-      const anyAssigned = images.find((img) => Boolean(img.colorId) && !img.isUnassigned);
-      if (anyAssigned) {
-        candidateCover = anyAssigned;
+      const unassigned = images.find((img) => Boolean(img.isUnassigned) || !img.colorId);
+      if (unassigned) {
+        candidateCover = unassigned;
       } else {
-        // "If ALL active colors have 0 images, and unassigned images exist, use first unassigned image"
-        const unassigned = images.find((img) => Boolean(img.isUnassigned) || !img.colorId);
-        if (unassigned) {
-          candidateCover = unassigned;
-        } else {
-          candidateCover = images[0];
-        }
+        candidateCover = images[0];
       }
     }
   }
 
+  // Set candidateCover isMain=true, all other images false.
+  // Never preserves old persisted isMain if it is not the canonical candidateCover.
   const targetUiKey = candidateCover?.uiKey;
   let hasAssignedMain = false;
 
@@ -492,10 +510,11 @@ export function transitionMediaToColorway(
   colors?: Array<{ id: string; [key: string]: any }>,
   variants?: Array<{ colorId?: string; isActive?: boolean; [key: string]: any }>
 ): ProductStudioImage[] {
-  const transitioned = (images || []).map((img) => ({
+  const transitioned = (images || []).map((img, idx) => ({
     ...img,
     colorId: null,
     isUnassigned: true,
+    sortOrder: idx,
   }));
   return normalizeProductStudioCovers(transitioned, 'COLORWAY', colors, variants);
 }
@@ -510,10 +529,11 @@ export function transitionMediaToGeneral(
   colors?: Array<{ id: string; [key: string]: any }>,
   variants?: Array<{ colorId?: string; isActive?: boolean; [key: string]: any }>
 ): ProductStudioImage[] {
-  const transitioned = (images || []).map((img) => ({
+  const transitioned = (images || []).map((img, idx) => ({
     ...img,
     colorId: null,
     isUnassigned: false,
+    sortOrder: idx,
   }));
   return normalizeProductStudioCovers(transitioned, 'GENERAL', colors, variants);
 }
@@ -521,7 +541,7 @@ export function transitionMediaToGeneral(
 /**
  * Resolve LEGACY_MIXED
  * Target A: GENERAL => all colorId = null, isUnassigned = false
- * Target B: COLORWAY => existing colored images keep colorId (isUnassigned: false), generic become UNASSIGNED (colorId: null, isUnassigned: true)
+ * Target B: COLORWAY => existing colored images with valid active color keep colorId (isUnassigned: false), generic and orphaned become UNASSIGNED (colorId: null, isUnassigned: true)
  */
 export function resolveLegacyMixedMedia(
   images: ProductStudioImage[] | undefined,
@@ -533,17 +553,38 @@ export function resolveLegacyMixedMedia(
   if (targetMode === 'GENERAL') {
     return transitionMediaToGeneral(list, colors, variants);
   }
-  const transitioned = list.map((img) => {
-    if (img.colorId != null && img.colorId !== '') {
+
+  const activeColorIds = new Set<string>();
+  for (const c of colors || []) {
+    if (c.id) activeColorIds.add(c.id);
+  }
+  for (const v of variants || []) {
+    if (v.isActive !== false && v.colorId) {
+      activeColorIds.add(v.colorId);
+    }
+  }
+
+  const hasColorDomain = (colors && colors.length > 0) || (variants && variants.length > 0);
+
+  const transitioned = list.map((img, idx) => {
+    const hasValidColor =
+      img.colorId != null &&
+      img.colorId !== '' &&
+      !img.isUnassigned &&
+      (!hasColorDomain || activeColorIds.has(img.colorId));
+
+    if (hasValidColor) {
       return {
         ...img,
         isUnassigned: false,
+        sortOrder: idx,
       };
     }
     return {
       ...img,
       colorId: null,
       isUnassigned: true,
+      sortOrder: idx,
     };
   });
   return normalizeProductStudioCovers(transitioned, 'COLORWAY', colors, variants);
@@ -790,10 +831,14 @@ export interface MediaReadinessDraft {
 export function getMediaReadinessWarning(draft: MediaReadinessDraft): string | null {
   const images = draft.images || [];
   const mediaCount = images.length;
-  const mediaMode = draft.mediaMode || deriveProductStudioMediaMode(images as any);
+  const mediaMode = draft.mediaMode || deriveProductStudioMediaMode(images as any, draft.colors, draft.variants);
 
   if (mediaMode === 'LEGACY_MIXED') {
     return 'Фотографии товара нужно привести к одному режиму';
+  }
+
+  if (mediaCount > MAX_PRODUCT_IMAGES) {
+    return `Удалите лишние фотографии: можно сохранить не более ${MAX_PRODUCT_IMAGES}`;
   }
 
   if (mediaMode === 'GENERAL') {

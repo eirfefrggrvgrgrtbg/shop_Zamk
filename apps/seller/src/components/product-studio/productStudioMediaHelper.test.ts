@@ -97,7 +97,8 @@ describe('productStudioMediaHelper', () => {
     expect(getMediaProgressText(1)).toBe(`Фото 1 из ${MIN_PRODUCT_IMAGES}`);
     expect(getMediaProgressText(2)).toBe(`Фото 2 из ${MIN_PRODUCT_IMAGES}`);
     expect(getMediaProgressText(3)).toBe(`Фото ${MIN_PRODUCT_IMAGES} из ${MIN_PRODUCT_IMAGES} · готово`);
-    expect(getMediaProgressText(5)).toBe(`Фото 5 из ${MIN_PRODUCT_IMAGES} · готово`);
     expect(getMediaProgressText(MAX_PRODUCT_IMAGES)).toBe(`Фото ${MAX_PRODUCT_IMAGES} из ${MAX_PRODUCT_IMAGES} · максимум`);
+    expect(getMediaProgressText(12)).toBe(`Фото 12 из ${MAX_PRODUCT_IMAGES}`);
+    expect(getMediaProgressText(20)).toBe(`Фото 20 из ${MAX_PRODUCT_IMAGES}`);
   });
 });

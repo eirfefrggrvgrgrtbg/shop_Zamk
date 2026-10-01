@@ -16,7 +16,10 @@ import type {
   ProductStudioVariant,
 } from '../../contexts/ProductStudioContext';
 import type { ProductStudioAttributeItem } from './ProductStudioCharacteristicsModal';
-import { deriveProductStudioMediaMode } from './productStudioMediaHelper';
+import {
+  deriveProductStudioMediaMode,
+  normalizeProductStudioCovers,
+} from './productStudioMediaHelper';
 
 export interface HydrateProductStudioDraftParams {
   product: SellerProduct;
@@ -67,37 +70,11 @@ export function hydrateProductStudioDraft({
   const currency = product.currency || 'RUB';
   const dimensionType = categorySchema?.dimensionType || 'COLOR_AND_SIZE';
 
-  // 2. Media Hydration
-  const images: ProductStudioImage[] = (product.images || [])
-    .map((img: ProductImage, originalIndex: number) => {
-      const url = img.imageUrl || img.url || '';
-      const imageId = img.id || '';
-      return {
-        uiKey: imageId,
-        sortOrder: typeof img.sortOrder === 'number' ? img.sortOrder : originalIndex,
-        colorId: img.colorId || null,
-        isMain: Boolean(img.isMain),
-        altText: img.altText ?? null,
-        source: {
-          kind: 'canonical' as const,
-          imageId,
-          url,
-        },
-        originalIndex,
-      };
-    })
-    .sort((a, b) => {
-      const sortA = typeof a.sortOrder === 'number' ? a.sortOrder : a.originalIndex;
-      const sortB = typeof b.sortOrder === 'number' ? b.sortOrder : b.originalIndex;
-      if (sortA !== sortB) {
-        return sortA - sortB;
-      }
-      return a.originalIndex - b.originalIndex;
-    })
-    .map(({ originalIndex: _, ...img }) => img);
-
-  // 3. Colors Hydration (Strictly canonical IDs)
+  // 2. Colors Hydration (Strictly canonical IDs)
   const referencedColorIds = new Set<string>();
+  for (const c of (product as any).colors || []) {
+    if (c.id) referencedColorIds.add(c.id);
+  }
   const activeVariants = (product.variants || []).filter((v: ProductVariant) => v.isActive !== false);
 
   activeVariants.forEach((v: ProductVariant) => {
@@ -122,7 +99,7 @@ export function hydrateProductStudioDraft({
     });
   }
 
-  // 4. Variants Hydration (Preserve exact variant IDs)
+  // 3. Variants Hydration (Preserve exact variant IDs)
   const variants: ProductStudioVariant[] = activeVariants.map((v: ProductVariant) => {
     return {
       id: v.id,
@@ -137,6 +114,44 @@ export function hydrateProductStudioDraft({
       isActive: true,
     };
   });
+
+  // 4. Media Hydration
+  const hasColorDefinition = product.variants !== undefined || (product as any).colors !== undefined;
+
+  const rawImages: ProductStudioImage[] = (product.images || [])
+    .map((img: ProductImage, originalIndex: number) => {
+      const url = img.imageUrl || img.url || '';
+      const imageId = img.id || '';
+      const isOrphaned = Boolean(
+        img.colorId && hasColorDefinition && !referencedColorIds.has(img.colorId)
+      );
+      return {
+        uiKey: imageId,
+        sortOrder: typeof img.sortOrder === 'number' ? img.sortOrder : originalIndex,
+        colorId: isOrphaned ? null : (img.colorId || null),
+        ...(isOrphaned ? { isUnassigned: true } : {}),
+        isMain: Boolean(img.isMain),
+        altText: img.altText ?? null,
+        source: {
+          kind: 'canonical' as const,
+          imageId,
+          url,
+        },
+        originalIndex,
+      };
+    })
+    .sort((a, b) => {
+      const sortA = typeof a.sortOrder === 'number' ? a.sortOrder : a.originalIndex;
+      const sortB = typeof b.sortOrder === 'number' ? b.sortOrder : b.originalIndex;
+      if (sortA !== sortB) {
+        return sortA - sortB;
+      }
+      return a.originalIndex - b.originalIndex;
+    })
+    .map(({ originalIndex: _, ...img }) => img);
+
+  const initialMediaMode = deriveProductStudioMediaMode(rawImages, colors, variants);
+  const images = normalizeProductStudioCovers(rawImages, initialMediaMode, colors, variants);
 
   // 5. Attributes Hydration
   const schemaAttrs = categorySchema?.attributes || [];
@@ -227,7 +242,7 @@ export function hydrateProductStudioDraft({
     priceCents,
     oldPriceCents,
     images,
-    mediaMode: deriveProductStudioMediaMode(images),
+    mediaMode: initialMediaMode,
     colors,
     dimensionType,
     variants,

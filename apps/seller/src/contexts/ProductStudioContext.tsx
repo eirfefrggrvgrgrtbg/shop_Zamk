@@ -178,9 +178,12 @@ function productStudioReducer(
 
     case 'UPDATE_DRAFT': {
       let updatedImages = action.payload.images !== undefined ? action.payload.images : state.draft.images;
-      let effectiveMode = action.payload.mediaMode || state.draft.mediaMode || deriveProductStudioMediaMode(updatedImages);
-
       const nextColors = action.payload.colors !== undefined ? action.payload.colors : state.draft.colors;
+      const nextVariants = action.payload.variants !== undefined ? action.payload.variants : state.draft.variants;
+      let effectiveMode =
+        action.payload.mediaMode ||
+        state.draft.mediaMode ||
+        deriveProductStudioMediaMode(updatedImages, nextColors, nextVariants, state.draft.mediaMode);
       const hasActiveColors = Boolean(nextColors && nextColors.length > 0);
 
       // If colors are updated and images were not explicitly provided in payload:
@@ -461,7 +464,7 @@ export function ProductStudioProvider({
     };
     const effectiveMode =
       initialDraft?.mediaMode ||
-      deriveProductStudioMediaMode(raw.images || []);
+      deriveProductStudioMediaMode(raw.images || [], raw.colors, raw.variants, initialDraft?.mediaMode);
     return {
       ...raw,
       mediaMode: effectiveMode,

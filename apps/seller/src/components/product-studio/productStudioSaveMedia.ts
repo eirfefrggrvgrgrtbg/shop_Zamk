@@ -5,6 +5,7 @@ import type {
 import {
   shouldIncludeImagesInPatch,
   deriveProductStudioMediaMode,
+  MAX_PRODUCT_IMAGES,
   type ProductStudioMediaMode,
 } from './productStudioMediaHelper';
 import type { SellerProductPatchImageItem } from '@zamk/api-client';
@@ -143,8 +144,14 @@ export async function stagePendingProductStudioImages({
  */
 export function mapProductStudioImagesToPatchPayload(
   images: ProductStudioImage[],
-  mediaMode?: ProductStudioMediaMode
+  mediaMode?: ProductStudioMediaMode,
+  activeColorIds?: Set<string>
 ): SellerProductPatchImageItem[] {
+  if (images.length > MAX_PRODUCT_IMAGES) {
+    throw new Error(
+      `Cannot build media PATCH payload: maximum ${MAX_PRODUCT_IMAGES} images allowed, got ${images.length}`
+    );
+  }
   const mode = mediaMode || deriveProductStudioMediaMode(images);
   if (mode === 'LEGACY_MIXED') {
     throw new Error('Cannot build media PATCH payload: product is in LEGACY_MIXED media mode');
@@ -167,6 +174,11 @@ export function mapProductStudioImagesToPatchPayload(
       if (!img.colorId) {
         throw new Error(
           `Cannot build media PATCH payload: image with uiKey "${img.uiKey}" missing colorId in COLORWAY mode`
+        );
+      }
+      if (activeColorIds && !activeColorIds.has(img.colorId)) {
+        throw new Error(
+          `Cannot build media PATCH payload: image with uiKey "${img.uiKey}" references invalid or stale colorId "${img.colorId}"`
         );
       }
       return {

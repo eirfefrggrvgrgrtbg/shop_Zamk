@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useProductStudio } from '../../contexts/ProductStudioContext';
 import { ProductStudioSectionNav } from './ProductStudioSectionNav';
 import { SellerSurface } from '../SellerSurface';
-import { FileText, Image, Sliders, Layers, DollarSign, ShieldCheck, Folder, Link2, Pencil, Trash2, Plus, GripVertical, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { FileText, Image, Sliders, Layers, DollarSign, ShieldCheck, Folder, Link2, Pencil, Trash2, Plus, GripVertical, CheckCircle, AlertCircle, AlertTriangle, X } from 'lucide-react';
 import {
   isColorRequired,
   isSizeRequired,
@@ -26,6 +26,7 @@ import {
   reorderProductStudioImages,
   normalizeProductStudioCovers,
   getMediaReadinessWarning,
+  resolveLegacyMixedMedia,
 } from './productStudioMediaHelper';
 import { getSellerCategorySchema, type SellerCategorySchema } from '@zamk/api-client';
 import { cn } from '../../lib/utils';
@@ -142,6 +143,12 @@ export function ProductStudioFormWorkspace() {
     [draft.images, mediaMode]
   );
 
+  const hasOrphanedImages = useMemo(() => {
+    return (draft.images || []).some(
+      (img) => Boolean(img.isUnassigned) || (Boolean(img.colorId) && !configuredColors.some((c: any) => c.id === img.colorId))
+    );
+  }, [draft.images, configuredColors]);
+
   const effectiveSelectedColorId = useMemo(() => {
     return resolveInitialMediaColorId({
       selectedMediaColorId,
@@ -174,6 +181,14 @@ export function ProductStudioFormWorkspace() {
     if (!file) return;
 
     setMediaError(null);
+
+    const existingImages = draft.images || [];
+    if (existingImages.length >= MAX_PRODUCT_IMAGES) {
+      setMediaError(`Удалите лишние фотографии: можно сохранить не более ${MAX_PRODUCT_IMAGES}`);
+      e.target.value = '';
+      return;
+    }
+
     setIsValidatingPhoto(true);
 
     try {
@@ -184,7 +199,6 @@ export function ProductStudioFormWorkspace() {
       }
 
       const objectUrl = createMediaUrl(file);
-      const existingImages = draft.images || [];
       const currentMode = draft.mediaMode || 'GENERAL';
 
       let targetColorId: string | null = null;
@@ -1115,7 +1129,7 @@ export function ProductStudioFormWorkspace() {
                   </button>
                 )}
                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400" data-testid="form-media-progress-badge">
-                  {getMediaProgressText(imagesList.length)}
+                  {getMediaProgressText((draft.images || []).length)}
                 </span>
               </div>
             </div>
@@ -1142,6 +1156,80 @@ export function ProductStudioFormWorkspace() {
                 >
                   ✕
                 </button>
+              </div>
+            )}
+
+            {(draft.images || []).length > MAX_PRODUCT_IMAGES && (
+              <div
+                data-testid="oversized-media-banner"
+                className="p-4 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 flex items-center gap-3 text-amber-900 dark:text-amber-200"
+              >
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-semibold">
+                    {`Удалите лишние фотографии: можно сохранить не более ${MAX_PRODUCT_IMAGES}`}
+                  </span>
+                  <span className="text-xs text-amber-800 dark:text-amber-300">
+                    {`В товаре сохранено ${(draft.images || []).length} фото. Максимально допустимо: ${MAX_PRODUCT_IMAGES}.`}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {draft.mediaMode === 'LEGACY_MIXED' && (
+              <div
+                data-testid="legacy-mixed-banner"
+                className="p-4 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 dark:text-amber-200"
+              >
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="text-sm font-medium">
+                      Фотографии товара нужно привести к одному режиму перед сохранением.
+                    </span>
+                  </div>
+                  {hasOrphanedImages ? (
+                    <p className="text-xs text-amber-800 dark:text-amber-300 ml-7">
+                      Некоторые фотографии были привязаны к цветам, которых больше нет в товаре.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-800 dark:text-amber-300 ml-7">
+                      В товаре есть и общие фотографии, и фотографии с привязкой к цветам.
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    data-testid="resolve-to-general-btn"
+                    onClick={() => {
+                      const resolved = resolveLegacyMixedMedia(draft.images || [], 'GENERAL', configuredColors, draft.variants);
+                      updateDraft({ images: resolved, mediaMode: 'GENERAL' });
+                      markTouched('media');
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-neutral-800 border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-neutral-700 transition-colors cursor-pointer"
+                  >
+                    Объединить в общую галерею
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="resolve-to-colorway-btn"
+                    disabled={configuredColors.length === 0}
+                    onClick={() => {
+                      const resolved = resolveLegacyMixedMedia(draft.images || [], 'COLORWAY', configuredColors, draft.variants);
+                      updateDraft({ images: resolved, mediaMode: 'COLORWAY' });
+                      markTouched('media');
+                    }}
+                    className={cn(
+                      "px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors",
+                      configuredColors.length === 0
+                        ? "bg-neutral-300 dark:bg-neutral-700 text-neutral-500 cursor-not-allowed opacity-60"
+                        : "bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
+                    )}
+                  >
+                    Разложить по цветам
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1340,7 +1428,7 @@ export function ProductStudioFormWorkspace() {
               })}
 
               {/* Add photo card slot */}
-              {imagesList.length < MAX_PRODUCT_IMAGES && (
+              {imagesList.length < MAX_PRODUCT_IMAGES && (draft.images || []).length < MAX_PRODUCT_IMAGES && (
                 <label
                   data-testid="form-media-add-card"
                   className={cn(
@@ -1369,7 +1457,7 @@ export function ProductStudioFormWorkspace() {
                     Добавить фото
                   </span>
                   <span className="text-[10px] text-gray-400 mt-1">
-                    {imagesList.length} из {MAX_PRODUCT_IMAGES}
+                    {(draft.images || []).length} из {MAX_PRODUCT_IMAGES}
                   </span>
                 </label>
               )}

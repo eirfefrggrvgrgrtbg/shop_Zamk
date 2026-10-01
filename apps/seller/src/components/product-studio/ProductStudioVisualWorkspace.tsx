@@ -309,6 +309,12 @@ export function ProductStudioVisualWorkspace() {
     return counts;
   }, [draft.images]);
 
+  const hasOrphanedImages = useMemo(() => {
+    return (draft.images || []).some(
+      (img) => Boolean(img.isUnassigned) || (Boolean(img.colorId) && !activeProductColors.some((c) => c.id === img.colorId))
+    );
+  }, [draft.images, activeProductColors]);
+
   // Selected media color resolution logic (Rules 1-5 + UNASSIGNED)
   const effectiveSelectedMediaColorId = useMemo(() => {
     return resolveInitialMediaColorId({
@@ -413,8 +419,15 @@ export function ProductStudioVisualWorkspace() {
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setMediaError(null);
+
+    const existingImages = draft.images || [];
+    if (existingImages.length >= MAX_PRODUCT_IMAGES) {
+      setMediaError(`Удалите лишние фотографии: можно сохранить не более ${MAX_PRODUCT_IMAGES}`);
+      e.target.value = '';
+      return;
+    }
+
     setIsValidatingPhoto(true);
 
     try {
@@ -425,8 +438,6 @@ export function ProductStudioVisualWorkspace() {
       }
 
       const objectUrl = createMediaUrl(file);
-
-      const existingImages = draft.images || [];
 
       let newImageColorId: string | null = null;
       let newImageIsUnassigned = false;
@@ -1071,16 +1082,52 @@ export function ProductStudioVisualWorkspace() {
           </div>
         )}
 
+        {(draft.images || []).length > MAX_PRODUCT_IMAGES && (
+          <div
+            data-testid="oversized-media-banner"
+            className="mb-4 p-4 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 flex items-center justify-between gap-3 text-amber-900 dark:text-amber-200"
+          >
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold">
+                  {`Удалите лишние фотографии: можно сохранить не более ${MAX_PRODUCT_IMAGES}`}
+                </span>
+                <span className="text-xs text-amber-800 dark:text-amber-300">
+                  {`В товаре сохранено ${(draft.images || []).length} фото. Максимально допустимо: ${MAX_PRODUCT_IMAGES}.`}
+                </span>
+              </div>
+            </div>
+            <span
+              className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-200/60 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 shrink-0"
+              data-testid="media-progress-badge"
+            >
+              {getMediaProgressText((draft.images || []).length)}
+            </span>
+          </div>
+        )}
+
         {mediaMode === 'LEGACY_MIXED' && (
           <div
             data-testid="legacy-mixed-banner"
             className="mb-4 p-4 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 dark:text-amber-200"
           >
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span className="text-sm font-medium">
-                Фотографии товара нужно привести к одному режиму перед сохранением.
-              </span>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="text-sm font-medium">
+                  Фотографии товара нужно привести к одному режиму перед сохранением.
+                </span>
+              </div>
+              {hasOrphanedImages ? (
+                <p className="text-xs text-amber-800 dark:text-amber-300 ml-7">
+                  Некоторые фотографии были привязаны к цветам, которых больше нет в товаре.
+                </p>
+              ) : (
+                <p className="text-xs text-amber-800 dark:text-amber-300 ml-7">
+                  В товаре есть и общие фотографии, и фотографии с привязкой к цветам.
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
@@ -1098,12 +1145,18 @@ export function ProductStudioVisualWorkspace() {
               <button
                 type="button"
                 data-testid="resolve-to-colorway-btn"
+                disabled={activeProductColors.length === 0}
                 onClick={() => {
                   const resolved = resolveLegacyMixedMedia(draft.images || [], 'COLORWAY', activeProductColors, draft.variants);
                   updateDraft({ images: resolved, mediaMode: 'COLORWAY' });
                   markTouched('media');
                 }}
-                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer"
+                className={cn(
+                  "px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors",
+                  activeProductColors.length === 0
+                    ? "bg-neutral-300 dark:bg-neutral-700 text-neutral-500 cursor-not-allowed opacity-60"
+                    : "bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
+                )}
               >
                 Разложить по цветам
               </button>
@@ -1207,6 +1260,7 @@ export function ProductStudioVisualWorkspace() {
                 className="hidden"
                 aria-label="Добавить фото"
                 data-testid="empty-stage-photo-input"
+                disabled={(draft.images || []).length >= MAX_PRODUCT_IMAGES}
                 onChange={handlePhotoSelect}
               />
               <div className={cn(
