@@ -40,10 +40,14 @@ import {
   resolveLegacyMixedMedia,
   reconcileMediaOnColorRemoval,
   isImageUnassigned,
+  getProductStudioImageDisplayUrl,
   type ProductStudioMediaMode,
-  MIN_PRODUCT_IMAGES,
   MAX_PRODUCT_IMAGES,
   ALLOWED_IMAGE_MIME_TYPES,
+  resolveInitialMediaColorId,
+  reorderProductStudioImages,
+  normalizeProductStudioCovers,
+  getMediaReadinessWarning,
 } from "./productStudioMediaHelper";
 import {
   getSizeChartCompleteness,
@@ -67,6 +71,8 @@ export function ProductStudioVisualWorkspace() {
     selectedPreviewSizeValueId: selectedSizeId,
     setSelectedPreviewColorId: setSelectedColorId,
     setSelectedPreviewSizeValueId: setSelectedSizeId,
+    selectedMediaColorId,
+    setSelectedMediaColorId,
     categorySchema: contextCategorySchema,
   } = useProductStudio();
 
@@ -286,6 +292,67 @@ export function ProductStudioVisualWorkspace() {
     [draft.images, mediaMode]
   );
 
+  const activeProductColors = useMemo<Array<{ id: string; name?: string; nameRu?: string; hex?: string; hexValue?: string }>>(() => {
+    if (colors && colors.length > 0) {
+      return colors;
+    }
+    return (draft.colors || []).filter((c: any) => Boolean(c.id));
+  }, [colors, draft.colors]);
+
+  const colorPhotoCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const img of draft.images || []) {
+      if (img.colorId && !img.isUnassigned) {
+        counts[img.colorId] = (counts[img.colorId] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [draft.images]);
+
+  // Selected media color resolution logic (Rules 1-5 + UNASSIGNED)
+  const effectiveSelectedMediaColorId = useMemo(() => {
+    return resolveInitialMediaColorId({
+      selectedMediaColorId,
+      selectedPreviewColorId: selectedColorId,
+      images: draft.images || [],
+      colors: activeProductColors,
+      mediaMode,
+      unassignedCount: unassignedImagesCount,
+    });
+  }, [mediaMode, activeProductColors, selectedMediaColorId, unassignedImagesCount, selectedColorId, draft.images]);
+
+  // Derived filtered images for gallery display
+  const activeFilteredImages = useMemo(() => {
+    const allImages = draft.images || [];
+    if (mediaMode === 'GENERAL') {
+      return allImages;
+    }
+    if (mediaMode === 'COLORWAY') {
+      if (effectiveSelectedMediaColorId === 'UNASSIGNED') {
+        return allImages.filter((img) => isImageUnassigned(img, mediaMode));
+      }
+      if (effectiveSelectedMediaColorId) {
+        return allImages.filter(
+          (img) => img.colorId === effectiveSelectedMediaColorId && !img.isUnassigned
+        );
+      }
+      return [];
+    }
+    return allImages;
+  }, [draft.images, mediaMode, effectiveSelectedMediaColorId]);
+
+  const effectiveVisibleImages: ProductPresentationMediaItem[] = useMemo(() => {
+    return activeFilteredImages.map((img) => ({
+      url: getProductStudioImageDisplayUrl(img),
+      colorId: img.colorId || undefined,
+    }));
+  }, [activeFilteredImages]);
+
+  const selectedColorObj = useMemo(() => {
+    if (!effectiveSelectedMediaColorId || effectiveSelectedMediaColorId === 'UNASSIGNED') return null;
+    return activeProductColors.find((c: any) => c.id === effectiveSelectedMediaColorId) || null;
+  }, [activeProductColors, effectiveSelectedMediaColorId]);
+
   const isResolved = useMemo(() => {
     if (!hasVariants) return false;
     switch (dimensionType) {
@@ -312,8 +379,21 @@ export function ProductStudioVisualWorkspace() {
 
     setSelectedColorId(colorId);
 
-    const targetIdx = findFirstMediaIndexForColor(visibleImages, colorId);
-    setActiveImage(targetIdx);
+    if (mediaMode === 'COLORWAY') {
+      setSelectedMediaColorId(colorId);
+      setActiveImage(0);
+    } else {
+      const targetIdx = findFirstMediaIndexForColor(visibleImages, colorId);
+      setActiveImage(targetIdx);
+    }
+  };
+
+  const handleSelectMediaColorTab = (colorId: string | 'UNASSIGNED') => {
+    setSelectedMediaColorId(colorId);
+    if (colorId !== 'UNASSIGNED') {
+      setSelectedColorId(colorId);
+    }
+    setActiveImage(0);
   };
 
   const handleSizeChange = (sizeId: string) => {
@@ -347,15 +427,19 @@ export function ProductStudioVisualWorkspace() {
       const objectUrl = createMediaUrl(file);
 
       const existingImages = draft.images || [];
-      const isFirst = existingImages.length === 0;
 
       let newImageColorId: string | null = null;
       let newImageIsUnassigned = false;
 
       if (mediaMode === 'COLORWAY') {
-        const isColorActive = selectedColorId && (draft.colors || []).some((c: any) => c.id === selectedColorId);
-        if (isColorActive) {
-          newImageColorId = selectedColorId;
+        if (effectiveSelectedMediaColorId && effectiveSelectedMediaColorId !== 'UNASSIGNED') {
+          newImageColorId = effectiveSelectedMediaColorId;
+          newImageIsUnassigned = false;
+        } else if (effectiveSelectedMediaColorId === 'UNASSIGNED') {
+          newImageColorId = null;
+          newImageIsUnassigned = true;
+        } else if (activeProductColors.length > 0) {
+          newImageColorId = activeProductColors[0].id;
           newImageIsUnassigned = false;
         } else {
           newImageColorId = null;
@@ -369,15 +453,23 @@ export function ProductStudioVisualWorkspace() {
       const newImage = createLocalProductStudioImage({
         file,
         previewUrl: objectUrl,
-        isMain: isFirst,
+        isMain: false,
         sortOrder: existingImages.length,
         colorId: newImageColorId,
         isUnassigned: newImageIsUnassigned,
       });
 
+      const nextImages = normalizeProductStudioCovers(
+        [...existingImages, newImage],
+        mediaMode,
+        activeProductColors,
+        draft.variants
+      );
+
       updateDraft({
-        images: [...existingImages, newImage],
+        images: nextImages,
       });
+      markTouched('media');
     } finally {
       setIsValidatingPhoto(false);
       e.target.value = '';
@@ -598,6 +690,13 @@ export function ProductStudioVisualWorkspace() {
   const isTitleAttention = isFieldAttention("title");
   const isPriceAttention = isFieldAttention("price");
   const isMediaAttention = isFieldAttention("media");
+  const mediaWarning = useMemo(() => getMediaReadinessWarning(draft), [draft]);
+  const isSelectedColorEmpty = useMemo(() => {
+    if (mediaMode !== 'COLORWAY' || !selectedColorObj) return false;
+    return (draft.images || []).filter(
+      (img) => !img.isUnassigned && img.colorId === selectedColorObj.id
+    ).length === 0;
+  }, [mediaMode, selectedColorObj, draft.images]);
   const isColorAttention = isFieldAttention("color");
   const isSizeAttention = isFieldAttention("size");
   const isDescriptionAttention = isFieldAttention("description");
@@ -836,34 +935,114 @@ export function ProductStudioVisualWorkspace() {
     </div>
   );
 
-  const renderMediaThumbnailOverlay = (image: ProductPresentationMediaItem, index: number) => {
-    const isUnassigned = (draft.images || [])[index]?.isUnassigned;
-    if (mediaMode === 'COLORWAY' && (isUnassigned || !image.colorId)) {
-      return (
-        <span
-          data-testid={`thumbnail-unassigned-dot-${index}`}
-          title="Нераспределённая фотография"
-          className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border border-white dark:border-black shadow-xs pointer-events-none z-10"
-        />
-      );
-    }
+  const handleDeleteVisualImage = (index: number) => {
+    const target = activeFilteredImages[index];
+    if (!target) return;
+    const existing = [...(draft.images || [])];
+    const draftIdx = existing.findIndex(
+      (img) => img === target || (img.uiKey && img.uiKey === target.uiKey)
+    );
+    if (draftIdx === -1) return;
 
-    const assignedColor = (draft.colors || []).find((c: any) => c.id === image.colorId);
-    if (image.colorId && assignedColor) {
-      return (
-        <span
-          data-testid={`thumbnail-color-dot-${index}`}
-          title={`Цвет: ${getColorDisplayName(assignedColor)}`}
-          className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border border-white dark:border-black shadow-xs pointer-events-none z-10"
-          style={{ backgroundColor: assignedColor.hex || "#000000" }}
-        />
-      );
+    existing.splice(draftIdx, 1);
+    const reindexed = existing.map((img, i) => ({
+      ...img,
+      sortOrder: i,
+    }));
+    const normalized = normalizeProductStudioCovers(
+      reindexed,
+      mediaMode,
+      activeProductColors,
+      draft.variants
+    );
+    if (effectiveSelectedMediaColorId) {
+      setSelectedMediaColorId(effectiveSelectedMediaColorId);
     }
-
-    return null;
+    updateDraft({ images: normalized });
+    markTouched('media');
+    if (activeImage >= activeFilteredImages.length - 1) {
+      setActiveImage(Math.max(0, activeFilteredImages.length - 2));
+    }
   };
 
-  const safeActiveImage = activeImage < visibleImages.length ? activeImage : 0;
+  const handleThumbnailReorder = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    const currentImages = draft.images || [];
+    const nextImages = reorderProductStudioImages(
+      currentImages,
+      fromIndex,
+      toIndex,
+      mediaMode === 'COLORWAY' ? effectiveSelectedMediaColorId : null,
+      mediaMode,
+      activeProductColors,
+      draft.variants
+    );
+    updateDraft({ images: nextImages });
+    markTouched('media');
+    setActiveImage(toIndex);
+  };
+
+  const renderMediaThumbnailOverlay = (_image: ProductPresentationMediaItem, index: number) => {
+    const currentImg = activeFilteredImages[index];
+    const isUnassigned = currentImg?.isUnassigned;
+    const isCover = currentImg?.isMain;
+
+    return (
+      <>
+        {isCover && (
+          <span
+            data-testid={`thumbnail-main-badge-${index}`}
+            className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-gray-900 text-white dark:bg-white dark:text-gray-900 leading-none z-10 shadow-xs pointer-events-none"
+          >
+            Обложка
+          </span>
+        )}
+
+        {mediaMode === 'COLORWAY' && (isUnassigned || !currentImg?.colorId) && (
+          <span
+            data-testid={`thumbnail-unassigned-dot-${index}`}
+            title="Нераспределённая фотография"
+            className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border border-white dark:border-black shadow-xs pointer-events-none z-10"
+          />
+        )}
+
+        {mediaMode === 'COLORWAY' && currentImg?.colorId && (() => {
+          const assignedColor = (draft.colors || []).find((c: any) => c.id === currentImg.colorId);
+          if (!assignedColor) return null;
+          return (
+            <span
+              data-testid={`thumbnail-color-dot-${index}`}
+              title={`Цвет: ${getColorDisplayName(assignedColor)}`}
+              className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border border-white dark:border-black shadow-xs pointer-events-none z-10"
+              style={{ backgroundColor: assignedColor.hex || "#000000" }}
+            />
+          );
+        })()}
+
+        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1 rounded-lg pointer-events-none z-20">
+          <button
+            type="button"
+            draggable={false}
+            onDragStart={(e) => {
+              e.stopPropagation();
+            }}
+            data-testid={`thumbnail-delete-btn-${index}`}
+            title="Удалить фото"
+            aria-label="Удалить фото"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteVisualImage(index);
+            }}
+            className="pointer-events-auto w-5 h-5 rounded-full bg-red-600/90 hover:bg-red-600 text-white flex items-center justify-center text-[10px] font-bold shadow-xs cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      </>
+    );
+  };
+
+  const safeActiveImage = activeImage < effectiveVisibleImages.length ? activeImage : 0;
 
   return (
     <div
@@ -876,7 +1055,7 @@ export function ProductStudioVisualWorkspace() {
       onClickCapture={handleWorkspaceClickCapture}
     >
       <div className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 py-6 relative">
-        {mediaError && visibleImages.length > 0 && (
+        {mediaError && effectiveVisibleImages.length > 0 && (
           <div
             data-testid="media-upload-error-banner"
             className="mb-4 text-xs text-red-600 bg-red-50 dark:bg-red-950/40 p-3 rounded-lg border border-red-200 dark:border-red-900/50 flex items-center justify-between"
@@ -908,7 +1087,7 @@ export function ProductStudioVisualWorkspace() {
                 type="button"
                 data-testid="resolve-to-general-btn"
                 onClick={() => {
-                  const resolved = resolveLegacyMixedMedia(draft.images || [], 'GENERAL');
+                  const resolved = resolveLegacyMixedMedia(draft.images || [], 'GENERAL', activeProductColors, draft.variants);
                   updateDraft({ images: resolved, mediaMode: 'GENERAL' });
                   markTouched('media');
                 }}
@@ -920,7 +1099,7 @@ export function ProductStudioVisualWorkspace() {
                 type="button"
                 data-testid="resolve-to-colorway-btn"
                 onClick={() => {
-                  const resolved = resolveLegacyMixedMedia(draft.images || [], 'COLORWAY');
+                  const resolved = resolveLegacyMixedMedia(draft.images || [], 'COLORWAY', activeProductColors, draft.variants);
                   updateDraft({ images: resolved, mediaMode: 'COLORWAY' });
                   markTouched('media');
                 }}
@@ -957,7 +1136,7 @@ export function ProductStudioVisualWorkspace() {
 
         <ProductPresentationCore
           product={product}
-          visibleImages={visibleImages}
+          visibleImages={effectiveVisibleImages}
           activeImage={safeActiveImage}
           onActiveImageChange={handleActiveImageChange}
           displayPrice={displayPrice}
@@ -987,6 +1166,7 @@ export function ProductStudioVisualWorkspace() {
           priceSlot={priceSlot}
           descriptionSlot={descriptionSlot}
           renderThumbnailOverlay={renderMediaThumbnailOverlay}
+          onThumbnailReorder={handleThumbnailReorder}
           onColorChange={handleColorChange}
           onSizeChange={handleSizeChange}
           onAddToCart={() => {
@@ -1038,19 +1218,33 @@ export function ProductStudioVisualWorkspace() {
                 +
               </div>
               <span className={cn(
-                "text-base font-semibold mb-1",
+                "text-base font-semibold mb-2",
                 isMediaAttention
                   ? "text-amber-700 dark:text-amber-400"
                   : "text-graphite dark:text-white"
               )}>
-                Добавить фото *
+                {selectedColorObj
+                  ? `Для цвета «${getColorDisplayName(selectedColorObj)}» пока нет фотографий`
+                  : selectedMediaColorId === 'UNASSIGNED'
+                  ? 'Нет нераспределённых фотографий'
+                  : 'Добавить фото *'}
               </span>
+
+              {selectedColorObj && (
+                <span
+                  data-testid="empty-stage-add-btn"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-xs font-semibold shadow-xs mb-3 group-hover:bg-gray-800 transition-colors"
+                >
+                  + Добавить фото
+                </span>
+              )}
+
               <span className="text-xs font-medium text-graphite dark:text-white mb-1" data-testid="media-progress-badge">
-                {getMediaProgressText(visibleImages.length)}
+                {getMediaProgressText((draft.images || []).length)}
               </span>
-              {isMediaAttention && (
+              {mediaWarning && (isMediaAttention || isSelectedColorEmpty) && (
                 <span data-testid="media-required-helper" className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">
-                  Нужно минимум 3 фото
+                  {mediaWarning}
                 </span>
               )}
               <span className="text-xs text-ash dark:text-gray-400 mb-4">
@@ -1091,107 +1285,169 @@ export function ProductStudioVisualWorkspace() {
           }
           galleryExtraSlot={
             ((draft.images && draft.images.length > 0) || (draft.colors && draft.colors.length > 0)) ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <div
-                  data-testid="media-mode-switcher"
-                  className="inline-flex items-center rounded-lg bg-black/5 dark:bg-white/10 p-0.5 text-xs font-medium"
-                >
-                  <button
-                    type="button"
-                    data-testid="media-mode-general-btn"
-                    onClick={() => {
-                      if (mediaMode === 'GENERAL') return;
-                      if ((draft.images || []).length > 0) {
-                        setIsConfirmToGeneralOpen(true);
-                      } else {
-                        updateDraft({ mediaMode: 'GENERAL' });
-                        markTouched('media');
-                      }
-                    }}
-                    className={cn(
-                      "px-2.5 py-1 rounded-md transition-colors cursor-pointer",
-                      mediaMode === 'GENERAL'
-                        ? "bg-white dark:bg-neutral-800 text-graphite dark:text-white shadow-xs font-semibold"
-                        : "text-ash hover:text-graphite dark:hover:text-white"
-                    )}
+              <div className="flex flex-col gap-2.5 w-full" data-testid="media-gallery-controls">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div
+                    data-testid="media-mode-switcher"
+                    className="inline-flex items-center rounded-lg bg-black/5 dark:bg-white/10 p-0.5 text-xs font-medium"
                   >
-                    Общая галерея
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="media-mode-colorway-btn"
-                    disabled={!draft.colors || draft.colors.length === 0}
-                    title={
-                      !draft.colors || draft.colors.length === 0
-                        ? "Добавьте цвет товара, чтобы использовать фотографии по цветам."
-                        : "Фотографии по цветам"
-                    }
-                    onClick={() => {
-                      if (!draft.colors || draft.colors.length === 0) return;
-                      if (mediaMode === 'COLORWAY') return;
-                      if ((draft.images || []).length > 0) {
-                        setIsConfirmToColorwayOpen(true);
-                      } else {
-                        updateDraft({ mediaMode: 'COLORWAY' });
-                        markTouched('media');
+                    <button
+                      type="button"
+                      data-testid="media-mode-general-btn"
+                      onClick={() => {
+                        if (mediaMode === 'GENERAL') return;
+                        if ((draft.images || []).length > 0) {
+                          setIsConfirmToGeneralOpen(true);
+                        } else {
+                          updateDraft({ mediaMode: 'GENERAL' });
+                          markTouched('media');
+                        }
+                      }}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md transition-colors cursor-pointer",
+                        mediaMode === 'GENERAL'
+                          ? "bg-white dark:bg-neutral-800 text-graphite dark:text-white shadow-xs font-semibold"
+                          : "text-ash hover:text-graphite dark:hover:text-white"
+                      )}
+                    >
+                      Общая галерея
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="media-mode-colorway-btn"
+                      disabled={activeProductColors.length === 0}
+                      title={
+                        activeProductColors.length === 0
+                          ? "Добавьте цвет товара, чтобы использовать фотографии по цветам."
+                          : "Фотографии по цветам"
                       }
-                    }}
-                    className={cn(
-                      "px-2.5 py-1 rounded-md transition-colors",
-                      !draft.colors || draft.colors.length === 0
-                        ? "text-ash/40 opacity-50 cursor-not-allowed"
-                        : mediaMode === 'COLORWAY'
-                        ? "bg-white dark:bg-neutral-800 text-graphite dark:text-white shadow-xs font-semibold cursor-pointer"
-                        : "text-ash hover:text-graphite dark:hover:text-white cursor-pointer"
-                    )}
-                  >
-                    Фотографии по цветам
-                  </button>
+                      onClick={() => {
+                        if (activeProductColors.length === 0) return;
+                        if (mediaMode === 'COLORWAY') return;
+                        if ((draft.images || []).length > 0) {
+                          setIsConfirmToColorwayOpen(true);
+                        } else {
+                          updateDraft({ mediaMode: 'COLORWAY' });
+                          markTouched('media');
+                        }
+                      }}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md transition-colors",
+                        activeProductColors.length === 0
+                          ? "text-ash/40 opacity-50 cursor-not-allowed"
+                          : mediaMode === 'COLORWAY'
+                          ? "bg-white dark:bg-neutral-800 text-graphite dark:text-white shadow-xs font-semibold cursor-pointer"
+                          : "text-ash hover:text-graphite dark:hover:text-white cursor-pointer"
+                      )}
+                    >
+                      Фотографии по цветам
+                    </button>
+                  </div>
+
+                  {(mediaMode === 'COLORWAY'
+                    ? unassignedImagesCount > 0
+                    : ((draft.images && draft.images.length > 0) || activeProductColors.length === 0)
+                  ) && (
+                    <button
+                      type="button"
+                      data-testid="bind-photos-to-colors-btn"
+                      disabled={activeProductColors.length === 0}
+                      title={activeProductColors.length === 0 ? "Сначала добавьте цвета" : "Привязать фото к цветам"}
+                      onClick={() => setIsPhotoColorModalOpen(true)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all select-none",
+                        activeProductColors.length === 0
+                          ? "border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] text-ash/40 dark:text-white/20 cursor-not-allowed"
+                          : "border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-400 shadow-2xs cursor-pointer font-semibold"
+                      )}
+                    >
+                      <Link2
+                        className={cn(
+                          "w-3.5 h-3.5 shrink-0",
+                          activeProductColors.length === 0
+                            ? "text-ash/30 dark:text-white/20"
+                            : "text-amber-600 dark:text-amber-400"
+                        )}
+                      />
+                      <span>
+                        {mediaMode === 'COLORWAY' && unassignedImagesCount > 0
+                          ? `Распределить фотографии · ${unassignedImagesCount}`
+                          : "Привязать фото к цветам"}
+                      </span>
+                      {activeProductColors.length === 0 && (
+                        <span className="text-[11px] text-ash/60 dark:text-white/30 font-normal">(Сначала добавьте цвета)</span>
+                      )}
+                    </button>
+                  )}
                 </div>
 
-                <button
-                  type="button"
-                  data-testid="bind-photos-to-colors-btn"
-                  disabled={!draft.colors || draft.colors.length === 0}
-                  title={!draft.colors || draft.colors.length === 0 ? "Сначала добавьте цвета" : "Привязать фото к цветам"}
-                  onClick={() => setIsPhotoColorModalOpen(true)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all select-none",
-                    !draft.colors || draft.colors.length === 0
-                      ? "border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] text-ash/40 dark:text-white/20 cursor-not-allowed"
-                      : mediaMode === 'COLORWAY' && unassignedImagesCount > 0
-                      ? "border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-400 shadow-2xs cursor-pointer font-semibold"
-                      : "border-slate-200 dark:border-white/10 bg-white dark:bg-neutral-800 text-graphite dark:text-white hover:bg-slate-50 dark:hover:bg-neutral-700 hover:border-slate-300 dark:hover:border-white/20 shadow-2xs cursor-pointer"
-                  )}
-                >
-                  <Link2
-                    className={cn(
-                      "w-3.5 h-3.5 shrink-0",
-                      !draft.colors || draft.colors.length === 0
-                        ? "text-ash/30 dark:text-white/20"
-                        : mediaMode === 'COLORWAY' && unassignedImagesCount > 0
-                        ? "text-amber-600 dark:text-amber-400"
-                        : "text-indigo-600 dark:text-indigo-400"
+                {mediaMode === 'COLORWAY' && activeProductColors.length > 0 && (
+                  <div
+                    data-testid="colorway-tabs-bar"
+                    className="flex items-center gap-1.5 overflow-x-auto py-1 no-scrollbar flex-wrap"
+                  >
+                    {activeProductColors.map((color) => {
+                      const isSelected = effectiveSelectedMediaColorId === color.id;
+                      const count = colorPhotoCounts[color.id] || 0;
+                      return (
+                        <button
+                          key={color.id}
+                          type="button"
+                          data-testid={`colorway-tab-${color.id}`}
+                          aria-selected={isSelected ? "true" : "false"}
+                          onClick={() => handleSelectMediaColorTab(color.id)}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer border select-none shrink-0",
+                            isSelected
+                              ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent shadow-xs font-semibold"
+                              : "bg-white dark:bg-neutral-800 text-graphite dark:text-white border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
+                          )}
+                        >
+                          <span
+                            className="w-2.5 h-2.5 rounded-full border border-black/10 dark:border-white/20 shrink-0"
+                            style={{ backgroundColor: color.hex || '#000000' }}
+                          />
+                          <span>{getColorDisplayName(color)}</span>
+                          <span className={cn(
+                            "text-[11px] opacity-75 font-normal ml-0.5",
+                            isSelected ? "text-white/80 dark:text-gray-700" : "text-ash dark:text-gray-400"
+                          )}>
+                            · {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {unassignedImagesCount > 0 && (
+                      <button
+                        type="button"
+                        data-testid="colorway-tab-unassigned"
+                        aria-selected={effectiveSelectedMediaColorId === 'UNASSIGNED' ? "true" : "false"}
+                        onClick={() => handleSelectMediaColorTab('UNASSIGNED')}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer border select-none shrink-0",
+                          effectiveSelectedMediaColorId === 'UNASSIGNED'
+                            ? "bg-amber-600 text-white border-transparent shadow-xs font-semibold"
+                            : "bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700/60 hover:bg-amber-100"
+                        )}
+                      >
+                        <span className="text-amber-500 font-bold">⚠</span>
+                        <span>Нераспределённые</span>
+                        <span className="text-[11px] opacity-80 font-normal ml-0.5">
+                          · {unassignedImagesCount}
+                        </span>
+                      </button>
                     )}
-                  />
-                  <span>Привязать фото к цветам</span>
-                  {mediaMode === 'COLORWAY' && unassignedImagesCount > 0 && (
-                    <span className="ml-0.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-200/80 dark:bg-amber-800/80 text-amber-900 dark:text-amber-100 leading-none">
-                      {unassignedImagesCount}
-                    </span>
-                  )}
-                  {(!draft.colors || draft.colors.length === 0) && (
-                    <span className="text-[11px] text-ash/60 dark:text-white/30 font-normal">(Сначала добавьте цвета)</span>
-                  )}
-                </button>
+                  </div>
+                )}
               </div>
             ) : null
           }
           mediaAddSlot={
-            visibleImages.length < MAX_PRODUCT_IMAGES ? (
+            effectiveVisibleImages.length < MAX_PRODUCT_IMAGES && (draft.images || []).length < MAX_PRODUCT_IMAGES ? (
               <label
-                className="w-16 h-20 min-[1200px]:w-[72px] min-[1200px]:h-[90px] flex-shrink-0 rounded-lg border-2 border-dashed border-ash/30 flex flex-col items-center justify-center cursor-pointer hover:border-graphite transition-colors hover:bg-gray-50/50 text-center p-1 group"
-                title={getMediaProgressText(visibleImages.length)}
+                className="w-14 h-[70px] sm:w-16 sm:h-20 min-[1200px]:w-[72px] min-[1200px]:h-[90px] flex-shrink-0 rounded-lg border-2 border-dashed border-ash/30 flex flex-col items-center justify-center cursor-pointer hover:border-graphite transition-colors hover:bg-gray-50/50 text-center p-1 group"
+                title={getMediaProgressText((draft.images || []).length)}
                 data-testid="media-add-thumb-slot"
               >
                 <input
@@ -1199,11 +1455,12 @@ export function ProductStudioVisualWorkspace() {
                   accept={ALLOWED_IMAGE_MIME_TYPES.join(',')}
                   className="hidden"
                   aria-label="Добавить фото"
+                  data-testid="thumbnail-add-photo-input"
                   onChange={handlePhotoSelect}
                 />
                 <span className="text-xl text-ash group-hover:text-graphite leading-none">+</span>
                 <span className="text-[10px] text-ash group-hover:text-graphite font-medium mt-1 leading-tight">
-                  {visibleImages.length} из {MIN_PRODUCT_IMAGES}
+                  + фото
                 </span>
               </label>
             ) : null
@@ -1690,7 +1947,7 @@ export function ProductStudioVisualWorkspace() {
         isOpen={isPhotoColorModalOpen}
         onClose={() => setIsPhotoColorModalOpen(false)}
         images={draft.images || []}
-        colors={draft.colors || []}
+        colors={activeProductColors}
         mediaMode={mediaMode}
         onSave={(updatedImages) => {
           const nextMode = mediaMode === 'GENERAL' ? 'COLORWAY' : mediaMode;
@@ -1777,8 +2034,11 @@ export function ProductStudioVisualWorkspace() {
                 type="button"
                 data-testid="confirm-to-colorway-submit"
                 onClick={() => {
-                  const transitioned = transitionMediaToColorway(draft.images || []);
+                  const transitioned = transitionMediaToColorway(draft.images || [], activeProductColors, draft.variants);
                   updateDraft({ images: transitioned, mediaMode: 'COLORWAY' });
+                  if (transitioned.some((img) => img.isUnassigned)) {
+                    setSelectedMediaColorId('UNASSIGNED');
+                  }
                   markTouched('media');
                   setIsConfirmToColorwayOpen(false);
                 }}
@@ -1818,7 +2078,7 @@ export function ProductStudioVisualWorkspace() {
                 type="button"
                 data-testid="confirm-to-general-submit"
                 onClick={() => {
-                  const transitioned = transitionMediaToGeneral(draft.images || []);
+                  const transitioned = transitionMediaToGeneral(draft.images || [], activeProductColors, draft.variants);
                   updateDraft({ images: transitioned, mediaMode: 'GENERAL' });
                   markTouched('media');
                   setIsConfirmToGeneralOpen(false);

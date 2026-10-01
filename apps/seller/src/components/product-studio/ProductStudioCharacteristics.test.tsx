@@ -266,13 +266,17 @@ describe('ProductStudio Form Characteristics Category Display', () => {
     expect(screen.getByTestId('form-media-card-1')).toBeTruthy();
     expect(screen.getByTestId('form-media-card-2')).toBeTruthy();
 
-    // Check that first card has cover badge
+    // Check that first card has cover badge and no make-cover buttons exist
     expect(screen.getByTestId('form-media-cover-badge-0')).toBeTruthy();
     expect(screen.queryByTestId('form-media-cover-badge-1')).toBeNull();
+    expect(screen.queryByTestId('form-media-make-cover-1')).toBeNull();
 
-    // Second card has "Сделать обложкой"
-    const makeCoverBtn = screen.getByTestId('form-media-make-cover-1');
-    fireEvent.click(makeCoverBtn);
+    // Drag card 1 to position 0 to make it cover
+    const card0 = screen.getByTestId('form-media-card-0');
+    const card1 = screen.getByTestId('form-media-card-1');
+    fireEvent.dragStart(card1, { dataTransfer: { setData: vi.fn() } });
+    fireEvent.drop(card0, { dataTransfer: {} });
+    fireEvent.dragEnd(card1);
 
     // Now img-2 is first
     const imgs = screen.getAllByRole('img');
@@ -481,7 +485,7 @@ describe('ProductStudio Form Characteristics Category Display', () => {
       // Verify replace and delete controls exist
       expect(screen.getByTestId('form-media-replace-btn-0')).toBeTruthy();
       expect(screen.getByTestId('form-media-delete-btn-0')).toBeTruthy();
-      expect(screen.getByTestId('form-media-make-cover-1')).toBeTruthy();
+      expect(screen.queryByTestId('form-media-make-cover-1')).toBeNull();
 
       // Open binding modal from Form header
       const openModalBtn = screen.getByTestId('form-bind-photos-to-colors-btn');
@@ -586,18 +590,22 @@ describe('ProductStudio Form Characteristics Category Display', () => {
       expect(reordered[2].uiKey).toBe('img-B');
       expect(reordered[3].uiKey).toBe('img-C');
 
-      // 4. Verify sortOrder normalization (0, 1, 2, 3) and isMain (only first is true)
+      // 4. Verify sortOrder normalization (0, 1, 2, 3) and isMain (col-black's photo img-B at index 2 is canonical cover in colorway mode)
       expect(reordered.map((img) => img.sortOrder)).toEqual([0, 1, 2, 3]);
-      expect(reordered.map((img) => img.isMain)).toEqual([true, false, false, false]);
+      expect(reordered.map((img) => img.isMain)).toEqual([false, false, true, false]);
 
       // 5. Verify color bindings survive reorder
       expect(reordered[1].colorId).toBeNull(); // img-D
       expect(reordered[2].colorId).toBe('col-black'); // img-B
       expect(reordered[3].colorId).toBe('col-red'); // img-C
 
-      // 6. Verify "Сделать обложкой" still works: make B (index 2) cover -> B A D C
-      const makeCoverBtn = screen.getByTestId('form-media-make-cover-2');
-      fireEvent.click(makeCoverBtn);
+      // 6. Verify "Сделать обложкой" manual button is removed, and dragging B (index 2) to 0 makes it cover -> B A D C
+      expect(screen.queryByTestId('form-media-make-cover-2')).toBeNull();
+      const card2After = screen.getByTestId('form-media-card-2');
+      const card0After = screen.getByTestId('form-media-card-0');
+      fireEvent.dragStart(card2After, { dataTransfer: { setData: () => {}, effectAllowed: 'move' } });
+      fireEvent.dragOver(card0After, { dataTransfer: { dropEffect: 'move' } });
+      fireEvent.drop(card0After);
 
       const afterCover = currentDraft!.images!;
       expect(afterCover[0].uiKey).toBe('img-B');

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronRight, ChevronLeft, Heart, ShoppingBag, ChevronDown, X } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Heart, ShoppingBag, ChevronDown, X, GripVertical } from 'lucide-react';
 import { cn, formatPrice } from './internal/presentationUtils';
 import { lockBodyScroll, unlockBodyScroll } from './internal/presentationScrollLock';
 import { PresentationButton } from './internal/PresentationButton';
@@ -124,8 +124,11 @@ export function ProductPresentationCore({
   descriptionSlot,
   galleryExtraSlot,
   renderThumbnailOverlay,
+  onThumbnailReorder,
   sellerHref,
 }: ProductPresentationCoreProps) {
+  const [draggedThumbnailIndex, setDraggedThumbnailIndex] = useState<number | null>(null);
+  const [dragOverThumbnailIndex, setDragOverThumbnailIndex] = useState<number | null>(null);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
@@ -348,8 +351,64 @@ export function ProductPresentationCore({
                 >
                   {visibleImages.map((image, index) => {
                     const isSelected = currentActiveImage === index;
+                    const isReorderable = Boolean(onThumbnailReorder && visibleImages.length > 1);
+                    const isDraggingThis = draggedThumbnailIndex === index;
+                    const isOverThis = dragOverThumbnailIndex === index && draggedThumbnailIndex !== index;
+
                     return (
-                      <div key={index + image.url} className="relative group/thumb flex-shrink-0">
+                      <div
+                        key={index + image.url}
+                        data-testid={`thumbnail-item-${index}`}
+                        draggable={isReorderable}
+                        onDragStart={(e) => {
+                          if (!isReorderable) return;
+                          setDraggedThumbnailIndex(index);
+                          e.dataTransfer.setData('text/plain', String(index));
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragOver={(e) => {
+                          if (!isReorderable) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          if (dragOverThumbnailIndex !== index) {
+                            setDragOverThumbnailIndex(index);
+                          }
+                        }}
+                        onDragEnter={(e) => {
+                          if (!isReorderable) return;
+                          e.preventDefault();
+                          setDragOverThumbnailIndex(index);
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverThumbnailIndex === index) {
+                            setDragOverThumbnailIndex(null);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          if (!isReorderable) return;
+                          e.preventDefault();
+                          const rawFrom = e.dataTransfer.getData('text/plain');
+                          const fromIndex = rawFrom !== '' && !isNaN(parseInt(rawFrom, 10))
+                            ? parseInt(rawFrom, 10)
+                            : draggedThumbnailIndex;
+                          if (fromIndex !== null && fromIndex !== undefined && fromIndex !== index) {
+                            onThumbnailReorder?.(fromIndex, index);
+                          }
+                          setDraggedThumbnailIndex(null);
+                          setDragOverThumbnailIndex(null);
+                        }}
+                        onDragEnd={() => {
+                          setDraggedThumbnailIndex(null);
+                          setDragOverThumbnailIndex(null);
+                        }}
+                        className={cn(
+                          "relative group/thumb flex-shrink-0 transition-transform",
+                          isReorderable && "cursor-grab active:cursor-grabbing",
+                          isDraggingThis && "opacity-40 scale-95",
+                          isOverThis && "ring-2 ring-graphite dark:ring-white scale-105"
+                        )}
+                        title={isReorderable ? "Перетащите для изменения порядка" : undefined}
+                      >
                         <button
                           type="button"
                           data-testid={`pdp-thumbnail-${index}`}
@@ -365,9 +424,19 @@ export function ProductPresentationCore({
                           <img
                             src={image.url}
                             alt=""
-                            className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal"
+                            className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal pointer-events-none"
+                            draggable={false}
                           />
                         </button>
+                        {isReorderable && (
+                          <div
+                            data-testid={`thumbnail-drag-handle-${index}`}
+                            className="absolute top-1 left-1 p-0.5 rounded bg-black/40 text-white/80 opacity-0 group-hover/thumb:opacity-100 transition-opacity pointer-events-none z-10"
+                            title="Перетащить"
+                          >
+                            <GripVertical className="w-3 h-3" />
+                          </div>
+                        )}
                         {renderThumbnailOverlay?.(image, index)}
                       </div>
                     );

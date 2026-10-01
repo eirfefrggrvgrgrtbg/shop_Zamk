@@ -399,12 +399,15 @@ describe('ProductStudio PS.R4A.5A3 Integrations', () => {
       expect(studioCtx!.draft!.images![1].colorId).toBe('col-white');
 
       // Visual thumbnail indicators
-      const dot0 = screen.getAllByTestId('thumbnail-color-dot-0')[0];
-      const dot1 = screen.getAllByTestId('thumbnail-color-dot-1')[0];
-      expect(dot0).toBeTruthy();
-      expect(dot1).toBeTruthy();
-      expect(dot0.getAttribute('title')).toBe('Цвет: Чёрный');
-      expect(dot1.getAttribute('title')).toBe('Цвет: Белый');
+      const dotBlack = screen.getAllByTestId('thumbnail-color-dot-0')[0];
+      expect(dotBlack).toBeTruthy();
+      expect(dotBlack.getAttribute('title')).toBe('Цвет: Чёрный');
+
+      // In COLORWAY mode with direct tabs, switch to white tab to view white photos
+      fireEvent.click(screen.getByTestId('colorway-tab-col-white'));
+      const dotWhite = screen.getAllByTestId('thumbnail-color-dot-0')[0];
+      expect(dotWhite).toBeTruthy();
+      expect(dotWhite.getAttribute('title')).toBe('Цвет: Белый');
     });
   });
 

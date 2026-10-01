@@ -150,6 +150,7 @@ export interface ProductPresentationCoreProps {
   descriptionSlot?: React.ReactNode;
   galleryExtraSlot?: React.ReactNode;
   renderThumbnailOverlay?: (image: ProductPresentationMediaItem, index: number) => React.ReactNode;
+  onThumbnailReorder?: (fromIndex: number, toIndex: number) => void;
   onColorRemove?: (id: string) => void;
   onSizeRemove?: (id: string) => void;
 }

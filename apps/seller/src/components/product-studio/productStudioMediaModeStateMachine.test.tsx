@@ -189,8 +189,8 @@ describe('SELLER MEDIA.2B — Product Studio Media Mode State Machine (Matrix A-
     expect(transitioned.map((img) => img.sortOrder)).toEqual([0, 1, 2]);
   });
 
-  // J. COLORWAY -> GENERAL: exactly one global isMain preserved
-  it('J. COLORWAY -> GENERAL: exactly one global isMain preserved', () => {
+  // J. COLORWAY -> GENERAL: exactly one global isMain normalized to first photo
+  it('J. COLORWAY -> GENERAL: exactly one global isMain normalized to first photo', () => {
     const initialImages: ProductStudioImage[] = [
       createCanonicalProductStudioImage({ imageId: 'c1', url: 'https://img/c1', colorId: 'col-black', isMain: false }),
       createCanonicalProductStudioImage({ imageId: 'c2', url: 'https://img/c2', colorId: 'col-white', isMain: true }),
@@ -200,7 +200,7 @@ describe('SELLER MEDIA.2B — Product Studio Media Mode State Machine (Matrix A-
     const transitioned = transitionMediaToGeneral(initialImages);
     const mainImages = transitioned.filter((img) => img.isMain);
     expect(mainImages).toHaveLength(1);
-    expect(mainImages[0].uiKey).toBe('c2');
+    expect(mainImages[0].uiKey).toBe('c1');
   });
 
   // K. LEGACY_MIXED: save button blocked with clear reason
@@ -486,7 +486,7 @@ describe('SELLER MEDIA.2B — Product Studio Media Mode State Machine (Matrix A-
     expect(fixedReadiness.blockingFields).not.toContain('media');
   });
 
-  // Y. Preserving single global isMain across mode switches
+  // Y. Preserving single global isMain across mode switches (normalized to first photo)
   it('Y. Preserving single global isMain across mode switches', () => {
     const images: ProductStudioImage[] = [
       createCanonicalProductStudioImage({ imageId: '1', url: 'https://img/1', colorId: 'col-black', isMain: false }),
@@ -494,15 +494,15 @@ describe('SELLER MEDIA.2B — Product Studio Media Mode State Machine (Matrix A-
       createCanonicalProductStudioImage({ imageId: '3', url: 'https://img/3', colorId: 'col-black', isMain: false }),
     ];
 
-    // COLORWAY -> GENERAL
+    // COLORWAY -> GENERAL: first image becomes cover
     const toGeneral = transitionMediaToGeneral(images);
     expect(toGeneral.filter((img) => img.isMain)).toHaveLength(1);
-    expect(toGeneral[1].isMain).toBe(true);
+    expect(toGeneral[0].isMain).toBe(true);
 
-    // GENERAL -> COLORWAY
+    // GENERAL -> COLORWAY: first unassigned image becomes cover
     const toColorway = transitionMediaToColorway(toGeneral);
     expect(toColorway.filter((img) => img.isMain)).toHaveLength(1);
-    expect(toColorway[1].isMain).toBe(true);
+    expect(toColorway[0].isMain).toBe(true);
   });
 
   // Z. No regressions in existing Product Studio behaviors

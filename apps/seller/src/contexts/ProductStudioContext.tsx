@@ -15,6 +15,7 @@ import {
   getProductStudioImagePreviewUrl,
   deriveProductStudioMediaMode,
   reconcileMediaOnColorRemoval,
+  normalizeProductStudioCovers,
   type ProductStudioMediaMode,
 } from '../components/product-studio/productStudioMediaHelper';
 import {
@@ -134,6 +135,7 @@ export interface ProductStudioState {
   saveError: string | null;
   selectedPreviewColorId: string | null;
   selectedPreviewSizeValueId: string | null;
+  selectedMediaColorId?: string | 'UNASSIGNED' | null;
 }
 
 type ProductStudioAction =
@@ -150,7 +152,8 @@ type ProductStudioAction =
   | { type: 'COMMIT_SAVED_DRAFT'; payload: ProductStudioDraft }
   | { type: 'CLEAR_SAVE_ERROR' }
   | { type: 'SET_PREVIEW_COLOR'; payload: string | null }
-  | { type: 'SET_PREVIEW_SIZE'; payload: string | null };
+  | { type: 'SET_PREVIEW_SIZE'; payload: string | null }
+  | { type: 'SET_MEDIA_COLOR'; payload: string | 'UNASSIGNED' | null };
 
 function computeIsDirty(current: ProductStudioDraft, initial: ProductStudioDraft): boolean {
   return JSON.stringify(current) !== JSON.stringify(initial);
@@ -189,6 +192,19 @@ function productStudioReducer(
       // If trying to switch to COLORWAY without any colors and without colored images, keep GENERAL:
       if (action.payload.mediaMode === 'COLORWAY' && !hasActiveColors && !(updatedImages || []).some((img) => img.colorId)) {
         effectiveMode = 'GENERAL';
+      }
+
+      if (
+        (action.payload.images !== undefined || action.payload.mediaMode !== undefined) &&
+        updatedImages &&
+        updatedImages.length > 0
+      ) {
+        updatedImages = normalizeProductStudioCovers(
+          updatedImages,
+          effectiveMode,
+          nextColors,
+          action.payload.variants !== undefined ? action.payload.variants : state.draft.variants
+        );
       }
 
       const updatedDraft = {
@@ -322,6 +338,12 @@ function productStudioReducer(
       };
     }
 
+    case 'SET_MEDIA_COLOR':
+      return {
+        ...state,
+        selectedMediaColorId: action.payload,
+      };
+
     case 'RESET_DRAFT':
       return {
         ...state,
@@ -329,6 +351,7 @@ function productStudioReducer(
         mediaMode: state.initialDraft.mediaMode || 'GENERAL',
         selectedPreviewColorId: null,
         selectedPreviewSizeValueId: null,
+        selectedMediaColorId: null,
         isDirty: false,
         touchedFields: {},
         showReadinessAttention: false,
@@ -388,8 +411,10 @@ export interface ProductStudioContextValue extends ProductStudioState {
   clearSaveError: () => void;
   selectedPreviewColorId: string | null;
   selectedPreviewSizeValueId: string | null;
+  selectedMediaColorId?: string | 'UNASSIGNED' | null;
   setSelectedPreviewColorId: (colorId: string | null) => void;
   setSelectedPreviewSizeValueId: (sizeValueId: string | null) => void;
+  setSelectedMediaColorId: (colorId: string | 'UNASSIGNED' | null) => void;
 }
 
 const ProductStudioContext = createContext<ProductStudioContextValue | undefined>(undefined);
@@ -461,6 +486,7 @@ export function ProductStudioProvider({
     saveError: null,
     selectedPreviewColorId: null,
     selectedPreviewSizeValueId: null,
+    selectedMediaColorId: null,
   });
 
   const isSaveInFlight = state.saveStatus === 'staging' || state.saveStatus === 'saving';
@@ -792,6 +818,9 @@ export function ProductStudioProvider({
         dispatch({ type: 'SET_PREVIEW_COLOR', payload: colorId }),
       setSelectedPreviewSizeValueId: (sizeValueId: string | null) =>
         dispatch({ type: 'SET_PREVIEW_SIZE', payload: sizeValueId }),
+      selectedMediaColorId: state.selectedMediaColorId ?? null,
+      setSelectedMediaColorId: (colorId: string | 'UNASSIGNED' | null) =>
+        dispatch({ type: 'SET_MEDIA_COLOR', payload: colorId }),
     };
   }, [
     state,

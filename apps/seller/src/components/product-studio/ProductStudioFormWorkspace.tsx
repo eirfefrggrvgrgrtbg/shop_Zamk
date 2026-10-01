@@ -21,10 +21,15 @@ import {
   getMediaProgressText,
   createLocalProductStudioImage,
   getProductStudioImageDisplayUrl,
+  isImageUnassigned,
+  resolveInitialMediaColorId,
+  reorderProductStudioImages,
+  normalizeProductStudioCovers,
+  getMediaReadinessWarning,
 } from './productStudioMediaHelper';
 import { getSellerCategorySchema, type SellerCategorySchema } from '@zamk/api-client';
 import { cn } from '../../lib/utils';
-import { ProductStudioPhotoColorModal, getColorDisplayName } from './ProductStudioPhotoColorModal';
+import { ProductStudioPhotoColorModal } from './ProductStudioPhotoColorModal';
 import { ProductStudioCompositionModal } from './ProductStudioCompositionModal';
 import { ProductStudioCareModal } from './ProductStudioCareModal';
 import { ProductStudioCharacteristicsModal } from './ProductStudioCharacteristicsModal';
@@ -74,6 +79,9 @@ export function ProductStudioFormWorkspace() {
     categorySchema: contextCategorySchema,
     activeSizeSystemId,
     createMediaUrl,
+    selectedMediaColorId,
+    setSelectedMediaColorId,
+    selectedPreviewColorId,
   } = useProductStudio();
   const [localCategorySchema, setLocalCategorySchema] = useState<SellerCategorySchema | null>(null);
   const categorySchema = contextCategorySchema || localCategorySchema;
@@ -87,7 +95,79 @@ export function ProductStudioFormWorkspace() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  const imagesList = useMemo(() => draft.images || [], [draft.images]);
+  const [colorsList, setColorsList] = useState<SellerColor[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    getSellerColors()
+      .then((data) => {
+        if (isMounted) setColorsList(data || []);
+      })
+      .catch((err) => {
+        console.error('Failed to load seller colors in Form Workspace:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const configuredColors = useMemo(() => {
+    const colorMap = new Map<string, { id: string; name: string; hex: string }>();
+
+    for (const c of draft.colors || []) {
+      if (c.id && !colorMap.has(c.id)) {
+        const found = colorsList.find((item) => item.id === c.id);
+        const name = found?.nameRu || c.name || (c as any)?.nameRu || 'Цвет';
+        const hex = found?.hex || c.hex || (c as any)?.hexValue || '#cccccc';
+        colorMap.set(c.id, { id: c.id, name, hex });
+      }
+    }
+
+    for (const v of draft.variants || []) {
+      if (v.colorId && !colorMap.has(v.colorId)) {
+        const found = colorsList.find((item) => item.id === v.colorId);
+        const name = found?.nameRu || v.colorName || 'Цвет';
+        const hex = found?.hex || v.colorHex || '#cccccc';
+        colorMap.set(v.colorId, { id: v.colorId, name, hex });
+      }
+    }
+
+    return Array.from(colorMap.values());
+  }, [draft.colors, draft.variants, colorsList]);
+
+  const mediaMode = draft.mediaMode || 'GENERAL';
+
+  const unassignedImagesCount = useMemo(
+    () => (draft.images || []).filter((img) => isImageUnassigned(img, mediaMode)).length,
+    [draft.images, mediaMode]
+  );
+
+  const effectiveSelectedColorId = useMemo(() => {
+    return resolveInitialMediaColorId({
+      selectedMediaColorId,
+      selectedPreviewColorId,
+      images: draft.images || [],
+      colors: configuredColors,
+      mediaMode,
+      unassignedCount: unassignedImagesCount,
+    });
+  }, [mediaMode, configuredColors, selectedMediaColorId, unassignedImagesCount, selectedPreviewColorId, draft.images]);
+
+  const imagesList = useMemo(() => {
+    const allImages = draft.images || [];
+    if (mediaMode === 'COLORWAY') {
+      if (effectiveSelectedColorId === 'UNASSIGNED') {
+        return allImages.filter((img) => isImageUnassigned(img, mediaMode));
+      }
+      if (effectiveSelectedColorId) {
+        return allImages.filter(
+          (img) => img.colorId === effectiveSelectedColorId && !img.isUnassigned
+        );
+      }
+      return [];
+    }
+    return allImages;
+  }, [draft.images, mediaMode, effectiveSelectedColorId]);
 
   const handleAddMedia = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -105,19 +185,42 @@ export function ProductStudioFormWorkspace() {
 
       const objectUrl = createMediaUrl(file);
       const existingImages = draft.images || [];
-      const isFirst = existingImages.length === 0;
       const currentMode = draft.mediaMode || 'GENERAL';
+
+      let targetColorId: string | null = null;
+      let targetIsUnassigned = false;
+
+      if (currentMode === 'COLORWAY') {
+        if (effectiveSelectedColorId === 'UNASSIGNED') {
+          targetColorId = null;
+          targetIsUnassigned = true;
+        } else if (effectiveSelectedColorId) {
+          targetColorId = effectiveSelectedColorId;
+        } else if (configuredColors.length > 0) {
+          targetColorId = configuredColors[0].id;
+        } else {
+          targetIsUnassigned = true;
+        }
+      }
+
       const newImage = createLocalProductStudioImage({
         file,
         previewUrl: objectUrl,
-        isMain: isFirst,
+        isMain: false,
         sortOrder: existingImages.length,
-        colorId: null,
-        isUnassigned: currentMode === 'COLORWAY',
+        colorId: targetColorId,
+        isUnassigned: targetIsUnassigned,
       });
 
+      const nextImages = normalizeProductStudioCovers(
+        [...existingImages, newImage],
+        currentMode,
+        configuredColors,
+        draft.variants
+      );
+
       updateDraft({
-        images: [...existingImages, newImage],
+        images: nextImages,
       });
       markTouched('media');
     } finally {
@@ -140,9 +243,15 @@ export function ProductStudioFormWorkspace() {
         return;
       }
 
+      const targetOld = imagesList[index];
+      if (!targetOld) return;
+
       const objectUrl = createMediaUrl(file);
       const existingImages = [...(draft.images || [])];
-      const targetOld = existingImages[index];
+      const targetIndex = existingImages.findIndex(
+        (img) => img === targetOld || (targetOld.uiKey && img.uiKey === targetOld.uiKey)
+      );
+      if (targetIndex === -1) return;
 
       const replacedImage = createLocalProductStudioImage({
         file,
@@ -154,8 +263,14 @@ export function ProductStudioFormWorkspace() {
         isUnassigned: targetOld.isUnassigned,
       });
 
-      existingImages[index] = replacedImage;
-      updateDraft({ images: existingImages });
+      existingImages[targetIndex] = replacedImage;
+      const nextImages = normalizeProductStudioCovers(
+        existingImages,
+        mediaMode,
+        configuredColors,
+        draft.variants
+      );
+      updateDraft({ images: nextImages });
       markTouched('media');
     } finally {
       setIsValidatingPhoto(false);
@@ -164,46 +279,40 @@ export function ProductStudioFormWorkspace() {
   };
 
   const handleDeleteMedia = (index: number) => {
-    const existingImages = [...(draft.images || [])];
-    existingImages.splice(index, 1);
+    const target = imagesList[index];
+    if (!target) return;
+    const existingImages = (draft.images || []).filter(
+      (img) => img !== target && (!target.uiKey || img.uiKey !== target.uiKey)
+    );
     const reindexed = existingImages.map((img, idx) => ({
       ...img,
-      isMain: idx === 0,
       sortOrder: idx,
     }));
-    updateDraft({ images: reindexed });
-    markTouched('media');
-  };
-
-  const handleSetAsCover = (index: number) => {
-    if (index === 0) return;
-    const existingImages = [...(draft.images || [])];
-    const [moved] = existingImages.splice(index, 1);
-    existingImages.unshift(moved);
-    const reindexed = existingImages.map((img, idx) => ({
-      ...img,
-      isMain: idx === 0,
-      sortOrder: idx,
-    }));
-    updateDraft({ images: reindexed });
+    const normalized = normalizeProductStudioCovers(
+      reindexed,
+      mediaMode,
+      configuredColors,
+      draft.variants
+    );
+    if (effectiveSelectedColorId) {
+      setSelectedMediaColorId(effectiveSelectedColorId);
+    }
+    updateDraft({ images: normalized });
     markTouched('media');
   };
 
   const handleReorderMedia = (fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
-    const existingImages = [...(draft.images || [])];
-    if (fromIndex >= existingImages.length || toIndex >= existingImages.length) return;
-
-    const [moved] = existingImages.splice(fromIndex, 1);
-    existingImages.splice(toIndex, 0, moved);
-
-    const reindexed = existingImages.map((img, idx) => ({
-      ...img,
-      isMain: idx === 0,
-      sortOrder: idx,
-    }));
-
-    updateDraft({ images: reindexed });
+    const nextImages = reorderProductStudioImages(
+      draft.images || [],
+      fromIndex,
+      toIndex,
+      mediaMode === 'COLORWAY' ? effectiveSelectedColorId : null,
+      mediaMode,
+      configuredColors,
+      draft.variants
+    );
+    updateDraft({ images: nextImages });
     markTouched('media');
   };
 
@@ -260,22 +369,7 @@ export function ProductStudioFormWorkspace() {
   const [isFormSizePopoverOpen, setIsFormSizePopoverOpen] = useState(false);
   const [pendingFormSizeIds, setPendingFormSizeIds] = useState<Set<string>>(new Set());
 
-  const [colorsList, setColorsList] = useState<SellerColor[]>([]);
   const [sizesList, setSizesList] = useState<SellerSizeValue[]>([]);
-
-  useEffect(() => {
-    let isMounted = true;
-    getSellerColors()
-      .then((data) => {
-        if (isMounted) setColorsList(data || []);
-      })
-      .catch((err) => {
-        console.error('Failed to load seller colors in Form Workspace:', err);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -297,30 +391,6 @@ export function ProductStudioFormWorkspace() {
 
   const [sizePopoverAnchor, setSizePopoverAnchor] = useState<DOMRect | null>(null);
   const [colorPopoverAnchor, setColorPopoverAnchor] = useState<DOMRect | null>(null);
-
-  const configuredColors = useMemo(() => {
-    const colorMap = new Map<string, { id: string; name: string; hex: string }>();
-
-    for (const c of draft.colors || []) {
-      if (c.id && !colorMap.has(c.id)) {
-        const found = colorsList.find((item) => item.id === c.id);
-        const name = found?.nameRu || c.name || (c as any)?.nameRu || 'Цвет';
-        const hex = found?.hex || c.hex || (c as any)?.hexValue || '#cccccc';
-        colorMap.set(c.id, { id: c.id, name, hex });
-      }
-    }
-
-    for (const v of draft.variants || []) {
-      if (v.colorId && !colorMap.has(v.colorId)) {
-        const found = colorsList.find((item) => item.id === v.colorId);
-        const name = found?.nameRu || v.colorName || 'Цвет';
-        const hex = found?.hex || v.colorHex || '#cccccc';
-        colorMap.set(v.colorId, { id: v.colorId, name, hex });
-      }
-    }
-
-    return Array.from(colorMap.values());
-  }, [draft.colors, draft.variants, colorsList]);
 
   const configuredSizes = useMemo(() => {
     const sizeIds = new Set<string>();
@@ -657,6 +727,13 @@ export function ProductStudioFormWorkspace() {
   const isCategoryAttention = isFieldAttention('category');
   const isPriceAttention = isFieldAttention('price');
   const isMediaAttention = isFieldAttention('media');
+  const mediaWarning = useMemo(() => getMediaReadinessWarning(draft), [draft]);
+  const isSelectedColorEmpty = useMemo(() => {
+    if (draft.mediaMode !== 'COLORWAY' || !effectiveSelectedColorId) return false;
+    return (draft.images || []).filter(
+      (img) => !img.isUnassigned && img.colorId === effectiveSelectedColorId
+    ).length === 0;
+  }, [draft.mediaMode, effectiveSelectedColorId, draft.images]);
   const isColorAttention = isFieldAttention('color');
   const isSizeAttention = isFieldAttention('size');
   const isDescriptionAttention = isFieldAttention('description');
@@ -998,15 +1075,19 @@ export function ProductStudioFormWorkspace() {
               </div>
               <div className="flex items-center gap-3">
                 {draft.images && draft.images.length > 0 && (
+                  (draft.mediaMode === 'COLORWAY'
+                    ? (draft.images || []).some(img => !img.colorId || img.isUnassigned)
+                    : true)
+                ) && (
                   <button
                     type="button"
                     data-testid="form-bind-photos-to-colors-btn"
-                    disabled={!draft.colors || draft.colors.length === 0}
-                    title={!draft.colors || draft.colors.length === 0 ? "Сначала добавьте цвета" : "Привязать фото к цветам"}
+                    disabled={configuredColors.length === 0}
+                    title={configuredColors.length === 0 ? "Сначала добавьте цвета" : "Привязать фото к цветам"}
                     onClick={() => setIsPhotoColorModalOpen(true)}
                     className={cn(
                       "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all select-none",
-                      !draft.colors || draft.colors.length === 0
+                      configuredColors.length === 0
                         ? "border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02] text-gray-400 cursor-not-allowed"
                         : (draft.mediaMode === 'COLORWAY' && (draft.images || []).some(img => !img.colorId || img.isUnassigned))
                         ? "border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-400 shadow-2xs cursor-pointer font-semibold"
@@ -1016,15 +1097,19 @@ export function ProductStudioFormWorkspace() {
                     <Link2
                       className={cn(
                         "w-3.5 h-3.5 shrink-0",
-                        !draft.colors || draft.colors.length === 0
+                        configuredColors.length === 0
                           ? "text-gray-300 dark:text-white/20"
                           : (draft.mediaMode === 'COLORWAY' && (draft.images || []).some(img => !img.colorId || img.isUnassigned))
                           ? "text-amber-600 dark:text-amber-400"
                           : "text-indigo-600 dark:text-indigo-400"
                       )}
                     />
-                    <span>Привязать фото к цветам</span>
-                    {(!draft.colors || draft.colors.length === 0) && (
+                    <span>
+                      {draft.mediaMode === 'COLORWAY' && (draft.images || []).filter(img => !img.colorId || img.isUnassigned).length > 0
+                        ? `Распределить фотографии · ${(draft.images || []).filter(img => !img.colorId || img.isUnassigned).length}`
+                        : "Привязать фото к цветам"}
+                    </span>
+                    {configuredColors.length === 0 && (
                       <span className="text-[11px] text-gray-400 font-normal">(Сначала добавьте цвета)</span>
                     )}
                   </button>
@@ -1060,18 +1145,82 @@ export function ProductStudioFormWorkspace() {
               </div>
             )}
 
-            {isMediaAttention && (
-              <div className="p-3 rounded-lg border border-amber-300 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 text-xs text-amber-800 dark:text-amber-300 font-medium">
-                Нужно минимум 3 фото (загружено: {imagesList.length})
+            {mediaWarning && (isMediaAttention || isSelectedColorEmpty) && (
+              <div
+                data-testid="form-media-required-helper"
+                className="p-3 rounded-lg border border-amber-300 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 text-xs text-amber-800 dark:text-amber-300 font-medium"
+              >
+                {mediaWarning}
+              </div>
+            )}
+
+            {/* Colorway tabs bar in form workspace */}
+            {draft.mediaMode === 'COLORWAY' && configuredColors.length > 0 && (
+              <div
+                data-testid="form-colorway-tabs-bar"
+                className="flex items-center gap-1.5 overflow-x-auto py-1 no-scrollbar flex-wrap"
+              >
+                {configuredColors.map((color: any) => {
+                  const isSelected = effectiveSelectedColorId === color.id;
+                  const count = (draft.images || []).filter(
+                    (img) => img.colorId === color.id && !img.isUnassigned
+                  ).length;
+                  return (
+                    <button
+                      key={color.id}
+                      type="button"
+                      data-testid={`form-colorway-tab-${color.id}`}
+                      onClick={() => setSelectedMediaColorId(color.id)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer border select-none shrink-0",
+                        isSelected
+                          ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent shadow-xs font-semibold"
+                          : "bg-white dark:bg-neutral-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
+                      )}
+                    >
+                      <span
+                        className="w-2.5 h-2.5 rounded-full border border-black/10 dark:border-white/20 shrink-0"
+                        style={{ backgroundColor: color.hex || '#000000' }}
+                      />
+                      <span>{color.name}</span>
+                      <span className={cn(
+                        "text-[11px] opacity-75 font-normal ml-0.5",
+                        isSelected ? "text-white/80 dark:text-gray-700" : "text-gray-400"
+                      )}>
+                        · {count}
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {unassignedImagesCount > 0 && (
+                  <button
+                    type="button"
+                    data-testid="form-colorway-tab-unassigned"
+                    onClick={() => setSelectedMediaColorId('UNASSIGNED')}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer border select-none shrink-0",
+                      effectiveSelectedColorId === 'UNASSIGNED'
+                        ? "bg-amber-600 text-white border-transparent shadow-xs font-semibold"
+                        : "bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700/60 hover:bg-amber-100"
+                    )}
+                  >
+                    <span className="text-amber-500 font-bold">⚠</span>
+                    <span>Нераспределённые</span>
+                    <span className="text-[11px] opacity-80 font-normal ml-0.5">
+                      · {unassignedImagesCount}
+                    </span>
+                  </button>
+                )}
               </div>
             )}
 
             {/* Media thumbnails grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4" data-testid="form-media-grid">
               {imagesList.map((img, index) => {
-                const assignedColor = (draft.colors || []).find((c: any) => c.id === img.colorId);
-                const assignedColorName = assignedColor ? getColorDisplayName(assignedColor) : '';
-                const isCover = index === 0;
+                const assignedColor = configuredColors.find((c: any) => c.id === img.colorId);
+                const assignedColorName = assignedColor ? assignedColor.name : '';
+                const isCover = Boolean(img.isMain);
                 const isDragging = draggedIndex === index;
                 const isDragOver = dragOverIndex === index && draggedIndex !== index;
 
@@ -1186,18 +1335,6 @@ export function ProductStudioFormWorkspace() {
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-
-                    {!isCover && (
-                      <button
-                        type="button"
-                        data-testid={`form-media-make-cover-${index}`}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={() => handleSetAsCover(index)}
-                        className="w-full py-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 border-t border-gray-100 dark:border-white/5 transition-colors cursor-pointer"
-                      >
-                        Сделать обложкой
-                      </button>
-                    )}
                   </div>
                 );
               })}
@@ -1215,6 +1352,7 @@ export function ProductStudioFormWorkspace() {
                 >
                   <input
                     type="file"
+                    data-testid="form-add-media-input"
                     accept={ALLOWED_IMAGE_MIME_TYPES.join(',')}
                     className="hidden"
                     onChange={handleAddMedia}
@@ -2019,7 +2157,7 @@ export function ProductStudioFormWorkspace() {
         isOpen={isPhotoColorModalOpen}
         onClose={() => setIsPhotoColorModalOpen(false)}
         images={draft.images || []}
-        colors={draft.colors || []}
+        colors={configuredColors}
         mediaMode={draft.mediaMode || 'GENERAL'}
         onSave={(updatedImages) => {
           const nextMode = (draft.mediaMode || 'GENERAL') === 'GENERAL' ? 'COLORWAY' : draft.mediaMode;
