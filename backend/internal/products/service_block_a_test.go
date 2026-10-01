@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -24,10 +23,7 @@ func ptr[T any](v T) *T {
 }
 
 func setupBlockATestDB(t *testing.T) (*postgres.Client, *products.Service, uuid.UUID) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_URL not set")
-	}
+	dsn := testutil.GetTestDatabaseURL()
 
 	ctx := context.Background()
 	db, err := postgres.NewClient(ctx, dsn)

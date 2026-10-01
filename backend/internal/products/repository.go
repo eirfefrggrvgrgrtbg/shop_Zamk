@@ -1323,10 +1323,55 @@ func (r *Repository) listProductsQuery(ctx context.Context, query string, args .
 	return products, nil
 }
 
-func (r *Repository) UpdateProductPriceCents(ctx context.Context, productID uuid.UUID, priceCents int64) error {
+func (r *Repository) UpdateProductPriceWithHistory(ctx context.Context, productID uuid.UUID, newPrice int64, actorID *uuid.UUID, source string, reason *string) error {
+	if newPrice < 0 {
+		return fmt.Errorf("price cannot be negative: %d", newPrice)
+	}
+	if source == "" {
+		source = "seller"
+	}
+
+	var oldPrice int64
+	err := r.db.QueryRow(ctx, "SELECT price_cents FROM products WHERE id = $1 FOR UPDATE", productID).Scan(&oldPrice)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrProductNotFound
+		}
+		return fmt.Errorf("failed to query product price: %w", err)
+	}
+
+	// No-op: if price did not change, do not create history
+	if oldPrice == newPrice {
+		return nil
+	}
+
 	query := `UPDATE products SET price_cents = $1, updated_at = now() WHERE id = $2`
-	_, err := r.db.Exec(ctx, query, priceCents, productID)
-	return err
+	res, err := r.db.Exec(ctx, query, newPrice, productID)
+	if err != nil {
+		return fmt.Errorf("failed to update product price: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrProductNotFound
+	}
+
+	histQuery := `
+		INSERT INTO product_price_history (
+			id, product_id, product_variant_id, old_price_cents, new_price_cents,
+			changed_by_user_id, source, reason, created_at
+		) VALUES (
+			gen_random_uuid(), $1, NULL, $2, $3, $4, $5, $6, now()
+		)
+	`
+	_, err = r.db.Exec(ctx, histQuery, productID, oldPrice, newPrice, actorID, source, reason)
+	if err != nil {
+		return fmt.Errorf("failed to insert product price history: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) UpdateProductPriceCents(ctx context.Context, productID uuid.UUID, priceCents int64) error {
+	return r.UpdateProductPriceWithHistory(ctx, productID, priceCents, nil, "system", nil)
 }
 
 func (r *Repository) GetProductImageByID(ctx context.Context, imageID uuid.UUID) (ProductImage, error) {
@@ -1422,10 +1467,56 @@ func (r *Repository) IsBrandAllowedForSeller(ctx context.Context, sellerID uuid.
 	return exists, nil
 }
 
-func (r *Repository) UpdateVariantPrice(ctx context.Context, variantID uuid.UUID, priceCents int64) error {
+func (r *Repository) UpdateVariantPriceWithHistory(ctx context.Context, variantID uuid.UUID, newPrice int64, actorID *uuid.UUID, source string, reason *string) error {
+	if newPrice < 0 {
+		return fmt.Errorf("price cannot be negative: %d", newPrice)
+	}
+	if source == "" {
+		source = "seller"
+	}
+
+	var oldPrice int64
+	var productID uuid.UUID
+	err := r.db.QueryRow(ctx, "SELECT price_cents, product_id FROM product_variants WHERE id = $1 FOR UPDATE", variantID).Scan(&oldPrice, &productID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrVariantNotFound
+		}
+		return fmt.Errorf("failed to query variant price: %w", err)
+	}
+
+	// No-op: if price did not change, do not create history
+	if oldPrice == newPrice {
+		return nil
+	}
+
 	query := `UPDATE product_variants SET price_cents = $1, updated_at = now() WHERE id = $2`
-	_, err := r.db.Exec(ctx, query, priceCents, variantID)
-	return err
+	res, err := r.db.Exec(ctx, query, newPrice, variantID)
+	if err != nil {
+		return fmt.Errorf("failed to update variant price: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrVariantNotFound
+	}
+
+	histQuery := `
+		INSERT INTO product_price_history (
+			id, product_id, product_variant_id, old_price_cents, new_price_cents,
+			changed_by_user_id, source, reason, created_at
+		) VALUES (
+			gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, now()
+		)
+	`
+	_, err = r.db.Exec(ctx, histQuery, productID, variantID, oldPrice, newPrice, actorID, source, reason)
+	if err != nil {
+		return fmt.Errorf("failed to insert variant price history: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) UpdateVariantPrice(ctx context.Context, variantID uuid.UUID, priceCents int64) error {
+	return r.UpdateVariantPriceWithHistory(ctx, variantID, priceCents, nil, "seller", nil)
 }
 
 func (r *Repository) InsertProductAttributeValues(ctx context.Context, productID uuid.UUID, attrs []ProductAttributeValue) error {

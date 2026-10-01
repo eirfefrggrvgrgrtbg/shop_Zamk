@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS promo_code_usages CASCADE;
+DROP TABLE IF EXISTS promo_codes CASCADE;
+DROP TABLE IF EXISTS marketing_campaigns CASCADE;

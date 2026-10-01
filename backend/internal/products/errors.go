@@ -4,6 +4,7 @@ import "errors"
 
 var (
 	ErrProductNotFound         = errors.New("product not found")
+	ErrVariantNotFound         = errors.New("product variant not found")
 	ErrProductNotDisposable    = errors.New("product not disposable")
 	ErrDuplicateSlug           = errors.New("slug already exists")
 	ErrIdempotencyKeyConflict  = errors.New("idempotency key conflict")

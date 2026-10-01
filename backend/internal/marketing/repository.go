@@ -1,0 +1,491 @@
+package marketing
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type DBExecutor interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+type Repository struct {
+	pool *pgxpool.Pool
+}
+
+func NewRepository(pool *pgxpool.Pool) *Repository {
+	return &Repository{pool: pool}
+}
+
+func (r *Repository) CreateCampaign(ctx context.Context, c *MarketingCampaign) error {
+	return r.CreateCampaignTx(ctx, r.pool, c)
+}
+
+func (r *Repository) CreateCampaignTx(ctx context.Context, db DBExecutor, c *MarketingCampaign) error {
+	if c.ID == uuid.Nil {
+		c.ID = uuid.New()
+	}
+	now := time.Now().UTC()
+	c.CreatedAt = now
+	c.UpdatedAt = now
+
+	query := `
+		INSERT INTO marketing_campaigns (
+			id, seller_id, title, description, funding_mode, status, discount_type,
+			seller_discount_bps, seller_discount_fixed_cents,
+			requested_zamk_share_bps, requested_zamk_budget_cap_cents,
+			approved_zamk_share_bps, approved_zamk_budget_cap_cents,
+			zamk_reserved_cents, zamk_spent_cents,
+			rejection_reason, admin_comment,
+			starts_at, ends_at, submitted_at, decided_at, decided_by_staff_id,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7,
+			$8, $9,
+			$10, $11,
+			$12, $13,
+			$14, $15,
+			$16, $17,
+			$18, $19, $20, $21, $22,
+			$23, $24
+		)
+	`
+	_, err := db.Exec(ctx, query,
+		c.ID, c.SellerID, c.Title, c.Description, string(c.FundingMode), string(c.Status), string(c.DiscountType),
+		c.SellerDiscountBps, c.SellerDiscountFixedCents,
+		c.RequestedZamkShareBps, c.RequestedZamkBudgetCapCents,
+		c.ApprovedZamkShareBps, c.ApprovedZamkBudgetCapCents,
+		c.ZamkReservedCents, c.ZamkSpentCents,
+		c.RejectionReason, c.AdminComment,
+		c.StartsAt, c.EndsAt, c.SubmittedAt, c.DecidedAt, c.DecidedByStaffID,
+		c.CreatedAt, c.UpdatedAt,
+	)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.ConstraintName == "uq_open_platform_funding_per_seller" {
+				return ErrOpenPlatformFundingExists
+			}
+		}
+		return fmt.Errorf("failed to create marketing campaign: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) GetCampaignByID(ctx context.Context, id uuid.UUID) (*MarketingCampaign, error) {
+	query := `
+		SELECT
+			id, seller_id, title, description, funding_mode, status, discount_type,
+			seller_discount_bps, seller_discount_fixed_cents,
+			requested_zamk_share_bps, requested_zamk_budget_cap_cents,
+			approved_zamk_share_bps, approved_zamk_budget_cap_cents,
+			zamk_reserved_cents, zamk_spent_cents,
+			rejection_reason, admin_comment,
+			starts_at, ends_at, submitted_at, decided_at, decided_by_staff_id,
+			created_at, updated_at
+		FROM marketing_campaigns
+		WHERE id = $1
+	`
+	var c MarketingCampaign
+	var fMode, status, dType string
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&c.ID, &c.SellerID, &c.Title, &c.Description, &fMode, &status, &dType,
+		&c.SellerDiscountBps, &c.SellerDiscountFixedCents,
+		&c.RequestedZamkShareBps, &c.RequestedZamkBudgetCapCents,
+		&c.ApprovedZamkShareBps, &c.ApprovedZamkBudgetCapCents,
+		&c.ZamkReservedCents, &c.ZamkSpentCents,
+		&c.RejectionReason, &c.AdminComment,
+		&c.StartsAt, &c.EndsAt, &c.SubmittedAt, &c.DecidedAt, &c.DecidedByStaffID,
+		&c.CreatedAt, &c.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrCampaignNotFound
+		}
+		return nil, fmt.Errorf("failed to get marketing campaign: %w", err)
+	}
+	c.FundingMode = FundingMode(fMode)
+	c.Status = CampaignStatus(status)
+	c.DiscountType = DiscountType(dType)
+	return &c, nil
+}
+
+func (r *Repository) CountSuccessfulSellerSales(ctx context.Context, sellerID uuid.UUID) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM order_fulfillments
+		WHERE seller_id = $1
+		  AND status IN (
+		    'paid', 'assembling', 'packed', 'accepted',
+		    'discrepancy', 'shipped', 'delivered',
+		    'returned', 'refunded'
+		  )
+	`
+	var count int
+	err := r.pool.QueryRow(ctx, query, sellerID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count seller successful paid sales: %w", err)
+	}
+	return count, nil
+}
+
+func (r *Repository) HasOpenPlatformCampaign(ctx context.Context, sellerID uuid.UUID) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM marketing_campaigns
+			WHERE seller_id = $1
+			  AND funding_mode IN ('zamk', 'cofunded')
+			  AND status IN ('submitted', 'counter_offered', 'approved', 'active')
+		)
+	`
+	var exists bool
+	err := r.pool.QueryRow(ctx, query, sellerID).Scan(&exists)
+	return exists, err
+}
+
+func (r *Repository) SubmitCampaign(ctx context.Context, campaignID uuid.UUID, sellerID uuid.UUID) error {
+	now := time.Now().UTC()
+	query := `
+		UPDATE marketing_campaigns
+		SET status = 'submitted', submitted_at = $1, updated_at = $1
+		WHERE id = $2 AND seller_id = $3 AND status = 'draft'
+	`
+	tag, err := r.pool.Exec(ctx, query, now, campaignID, sellerID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.ConstraintName == "uq_open_platform_funding_per_seller" {
+				return ErrOpenPlatformFundingExists
+			}
+		}
+		return fmt.Errorf("failed to submit campaign: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrCampaignNotFound
+	}
+	return nil
+}
+
+func (r *Repository) AdminApproveCampaign(ctx context.Context, campaignID uuid.UUID, staffUserID uuid.UUID, approvedShareBps int, approvedBudgetCapCents int64, adminComment *string) error {
+	now := time.Now().UTC()
+	query := `
+		UPDATE marketing_campaigns
+		SET status = 'approved',
+		    approved_zamk_share_bps = $1,
+		    approved_zamk_budget_cap_cents = $2,
+		    admin_comment = $3,
+		    decided_at = $4,
+		    decided_by_staff_id = $5,
+		    updated_at = $4
+		WHERE id = $6 AND status = 'submitted'
+	`
+	tag, err := r.pool.Exec(ctx, query, approvedShareBps, approvedBudgetCapCents, adminComment, now, staffUserID, campaignID)
+	if err != nil {
+		return fmt.Errorf("failed to approve campaign: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrCampaignNotFound
+	}
+	return nil
+}
+
+func (r *Repository) AdminCounterOfferCampaign(ctx context.Context, campaignID uuid.UUID, staffUserID uuid.UUID, counterShareBps int, counterBudgetCapCents int64, adminComment *string) error {
+	now := time.Now().UTC()
+	query := `
+		UPDATE marketing_campaigns
+		SET status = 'counter_offered',
+		    approved_zamk_share_bps = $1,
+		    approved_zamk_budget_cap_cents = $2,
+		    admin_comment = $3,
+		    decided_at = $4,
+		    decided_by_staff_id = $5,
+		    updated_at = $4
+		WHERE id = $6 AND status = 'submitted'
+	`
+	tag, err := r.pool.Exec(ctx, query, counterShareBps, counterBudgetCapCents, adminComment, now, staffUserID, campaignID)
+	if err != nil {
+		return fmt.Errorf("failed to counter-offer campaign: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrCampaignNotFound
+	}
+	return nil
+}
+
+func (r *Repository) AdminRejectCampaign(ctx context.Context, campaignID uuid.UUID, staffUserID uuid.UUID, reason string, comment *string) error {
+	now := time.Now().UTC()
+	query := `
+		UPDATE marketing_campaigns
+		SET status = 'rejected',
+		    rejection_reason = $1,
+		    admin_comment = $2,
+		    decided_at = $3,
+		    decided_by_staff_id = $4,
+		    updated_at = $3
+		WHERE id = $5 AND status = 'submitted'
+	`
+	tag, err := r.pool.Exec(ctx, query, reason, comment, now, staffUserID, campaignID)
+	if err != nil {
+		return fmt.Errorf("failed to reject campaign: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrCampaignNotFound
+	}
+	return nil
+}
+
+func (r *Repository) SellerAcceptCounterOffer(ctx context.Context, campaignID uuid.UUID, sellerID uuid.UUID) error {
+	now := time.Now().UTC()
+	query := `
+		UPDATE marketing_campaigns
+		SET status = 'approved', updated_at = $1
+		WHERE id = $2 AND seller_id = $3 AND status = 'counter_offered'
+	`
+	tag, err := r.pool.Exec(ctx, query, now, campaignID, sellerID)
+	if err != nil {
+		return fmt.Errorf("failed to accept counter offer: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrCounterOfferInvalidState
+	}
+	return nil
+}
+
+func (r *Repository) SellerRejectCounterOffer(ctx context.Context, campaignID uuid.UUID, sellerID uuid.UUID) error {
+	now := time.Now().UTC()
+	query := `
+		UPDATE marketing_campaigns
+		SET status = 'cancelled', updated_at = $1
+		WHERE id = $2 AND seller_id = $3 AND status = 'counter_offered'
+	`
+	tag, err := r.pool.Exec(ctx, query, now, campaignID, sellerID)
+	if err != nil {
+		return fmt.Errorf("failed to reject counter offer: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrCounterOfferInvalidState
+	}
+	return nil
+}
+
+func (r *Repository) CreatePromoCode(ctx context.Context, p *PromoCode) error {
+	return r.CreatePromoCodeTx(ctx, r.pool, p)
+}
+
+func (r *Repository) CreatePromoCodeTx(ctx context.Context, db DBExecutor, p *PromoCode) error {
+	if p.ID == uuid.Nil {
+		p.ID = uuid.New()
+	}
+	now := time.Now().UTC()
+	p.CreatedAt = now
+	p.UpdatedAt = now
+	p.Code = strings.ToUpper(strings.TrimSpace(p.Code))
+
+	query := `
+		INSERT INTO promo_codes (
+			id, campaign_id, seller_id, code, discount_type,
+			discount_value_bps, discount_value_fixed_cents,
+			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
+			first_paid_order_only, is_active, starts_at, ends_at,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5,
+			$6, $7,
+			$8, $9, $10,
+			$11, $12, $13, $14,
+			$15, $16
+		)
+	`
+	_, err := db.Exec(ctx, query,
+		p.ID, p.CampaignID, p.SellerID, p.Code, string(p.DiscountType),
+		p.DiscountValueBps, p.DiscountValueFixedCents,
+		p.MinOrderSubtotalCents, p.GlobalUsageLimit, p.PerCustomerUsageLimit,
+		p.FirstPaidOrderOnly, p.IsActive, p.StartsAt, p.EndsAt,
+		p.CreatedAt, p.UpdatedAt,
+	)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.ConstraintName == "uq_promo_codes_normalized_code" {
+				return ErrPromoCodeDuplicate
+			}
+		}
+		return fmt.Errorf("failed to create promo code: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) GetPromoCodeByCode(ctx context.Context, code string) (*PromoCode, error) {
+	normalized := strings.TrimSpace(code)
+	query := `
+		SELECT
+			id, campaign_id, seller_id, code, discount_type,
+			discount_value_bps, discount_value_fixed_cents,
+			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
+			first_paid_order_only, is_active, starts_at, ends_at,
+			created_at, updated_at
+		FROM promo_codes
+		WHERE LOWER(code) = LOWER($1)
+	`
+	var p PromoCode
+	var dType string
+	err := r.pool.QueryRow(ctx, query, normalized).Scan(
+		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
+		&p.DiscountValueBps, &p.DiscountValueFixedCents,
+		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
+		&p.FirstPaidOrderOnly, &p.IsActive, &p.StartsAt, &p.EndsAt,
+		&p.CreatedAt, &p.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPromoCodeNotFound
+		}
+		return nil, fmt.Errorf("failed to get promo code: %w", err)
+	}
+	p.DiscountType = DiscountType(dType)
+	return &p, nil
+}
+
+func (r *Repository) RecordPriceChange(ctx context.Context, h *ProductPriceHistory) error {
+	return r.RecordPriceChangeTx(ctx, r.pool, h)
+}
+
+func (r *Repository) RecordPriceChangeTx(ctx context.Context, db DBExecutor, h *ProductPriceHistory) error {
+	if h.ID == uuid.Nil {
+		h.ID = uuid.New()
+	}
+	if h.CreatedAt.IsZero() {
+		h.CreatedAt = time.Now().UTC()
+	}
+
+	query := `
+		INSERT INTO product_price_history (
+			id, product_id, product_variant_id, old_price_cents, new_price_cents,
+			changed_by_user_id, source, reason, created_at
+		) VALUES (
+			$1, $2, $3, $4, $5,
+			$6, $7, $8, $9
+		)
+	`
+	_, err := db.Exec(ctx, query,
+		h.ID, h.ProductID, h.ProductVariantID, h.OldPriceCents, h.NewPriceCents,
+		h.ChangedByUserID, string(h.Source), h.Reason, h.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to record product price history: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) ListProductPriceHistory(ctx context.Context, productID uuid.UUID, limit int) ([]ProductPriceHistory, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	query := `
+		SELECT
+			id, product_id, product_variant_id, old_price_cents, new_price_cents,
+			changed_by_user_id, source, reason, created_at
+		FROM product_price_history
+		WHERE product_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2
+	`
+	rows, err := r.pool.Query(ctx, query, productID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query price history: %w", err)
+	}
+	defer rows.Close()
+
+	var history []ProductPriceHistory
+	for rows.Next() {
+		var h ProductPriceHistory
+		var source string
+		if err := rows.Scan(
+			&h.ID, &h.ProductID, &h.ProductVariantID, &h.OldPriceCents, &h.NewPriceCents,
+			&h.ChangedByUserID, &source, &h.Reason, &h.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan price history: %w", err)
+		}
+		h.Source = PriceChangeSource(source)
+		history = append(history, h)
+	}
+	return history, rows.Err()
+}
+
+func (r *Repository) CreateOrderItemPromotion(ctx context.Context, p *OrderItemPromotion) error {
+	return r.CreateOrderItemPromotionTx(ctx, r.pool, p)
+}
+
+func (r *Repository) CreateOrderItemPromotionTx(ctx context.Context, db DBExecutor, p *OrderItemPromotion) error {
+	if p.ID == uuid.Nil {
+		p.ID = uuid.New()
+	}
+	if p.CreatedAt.IsZero() {
+		p.CreatedAt = time.Now().UTC()
+	}
+
+	query := `
+		INSERT INTO order_item_promotions (
+			id, order_item_id, order_id, seller_id, campaign_id, promo_code_id,
+			base_unit_price_cents, seller_discount_unit_cents, zamk_subsidy_unit_cents, customer_paid_unit_price_cents,
+			commission_base_unit_cents, quantity, total_seller_discount_cents, total_zamk_subsidy_cents, total_customer_paid_cents,
+			total_commission_base_cents, commission_rate_bps, total_commission_charged_cents,
+			created_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10,
+			$11, $12, $13, $14, $15,
+			$16, $17, $18,
+			$19
+		)
+	`
+	_, err := db.Exec(ctx, query,
+		p.ID, p.OrderItemID, p.OrderID, p.SellerID, p.CampaignID, p.PromoCodeID,
+		p.BaseUnitPriceCents, p.SellerDiscountUnitCents, p.ZamkSubsidyUnitCents, p.CustomerPaidUnitPriceCents,
+		p.CommissionBaseUnitCents, p.Quantity, p.TotalSellerDiscountCents, p.TotalZamkSubsidyCents, p.TotalCustomerPaidCents,
+		p.TotalCommissionBaseCents, p.CommissionRateBps, p.TotalCommissionChargedCents,
+		p.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create order item promotion: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) GetOrderItemPromotion(ctx context.Context, orderItemID uuid.UUID) (*OrderItemPromotion, error) {
+	query := `
+		SELECT
+			id, order_item_id, order_id, seller_id, campaign_id, promo_code_id,
+			base_unit_price_cents, seller_discount_unit_cents, zamk_subsidy_unit_cents, customer_paid_unit_price_cents,
+			commission_base_unit_cents, quantity, total_seller_discount_cents, total_zamk_subsidy_cents, total_customer_paid_cents,
+			total_commission_base_cents, commission_rate_bps, total_commission_charged_cents,
+			created_at
+		FROM order_item_promotions
+		WHERE order_item_id = $1
+	`
+	var p OrderItemPromotion
+	err := r.pool.QueryRow(ctx, query, orderItemID).Scan(
+		&p.ID, &p.OrderItemID, &p.OrderID, &p.SellerID, &p.CampaignID, &p.PromoCodeID,
+		&p.BaseUnitPriceCents, &p.SellerDiscountUnitCents, &p.ZamkSubsidyUnitCents, &p.CustomerPaidUnitPriceCents,
+		&p.CommissionBaseUnitCents, &p.Quantity, &p.TotalSellerDiscountCents, &p.TotalZamkSubsidyCents, &p.TotalCustomerPaidCents,
+		&p.TotalCommissionBaseCents, &p.CommissionRateBps, &p.TotalCommissionChargedCents,
+		&p.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get order item promotion: %w", err)
+	}
+	return &p, nil
+}

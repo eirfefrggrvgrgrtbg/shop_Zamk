@@ -1700,7 +1700,7 @@ func (s *Service) UpdateVariantPricesForSeller(ctx context.Context, currentUserI
 			if !found {
 				return fmt.Errorf("variant %s not found in product %s", variantID, p.ID)
 			}
-			if err := txRepo.UpdateVariantPrice(ctx, variantID, priceCents); err != nil {
+			if err := txRepo.UpdateVariantPriceWithHistory(ctx, variantID, priceCents, &currentUserID, "seller", nil); err != nil {
 				return err
 			}
 		}
@@ -2313,41 +2313,46 @@ func (s *Service) UpdateProductPrices(ctx context.Context, currentUserID, produc
 		return err
 	}
 
-	// Update prices for variants that belong to this product
-	for _, vUpdate := range req.Variants {
-		// Verify variant belongs to product
-		found := false
-		for _, v := range p.Variants {
-			if v.ID == vUpdate.ID {
-				found = true
-				break
+	return s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
+		txRepo := s.repo.WithTx(tx)
+
+		// Update prices for variants that belong to this product
+		for _, vUpdate := range req.Variants {
+			// Verify variant belongs to product
+			found := false
+			for _, v := range p.Variants {
+				if v.ID == vUpdate.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("variant %s does not belong to product %s", vUpdate.ID, productID)
+			}
+
+			if err := txRepo.UpdateVariantPriceWithHistory(ctx, vUpdate.ID, vUpdate.PriceCents, &currentUserID, "seller", nil); err != nil {
+				return err
 			}
 		}
-		if !found {
-			return fmt.Errorf("variant %s does not belong to product %s", vUpdate.ID, productID)
-		}
 
-		err := s.repo.UpdateVariantPrice(ctx, vUpdate.ID, vUpdate.PriceCents)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Sync product-level price_cents to minimum active variant price
-	updatedVariants, err := s.repo.GetProductVariants(ctx, productID)
-	if err == nil && len(updatedVariants) > 0 {
-		minPrice := int64(0)
-		for _, v := range updatedVariants {
-			if v.PriceCents != nil && *v.PriceCents > 0 {
-				if minPrice == 0 || *v.PriceCents < minPrice {
-					minPrice = *v.PriceCents
+		// Sync product-level price_cents to minimum active variant price
+		updatedVariants, err := txRepo.GetProductVariants(ctx, productID)
+		if err == nil && len(updatedVariants) > 0 {
+			minPrice := int64(0)
+			for _, v := range updatedVariants {
+				if v.PriceCents != nil && *v.PriceCents > 0 {
+					if minPrice == 0 || *v.PriceCents < minPrice {
+						minPrice = *v.PriceCents
+					}
+				}
+			}
+			if minPrice > 0 {
+				if err := txRepo.UpdateProductPriceWithHistory(ctx, productID, minPrice, &currentUserID, "seller", nil); err != nil {
+					return err
 				}
 			}
 		}
-		if minPrice > 0 {
-			_ = s.repo.UpdateProductPriceCents(ctx, productID, minPrice)
-		}
-	}
 
-	return nil
+		return nil
+	})
 }
