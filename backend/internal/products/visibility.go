@@ -17,6 +17,19 @@ func CanonicalProductFreeStockSQL(productIDExpr string) string {
 	)`, productIDExpr)
 }
 
+// CanonicalStorefrontEligibilitySQL returns the authoritative SQL predicate expression
+// that filters products and sellers according to canonical storefront eligibility:
+// published status, active seller status, and free sellable stock meeting the storefront minimum.
+func CanonicalStorefrontEligibilitySQL(productAlias, sellerAlias string) string {
+	return fmt.Sprintf(
+		"%s.status = 'published' AND %s.status = 'active' AND %s >= %d",
+		productAlias,
+		sellerAlias,
+		CanonicalProductFreeStockSQL(productAlias+".id"),
+		MinStorefrontFreeSellableUnits,
+	)
+}
+
 // CanonicalVariantFreeStock returns the canonical free sellable quantity for a variant.
 func CanonicalVariantFreeStock(totalStock, reservedStock int) int {
 	free := totalStock - reservedStock
