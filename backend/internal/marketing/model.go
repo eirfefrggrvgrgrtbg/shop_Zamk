@@ -114,6 +114,7 @@ type PromoUsage struct {
 	ConsumedAt          *time.Time  `json:"consumedAt,omitempty" db:"consumed_at"`
 	ReleasedAt          *time.Time  `json:"releasedAt,omitempty" db:"released_at"`
 	ExpiresAt           time.Time   `json:"expiresAt" db:"expires_at"`
+	IsFirstOrder        bool        `json:"isFirstOrder" db:"is_first_order"`
 }
 
 // ProductPriceHistory records historical product and variant price changes for reference verification.
@@ -150,4 +151,40 @@ type OrderItemPromotion struct {
 	CommissionRateBps           int       `json:"commissionRateBps" db:"commission_rate_bps"`
 	TotalCommissionChargedCents int64     `json:"totalCommissionChargedCents" db:"total_commission_charged_cents"`
 	CreatedAt                   time.Time `json:"createdAt" db:"created_at"`
+}
+
+// PromotedLineResult holds the calculated promotional economics for a single promoted order line.
+type PromotedLineResult struct {
+	OrderItemID                 uuid.UUID
+	ProductID                   uuid.UUID
+	ProductVariantID            uuid.UUID
+	SellerID                    uuid.UUID
+	BaseUnitPriceCents          int64
+	Quantity                    int
+	SellerDiscountUnitCents     int64
+	ZamkSubsidyUnitCents        int64
+	CustomerPaidUnitPriceCents  int64
+	CommissionBaseUnitCents     int64
+	TotalSellerDiscountCents    int64
+	TotalZamkSubsidyCents       int64
+	TotalCustomerPaidCents      int64
+	TotalCommissionBaseCents    int64
+	CommissionRateBps           int
+	TotalCommissionChargedCents int64
+}
+
+// CheckoutPromoCalculation contains the fully verified and computed checkout promotional breakdown.
+type CheckoutPromoCalculation struct {
+	PromoCodeID              uuid.UUID
+	CampaignID               uuid.UUID
+	SellerID                 uuid.UUID
+	FundingMode              FundingMode
+	DiscountType             DiscountType
+	Code                     string
+	IsFirstOrder             bool
+	TotalSellerDiscountCents int64
+	TotalZamkSubsidyCents    int64
+	TotalCustomerPaidCents   int64
+	TotalOrderDiscountCents  int64
+	PromotedLines            []PromotedLineResult
 }

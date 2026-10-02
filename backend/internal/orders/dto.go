@@ -7,12 +7,14 @@ import (
 )
 
 type CreateOrderRequest struct {
-	CustomerName    string `json:"customerName" validate:"required"`
-	CustomerPhone   string `json:"customerPhone" validate:"required"`
+	CustomerName     string    `json:"customerName" validate:"required"`
+	CustomerPhone    string    `json:"customerPhone" validate:"required"`
 	CustomerEmail    string    `json:"customerEmail" validate:"required,email"`
 	DeliveryAddress  string    `json:"deliveryAddress" validate:"required"`
 	DeliveryMethodID uuid.UUID `json:"deliveryMethodId" validate:"required"`
+	PromoCode        *string   `json:"promoCode,omitempty"`
 }
+
 
 type CancelAdminOrderRequest struct {
 	Reason  *string `json:"reason,omitempty"`

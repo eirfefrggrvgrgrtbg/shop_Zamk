@@ -2,6 +2,7 @@ package payments
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,19 +11,21 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/behavior"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/marketing"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/behavior"
 )
 
 type Service struct {
 	repo           *Repository
 	ordersRepo     *orders.Repository
 	inventorySvc   *inventory.Service
+	marketingSvc   *marketing.Service
 	provider       Provider
 	db             *postgres.Client
 	notifSvc       *notifications.Service
@@ -43,6 +46,11 @@ func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *i
 		logger:         slog.Default(),
 		behaviorWriter: behaviorWriter,
 	}
+}
+
+func (s *Service) WithMarketing(m *marketing.Service) *Service {
+	s.marketingSvc = m
+	return s
 }
 
 func (s *Service) SetLogger(l *slog.Logger) *Service {
@@ -70,8 +78,44 @@ func (s *Service) CreatePayment(ctx context.Context, userID, orderID uuid.UUID, 
 		return nil, ErrOrderNotAwaitingPayment
 	}
 
-	// Atomically ensure this order owns active reservations and allocations.
-	// If reservation was released/expired, reacquire inventory or fail before initiating payment.
+	// 1. Check if there is already an active payment for this order
+	existingPayment, err := s.repo.GetActivePaymentForOrder(ctx, orderID)
+	if err == nil && existingPayment != nil {
+		if existingPayment.InitOutcome == "unknown" {
+			return nil, fmt.Errorf("%w: previous payment attempt outcome is uncertain", ErrPaymentOutcomeUncertain)
+		}
+		if existingPayment.Status == "pending" && existingPayment.PaymentURL != nil && *existingPayment.PaymentURL != "" {
+			return &CreatePaymentResponse{
+				PaymentID:       existingPayment.ID,
+				Provider:        existingPayment.Provider,
+				Status:          existingPayment.Status,
+				AmountCents:     existingPayment.AmountCents,
+				Currency:        existingPayment.Currency,
+				PaymentURL:      *existingPayment.PaymentURL,
+				PaymentNumber:   existingPayment.PaymentNumber,
+				PaymentMethod:   existingPayment.PaymentMethod,
+				IntegrationMode: existingPayment.IntegrationMode,
+			}, nil
+		}
+	}
+
+	// 2. Prepare payment model
+	idempotencyKey := uuid.New().String()
+	paymentID := uuid.New()
+
+	payment := &Payment{
+		ID:              paymentID,
+		OrderID:         orderID,
+		Provider:        "tbank",
+		AmountCents:     order.TotalPriceCents,
+		Currency:        order.Currency,
+		IdempotencyKey:  idempotencyKey,
+		PaymentMethod:   method,
+		IntegrationMode: integrationMode,
+	}
+
+	// 3. Atomically ensure inventory hold, first-payment claim, promo hold, and persist payment claim (TX1).
+	// This COMMITS BEFORE any external provider HTTP call.
 	var reacquired bool
 	var reacquiredResID uuid.UUID
 	var reacquiredAllocsCount int
@@ -79,9 +123,75 @@ func (s *Service) CreatePayment(ctx context.Context, userID, orderID uuid.UUID, 
 	err = s.db.RunInTx(ctx, func(tx pgx.Tx) error {
 		var txErr error
 		reacquired, reacquiredResID, reacquiredAllocsCount, txErr = s.EnsureOrderInventoryHoldTx(ctx, tx, userID, orderID)
-		return txErr
+		if txErr != nil {
+			return txErr
+		}
+
+		// Deterministically serialize customer-level payment operations around first-paid transition
+		var userLockID uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&userLockID); err != nil {
+			return err
+		}
+
+		var paidCount int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM orders WHERE user_id = $1 AND status = 'paid'`, userID).Scan(&paidCount); err != nil {
+			return err
+		}
+
+		// If customer has 0 successfully paid orders, acquire exclusive first-payment claim
+		// to serialize competing orders until first-payment resolution.
+		if paidCount == 0 {
+			if err := s.repo.AcquireFirstPaymentClaimTx(ctx, tx, userID, orderID); err != nil {
+				return err
+			}
+		}
+
+		if s.marketingSvc != nil {
+			if err := s.marketingSvc.EnsureOrderPromoHoldTx(ctx, tx, orderID); err != nil {
+				return err
+			}
+		}
+
+		if err := s.repo.CreatePaymentClaimTx(ctx, tx, payment); err != nil {
+			return err
+		}
+
+		return nil
 	})
 	if err != nil {
+		if errors.Is(err, ErrPaymentClaimConflict) {
+			// Concurrent request holds claim or is already pending. Wait for it to become pending.
+			for i := 0; i < 15; i++ {
+				time.Sleep(200 * time.Millisecond)
+				existingPayment, getErr := s.repo.GetActivePaymentForOrder(ctx, orderID)
+				if getErr != nil {
+					if errors.Is(getErr, pgx.ErrNoRows) || errors.Is(getErr, ErrPaymentNotFound) {
+						return nil, errors.New("concurrent payment failed initialization")
+					}
+					return nil, getErr
+				}
+				if existingPayment.InitOutcome == "unknown" {
+					return nil, fmt.Errorf("%w: previous payment attempt outcome is uncertain", ErrPaymentOutcomeUncertain)
+				}
+				if existingPayment.Status == "pending" && existingPayment.PaymentURL != nil && *existingPayment.PaymentURL != "" {
+					return &CreatePaymentResponse{
+						PaymentID:       existingPayment.ID,
+						Provider:        existingPayment.Provider,
+						Status:          existingPayment.Status,
+						AmountCents:     existingPayment.AmountCents,
+						Currency:        existingPayment.Currency,
+						PaymentURL:      *existingPayment.PaymentURL,
+						PaymentNumber:   existingPayment.PaymentNumber,
+						PaymentMethod:   existingPayment.PaymentMethod,
+						IntegrationMode: existingPayment.IntegrationMode,
+					}, nil
+				}
+			}
+			return nil, errors.New("timeout waiting for concurrent payment initialization")
+		}
+		if errors.Is(err, marketing.ErrPromoFirstOrderOnly) && s.marketingSvc != nil {
+			_ = s.marketingSvc.ReleasePromoForOrder(ctx, orderID, "first_order_ineligible")
+		}
 		if errors.Is(err, ErrInsufficientStock) {
 			attrs := []slog.Attr{
 				slog.String("order_id", orderID.String()),
@@ -132,52 +242,7 @@ func (s *Service) CreatePayment(ctx context.Context, userID, orderID uuid.UUID, 
 		})
 	}
 
-	idempotencyKey := uuid.New().String()
-	paymentID := uuid.New()
-
-	payment := &Payment{
-		ID:              paymentID,
-		OrderID:         orderID,
-		Provider:        "tbank",
-		AmountCents:     order.TotalPriceCents,
-		Currency:        order.Currency,
-		IdempotencyKey:  idempotencyKey,
-		PaymentMethod:   method,
-		IntegrationMode: integrationMode,
-	}
-
-	err = s.repo.CreatePaymentClaim(ctx, payment)
-	if errors.Is(err, ErrPaymentClaimConflict) {
-		// Concurrent request holds claim or is already pending. Wait for it to become pending.
-		for i := 0; i < 15; i++ {
-			time.Sleep(200 * time.Millisecond)
-			existingPayment, err := s.repo.GetActivePaymentForOrder(ctx, orderID)
-			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, ErrPaymentNotFound) {
-					return nil, errors.New("concurrent payment failed initialization")
-				}
-				return nil, err
-			}
-			if existingPayment.Status == "pending" {
-				return &CreatePaymentResponse{
-					PaymentID:       existingPayment.ID,
-					Provider:        existingPayment.Provider,
-					Status:          existingPayment.Status,
-					AmountCents:     existingPayment.AmountCents,
-					Currency:        existingPayment.Currency,
-					PaymentURL:      *existingPayment.PaymentURL,
-					PaymentNumber:   existingPayment.PaymentNumber,
-					PaymentMethod:   existingPayment.PaymentMethod,
-					IntegrationMode: existingPayment.IntegrationMode,
-				}, nil
-			}
-		}
-		return nil, errors.New("timeout waiting for concurrent payment initialization")
-	} else if err != nil {
-		return nil, err
-	}
-
-	// We own the claim! Call provider
+	// 4. TX1 has committed. Call provider outside DB transaction.
 	input := CreatePaymentInput{
 		OrderID:         orderID.String(),
 		AmountCents:     order.TotalPriceCents,
@@ -190,34 +255,18 @@ func (s *Service) CreatePayment(ctx context.Context, userID, orderID uuid.UUID, 
 
 	res, err := s.provider.CreatePayment(ctx, input)
 	if err != nil {
-		var releasedRes, releasedAllocs int
-		_ = s.db.RunInTx(context.Background(), func(tx pgx.Tx) error {
-			_ = s.repo.MarkPaymentFailedTx(ctx, tx, paymentID)
-			releasedRes, releasedAllocs, _ = s.releaseOrderReservationsTx(ctx, tx, orderID, "payment_failed")
-			return nil
-		})
-		if releasedRes+releasedAllocs > 0 {
-			attrs := []slog.Attr{
-				slog.String("order_id", orderID.String()),
+		if errors.Is(err, ErrProviderRejected) {
+			_ = s.repo.MarkPaymentFailed(ctx, paymentID)
+			_ = s.repo.ReleaseFirstPaymentClaimByOrderID(ctx, orderID)
+			if s.marketingSvc != nil {
+				_ = s.marketingSvc.ReleasePromoForOrder(ctx, orderID, "payment_rejected")
 			}
-			if order.OrderNumber != nil && *order.OrderNumber != "" {
-				attrs = append(attrs, slog.String("order_number", *order.OrderNumber))
-			}
-			attrs = append(attrs,
-				slog.Int("reservations_released_count", releasedRes),
-				slog.Int("allocations_released_count", releasedAllocs),
-				slog.String("reason", "payment_failed"),
-			)
-			observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
-				EventName:  "inventory.order_hold_released",
-				Domain:     "inventory",
-				Action:     "release_order_hold",
-				Result:     "success",
-				ActorRole:  "system",
-				Attributes: attrs,
-			})
+			return nil, err
 		}
-		return nil, err
+		// Ambiguous transport failure or timeout: payment remains 'created' with init_outcome = 'unknown'.
+		// Claim, promo hold, and inventory reservations remain strictly held.
+		_ = s.repo.UpdatePaymentInitOutcome(ctx, paymentID, "unknown")
+		return nil, fmt.Errorf("%w: %w", ErrPaymentOutcomeUncertain, err)
 	}
 
 	paymentURL := res.PaymentURL
@@ -226,34 +275,8 @@ func (s *Service) CreatePayment(ctx context.Context, userID, orderID uuid.UUID, 
 	}
 
 	if err := s.repo.UpdatePaymentWithProviderData(ctx, paymentID, res.ProviderPaymentID, paymentURL); err != nil {
-		var releasedRes, releasedAllocs int
-		_ = s.db.RunInTx(context.Background(), func(tx pgx.Tx) error {
-			_ = s.repo.MarkPaymentFailedTx(ctx, tx, paymentID)
-			releasedRes, releasedAllocs, _ = s.releaseOrderReservationsTx(ctx, tx, orderID, "payment_failed")
-			return nil
-		})
-		if releasedRes+releasedAllocs > 0 {
-			attrs := []slog.Attr{
-				slog.String("order_id", orderID.String()),
-			}
-			if order.OrderNumber != nil && *order.OrderNumber != "" {
-				attrs = append(attrs, slog.String("order_number", *order.OrderNumber))
-			}
-			attrs = append(attrs,
-				slog.Int("reservations_released_count", releasedRes),
-				slog.Int("allocations_released_count", releasedAllocs),
-				slog.String("reason", "payment_failed"),
-			)
-			observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
-				EventName:  "inventory.order_hold_released",
-				Domain:     "inventory",
-				Action:     "release_order_hold",
-				Result:     "success",
-				ActorRole:  "system",
-				Attributes: attrs,
-			})
-		}
-		return nil, err
+		_ = s.repo.UpdatePaymentInitOutcome(ctx, paymentID, "unknown")
+		return nil, fmt.Errorf("%w: %w", ErrPaymentOutcomeUncertain, err)
 	}
 
 	return &CreatePaymentResponse{
@@ -267,6 +290,395 @@ func (s *Service) CreatePayment(ctx context.Context, userID, orderID uuid.UUID, 
 		PaymentMethod:   method,
 		IntegrationMode: integrationMode,
 	}, nil
+}
+
+func (s *Service) applyPaymentConfirmedTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	payment *Payment,
+	order *orders.Order,
+	providerPaymentID string,
+	rawPayload []byte,
+	eventKey string,
+	didConfirm *bool,
+	confirmedPaymentID, confirmedOrderID *uuid.UUID,
+	orderNumber *string,
+) error {
+	if providerPaymentID != "" && (payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "") {
+		payment.ProviderPaymentID = &providerPaymentID
+		_, _ = tx.Exec(ctx, `UPDATE payments SET provider_payment_id = $2 WHERE id = $1`, payment.ID, providerPaymentID)
+	}
+
+	now := time.Now()
+	var pEvent PaymentEvent
+	pEvent.ID = uuid.New()
+	pEvent.PaymentID = &payment.ID
+	pEvent.Provider = payment.Provider
+	pEvent.ProviderPaymentID = &providerPaymentID
+	pEvent.EventType = "CONFIRMED"
+	pEvent.EventKey = eventKey
+	if len(rawPayload) == 0 {
+		pEvent.RawPayload = []byte("{}")
+	} else {
+		pEvent.RawPayload = rawPayload
+	}
+	pEvent.SignatureValid = true
+	pEvent.ProcessedAt = &now
+
+	if err := s.repo.CreatePaymentEventTx(ctx, tx, &pEvent); err != nil {
+		if errors.Is(err, ErrPaymentAlreadyProcessed) {
+			if payment.Status == "succeeded" {
+				return nil
+			}
+		} else {
+			return err
+		}
+	}
+
+	if payment.Status == "succeeded" || payment.Status == "failed" || payment.Status == "cancelled" {
+		return nil
+	}
+
+	if order == nil {
+		var err error
+		order, err = s.ordersRepo.GetOrderForUpdateTx(ctx, tx, payment.OrderID)
+		if err != nil {
+			return err
+		}
+	}
+
+	if order.Status != "awaiting_payment" {
+		return nil
+	}
+
+	// Deterministically serialize customer payment completions around first-paid transition
+	var userLockID uuid.UUID
+	err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, order.UserID).Scan(&userLockID)
+	if err != nil {
+		return err
+	}
+
+	// 1. Update Payment
+	payment.Status = "succeeded"
+	payment.InitOutcome = "successful"
+	payment.PaidAt = &now
+	if err := s.repo.UpdatePaymentStatusTx(ctx, tx, payment); err != nil {
+		return err
+	}
+
+	// Check if it's an auction order
+	var isAuction bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM auction_order_links WHERE order_id = $1)`, order.ID).Scan(&isAuction)
+	if err != nil {
+		return err
+	}
+
+	if isAuction {
+		updatedAt, err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid")
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `UPDATE auction_order_links SET status = 'paid', updated_at = now() WHERE order_id = $1`, order.ID)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `
+			UPDATE auction_lots SET status = 'paid', updated_at = now()
+			WHERE id = (SELECT lot_id FROM auction_order_links WHERE order_id = $1)
+		`, order.ID)
+		if err != nil {
+			return err
+		}
+
+		var winnerID, lotID uuid.UUID
+		err = tx.QueryRow(ctx, `SELECT winner_user_id, lot_id FROM auction_order_links WHERE order_id = $1`, order.ID).Scan(&winnerID, &lotID)
+		if err == nil {
+			metaNotif := map[string]interface{}{"lotId": lotID.String()}
+			paidNotif := notifications.Notification{
+				ID:              uuid.New(),
+				RecipientUserID: &winnerID,
+				RecipientKind:   notifications.RecipientKindCustomer,
+				Type:            "auction_paid",
+				Title:           "Оплата лота получена",
+				Body:            "Оплата успешно зачислена. Ожидайте доставки или получения.",
+				EntityType:      "auction_lot",
+				EntityID:        lotID,
+				Metadata:        metaNotif,
+				CreatedAt:       now,
+			}
+			_ = s.notifSvc.CreateNotificationTx(ctx, tx, paidNotif)
+		}
+
+		history := &orders.OrderStatusHistory{
+			ID:         uuid.New(),
+			OrderID:    order.ID,
+			FromStatus: &order.Status,
+			ToStatus:   "paid",
+		}
+		if err := s.ordersRepo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
+			return err
+		}
+		if err := s.emitOrderPaidEventsTx(ctx, tx, order, updatedAt); err != nil {
+			return err
+		}
+	} else {
+		// 2. Normal Checkout Update Order
+		updatedAt, err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid")
+		if err != nil {
+			return err
+		}
+		if affected, err := s.ordersRepo.MarkOrderFulfillmentsStatusTx(ctx, tx, order.ID, "awaiting_payment", "paid"); err != nil {
+			return err
+		} else if affected == 0 {
+			return errors.New("cannot sync payment: no awaiting_payment fulfillments found for order")
+		}
+
+		query := `SELECT id, seller_id FROM order_fulfillments WHERE order_id = $1`
+		rows, err := tx.Query(ctx, query, order.ID)
+		if err != nil {
+			return err
+		}
+
+		var fulfillments []struct {
+			ID       uuid.UUID
+			SellerID uuid.UUID
+		}
+		for rows.Next() {
+			var id, sellerID uuid.UUID
+			if err := rows.Scan(&id, &sellerID); err != nil {
+				rows.Close()
+				return err
+			}
+			fulfillments = append(fulfillments, struct{ID, SellerID uuid.UUID}{id, sellerID})
+		}
+		rows.Close()
+
+		var notifs []notifications.Notification
+		nowUTC := time.Now().UTC()
+		for _, f := range fulfillments {
+			notifs = append(notifs, notifications.Notification{
+				ID:                uuid.New(),
+				RecipientSellerID: &f.SellerID,
+				RecipientKind:     notifications.RecipientKindSeller,
+				Type:              notifications.TypeSellerFulfillmentPaid,
+				Title:             "Новый оплаченный заказ",
+				Body:              "Поступила новая сборка, готовая к обработке.",
+				EntityType:        "fulfillment",
+				EntityID:          f.ID,
+				CreatedAt:         nowUTC,
+			})
+		}
+		if err := s.notifSvc.CreateManyNotificationsTx(ctx, tx, notifs); err != nil {
+			return err
+		}
+
+		history := &orders.OrderStatusHistory{
+			ID:         uuid.New(),
+			OrderID:    order.ID,
+			FromStatus: &order.Status,
+			ToStatus:   "paid",
+		}
+		if err := s.ordersRepo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
+			return err
+		}
+		if err := s.emitOrderPaidEventsTx(ctx, tx, order, updatedAt); err != nil {
+			return err
+		}
+
+		// 3. Convert Reservations to Sale
+		resIDs, err := s.ordersRepo.GetActiveOrderReservations(ctx, order.ID)
+		if err != nil {
+			return err
+		}
+		var orderItemCount int
+		_ = tx.QueryRow(ctx, `SELECT count(*) FROM order_items WHERE order_id = $1`, order.ID).Scan(&orderItemCount)
+		if orderItemCount > 0 && len(resIDs) == 0 {
+			return errors.New("cannot confirm payment: order has no active reservation")
+		}
+
+		for _, rid := range resIDs {
+			if err := s.inventorySvc.ConvertReservationToSaleTx(ctx, tx, rid); err != nil {
+				return err
+			}
+		}
+	}
+
+	// 4. Consume promo if order has promo reservation
+	if s.marketingSvc != nil {
+		if err := s.marketingSvc.ConsumePromoForOrderTx(ctx, tx, order.ID); err != nil {
+			return err
+		}
+	}
+
+	// 5. Release any temporary customer first-payment claim
+	_ = s.repo.ReleaseFirstPaymentClaimByOrderIDTx(ctx, tx, order.ID)
+
+	if didConfirm != nil {
+		*didConfirm = true
+	}
+	if confirmedPaymentID != nil {
+		*confirmedPaymentID = payment.ID
+	}
+	if confirmedOrderID != nil {
+		*confirmedOrderID = payment.OrderID
+	}
+	if orderNumber != nil && order.OrderNumber != nil {
+		*orderNumber = *order.OrderNumber
+	}
+	return nil
+}
+
+func (s *Service) applyPaymentTerminalFailureTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	payment *Payment,
+	order *orders.Order,
+	providerPaymentID string,
+	providerStatus string,
+	rawPayload []byte,
+	eventKey string,
+	didRelease *bool,
+	releaseReason *string,
+	releasedRes, releasedAllocs *int,
+	confirmedOrderID *uuid.UUID,
+	orderNumber *string,
+) error {
+	if providerPaymentID != "" && (payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "") {
+		payment.ProviderPaymentID = &providerPaymentID
+		_, _ = tx.Exec(ctx, `UPDATE payments SET provider_payment_id = $2 WHERE id = $1`, payment.ID, providerPaymentID)
+	}
+
+	now := time.Now()
+	var pEvent PaymentEvent
+	pEvent.ID = uuid.New()
+	pEvent.PaymentID = &payment.ID
+	pEvent.Provider = payment.Provider
+	pEvent.ProviderPaymentID = &providerPaymentID
+	pEvent.EventType = providerStatus
+	pEvent.EventKey = eventKey
+	if len(rawPayload) == 0 {
+		pEvent.RawPayload = []byte("{}")
+	} else {
+		pEvent.RawPayload = rawPayload
+	}
+	pEvent.SignatureValid = true
+	pEvent.ProcessedAt = &now
+
+	if err := s.repo.CreatePaymentEventTx(ctx, tx, &pEvent); err != nil {
+		if errors.Is(err, ErrPaymentAlreadyProcessed) {
+			if payment.Status == "failed" || payment.Status == "cancelled" {
+				return nil
+			}
+		} else {
+			return err
+		}
+	}
+
+	if payment.Status == "succeeded" {
+		return nil
+	}
+	if payment.Status == "failed" || payment.Status == "cancelled" {
+		return nil
+	}
+
+	payment.Status = "failed"
+	payment.InitOutcome = "rejected"
+	if providerStatus == "CANCELED" {
+		payment.Status = "cancelled"
+		payment.CancelledAt = &now
+	} else {
+		payment.FailedAt = &now
+	}
+
+	if err := s.repo.UpdatePaymentStatusTx(ctx, tx, payment); err != nil {
+		return err
+	}
+
+	if order == nil {
+		order, _ = s.ordersRepo.GetOrder(ctx, payment.OrderID)
+	}
+	if order != nil && order.OrderNumber != nil && *order.OrderNumber != "" && orderNumber != nil {
+		*orderNumber = *order.OrderNumber
+	}
+
+	resCount, allocCount, relErr := s.releaseOrderReservationsTx(ctx, tx, payment.OrderID, "payment_failed")
+	if relErr != nil {
+		return relErr
+	}
+
+	if s.marketingSvc != nil {
+		if err := s.marketingSvc.ReleasePromoForOrderTx(ctx, tx, payment.OrderID, "payment_failed"); err != nil {
+			return err
+		}
+	}
+
+	_ = s.repo.ReleaseFirstPaymentClaimByOrderIDTx(ctx, tx, payment.OrderID)
+
+	if didRelease != nil {
+		*didRelease = true
+	}
+	if releaseReason != nil {
+		*releaseReason = "payment_failed"
+	}
+	if releasedRes != nil {
+		*releasedRes = resCount
+	}
+	if releasedAllocs != nil {
+		*releasedAllocs = allocCount
+	}
+	if confirmedOrderID != nil {
+		*confirmedOrderID = payment.OrderID
+	}
+	return nil
+}
+
+func (s *Service) applyPaymentNonTerminalUpdateTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	payment *Payment,
+	providerPaymentID string,
+	providerStatus string,
+	rawPayload []byte,
+	eventKey string,
+) error {
+	if providerPaymentID != "" && (payment.ProviderPaymentID == nil || *payment.ProviderPaymentID == "") {
+		payment.ProviderPaymentID = &providerPaymentID
+		_, _ = tx.Exec(ctx, `UPDATE payments SET provider_payment_id = $2 WHERE id = $1`, payment.ID, providerPaymentID)
+	}
+
+	now := time.Now()
+	var pEvent PaymentEvent
+	pEvent.ID = uuid.New()
+	pEvent.PaymentID = &payment.ID
+	pEvent.Provider = payment.Provider
+	pEvent.ProviderPaymentID = &providerPaymentID
+	pEvent.EventType = providerStatus
+	pEvent.EventKey = eventKey
+	if len(rawPayload) == 0 {
+		pEvent.RawPayload = []byte("{}")
+	} else {
+		pEvent.RawPayload = rawPayload
+	}
+	pEvent.SignatureValid = true
+	pEvent.ProcessedAt = &now
+
+	_ = s.repo.CreatePaymentEventTx(ctx, tx, &pEvent)
+
+	if payment.Status == "succeeded" || payment.Status == "failed" || payment.Status == "cancelled" {
+		return nil
+	}
+
+	if providerStatus != "AUTH_FAIL" {
+		if payment.Status == "created" {
+			payment.Status = "pending"
+		}
+		payment.InitOutcome = "successful"
+	}
+	// For AUTH_FAIL:
+	// Do NOT mark terminal failed. Do NOT set init_outcome = 'successful'.
+	// Keep non-terminal status ('created' or 'pending') and init_outcome = 'unknown' (or existing)
+	// so that it remains eligible for subsequent reconciliation worker candidate selection.
+	return s.repo.UpdatePaymentStatusTx(ctx, tx, payment)
 }
 
 func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, body []byte) error {
@@ -287,236 +699,220 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 	var confirmedPaymentID, confirmedOrderID uuid.UUID
 
 	err = s.db.RunInTx(ctx, func(tx pgx.Tx) error {
-		payment, err := s.repo.GetPaymentByProviderIDForUpdate(ctx, tx, "tbank", event.ProviderPaymentID)
+		payment, err := s.repo.GetPaymentByProviderOrOrderIDForUpdate(ctx, tx, "tbank", event.ProviderPaymentID, event.OrderID, event.AmountCents)
 		if err != nil {
 			return err
 		}
 
-		now := time.Now()
-		var pEvent PaymentEvent
-		pEvent.ID = uuid.New()
-		pEvent.PaymentID = &payment.ID
-		pEvent.Provider = "tbank"
-		pEvent.ProviderPaymentID = &event.ProviderPaymentID
-		pEvent.EventType = event.ProviderStatus
-		pEvent.EventKey = event.EventKey
-		pEvent.RawPayload = event.RawPayload
-		pEvent.SignatureValid = true
-		pEvent.ProcessedAt = &now
+		category := ClassifyProviderStatus(event.ProviderStatus)
+		switch category {
+		case ProviderStatusCategorySuccess:
+			return s.applyPaymentConfirmedTx(ctx, tx, payment, nil, event.ProviderPaymentID, event.RawPayload, event.EventKey,
+				&didConfirm, &confirmedPaymentID, &confirmedOrderID, &orderNumber)
+		case ProviderStatusCategoryTerminalFailure:
+			return s.applyPaymentTerminalFailureTx(ctx, tx, payment, nil, event.ProviderPaymentID, event.ProviderStatus, event.RawPayload, event.EventKey,
+				&didRelease, &releaseReason, &releasedRes, &releasedAllocs, &confirmedOrderID, &orderNumber)
+		case ProviderStatusCategoryNonTerminal:
+			return s.applyPaymentNonTerminalUpdateTx(ctx, tx, payment, event.ProviderPaymentID, event.ProviderStatus, event.RawPayload, event.EventKey)
+		case ProviderStatusCategoryUnknown:
+			fallthrough
+		default:
+			// Fail closed: unrecognized provider status must not cause financial mutations.
+			s.logger.WarnContext(ctx, "unrecognized provider status in webhook, failing closed",
+				"provider_status", event.ProviderStatus,
+				"payment_id", payment.ID.String(),
+				"order_id", payment.OrderID.String(),
+			)
+			return s.applyPaymentNonTerminalUpdateTx(ctx, tx, payment, event.ProviderPaymentID, event.ProviderStatus, event.RawPayload, event.EventKey)
+		}
+	})
+	if err != nil {
+		if errors.Is(err, ErrPaymentAlreadyProcessed) {
+			return nil
+		}
+		return err
+	}
 
-		if err := s.repo.CreatePaymentEventTx(ctx, tx, &pEvent); err != nil {
-			if errors.Is(err, ErrPaymentAlreadyProcessed) {
-				return ErrPaymentAlreadyProcessed // Duplicate webhook, safely ignore
+	if didConfirm {
+		attrs := []slog.Attr{
+			slog.String("payment_id", confirmedPaymentID.String()),
+			slog.String("order_id", confirmedOrderID.String()),
+		}
+		if orderNumber != "" {
+			attrs = append(attrs, slog.String("order_number", orderNumber))
+		}
+		attrs = append(attrs, slog.String("result", "success"))
+
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName:  "payment.confirmed",
+			Domain:     "payment",
+			Action:     "confirm_payment",
+			Result:     "success",
+			ActorRole:  "system",
+			Attributes: attrs,
+		})
+	}
+
+	if didRelease && (releasedRes+releasedAllocs > 0) {
+		attrs := []slog.Attr{
+			slog.String("order_id", confirmedOrderID.String()),
+		}
+		if orderNumber != "" {
+			attrs = append(attrs, slog.String("order_number", orderNumber))
+		}
+		attrs = append(attrs,
+			slog.Int("reservations_released_count", releasedRes),
+			slog.Int("allocations_released_count", releasedAllocs),
+			slog.String("reason", releaseReason),
+		)
+
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName:  "inventory.order_hold_released",
+			Domain:     "inventory",
+			Action:     "release_order_hold",
+			Result:     "success",
+			ActorRole:  "system",
+			Attributes: attrs,
+		})
+	}
+
+	return nil
+}
+
+func (s *Service) matchProviderPayment(ctx context.Context, lp *Payment, items []ProviderPaymentItem) (*ProviderPaymentItem, error) {
+	if lp.ProviderPaymentID != nil && *lp.ProviderPaymentID != "" {
+		for _, it := range items {
+			if it.ProviderPaymentID == *lp.ProviderPaymentID {
+				if it.AmountCents != lp.AmountCents {
+					return nil, fmt.Errorf("%w: remote %d != local %d", ErrPaymentAmountMismatch, it.AmountCents, lp.AmountCents)
+				}
+				itemCopy := it
+				return &itemCopy, nil
 			}
+		}
+		return nil, nil
+	}
+
+	var plausible []ProviderPaymentItem
+	var amountMismatches int
+	var alreadyAssigned int
+
+	for _, it := range items {
+		owned, err := s.repo.IsProviderPaymentIDAttachedToOtherPayment(ctx, lp.Provider, it.ProviderPaymentID, lp.ID)
+		if err != nil {
+			return nil, err
+		}
+		if owned {
+			alreadyAssigned++
+			continue
+		}
+		if it.AmountCents != lp.AmountCents {
+			amountMismatches++
+			continue
+		}
+		plausible = append(plausible, it)
+	}
+
+	if len(plausible) == 0 {
+		if amountMismatches > 0 {
+			return nil, fmt.Errorf("%w: order payment amount mismatch", ErrPaymentAmountMismatch)
+		}
+		if alreadyAssigned > 0 {
+			return nil, fmt.Errorf("%w: provider payment already assigned to another payment", ErrProviderPaymentAlreadyAssigned)
+		}
+		return nil, nil
+	}
+
+	if len(plausible) > 1 {
+		return nil, fmt.Errorf("%w: %d plausible provider payments for order %s", ErrMultipleProviderPaymentsAmbiguous, len(plausible), lp.OrderID)
+	}
+
+	itemCopy := plausible[0]
+	return &itemCopy, nil
+}
+
+func (s *Service) ReconcilePayment(ctx context.Context, paymentID uuid.UUID) error {
+	lp, err := s.repo.GetPaymentByID(ctx, paymentID)
+	if err != nil {
+		return err
+	}
+
+	if (lp.Status != "created" && lp.Status != "pending") || lp.InitOutcome != "unknown" {
+		return nil
+	}
+
+	checkRes, err := s.provider.CheckOrder(ctx, lp.OrderID.String())
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to check order at payment provider",
+			"payment_id", paymentID.String(),
+			"order_id", lp.OrderID.String(),
+			"error", err,
+		)
+		return err
+	}
+
+	if len(checkRes.Payments) == 0 {
+		return nil
+	}
+
+	matchedItem, err := s.matchProviderPayment(ctx, lp, checkRes.Payments)
+	if err != nil {
+		s.logger.WarnContext(ctx, "ambiguous or mismatched payment reconciliation",
+			"payment_id", paymentID.String(),
+			"order_id", lp.OrderID.String(),
+			"error", err,
+		)
+		return err
+	}
+	if matchedItem == nil {
+		return nil
+	}
+
+	var didConfirm bool
+	var didRelease bool
+	var releaseReason string
+	var releasedRes, releasedAllocs int
+	var orderNumber string
+	var confirmedPaymentID, confirmedOrderID uuid.UUID
+
+	err = s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		currentPayment, err := s.repo.GetPaymentByIDForUpdateTx(ctx, tx, lp.ID)
+		if err != nil {
 			return err
 		}
-
-		if payment.Status == "succeeded" || payment.Status == "failed" || payment.Status == "cancelled" {
-			// Terminal status protection: event saved, but payment mutation is skipped
+		if (currentPayment.Status != "created" && currentPayment.Status != "pending") || currentPayment.InitOutcome != "unknown" {
 			return nil
 		}
 
-		if event.Status == "succeeded" {
-			order, err := s.ordersRepo.GetOrderForUpdateTx(ctx, tx, payment.OrderID)
-			if err != nil {
-				return err
-			}
-
-			if order.Status != "awaiting_payment" {
-				return nil // If order is already paid or cancelled, skip converting. Webhook processed safely.
-			}
-
-			// 1. Update Payment
-			payment.Status = "succeeded"
-			payment.PaidAt = &now
-			if err := s.repo.UpdatePaymentStatusTx(ctx, tx, payment); err != nil {
-				return err
-			}
-
-			// Check if it's an auction order
-			var isAuction bool
-			err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM auction_order_links WHERE order_id = $1)`, order.ID).Scan(&isAuction)
-			if err != nil {
-				return err
-			}
-
-			if isAuction {
-				updatedAt, err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid")
-				if err != nil {
-					return err
-				}
-				_, err = tx.Exec(ctx, `UPDATE auction_order_links SET status = 'paid', updated_at = now() WHERE order_id = $1`, order.ID)
-				if err != nil {
-					return err
-				}
-				_, err = tx.Exec(ctx, `
-					UPDATE auction_lots SET status = 'paid', updated_at = now() 
-					WHERE id = (SELECT lot_id FROM auction_order_links WHERE order_id = $1)
-				`, order.ID)
-				if err != nil {
-					return err
-				}
-
-				var winnerID, lotID uuid.UUID
-				err = tx.QueryRow(ctx, `SELECT winner_user_id, lot_id FROM auction_order_links WHERE order_id = $1`, order.ID).Scan(&winnerID, &lotID)
-				if err == nil {
-					metaNotif := map[string]interface{}{"lotId": lotID.String()}
-					paidNotif := notifications.Notification{
-						ID:              uuid.New(),
-						RecipientUserID: &winnerID,
-						RecipientKind:   notifications.RecipientKindCustomer,
-						Type:            "auction_paid",
-						Title:           "Оплата лота получена",
-						Body:            "Оплата успешно зачислена. Ожидайте доставки или получения.",
-						EntityType:      "auction_lot",
-						EntityID:        lotID,
-						Metadata:        metaNotif,
-						CreatedAt:       now,
-					}
-					_ = s.notifSvc.CreateNotificationTx(ctx, tx, paidNotif)
-				}
-				
-				history := &orders.OrderStatusHistory{
-					ID:         uuid.New(),
-					OrderID:    order.ID,
-					FromStatus: &order.Status,
-					ToStatus:   "paid",
-				}
-				if err := s.ordersRepo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
-					return err
-				}
-				if err := s.emitOrderPaidEventsTx(ctx, tx, order, updatedAt); err != nil {
-					return err
-				}
-
-			} else {
-				// 2. Normal Checkout Update Order
-				updatedAt, err := s.ordersRepo.UpdateOrderStatusTx(ctx, tx, order.ID, "paid")
-				if err != nil {
-					return err
-				}
-				if affected, err := s.ordersRepo.MarkOrderFulfillmentsStatusTx(ctx, tx, order.ID, "awaiting_payment", "paid"); err != nil {
-					return err
-				} else if affected == 0 {
-					return errors.New("cannot sync payment: no awaiting_payment fulfillments found for order")
-				}
-
-				query := `SELECT id, seller_id FROM order_fulfillments WHERE order_id = $1`
-				rows, err := tx.Query(ctx, query, order.ID)
-				if err != nil {
-					return err
-				}
-				
-				var fulfillments []struct {
-					ID       uuid.UUID
-					SellerID uuid.UUID
-				}
-				for rows.Next() {
-					var id, sellerID uuid.UUID
-					if err := rows.Scan(&id, &sellerID); err != nil {
-						rows.Close()
-						return err
-					}
-					fulfillments = append(fulfillments, struct{ID, SellerID uuid.UUID}{id, sellerID})
-				}
-				rows.Close()
-
-				var notifs []notifications.Notification
-				now := time.Now().UTC()
-				for _, f := range fulfillments {
-					notifs = append(notifs, notifications.Notification{
-						ID:                uuid.New(),
-						RecipientSellerID: &f.SellerID,
-						RecipientKind:     notifications.RecipientKindSeller,
-						Type:              notifications.TypeSellerFulfillmentPaid,
-						Title:             "Новый оплаченный заказ",
-						Body:              "Поступила новая сборка, готовая к обработке.",
-						EntityType:        "fulfillment",
-						EntityID:          f.ID,
-						CreatedAt:         now,
-					})
-				}
-				if err := s.notifSvc.CreateManyNotificationsTx(ctx, tx, notifs); err != nil {
-					return err
-				}
-
-				history := &orders.OrderStatusHistory{
-					ID:         uuid.New(),
-					OrderID:    order.ID,
-					FromStatus: &order.Status,
-					ToStatus:   "paid",
-				}
-				if err := s.ordersRepo.CreateOrderStatusHistoryTx(ctx, tx, history); err != nil {
-					return err
-				}
-				if err := s.emitOrderPaidEventsTx(ctx, tx, order, updatedAt); err != nil {
-					return err
-				}
-
-				// 3. Convert Reservations to Sale
-				resIDs, err := s.ordersRepo.GetActiveOrderReservations(ctx, order.ID)
-				if err != nil {
-					return err
-				}
-				var orderItemCount int
-				_ = tx.QueryRow(ctx, `SELECT count(*) FROM order_items WHERE order_id = $1`, order.ID).Scan(&orderItemCount)
-				if orderItemCount > 0 && len(resIDs) == 0 {
-					return errors.New("cannot confirm payment: order has no active reservation")
-				}
-
-				for _, rid := range resIDs {
-					if err := s.inventorySvc.ConvertReservationToSaleTx(ctx, tx, rid); err != nil {
-						return err
-					}
-				}
-			}
-
-			didConfirm = true
-			confirmedPaymentID = payment.ID
-			confirmedOrderID = payment.OrderID
-			if order.OrderNumber != nil && *order.OrderNumber != "" {
-				orderNumber = *order.OrderNumber
-			}
-
-		} else if event.Status == "failed" {
-			payment.Status = "failed"
-			payment.FailedAt = &now
-			if err := s.repo.UpdatePaymentStatusTx(ctx, tx, payment); err != nil {
-				return err
-			}
-			order, _ := s.ordersRepo.GetOrder(ctx, payment.OrderID)
-			if order != nil && order.OrderNumber != nil && *order.OrderNumber != "" {
-				orderNumber = *order.OrderNumber
-			}
-			var relErr error
-			releasedRes, releasedAllocs, relErr = s.releaseOrderReservationsTx(ctx, tx, payment.OrderID, "payment_failed")
-			if relErr != nil {
-				return relErr
-			}
-			didRelease = true
-			releaseReason = "payment_failed"
-			confirmedOrderID = payment.OrderID
-		} else if event.Status == "cancelled" {
-			payment.Status = "cancelled"
-			payment.CancelledAt = &now
-			if err := s.repo.UpdatePaymentStatusTx(ctx, tx, payment); err != nil {
-				return err
-			}
-			order, _ := s.ordersRepo.GetOrder(ctx, payment.OrderID)
-			if order != nil && order.OrderNumber != nil && *order.OrderNumber != "" {
-				orderNumber = *order.OrderNumber
-			}
-			var relErr error
-			releasedRes, releasedAllocs, relErr = s.releaseOrderReservationsTx(ctx, tx, payment.OrderID, "payment_rejected")
-			if relErr != nil {
-				return relErr
-			}
-			didRelease = true
-			releaseReason = "payment_rejected"
-			confirmedOrderID = payment.OrderID
+		order, err := s.ordersRepo.GetOrderForUpdateTx(ctx, tx, currentPayment.OrderID)
+		if err != nil {
+			return err
 		}
 
-		return nil
+		rawPayload, _ := json.Marshal(matchedItem)
+		eventKey := fmt.Sprintf("reconcile:%s:%s", matchedItem.ProviderPaymentID, matchedItem.ProviderStatus)
+
+		category := ClassifyProviderStatus(matchedItem.ProviderStatus)
+		switch category {
+		case ProviderStatusCategorySuccess:
+			return s.applyPaymentConfirmedTx(ctx, tx, currentPayment, order, matchedItem.ProviderPaymentID, rawPayload, eventKey,
+				&didConfirm, &confirmedPaymentID, &confirmedOrderID, &orderNumber)
+		case ProviderStatusCategoryTerminalFailure:
+			return s.applyPaymentTerminalFailureTx(ctx, tx, currentPayment, order, matchedItem.ProviderPaymentID, matchedItem.ProviderStatus, rawPayload, eventKey,
+				&didRelease, &releaseReason, &releasedRes, &releasedAllocs, &confirmedOrderID, &orderNumber)
+		case ProviderStatusCategoryNonTerminal:
+			return s.applyPaymentNonTerminalUpdateTx(ctx, tx, currentPayment, matchedItem.ProviderPaymentID, matchedItem.ProviderStatus, rawPayload, eventKey)
+		case ProviderStatusCategoryUnknown:
+			fallthrough
+		default:
+			// Fail closed: unrecognized provider status must not cause financial mutations.
+			s.logger.WarnContext(ctx, "unrecognized provider status in reconciliation, failing closed",
+				"provider_status", matchedItem.ProviderStatus,
+				"payment_id", currentPayment.ID.String(),
+				"order_id", currentPayment.OrderID.String(),
+			)
+			return s.applyPaymentNonTerminalUpdateTx(ctx, tx, currentPayment, matchedItem.ProviderPaymentID, matchedItem.ProviderStatus, rawPayload, eventKey)
+		}
 	})
 	if err != nil {
 		return err
@@ -566,6 +962,27 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 	}
 
 	return nil
+}
+
+func (s *Service) ReconcileUnknownPayments(ctx context.Context, batchLimit int) (int, error) {
+	candidates, err := s.repo.ClaimReconciliationCandidates(ctx, batchLimit, 0)
+	if err != nil {
+		return 0, err
+	}
+
+	processed := 0
+	for _, cand := range candidates {
+		if err := s.ReconcilePayment(ctx, cand.ID); err != nil {
+			s.logger.WarnContext(ctx, "failed to reconcile payment",
+				"payment_id", cand.ID.String(),
+				"order_id", cand.OrderID.String(),
+				"error", err,
+			)
+		} else {
+			processed++
+		}
+	}
+	return processed, nil
 }
 
 func (s *Service) GetPaymentByID(ctx context.Context, id uuid.UUID) (*Payment, error) {
@@ -644,6 +1061,13 @@ func (s *Service) ProcessMockPaymentAction(ctx context.Context, paymentID uuid.U
 
 			if order.Status != "awaiting_payment" {
 				return nil
+			}
+
+			// Deterministically serialize customer payment completions around first-paid transition
+			var userLockID uuid.UUID
+			err = tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, order.UserID).Scan(&userLockID)
+			if err != nil {
+				return err
 			}
 
 			payment.Status = "succeeded"
@@ -765,6 +1189,16 @@ func (s *Service) ProcessMockPaymentAction(ctx context.Context, paymentID uuid.U
 				}
 			}
 
+			// Consume promo if order has promo reservation
+			if s.marketingSvc != nil {
+				if err := s.marketingSvc.ConsumePromoForOrderTx(ctx, tx, order.ID); err != nil {
+					return err
+				}
+			}
+
+			// Release any temporary customer first-payment claim
+			_ = s.repo.ReleaseFirstPaymentClaimByOrderIDTx(ctx, tx, order.ID)
+
 			didConfirm = true
 			confirmedPaymentID = payment.ID
 			confirmedOrderID = payment.OrderID
@@ -787,6 +1221,15 @@ func (s *Service) ProcessMockPaymentAction(ctx context.Context, paymentID uuid.U
 			if relErr != nil {
 				return relErr
 			}
+			if s.marketingSvc != nil {
+				if err := s.marketingSvc.ReleasePromoForOrderTx(ctx, tx, payment.OrderID, "payment_failed"); err != nil {
+					return err
+				}
+			}
+
+			// Release any temporary customer first-payment claim
+			_ = s.repo.ReleaseFirstPaymentClaimByOrderIDTx(ctx, tx, payment.OrderID)
+
 			didRelease = true
 			releaseReason = "payment_failed"
 			confirmedOrderID = payment.OrderID
@@ -805,6 +1248,15 @@ func (s *Service) ProcessMockPaymentAction(ctx context.Context, paymentID uuid.U
 			if relErr != nil {
 				return relErr
 			}
+			if s.marketingSvc != nil {
+				if err := s.marketingSvc.ReleasePromoForOrderTx(ctx, tx, payment.OrderID, "payment_rejected"); err != nil {
+					return err
+				}
+			}
+
+			// Release any temporary customer first-payment claim
+			_ = s.repo.ReleaseFirstPaymentClaimByOrderIDTx(ctx, tx, payment.OrderID)
+
 			didRelease = true
 			releaseReason = "payment_rejected"
 			confirmedOrderID = payment.OrderID

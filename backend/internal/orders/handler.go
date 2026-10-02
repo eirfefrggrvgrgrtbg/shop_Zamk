@@ -6,12 +6,15 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/google/uuid"
+
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/marketing"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 )
 
 type Handler struct {
@@ -67,7 +70,11 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	order, err := h.service.CreateOrder(r.Context(), userID, req, idempotencyKey)
 	if err != nil {
-		if errors.Is(err, ErrEmptyCart) || errors.Is(err, ErrProductNotPublished) || errors.Is(err, ErrVariantNotFound) || errors.Is(err, ErrInsufficientStock) {
+		if errors.Is(err, ErrEmptyCart) || errors.Is(err, ErrProductNotPublished) || errors.Is(err, ErrVariantNotFound) || errors.Is(err, ErrInsufficientStock) ||
+			errors.Is(err, marketing.ErrPromoNotFound) || errors.Is(err, marketing.ErrPromoInactive) || errors.Is(err, marketing.ErrPromoNotStarted) ||
+			errors.Is(err, marketing.ErrPromoExpired) || errors.Is(err, marketing.ErrPromoMinSubtotal) || errors.Is(err, marketing.ErrPromoGlobalLimit) ||
+			errors.Is(err, marketing.ErrPromoCustomerLimit) || errors.Is(err, marketing.ErrPromoFirstOrderOnly) || errors.Is(err, marketing.ErrPromoNotApplicable) ||
+			errors.Is(err, marketing.ErrPromoBudgetExhausted) {
 			h.writeError(w, http.StatusBadRequest, "invalid_order", err.Error())
 			return
 		}
@@ -82,6 +89,47 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(order)
+}
+
+type ValidatePromoRequest struct {
+	Code string `json:"code" validate:"required"`
+}
+
+func (h *Handler) ValidatePromo(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value("userID")
+	if val == nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+	userID := val.(uuid.UUID)
+
+	var req ValidatePromoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Code) == "" {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Promo code cannot be empty")
+		return
+	}
+
+	calc, err := h.service.ValidateCartPromo(r.Context(), userID, req.Code)
+	if err != nil {
+		if errors.Is(err, ErrEmptyCart) || errors.Is(err, ErrProductNotPublished) || errors.Is(err, ErrVariantNotFound) ||
+			errors.Is(err, marketing.ErrPromoNotFound) || errors.Is(err, marketing.ErrPromoInactive) || errors.Is(err, marketing.ErrPromoNotStarted) ||
+			errors.Is(err, marketing.ErrPromoExpired) || errors.Is(err, marketing.ErrPromoMinSubtotal) || errors.Is(err, marketing.ErrPromoGlobalLimit) ||
+			errors.Is(err, marketing.ErrPromoCustomerLimit) || errors.Is(err, marketing.ErrPromoFirstOrderOnly) || errors.Is(err, marketing.ErrPromoNotApplicable) ||
+			errors.Is(err, marketing.ErrPromoBudgetExhausted) {
+			h.writeError(w, http.StatusBadRequest, "invalid_promo", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(calc)
 }
 
 func (h *Handler) CancelCustomerOrder(w http.ResponseWriter, r *http.Request) {

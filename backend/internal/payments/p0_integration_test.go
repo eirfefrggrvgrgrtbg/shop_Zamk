@@ -139,12 +139,17 @@ func TestAuthorizedThenConfirmed_AreDistinctEvents(t *testing.T) {
 	}
 	
 	p, _ := svc.repo.GetPaymentByID(ctx, resp.PaymentID)
-	if p.Status != "succeeded" {
-		t.Errorf("expected payment to be succeeded after AUTHORIZED, got %s", p.Status)
+	if p.Status != "pending" {
+		t.Errorf("expected payment to remain pending after AUTHORIZED (intermediate hold), got %s", p.Status)
 	}
 
 	if err := svc.HandleWebhook(ctx, nil, payloadConf); err != nil {
 		t.Fatalf("failed CONFIRMED: %v", err)
+	}
+
+	pConf, _ := svc.repo.GetPaymentByID(ctx, resp.PaymentID)
+	if pConf.Status != "succeeded" {
+		t.Errorf("expected payment to be succeeded after CONFIRMED, got %s", pConf.Status)
 	}
 
 	var count int

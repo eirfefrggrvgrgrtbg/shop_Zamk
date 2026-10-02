@@ -13,8 +13,10 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/marketing"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payments"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
@@ -78,10 +80,53 @@ func main() {
 	productsService := products.NewService(productsRepo, sellersRepo, pgClient, nil, notificationsService)
 	inventoryService.SetStockAlertReconciler(productsService)
 
+	marketingRepo := marketing.NewRepository(pgClient.Pool)
+	marketingService := marketing.NewService(marketingRepo, pgClient.Pool)
+
+	tbankProvider := payments.NewTBankProvider(
+		cfg.TBank.TerminalKey,
+		cfg.TBank.Password,
+		cfg.TBank.APIBaseURL,
+		cfg.TBank.SuccessURL,
+		cfg.TBank.FailURL,
+		cfg.TBank.TPayEnabled,
+		cfg.TBank.PayType,
+		cfg.TBank.TPayMode,
+	)
+	paymentsRepo := payments.NewRepository(pgClient.Pool)
+	paymentsService := payments.NewService(paymentsRepo, ordersRepo, inventoryService, tbankProvider, pgClient, notificationsService, nil, cfg).WithMarketing(marketingService)
+
 	logger.Info("worker started successfully")
 
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	reconIntervalSecs := cfg.Worker.PaymentReconciliationIntervalSeconds
+	if reconIntervalSecs <= 0 {
+		reconIntervalSecs = 30
+	}
+	reconTicker := time.NewTicker(time.Duration(reconIntervalSecs) * time.Second)
+	defer reconTicker.Stop()
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-reconTicker.C:
+				limit := cfg.Worker.PaymentReconciliationBatchLimit
+				if limit <= 0 {
+					limit = 50
+				}
+				reconciled, err := paymentsService.ReconcileUnknownPayments(ctx, limit)
+				if err != nil {
+					logger.Error("failed to reconcile unknown payments", "error", err)
+				} else if reconciled > 0 {
+					logger.Info("payment reconciliation run completed", "reconciled", reconciled)
+				}
+			}
+		}
+	}()
 
 	expirationTicker := time.NewTicker(time.Duration(cfg.Worker.OrderExpirationIntervalSeconds) * time.Second)
 	defer expirationTicker.Stop()

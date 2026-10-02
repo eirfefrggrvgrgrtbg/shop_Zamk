@@ -209,8 +209,8 @@ func TestOrderTimeline_ComprehensiveMatrix(t *testing.T) {
 
 	_, err = pool.Exec(ctx, `
 		INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_url, idempotency_key, payment_number, payment_method, integration_mode, created_at, updated_at, paid_at)
-		VALUES ($1, $2, 'tbank', 'pay-mock-1', 'succeeded', 1500000, 'RUB', 'url', $3, $4, 'card', 'mock', $5, $5, $6)
-	`, paymentID, orderID, fmt.Sprintf("idemp-%s", paymentID.String()), payNumber, t0, tPaid)
+		VALUES ($1, $2, 'tbank', $7, 'succeeded', 1500000, 'RUB', 'url', $3, $4, 'card', 'mock', $5, $5, $6)
+	`, paymentID, orderID, fmt.Sprintf("idemp-%s", paymentID.String()), payNumber, t0, tPaid, fmt.Sprintf("pay-mock-1-%s", paymentID.String()))
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, `
@@ -352,8 +352,8 @@ func TestOrderTimeline_EqualTimestampTieBreak(t *testing.T) {
 
 	_, err = pool.Exec(ctx, `
 		INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_url, idempotency_key, payment_number, payment_method, integration_mode, created_at, updated_at, paid_at)
-		VALUES ($1, $2, 'tbank', 'pay-mock-tb', 'succeeded', 100000, 'RUB', 'url', $3, $4, 'card', 'mock', $5, $5, $5)
-	`, paymentID, orderID, fmt.Sprintf("idemp-%s", paymentID.String()), payNumber, exactTime)
+		VALUES ($1, $2, 'tbank', $6, 'succeeded', 100000, 'RUB', 'url', $3, $4, 'card', 'mock', $5, $5, $5)
+	`, paymentID, orderID, fmt.Sprintf("idemp-%s", paymentID.String()), payNumber, exactTime, fmt.Sprintf("pay-mock-tb-%s", paymentID.String()))
 	require.NoError(t, err)
 
 	tl, err := svc.GetAdminOrderTimeline(ctx, orderID)

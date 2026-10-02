@@ -105,8 +105,10 @@ type WorkerConfig struct {
 	StockForecastIntervalSeconds   int
 	MediaCleanupEnabled            bool
 	MediaCleanupIntervalSeconds    int
-	MediaTTLSweepIntervalSeconds   int
-	MediaTTLSweepBatchLimit        int
+	MediaTTLSweepIntervalSeconds         int
+	MediaTTLSweepBatchLimit              int
+	PaymentReconciliationIntervalSeconds int
+	PaymentReconciliationBatchLimit      int
 }
 
 type RateLimitConfig struct {
@@ -209,8 +211,10 @@ func Load() (*Config, error) {
 			StockForecastIntervalSeconds:   getEnvAsInt("WORKER_STOCK_FORECAST_INTERVAL_SECONDS", 21600),
 			MediaCleanupEnabled:            getEnvAsBool("MEDIA_CLEANUP_ENABLED", true),
 			MediaCleanupIntervalSeconds:    getEnvAsInt("MEDIA_CLEANUP_INTERVAL_SECONDS", 5),
-			MediaTTLSweepIntervalSeconds:   getEnvAsInt("MEDIA_TTL_SWEEP_INTERVAL_SECONDS", 600),
-			MediaTTLSweepBatchLimit:        getEnvAsInt("MEDIA_TTL_SWEEP_BATCH_LIMIT", 100),
+			MediaTTLSweepIntervalSeconds:         getEnvAsInt("MEDIA_TTL_SWEEP_INTERVAL_SECONDS", 600),
+			MediaTTLSweepBatchLimit:              getEnvAsInt("MEDIA_TTL_SWEEP_BATCH_LIMIT", 100),
+			PaymentReconciliationIntervalSeconds: getEnvAsInt("PAYMENT_RECONCILIATION_INTERVAL_SECONDS", 30),
+			PaymentReconciliationBatchLimit:      getEnvAsInt("PAYMENT_RECONCILIATION_BATCH_LIMIT", 50),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:                        getEnvAsBool("RATE_LIMIT_ENABLED", true),

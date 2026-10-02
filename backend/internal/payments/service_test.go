@@ -43,6 +43,10 @@ func (d *dummyProvider) GetMode(method string) string {
 	return "unknown"
 }
 
+func (d *dummyProvider) CheckOrder(ctx context.Context, orderID string) (CheckOrderResult, error) {
+	return CheckOrderResult{OrderID: orderID}, nil
+}
+
 func TestTPayDisabled_ReturnsUnavailable(t *testing.T) {
 	p := &dummyProvider{}
 	if mode := p.GetMode("sbp"); mode != "unavailable" {

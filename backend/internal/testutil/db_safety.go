@@ -61,6 +61,11 @@ func AssertTestDatabase(t testing.TB, db DBQueryRow) {
 	if err := VerifyTestDatabase(context.Background(), db); err != nil {
 		t.Fatalf("%v", err)
 	}
+	if exec, ok := db.(DBExecutor); ok {
+		if err := EnsureMarketingMigrations(context.Background(), exec); err != nil {
+			t.Fatalf("failed to ensure marketing migrations: %v", err)
+		}
+	}
 }
 
 // GetTestDatabaseURL retrieves the test database URL from TEST_DATABASE_URL or returns the canonical test DSN.
@@ -137,6 +142,79 @@ func EnsureCanonicalStarterTaxonomy(ctx context.Context, db DBExecutor) error {
 	}
 	if _, err := db.Exec(ctx, string(mig61Bytes)); err != nil {
 		return fmt.Errorf("failed to apply starter taxonomy fields (mig 61): %w", err)
+	}
+
+	return nil
+}
+
+// EnsureMarketingMigrations guarantees that the marketing foundation migrations (000095-000098)
+// are applied to the test database.
+// It strictly validates that the database is "zamk_test" before modifying any state.
+func EnsureMarketingMigrations(ctx context.Context, db DBExecutor) error {
+	if err := VerifyTestDatabase(ctx, db); err != nil {
+		return err
+	}
+
+	var hasIndex, hasClaimsTable, hasInitOutcomeCol, hasReconCol, hasProviderPIDIndex bool
+	_ = db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT FROM pg_indexes
+			WHERE indexname = 'uq_first_order_active_per_customer'
+		)
+	`).Scan(&hasIndex)
+	_ = db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables
+			WHERE table_name = 'customer_first_payment_claims'
+		)
+	`).Scan(&hasClaimsTable)
+	_ = db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.columns
+			WHERE table_name = 'payments' AND column_name = 'init_outcome'
+		)
+	`).Scan(&hasInitOutcomeCol)
+	_ = db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.columns
+			WHERE table_name = 'payments' AND column_name = 'reconciliation_attempted_at'
+		)
+	`).Scan(&hasReconCol)
+	_ = db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT FROM pg_indexes
+			WHERE indexname = 'uq_payments_provider_payment_id'
+		)
+	`).Scan(&hasProviderPIDIndex)
+	if hasIndex && hasClaimsTable && hasInitOutcomeCol && hasReconCol && hasProviderPIDIndex {
+		return nil
+	}
+
+	root := findRepoRoot()
+	if root == "" {
+		return fmt.Errorf("failed to locate repo root (go.mod)")
+	}
+
+	migs := []string{
+		"000095_create_marketing_campaigns_and_promotions.up.sql",
+		"000096_create_product_price_history.up.sql",
+		"000097_create_order_item_promotions.up.sql",
+		"000098_harden_promotion_allocations_and_first_order.up.sql",
+	}
+
+	for _, mig := range migs {
+		migPath := filepath.Join(root, "migrations", mig)
+		content, err := os.ReadFile(migPath)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", migPath, err)
+		}
+		if _, err := db.Exec(ctx, string(content)); err != nil {
+			// Ignore if already applied or table exists
+			errStr := err.Error()
+			if !strings.Contains(errStr, "already exists") && !strings.Contains(errStr, "duplicate key") {
+				return fmt.Errorf("failed to apply %s: %w", mig, err)
+			}
+		}
 	}
 
 	return nil

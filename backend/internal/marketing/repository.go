@@ -489,3 +489,315 @@ func (r *Repository) GetOrderItemPromotion(ctx context.Context, orderItemID uuid
 	}
 	return &p, nil
 }
+
+// GetPromoCodeByCodeTx queries promo code within a transaction.
+func (r *Repository) GetPromoCodeByCodeTx(ctx context.Context, db DBExecutor, code string) (*PromoCode, error) {
+	normalized := strings.TrimSpace(code)
+	query := `
+		SELECT
+			id, campaign_id, seller_id, code, discount_type,
+			discount_value_bps, discount_value_fixed_cents,
+			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
+			first_paid_order_only, is_active, starts_at, ends_at,
+			created_at, updated_at
+		FROM promo_codes
+		WHERE LOWER(code) = LOWER($1)
+	`
+	var p PromoCode
+	var dType string
+	err := db.QueryRow(ctx, query, normalized).Scan(
+		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
+		&p.DiscountValueBps, &p.DiscountValueFixedCents,
+		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
+		&p.FirstPaidOrderOnly, &p.IsActive, &p.StartsAt, &p.EndsAt,
+		&p.CreatedAt, &p.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPromoCodeNotFound
+		}
+		return nil, fmt.Errorf("failed to get promo code in tx: %w", err)
+	}
+	p.DiscountType = DiscountType(dType)
+	return &p, nil
+}
+
+// GetPromoCodeForUpdateTx selects and locks a promo code row FOR UPDATE.
+func (r *Repository) GetPromoCodeForUpdateTx(ctx context.Context, db DBExecutor, id uuid.UUID) (*PromoCode, error) {
+	query := `
+		SELECT
+			id, campaign_id, seller_id, code, discount_type,
+			discount_value_bps, discount_value_fixed_cents,
+			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
+			first_paid_order_only, is_active, starts_at, ends_at,
+			created_at, updated_at
+		FROM promo_codes
+		WHERE id = $1
+		FOR UPDATE
+	`
+	var p PromoCode
+	var dType string
+	err := db.QueryRow(ctx, query, id).Scan(
+		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
+		&p.DiscountValueBps, &p.DiscountValueFixedCents,
+		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
+		&p.FirstPaidOrderOnly, &p.IsActive, &p.StartsAt, &p.EndsAt,
+		&p.CreatedAt, &p.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPromoCodeNotFound
+		}
+		return nil, fmt.Errorf("failed to lock promo code for update: %w", err)
+	}
+	p.DiscountType = DiscountType(dType)
+	return &p, nil
+}
+
+// GetCampaignForUpdateTx selects and locks a marketing campaign row FOR UPDATE.
+func (r *Repository) GetCampaignForUpdateTx(ctx context.Context, db DBExecutor, id uuid.UUID) (*MarketingCampaign, error) {
+	query := `
+		SELECT
+			id, seller_id, title, description, funding_mode, status, discount_type,
+			seller_discount_bps, seller_discount_fixed_cents,
+			requested_zamk_share_bps, requested_zamk_budget_cap_cents,
+			approved_zamk_share_bps, approved_zamk_budget_cap_cents,
+			zamk_reserved_cents, zamk_spent_cents,
+			rejection_reason, admin_comment,
+			starts_at, ends_at, submitted_at, decided_at, decided_by_staff_id,
+			created_at, updated_at
+		FROM marketing_campaigns
+		WHERE id = $1
+		FOR UPDATE
+	`
+	var c MarketingCampaign
+	var fMode, status, dType string
+	err := db.QueryRow(ctx, query, id).Scan(
+		&c.ID, &c.SellerID, &c.Title, &c.Description, &fMode, &status, &dType,
+		&c.SellerDiscountBps, &c.SellerDiscountFixedCents,
+		&c.RequestedZamkShareBps, &c.RequestedZamkBudgetCapCents,
+		&c.ApprovedZamkShareBps, &c.ApprovedZamkBudgetCapCents,
+		&c.ZamkReservedCents, &c.ZamkSpentCents,
+		&c.RejectionReason, &c.AdminComment,
+		&c.StartsAt, &c.EndsAt, &c.SubmittedAt, &c.DecidedAt, &c.DecidedByStaffID,
+		&c.CreatedAt, &c.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrCampaignNotFound
+		}
+		return nil, fmt.Errorf("failed to lock marketing campaign for update: %w", err)
+	}
+	c.FundingMode = FundingMode(fMode)
+	c.Status = CampaignStatus(status)
+	c.DiscountType = DiscountType(dType)
+	return &c, nil
+}
+
+// CountPromoUsageGlobalTx counts active reservations and consumed usages for a promo code.
+func (r *Repository) CountPromoUsageGlobalTx(ctx context.Context, db DBExecutor, promoID uuid.UUID) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM promo_code_usages
+		WHERE promo_code_id = $1 AND status IN ('consumed', 'reserved')
+	`
+	var count int
+	err := db.QueryRow(ctx, query, promoID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count global promo usages: %w", err)
+	}
+	return count, nil
+}
+
+// CountPromoUsageCustomerTx counts active reservations and consumed usages for a specific customer and promo code.
+func (r *Repository) CountPromoUsageCustomerTx(ctx context.Context, db DBExecutor, promoID, customerID uuid.UUID) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM promo_code_usages
+		WHERE promo_code_id = $1 AND user_id = $2 AND status IN ('consumed', 'reserved')
+	`
+	var count int
+	err := db.QueryRow(ctx, query, promoID, customerID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count customer promo usages: %w", err)
+	}
+	return count, nil
+}
+
+// CountCustomerPaidOrdersTx counts how many paid orders this customer has (excluding an optional current order).
+func (r *Repository) CountCustomerPaidOrdersTx(ctx context.Context, db DBExecutor, customerID, excludeOrderID uuid.UUID) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM orders
+		WHERE user_id = $1 AND status = 'paid' AND id != $2
+	`
+	var count int
+	err := db.QueryRow(ctx, query, customerID, excludeOrderID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count customer paid orders: %w", err)
+	}
+	return count, nil
+}
+
+// HasActiveFirstOrderReservationTx checks if the customer already holds an active first-order reservation.
+func (r *Repository) HasActiveFirstOrderReservationTx(ctx context.Context, db DBExecutor, customerID, excludeOrderID uuid.UUID) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM promo_code_usages
+			WHERE user_id = $1 AND status = 'reserved' AND is_first_order = true AND order_id != $2
+		)
+	`
+	var exists bool
+	err := db.QueryRow(ctx, query, customerID, excludeOrderID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check active first order reservation: %w", err)
+	}
+	return exists, nil
+}
+
+// ReserveZamkBudgetTx atomically checks remaining budget and increments zamk_reserved_cents.
+func (r *Repository) ReserveZamkBudgetTx(ctx context.Context, db DBExecutor, campaignID uuid.UUID, subsidyCents int64) (bool, error) {
+	if subsidyCents <= 0 {
+		return true, nil
+	}
+	query := `
+		UPDATE marketing_campaigns
+		SET zamk_reserved_cents = zamk_reserved_cents + $1, updated_at = NOW()
+		WHERE id = $2
+		  AND (zamk_spent_cents + zamk_reserved_cents + $1 <= approved_zamk_budget_cap_cents)
+	`
+	tag, err := db.Exec(ctx, query, subsidyCents, campaignID)
+	if err != nil {
+		return false, fmt.Errorf("failed to reserve ZAMK budget: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// ConsumeZamkBudgetTx atomically decrements zamk_reserved_cents and increments zamk_spent_cents on payment success.
+func (r *Repository) ConsumeZamkBudgetTx(ctx context.Context, db DBExecutor, campaignID uuid.UUID, subsidyCents int64) error {
+	if subsidyCents <= 0 {
+		return nil
+	}
+	query := `
+		UPDATE marketing_campaigns
+		SET zamk_reserved_cents = GREATEST(0, zamk_reserved_cents - $1),
+		    zamk_spent_cents = zamk_spent_cents + $1,
+		    updated_at = NOW()
+		WHERE id = $2
+	`
+	_, err := db.Exec(ctx, query, subsidyCents, campaignID)
+	if err != nil {
+		return fmt.Errorf("failed to consume ZAMK budget: %w", err)
+	}
+	return nil
+}
+
+// ReleaseZamkBudgetTx atomically decrements zamk_reserved_cents when a reservation fails or is cancelled.
+func (r *Repository) ReleaseZamkBudgetTx(ctx context.Context, db DBExecutor, campaignID uuid.UUID, subsidyCents int64) error {
+	if subsidyCents <= 0 {
+		return nil
+	}
+	query := `
+		UPDATE marketing_campaigns
+		SET zamk_reserved_cents = GREATEST(0, zamk_reserved_cents - $1),
+		    updated_at = NOW()
+		WHERE id = $2
+	`
+	_, err := db.Exec(ctx, query, subsidyCents, campaignID)
+	if err != nil {
+		return fmt.Errorf("failed to release ZAMK budget: %w", err)
+	}
+	return nil
+}
+
+// CreatePromoCodeUsageTx inserts a new promo_code_usages record in a transaction.
+func (r *Repository) CreatePromoCodeUsageTx(ctx context.Context, db DBExecutor, u *PromoUsage) error {
+	if u.ID == uuid.Nil {
+		u.ID = uuid.New()
+	}
+	if u.ReservedAt.IsZero() {
+		u.ReservedAt = time.Now().UTC()
+	}
+	query := `
+		INSERT INTO promo_code_usages (
+			id, promo_code_id, campaign_id, order_id, user_id,
+			status, subsidy_cents, seller_discount_cents,
+			reserved_at, expires_at, is_first_order
+		) VALUES (
+			$1, $2, $3, $4, $5,
+			$6, $7, $8,
+			$9, $10, $11
+		)
+	`
+	_, err := db.Exec(ctx, query,
+		u.ID, u.PromoCodeID, u.CampaignID, u.OrderID, u.UserID,
+		string(u.Status), u.SubsidyCents, u.SellerDiscountCents,
+		u.ReservedAt, u.ExpiresAt, u.IsFirstOrder,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create promo code usage: %w", err)
+	}
+	return nil
+}
+
+// GetPromoCodeUsageByOrderIDForUpdateTx selects and locks a promo_code_usages row FOR UPDATE.
+func (r *Repository) GetPromoCodeUsageByOrderIDForUpdateTx(ctx context.Context, db DBExecutor, orderID uuid.UUID) (*PromoUsage, error) {
+	query := `
+		SELECT
+			id, promo_code_id, campaign_id, order_id, user_id,
+			status, subsidy_cents, seller_discount_cents,
+			reserved_at, consumed_at, released_at, expires_at, is_first_order
+		FROM promo_code_usages
+		WHERE order_id = $1
+		FOR UPDATE
+	`
+	var u PromoUsage
+	var status string
+	err := db.QueryRow(ctx, query, orderID).Scan(
+		&u.ID, &u.PromoCodeID, &u.CampaignID, &u.OrderID, &u.UserID,
+		&status, &u.SubsidyCents, &u.SellerDiscountCents,
+		&u.ReservedAt, &u.ConsumedAt, &u.ReleasedAt, &u.ExpiresAt, &u.IsFirstOrder,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil // No promo for this order
+		}
+		return nil, fmt.Errorf("failed to lock promo code usage for order: %w", err)
+	}
+	u.Status = UsageStatus(status)
+	return &u, nil
+}
+
+// SetPromoCodeUsageStatusTx atomically transitions usage from expected status to new status.
+func (r *Repository) SetPromoCodeUsageStatusTx(ctx context.Context, db DBExecutor, usageID uuid.UUID, fromStatus, toStatus UsageStatus, timestamp time.Time) (bool, error) {
+	var query string
+	if toStatus == UsageStatusConsumed {
+		query = `
+			UPDATE promo_code_usages
+			SET status = $2, consumed_at = $3
+			WHERE id = $1 AND status = $4
+		`
+	} else if toStatus == UsageStatusReleased || toStatus == UsageStatusExpired {
+		query = `
+			UPDATE promo_code_usages
+			SET status = $2, released_at = $3
+			WHERE id = $1 AND status = $4
+		`
+	} else {
+		query = `
+			UPDATE promo_code_usages
+			SET status = $2
+			WHERE id = $1 AND status = $3
+		`
+		tag, err := db.Exec(ctx, query, usageID, string(toStatus), string(fromStatus))
+		if err != nil {
+			return false, fmt.Errorf("failed to transition promo usage status: %w", err)
+		}
+		return tag.RowsAffected() > 0, nil
+	}
+	tag, err := db.Exec(ctx, query, usageID, string(toStatus), timestamp, string(fromStatus))
+	if err != nil {
+		return false, fmt.Errorf("failed to transition promo usage status: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
+}

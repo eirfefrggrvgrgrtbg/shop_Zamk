@@ -19,11 +19,13 @@ type Payment struct {
 	PaymentNumber     string     `json:"paymentNumber" db:"payment_number"`
 	PaymentMethod     string     `json:"paymentMethod" db:"payment_method"`
 	IntegrationMode   string     `json:"integrationMode" db:"integration_mode"`
+	InitOutcome       string     `json:"initOutcome" db:"init_outcome"`
 	CreatedAt         time.Time  `json:"createdAt" db:"created_at"`
 	UpdatedAt         time.Time  `json:"updatedAt" db:"updated_at"`
 	PaidAt            *time.Time `json:"paidAt" db:"paid_at"`
-	FailedAt          *time.Time `json:"failedAt" db:"failed_at"`
-	CancelledAt       *time.Time `json:"cancelledAt" db:"cancelled_at"`
+	FailedAt                  *time.Time `json:"failedAt" db:"failed_at"`
+	CancelledAt               *time.Time `json:"cancelledAt" db:"cancelled_at"`
+	ReconciliationAttemptedAt *time.Time `json:"reconciliationAttemptedAt" db:"reconciliation_attempted_at"`
 }
 
 type PaymentEvent struct {

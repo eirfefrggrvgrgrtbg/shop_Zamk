@@ -22,6 +22,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/fulfillment"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/router"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/marketing"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
@@ -78,8 +79,11 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	cartService := cart.NewService(cartRepo)
 	cartHandler := cart.NewHandler(cartService)
 
+	marketingRepo := marketing.NewRepository(pgClient.Pool)
+	marketingService := marketing.NewService(marketingRepo, pgClient.Pool)
+
 	ordersRepo := orders.NewRepository(pgClient.Pool)
-	ordersService := orders.NewService(ordersRepo, cartRepo, inventoryService, pgClient, cfg)
+	ordersService := orders.NewService(ordersRepo, cartRepo, inventoryService, pgClient, cfg).WithMarketing(marketingService)
 	ordersService.SetLogger(logger)
 	ordersHandler := orders.NewHandler(ordersService)
 
@@ -109,7 +113,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	behaviorHandler := behavior.NewHandler(behaviorService)
 
 	paymentsRepo := payments.NewRepository(pgClient.Pool)
-	paymentsService := payments.NewService(paymentsRepo, ordersRepo, inventoryService, tbankProvider, pgClient, notificationsService, behaviorService, cfg)
+	paymentsService := payments.NewService(paymentsRepo, ordersRepo, inventoryService, tbankProvider, pgClient, notificationsService, behaviorService, cfg).WithMarketing(marketingService)
 	paymentsHandler := payments.NewHandler(paymentsService, cfg.App.Env)
 
 	returnsRepo := returns.NewRepository(pgClient.Pool)
@@ -232,6 +236,27 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 					}
 					olderThan := time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute)
 					_, _ = ordersService.ExpireAwaitingPaymentOrders(workerCtx, olderThan, 100)
+				}
+			}
+		}()
+
+		reconInterval := cfg.Worker.PaymentReconciliationIntervalSeconds
+		if reconInterval <= 0 {
+			reconInterval = 30
+		}
+		go func() {
+			ticker := time.NewTicker(time.Duration(reconInterval) * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-workerCtx.Done():
+					return
+				case <-ticker.C:
+					limit := cfg.Worker.PaymentReconciliationBatchLimit
+					if limit <= 0 {
+						limit = 50
+					}
+					_, _ = paymentsService.ReconcileUnknownPayments(workerCtx, limit)
 				}
 			}
 		}()

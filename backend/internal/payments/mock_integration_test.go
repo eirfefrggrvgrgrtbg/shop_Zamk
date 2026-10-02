@@ -14,6 +14,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 func setupTestDB(t *testing.T) (*postgres.Client, *Service, *orders.Repository) {
@@ -26,6 +27,10 @@ func setupTestDB(t *testing.T) (*postgres.Client, *Service, *orders.Repository) 
 	client, err := postgres.NewClient(ctx, dbURL)
 	if err != nil {
 		t.Fatalf("failed to connect to test db: %v", err)
+	}
+
+	if err := testutil.EnsureMarketingMigrations(ctx, client.Pool); err != nil {
+		t.Fatalf("failed to ensure marketing migrations: %v", err)
 	}
 
 	paymentsRepo := NewRepository(client.Pool)

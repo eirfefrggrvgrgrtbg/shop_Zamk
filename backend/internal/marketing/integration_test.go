@@ -24,6 +24,9 @@ func setupTestMarketingDB(t *testing.T) (*postgres.Client, *marketing.Repository
 
 	client, err := postgres.NewClient(ctx, dbURL)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		client.Close()
+	})
 
 	testutil.AssertTestDatabase(t, client.Pool)
 
@@ -38,51 +41,8 @@ func setupTestMarketingDB(t *testing.T) (*postgres.Client, *marketing.Repository
 
 func ensureMarketingMigrations(t *testing.T, client *postgres.Client) {
 	ctx := context.Background()
-
-	// Check if latest columns exist in order_item_promotions
-	var hasNewCol bool
-	_ = client.Pool.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT FROM information_schema.columns
-			WHERE table_name = 'order_item_promotions' AND column_name = 'commission_base_unit_cents'
-		)
-	`).Scan(&hasNewCol)
-
-	if hasNewCol {
-		return
-	}
-
-	root := findRepoRoot()
-	require.NotEmpty(t, root, "failed to find repo root")
-
-	// Apply down migrations cleanly first if old version of tables exist
-	downFiles := []string{
-		"000097_create_order_item_promotions.down.sql",
-		"000096_create_product_price_history.down.sql",
-		"000095_create_marketing_campaigns_and_promotions.down.sql",
-	}
-	for _, downFile := range downFiles {
-		downPath := filepath.Join(root, "migrations", downFile)
-		content, err := os.ReadFile(downPath)
-		if err == nil {
-			_, _ = client.Pool.Exec(ctx, string(content))
-		}
-	}
-
-	upFiles := []string{
-		"000095_create_marketing_campaigns_and_promotions.up.sql",
-		"000096_create_product_price_history.up.sql",
-		"000097_create_order_item_promotions.up.sql",
-	}
-
-	for _, upFile := range upFiles {
-		upPath := filepath.Join(root, "migrations", upFile)
-		content, err := os.ReadFile(upPath)
-		require.NoError(t, err, "failed to read migration %s", upFile)
-
-		_, err = client.Pool.Exec(ctx, string(content))
-		require.NoError(t, err, "failed to execute migration %s", upFile)
-	}
+	err := testutil.EnsureMarketingMigrations(ctx, client.Pool)
+	require.NoError(t, err, "failed to ensure marketing migrations")
 }
 
 func findRepoRoot() string {

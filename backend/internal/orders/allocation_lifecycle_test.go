@@ -449,7 +449,7 @@ func TestAllocationLifecycle_Case4_RepeatedConfirmedWebhook(t *testing.T) {
 		"TerminalKey": "STUB",
 		"OrderId":     order.ID.String(),
 		"PaymentId":   pidInt,
-		"Amount":      2000,
+		"Amount":      order.TotalPriceCents,
 		"Status":      "CONFIRMED",
 	}
 	body, err := json.Marshal(payload)

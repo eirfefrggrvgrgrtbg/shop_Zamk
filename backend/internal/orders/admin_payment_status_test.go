@@ -48,7 +48,7 @@ func TestAdminOrderPaymentStatus(t *testing.T) {
 	paymentID := uuid.New()
 	_, err = db.Exec(ctx, `
 		INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_url, idempotency_key, payment_number, payment_method, integration_mode, created_at, updated_at, paid_at)
-		VALUES ($1, $2, 'tbank', 'test-prov-1', 'succeeded', 1299000, 'RUB', 'https://pay.url', $3, $4, 'tpay', 'mock', now(), now(), now())
+		VALUES ($1, $2, 'tbank', 'test-prov-1-' || substr(gen_random_uuid()::text, 1, 8), 'succeeded', 1299000, 'RUB', 'https://pay.url', $3, $4, 'tpay', 'mock', now(), now(), now())
 	`, paymentID, shippedOrderID, uuid.New().String(), "PAY-TEST-"+uuid.New().String()[:8])
 	if err != nil {
 		t.Fatalf("failed to create payment: %v", err)
@@ -67,7 +67,7 @@ func TestAdminOrderPaymentStatus(t *testing.T) {
 	pendingPaymentID := uuid.New()
 	_, err = db.Exec(ctx, `
 		INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_url, idempotency_key, payment_number, payment_method, integration_mode, created_at, updated_at)
-		VALUES ($1, $2, 'tbank', 'test-prov-2', 'pending', 500000, 'RUB', 'https://pay.url/2', $3, $4, 'tpay', 'mock', now(), now())
+		VALUES ($1, $2, 'tbank', 'test-prov-2-' || substr(gen_random_uuid()::text, 1, 8), 'pending', 500000, 'RUB', 'https://pay.url/2', $3, $4, 'tpay', 'mock', now(), now())
 	`, pendingPaymentID, pendingOrderID, uuid.New().String(), "PAY-TEST-"+uuid.New().String()[:8])
 	if err != nil {
 		t.Fatalf("failed to create pending payment: %v", err)
@@ -94,7 +94,7 @@ func TestAdminOrderPaymentStatus(t *testing.T) {
 	}
 	_, err = db.Exec(ctx, `
 		INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_url, idempotency_key, payment_number, payment_method, integration_mode, created_at, updated_at)
-		VALUES ($1, $2, 'tbank', 'test-prov-failed', 'failed', 800000, 'RUB', 'https://pay.url/f', $3, $4, 'tpay', 'mock', now(), now())
+		VALUES ($1, $2, 'tbank', 'test-prov-failed-' || substr(gen_random_uuid()::text, 1, 8), 'failed', 800000, 'RUB', 'https://pay.url/f', $3, $4, 'tpay', 'mock', now(), now())
 	`, uuid.New(), packedFailedOrderID, uuid.New().String(), "PAY-TEST-"+uuid.New().String()[:8])
 	if err != nil {
 		t.Fatalf("failed to create failed payment: %v", err)
@@ -111,7 +111,7 @@ func TestAdminOrderPaymentStatus(t *testing.T) {
 	}
 	_, err = db.Exec(ctx, `
 		INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_url, idempotency_key, payment_number, payment_method, integration_mode, created_at, updated_at)
-		VALUES ($1, $2, 'tbank', 'test-prov-canc', 'cancelled', 900000, 'RUB', 'https://pay.url/c', $3, $4, 'tpay', 'mock', now(), now())
+		VALUES ($1, $2, 'tbank', 'test-prov-canc-' || substr(gen_random_uuid()::text, 1, 8), 'cancelled', 900000, 'RUB', 'https://pay.url/c', $3, $4, 'tpay', 'mock', now(), now())
 	`, uuid.New(), deliveredCancelledOrderID, uuid.New().String(), "PAY-TEST-"+uuid.New().String()[:8])
 	if err != nil {
 		t.Fatalf("failed to create cancelled payment: %v", err)
@@ -129,7 +129,7 @@ func TestAdminOrderPaymentStatus(t *testing.T) {
 	// Attempt 1: Failed
 	_, err = db.Exec(ctx, `
 		INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_url, idempotency_key, payment_number, payment_method, integration_mode, created_at, updated_at)
-		VALUES ($1, $2, 'tbank', 'test-prov-multi-1', 'failed', 1100000, 'RUB', 'https://pay.url/m1', $3, $4, 'tpay', 'mock', now() - interval '5 minutes', now() - interval '5 minutes')
+		VALUES ($1, $2, 'tbank', 'test-prov-multi-1-' || substr(gen_random_uuid()::text, 1, 8), 'failed', 1100000, 'RUB', 'https://pay.url/m1', $3, $4, 'tpay', 'mock', now() - interval '5 minutes', now() - interval '5 minutes')
 	`, uuid.New(), multiAttemptOrderID, uuid.New().String(), "PAY-TEST-"+uuid.New().String()[:8])
 	if err != nil {
 		t.Fatalf("failed to create multi attempt 1 payment: %v", err)
@@ -137,7 +137,7 @@ func TestAdminOrderPaymentStatus(t *testing.T) {
 	// Attempt 2: Succeeded
 	_, err = db.Exec(ctx, `
 		INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_url, idempotency_key, payment_number, payment_method, integration_mode, created_at, updated_at, paid_at)
-		VALUES ($1, $2, 'tbank', 'test-prov-multi-2', 'succeeded', 1100000, 'RUB', 'https://pay.url/m2', $3, $4, 'tpay', 'mock', now(), now(), now())
+		VALUES ($1, $2, 'tbank', 'test-prov-multi-2-' || substr(gen_random_uuid()::text, 1, 8), 'succeeded', 1100000, 'RUB', 'https://pay.url/m2', $3, $4, 'tpay', 'mock', now(), now(), now())
 	`, uuid.New(), multiAttemptOrderID, uuid.New().String(), "PAY-TEST-"+uuid.New().String()[:8])
 	if err != nil {
 		t.Fatalf("failed to create multi attempt 2 payment: %v", err)
@@ -154,7 +154,7 @@ func TestAdminOrderPaymentStatus(t *testing.T) {
 	}
 	_, err = db.Exec(ctx, `
 		INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_url, idempotency_key, payment_number, payment_method, integration_mode, created_at, updated_at)
-		VALUES ($1, $2, 'tbank', 'test-prov-del-pend', 'pending', 1500000, 'RUB', 'https://pay.url/dp', $3, $4, 'tpay', 'mock', now(), now())
+		VALUES ($1, $2, 'tbank', 'test-prov-del-pend-' || substr(gen_random_uuid()::text, 1, 8), 'pending', 1500000, 'RUB', 'https://pay.url/dp', $3, $4, 'tpay', 'mock', now(), now())
 	`, uuid.New(), deliveredPendingOrderID, uuid.New().String(), "PAY-TEST-"+uuid.New().String()[:8])
 	if err != nil {
 		t.Fatalf("failed to create delivered pending payment: %v", err)
@@ -357,7 +357,7 @@ func TestAdminOrderTimeline(t *testing.T) {
 	payNum := "PAY-TIME-" + uuid.New().String()[:8]
 	_, err = db.Exec(ctx, `
 		INSERT INTO payments (id, order_id, provider, provider_payment_id, status, amount_cents, currency, payment_url, idempotency_key, payment_number, payment_method, integration_mode, created_at, updated_at, paid_at)
-		VALUES ($1, $2, 'tbank', 'test-timeline-pay', 'succeeded', 250000, 'RUB', 'https://pay.url/t', $3, $4, 'tpay', 'mock', $5, $5, $5)
+		VALUES ($1, $2, 'tbank', 'test-timeline-pay-' || substr(gen_random_uuid()::text, 1, 8), 'succeeded', 250000, 'RUB', 'https://pay.url/t', $3, $4, 'tpay', 'mock', $5, $5, $5)
 	`, uuid.New(), orderID, uuid.New().String(), payNum, t1)
 	if err != nil {
 		t.Fatalf("failed to create payment: %v", err)

@@ -2,6 +2,7 @@ package marketing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -297,4 +298,452 @@ func (s *Service) RecordProductPriceChange(ctx context.Context, productID uuid.U
 	}
 
 	return h, nil
+}
+
+// PromotedOrderItemInput provides item details necessary to calculate and reserve promo discounts.
+type PromotedOrderItemInput struct {
+	OrderItemID        uuid.UUID
+	ProductID          uuid.UUID
+	ProductVariantID   uuid.UUID
+	SellerID           uuid.UUID
+	BaseUnitPriceCents int64
+	Quantity           int
+}
+
+// ValidateAndCalculateCheckoutPromoTx validates a promo code against order items and customer, computing the exact financial split.
+func (s *Service) ValidateAndCalculateCheckoutPromoTx(
+	ctx context.Context,
+	tx DBExecutor,
+	customerID uuid.UUID,
+	code string,
+	items []PromotedOrderItemInput,
+	commissionBps int,
+	now time.Time,
+) (*CheckoutPromoCalculation, error) {
+	normalized := strings.TrimSpace(code)
+	if normalized == "" {
+		return nil, ErrPromoNotFound
+	}
+
+	// 1. Lock promo code row
+	promo, err := s.repo.GetPromoCodeByCodeTx(ctx, tx, normalized)
+	if err != nil {
+		return nil, err
+	}
+	promo, err = s.repo.GetPromoCodeForUpdateTx(ctx, tx, promo.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Validate promo status and windows
+	if !promo.IsActive {
+		return nil, ErrPromoInactive
+	}
+	if promo.StartsAt != nil && now.Before(*promo.StartsAt) {
+		return nil, ErrPromoNotStarted
+	}
+	if promo.EndsAt != nil && now.After(*promo.EndsAt) {
+		return nil, ErrPromoExpired
+	}
+
+	// 3. Lock campaign row
+	campaign, err := s.repo.GetCampaignForUpdateTx(ctx, tx, promo.CampaignID)
+	if err != nil {
+		return nil, err
+	}
+	if campaign.Status != CampaignStatusActive && campaign.Status != CampaignStatusApproved {
+		return nil, ErrPromoInactive
+	}
+	if campaign.StartsAt != nil && now.Before(*campaign.StartsAt) {
+		return nil, ErrPromoNotStarted
+	}
+	if campaign.EndsAt != nil && now.After(*campaign.EndsAt) {
+		return nil, ErrPromoExpired
+	}
+
+	// 4. Global usage limit check (consumed + active reservations)
+	if promo.GlobalUsageLimit != nil {
+		globalCount, err := s.repo.CountPromoUsageGlobalTx(ctx, tx, promo.ID)
+		if err != nil {
+			return nil, err
+		}
+		if globalCount >= *promo.GlobalUsageLimit {
+			return nil, ErrPromoGlobalLimit
+		}
+	}
+
+	// 5. Per-customer usage limit check
+	customerCount, err := s.repo.CountPromoUsageCustomerTx(ctx, tx, promo.ID, customerID)
+	if err != nil {
+		return nil, err
+	}
+	if customerCount >= promo.PerCustomerUsageLimit {
+		return nil, ErrPromoCustomerLimit
+	}
+
+	// 6. First-paid-order verification
+	if promo.FirstPaidOrderOnly {
+		paidCount, err := s.repo.CountCustomerPaidOrdersTx(ctx, tx, customerID, uuid.Nil)
+		if err != nil {
+			return nil, err
+		}
+		if paidCount > 0 {
+			return nil, ErrPromoFirstOrderOnly
+		}
+		hasActive, err := s.repo.HasActiveFirstOrderReservationTx(ctx, tx, customerID, uuid.Nil)
+		if err != nil {
+			return nil, err
+		}
+		if hasActive {
+			return nil, ErrPromoFirstOrderOnly
+		}
+	}
+
+	// 7. Filter eligible items (strictly belonging to promo's seller)
+	var eligibleItems []PromotedOrderItemInput
+	var eligibleSubtotal int64
+	for _, it := range items {
+		if it.SellerID == promo.SellerID {
+			eligibleItems = append(eligibleItems, it)
+			eligibleSubtotal += it.BaseUnitPriceCents * int64(it.Quantity)
+		}
+	}
+	if len(eligibleItems) == 0 {
+		return nil, ErrPromoNotApplicable
+	}
+
+	// 8. Minimum subtotal check against eligible items only
+	if eligibleSubtotal < promo.MinOrderSubtotalCents {
+		return nil, ErrPromoMinSubtotal
+	}
+
+	// 9. Compute line economics
+	var promotedLines []PromotedLineResult
+	var totalSellerDiscount int64
+	var totalZamkSubsidy int64
+	var totalCustomerPaid int64
+
+	if campaign.DiscountType == DiscountTypePercent {
+		sellerBps := campaign.SellerDiscountBps
+		zamkBps := campaign.ApprovedZamkShareBps
+
+		for _, it := range eligibleItems {
+			lineRes, err := CalculateLineSplitDiscount(it.BaseUnitPriceCents, it.Quantity, sellerBps, zamkBps, commissionBps)
+			if err != nil {
+				return nil, err
+			}
+			promotedLines = append(promotedLines, PromotedLineResult{
+				OrderItemID:                 it.OrderItemID,
+				ProductID:                   it.ProductID,
+				ProductVariantID:            it.ProductVariantID,
+				SellerID:                    it.SellerID,
+				BaseUnitPriceCents:          lineRes.BaseUnitPriceCents,
+				Quantity:                    lineRes.Quantity,
+				SellerDiscountUnitCents:     lineRes.SellerDiscountUnitCents,
+				ZamkSubsidyUnitCents:        lineRes.ZamkSubsidyUnitCents,
+				CustomerPaidUnitPriceCents:  lineRes.CustomerPaidUnitPriceCents,
+				CommissionBaseUnitCents:     lineRes.CommissionBaseUnitCents,
+				TotalSellerDiscountCents:    lineRes.TotalSellerDiscountCents,
+				TotalZamkSubsidyCents:       lineRes.TotalZamkSubsidyCents,
+				TotalCustomerPaidCents:      lineRes.TotalCustomerPaidCents,
+				TotalCommissionBaseCents:    lineRes.TotalCommissionBaseCents,
+				CommissionRateBps:           lineRes.CommissionRateBps,
+				TotalCommissionChargedCents: lineRes.TotalCommissionChargedCents,
+			})
+			totalSellerDiscount += lineRes.TotalSellerDiscountCents
+			totalZamkSubsidy += lineRes.TotalZamkSubsidyCents
+			totalCustomerPaid += lineRes.TotalCustomerPaidCents
+		}
+	} else if campaign.DiscountType == DiscountTypeFixed {
+		// FIXED discount is seller-only
+		fixedInputs := make([]PromotedItemInput, len(eligibleItems))
+		for i, it := range eligibleItems {
+			fixedInputs[i] = PromotedItemInput{
+				ID:                 it.OrderItemID.String(),
+				BaseUnitPriceCents: it.BaseUnitPriceCents,
+				Quantity:           it.Quantity,
+				CommissionRateBps:  commissionBps,
+			}
+		}
+		fixedResults, err := AllocateSellerFixedDiscount(promo.DiscountValueFixedCents, fixedInputs)
+		if err != nil {
+			return nil, err
+		}
+		for i, lineRes := range fixedResults {
+			it := eligibleItems[i]
+			promotedLines = append(promotedLines, PromotedLineResult{
+				OrderItemID:                 it.OrderItemID,
+				ProductID:                   it.ProductID,
+				ProductVariantID:            it.ProductVariantID,
+				SellerID:                    it.SellerID,
+				BaseUnitPriceCents:          lineRes.BaseUnitPriceCents,
+				Quantity:                    lineRes.Quantity,
+				SellerDiscountUnitCents:     lineRes.SellerDiscountUnitCents,
+				ZamkSubsidyUnitCents:        0,
+				CustomerPaidUnitPriceCents:  lineRes.CustomerPaidUnitPriceCents,
+				CommissionBaseUnitCents:     lineRes.CommissionBaseUnitCents,
+				TotalSellerDiscountCents:    lineRes.TotalSellerDiscountCents,
+				TotalZamkSubsidyCents:       0,
+				TotalCustomerPaidCents:      lineRes.TotalCustomerPaidCents,
+				TotalCommissionBaseCents:    lineRes.TotalCommissionBaseCents,
+				CommissionRateBps:           lineRes.CommissionRateBps,
+				TotalCommissionChargedCents: lineRes.TotalCommissionChargedCents,
+			})
+			totalSellerDiscount += lineRes.TotalSellerDiscountCents
+			totalCustomerPaid += lineRes.TotalCustomerPaidCents
+		}
+	}
+
+	// 10. Platform budget check
+	if totalZamkSubsidy > 0 {
+		if campaign.ZamkSpentCents+campaign.ZamkReservedCents+totalZamkSubsidy > campaign.ApprovedZamkBudgetCapCents {
+			return nil, ErrPromoBudgetExhausted
+		}
+	}
+
+	return &CheckoutPromoCalculation{
+		PromoCodeID:              promo.ID,
+		CampaignID:               campaign.ID,
+		SellerID:                 promo.SellerID,
+		FundingMode:              campaign.FundingMode,
+		DiscountType:             campaign.DiscountType,
+		Code:                     promo.Code,
+		IsFirstOrder:             promo.FirstPaidOrderOnly,
+		TotalSellerDiscountCents: totalSellerDiscount,
+		TotalZamkSubsidyCents:    totalZamkSubsidy,
+		TotalCustomerPaidCents:   totalCustomerPaid,
+		TotalOrderDiscountCents:  totalSellerDiscount + totalZamkSubsidy,
+		PromotedLines:            promotedLines,
+	}, nil
+}
+
+// ReserveCheckoutPromoTx creates the durable promo_code_usages reservation and immutable order_item_promotions snapshots.
+func (s *Service) ReserveCheckoutPromoTx(
+	ctx context.Context,
+	tx DBExecutor,
+	orderID uuid.UUID,
+	customerID uuid.UUID,
+	calc *CheckoutPromoCalculation,
+	expiresAt time.Time,
+) error {
+	if calc == nil {
+		return nil
+	}
+
+	// 1. Atomically reserve platform budget if subsidized
+	if calc.TotalZamkSubsidyCents > 0 {
+		ok, err := s.repo.ReserveZamkBudgetTx(ctx, tx, calc.CampaignID, calc.TotalZamkSubsidyCents)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return ErrPromoBudgetExhausted
+		}
+	}
+
+	// 2. Insert promo_code_usages record
+	usage := &PromoUsage{
+		ID:                  uuid.New(),
+		PromoCodeID:         calc.PromoCodeID,
+		CampaignID:          calc.CampaignID,
+		OrderID:             orderID,
+		UserID:              customerID,
+		Status:              UsageStatusReserved,
+		SubsidyCents:        calc.TotalZamkSubsidyCents,
+		SellerDiscountCents: calc.TotalSellerDiscountCents,
+		ReservedAt:          time.Now().UTC(),
+		ExpiresAt:           expiresAt,
+		IsFirstOrder:        calc.IsFirstOrder,
+	}
+	if err := s.repo.CreatePromoCodeUsageTx(ctx, tx, usage); err != nil {
+		return err
+	}
+
+	// 3. Insert immutable order_item_promotions snapshots for all promoted items
+	for _, line := range calc.PromotedLines {
+		snap := &OrderItemPromotion{
+			ID:                          uuid.New(),
+			OrderItemID:                 line.OrderItemID,
+			OrderID:                     orderID,
+			SellerID:                    line.SellerID,
+			CampaignID:                  calc.CampaignID,
+			PromoCodeID:                 calc.PromoCodeID,
+			BaseUnitPriceCents:          line.BaseUnitPriceCents,
+			SellerDiscountUnitCents:     line.SellerDiscountUnitCents,
+			ZamkSubsidyUnitCents:        line.ZamkSubsidyUnitCents,
+			CustomerPaidUnitPriceCents:  line.CustomerPaidUnitPriceCents,
+			CommissionBaseUnitCents:     line.CommissionBaseUnitCents,
+			Quantity:                    line.Quantity,
+			TotalSellerDiscountCents:    line.TotalSellerDiscountCents,
+			TotalZamkSubsidyCents:       line.TotalZamkSubsidyCents,
+			TotalCustomerPaidCents:      line.TotalCustomerPaidCents,
+			TotalCommissionBaseCents:    line.TotalCommissionBaseCents,
+			CommissionRateBps:           line.CommissionRateBps,
+			TotalCommissionChargedCents: line.TotalCommissionChargedCents,
+			CreatedAt:                   time.Now().UTC(),
+		}
+		if err := s.repo.CreateOrderItemPromotionTx(ctx, tx, snap); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ConsumePromoForOrderTx consumes a promo reservation upon payment success.
+func (s *Service) ConsumePromoForOrderTx(ctx context.Context, tx DBExecutor, orderID uuid.UUID) error {
+	usage, err := s.repo.GetPromoCodeUsageByOrderIDForUpdateTx(ctx, tx, orderID)
+	if err != nil {
+		return err
+	}
+	if usage == nil {
+		return nil // Order has no promo
+	}
+	if usage.Status == UsageStatusConsumed {
+		return nil // Duplicate webhook, idempotent no-op
+	}
+	if usage.Status != UsageStatusReserved {
+		return ErrPromoUsageNotReserved
+	}
+
+	// Consume platform budget
+	if usage.SubsidyCents > 0 {
+		if err := s.repo.ConsumeZamkBudgetTx(ctx, tx, usage.CampaignID, usage.SubsidyCents); err != nil {
+			return err
+		}
+	}
+
+	// Transition to consumed
+	_, err = s.repo.SetPromoCodeUsageStatusTx(ctx, tx, usage.ID, UsageStatusReserved, UsageStatusConsumed, time.Now().UTC())
+	return err
+}
+
+// ReleasePromoForOrderTx releases a promo reservation upon payment failure, cancellation, or expiration.
+func (s *Service) ReleasePromoForOrderTx(ctx context.Context, tx DBExecutor, orderID uuid.UUID, reason string) error {
+	usage, err := s.repo.GetPromoCodeUsageByOrderIDForUpdateTx(ctx, tx, orderID)
+	if err != nil {
+		return err
+	}
+	if usage == nil {
+		return nil // Order has no promo
+	}
+	if usage.Status == UsageStatusConsumed {
+		return nil // Order was already successfully paid, never release consumed promo!
+	}
+	if usage.Status == UsageStatusReleased || usage.Status == UsageStatusExpired {
+		return nil // Already released, idempotent no-op
+	}
+	if usage.Status != UsageStatusReserved {
+		return nil
+	}
+
+	// Release platform reserved budget
+	if usage.SubsidyCents > 0 {
+		if err := s.repo.ReleaseZamkBudgetTx(ctx, tx, usage.CampaignID, usage.SubsidyCents); err != nil {
+			return err
+		}
+	}
+
+	// Transition to released
+	_, err = s.repo.SetPromoCodeUsageStatusTx(ctx, tx, usage.ID, UsageStatusReserved, UsageStatusReleased, time.Now().UTC())
+	return err
+}
+
+// ReleasePromoForOrder releases a promo reservation on pool executor.
+func (s *Service) ReleasePromoForOrder(ctx context.Context, orderID uuid.UUID, reason string) error {
+	return s.ReleasePromoForOrderTx(ctx, s.pool, orderID, reason)
+}
+
+// EnsureOrderPromoHold ensures that promo hold is valid before payment initiation, releasing the hold if first-order eligibility was lost.
+func (s *Service) EnsureOrderPromoHold(ctx context.Context, orderID uuid.UUID) error {
+	err := s.EnsureOrderPromoHoldTx(ctx, s.pool, orderID)
+	if errors.Is(err, ErrPromoFirstOrderOnly) {
+		_ = s.ReleasePromoForOrderTx(ctx, s.pool, orderID, "first_order_ineligible")
+	}
+	return err
+}
+
+// EnsureOrderPromoHoldTx guarantees that an awaiting_payment order retains valid promo reservation before payment initiation.
+func (s *Service) EnsureOrderPromoHoldTx(ctx context.Context, tx DBExecutor, orderID uuid.UUID) error {
+	usage, err := s.repo.GetPromoCodeUsageByOrderIDForUpdateTx(ctx, tx, orderID)
+	if err != nil {
+		return err
+	}
+	if usage == nil {
+		return nil // Order has no promo
+	}
+	if usage.Status == UsageStatusConsumed {
+		return nil
+	}
+	if usage.Status == UsageStatusReserved {
+		if usage.IsFirstOrder {
+			paidCount, err := s.repo.CountCustomerPaidOrdersTx(ctx, tx, usage.UserID, orderID)
+			if err != nil {
+				return err
+			}
+			if paidCount > 0 {
+				_ = s.ReleasePromoForOrderTx(ctx, tx, orderID, "first_order_ineligible")
+				return ErrPromoFirstOrderOnly
+			}
+		}
+		return nil // Hold is active and valid
+	}
+
+	// If released, attempt to reacquire hold on payment retry
+	promo, err := s.repo.GetPromoCodeForUpdateTx(ctx, tx, usage.PromoCodeID)
+	if err != nil {
+		return err
+	}
+	if !promo.IsActive || (promo.EndsAt != nil && time.Now().UTC().After(*promo.EndsAt)) {
+		return ErrPromoExpired
+	}
+
+	campaign, err := s.repo.GetCampaignForUpdateTx(ctx, tx, usage.CampaignID)
+	if err != nil {
+		return err
+	}
+	if campaign.Status != CampaignStatusActive && campaign.Status != CampaignStatusApproved {
+		return ErrPromoInactive
+	}
+
+	if promo.GlobalUsageLimit != nil {
+		gCount, err := s.repo.CountPromoUsageGlobalTx(ctx, tx, promo.ID)
+		if err != nil {
+			return err
+		}
+		if gCount >= *promo.GlobalUsageLimit {
+			return ErrPromoGlobalLimit
+		}
+	}
+
+	cCount, err := s.repo.CountPromoUsageCustomerTx(ctx, tx, promo.ID, usage.UserID)
+	if err != nil {
+		return err
+	}
+	if cCount >= promo.PerCustomerUsageLimit {
+		return ErrPromoCustomerLimit
+	}
+
+	if usage.IsFirstOrder {
+		paidCount, err := s.repo.CountCustomerPaidOrdersTx(ctx, tx, usage.UserID, orderID)
+		if err != nil {
+			return err
+		}
+		if paidCount > 0 {
+			return ErrPromoFirstOrderOnly
+		}
+	}
+
+	if usage.SubsidyCents > 0 {
+		ok, err := s.repo.ReserveZamkBudgetTx(ctx, tx, usage.CampaignID, usage.SubsidyCents)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return ErrPromoBudgetExhausted
+		}
+	}
+
+	_, err = s.repo.SetPromoCodeUsageStatusTx(ctx, tx, usage.ID, usage.Status, UsageStatusReserved, time.Now().UTC())
+	return err
 }

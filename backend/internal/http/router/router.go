@@ -298,6 +298,7 @@ func New(
 		r.Delete("/cart/items/{id}", cartHandler.RemoveItem)
 		r.Delete("/cart", cartHandler.ClearCart)
 
+		r.Post("/promotions/validate", ordersHandler.ValidatePromo)
 		r.Post("/orders", ordersHandler.CreateOrder)
 		r.Get("/orders", ordersHandler.ListCustomerOrders)
 		r.Get("/orders/{id}", ordersHandler.GetCustomerOrder)

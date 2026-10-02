@@ -155,7 +155,7 @@ func (p *TBankProvider) CreatePayment(ctx context.Context, input CreatePaymentIn
 	}
 
 	if !tResp.Success {
-		return ProviderCreatePaymentResult{}, fmt.Errorf("tbank init failed: %s - %s", tResp.Message, tResp.Details)
+		return ProviderCreatePaymentResult{}, fmt.Errorf("%w: %s - %s", ErrProviderRejected, tResp.Message, tResp.Details)
 	}
 
 	return ProviderCreatePaymentResult{
@@ -228,12 +228,15 @@ func (p *TBankProvider) ParseWebhook(ctx context.Context, body []byte) (Provider
 		return ProviderWebhookEvent{}, err
 	}
 
-	status := "failed"
-	if payload.Status == "CONFIRMED" || payload.Status == "AUTHORIZED" {
+	var status string
+	switch ClassifyProviderStatus(payload.Status) {
+	case ProviderStatusCategorySuccess:
 		status = "succeeded"
-	} else if payload.Status == "CANCELED" || payload.Status == "REJECTED" || payload.Status == "DEADLINE_EXPIRED" {
+	case ProviderStatusCategoryTerminalFailure:
 		status = "cancelled"
-	} else if payload.Status == "NEW" || payload.Status == "FORMSHOWED" {
+	case ProviderStatusCategoryNonTerminal:
+		status = "pending"
+	default:
 		status = "pending"
 	}
 
@@ -270,4 +273,126 @@ func (p *TBankProvider) GetMode(method string) string {
 		return "unavailable"
 	}
 	return "unknown"
+}
+
+func normalizeTBankStatus(rawStatus string) string {
+	switch ClassifyProviderStatus(rawStatus) {
+	case ProviderStatusCategorySuccess:
+		return "succeeded"
+	case ProviderStatusCategoryTerminalFailure:
+		return "cancelled"
+	case ProviderStatusCategoryNonTerminal:
+		return "pending"
+	default:
+		return "pending"
+	}
+}
+
+type checkOrderRequest struct {
+	TerminalKey string `json:"TerminalKey"`
+	OrderId     string `json:"OrderId"`
+	Token       string `json:"Token"`
+}
+
+type checkOrderPaymentRaw struct {
+	PaymentId any    `json:"PaymentId"`
+	Amount    int64  `json:"Amount"`
+	Status    string `json:"Status"`
+	Success   bool   `json:"Success"`
+	ErrorCode string `json:"ErrorCode"`
+	Message   string `json:"Message"`
+}
+
+type checkOrderResponse struct {
+	Success     bool                   `json:"Success"`
+	ErrorCode   string                 `json:"ErrorCode"`
+	Message     string                 `json:"Message"`
+	Details     string                 `json:"Details"`
+	TerminalKey string                 `json:"TerminalKey"`
+	OrderId     string                 `json:"OrderId"`
+	Payments    []checkOrderPaymentRaw `json:"Payments"`
+}
+
+func (p *TBankProvider) CheckOrder(ctx context.Context, orderID string) (CheckOrderResult, error) {
+	if p.terminalKey == "STUB" {
+		return CheckOrderResult{
+			OrderID:  orderID,
+			Payments: []ProviderPaymentItem{},
+		}, nil
+	}
+
+	paramsMap := map[string]string{
+		"TerminalKey": p.terminalKey,
+		"OrderId":     orderID,
+	}
+	token := p.generateToken(paramsMap)
+
+	reqData := checkOrderRequest{
+		TerminalKey: p.terminalKey,
+		OrderId:     orderID,
+		Token:       token,
+	}
+
+	body, err := json.Marshal(reqData)
+	if err != nil {
+		return CheckOrderResult{}, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.apiBaseURL+"/CheckOrder", bytes.NewBuffer(body))
+	if err != nil {
+		return CheckOrderResult{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return CheckOrderResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return CheckOrderResult{}, fmt.Errorf("tbank check order unexpected status code: %d", resp.StatusCode)
+	}
+
+	dec := json.NewDecoder(resp.Body)
+	dec.UseNumber()
+
+	var tResp checkOrderResponse
+	if err := dec.Decode(&tResp); err != nil {
+		return CheckOrderResult{}, err
+	}
+
+	if !tResp.Success && tResp.ErrorCode != "0" {
+		return CheckOrderResult{}, fmt.Errorf("%w: %s - %s (code %s)", ErrProviderRejected, tResp.Message, tResp.Details, tResp.ErrorCode)
+	}
+
+	items := make([]ProviderPaymentItem, 0, len(tResp.Payments))
+	for _, raw := range tResp.Payments {
+		var pidStr string
+		switch v := raw.PaymentId.(type) {
+		case string:
+			pidStr = v
+		case float64:
+			pidStr = strconv.FormatInt(int64(v), 10)
+		case json.Number:
+			pidStr = v.String()
+		case int64:
+			pidStr = strconv.FormatInt(v, 10)
+		case int:
+			pidStr = strconv.Itoa(v)
+		}
+
+		items = append(items, ProviderPaymentItem{
+			ProviderPaymentID: pidStr,
+			AmountCents:       raw.Amount,
+			Status:            normalizeTBankStatus(raw.Status),
+			ProviderStatus:    raw.Status,
+			Success:           raw.Success,
+		})
+	}
+
+	return CheckOrderResult{
+		OrderID:  orderID,
+		Payments: items,
+	}, nil
 }

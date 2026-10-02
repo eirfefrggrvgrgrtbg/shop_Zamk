@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +19,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/marketing"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 )
@@ -26,6 +28,7 @@ type Service struct {
 	repo         *Repository
 	cartRepo     *cart.Repository
 	inventorySvc *inventory.Service
+	marketingSvc *marketing.Service
 	db           *postgres.Client
 	cfg          *config.Config
 	logger       *slog.Logger
@@ -41,6 +44,12 @@ func NewService(repo *Repository, cartRepo *cart.Repository, inventorySvc *inven
 		logger:       slog.Default(),
 	}
 }
+
+func (s *Service) WithMarketing(m *marketing.Service) *Service {
+	s.marketingSvc = m
+	return s
+}
+
 
 func (s *Service) SetLogger(l *slog.Logger) *Service {
 	if l == nil {
@@ -108,7 +117,6 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 
 	// 2. Start transaction
 	err = s.db.RunInTx(ctx, func(tx pgx.Tx) error {
-		totalPriceCents := dm.PriceCents
 		var orderItems []OrderItem
 		var reservations []OrderReservation
 
@@ -156,7 +164,6 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 			}
 
 			subtotal := snap.PriceCents * int64(item.Quantity)
-			totalPriceCents += subtotal
 
 			orderItems = append(orderItems, OrderItem{
 				ID:                 uuid.New(),
@@ -175,6 +182,55 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 				SubtotalPriceCents: subtotal,
 			})
 		}
+
+		commissionBps := 900
+		if s.cfg != nil && s.cfg.Worker.MarketplaceCommissionBPS > 0 {
+			commissionBps = s.cfg.Worker.MarketplaceCommissionBPS
+		}
+
+		// Optional promotional discount validation & calculation
+		var promoCalc *marketing.CheckoutPromoCalculation
+		if req.PromoCode != nil && strings.TrimSpace(*req.PromoCode) != "" {
+			if s.marketingSvc == nil {
+				return errors.New("cannot apply promo code: marketing service unavailable")
+			}
+			promotedInputs := make([]marketing.PromotedOrderItemInput, len(orderItems))
+			for i, oi := range orderItems {
+				promotedInputs[i] = marketing.PromotedOrderItemInput{
+					OrderItemID:        oi.ID,
+					ProductID:          oi.ProductID,
+					ProductVariantID:   oi.ProductVariantID,
+					SellerID:           oi.SellerID,
+					BaseUnitPriceCents: oi.PriceCents,
+					Quantity:           oi.Quantity,
+				}
+			}
+			calc, err := s.marketingSvc.ValidateAndCalculateCheckoutPromoTx(ctx, tx, userID, *req.PromoCode, promotedInputs, commissionBps, time.Now().UTC())
+			if err != nil {
+				return err
+			}
+			promoCalc = calc
+		}
+
+		promotedLinesMap := make(map[uuid.UUID]marketing.PromotedLineResult)
+		if promoCalc != nil {
+			for _, pl := range promoCalc.PromotedLines {
+				promotedLinesMap[pl.OrderItemID] = pl
+			}
+		}
+
+		sellerTotals := make(map[uuid.UUID]int64)
+		var totalCustomerPaidItems int64
+		for _, item := range orderItems {
+			if pl, ok := promotedLinesMap[item.ID]; ok {
+				totalCustomerPaidItems += pl.TotalCustomerPaidCents
+				sellerTotals[item.SellerID] += pl.TotalCommissionBaseCents
+			} else {
+				totalCustomerPaidItems += item.SubtotalPriceCents
+				sellerTotals[item.SellerID] += item.SubtotalPriceCents
+			}
+		}
+		totalPriceCents := dm.PriceCents + totalCustomerPaidItems
 
 		// Create order
 		order := &Order{
@@ -205,14 +261,8 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 		}
 
 		// Group items by seller and create fulfillments
-		sellerTotals := make(map[uuid.UUID]int64)
-		for _, item := range orderItems {
-			sellerTotals[item.SellerID] += item.SubtotalPriceCents
-		}
-
 		sellerFulfillments := make(map[uuid.UUID]*OrderFulfillment)
 		for sellerID, subtotal := range sellerTotals {
-			commissionBps := s.cfg.Worker.MarketplaceCommissionBPS // From MARKETPLACE_COMMISSION_BPS env var (default 900, .env sets 1500)
 			commissionAmount := (subtotal * int64(commissionBps)) / 10000
 			sellerAmount := subtotal - commissionAmount
 
@@ -250,6 +300,18 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 
 		for i := range reservations {
 			if err := s.repo.CreateOrderReservationTx(ctx, tx, &reservations[i]); err != nil {
+				return err
+			}
+		}
+
+		// Reserve promotional budget and snapshot financial line allocations
+		if promoCalc != nil {
+			timeoutMinutes := 30
+			if s.cfg != nil && s.cfg.Worker.OrderPaymentTimeoutMinutes > 0 {
+				timeoutMinutes = s.cfg.Worker.OrderPaymentTimeoutMinutes
+			}
+			resTTL := time.Duration(timeoutMinutes) * time.Minute
+			if err := s.marketingSvc.ReserveCheckoutPromoTx(ctx, tx, orderID, userID, promoCalc, time.Now().UTC().Add(resTTL)); err != nil {
 				return err
 			}
 		}
@@ -353,6 +415,20 @@ func (s *Service) executeOrderCancellation(ctx context.Context, orderID uuid.UUI
 			}
 		}
 
+		if order.Status == "awaiting_payment" {
+			var activePaymentCount int
+			err := tx.QueryRow(ctx, `
+				SELECT count(*) FROM payments
+				WHERE order_id = $1 AND (status IN ('pending', 'succeeded') OR (status = 'created' AND init_outcome IN ('pending', 'unknown')))
+			`, orderID).Scan(&activePaymentCount)
+			if err != nil {
+				return err
+			}
+			if activePaymentCount > 0 {
+				return fmt.Errorf("%w: cannot cancel order while payment attempt is in progress or outcome uncertain", ErrOrderNotCancellable)
+			}
+		}
+
 		// 1. Mark order cancelled in DB
 		if err := s.repo.SetOrderCancelledTx(ctx, tx, orderID); err != nil {
 			return err
@@ -411,6 +487,16 @@ func (s *Service) executeOrderCancellation(ctx context.Context, orderID uuid.UUI
 		if _, err := s.repo.CancelActiveOrderFulfillmentsTx(ctx, tx, orderID); err != nil {
 			return err
 		}
+
+		// 6. Release promo reservation if order used promo
+		if s.marketingSvc != nil {
+			if err := s.marketingSvc.ReleasePromoForOrderTx(ctx, tx, orderID, params.StableReasonCode); err != nil {
+				return err
+			}
+		}
+
+		// 7. Release any customer first-payment claim
+		_, _ = tx.Exec(ctx, `DELETE FROM customer_first_payment_claims WHERE order_id = $1`, orderID)
 
 		cancelledOrder = order
 		return nil
@@ -518,11 +604,13 @@ func calculateRequestHash(userID uuid.UUID, req CreateOrderRequest, cartItems []
 		UserID           string
 		DeliveryMethodID string
 		DeliveryAddress  string
+		PromoCode        *string
 		Items            []hashItem
 	}{
 		UserID:           userID.String(),
 		DeliveryMethodID: req.DeliveryMethodID.String(),
 		DeliveryAddress:  req.DeliveryAddress, // spaces normalization can be added, assuming exact match for now
+		PromoCode:        req.PromoCode,
 		Items:            items,
 	}
 
@@ -605,6 +693,19 @@ func (s *Service) ExpireAwaitingPaymentOrders(ctx context.Context, now time.Time
 				continue
 			}
 
+			// Do not expire order if payment is in-flight or outcome-uncertain
+			var activePaymentCount int
+			err = tx.QueryRow(ctx, `
+				SELECT count(*) FROM payments
+				WHERE order_id = $1 AND (status IN ('pending', 'succeeded') OR (status = 'created' AND init_outcome IN ('pending', 'unknown')))
+			`, orderID).Scan(&activePaymentCount)
+			if err != nil {
+				return err
+			}
+			if activePaymentCount > 0 {
+				continue
+			}
+
 			// Cancel order
 			if err := s.repo.SetOrderCancelledTx(ctx, tx, orderID); err != nil {
 				return err
@@ -646,6 +747,16 @@ func (s *Service) ExpireAwaitingPaymentOrders(ctx context.Context, now time.Time
 					result.ReleasedReservations++
 				}
 			}
+
+			// Release promo reservation if order used promo
+			if s.marketingSvc != nil {
+				if err := s.marketingSvc.ReleasePromoForOrderTx(ctx, tx, orderID, "order_expired"); err != nil {
+					return err
+				}
+			}
+
+			// Release any customer first-payment claim
+			_, _ = tx.Exec(ctx, `DELETE FROM customer_first_payment_claims WHERE order_id = $1`, orderID)
 
 			orderNum := ""
 			if order.OrderNumber != nil {
@@ -752,4 +863,65 @@ func (s *Service) getSnapshot(ctx context.Context, tx pgx.Tx, productID, variant
 	}
 
 	return &snap, nil
+}
+
+func (s *Service) ValidateCartPromo(ctx context.Context, userID uuid.UUID, code string) (*marketing.CheckoutPromoCalculation, error) {
+	userCart, err := s.cartRepo.GetCartByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if userCart == nil || len(userCart.Items) == 0 {
+		return nil, ErrEmptyCart
+	}
+
+	if s.marketingSvc == nil {
+		return nil, errors.New("marketing service unavailable")
+	}
+
+	var calc *marketing.CheckoutPromoCalculation
+	err = s.db.RunInTx(ctx, func(tx pgx.Tx) error {
+		var promotedInputs []marketing.PromotedOrderItemInput
+		for _, item := range userCart.Items {
+			info, err := s.cartRepo.GetProductValidationInfo(ctx, item.ProductID, item.ProductVariantID)
+			if err != nil {
+				return err
+			}
+			if info.Status != "published" {
+				return ErrProductNotPublished
+			}
+			if !info.VariantActive {
+				return ErrVariantNotFound
+			}
+
+			snap, err := s.getSnapshot(ctx, tx, item.ProductID, item.ProductVariantID)
+			if err != nil {
+				return err
+			}
+
+			promotedInputs = append(promotedInputs, marketing.PromotedOrderItemInput{
+				OrderItemID:        uuid.New(),
+				ProductID:          item.ProductID,
+				ProductVariantID:   item.ProductVariantID,
+				SellerID:           snap.SellerID,
+				BaseUnitPriceCents: snap.PriceCents,
+				Quantity:           item.Quantity,
+			})
+		}
+
+		commissionBps := 900
+		if s.cfg != nil && s.cfg.Worker.MarketplaceCommissionBPS > 0 {
+			commissionBps = s.cfg.Worker.MarketplaceCommissionBPS
+		}
+
+		res, err := s.marketingSvc.ValidateAndCalculateCheckoutPromoTx(ctx, tx, userID, code, promotedInputs, commissionBps, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		calc = res
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return calc, nil
 }

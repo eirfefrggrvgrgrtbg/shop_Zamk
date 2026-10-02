@@ -700,10 +700,15 @@ func (r *Repository) ReleaseAllocationsForOrderCountTx(ctx context.Context, tx p
 
 func (r *Repository) GetExpiredAwaitingPaymentOrdersTx(ctx context.Context, tx pgx.Tx, olderThan time.Time, limit int) ([]uuid.UUID, error) {
 	query := `
-		SELECT id
-		FROM orders
-		WHERE status = 'awaiting_payment' AND created_at < $1
-		ORDER BY created_at ASC
+		SELECT o.id
+		FROM orders o
+		WHERE o.status = 'awaiting_payment' AND o.created_at < $1
+		  AND NOT EXISTS (
+			SELECT 1 FROM payments p
+			WHERE p.order_id = o.id
+			  AND (p.status IN ('pending', 'succeeded') OR (p.status = 'created' AND p.init_outcome IN ('pending', 'unknown')))
+		  )
+		ORDER BY o.created_at ASC
 		LIMIT $2
 		FOR UPDATE SKIP LOCKED
 	`
