@@ -34,6 +34,7 @@ var (
 	ErrPromoExpired              = errors.New("promo_expired")
 	ErrPromoMinSubtotal          = errors.New("promo_min_subtotal")
 	ErrPromoMinQuantity          = errors.New("promo_min_quantity")
+	ErrPromoMinDistinctProducts  = errors.New("promo_min_distinct_products")
 	ErrPromoGlobalLimit          = errors.New("promo_global_limit")
 	ErrPromoCustomerLimit           = errors.New("promo_customer_limit")
 	ErrPromoFirstOrderOnly          = errors.New("promo_first_order_only")
@@ -62,4 +63,5 @@ var (
 	ErrCategoryNotAllowed            = errors.New("category exclusions are not allowed for selected products scope")
 	ErrInvalidMaxDiscount            = errors.New("max discount must be positive")
 	ErrInvalidMinQuantity            = errors.New("min eligible quantity must be positive")
+	ErrInvalidMinDistinctProducts    = errors.New("min distinct products must be positive")
 )

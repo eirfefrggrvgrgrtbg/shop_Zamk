@@ -212,7 +212,14 @@ func EnsureMarketingMigrations(ctx context.Context, db DBExecutor) error {
 			WHERE table_name = 'promo_codes' AND column_name = 'audience_type'
 		)
 	`).Scan(&hasAudienceTypeCol)
-	if hasIndex && hasClaimsTable && hasInitOutcomeCol && hasReconCol && hasProviderPIDIndex && hasTargetsTable && hasCategoryTargetsTable && hasMinQuantityCol && hasAudienceTypeCol {
+	var hasMinDistinctCol bool
+	_ = db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.columns
+			WHERE table_name = 'promo_codes' AND column_name = 'min_distinct_products'
+		)
+	`).Scan(&hasMinDistinctCol)
+	if hasIndex && hasClaimsTable && hasInitOutcomeCol && hasReconCol && hasProviderPIDIndex && hasTargetsTable && hasCategoryTargetsTable && hasMinQuantityCol && hasAudienceTypeCol && hasMinDistinctCol {
 		return nil
 	}
 
@@ -230,6 +237,7 @@ func EnsureMarketingMigrations(ctx context.Context, db DBExecutor) error {
 		"000100_add_promotion_category_targeting.up.sql",
 		"000101_add_min_eligible_quantity_to_promo_codes.up.sql",
 		"000102_evolve_promo_customer_audience.up.sql",
+		"000103_add_min_distinct_products_to_promo_codes.up.sql",
 	}
 
 	for _, mig := range migs {

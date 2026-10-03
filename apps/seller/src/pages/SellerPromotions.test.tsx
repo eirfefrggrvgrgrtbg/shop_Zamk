@@ -4763,4 +4763,286 @@ describe('SellerPromotions Component & Interaction Tests', () => {
       expect(screen.queryByTestId('summary-audience')).toBeNull();
     });
   });
+
+  describe('PROMO.2F — MINIMUM DISTINCT ELIGIBLE PRODUCTS', () => {
+    const openCreatePromoModal = async () => {
+      vi.mocked(getSellerPromotions).mockResolvedValue({ items: [], count: 0 });
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('create-first-promo-button')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('create-first-promo-button'));
+      await waitFor(() => {
+        expect(screen.getByTestId('input-min-distinct')).toBeTruthy();
+      });
+    };
+
+    it('1. Input input-min-distinct is rendered with placeholder and label', async () => {
+      await openCreatePromoModal();
+      const input = screen.getByTestId('input-min-distinct') as HTMLInputElement;
+      expect(input).toBeTruthy();
+      expect(input.placeholder).toBe('Без ограничений');
+      expect(screen.getByText('Минимум разных товаров')).toBeTruthy();
+      expect(
+        screen.getByText('Разные размеры или цвета одной модели считаются как один товар.')
+      ).toBeTruthy();
+    });
+
+    it('2. Typing valid positive integer updates input value', async () => {
+      await openCreatePromoModal();
+      const input = screen.getByTestId('input-min-distinct') as HTMLInputElement;
+      fireEvent.change(input, { target: { value: '3' } });
+      expect(input.value).toBe('3');
+    });
+
+    it('3. Rejects 0 with clear validation error', async () => {
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'DIST0' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '10' } });
+      fireEvent.change(screen.getByTestId('input-min-distinct'), { target: { value: '0' } });
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('create-promo-error').textContent).toContain(
+          'Минимум разных товаров должен быть целым положительным числом'
+        );
+      });
+      expect(createSellerPromotion).not.toHaveBeenCalled();
+    });
+
+    it('4. Rejects negative numbers with clear validation error', async () => {
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'DISTNEG' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '10' } });
+      fireEvent.change(screen.getByTestId('input-min-distinct'), { target: { value: '-2' } });
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('create-promo-error').textContent).toContain(
+          'Минимум разных товаров должен быть целым положительным числом'
+        );
+      });
+      expect(createSellerPromotion).not.toHaveBeenCalled();
+    });
+
+    it('5. Rejects fractional numbers with clear validation error', async () => {
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'DISTFRAC' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '10' } });
+      fireEvent.change(screen.getByTestId('input-min-distinct'), { target: { value: '2.5' } });
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('create-promo-error').textContent).toContain(
+          'Минимум разных товаров должен быть целым положительным числом'
+        );
+      });
+      expect(createSellerPromotion).not.toHaveBeenCalled();
+    });
+
+    it('6. Rejects non-numeric characters with clear validation error', async () => {
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'DISTABC' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '10' } });
+      fireEvent.change(screen.getByTestId('input-min-distinct'), { target: { value: 'abc' } });
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('create-promo-error').textContent).toContain(
+          'Минимум разных товаров должен быть целым положительным числом'
+        );
+      });
+      expect(createSellerPromotion).not.toHaveBeenCalled();
+    });
+
+    it('7. Submitting with valid minDistinctProducts includes it in payload', async () => {
+      vi.mocked(createSellerPromotion).mockResolvedValue(mockPromoPercent);
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'DIST3' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '10' } });
+      fireEvent.change(screen.getByTestId('input-min-distinct'), { target: { value: '3' } });
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(createSellerPromotion).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: 'DIST3',
+            minDistinctProducts: 3,
+          })
+        );
+      });
+    });
+
+    it('8. Submitting without minDistinctProducts omits it from payload', async () => {
+      vi.mocked(createSellerPromotion).mockResolvedValue(mockPromoPercent);
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'NODIST' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '10' } });
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(createSellerPromotion).toHaveBeenCalledWith(
+          expect.not.objectContaining({
+            minDistinctProducts: expect.anything(),
+          })
+        );
+      });
+    });
+
+    it('9. Live summary card updates when minDistinctProducts is entered', async () => {
+      await openCreatePromoModal();
+      expect(screen.queryByTestId('summary-min-distinct')).toBeNull();
+
+      fireEvent.change(screen.getByTestId('input-min-distinct'), { target: { value: '4' } });
+      expect(screen.getByTestId('summary-min-distinct')?.textContent).toContain('от 4 разных товаров');
+
+      fireEvent.change(screen.getByTestId('input-min-distinct'), { target: { value: '' } });
+      expect(screen.queryByTestId('summary-min-distinct')).toBeNull();
+    });
+
+    it('10. Form reset restores empty minDistinctProducts', async () => {
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-min-distinct'), { target: { value: '5' } });
+      expect((screen.getByTestId('input-min-distinct') as HTMLInputElement).value).toBe('5');
+
+      // Click cancel
+      fireEvent.click(screen.getByText('Отмена'));
+
+      // Reopen modal
+      await waitFor(() => {
+        expect(screen.getByTestId('create-first-promo-button')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('create-first-promo-button'));
+      expect((screen.getByTestId('input-min-distinct') as HTMLInputElement).value).toBe('');
+    });
+
+    it('11. Table renders minDistinctProducts in column МИН. ЗАКАЗ', async () => {
+      const promo: SellerPromotion = {
+        ...mockPromoPercent,
+        id: 'promo-distinct-table',
+        code: 'DISTTABLE',
+        minDistinctProducts: 3,
+      };
+      vi.mocked(getSellerPromotions).mockResolvedValue({ items: [promo], count: 1 });
+
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('distinct-quantity-promo-distinct-table')).toBeTruthy();
+      });
+      expect(screen.getByTestId('distinct-quantity-promo-distinct-table').textContent).toContain('от 3 разных товаров');
+    });
+
+    it('12. Table does not render distinct line when minDistinctProducts is absent', async () => {
+      const promo: SellerPromotion = {
+        ...mockPromoPercent,
+        id: 'promo-no-distinct',
+        code: 'NODISTTABLE',
+        minDistinctProducts: null,
+      };
+      vi.mocked(getSellerPromotions).mockResolvedValue({ items: [promo], count: 1 });
+
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('NODISTTABLE')).toBeTruthy();
+      });
+      expect(screen.queryByTestId('distinct-quantity-promo-no-distinct')).toBeNull();
+    });
+
+    it('13. Details Drawer renders minDistinctProducts when set', async () => {
+      const promo: SellerPromotion = {
+        ...mockPromoPercent,
+        id: 'promo-distinct-drawer',
+        code: 'DRAWERDIST',
+        minDistinctProducts: 2,
+      };
+      vi.mocked(getSellerPromotions).mockResolvedValue({ items: [promo], count: 1 });
+
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('promo-edit-button-DRAWERDIST')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('promo-edit-button-DRAWERDIST'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('edit-promo-modal')).toBeTruthy();
+      });
+
+      expect(screen.getByTestId('edit-promo-min-distinct').textContent).toBe('от 2 разных товаров');
+    });
+
+    it('14. Details Drawer renders Без ограничений when minDistinctProducts is null', async () => {
+      const promo: SellerPromotion = {
+        ...mockPromoPercent,
+        id: 'promo-no-distinct-drawer',
+        code: 'DRAWEREMPTY',
+        minDistinctProducts: null,
+      };
+      vi.mocked(getSellerPromotions).mockResolvedValue({ items: [promo], count: 1 });
+
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('promo-edit-button-DRAWEREMPTY')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('promo-edit-button-DRAWEREMPTY'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('edit-promo-modal')).toBeTruthy();
+      });
+
+      expect(screen.getByTestId('edit-promo-min-distinct').textContent).toBe('Без ограничений');
+    });
+
+    it('15. Details Drawer immutability: minDistinctProducts cannot be edited', async () => {
+      const promo: SellerPromotion = {
+        ...mockPromoPercent,
+        id: 'promo-immut-distinct',
+        code: 'IMMUTDIST',
+        minDistinctProducts: 3,
+      };
+      vi.mocked(getSellerPromotions).mockResolvedValue({ items: [promo], count: 1 });
+
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('promo-edit-button-IMMUTDIST')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('promo-edit-button-IMMUTDIST'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('edit-promo-modal')).toBeTruthy();
+      });
+
+      // No input or editable field in drawer
+      expect(screen.queryByTestId('edit-input-min-distinct')).toBeNull();
+      expect(screen.getByTestId('edit-promo-min-distinct').textContent).toBe('от 3 разных товаров');
+    });
+  });
 });

@@ -215,6 +215,7 @@ export function SellerPromotions() {
   const [createDiscountFixedRub, setCreateDiscountFixedRub] = useState('');
   const [createMinOrderSubtotalRub, setCreateMinOrderSubtotalRub] = useState('');
   const [createMinEligibleQuantity, setCreateMinEligibleQuantity] = useState('');
+  const [createMinDistinctProducts, setCreateMinDistinctProducts] = useState('');
   const [createAudienceType, setCreateAudienceType] = useState<SellerPromoAudienceType>('ALL_CUSTOMERS');
   const [createStartsAt, setCreateStartsAt] = useState('');
   const [createEndsAt, setCreateEndsAt] = useState('');
@@ -510,6 +511,7 @@ export function SellerPromotions() {
     setCreateDiscountFixedRub('');
     setCreateMinOrderSubtotalRub('');
     setCreateMinEligibleQuantity('');
+    setCreateMinDistinctProducts('');
     setCreateAudienceType('ALL_CUSTOMERS');
     setCreateStartsAt('');
     setCreateEndsAt('');
@@ -606,6 +608,18 @@ export function SellerPromotions() {
             throw new Error('Минимальное количество товаров должно быть целым положительным числом.');
           }
           req.minEligibleQuantity = qty;
+        }
+      }
+
+      if (createMinDistinctProducts) {
+        const trimmed = createMinDistinctProducts.trim();
+        if (trimmed !== '') {
+          const qty = Number(trimmed);
+          if (!/^\d+$/.test(trimmed) || !Number.isInteger(qty) || qty <= 0) {
+            scrollToAndFocus('input-min-distinct');
+            throw new Error('Минимум разных товаров должен быть целым положительным числом.');
+          }
+          req.minDistinctProducts = qty;
         }
       }
 
@@ -960,6 +974,11 @@ export function SellerPromotions() {
                             от {p.minEligibleQuantity} товаров
                           </div>
                         )}
+                        {p.minDistinctProducts && p.minDistinctProducts > 0 && (
+                          <div className="text-xs text-gray-500 font-medium" data-testid={`distinct-quantity-${p.id}`}>
+                            от {p.minDistinctProducts} разных товаров
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-gray-600">
                         <span className="font-medium text-gray-900">{p.consumedUsageCount}</span>
@@ -1160,7 +1179,7 @@ export function SellerPromotions() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
                 Минимальная сумма заказа (₽)
@@ -1203,6 +1222,35 @@ export function SellerPromotions() {
               </p>
               <p id="create-min-quantity-biz-help" className="text-[11px] text-gray-400 mt-0.5">
                 Считаются только товары, на которые действует промокод.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="create-min-distinct" className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                Минимум разных товаров
+              </label>
+              <input
+                id="create-min-distinct"
+                type="text"
+                inputMode="numeric"
+                data-testid="input-min-distinct"
+                aria-describedby="create-min-distinct-help create-min-distinct-biz-help"
+                aria-invalid={createError.includes('Минимум разных товаров') ? 'true' : 'false'}
+                value={createMinDistinctProducts}
+                onChange={(e) => setCreateMinDistinctProducts(e.target.value)}
+                placeholder="Без ограничений"
+                className={cn(
+                  "w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black",
+                  createError.includes('Минимум разных товаров')
+                    ? "border-red-500 focus:ring-red-500"
+                    : "border-gray-300"
+                )}
+              />
+              <p id="create-min-distinct-help" className="text-[11px] text-gray-500 mt-1">
+                Только целые числа от 1.
+              </p>
+              <p id="create-min-distinct-biz-help" className="text-[11px] text-gray-400 mt-0.5">
+                Разные размеры или цвета одной модели считаются как один товар.
               </p>
             </div>
           </div>
@@ -1771,6 +1819,14 @@ export function SellerPromotions() {
                 <span className="font-medium text-gray-500">Мин. количество:</span>{' '}
                 <span className="font-semibold text-gray-900" data-testid="summary-min-quantity">
                   от {createMinEligibleQuantity} товаров
+                </span>
+              </div>
+            )}
+            {createMinDistinctProducts && (
+              <div className="text-gray-700">
+                <span className="font-medium text-gray-500">Мин. разных товаров:</span>{' '}
+                <span className="font-semibold text-gray-900" data-testid="summary-min-distinct">
+                  от {createMinDistinctProducts} разных товаров
                 </span>
               </div>
             )}
@@ -2428,6 +2484,14 @@ export function SellerPromotions() {
                   <span className="font-semibold text-gray-900" data-testid="edit-promo-min-quantity">
                     {editPromo.minEligibleQuantity && editPromo.minEligibleQuantity > 0
                       ? `от ${editPromo.minEligibleQuantity} товаров`
+                      : 'Без ограничений'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Минимум разных товаров: </span>
+                  <span className="font-semibold text-gray-900" data-testid="edit-promo-min-distinct">
+                    {editPromo.minDistinctProducts && editPromo.minDistinctProducts > 0
+                      ? `от ${editPromo.minDistinctProducts} разных товаров`
                       : 'Без ограничений'}
                   </span>
                 </div>

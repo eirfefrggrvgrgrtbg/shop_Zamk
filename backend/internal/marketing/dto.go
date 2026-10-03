@@ -42,6 +42,7 @@ type CreatePromoCodeRequest struct {
 	DiscountValueFixedCents int64        `json:"discountValueFixedCents"`
 	MinOrderSubtotalCents   int64        `json:"minOrderSubtotalCents"`
 	MinEligibleQuantity     *int         `json:"minEligibleQuantity,omitempty"`
+	MinDistinctProducts     *int         `json:"minDistinctProducts,omitempty"`
 	GlobalUsageLimit        *int         `json:"globalUsageLimit,omitempty"`
 	PerCustomerUsageLimit   int          `json:"perCustomerUsageLimit"`
 	AudienceType            AudienceType `json:"audienceType"`
@@ -72,6 +73,7 @@ type CreateSellerPromoRequest struct {
 	ExcludedCategoryIDs     []uuid.UUID   `json:"excludedCategoryIds,omitempty"`
 	MaxDiscountCents        *int64        `json:"maxDiscountCents,omitempty"`
 	MinEligibleQuantity     *int          `json:"minEligibleQuantity,omitempty"`
+	MinDistinctProducts     *int          `json:"minDistinctProducts,omitempty"`
 	StartsAt                *time.Time    `json:"startsAt,omitempty"`
 	EndsAt                  *time.Time    `json:"endsAt,omitempty"`
 	GlobalUsageLimit        *int          `json:"globalUsageLimit,omitempty"`
@@ -108,6 +110,7 @@ type SellerPromoResponse struct {
 	ExcludedCategoryIDs     []uuid.UUID  `json:"excludedCategoryIds"`
 	MaxDiscountCents        *int64       `json:"maxDiscountCents,omitempty"`
 	MinEligibleQuantity     *int         `json:"minEligibleQuantity,omitempty"`
+	MinDistinctProducts     *int         `json:"minDistinctProducts,omitempty"`
 	IsActive                bool         `json:"isActive"`
 	StartsAt                *time.Time   `json:"startsAt,omitempty"`
 	EndsAt                  *time.Time   `json:"endsAt,omitempty"`

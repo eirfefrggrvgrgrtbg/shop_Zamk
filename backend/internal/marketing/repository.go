@@ -301,7 +301,7 @@ func (r *Repository) CreatePromoCodeTx(ctx context.Context, db DBExecutor, p *Pr
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
 			audience_type, product_scope, max_discount_cents,
-			min_eligible_quantity,
+			min_eligible_quantity, min_distinct_products,
 			is_active, starts_at, ends_at,
 			created_at, updated_at
 		) VALUES (
@@ -309,9 +309,9 @@ func (r *Repository) CreatePromoCodeTx(ctx context.Context, db DBExecutor, p *Pr
 			$6, $7,
 			$8, $9, $10,
 			$11, $12, $13,
-			$14,
-			$15, $16, $17,
-			$18, $19
+			$14, $15,
+			$16, $17, $18,
+			$19, $20
 		)
 	`
 	if p.AudienceType == "" {
@@ -322,7 +322,7 @@ func (r *Repository) CreatePromoCodeTx(ctx context.Context, db DBExecutor, p *Pr
 		p.DiscountValueBps, p.DiscountValueFixedCents,
 		p.MinOrderSubtotalCents, p.GlobalUsageLimit, p.PerCustomerUsageLimit,
 		string(p.AudienceType), string(p.ProductScope), p.MaxDiscountCents,
-		p.MinEligibleQuantity,
+		p.MinEligibleQuantity, p.MinDistinctProducts,
 		p.IsActive, p.StartsAt, p.EndsAt,
 		p.CreatedAt, p.UpdatedAt,
 	)
@@ -346,7 +346,7 @@ func (r *Repository) GetPromoCodeByCode(ctx context.Context, code string) (*Prom
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
 			audience_type, product_scope, max_discount_cents,
-			min_eligible_quantity,
+			min_eligible_quantity, min_distinct_products,
 			is_active, starts_at, ends_at,
 			created_at, updated_at
 		FROM promo_codes
@@ -359,7 +359,7 @@ func (r *Repository) GetPromoCodeByCode(ctx context.Context, code string) (*Prom
 		&p.DiscountValueBps, &p.DiscountValueFixedCents,
 		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
 		&aType, &pScope, &p.MaxDiscountCents,
-		&p.MinEligibleQuantity,
+		&p.MinEligibleQuantity, &p.MinDistinctProducts,
 		&p.IsActive, &p.StartsAt, &p.EndsAt,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
@@ -518,7 +518,7 @@ func (r *Repository) GetPromoCodeByCodeTx(ctx context.Context, db DBExecutor, co
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
 			audience_type, product_scope, max_discount_cents,
-			min_eligible_quantity,
+			min_eligible_quantity, min_distinct_products,
 			is_active, starts_at, ends_at,
 			created_at, updated_at
 		FROM promo_codes
@@ -531,7 +531,7 @@ func (r *Repository) GetPromoCodeByCodeTx(ctx context.Context, db DBExecutor, co
 		&p.DiscountValueBps, &p.DiscountValueFixedCents,
 		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
 		&aType, &pScope, &p.MaxDiscountCents,
-		&p.MinEligibleQuantity,
+		&p.MinEligibleQuantity, &p.MinDistinctProducts,
 		&p.IsActive, &p.StartsAt, &p.EndsAt,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
@@ -555,7 +555,7 @@ func (r *Repository) GetPromoCodeForUpdateTx(ctx context.Context, db DBExecutor,
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
 			audience_type, product_scope, max_discount_cents,
-			min_eligible_quantity,
+			min_eligible_quantity, min_distinct_products,
 			is_active, starts_at, ends_at,
 			created_at, updated_at
 		FROM promo_codes
@@ -569,7 +569,7 @@ func (r *Repository) GetPromoCodeForUpdateTx(ctx context.Context, db DBExecutor,
 		&p.DiscountValueBps, &p.DiscountValueFixedCents,
 		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
 		&aType, &pScope, &p.MaxDiscountCents,
-		&p.MinEligibleQuantity,
+		&p.MinEligibleQuantity, &p.MinDistinctProducts,
 		&p.IsActive, &p.StartsAt, &p.EndsAt,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
@@ -876,7 +876,7 @@ func (r *Repository) ListSellerPromos(ctx context.Context, sellerID uuid.UUID) (
 			p.discount_value_bps, p.discount_value_fixed_cents,
 			p.min_order_subtotal_cents, p.global_usage_limit, p.per_customer_usage_limit,
 			p.audience_type, p.product_scope, p.max_discount_cents,
-			p.min_eligible_quantity,
+			p.min_eligible_quantity, p.min_distinct_products,
 			p.is_active, p.starts_at, p.ends_at,
 			p.created_at, p.updated_at,
 			COALESCE(COUNT(CASE WHEN u.status = 'reserved' THEN 1 END), 0) AS reserved_count,
@@ -903,7 +903,7 @@ func (r *Repository) ListSellerPromos(ctx context.Context, sellerID uuid.UUID) (
 			&it.DiscountValueBps, &it.DiscountValueFixedCents,
 			&it.MinOrderSubtotalCents, &it.GlobalUsageLimit, &it.PerCustomerUsageLimit,
 			&aType, &pScope, &it.MaxDiscountCents,
-			&it.MinEligibleQuantity,
+			&it.MinEligibleQuantity, &it.MinDistinctProducts,
 			&it.IsActive, &it.StartsAt, &it.EndsAt,
 			&it.CreatedAt, &it.UpdatedAt,
 			&it.ReservedCount, &it.ConsumedCount,
@@ -1024,7 +1024,7 @@ func (r *Repository) GetSellerPromoForUpdateTx(ctx context.Context, db DBExecuto
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
 			audience_type, product_scope, max_discount_cents,
-			min_eligible_quantity,
+			min_eligible_quantity, min_distinct_products,
 			is_active, starts_at, ends_at,
 			created_at, updated_at
 		FROM promo_codes
@@ -1038,7 +1038,7 @@ func (r *Repository) GetSellerPromoForUpdateTx(ctx context.Context, db DBExecuto
 		&p.DiscountValueBps, &p.DiscountValueFixedCents,
 		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
 		&aType, &pScope, &p.MaxDiscountCents,
-		&p.MinEligibleQuantity,
+		&p.MinEligibleQuantity, &p.MinDistinctProducts,
 		&p.IsActive, &p.StartsAt, &p.EndsAt,
 		&p.CreatedAt, &p.UpdatedAt,
 	)

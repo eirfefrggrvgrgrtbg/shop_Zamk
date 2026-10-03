@@ -146,6 +146,7 @@ type PromoCode struct {
 	ProductScope            ProductScope `json:"productScope" db:"product_scope"`
 	MaxDiscountCents        *int64       `json:"maxDiscountCents,omitempty" db:"max_discount_cents"`
 	MinEligibleQuantity     *int         `json:"minEligibleQuantity,omitempty" db:"min_eligible_quantity"`
+	MinDistinctProducts     *int         `json:"minDistinctProducts,omitempty" db:"min_distinct_products"`
 	IsActive                bool         `json:"isActive" db:"is_active"`
 	StartsAt                *time.Time   `json:"startsAt,omitempty" db:"starts_at"`
 	EndsAt                  *time.Time   `json:"endsAt,omitempty" db:"ends_at"`
