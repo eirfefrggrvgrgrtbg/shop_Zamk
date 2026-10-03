@@ -44,7 +44,7 @@ type CreatePromoCodeRequest struct {
 	MinEligibleQuantity     *int         `json:"minEligibleQuantity,omitempty"`
 	GlobalUsageLimit        *int         `json:"globalUsageLimit,omitempty"`
 	PerCustomerUsageLimit   int          `json:"perCustomerUsageLimit"`
-	FirstPaidOrderOnly      bool         `json:"firstPaidOrderOnly"`
+	AudienceType            AudienceType `json:"audienceType"`
 	StartsAt                *time.Time   `json:"startsAt,omitempty"`
 	EndsAt                  *time.Time   `json:"endsAt,omitempty"`
 }
@@ -64,7 +64,7 @@ type CreateSellerPromoRequest struct {
 	DiscountValueBps        int           `json:"discountValueBps"`
 	DiscountValueFixedCents int64         `json:"discountValueFixedCents"`
 	MinOrderSubtotalCents   int64         `json:"minOrderSubtotalCents"`
-	FirstPaidOrderOnly      bool          `json:"firstPaidOrderOnly"`
+	AudienceType            AudienceType  `json:"audienceType"`
 	ProductScope            *ProductScope `json:"productScope,omitempty"`
 	IncludedProductIDs      []uuid.UUID   `json:"includedProductIds,omitempty"`
 	ExcludedProductIDs      []uuid.UUID   `json:"excludedProductIds,omitempty"`
@@ -100,7 +100,7 @@ type SellerPromoResponse struct {
 	MinOrderSubtotalCents   int64        `json:"minOrderSubtotalCents"`
 	GlobalUsageLimit        *int         `json:"globalUsageLimit,omitempty"`
 	PerCustomerUsageLimit   int          `json:"perCustomerUsageLimit"`
-	FirstPaidOrderOnly      bool         `json:"firstPaidOrderOnly"`
+	AudienceType            AudienceType `json:"audienceType"`
 	ProductScope            ProductScope `json:"productScope"`
 	IncludedProductIDs      []uuid.UUID  `json:"includedProductIds"`
 	ExcludedProductIDs      []uuid.UUID  `json:"excludedProductIds"`

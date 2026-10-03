@@ -1104,6 +1104,10 @@ func createPromoWithLimits(
 	firstOrderOnly bool,
 ) *marketing.PromoCode {
 	ctx := context.Background()
+	audience := marketing.AudienceAllCustomers
+	if firstOrderOnly {
+		audience = marketing.AudienceFirstPaidOrder
+	}
 	p, err := svc.CreatePromoCode(ctx, sellerID, marketing.CreatePromoCodeRequest{
 		CampaignID:              campaignID,
 		Code:                    code,
@@ -1113,7 +1117,7 @@ func createPromoWithLimits(
 		MinOrderSubtotalCents:   minSubtotal,
 		GlobalUsageLimit:        globalLimit,
 		PerCustomerUsageLimit:   perCustomerLimit,
-		FirstPaidOrderOnly:      firstOrderOnly,
+		AudienceType:            audience,
 		StartsAt:                timePtr(time.Now().UTC().Add(-1 * time.Hour)),
 		EndsAt:                  timePtr(time.Now().UTC().Add(48 * time.Hour)),
 	})
@@ -1336,8 +1340,13 @@ func TestMatrixQ_FirstOrderPromoReservedNonPromoPaidFirst(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(50000), campBefore.ZamkReservedCents)
 
-	// 2. Order B (non-promo) becomes PAID
+	// 2. Order B (non-promo) becomes PAID with succeeded payment
 	_, err = client.Pool.Exec(ctx, "UPDATE orders SET status = 'paid', updated_at = now() WHERE id = $1", orderB)
+	require.NoError(t, err)
+	_, err = client.Pool.Exec(ctx, `
+		INSERT INTO payments (id, order_id, provider, amount_cents, currency, status, idempotency_key, created_at, updated_at)
+		VALUES ($1, $2, 'tbank', 100000, 'RUB', 'succeeded', $3, now(), now())`,
+		uuid.New(), orderB, uuid.New().String())
 	require.NoError(t, err)
 
 	// 3. Order A attempts payment initiation: EnsureOrderPromoHold must reject and release hold

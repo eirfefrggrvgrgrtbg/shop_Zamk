@@ -2641,6 +2641,7 @@ export interface UpdateStaffMemberProfileRequest {
 export type SellerPromoDiscountType = 'percent' | 'fixed';
 export type SellerPromoStatus = 'scheduled' | 'active' | 'paused' | 'expired' | 'exhausted';
 export type SellerPromoProductScope = 'ENTIRE_STORE' | 'SELECTED_PRODUCTS' | 'SELECTED_CATEGORIES';
+export type SellerPromoAudienceType = 'ALL_CUSTOMERS' | 'FIRST_PAID_ORDER' | 'REPEAT_CUSTOMERS';
 
 export interface SellerPromotion {
   id: string;
@@ -2649,7 +2650,7 @@ export interface SellerPromotion {
   discountValueBps: number;
   discountValueFixedCents: number;
   minOrderSubtotalCents: number;
-  firstPaidOrderOnly: boolean;
+  audienceType: SellerPromoAudienceType;
   productScope: SellerPromoProductScope;
   includedProductIds?: string[];
   excludedProductIds?: string[];
@@ -2683,7 +2684,7 @@ export interface CreateSellerPromotionRequest {
   discountValueFixedCents?: number;
   minOrderSubtotalCents?: number;
   minEligibleQuantity?: number | null;
-  firstPaidOrderOnly?: boolean;
+  audienceType?: SellerPromoAudienceType;
   productScope?: SellerPromoProductScope;
   includedProductIds?: string[];
   excludedProductIds?: string[];

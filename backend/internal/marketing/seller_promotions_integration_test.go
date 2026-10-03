@@ -158,7 +158,7 @@ func TestMatrixA_SellerCreatesPercentPromo(t *testing.T) {
 		DiscountType:          marketing.DiscountTypePercent,
 		DiscountValueBps:      1000,
 		MinOrderSubtotalCents: 50000,
-		FirstPaidOrderOnly:    true,
+		AudienceType:          marketing.AudienceFirstPaidOrder,
 		PerCustomerUsageLimit: 2,
 	}
 
@@ -172,7 +172,7 @@ func TestMatrixA_SellerCreatesPercentPromo(t *testing.T) {
 	assert.Equal(t, 1000, res.DiscountValueBps)
 	assert.Equal(t, int64(0), res.DiscountValueFixedCents)
 	assert.Equal(t, int64(50000), res.MinOrderSubtotalCents)
-	assert.True(t, res.FirstPaidOrderOnly)
+	assert.Equal(t, marketing.AudienceFirstPaidOrder, res.AudienceType)
 	assert.Equal(t, 2, res.PerCustomerUsageLimit)
 	assert.True(t, res.IsActive)
 	assert.Equal(t, "active", res.Status)
@@ -434,7 +434,7 @@ func TestMatrixH_ImmutableEconomicsCannotBePatched(t *testing.T) {
 		`{"discountValueBps": 2000}`,
 		`{"discountValueFixedCents": 5000}`,
 		`{"minOrderSubtotalCents": 10000}`,
-		`{"firstPaidOrderOnly": false}`,
+		`{"audienceType": "REPEAT_CUSTOMERS"}`,
 		`{"sellerId": "00000000-0000-0000-0000-000000000000"}`,
 		`{"campaignId": "00000000-0000-0000-0000-000000000000"}`,
 		`{"fundingMode": "zamk"}`,

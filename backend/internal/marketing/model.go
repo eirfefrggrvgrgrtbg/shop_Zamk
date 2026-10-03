@@ -113,6 +113,23 @@ type PromoCodeCategoryTarget struct {
 	CreatedAt   time.Time  `json:"createdAt" db:"created_at"`
 }
 
+type AudienceType string
+
+const (
+	AudienceAllCustomers   AudienceType = "ALL_CUSTOMERS"
+	AudienceFirstPaidOrder AudienceType = "FIRST_PAID_ORDER"
+	AudienceRepeatCustomer AudienceType = "REPEAT_CUSTOMERS"
+)
+
+func IsValidAudienceType(a AudienceType) bool {
+	switch a {
+	case AudienceAllCustomers, AudienceFirstPaidOrder, AudienceRepeatCustomer:
+		return true
+	default:
+		return false
+	}
+}
+
 // PromoCode represents a customer-facing promotional voucher linked to a campaign.
 type PromoCode struct {
 	ID                      uuid.UUID    `json:"id" db:"id"`
@@ -125,7 +142,7 @@ type PromoCode struct {
 	MinOrderSubtotalCents   int64        `json:"minOrderSubtotalCents" db:"min_order_subtotal_cents"`
 	GlobalUsageLimit        *int         `json:"globalUsageLimit,omitempty" db:"global_usage_limit"`
 	PerCustomerUsageLimit   int          `json:"perCustomerUsageLimit" db:"per_customer_usage_limit"`
-	FirstPaidOrderOnly      bool         `json:"firstPaidOrderOnly" db:"first_paid_order_only"`
+	AudienceType            AudienceType `json:"audienceType" db:"audience_type"`
 	ProductScope            ProductScope `json:"productScope" db:"product_scope"`
 	MaxDiscountCents        *int64       `json:"maxDiscountCents,omitempty" db:"max_discount_cents"`
 	MinEligibleQuantity     *int         `json:"minEligibleQuantity,omitempty" db:"min_eligible_quantity"`

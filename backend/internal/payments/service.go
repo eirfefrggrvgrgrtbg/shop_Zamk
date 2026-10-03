@@ -133,8 +133,8 @@ func (s *Service) CreatePayment(ctx context.Context, userID, orderID uuid.UUID, 
 			return err
 		}
 
-		var paidCount int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM orders WHERE user_id = $1 AND status = 'paid'`, userID).Scan(&paidCount); err != nil {
+		paidCount, err := marketing.CountCustomerSuccessfullyPaidOrdersTx(ctx, tx, userID, uuid.Nil)
+		if err != nil {
 			return err
 		}
 

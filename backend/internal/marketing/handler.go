@@ -167,6 +167,10 @@ func (h *Handler) CreateSellerPromotion(w http.ResponseWriter, r *http.Request) 
 			h.writeError(w, http.StatusBadRequest, "invalid_min_quantity", err.Error())
 			return
 		}
+		if errors.Is(err, ErrInvalidAudienceType) {
+			h.writeError(w, http.StatusBadRequest, "invalid_audience_type", err.Error())
+			return
+		}
 		h.writeError(w, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
@@ -202,7 +206,7 @@ func (h *Handler) UpdateSellerPromotion(w http.ResponseWriter, r *http.Request) 
 		"discountvaluebps":        true,
 		"discountvaluefixedcents": true,
 		"minordersubtotalcents":   true,
-		"firstpaidorderonly":      true,
+		"audiencetype":            true,
 		"sellerid":                true,
 		"campaignid":              true,
 		"fundingmode":             true,

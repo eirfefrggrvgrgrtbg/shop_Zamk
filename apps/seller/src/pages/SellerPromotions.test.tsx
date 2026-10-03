@@ -61,7 +61,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
     discountValueBps: 1000,
     discountValueFixedCents: 0,
     minOrderSubtotalCents: 50000,
-    firstPaidOrderOnly: false,
+    audienceType: 'ALL_CUSTOMERS',
     productScope: 'ENTIRE_STORE',
     isActive: true,
     startsAt: '2026-10-01T00:00:00Z',
@@ -84,7 +84,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
     discountValueBps: 0,
     discountValueFixedCents: 30000,
     minOrderSubtotalCents: 0,
-    firstPaidOrderOnly: true,
+    audienceType: 'FIRST_PAID_ORDER',
     productScope: 'ENTIRE_STORE',
     isActive: false,
     startsAt: null,
@@ -142,7 +142,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
     expect(screen.getByTestId('promo-status-badge-FIXED300').textContent).toContain('На паузе');
 
     // Check first order badge
-    expect(screen.getByText('1-й заказ')).toBeTruthy();
+    expect(screen.getByText('Первый заказ')).toBeTruthy();
   });
 
   it('3. Creates a new percent promotion with correct BPS conversion', async () => {
@@ -166,7 +166,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
     fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'NEWYEAR15' } });
     fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '15' } });
     fireEvent.change(screen.getByTestId('input-min-order'), { target: { value: '1000' } });
-    fireEvent.click(screen.getByTestId('input-first-paid-only'));
+    fireEvent.click(screen.getByTestId('input-audience-first-paid-order'));
 
     fireEvent.click(screen.getByTestId('submit-create-promo'));
 
@@ -176,7 +176,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
         discountType: 'percent',
         discountValueBps: 1500,
         minOrderSubtotalCents: 100000,
-        firstPaidOrderOnly: true,
+        audienceType: 'FIRST_PAID_ORDER',
         perCustomerUsageLimit: 1,
         productScope: 'ENTIRE_STORE',
       });
@@ -212,7 +212,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
         code: 'MINUS500',
         discountType: 'fixed',
         discountValueFixedCents: 50000,
-        firstPaidOrderOnly: false,
+        audienceType: 'ALL_CUSTOMERS',
         globalUsageLimit: 50,
         perCustomerUsageLimit: 1,
         productScope: 'ENTIRE_STORE',
@@ -490,7 +490,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
           code: 'NODATES',
           discountType: 'percent',
           discountValueBps: 1000,
-          firstPaidOrderOnly: false,
+          audienceType: 'ALL_CUSTOMERS',
           perCustomerUsageLimit: 1,
           productScope: 'ENTIRE_STORE',
         });
@@ -794,7 +794,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
           discountType: 'percent',
           discountValueBps: 2000,
           minOrderSubtotalCents: 200000,
-          firstPaidOrderOnly: false,
+          audienceType: 'ALL_CUSTOMERS',
           globalUsageLimit: 500,
           perCustomerUsageLimit: 2,
           productScope: 'ENTIRE_STORE',
@@ -1401,7 +1401,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
       fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '15' } });
       fireEvent.change(screen.getByTestId('input-max-discount'), { target: { value: '1000' } });
       fireEvent.change(screen.getByTestId('input-min-order'), { target: { value: '3000' } });
-      fireEvent.click(screen.getByTestId('input-first-paid-only'));
+      fireEvent.click(screen.getByTestId('input-audience-first-paid-order'));
       fireEvent.click(screen.getByTestId('radio-scope-selected-products'));
 
       await waitFor(() => {
@@ -1464,7 +1464,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
           includedProductIds: ['11111111-1111-1111-1111-111111111111'],
           excludedProductIds: ['22222222-2222-2222-2222-222222222222'],
           maxDiscountCents: 200000,
-          firstPaidOrderOnly: false,
+          audienceType: 'ALL_CUSTOMERS',
           perCustomerUsageLimit: 1,
         });
       });
@@ -1657,7 +1657,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
           code: 'SIMPLE10',
           discountType: 'percent',
           discountValueBps: 1000,
-          firstPaidOrderOnly: false,
+          audienceType: 'ALL_CUSTOMERS',
           perCustomerUsageLimit: 1,
           productScope: 'ENTIRE_STORE',
         });
@@ -3169,7 +3169,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
           includedProductIds: ['prod-item-1'],
           excludedProductIds: ['prod-item-2'],
           maxDiscountCents: 250000,
-          firstPaidOrderOnly: false,
+          audienceType: 'ALL_CUSTOMERS',
           perCustomerUsageLimit: 1,
         });
       });
@@ -4481,6 +4481,286 @@ describe('SellerPromotions Component & Interaction Tests', () => {
         const callArgs = vi.mocked(createSellerPromotion).mock.calls[0][0];
         expect(callArgs.minEligibleQuantity).toBe(2);
       });
+    });
+  });
+
+  describe('PROMO.2E: Customer Audience Targeting UI tests (AP–BB)', () => {
+    const openCreatePromoModal = async () => {
+      vi.mocked(getSellerPromotions).mockResolvedValue({ items: [], count: 0 });
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('create-first-promo-button')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('create-first-promo-button'));
+      expect(screen.getByTestId('create-promo-modal')).toBeTruthy();
+    };
+
+    it('AP. Form renders audience radio options (All Customers, First Paid Order, Repeat Customers)', async () => {
+      await openCreatePromoModal();
+      expect(screen.getByTestId('radio-audience-all-customers')).toBeTruthy();
+      expect(screen.getByTestId('radio-audience-first-paid-order')).toBeTruthy();
+      expect(screen.getByTestId('radio-audience-repeat-customers')).toBeTruthy();
+      expect(screen.getByTestId('input-audience-all-customers')).toBeTruthy();
+      expect(screen.getByTestId('input-audience-first-paid-order')).toBeTruthy();
+      expect(screen.getByTestId('input-audience-repeat-customers')).toBeTruthy();
+    });
+
+    it('AQ. Default selection is ALL_CUSTOMERS', async () => {
+      await openCreatePromoModal();
+      const allRadio = screen.getByTestId('input-audience-all-customers') as HTMLInputElement;
+      const firstRadio = screen.getByTestId('input-audience-first-paid-order') as HTMLInputElement;
+      const repeatRadio = screen.getByTestId('input-audience-repeat-customers') as HTMLInputElement;
+
+      expect(allRadio.checked).toBe(true);
+      expect(firstRadio.checked).toBe(false);
+      expect(repeatRadio.checked).toBe(false);
+    });
+
+    it('AR. Selecting FIRST_PAID_ORDER sends audienceType: FIRST_PAID_ORDER', async () => {
+      vi.mocked(createSellerPromotion).mockResolvedValue(mockPromoPercent);
+      await openCreatePromoModal();
+
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'FIRSTONLY' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '15' } });
+      fireEvent.click(screen.getByTestId('input-audience-first-paid-order'));
+
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(createSellerPromotion).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: 'FIRSTONLY',
+            audienceType: 'FIRST_PAID_ORDER',
+          })
+        );
+      });
+    });
+
+    it('AS. Selecting REPEAT_CUSTOMERS sends audienceType: REPEAT_CUSTOMERS', async () => {
+      vi.mocked(createSellerPromotion).mockResolvedValue(mockPromoPercent);
+      await openCreatePromoModal();
+
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'REPEATONLY' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '25' } });
+      fireEvent.click(screen.getByTestId('input-audience-repeat-customers'));
+
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(createSellerPromotion).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: 'REPEATONLY',
+            audienceType: 'REPEAT_CUSTOMERS',
+          })
+        );
+      });
+    });
+
+    it('AT. Selecting ALL_CUSTOMERS sends audienceType: ALL_CUSTOMERS', async () => {
+      vi.mocked(createSellerPromotion).mockResolvedValue(mockPromoPercent);
+      await openCreatePromoModal();
+
+      // First click repeat, then switch back to all
+      fireEvent.click(screen.getByTestId('input-audience-repeat-customers'));
+      fireEvent.click(screen.getByTestId('input-audience-all-customers'));
+
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'ALLUSERS' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '10' } });
+
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(createSellerPromotion).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: 'ALLUSERS',
+            audienceType: 'ALL_CUSTOMERS',
+          })
+        );
+      });
+    });
+
+    it('AU. List view displays "Все покупатели" badge for ALL_CUSTOMERS', async () => {
+      const promoAll: SellerPromotion = {
+        ...mockPromoPercent,
+        id: 'promo-all-id',
+        code: 'PROMOALL',
+        audienceType: 'ALL_CUSTOMERS',
+      };
+      vi.mocked(getSellerPromotions).mockResolvedValue({ items: [promoAll], count: 1 });
+
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        const badge = screen.getByTestId('badge-audience-promo-all-id');
+        expect(badge).toBeTruthy();
+        expect(badge.textContent).toBe('Все покупатели');
+      });
+    });
+
+    it('AV. List view displays "Первый заказ" badge for FIRST_PAID_ORDER', async () => {
+      const promoFirst: SellerPromotion = {
+        ...mockPromoPercent,
+        id: 'promo-first-id',
+        code: 'PROMOFIRST',
+        audienceType: 'FIRST_PAID_ORDER',
+      };
+      vi.mocked(getSellerPromotions).mockResolvedValue({ items: [promoFirst], count: 1 });
+
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        const badge = screen.getByTestId('badge-audience-promo-first-id');
+        expect(badge).toBeTruthy();
+        expect(badge.textContent).toBe('Первый заказ');
+      });
+    });
+
+    it('AW. List view displays "Повторные клиенты" badge for REPEAT_CUSTOMERS', async () => {
+      const promoRepeat: SellerPromotion = {
+        ...mockPromoPercent,
+        id: 'promo-repeat-id',
+        code: 'PROMOREPEAT',
+        audienceType: 'REPEAT_CUSTOMERS',
+      };
+      vi.mocked(getSellerPromotions).mockResolvedValue({ items: [promoRepeat], count: 1 });
+
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        const badge = screen.getByTestId('badge-audience-promo-repeat-id');
+        expect(badge).toBeTruthy();
+        expect(badge.textContent).toBe('Повторные клиенты');
+      });
+    });
+
+    it('AX. Details drawer displays audience type correctly', async () => {
+      const promoRepeat: SellerPromotion = {
+        ...mockPromoPercent,
+        id: 'promo-drawer-id',
+        code: 'DRAWERPROMO',
+        audienceType: 'REPEAT_CUSTOMERS',
+      };
+      vi.mocked(getSellerPromotions).mockResolvedValue({ items: [promoRepeat], count: 1 });
+
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('promo-edit-button-DRAWERPROMO')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('promo-edit-button-DRAWERPROMO'));
+
+      await waitFor(() => {
+        const drawerAudience = screen.getByTestId('edit-promo-audience');
+        expect(drawerAudience).toBeTruthy();
+        expect(drawerAudience.textContent).toBe('Повторные клиенты');
+      });
+    });
+
+    it('AY. Form reset restores default ALL_CUSTOMERS', async () => {
+      await openCreatePromoModal();
+
+      fireEvent.click(screen.getByTestId('input-audience-repeat-customers'));
+      expect((screen.getByTestId('input-audience-repeat-customers') as HTMLInputElement).checked).toBe(true);
+
+      // Close modal by clicking cancel
+      fireEvent.click(screen.getByText('Отмена'));
+
+      // Reopen modal
+      await waitFor(() => {
+        expect(screen.getByTestId('create-first-promo-button')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('create-first-promo-button'));
+
+      // Audience should be reset to ALL_CUSTOMERS
+      expect((screen.getByTestId('input-audience-all-customers') as HTMLInputElement).checked).toBe(true);
+      expect((screen.getByTestId('input-audience-repeat-customers') as HTMLInputElement).checked).toBe(false);
+    });
+
+    it('AZ. Immutable field check (audienceType is not editable in edit modal)', async () => {
+      const promo: SellerPromotion = {
+        ...mockPromoPercent,
+        id: 'promo-immut-id',
+        code: 'IMMUTABLEPROMO',
+        audienceType: 'FIRST_PAID_ORDER',
+      };
+      vi.mocked(getSellerPromotions).mockResolvedValue({ items: [promo], count: 1 });
+
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('promo-edit-button-IMMUTABLEPROMO')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('promo-edit-button-IMMUTABLEPROMO'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('edit-promo-modal')).toBeTruthy();
+      });
+
+      // Assert that there are no radio buttons or editable audience inputs in the drawer
+      expect(screen.queryByTestId('input-audience-all-customers')).toBeNull();
+      expect(screen.queryByTestId('input-audience-first-paid-order')).toBeNull();
+      expect(screen.queryByTestId('input-audience-repeat-customers')).toBeNull();
+      // It is only displayed in the read-only section
+      expect(screen.getByTestId('edit-promo-audience').textContent).toBe('Только первый заказ');
+    });
+
+    it('BA. Audience helper text is rendered for each option', async () => {
+      await openCreatePromoModal();
+      expect(
+        screen.getByText('Промокод действует для всех клиентов без ограничений по истории заказов')
+      ).toBeTruthy();
+      expect(
+        screen.getByText('Действует только если у клиента ещё нет ни одного оплаченного заказа')
+      ).toBeTruthy();
+      expect(
+        screen.getByText('Действует только для клиентов, уже совершивших хотя бы один успешно оплаченный заказ')
+      ).toBeTruthy();
+    });
+
+    it('BB. Full seller audience targeting end-to-end form verification', async () => {
+      vi.mocked(createSellerPromotion).mockResolvedValue(mockPromoPercent);
+      await openCreatePromoModal();
+
+      // Check summary card reflects audience
+      // Initially ALL_CUSTOMERS => summary card doesn't show audience row
+      expect(screen.queryByTestId('summary-audience')).toBeNull();
+
+      // Switch to FIRST_PAID_ORDER => summary reflects it
+      fireEvent.click(screen.getByTestId('input-audience-first-paid-order'));
+      expect(screen.getByTestId('summary-audience')?.textContent).toBe('Только первый заказ');
+
+      // Switch to REPEAT_CUSTOMERS => summary reflects it
+      fireEvent.click(screen.getByTestId('input-audience-repeat-customers'));
+      expect(screen.getByTestId('summary-audience')?.textContent).toBe('Повторные клиенты');
+
+      // Switch back to ALL_CUSTOMERS => summary hides audience row
+      fireEvent.click(screen.getByTestId('input-audience-all-customers'));
+      expect(screen.queryByTestId('summary-audience')).toBeNull();
     });
   });
 });

@@ -73,7 +73,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, ErrEmptyCart) || errors.Is(err, ErrProductNotPublished) || errors.Is(err, ErrVariantNotFound) || errors.Is(err, ErrInsufficientStock) ||
 			errors.Is(err, marketing.ErrPromoNotFound) || errors.Is(err, marketing.ErrPromoInactive) || errors.Is(err, marketing.ErrPromoNotStarted) ||
 			errors.Is(err, marketing.ErrPromoExpired) || errors.Is(err, marketing.ErrPromoMinSubtotal) || errors.Is(err, marketing.ErrPromoMinQuantity) || errors.Is(err, marketing.ErrPromoGlobalLimit) ||
-			errors.Is(err, marketing.ErrPromoCustomerLimit) || errors.Is(err, marketing.ErrPromoFirstOrderOnly) || errors.Is(err, marketing.ErrPromoNotApplicable) ||
+			errors.Is(err, marketing.ErrPromoCustomerLimit) || errors.Is(err, marketing.ErrPromoFirstOrderOnly) || errors.Is(err, marketing.ErrPromoRepeatCustomerRequired) || errors.Is(err, marketing.ErrPromoNotApplicable) ||
 			errors.Is(err, marketing.ErrPromoBudgetExhausted) {
 			h.writeError(w, http.StatusBadRequest, "invalid_order", err.Error())
 			return
@@ -118,7 +118,7 @@ func (h *Handler) ValidatePromo(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, ErrEmptyCart) || errors.Is(err, ErrProductNotPublished) || errors.Is(err, ErrVariantNotFound) ||
 			errors.Is(err, marketing.ErrPromoNotFound) || errors.Is(err, marketing.ErrPromoInactive) || errors.Is(err, marketing.ErrPromoNotStarted) ||
 			errors.Is(err, marketing.ErrPromoExpired) || errors.Is(err, marketing.ErrPromoMinSubtotal) || errors.Is(err, marketing.ErrPromoMinQuantity) || errors.Is(err, marketing.ErrPromoGlobalLimit) ||
-			errors.Is(err, marketing.ErrPromoCustomerLimit) || errors.Is(err, marketing.ErrPromoFirstOrderOnly) || errors.Is(err, marketing.ErrPromoNotApplicable) ||
+			errors.Is(err, marketing.ErrPromoCustomerLimit) || errors.Is(err, marketing.ErrPromoFirstOrderOnly) || errors.Is(err, marketing.ErrPromoRepeatCustomerRequired) || errors.Is(err, marketing.ErrPromoNotApplicable) ||
 			errors.Is(err, marketing.ErrPromoBudgetExhausted) {
 			h.writeError(w, http.StatusBadRequest, "invalid_promo", err.Error())
 			return

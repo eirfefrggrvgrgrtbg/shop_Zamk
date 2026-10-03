@@ -244,6 +244,14 @@ func (s *Service) CreatePromoCode(ctx context.Context, sellerID uuid.UUID, req C
 		return nil, ErrSellerUnauthorized
 	}
 
+	audienceType := req.AudienceType
+	if audienceType == "" {
+		audienceType = AudienceAllCustomers
+	}
+	if !IsValidAudienceType(audienceType) {
+		return nil, ErrInvalidAudienceType
+	}
+
 	promo := &PromoCode{
 		ID:                      uuid.New(),
 		CampaignID:              req.CampaignID,
@@ -256,7 +264,7 @@ func (s *Service) CreatePromoCode(ctx context.Context, sellerID uuid.UUID, req C
 		MinEligibleQuantity:     req.MinEligibleQuantity,
 		GlobalUsageLimit:        req.GlobalUsageLimit,
 		PerCustomerUsageLimit:   req.PerCustomerUsageLimit,
-		FirstPaidOrderOnly:      req.FirstPaidOrderOnly,
+		AudienceType:            audienceType,
 		IsActive:                true,
 		StartsAt:                req.StartsAt,
 		EndsAt:                  req.EndsAt,
@@ -382,9 +390,10 @@ func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 		return nil, ErrPromoCustomerLimit
 	}
 
-	// 6. First-paid-order verification
-	if promo.FirstPaidOrderOnly {
-		paidCount, err := s.repo.CountCustomerPaidOrdersTx(ctx, tx, customerID, uuid.Nil)
+	// 6. Audience verification
+	switch promo.AudienceType {
+	case AudienceFirstPaidOrder:
+		paidCount, err := s.repo.CountCustomerSuccessfullyPaidOrdersTx(ctx, tx, customerID, uuid.Nil)
 		if err != nil {
 			return nil, err
 		}
@@ -398,6 +407,18 @@ func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 		if hasActive {
 			return nil, ErrPromoFirstOrderOnly
 		}
+	case AudienceRepeatCustomer:
+		paidCount, err := s.repo.CountCustomerSuccessfullyPaidOrdersTx(ctx, tx, customerID, uuid.Nil)
+		if err != nil {
+			return nil, err
+		}
+		if paidCount == 0 {
+			return nil, ErrPromoRepeatCustomerRequired
+		}
+	case AudienceAllCustomers:
+		// no customer paid-history restriction
+	default:
+		return nil, ErrInvalidAudienceType
 	}
 
 	// 7. Load targets and filter eligible items (strictly belonging to promo's seller, matching scope and exclusions)
@@ -656,7 +677,7 @@ func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 		FundingMode:              campaign.FundingMode,
 		DiscountType:             campaign.DiscountType,
 		Code:                     promo.Code,
-		IsFirstOrder:             promo.FirstPaidOrderOnly,
+		IsFirstOrder:             promo.AudienceType == AudienceFirstPaidOrder,
 		TotalSellerDiscountCents: totalSellerDiscount,
 		TotalZamkSubsidyCents:    totalZamkSubsidy,
 		TotalCustomerPaidCents:   totalCustomerPaid,
@@ -1097,6 +1118,14 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 	}
 
 	// 2. Promo code linked to campaign
+	audienceType := req.AudienceType
+	if audienceType == "" {
+		audienceType = AudienceAllCustomers
+	}
+	if !IsValidAudienceType(audienceType) {
+		return nil, ErrInvalidAudienceType
+	}
+
 	promo := &PromoCode{
 		ID:                      uuid.New(),
 		CampaignID:              campaign.ID,
@@ -1108,7 +1137,7 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		MinOrderSubtotalCents:   req.MinOrderSubtotalCents,
 		GlobalUsageLimit:        req.GlobalUsageLimit,
 		PerCustomerUsageLimit:   perCustLimit,
-		FirstPaidOrderOnly:      req.FirstPaidOrderOnly,
+		AudienceType:            audienceType,
 		ProductScope:            productScope,
 		MaxDiscountCents:        req.MaxDiscountCents,
 		MinEligibleQuantity:     req.MinEligibleQuantity,
@@ -1200,7 +1229,7 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		MinOrderSubtotalCents:   promo.MinOrderSubtotalCents,
 		GlobalUsageLimit:        promo.GlobalUsageLimit,
 		PerCustomerUsageLimit:   promo.PerCustomerUsageLimit,
-		FirstPaidOrderOnly:      promo.FirstPaidOrderOnly,
+		AudienceType:            promo.AudienceType,
 		ProductScope:            promo.ProductScope,
 		IncludedProductIDs:      includedIDs,
 		ExcludedProductIDs:      excludedIDs,
@@ -1255,7 +1284,7 @@ func (s *Service) ListSellerPromotions(ctx context.Context, sellerID uuid.UUID) 
 			MinOrderSubtotalCents:   it.MinOrderSubtotalCents,
 			GlobalUsageLimit:        it.GlobalUsageLimit,
 			PerCustomerUsageLimit:   it.PerCustomerUsageLimit,
-			FirstPaidOrderOnly:      it.FirstPaidOrderOnly,
+			AudienceType:            it.AudienceType,
 			ProductScope:            it.ProductScope,
 			IncludedProductIDs:      inc,
 			ExcludedProductIDs:      exc,
@@ -1391,7 +1420,7 @@ func (s *Service) UpdateSellerPromotion(ctx context.Context, sellerID, promoID u
 		MinOrderSubtotalCents:   promo.MinOrderSubtotalCents,
 		GlobalUsageLimit:        promo.GlobalUsageLimit,
 		PerCustomerUsageLimit:   promo.PerCustomerUsageLimit,
-		FirstPaidOrderOnly:      promo.FirstPaidOrderOnly,
+		AudienceType:            promo.AudienceType,
 		ProductScope:            promo.ProductScope,
 		IncludedProductIDs:      inc,
 		ExcludedProductIDs:      exc,

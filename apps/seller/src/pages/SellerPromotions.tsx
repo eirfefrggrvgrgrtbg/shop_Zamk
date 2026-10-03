@@ -15,6 +15,7 @@ import type {
   UpdateSellerPromotionRequest,
   SellerProduct,
   SellerPromoProductScope,
+  SellerPromoAudienceType,
   GetSellerProductsParams,
   SellerProductListResponse,
 } from '@zamk/api-client/src/types';
@@ -214,7 +215,7 @@ export function SellerPromotions() {
   const [createDiscountFixedRub, setCreateDiscountFixedRub] = useState('');
   const [createMinOrderSubtotalRub, setCreateMinOrderSubtotalRub] = useState('');
   const [createMinEligibleQuantity, setCreateMinEligibleQuantity] = useState('');
-  const [createFirstPaidOnly, setCreateFirstPaidOnly] = useState(false);
+  const [createAudienceType, setCreateAudienceType] = useState<SellerPromoAudienceType>('ALL_CUSTOMERS');
   const [createStartsAt, setCreateStartsAt] = useState('');
   const [createEndsAt, setCreateEndsAt] = useState('');
   const [createGlobalLimit, setCreateGlobalLimit] = useState('');
@@ -509,7 +510,7 @@ export function SellerPromotions() {
     setCreateDiscountFixedRub('');
     setCreateMinOrderSubtotalRub('');
     setCreateMinEligibleQuantity('');
-    setCreateFirstPaidOnly(false);
+    setCreateAudienceType('ALL_CUSTOMERS');
     setCreateStartsAt('');
     setCreateEndsAt('');
     setCreateGlobalLimit('');
@@ -642,7 +643,7 @@ export function SellerPromotions() {
         req.excludedProductIds = createExcludedProductIds;
       }
 
-      req.firstPaidOrderOnly = createFirstPaidOnly;
+      req.audienceType = createAudienceType;
 
       if (createStartsAt && createEndsAt) {
         if (new Date(createEndsAt) <= new Date(createStartsAt)) {
@@ -924,12 +925,29 @@ export function SellerPromotions() {
                               ? `Все товары (искл. ${(p.excludedProductIds?.length || 0) + (p.excludedCategoryIds?.length || 0)})`
                               : 'Все товары'}
                           </span>
-                          {p.firstPaidOrderOnly && (
+                          {p.audienceType === 'FIRST_PAID_ORDER' ? (
                             <span
                               title="Только для первого заказа покупателя"
+                              data-testid={`badge-audience-${p.id}`}
+                              className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 rounded"
+                            >
+                              Первый заказ
+                            </span>
+                          ) : p.audienceType === 'REPEAT_CUSTOMERS' ? (
+                            <span
+                              title="Повторные клиенты (от 1 оплаченного заказа)"
+                              data-testid={`badge-audience-${p.id}`}
                               className="px-1.5 py-0.5 text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded"
                             >
-                              1-й заказ
+                              Повторные клиенты
+                            </span>
+                          ) : (
+                            <span
+                              title="Все покупатели"
+                              data-testid={`badge-audience-${p.id}`}
+                              className="px-1.5 py-0.5 text-[10px] font-semibold bg-gray-50 text-gray-700 border border-gray-200 rounded"
+                            >
+                              Все покупатели
                             </span>
                           )}
                         </div>
@@ -1210,18 +1228,91 @@ export function SellerPromotions() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="create-first-paid-only"
-              data-testid="input-first-paid-only"
-              checked={createFirstPaidOnly}
-              onChange={(e) => setCreateFirstPaidOnly(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
-            />
-            <label htmlFor="create-first-paid-only" className="text-sm text-gray-700">
-              Только для первого заказа покупателя
-            </label>
+          {/* Customer Audience Section */}
+          <div className="border-t border-gray-200 pt-4">
+            <h4 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-2">
+              Целевая аудитория покупателей
+            </h4>
+            <div className="space-y-2">
+              <label
+                data-testid="radio-audience-all-customers"
+                className={cn(
+                  'flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors',
+                  createAudienceType === 'ALL_CUSTOMERS'
+                    ? 'border-black bg-gray-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                )}
+              >
+                <input
+                  type="radio"
+                  name="audienceType"
+                  value="ALL_CUSTOMERS"
+                  data-testid="input-audience-all-customers"
+                  checked={createAudienceType === 'ALL_CUSTOMERS'}
+                  onChange={() => setCreateAudienceType('ALL_CUSTOMERS')}
+                  className="mt-0.5 text-black focus:ring-black"
+                />
+                <div>
+                  <span className="block text-sm font-medium text-gray-900">Все покупатели</span>
+                  <span className="block text-xs text-gray-500">
+                    Промокод действует для всех клиентов без ограничений по истории заказов
+                  </span>
+                </div>
+              </label>
+
+              <label
+                data-testid="radio-audience-first-paid-order"
+                className={cn(
+                  'flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors',
+                  createAudienceType === 'FIRST_PAID_ORDER'
+                    ? 'border-black bg-gray-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                )}
+              >
+                <input
+                  type="radio"
+                  name="audienceType"
+                  value="FIRST_PAID_ORDER"
+                  id="create-first-paid-only"
+                  data-testid="input-audience-first-paid-order"
+                  checked={createAudienceType === 'FIRST_PAID_ORDER'}
+                  onChange={() => setCreateAudienceType('FIRST_PAID_ORDER')}
+                  className="mt-0.5 text-black focus:ring-black"
+                />
+                <div>
+                  <span className="block text-sm font-medium text-gray-900">Только первый оплаченный заказ</span>
+                  <span className="block text-xs text-gray-500">
+                    Действует только если у клиента ещё нет ни одного оплаченного заказа
+                  </span>
+                </div>
+              </label>
+
+              <label
+                data-testid="radio-audience-repeat-customers"
+                className={cn(
+                  'flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors',
+                  createAudienceType === 'REPEAT_CUSTOMERS'
+                    ? 'border-black bg-gray-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                )}
+              >
+                <input
+                  type="radio"
+                  name="audienceType"
+                  value="REPEAT_CUSTOMERS"
+                  data-testid="input-audience-repeat-customers"
+                  checked={createAudienceType === 'REPEAT_CUSTOMERS'}
+                  onChange={() => setCreateAudienceType('REPEAT_CUSTOMERS')}
+                  className="mt-0.5 text-black focus:ring-black"
+                />
+                <div>
+                  <span className="block text-sm font-medium text-gray-900">Повторные клиенты</span>
+                  <span className="block text-xs text-gray-500">
+                    Действует только для клиентов, уже совершивших хотя бы один успешно оплаченный заказ
+                  </span>
+                </div>
+              </label>
+            </div>
           </div>
 
           {/* Product Scope Section */}
@@ -1683,10 +1774,12 @@ export function SellerPromotions() {
                 </span>
               </div>
             )}
-            {createFirstPaidOnly && (
+            {createAudienceType !== 'ALL_CUSTOMERS' && (
               <div className="text-gray-700">
-                <span className="font-medium text-gray-500">Ограничение:</span>{' '}
-                <span className="font-semibold text-gray-900">Только первый заказ</span>
+                <span className="font-medium text-gray-500">Аудитория:</span>{' '}
+                <span className="font-semibold text-gray-900" data-testid="summary-audience">
+                  {createAudienceType === 'FIRST_PAID_ORDER' ? 'Только первый заказ' : 'Повторные клиенты'}
+                </span>
               </div>
             )}
           </div>
@@ -2339,9 +2432,13 @@ export function SellerPromotions() {
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-500">1-й заказ: </span>
-                  <span className="font-semibold text-gray-900">
-                    {editPromo.firstPaidOrderOnly ? 'Да' : 'Нет'}
+                  <span className="text-gray-500">Аудитория: </span>
+                  <span className="font-semibold text-gray-900" data-testid="edit-promo-audience">
+                    {editPromo.audienceType === 'FIRST_PAID_ORDER'
+                      ? 'Только первый заказ'
+                      : editPromo.audienceType === 'REPEAT_CUSTOMERS'
+                      ? 'Повторные клиенты'
+                      : 'Все покупатели'}
                   </span>
                 </div>
                 <div>

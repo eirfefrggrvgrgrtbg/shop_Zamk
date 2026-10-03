@@ -300,7 +300,7 @@ func (r *Repository) CreatePromoCodeTx(ctx context.Context, db DBExecutor, p *Pr
 			id, campaign_id, seller_id, code, discount_type,
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
-			first_paid_order_only, product_scope, max_discount_cents,
+			audience_type, product_scope, max_discount_cents,
 			min_eligible_quantity,
 			is_active, starts_at, ends_at,
 			created_at, updated_at
@@ -314,11 +314,14 @@ func (r *Repository) CreatePromoCodeTx(ctx context.Context, db DBExecutor, p *Pr
 			$18, $19
 		)
 	`
+	if p.AudienceType == "" {
+		p.AudienceType = AudienceAllCustomers
+	}
 	_, err := db.Exec(ctx, query,
 		p.ID, p.CampaignID, p.SellerID, p.Code, string(p.DiscountType),
 		p.DiscountValueBps, p.DiscountValueFixedCents,
 		p.MinOrderSubtotalCents, p.GlobalUsageLimit, p.PerCustomerUsageLimit,
-		p.FirstPaidOrderOnly, string(p.ProductScope), p.MaxDiscountCents,
+		string(p.AudienceType), string(p.ProductScope), p.MaxDiscountCents,
 		p.MinEligibleQuantity,
 		p.IsActive, p.StartsAt, p.EndsAt,
 		p.CreatedAt, p.UpdatedAt,
@@ -342,7 +345,7 @@ func (r *Repository) GetPromoCodeByCode(ctx context.Context, code string) (*Prom
 			id, campaign_id, seller_id, code, discount_type,
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
-			first_paid_order_only, product_scope, max_discount_cents,
+			audience_type, product_scope, max_discount_cents,
 			min_eligible_quantity,
 			is_active, starts_at, ends_at,
 			created_at, updated_at
@@ -350,12 +353,12 @@ func (r *Repository) GetPromoCodeByCode(ctx context.Context, code string) (*Prom
 		WHERE LOWER(code) = LOWER($1)
 	`
 	var p PromoCode
-	var dType, pScope string
+	var dType, pScope, aType string
 	err := r.pool.QueryRow(ctx, query, normalized).Scan(
 		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
 		&p.DiscountValueBps, &p.DiscountValueFixedCents,
 		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
-		&p.FirstPaidOrderOnly, &pScope, &p.MaxDiscountCents,
+		&aType, &pScope, &p.MaxDiscountCents,
 		&p.MinEligibleQuantity,
 		&p.IsActive, &p.StartsAt, &p.EndsAt,
 		&p.CreatedAt, &p.UpdatedAt,
@@ -368,6 +371,7 @@ func (r *Repository) GetPromoCodeByCode(ctx context.Context, code string) (*Prom
 	}
 	p.DiscountType = DiscountType(dType)
 	p.ProductScope = ProductScope(pScope)
+	p.AudienceType = AudienceType(aType)
 	return &p, nil
 }
 
@@ -513,7 +517,7 @@ func (r *Repository) GetPromoCodeByCodeTx(ctx context.Context, db DBExecutor, co
 			id, campaign_id, seller_id, code, discount_type,
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
-			first_paid_order_only, product_scope, max_discount_cents,
+			audience_type, product_scope, max_discount_cents,
 			min_eligible_quantity,
 			is_active, starts_at, ends_at,
 			created_at, updated_at
@@ -521,12 +525,12 @@ func (r *Repository) GetPromoCodeByCodeTx(ctx context.Context, db DBExecutor, co
 		WHERE LOWER(code) = LOWER($1)
 	`
 	var p PromoCode
-	var dType, pScope string
+	var dType, pScope, aType string
 	err := db.QueryRow(ctx, query, normalized).Scan(
 		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
 		&p.DiscountValueBps, &p.DiscountValueFixedCents,
 		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
-		&p.FirstPaidOrderOnly, &pScope, &p.MaxDiscountCents,
+		&aType, &pScope, &p.MaxDiscountCents,
 		&p.MinEligibleQuantity,
 		&p.IsActive, &p.StartsAt, &p.EndsAt,
 		&p.CreatedAt, &p.UpdatedAt,
@@ -539,6 +543,7 @@ func (r *Repository) GetPromoCodeByCodeTx(ctx context.Context, db DBExecutor, co
 	}
 	p.DiscountType = DiscountType(dType)
 	p.ProductScope = ProductScope(pScope)
+	p.AudienceType = AudienceType(aType)
 	return &p, nil
 }
 
@@ -549,7 +554,7 @@ func (r *Repository) GetPromoCodeForUpdateTx(ctx context.Context, db DBExecutor,
 			id, campaign_id, seller_id, code, discount_type,
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
-			first_paid_order_only, product_scope, max_discount_cents,
+			audience_type, product_scope, max_discount_cents,
 			min_eligible_quantity,
 			is_active, starts_at, ends_at,
 			created_at, updated_at
@@ -558,12 +563,12 @@ func (r *Repository) GetPromoCodeForUpdateTx(ctx context.Context, db DBExecutor,
 		FOR UPDATE
 	`
 	var p PromoCode
-	var dType, pScope string
+	var dType, pScope, aType string
 	err := db.QueryRow(ctx, query, id).Scan(
 		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
 		&p.DiscountValueBps, &p.DiscountValueFixedCents,
 		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
-		&p.FirstPaidOrderOnly, &pScope, &p.MaxDiscountCents,
+		&aType, &pScope, &p.MaxDiscountCents,
 		&p.MinEligibleQuantity,
 		&p.IsActive, &p.StartsAt, &p.EndsAt,
 		&p.CreatedAt, &p.UpdatedAt,
@@ -576,6 +581,7 @@ func (r *Repository) GetPromoCodeForUpdateTx(ctx context.Context, db DBExecutor,
 	}
 	p.DiscountType = DiscountType(dType)
 	p.ProductScope = ProductScope(pScope)
+	p.AudienceType = AudienceType(aType)
 	return &p, nil
 }
 
@@ -649,19 +655,54 @@ func (r *Repository) CountPromoUsageCustomerTx(ctx context.Context, db DBExecuto
 	return count, nil
 }
 
-// CountCustomerPaidOrdersTx counts how many paid orders this customer has (excluding an optional current order).
-func (r *Repository) CountCustomerPaidOrdersTx(ctx context.Context, db DBExecutor, customerID, excludeOrderID uuid.UUID) (int, error) {
-	query := `
-		SELECT COUNT(*)
-		FROM orders
-		WHERE user_id = $1 AND status = 'paid' AND id != $2
-	`
+// CountCustomerSuccessfullyPaidOrdersTx counts how many distinct orders have ever been successfully paid
+// by this customer (backed strictly by payments.status = 'succeeded', excluding an optional current order).
+func CountCustomerSuccessfullyPaidOrdersTx(ctx context.Context, db DBExecutor, customerID, excludeOrderID uuid.UUID) (int, error) {
+	var query string
 	var count int
-	err := db.QueryRow(ctx, query, customerID, excludeOrderID).Scan(&count)
+	var err error
+	if excludeOrderID != uuid.Nil {
+		query = `
+			SELECT COUNT(DISTINCT o.id)
+			FROM orders o
+			WHERE o.user_id = $1
+			  AND o.id != $2
+			  AND EXISTS (
+				SELECT 1
+				FROM payments p
+				WHERE p.order_id = o.id
+				  AND p.status = 'succeeded'
+			  )
+		`
+		err = db.QueryRow(ctx, query, customerID, excludeOrderID).Scan(&count)
+	} else {
+		query = `
+			SELECT COUNT(DISTINCT o.id)
+			FROM orders o
+			WHERE o.user_id = $1
+			  AND EXISTS (
+				SELECT 1
+				FROM payments p
+				WHERE p.order_id = o.id
+				  AND p.status = 'succeeded'
+			  )
+		`
+		err = db.QueryRow(ctx, query, customerID).Scan(&count)
+	}
 	if err != nil {
-		return 0, fmt.Errorf("failed to count customer paid orders: %w", err)
+		return 0, fmt.Errorf("failed to count customer successfully paid orders: %w", err)
 	}
 	return count, nil
+}
+
+// CountCustomerSuccessfullyPaidOrdersTx is the repository method forwarding to the canonical function.
+func (r *Repository) CountCustomerSuccessfullyPaidOrdersTx(ctx context.Context, db DBExecutor, customerID, excludeOrderID uuid.UUID) (int, error) {
+	return CountCustomerSuccessfullyPaidOrdersTx(ctx, db, customerID, excludeOrderID)
+}
+
+// CountCustomerPaidOrdersTx is retained as an alias to the canonical CountCustomerSuccessfullyPaidOrdersTx.
+func (r *Repository) CountCustomerPaidOrdersTx(ctx context.Context, db DBExecutor, customerID, excludeOrderID uuid.UUID) (int, error) {
+	return CountCustomerSuccessfullyPaidOrdersTx(ctx, db, customerID, excludeOrderID)
 }
 
 // HasActiveFirstOrderReservationTx checks if the customer already holds an active first-order reservation.
@@ -834,7 +875,7 @@ func (r *Repository) ListSellerPromos(ctx context.Context, sellerID uuid.UUID) (
 			p.id, p.campaign_id, p.seller_id, p.code, p.discount_type,
 			p.discount_value_bps, p.discount_value_fixed_cents,
 			p.min_order_subtotal_cents, p.global_usage_limit, p.per_customer_usage_limit,
-			p.first_paid_order_only, p.product_scope, p.max_discount_cents,
+			p.audience_type, p.product_scope, p.max_discount_cents,
 			p.min_eligible_quantity,
 			p.is_active, p.starts_at, p.ends_at,
 			p.created_at, p.updated_at,
@@ -856,12 +897,12 @@ func (r *Repository) ListSellerPromos(ctx context.Context, sellerID uuid.UUID) (
 	var promoIDs []uuid.UUID
 	for rows.Next() {
 		var it SellerPromoItem
-		var dType, pScope string
+		var dType, pScope, aType string
 		if err := rows.Scan(
 			&it.ID, &it.CampaignID, &it.SellerID, &it.Code, &dType,
 			&it.DiscountValueBps, &it.DiscountValueFixedCents,
 			&it.MinOrderSubtotalCents, &it.GlobalUsageLimit, &it.PerCustomerUsageLimit,
-			&it.FirstPaidOrderOnly, &pScope, &it.MaxDiscountCents,
+			&aType, &pScope, &it.MaxDiscountCents,
 			&it.MinEligibleQuantity,
 			&it.IsActive, &it.StartsAt, &it.EndsAt,
 			&it.CreatedAt, &it.UpdatedAt,
@@ -871,6 +912,7 @@ func (r *Repository) ListSellerPromos(ctx context.Context, sellerID uuid.UUID) (
 		}
 		it.DiscountType = DiscountType(dType)
 		it.ProductScope = ProductScope(pScope)
+		it.AudienceType = AudienceType(aType)
 		it.IncludedProductIDs = []uuid.UUID{}
 		it.ExcludedProductIDs = []uuid.UUID{}
 		it.IncludedCategoryIDs = []uuid.UUID{}
@@ -981,7 +1023,7 @@ func (r *Repository) GetSellerPromoForUpdateTx(ctx context.Context, db DBExecuto
 			id, campaign_id, seller_id, code, discount_type,
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
-			first_paid_order_only, product_scope, max_discount_cents,
+			audience_type, product_scope, max_discount_cents,
 			min_eligible_quantity,
 			is_active, starts_at, ends_at,
 			created_at, updated_at
@@ -990,12 +1032,12 @@ func (r *Repository) GetSellerPromoForUpdateTx(ctx context.Context, db DBExecuto
 		FOR UPDATE
 	`
 	var p PromoCode
-	var dType, pScope string
+	var dType, pScope, aType string
 	err := db.QueryRow(ctx, query, promoID, sellerID).Scan(
 		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
 		&p.DiscountValueBps, &p.DiscountValueFixedCents,
 		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
-		&p.FirstPaidOrderOnly, &pScope, &p.MaxDiscountCents,
+		&aType, &pScope, &p.MaxDiscountCents,
 		&p.MinEligibleQuantity,
 		&p.IsActive, &p.StartsAt, &p.EndsAt,
 		&p.CreatedAt, &p.UpdatedAt,
@@ -1008,6 +1050,7 @@ func (r *Repository) GetSellerPromoForUpdateTx(ctx context.Context, db DBExecuto
 	}
 	p.DiscountType = DiscountType(dType)
 	p.ProductScope = ProductScope(pScope)
+	p.AudienceType = AudienceType(aType)
 	return &p, nil
 }
 

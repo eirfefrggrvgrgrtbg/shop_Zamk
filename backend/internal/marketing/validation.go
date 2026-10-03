@@ -183,6 +183,12 @@ func ValidatePromoCode(p *PromoCode) error {
 	if p.MinEligibleQuantity != nil && *p.MinEligibleQuantity <= 0 {
 		return ErrInvalidMinQuantity
 	}
+	if p.AudienceType == "" {
+		p.AudienceType = AudienceAllCustomers
+	}
+	if !IsValidAudienceType(p.AudienceType) {
+		return ErrInvalidAudienceType
+	}
 
 	return nil
 }
