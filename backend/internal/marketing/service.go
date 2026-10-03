@@ -253,6 +253,7 @@ func (s *Service) CreatePromoCode(ctx context.Context, sellerID uuid.UUID, req C
 		DiscountValueBps:        req.DiscountValueBps,
 		DiscountValueFixedCents: req.DiscountValueFixedCents,
 		MinOrderSubtotalCents:   req.MinOrderSubtotalCents,
+		MinEligibleQuantity:     req.MinEligibleQuantity,
 		GlobalUsageLimit:        req.GlobalUsageLimit,
 		PerCustomerUsageLimit:   req.PerCustomerUsageLimit,
 		FirstPaidOrderOnly:      req.FirstPaidOrderOnly,
@@ -503,9 +504,17 @@ func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 		return nil, ErrPromoNotApplicable
 	}
 
-	// 8. Minimum subtotal check against eligible items only
+	// 8. Minimum subtotal and quantity checks against eligible items only
 	if eligibleSubtotal < promo.MinOrderSubtotalCents {
 		return nil, ErrPromoMinSubtotal
+	}
+
+	var eligibleQuantity int64
+	for _, it := range eligibleItems {
+		eligibleQuantity += int64(it.Quantity)
+	}
+	if promo.MinEligibleQuantity != nil && eligibleQuantity < int64(*promo.MinEligibleQuantity) {
+		return nil, ErrPromoMinQuantity
 	}
 
 	// 9. Compute line economics
@@ -1012,6 +1021,9 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 	if req.MaxDiscountCents != nil && *req.MaxDiscountCents <= 0 {
 		return nil, ErrInvalidMaxDiscount
 	}
+	if req.MinEligibleQuantity != nil && *req.MinEligibleQuantity <= 0 {
+		return nil, ErrInvalidMinQuantity
+	}
 
 	isActive := true
 	if req.IsActive != nil {
@@ -1099,6 +1111,7 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		FirstPaidOrderOnly:      req.FirstPaidOrderOnly,
 		ProductScope:            productScope,
 		MaxDiscountCents:        req.MaxDiscountCents,
+		MinEligibleQuantity:     req.MinEligibleQuantity,
 		IsActive:                isActive,
 		StartsAt:                req.StartsAt,
 		EndsAt:                  req.EndsAt,
@@ -1194,6 +1207,7 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		IncludedCategoryIDs:     includedCatIDs,
 		ExcludedCategoryIDs:     excludedCatIDs,
 		MaxDiscountCents:        promo.MaxDiscountCents,
+		MinEligibleQuantity:     promo.MinEligibleQuantity,
 		IsActive:                promo.IsActive,
 		StartsAt:                promo.StartsAt,
 		EndsAt:                  promo.EndsAt,
@@ -1248,6 +1262,7 @@ func (s *Service) ListSellerPromotions(ctx context.Context, sellerID uuid.UUID) 
 			IncludedCategoryIDs:     incCat,
 			ExcludedCategoryIDs:     excCat,
 			MaxDiscountCents:        it.MaxDiscountCents,
+			MinEligibleQuantity:     it.MinEligibleQuantity,
 			IsActive:                it.IsActive,
 			StartsAt:                it.StartsAt,
 			EndsAt:                  it.EndsAt,
@@ -1383,6 +1398,7 @@ func (s *Service) UpdateSellerPromotion(ctx context.Context, sellerID, promoID u
 		IncludedCategoryIDs:     incCat,
 		ExcludedCategoryIDs:     excCat,
 		MaxDiscountCents:        promo.MaxDiscountCents,
+		MinEligibleQuantity:     promo.MinEligibleQuantity,
 		IsActive:                promo.IsActive,
 		StartsAt:                promo.StartsAt,
 		EndsAt:                  promo.EndsAt,

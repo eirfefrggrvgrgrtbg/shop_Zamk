@@ -163,6 +163,10 @@ func (h *Handler) CreateSellerPromotion(w http.ResponseWriter, r *http.Request) 
 			h.writeError(w, http.StatusBadRequest, "invalid_max_discount", err.Error())
 			return
 		}
+		if errors.Is(err, ErrInvalidMinQuantity) {
+			h.writeError(w, http.StatusBadRequest, "invalid_min_quantity", err.Error())
+			return
+		}
 		h.writeError(w, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}

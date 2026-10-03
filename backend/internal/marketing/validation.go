@@ -180,6 +180,9 @@ func ValidatePromoCode(p *PromoCode) error {
 	if p.MaxDiscountCents != nil && *p.MaxDiscountCents <= 0 {
 		return ErrInvalidMaxDiscount
 	}
+	if p.MinEligibleQuantity != nil && *p.MinEligibleQuantity <= 0 {
+		return ErrInvalidMinQuantity
+	}
 
 	return nil
 }

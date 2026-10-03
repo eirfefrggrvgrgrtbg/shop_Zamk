@@ -2656,6 +2656,7 @@ export interface SellerPromotion {
   includedCategoryIds?: string[];
   excludedCategoryIds?: string[];
   maxDiscountCents?: number | null;
+  minEligibleQuantity?: number | null;
   isActive: boolean;
   startsAt: string | null;
   endsAt: string | null;
@@ -2681,6 +2682,7 @@ export interface CreateSellerPromotionRequest {
   discountValueBps?: number;
   discountValueFixedCents?: number;
   minOrderSubtotalCents?: number;
+  minEligibleQuantity?: number | null;
   firstPaidOrderOnly?: boolean;
   productScope?: SellerPromoProductScope;
   includedProductIds?: string[];

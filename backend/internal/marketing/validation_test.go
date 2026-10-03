@@ -222,3 +222,38 @@ func TestValidateOrderItemPromotion_Invariants(t *testing.T) {
 	tamperedCommUnit.CommissionBaseUnitCents = 400000
 	assert.Error(t, marketing.ValidateOrderItemPromotion(&tamperedCommUnit))
 }
+
+func TestValidatePromoCode_MinEligibleQuantity(t *testing.T) {
+	zero := 0
+	neg := -1
+	pos := 3
+
+	basePromo := func() *marketing.PromoCode {
+		return &marketing.PromoCode{
+			Code:                  "VALID10",
+			DiscountType:          marketing.DiscountTypePercent,
+			DiscountValueBps:      1000,
+			PerCustomerUsageLimit: 1,
+		}
+	}
+
+	// 1. NULL is valid
+	pNull := basePromo()
+	pNull.MinEligibleQuantity = nil
+	assert.NoError(t, marketing.ValidatePromoCode(pNull))
+
+	// 2. Positive integer is valid
+	pPos := basePromo()
+	pPos.MinEligibleQuantity = &pos
+	assert.NoError(t, marketing.ValidatePromoCode(pPos))
+
+	// 3. Zero is invalid
+	pZero := basePromo()
+	pZero.MinEligibleQuantity = &zero
+	assert.ErrorIs(t, marketing.ValidatePromoCode(pZero), marketing.ErrInvalidMinQuantity)
+
+	// 4. Negative is invalid
+	pNeg := basePromo()
+	pNeg.MinEligibleQuantity = &neg
+	assert.ErrorIs(t, marketing.ValidatePromoCode(pNeg), marketing.ErrInvalidMinQuantity)
+}

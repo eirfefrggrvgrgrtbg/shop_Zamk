@@ -213,6 +213,7 @@ export function SellerPromotions() {
   const [createDiscountPercent, setCreateDiscountPercent] = useState('');
   const [createDiscountFixedRub, setCreateDiscountFixedRub] = useState('');
   const [createMinOrderSubtotalRub, setCreateMinOrderSubtotalRub] = useState('');
+  const [createMinEligibleQuantity, setCreateMinEligibleQuantity] = useState('');
   const [createFirstPaidOnly, setCreateFirstPaidOnly] = useState(false);
   const [createStartsAt, setCreateStartsAt] = useState('');
   const [createEndsAt, setCreateEndsAt] = useState('');
@@ -507,6 +508,7 @@ export function SellerPromotions() {
     setCreateDiscountPercent('');
     setCreateDiscountFixedRub('');
     setCreateMinOrderSubtotalRub('');
+    setCreateMinEligibleQuantity('');
     setCreateFirstPaidOnly(false);
     setCreateStartsAt('');
     setCreateEndsAt('');
@@ -535,6 +537,20 @@ export function SellerPromotions() {
     setEditDateError('');
   };
 
+  const scrollToAndFocus = (testIdOrId: string) => {
+    const el =
+      document.querySelector<HTMLElement>(`[data-testid="${testIdOrId}"]`) ||
+      document.getElementById(testIdOrId);
+    if (el) {
+      if (typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      if (typeof el.focus === 'function') {
+        el.focus();
+      }
+    }
+  };
+
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateSubmitting(true);
@@ -543,6 +559,7 @@ export function SellerPromotions() {
     try {
       const codeClean = createCode.trim().toUpperCase();
       if (!codeClean) {
+        scrollToAndFocus('input-promo-code');
         throw new Error('Укажите код промокода.');
       }
 
@@ -555,28 +572,60 @@ export function SellerPromotions() {
       if (createDiscountType === 'percent') {
         const pct = parseFloat(createDiscountPercent);
         if (isNaN(pct) || pct <= 0 || pct > 100) {
+          scrollToAndFocus('input-discount-percent');
           throw new Error('Скидка должна быть от 1% до 100%.');
         }
         req.discountValueBps = Math.round(pct * 100);
       } else {
         const fixedRub = parseFloat(createDiscountFixedRub);
         if (isNaN(fixedRub) || fixedRub <= 0) {
+          scrollToAndFocus('input-discount-fixed');
           throw new Error('Укажите фиксированную сумму скидки в рублях.');
         }
         req.discountValueFixedCents = Math.round(fixedRub * 100);
       }
 
+      if (createMinOrderSubtotalRub) {
+        const minRub = parseFloat(createMinOrderSubtotalRub);
+        if (isNaN(minRub) || minRub < 0) {
+          scrollToAndFocus('input-min-order');
+          throw new Error('Минимальная сумма заказа должна быть положительным числом.');
+        }
+        if (minRub > 0) {
+          req.minOrderSubtotalCents = Math.round(minRub * 100);
+        }
+      }
+
+      if (createMinEligibleQuantity) {
+        const trimmed = createMinEligibleQuantity.trim();
+        if (trimmed !== '') {
+          const qty = Number(trimmed);
+          if (!/^\d+$/.test(trimmed) || !Number.isInteger(qty) || qty <= 0) {
+            scrollToAndFocus('input-min-quantity');
+            throw new Error('Минимальное количество товаров должно быть целым положительным числом.');
+          }
+          req.minEligibleQuantity = qty;
+        }
+      }
+
       if (createMaxDiscountRub.trim()) {
-        req.maxDiscountCents = parseRubToCentsExact(createMaxDiscountRub);
+        try {
+          req.maxDiscountCents = parseRubToCentsExact(createMaxDiscountRub);
+        } catch (err: any) {
+          scrollToAndFocus('input-max-discount');
+          throw err;
+        }
       }
 
       if (createScope === 'SELECTED_PRODUCTS') {
         if (createIncludedProductIds.length === 0) {
+          scrollToAndFocus('btn-edit-included');
           throw new Error('Выберите хотя бы один товар для области действия «На выбранные товары».');
         }
         req.includedProductIds = createIncludedProductIds;
       } else if (createScope === 'SELECTED_CATEGORIES') {
         if (createIncludedCategoryIds.length === 0) {
+          scrollToAndFocus('btn-edit-included-categories');
           throw new Error('Выберите хотя бы одну категорию для области действия «По категориям».');
         }
         req.includedCategoryIds = createIncludedCategoryIds;
@@ -593,17 +642,11 @@ export function SellerPromotions() {
         req.excludedProductIds = createExcludedProductIds;
       }
 
-      if (createMinOrderSubtotalRub) {
-        const minRub = parseFloat(createMinOrderSubtotalRub);
-        if (!isNaN(minRub) && minRub > 0) {
-          req.minOrderSubtotalCents = Math.round(minRub * 100);
-        }
-      }
-
       req.firstPaidOrderOnly = createFirstPaidOnly;
 
       if (createStartsAt && createEndsAt) {
         if (new Date(createEndsAt) <= new Date(createStartsAt)) {
+          scrollToAndFocus('input-ends-at');
           throw new Error('Дата окончания должна быть позже даты начала.');
         }
       }
@@ -618,6 +661,7 @@ export function SellerPromotions() {
       if (createGlobalLimit) {
         const gl = parseInt(createGlobalLimit, 10);
         if (isNaN(gl) || gl <= 0) {
+          scrollToAndFocus('input-global-limit');
           throw new Error('Общий лимит должен быть положительным числом.');
         }
         req.globalUsageLimit = gl;
@@ -626,6 +670,7 @@ export function SellerPromotions() {
       if (createPerCustomerLimit) {
         const pcl = parseInt(createPerCustomerLimit, 10);
         if (isNaN(pcl) || pcl <= 0) {
+          scrollToAndFocus('input-per-customer-limit');
           throw new Error('Лимит на клиента должен быть положительным числом.');
         }
         req.perCustomerUsageLimit = pcl;
@@ -890,7 +935,14 @@ export function SellerPromotions() {
                         </div>
                       </td>
                       <td className="px-6 py-4 font-semibold text-gray-900">{discountText}</td>
-                      <td className="px-6 py-4 text-gray-600">{minOrderText}</td>
+                      <td className="px-6 py-4 text-gray-600">
+                        <div>{minOrderText}</div>
+                        {p.minEligibleQuantity && p.minEligibleQuantity > 0 && (
+                          <div className="text-xs text-gray-500 font-medium">
+                            от {p.minEligibleQuantity} товаров
+                          </div>
+                        )}
+                      </td>
                       <td className="px-6 py-4 text-gray-600">
                         <span className="font-medium text-gray-900">{p.consumedUsageCount}</span>
                         {p.reservedUsageCount > 0 && (
@@ -1108,25 +1160,54 @@ export function SellerPromotions() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
-                Максимальная скидка (₽) <span className="text-gray-400 font-normal">(опционально)</span>
+              <label htmlFor="create-min-quantity" className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                Минимальное количество товаров
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  data-testid="input-max-discount"
-                  value={createMaxDiscountRub}
-                  onChange={(e) => setCreateMaxDiscountRub(e.target.value)}
-                  placeholder="Без ограничения"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black"
-                />
-                <span className="absolute right-3 top-2 text-gray-400 text-sm">₽</span>
-              </div>
-              <p className="text-[11px] text-gray-400 mt-1">
-                Ограничение максимальной суммы скидки на один заказ.
+              <input
+                id="create-min-quantity"
+                type="text"
+                inputMode="numeric"
+                data-testid="input-min-quantity"
+                aria-describedby="create-min-quantity-help create-min-quantity-biz-help"
+                aria-invalid={createError.includes('Минимальное количество товаров') ? 'true' : 'false'}
+                value={createMinEligibleQuantity}
+                onChange={(e) => setCreateMinEligibleQuantity(e.target.value)}
+                placeholder="Без ограничений"
+                className={cn(
+                  "w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black",
+                  createError.includes('Минимальное количество товаров')
+                    ? "border-red-500 focus:ring-red-500"
+                    : "border-gray-300"
+                )}
+              />
+              <p id="create-min-quantity-help" className="text-[11px] text-gray-500 mt-1">
+                Только целые числа от 1. Оставьте пустым, если ограничения нет.
+              </p>
+              <p id="create-min-quantity-biz-help" className="text-[11px] text-gray-400 mt-0.5">
+                Считаются только товары, на которые действует промокод.
               </p>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+              Максимальная скидка (₽) <span className="text-gray-400 font-normal">(опционально)</span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                inputMode="decimal"
+                data-testid="input-max-discount"
+                value={createMaxDiscountRub}
+                onChange={(e) => setCreateMaxDiscountRub(e.target.value)}
+                placeholder="Без ограничения"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black"
+              />
+              <span className="absolute right-3 top-2 text-gray-400 text-sm">₽</span>
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Ограничение максимальной суммы скидки на один заказ.
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1592,6 +1673,14 @@ export function SellerPromotions() {
               <div className="text-gray-700">
                 <span className="font-medium text-gray-500">Мин. заказ:</span>{' '}
                 <span className="font-semibold text-gray-900">{createMinOrderSubtotalRub} ₽</span>
+              </div>
+            )}
+            {createMinEligibleQuantity && (
+              <div className="text-gray-700">
+                <span className="font-medium text-gray-500">Мин. количество:</span>{' '}
+                <span className="font-semibold text-gray-900" data-testid="summary-min-quantity">
+                  от {createMinEligibleQuantity} товаров
+                </span>
               </div>
             )}
             {createFirstPaidOnly && (
@@ -2239,6 +2328,14 @@ export function SellerPromotions() {
                     {editPromo.minOrderSubtotalCents > 0
                       ? currencyFormatter.format(editPromo.minOrderSubtotalCents / 100)
                       : '0 ₽'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Мин. количество: </span>
+                  <span className="font-semibold text-gray-900" data-testid="edit-promo-min-quantity">
+                    {editPromo.minEligibleQuantity && editPromo.minEligibleQuantity > 0
+                      ? `от ${editPromo.minEligibleQuantity} товаров`
+                      : 'Без ограничений'}
                   </span>
                 </div>
                 <div>

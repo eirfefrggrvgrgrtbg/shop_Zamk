@@ -128,6 +128,7 @@ type PromoCode struct {
 	FirstPaidOrderOnly      bool         `json:"firstPaidOrderOnly" db:"first_paid_order_only"`
 	ProductScope            ProductScope `json:"productScope" db:"product_scope"`
 	MaxDiscountCents        *int64       `json:"maxDiscountCents,omitempty" db:"max_discount_cents"`
+	MinEligibleQuantity     *int         `json:"minEligibleQuantity,omitempty" db:"min_eligible_quantity"`
 	IsActive                bool         `json:"isActive" db:"is_active"`
 	StartsAt                *time.Time   `json:"startsAt,omitempty" db:"starts_at"`
 	EndsAt                  *time.Time   `json:"endsAt,omitempty" db:"ends_at"`
