@@ -801,3 +801,150 @@ func (r *Repository) SetPromoCodeUsageStatusTx(ctx context.Context, db DBExecuto
 	}
 	return tag.RowsAffected() > 0, nil
 }
+
+// ListSellerPromos fetches all promo codes for an authenticated seller with aggregated usage counts.
+func (r *Repository) ListSellerPromos(ctx context.Context, sellerID uuid.UUID) ([]SellerPromoItem, error) {
+	query := `
+		SELECT
+			p.id, p.campaign_id, p.seller_id, p.code, p.discount_type,
+			p.discount_value_bps, p.discount_value_fixed_cents,
+			p.min_order_subtotal_cents, p.global_usage_limit, p.per_customer_usage_limit,
+			p.first_paid_order_only, p.is_active, p.starts_at, p.ends_at,
+			p.created_at, p.updated_at,
+			COALESCE(COUNT(CASE WHEN u.status = 'reserved' THEN 1 END), 0) AS reserved_count,
+			COALESCE(COUNT(CASE WHEN u.status = 'consumed' THEN 1 END), 0) AS consumed_count
+		FROM promo_codes p
+		LEFT JOIN promo_code_usages u ON u.promo_code_id = p.id AND u.status IN ('reserved', 'consumed')
+		WHERE p.seller_id = $1
+		GROUP BY p.id
+		ORDER BY p.created_at DESC
+	`
+	rows, err := r.pool.Query(ctx, query, sellerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list seller promo codes: %w", err)
+	}
+	defer rows.Close()
+
+	var items []SellerPromoItem
+	for rows.Next() {
+		var it SellerPromoItem
+		var dType string
+		if err := rows.Scan(
+			&it.ID, &it.CampaignID, &it.SellerID, &it.Code, &dType,
+			&it.DiscountValueBps, &it.DiscountValueFixedCents,
+			&it.MinOrderSubtotalCents, &it.GlobalUsageLimit, &it.PerCustomerUsageLimit,
+			&it.FirstPaidOrderOnly, &it.IsActive, &it.StartsAt, &it.EndsAt,
+			&it.CreatedAt, &it.UpdatedAt,
+			&it.ReservedCount, &it.ConsumedCount,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan seller promo item: %w", err)
+		}
+		it.DiscountType = DiscountType(dType)
+		items = append(items, it)
+	}
+	return items, rows.Err()
+}
+
+// GetSellerPromoForUpdateTx locks a promo code row belonging strictly to sellerID for update.
+func (r *Repository) GetSellerPromoForUpdateTx(ctx context.Context, db DBExecutor, promoID, sellerID uuid.UUID) (*PromoCode, error) {
+	query := `
+		SELECT
+			id, campaign_id, seller_id, code, discount_type,
+			discount_value_bps, discount_value_fixed_cents,
+			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
+			first_paid_order_only, is_active, starts_at, ends_at,
+			created_at, updated_at
+		FROM promo_codes
+		WHERE id = $1 AND seller_id = $2
+		FOR UPDATE
+	`
+	var p PromoCode
+	var dType string
+	err := db.QueryRow(ctx, query, promoID, sellerID).Scan(
+		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
+		&p.DiscountValueBps, &p.DiscountValueFixedCents,
+		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
+		&p.FirstPaidOrderOnly, &p.IsActive, &p.StartsAt, &p.EndsAt,
+		&p.CreatedAt, &p.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPromoCodeNotFound
+		}
+		return nil, fmt.Errorf("failed to lock seller promo code for update: %w", err)
+	}
+	p.DiscountType = DiscountType(dType)
+	return &p, nil
+}
+
+// CountPromoUsageCommittedTx returns both reserved and consumed usage counts for a promo.
+func (r *Repository) CountPromoUsageCommittedTx(ctx context.Context, db DBExecutor, promoID uuid.UUID) (int, int, error) {
+	query := `
+		SELECT
+			COALESCE(COUNT(CASE WHEN status = 'reserved' THEN 1 END), 0),
+			COALESCE(COUNT(CASE WHEN status = 'consumed' THEN 1 END), 0)
+		FROM promo_code_usages
+		WHERE promo_code_id = $1 AND status IN ('reserved', 'consumed')
+	`
+	var reserved, consumed int
+	err := db.QueryRow(ctx, query, promoID).Scan(&reserved, &consumed)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to count committed promo usages: %w", err)
+	}
+	return reserved, consumed, nil
+}
+
+// GetMaxCustomerCommittedUsageTx returns the maximum active usage count by any single customer for a promo.
+func (r *Repository) GetMaxCustomerCommittedUsageTx(ctx context.Context, db DBExecutor, promoID uuid.UUID) (int, error) {
+	query := `
+		SELECT COALESCE(MAX(cnt), 0)
+		FROM (
+			SELECT COUNT(*) AS cnt
+			FROM promo_code_usages
+			WHERE promo_code_id = $1 AND status IN ('reserved', 'consumed')
+			GROUP BY user_id
+		) s
+	`
+	var maxCount int
+	err := db.QueryRow(ctx, query, promoID).Scan(&maxCount)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max customer usage: %w", err)
+	}
+	return maxCount, nil
+}
+
+// UpdatePromoCodeMutableFieldsTx saves updated mutable fields to promo_codes and syncs backing campaign dates.
+func (r *Repository) UpdatePromoCodeMutableFieldsTx(ctx context.Context, db DBExecutor, p *PromoCode) error {
+	now := time.Now().UTC()
+	p.UpdatedAt = now
+
+	query := `
+		UPDATE promo_codes
+		SET is_active = $1, starts_at = $2, ends_at = $3,
+		    global_usage_limit = $4, per_customer_usage_limit = $5,
+		    updated_at = $6
+		WHERE id = $7 AND seller_id = $8
+	`
+	tag, err := db.Exec(ctx, query,
+		p.IsActive, p.StartsAt, p.EndsAt,
+		p.GlobalUsageLimit, p.PerCustomerUsageLimit,
+		now, p.ID, p.SellerID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update promo code: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrPromoCodeNotFound
+	}
+
+	campaignQuery := `
+		UPDATE marketing_campaigns
+		SET starts_at = $1, ends_at = $2, updated_at = $3
+		WHERE id = $4 AND seller_id = $5
+	`
+	_, err = db.Exec(ctx, campaignQuery, p.StartsAt, p.EndsAt, now, p.CampaignID, p.SellerID)
+	if err != nil {
+		return fmt.Errorf("failed to sync campaign dates: %w", err)
+	}
+	return nil
+}

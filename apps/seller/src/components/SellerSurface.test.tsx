@@ -9,6 +9,7 @@ import {
   SellerTableShell,
   SellerFilterBar,
   SellerDrawer,
+  SellerModal,
 } from './SellerSurface';
 import { SellerDashboard } from '../pages/SellerDashboard';
 import { SellerOrders } from '../pages/SellerOrders';
@@ -329,6 +330,55 @@ describe('SELLER R1.4A — Surface System Reference', () => {
         </SellerDrawer>
       );
       expect(screen.queryByTestId('test-drawer')).toBeNull();
+    });
+
+    it('SellerModal renders centered dialog when open, locks body scroll, and closes via backdrop, close button, or Escape', () => {
+      const handleClose = vi.fn();
+      const { rerender } = render(
+        <SellerModal
+          isOpen={true}
+          onClose={handleClose}
+          title="Тестовое окно"
+          data-testid="test-modal"
+        >
+          <div>Контент модального окна</div>
+        </SellerModal>
+      );
+
+      const modal = screen.getByTestId('test-modal');
+      expect(modal).toBeTruthy();
+      expect(screen.getByRole('dialog')).toBeTruthy();
+      expect(screen.getByText('Тестовое окно')).toBeTruthy();
+      expect(screen.getByText('Контент модального окна')).toBeTruthy();
+      expect(document.body.style.overflow).toBe('hidden');
+
+      // Close button triggers onClose
+      const closeBtn = screen.getByTestId('seller-modal-close');
+      fireEvent.click(closeBtn);
+      expect(handleClose).toHaveBeenCalledTimes(1);
+
+      // Backdrop click triggers onClose
+      const backdrop = screen.getByTestId('seller-modal-backdrop');
+      fireEvent.click(backdrop);
+      expect(handleClose).toHaveBeenCalledTimes(2);
+
+      // Escape key triggers onClose
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(handleClose).toHaveBeenCalledTimes(3);
+
+      // When isOpen is false, nothing is rendered and body scroll is restored
+      rerender(
+        <SellerModal
+          isOpen={false}
+          onClose={handleClose}
+          title="Тестовое окно"
+          data-testid="test-modal"
+        >
+          <div>Контент модального окна</div>
+        </SellerModal>
+      );
+      expect(screen.queryByTestId('test-modal')).toBeNull();
+      expect(document.body.style.overflow).toBe('');
     });
   });
 

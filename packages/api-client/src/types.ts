@@ -2625,3 +2625,54 @@ export interface UpdateStaffMemberProfileRequest {
   responsibilities?: string | null;
   workNote?: string | null;
 }
+
+export type SellerPromoDiscountType = 'percent' | 'fixed';
+export type SellerPromoStatus = 'scheduled' | 'active' | 'paused' | 'expired' | 'exhausted';
+
+export interface SellerPromotion {
+  id: string;
+  code: string;
+  discountType: SellerPromoDiscountType;
+  discountValueBps: number;
+  discountValueFixedCents: number;
+  minOrderSubtotalCents: number;
+  firstPaidOrderOnly: boolean;
+  isActive: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  globalUsageLimit: number | null;
+  perCustomerUsageLimit: number;
+  consumedUsageCount: number;
+  reservedUsageCount: number;
+  campaignId: string;
+  fundingMode: string;
+  status: SellerPromoStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SellerPromotionsResponse {
+  items: SellerPromotion[];
+  count: number;
+}
+
+export interface CreateSellerPromotionRequest {
+  code: string;
+  discountType: SellerPromoDiscountType;
+  discountValueBps?: number;
+  discountValueFixedCents?: number;
+  minOrderSubtotalCents?: number;
+  firstPaidOrderOnly?: boolean;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  globalUsageLimit?: number | null;
+  perCustomerUsageLimit?: number;
+}
+
+export interface UpdateSellerPromotionRequest {
+  isActive?: boolean;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  globalUsageLimit?: number | null;
+  perCustomerUsageLimit?: number | null;
+}

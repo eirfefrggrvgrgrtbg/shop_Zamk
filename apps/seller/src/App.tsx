@@ -6,6 +6,7 @@ import { SellerProducts } from './pages/SellerProducts';
 import SellerProductStudioNew from './pages/SellerProductStudioNew';
 import SellerProductStudioEdit from './pages/SellerProductStudioEdit';
 import { SellerOrders } from './pages/SellerOrders';
+import { SellerPromotions } from './pages/SellerPromotions';
 import { SellerInventory } from './pages/SellerInventory';
 import { SellerReturns } from './pages/SellerReturns';
 import { SellerReturnDetail } from './pages/SellerReturnDetail';
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/products/new" element={<SellerProtectedRoute><SellerLayout><SellerProductStudioNew /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/products/:id/edit" element={<SellerProtectedRoute><SellerLayout><SellerProductStudioEdit /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/orders" element={<SellerProtectedRoute><SellerLayout><SellerOrders /></SellerLayout></SellerProtectedRoute>} />
+          <Route path="/promotions" element={<SellerProtectedRoute><SellerLayout><SellerPromotions /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/inventory" element={<SellerProtectedRoute><SellerLayout><SellerInventory /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/returns" element={<SellerProtectedRoute><SellerLayout><SellerReturns /></SellerLayout></SellerProtectedRoute>} />
           <Route path="/returns/:id" element={<SellerProtectedRoute><SellerLayout><SellerReturnDetail /></SellerLayout></SellerProtectedRoute>} />

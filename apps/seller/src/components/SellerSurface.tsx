@@ -353,3 +353,123 @@ export function SellerDrawer({
     </div>
   );
 }
+
+export interface SellerModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  maxWidthClass?: string;
+  'data-testid'?: string;
+}
+
+/**
+ * Canonical Seller Modal / Dialog Primitive:
+ * - Centered overlay on desktop and mobile
+ * - Backdrop with click-to-close and subtle blur
+ * - Explicit close button & Escape key handling
+ * - Scroll lock on document.body while open
+ * - Contained scrollable content container
+ * - Accessible z-index (z-50) above page content and sticky nav
+ */
+export function SellerModal({
+  isOpen,
+  onClose,
+  title,
+  children,
+  className,
+  maxWidthClass = 'max-w-2xl sm:max-w-3xl',
+  'data-testid': dataTestId = 'seller-modal',
+}: SellerModalProps) {
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto" data-testid={dataTestId}>
+      {/* Backdrop */}
+      <div
+        data-testid="seller-modal-backdrop"
+        className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Modal Container: Centered */}
+      <div className="flex min-h-full items-center justify-center p-4 sm:p-6 text-center">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={typeof title === 'string' ? title : 'Модальное окно'}
+          className={cn(
+            "relative w-full bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 text-left flex flex-col overflow-hidden transition-all animate-in fade-in zoom-in-95 duration-200 max-h-[90vh]",
+            maxWidthClass,
+            className
+          )}
+        >
+          {/* Header */}
+          {title && (
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-white/10 bg-white dark:bg-gray-900 shrink-0">
+              <div className="min-w-0 flex-1">
+                {typeof title === 'string' ? (
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                    {title}
+                  </h3>
+                ) : (
+                  title
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                data-testid="seller-modal-close"
+                aria-label="Закрыть"
+                className="p-1.5 -mr-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-white/10 dark:hover:text-white transition-colors cursor-pointer"
+              >
+                <svg
+                  aria-hidden="true"
+                  className="h-5 w-5"
+                  fill="none"
+                  height="24"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  width="24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

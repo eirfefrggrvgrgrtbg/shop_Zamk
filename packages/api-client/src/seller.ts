@@ -18,9 +18,21 @@ import type {
   SellerSupplyUnitLabelsResponse,
   StageSellerProductImageResponse,
   SellerProductPatchImageItem,
+  SellerPromotion,
+  SellerPromotionsResponse,
+  CreateSellerPromotionRequest,
+  UpdateSellerPromotionRequest,
 } from './types';
 
-export type { SellerProduct, StageSellerProductImageResponse, SellerProductPatchImageItem };
+export type {
+  SellerProduct,
+  StageSellerProductImageResponse,
+  SellerProductPatchImageItem,
+  SellerPromotion,
+  SellerPromotionsResponse,
+  CreateSellerPromotionRequest,
+  UpdateSellerPromotionRequest,
+};
 
 export const getSellerMe = async (): Promise<SellerMe> => {
   return request<SellerMe>('GET', '/seller/me');
@@ -336,4 +348,21 @@ export const cropSellerProductImage = async (productId: string, imageId: string,
 
 export const setMainSellerProductImage = async (productId: string, imageId: string): Promise<void> => {
   return request<void>('POST', `/seller/products/${productId}/images/${imageId}/main`);
+};
+
+export const getSellerPromotions = async (): Promise<SellerPromotionsResponse> => {
+  return request<SellerPromotionsResponse>('GET', '/seller/promotions');
+};
+
+export const createSellerPromotion = async (
+  input: CreateSellerPromotionRequest
+): Promise<SellerPromotion> => {
+  return request<SellerPromotion>('POST', '/seller/promotions', { body: input });
+};
+
+export const updateSellerPromotion = async (
+  id: string,
+  input: UpdateSellerPromotionRequest
+): Promise<SellerPromotion> => {
+  return request<SellerPromotion>('PATCH', `/seller/promotions/${id}`, { body: input });
 };

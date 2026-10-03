@@ -81,6 +81,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 
 	marketingRepo := marketing.NewRepository(pgClient.Pool)
 	marketingService := marketing.NewService(marketingRepo, pgClient.Pool)
+	marketingHandler := marketing.NewHandler(marketingService, logger)
 
 	ordersRepo := orders.NewRepository(pgClient.Pool)
 	ordersService := orders.NewService(ordersRepo, cartRepo, inventoryService, pgClient, cfg).WithMarketing(marketingService)
@@ -290,7 +291,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 		obsProvider = obs[0]
 	}
 
-	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, personalizationHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, searchHandler, auditLogHandler, deliveryHandler, behaviorHandler, suppliesHandler, analyticsHandler, testLabHandler, obsProvider)
+	r := router.New(cfg, pgClient, redisClient, logger, authHandler, tokenService, sellersHandler, catalogHandler, productsHandler, inventoryHandler, cartHandler, ordersHandler, paymentsHandler, fulfillmentHandler, returnsHandler, payoutsHandler, reviewsHandler, storageHandler, staffHandler, staffAuditRepo, staffService, favoritesHandler, personalizationHandler, usersHandler, addressesHandler, notificationsHandler, auctionsAdminHandler, auctionsPublicHandler, auctionsCustomerHandler, dashboardHandler, reportsHandler, searchHandler, auditLogHandler, deliveryHandler, behaviorHandler, suppliesHandler, analyticsHandler, testLabHandler, marketingHandler, obsProvider)
 
 	return r, cancelWorkers
 }

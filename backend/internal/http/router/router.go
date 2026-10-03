@@ -20,6 +20,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/merchandising"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/marketing"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/delivery"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
@@ -87,6 +88,7 @@ func New(
 	suppliesHandler *supplies.Handler,
 	sellerAnalyticsHandler *selleranalytics.Handler,
 	testLabHandler *testlab.Handler,
+	marketingHandler *marketing.Handler,
 	obs ...*observability.Provider,
 ) *chi.Mux {
 	r := chi.NewRouter()
@@ -449,6 +451,15 @@ func New(
 		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
 
 		sellerAnalyticsHandler.RegisterRoutes(r)
+	})
+
+	r.Route("/api/seller/promotions", func(r chi.Router) {
+		r.Use(appMiddleware.AuthMiddleware(tokenService))
+		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
+
+		r.Get("/", marketingHandler.ListSellerPromotions)
+		r.Post("/", marketingHandler.CreateSellerPromotion)
+		r.Patch("/{id}", marketingHandler.UpdateSellerPromotion)
 	})
 
 	r.Route("/api/admin", func(r chi.Router) {

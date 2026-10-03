@@ -41,4 +41,13 @@ var (
 	ErrPromoOrderAlreadyHasPromo = errors.New("promo_order_already_has_promo")
 	ErrPromoUsageNotFound        = errors.New("promo_usage_not_found")
 	ErrPromoUsageNotReserved     = errors.New("promo_usage_not_reserved")
+
+	// Seller Promo Management Errors
+	ErrImmutableFieldCannotBeChanged = errors.New("economic and identity fields are immutable after creation")
+	ErrGlobalLimitBelowUsage         = errors.New("global usage limit cannot be lower than current committed usage")
+	ErrCustomerLimitBelowUsage       = errors.New("per customer usage limit cannot be lower than current customer usage")
+	ErrInvalidDates                  = errors.New("ends_at must be strictly after starts_at")
+	ErrPromoAlreadyExpired           = errors.New("cannot create an already expired promo code")
+	ErrInvalidDiscountValue          = errors.New("invalid discount value")
+	ErrInvalidLimit                  = errors.New("usage limit must be positive")
 )
