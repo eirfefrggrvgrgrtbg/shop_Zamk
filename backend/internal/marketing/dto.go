@@ -58,17 +58,21 @@ type SellerEligibilityResponse struct {
 
 // CreateSellerPromoRequest is the client payload for creating a seller-funded promotion.
 type CreateSellerPromoRequest struct {
-	Code                    string       `json:"code" validate:"required"`
-	DiscountType            DiscountType `json:"discountType" validate:"required"`
-	DiscountValueBps        int          `json:"discountValueBps"`
-	DiscountValueFixedCents int64        `json:"discountValueFixedCents"`
-	MinOrderSubtotalCents   int64        `json:"minOrderSubtotalCents"`
-	FirstPaidOrderOnly      bool         `json:"firstPaidOrderOnly"`
-	StartsAt                *time.Time   `json:"startsAt,omitempty"`
-	EndsAt                  *time.Time   `json:"endsAt,omitempty"`
-	GlobalUsageLimit        *int         `json:"globalUsageLimit,omitempty"`
-	PerCustomerUsageLimit   int          `json:"perCustomerUsageLimit"`
-	IsActive                *bool        `json:"isActive,omitempty"`
+	Code                    string        `json:"code" validate:"required"`
+	DiscountType            DiscountType  `json:"discountType" validate:"required"`
+	DiscountValueBps        int           `json:"discountValueBps"`
+	DiscountValueFixedCents int64         `json:"discountValueFixedCents"`
+	MinOrderSubtotalCents   int64         `json:"minOrderSubtotalCents"`
+	FirstPaidOrderOnly      bool          `json:"firstPaidOrderOnly"`
+	ProductScope            *ProductScope `json:"productScope,omitempty"`
+	IncludedProductIDs      []uuid.UUID   `json:"includedProductIds,omitempty"`
+	ExcludedProductIDs      []uuid.UUID   `json:"excludedProductIds,omitempty"`
+	MaxDiscountCents        *int64        `json:"maxDiscountCents,omitempty"`
+	StartsAt                *time.Time    `json:"startsAt,omitempty"`
+	EndsAt                  *time.Time    `json:"endsAt,omitempty"`
+	GlobalUsageLimit        *int          `json:"globalUsageLimit,omitempty"`
+	PerCustomerUsageLimit   int           `json:"perCustomerUsageLimit"`
+	IsActive                *bool         `json:"isActive,omitempty"`
 }
 
 // UpdateSellerPromoRequest contains only the mutable operational fields for a promotion.
@@ -93,6 +97,10 @@ type SellerPromoResponse struct {
 	GlobalUsageLimit        *int         `json:"globalUsageLimit,omitempty"`
 	PerCustomerUsageLimit   int          `json:"perCustomerUsageLimit"`
 	FirstPaidOrderOnly      bool         `json:"firstPaidOrderOnly"`
+	ProductScope            ProductScope `json:"productScope"`
+	IncludedProductIDs      []uuid.UUID  `json:"includedProductIds"`
+	ExcludedProductIDs      []uuid.UUID  `json:"excludedProductIds"`
+	MaxDiscountCents        *int64       `json:"maxDiscountCents,omitempty"`
 	IsActive                bool         `json:"isActive"`
 	StartsAt                *time.Time   `json:"startsAt,omitempty"`
 	EndsAt                  *time.Time   `json:"endsAt,omitempty"`
@@ -112,8 +120,10 @@ type SellerPromotionsResponse struct {
 // SellerPromoItem holds database projection of promo_codes joined with usage counters.
 type SellerPromoItem struct {
 	PromoCode
-	ReservedCount int
-	ConsumedCount int
+	IncludedProductIDs []uuid.UUID
+	ExcludedProductIDs []uuid.UUID
+	ReservedCount      int
+	ConsumedCount      int
 }
 
 // DerivePromoStatus calculates the exact derived display status matching checkout semantics.

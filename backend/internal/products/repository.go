@@ -750,19 +750,53 @@ func (r *Repository) ListProductModerationLogs(ctx context.Context, productID uu
 // For simplicity in Phase 4, we use basic lists without pagination arguments in SQL yet,
 // but we structure them to be easily extensible.
 
-func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUID, limit, offset int) ([]Product, error) {
-	query := `
-		SELECT id, seller_id, category_id, brand_id, title, slug, description,
-			status, source, gender, color, material, care_instructions,
-			price_cents, old_price_cents, currency, main_image_url,
-			average_rating, reviews_count,
-			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
-		FROM products
-		WHERE seller_id = $1
-		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3
-	`
-	return r.listProductsQuery(ctx, query, sellerID, limit, offset)
+func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUID, search string, limit, offset int) ([]Product, int, error) {
+	search = strings.TrimSpace(search)
+	whereClauses := []string{"p.seller_id = $1"}
+	args := []any{sellerID}
+	argIdx := 2
+
+	if search != "" {
+		pattern := "%" + search + "%"
+		whereClauses = append(whereClauses, fmt.Sprintf(`(
+			p.title ILIKE $%d
+			OR p.id::text ILIKE $%d
+			OR EXISTS (
+				SELECT 1 FROM product_variants pv
+				WHERE pv.product_id = p.id
+				AND (pv.sku ILIKE $%d OR pv.seller_sku ILIKE $%d OR pv.barcode ILIKE $%d)
+			)
+		)`, argIdx, argIdx, argIdx, argIdx, argIdx))
+		args = append(args, pattern)
+		argIdx++
+	}
+
+	whereSQL := strings.Join(whereClauses, " AND ")
+
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM products p WHERE %s", whereSQL)
+	var totalCount int
+	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&totalCount); err != nil {
+		return nil, 0, fmt.Errorf("failed to count seller products: %w", err)
+	}
+
+	selectQuery := fmt.Sprintf(`
+		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
+			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
+			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
+			p.average_rating, p.reviews_count,
+			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment
+		FROM products p
+		WHERE %s
+		ORDER BY p.created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, whereSQL, argIdx, argIdx+1)
+
+	selectArgs := append(args, limit, offset)
+	products, err := r.listProductsQuery(ctx, selectQuery, selectArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	return products, totalCount, nil
 }
 
 func (r *Repository) ListAdminProducts(ctx context.Context, filter AdminProductFilter, limit, offset int) ([]Product, int, error) {

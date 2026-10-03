@@ -3,12 +3,18 @@ import {
   getSellerPromotions,
   createSellerPromotion,
   updateSellerPromotion,
+  getSellerProducts,
+  getSellerProductsPaginated,
 } from '@zamk/api-client/src/seller';
 import type {
   SellerPromotion,
   SellerPromoDiscountType,
   CreateSellerPromotionRequest,
   UpdateSellerPromotionRequest,
+  SellerProduct,
+  SellerPromoProductScope,
+  GetSellerProductsParams,
+  SellerProductListResponse,
 } from '@zamk/api-client/src/types';
 import {
   Tag,
@@ -21,16 +27,32 @@ import {
   Clock,
   Ban,
   Archive,
+  X,
+  Search,
+  Check,
+  Package,
 } from 'lucide-react';
 import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 import { SellerSurface, SellerModal } from '../components/SellerSurface';
 import { SellerDateTimePicker } from '../components/SellerDateTimePicker';
+import { cn, parseRubToCentsExact } from '../lib/utils';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
   style: 'currency',
   currency: 'RUB',
   maximumFractionDigits: 0,
 });
+
+const fetchSellerProductsList = async (
+  params?: GetSellerProductsParams
+): Promise<SellerProductListResponse> => {
+  if (typeof getSellerProductsPaginated === 'function') {
+    return await getSellerProductsPaginated(params);
+  }
+  const items = await getSellerProducts(params);
+  const safeItems = Array.isArray(items) ? items : [];
+  return { items: safeItems, totalCount: safeItems.length };
+};
 
 const STATUS_CONFIG: Record<
   string,
@@ -63,14 +85,38 @@ const STATUS_CONFIG: Record<
   },
 };
 
+type SelectorMode = 'INCLUDE' | 'EXCLUDE' | null;
+
 export function SellerPromotions() {
   const [promotions, setPromotions] = useState<SellerPromotion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Drawer states
+  // Drawer / Modal states
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editPromo, setEditPromo] = useState<SellerPromotion | null>(null);
+
+  // Products state & lookup dictionary for persistent badge metadata
+  const [productLookup, setProductLookup] = useState<Record<string, SellerProduct>>({});
+  const [sellerProducts, setSellerProducts] = useState<SellerProduct[]>([]);
+
+  // Advanced Rules Form State
+  const [createScope, setCreateScope] = useState<SellerPromoProductScope>('ENTIRE_STORE');
+  const [createIncludedProductIds, setCreateIncludedProductIds] = useState<string[]>([]);
+  const [createExcludedProductIds, setCreateExcludedProductIds] = useState<string[]>([]);
+  const [createMaxDiscountRub, setCreateMaxDiscountRub] = useState('');
+
+  // Catalog Selector Modal State
+  const [selectorMode, setSelectorMode] = useState<SelectorMode>(null);
+  const [draftProductIds, setDraftProductIds] = useState<string[]>([]);
+  const [selectorSearchQuery, setSelectorSearchQuery] = useState('');
+  const [selectorDebouncedQuery, setSelectorDebouncedQuery] = useState('');
+  const [selectorProducts, setSelectorProducts] = useState<SellerProduct[]>([]);
+  const [selectorTotalCount, setSelectorTotalCount] = useState(0);
+  const [selectorPage, setSelectorPage] = useState(1);
+  const [isSelectorLoading, setIsSelectorLoading] = useState(false);
+  const [isSelectorLoadingMore, setIsSelectorLoadingMore] = useState(false);
+  const [selectorError, setSelectorError] = useState('');
 
   // Create Form State
   const [createCode, setCreateCode] = useState('');
@@ -96,6 +142,72 @@ export function SellerPromotions() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState('');
   const [editDateError, setEditDateError] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSelectorDebouncedQuery(selectorSearchQuery);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [selectorSearchQuery]);
+
+  const loadSellerProducts = useCallback(async () => {
+    try {
+      const res = await fetchSellerProductsList({ limit: 50 });
+      setSellerProducts(res.items || []);
+      setProductLookup((prev) => {
+        const next = { ...prev };
+        (res.items || []).forEach((p) => {
+          next[p.id] = p;
+        });
+        return next;
+      });
+    } catch {
+      // Non-blocking
+    }
+  }, []);
+
+  const loadSelectorProducts = useCallback(async (query: string, page = 1) => {
+    if (page === 1) {
+      setIsSelectorLoading(true);
+    } else {
+      setIsSelectorLoadingMore(true);
+    }
+    setSelectorError('');
+    try {
+      const res = await fetchSellerProductsList({
+        q: query.trim() || undefined,
+        page,
+        limit: 20,
+      });
+      setProductLookup((prev) => {
+        const next = { ...prev };
+        (res.items || []).forEach((p) => {
+          next[p.id] = p;
+        });
+        return next;
+      });
+      setSelectorProducts((prev) => (page === 1 ? res.items || [] : [...prev, ...(res.items || [])]));
+      setSelectorTotalCount(res.totalCount);
+      setSelectorPage(page);
+    } catch {
+      setSelectorError('Не удалось загрузить список товаров');
+    } finally {
+      setIsSelectorLoading(false);
+      setIsSelectorLoadingMore(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isCreateOpen && sellerProducts.length === 0) {
+      loadSellerProducts();
+    }
+  }, [isCreateOpen, sellerProducts.length, loadSellerProducts]);
+
+  useEffect(() => {
+    if (selectorMode) {
+      loadSelectorProducts(selectorDebouncedQuery, 1);
+    }
+  }, [selectorDebouncedQuery, selectorMode, loadSelectorProducts]);
 
   useEffect(() => {
     if (createStartsAt && createEndsAt) {
@@ -137,6 +249,53 @@ export function SellerPromotions() {
     fetchPromotions();
   }, [fetchPromotions]);
 
+  const openSelector = (mode: 'INCLUDE' | 'EXCLUDE') => {
+    setSelectorMode(mode);
+    if (mode === 'INCLUDE') {
+      setDraftProductIds([...createIncludedProductIds]);
+    } else {
+      setDraftProductIds([...createExcludedProductIds]);
+    }
+    setSelectorSearchQuery('');
+    setSelectorDebouncedQuery('');
+    setSelectorError('');
+    setSelectorPage(1);
+    if (sellerProducts.length > 0) {
+      setSelectorProducts(sellerProducts);
+      setSelectorTotalCount(sellerProducts.length);
+    } else {
+      loadSelectorProducts('', 1);
+    }
+  };
+
+  const closeSelector = () => {
+    setSelectorMode(null);
+    setDraftProductIds([]);
+    setSelectorSearchQuery('');
+    setSelectorDebouncedQuery('');
+    setSelectorError('');
+  };
+
+  const applySelector = () => {
+    if (selectorMode === 'INCLUDE') {
+      setCreateIncludedProductIds(draftProductIds);
+    } else if (selectorMode === 'EXCLUDE') {
+      setCreateExcludedProductIds(draftProductIds);
+    }
+    closeSelector();
+  };
+
+  const handleToggleDraft = (productId: string, product: SellerProduct) => {
+    setProductLookup((prev) => ({ ...prev, [productId]: product }));
+    setDraftProductIds((prev) => {
+      if (prev.includes(productId)) {
+        return prev.filter((id) => id !== productId);
+      } else {
+        return [...prev, productId];
+      }
+    });
+  };
+
   const resetCreateForm = () => {
     setCreateCode('');
     setCreateDiscountType('percent');
@@ -148,6 +307,11 @@ export function SellerPromotions() {
     setCreateEndsAt('');
     setCreateGlobalLimit('');
     setCreatePerCustomerLimit('1');
+    setCreateScope('ENTIRE_STORE');
+    setCreateIncludedProductIds([]);
+    setCreateExcludedProductIds([]);
+    setCreateMaxDiscountRub('');
+    closeSelector();
     setCreateError('');
     setCreateDateError('');
   };
@@ -177,6 +341,7 @@ export function SellerPromotions() {
       const req: CreateSellerPromotionRequest = {
         code: codeClean,
         discountType: createDiscountType,
+        productScope: createScope,
       };
 
       if (createDiscountType === 'percent') {
@@ -191,6 +356,21 @@ export function SellerPromotions() {
           throw new Error('Укажите фиксированную сумму скидки в рублях.');
         }
         req.discountValueFixedCents = Math.round(fixedRub * 100);
+      }
+
+      if (createMaxDiscountRub.trim()) {
+        req.maxDiscountCents = parseRubToCentsExact(createMaxDiscountRub);
+      }
+
+      if (createScope === 'SELECTED_PRODUCTS') {
+        if (createIncludedProductIds.length === 0) {
+          throw new Error('Выберите хотя бы один товар для области действия «На выбранные товары».');
+        }
+        req.includedProductIds = createIncludedProductIds;
+      }
+
+      if (createExcludedProductIds.length > 0) {
+        req.excludedProductIds = createExcludedProductIds;
       }
 
       if (createMinOrderSubtotalRub) {
@@ -238,6 +418,14 @@ export function SellerPromotions() {
     } catch (err: any) {
       if (err.data?.code === 'promo_code_duplicate' || err.code === 'promo_code_duplicate') {
         setCreateError('Промокод с таким кодом уже существует. Выберите другой код.');
+      } else if (err.data?.code === 'product_not_owned_by_seller' || err.code === 'product_not_owned_by_seller') {
+        setCreateError('Один или несколько выбранных товаров не принадлежат вашему магазину.');
+      } else if (err.data?.code === 'product_conflict' || err.code === 'product_conflict') {
+        setCreateError('Товар не может одновременно находиться в списке включений и исключений.');
+      } else if (err.data?.code === 'invalid_product_scope' || err.code === 'invalid_product_scope') {
+        setCreateError('Некорректная область действия промокода.');
+      } else if (err.data?.code === 'invalid_max_discount' || err.code === 'invalid_max_discount') {
+        setCreateError('Максимальная скидка должна быть положительным числом.');
       } else {
         setCreateError(err.message || err.data?.message || 'Не удалось создать промокод.');
       }
@@ -449,9 +637,19 @@ export function SellerPromotions() {
                       className="hover:bg-gray-50/50 transition-colors"
                     >
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono font-bold text-gray-900 tracking-wide text-base">
                             {p.code}
+                          </span>
+                          <span
+                            data-testid={`promo-scope-badge-${p.code}`}
+                            className="px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-200 rounded"
+                          >
+                            {p.productScope === 'SELECTED_PRODUCTS'
+                              ? `${(p.includedProductIds || []).length} тов.`
+                              : (p.excludedProductIds || []).length > 0
+                              ? `Все товары (искл. ${p.excludedProductIds!.length})`
+                              : 'Все товары'}
                           </span>
                           {p.firstPaidOrderOnly && (
                             <span
@@ -661,7 +859,7 @@ export function SellerPromotions() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
                 Минимальная сумма заказа (₽)
@@ -678,19 +876,223 @@ export function SellerPromotions() {
               />
             </div>
 
-            <div className="flex items-center gap-2 sm:pt-5">
-              <input
-                type="checkbox"
-                id="create-first-paid-only"
-                data-testid="input-first-paid-only"
-                checked={createFirstPaidOnly}
-                onChange={(e) => setCreateFirstPaidOnly(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
-              />
-              <label htmlFor="create-first-paid-only" className="text-sm text-gray-700">
-                Только для первого заказа покупателя
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                Максимальная скидка (₽) <span className="text-gray-400 font-normal">(опционально)</span>
               </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  data-testid="input-max-discount"
+                  value={createMaxDiscountRub}
+                  onChange={(e) => setCreateMaxDiscountRub(e.target.value)}
+                  placeholder="Без ограничения"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                />
+                <span className="absolute right-3 top-2 text-gray-400 text-sm">₽</span>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Ограничение максимальной суммы скидки на один заказ.
+              </p>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="create-first-paid-only"
+              data-testid="input-first-paid-only"
+              checked={createFirstPaidOnly}
+              onChange={(e) => setCreateFirstPaidOnly(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
+            />
+            <label htmlFor="create-first-paid-only" className="text-sm text-gray-700">
+              Только для первого заказа покупателя
+            </label>
+          </div>
+
+          {/* Product Scope Section */}
+          <div className="border-t border-gray-200 pt-4">
+            <h4 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-3">
+              Область действия промокода <span className="text-red-500">*</span>
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+              <button
+                type="button"
+                data-testid="radio-scope-entire-store"
+                onClick={() => setCreateScope('ENTIRE_STORE')}
+                className={`py-2.5 px-3 border rounded-lg text-sm font-medium transition-colors cursor-pointer text-left ${
+                  createScope === 'ENTIRE_STORE'
+                    ? 'border-black bg-black text-white'
+                    : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <div className="font-semibold">На все товары магазина</div>
+                <div className={`text-xs mt-0.5 ${createScope === 'ENTIRE_STORE' ? 'text-gray-300' : 'text-gray-400'}`}>
+                  Применяется ко всему каталогу
+                </div>
+              </button>
+              <button
+                type="button"
+                data-testid="radio-scope-selected-products"
+                onClick={() => {
+                  setCreateScope('SELECTED_PRODUCTS');
+                  openSelector('INCLUDE');
+                }}
+                className={`py-2.5 px-3 border rounded-lg text-sm font-medium transition-colors cursor-pointer text-left ${
+                  createScope === 'SELECTED_PRODUCTS'
+                    ? 'border-black bg-black text-white'
+                    : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <div className="font-semibold">На выбранные товары</div>
+                <div className={`text-xs mt-0.5 ${createScope === 'SELECTED_PRODUCTS' ? 'text-gray-300' : 'text-gray-400'}`}>
+                  Только на указанные позиции
+                </div>
+              </button>
+            </div>
+
+            {/* Compact Included Products State */}
+            {createScope === 'SELECTED_PRODUCTS' && (
+              <div className="mt-3 p-3.5 bg-gray-50 rounded-lg border border-gray-200" data-testid="selected-products-section">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider" data-testid="selected-products-summary">
+                    {createIncludedProductIds.length > 0 ? (
+                      <>Выбрано товаров: <span className="text-gray-900 font-bold" data-testid="selected-summary-count">{createIncludedProductIds.length}</span></>
+                    ) : (
+                      <span className="text-amber-700">Товары не выбраны</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {createIncludedProductIds.length > 0 && (
+                      <button
+                        type="button"
+                        data-testid="btn-clear-included"
+                        onClick={() => setCreateIncludedProductIds([])}
+                        className="text-xs text-gray-500 hover:text-red-600 font-medium cursor-pointer"
+                      >
+                        Очистить
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      data-testid="btn-edit-included"
+                      onClick={() => openSelector('INCLUDE')}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                    >
+                      {createIncludedProductIds.length > 0 ? 'Изменить' : 'Выбрать товары'}
+                    </button>
+                  </div>
+                </div>
+
+                {createIncludedProductIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {createIncludedProductIds.slice(0, 3).map((id) => {
+                      const prod = productLookup[id] || sellerProducts.find((p) => p.id === id);
+                      return (
+                        <span
+                          key={id}
+                          data-testid={`selected-included-product-${id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-black text-white"
+                        >
+                          <span className="max-w-[180px] truncate">{prod ? prod.title : id}</span>
+                          <button
+                            type="button"
+                            data-testid={`remove-included-product-${id}`}
+                            onClick={() => setCreateIncludedProductIds((prev) => prev.filter((pId) => pId !== id))}
+                            className="hover:text-red-300 cursor-pointer ml-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                    {createIncludedProductIds.length > 3 && (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-200 text-gray-700 font-medium">
+                        +{createIncludedProductIds.length - 3} ещё
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Exclusions Section */}
+          <div className="border-t border-gray-200 pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                Товары-исключения (опционально)
+              </h4>
+              {createExcludedProductIds.length === 0 ? (
+                <button
+                  type="button"
+                  data-testid="btn-toggle-exclusions"
+                  onClick={() => openSelector('EXCLUDE')}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                >
+                  + Добавить исключения
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    data-testid="btn-clear-excluded"
+                    onClick={() => setCreateExcludedProductIds([])}
+                    className="text-xs text-gray-500 hover:text-red-600 font-medium cursor-pointer"
+                  >
+                    Очистить
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="btn-edit-exclusions"
+                    onClick={() => openSelector('EXCLUDE')}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                  >
+                    Изменить
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mb-3">
+              Исключённые товары никогда не получат скидку (приоритет над включением).
+            </p>
+
+            {createExcludedProductIds.length > 0 && (
+              <div className="space-y-2 p-3.5 bg-gray-50 rounded-lg border border-gray-200" data-testid="excluded-products-section">
+                <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider" data-testid="excluded-products-summary">
+                  Исключено товаров: <span className="text-gray-900 font-bold" data-testid="excluded-summary-count">{createExcludedProductIds.length}</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {createExcludedProductIds.slice(0, 3).map((id) => {
+                    const prod = productLookup[id] || sellerProducts.find((p) => p.id === id);
+                    return (
+                      <span
+                        key={id}
+                        data-testid={`selected-excluded-product-${id}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-red-100 text-red-800 border border-red-200"
+                      >
+                        <span className="max-w-[180px] truncate">{prod ? prod.title : id}</span>
+                        <button
+                          type="button"
+                          data-testid={`remove-excluded-product-${id}`}
+                          onClick={() => setCreateExcludedProductIds((prev) => prev.filter((pId) => pId !== id))}
+                          className="hover:text-red-900 cursor-pointer ml-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                  {createExcludedProductIds.length > 3 && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-red-50 text-red-700 font-medium border border-red-200">
+                      +{createExcludedProductIds.length - 3} ещё
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="border-t border-gray-200 pt-4">
@@ -761,6 +1163,38 @@ export function SellerPromotions() {
             </div>
           </div>
 
+          <div data-testid="promo-summary-card" className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1.5">
+            <div className="font-semibold text-gray-900">Итоговые условия промокода:</div>
+            <div className="text-gray-700">
+              <span className="font-medium text-gray-500">Скидка:</span>{' '}
+              <span className="font-semibold text-gray-900">
+                {createDiscountType === 'percent'
+                  ? `${createDiscountPercent || 0}%${createMaxDiscountRub ? ` (макс. ${createMaxDiscountRub} ₽)` : ''}`
+                  : `${createDiscountFixedRub || 0} ₽`}
+              </span>
+            </div>
+            <div className="text-gray-700">
+              <span className="font-medium text-gray-500">Где действует:</span>{' '}
+              <span className="font-semibold text-gray-900">
+                {createScope === 'ENTIRE_STORE'
+                  ? `Все товары магазина${createExcludedProductIds.length > 0 ? ` (искл. ${createExcludedProductIds.length})` : ''}`
+                  : `Выбранные товары (${createIncludedProductIds.length} шт.)${createExcludedProductIds.length > 0 ? ` (искл. ${createExcludedProductIds.length})` : ''}`}
+              </span>
+            </div>
+            {createMinOrderSubtotalRub && (
+              <div className="text-gray-700">
+                <span className="font-medium text-gray-500">Мин. заказ:</span>{' '}
+                <span className="font-semibold text-gray-900">{createMinOrderSubtotalRub} ₽</span>
+              </div>
+            )}
+            {createFirstPaidOnly && (
+              <div className="text-gray-700">
+                <span className="font-medium text-gray-500">Ограничение:</span>{' '}
+                <span className="font-semibold text-gray-900">Только первый заказ</span>
+              </div>
+            )}
+          </div>
+
           <div className="pt-4 border-t border-gray-200 flex justify-end gap-3">
             <button
               type="button"
@@ -779,6 +1213,228 @@ export function SellerPromotions() {
             </button>
           </div>
         </form>
+      </SellerModal>
+
+      {/* CATALOG-STYLE PRODUCT SELECTOR MODAL */}
+      <SellerModal
+        isOpen={Boolean(selectorMode)}
+        onClose={closeSelector}
+        title={selectorMode === 'INCLUDE' ? 'Выберите товары' : 'Исключить товары'}
+        maxWidthClass="max-w-4xl"
+        data-testid="product-selector-modal"
+      >
+        <div className="p-1 space-y-4">
+          {/* Search Input */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+            <input
+              type="text"
+              data-testid={
+                selectorMode === 'INCLUDE'
+                  ? 'input-search-included-products'
+                  : 'input-search-excluded-products'
+              }
+              placeholder="Поиск по названию, артикулу или ID"
+              value={selectorSearchQuery}
+              onChange={(e) => setSelectorSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-black"
+            />
+          </div>
+
+          {/* Error Banner */}
+          {selectorError && (
+            <div
+              data-testid={selectorMode === 'INCLUDE' ? 'include-products-error' : 'exclude-products-error'}
+              className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{selectorError}</span>
+              </div>
+              <button
+                type="button"
+                data-testid={selectorMode === 'INCLUDE' ? 'btn-retry-included' : 'btn-retry-excluded'}
+                onClick={() => loadSelectorProducts(selectorSearchQuery, selectorPage)}
+                className="text-xs font-semibold text-red-700 underline hover:text-red-900 cursor-pointer ml-2"
+              >
+                Повторить
+              </button>
+            </div>
+          )}
+
+          {/* Cards Grid */}
+          <div className="max-h-[55vh] overflow-y-auto pr-1">
+            {isSelectorLoading ? (
+              <div className="py-16 text-center text-sm text-gray-400">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
+                Загрузка каталога...
+              </div>
+            ) : selectorProducts.length === 0 ? (
+              <div
+                data-testid={selectorMode === 'INCLUDE' ? 'empty-included-search' : 'empty-excluded-search'}
+                className="py-16 text-center text-sm text-gray-400"
+              >
+                {selectorSearchQuery.trim() ? 'Ничего не найдено' : 'Нет доступных товаров'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {selectorProducts.map((p) => {
+                  const isSelected = draftProductIds.includes(p.id);
+                  const isConflicting =
+                    selectorMode === 'INCLUDE'
+                      ? createExcludedProductIds.includes(p.id)
+                      : createIncludedProductIds.includes(p.id);
+                  const conflictReason =
+                    selectorMode === 'INCLUDE'
+                      ? 'Товар находится в исключениях'
+                      : 'Товар уже выбран для участия';
+
+                  const imgUrl =
+                    p.mainImageUrl ||
+                    p.images?.find((img) => img.isMain)?.imageUrl ||
+                    p.images?.find((img) => img.isMain)?.url ||
+                    p.images?.[0]?.imageUrl ||
+                    p.images?.[0]?.url ||
+                    (p as any).imageUrl;
+
+                  const sku =
+                    (p.variants?.[0] as any)?.sellerSku ||
+                    (p.variants?.[0] as any)?.sku ||
+                    (p as any).sku ||
+                    (p as any).sellerSku ||
+                    p.slug;
+
+                  return (
+                    <button
+                      type="button"
+                      key={p.id}
+                      disabled={isConflicting}
+                      onClick={() => handleToggleDraft(p.id, p)}
+                      data-testid={
+                        selectorMode === 'INCLUDE'
+                          ? `product-option-include-${p.id}`
+                          : `product-option-exclude-${p.id}`
+                      }
+                      aria-selected={isSelected}
+                      className={cn(
+                        "group relative flex flex-col text-left p-2.5 rounded-xl border transition-all text-xs cursor-pointer select-none bg-white",
+                        isConflicting && "opacity-40 cursor-not-allowed bg-gray-50 border-gray-200",
+                        !isConflicting && !isSelected && "border-gray-200 hover:border-gray-300 hover:shadow-xs",
+                        !isConflicting && isSelected && selectorMode === 'INCLUDE' && "border-black ring-1 ring-black bg-gray-50/50 shadow-xs",
+                        !isConflicting && isSelected && selectorMode === 'EXCLUDE' && "border-red-500 ring-1 ring-red-500 bg-red-50/30 shadow-xs"
+                      )}
+                    >
+                      {/* Image Container */}
+                      <div className="relative w-full aspect-square bg-gray-100 rounded-lg overflow-hidden mb-2 flex items-center justify-center">
+                        {imgUrl ? (
+                          <img src={imgUrl} alt={p.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-gray-400 p-2 text-center">
+                            <Package className="w-6 h-6 mb-1 opacity-50" />
+                            <span className="text-[10px] text-gray-400 font-medium">Нет фото</span>
+                          </div>
+                        )}
+
+                        {/* Top-Right Badge: Checkmark or Cross */}
+                        {isSelected && selectorMode === 'INCLUDE' && (
+                          <div
+                            data-testid={`product-card-check-${p.id}`}
+                            className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black text-white flex items-center justify-center shadow-md text-xs font-bold"
+                          >
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          </div>
+                        )}
+
+                        {isSelected && selectorMode === 'EXCLUDE' && (
+                          <div
+                            data-testid={`product-card-cross-${p.id}`}
+                            className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center shadow-md text-xs font-bold"
+                          >
+                            <X className="w-3.5 h-3.5 stroke-[3]" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Product Meta */}
+                      <div className="flex-1 flex flex-col justify-between min-w-0">
+                        <div>
+                          <div className="font-medium text-gray-900 line-clamp-2 leading-tight mb-1" title={p.title}>
+                            {p.title}
+                          </div>
+                          {sku && (
+                            <div className="text-[10px] text-gray-400 truncate mb-1">
+                              Арт: {sku}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-1 pt-1 border-t border-gray-100 flex items-center justify-between">
+                          <span className="font-semibold text-gray-900 text-xs">
+                            {p.priceCents > 0 ? currencyFormatter.format(p.priceCents / 100) : '0 ₽'}
+                          </span>
+                        </div>
+
+                        {isConflicting && (
+                          <div className="mt-1 text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded leading-tight">
+                            {conflictReason}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Load More Button */}
+            {selectorProducts.length < selectorTotalCount && (
+              <div className="pt-4 pb-2 text-center">
+                <button
+                  type="button"
+                  data-testid={
+                    selectorMode === 'INCLUDE'
+                      ? 'btn-load-more-included'
+                      : 'btn-load-more-excluded'
+                  }
+                  disabled={isSelectorLoadingMore}
+                  onClick={() => loadSelectorProducts(selectorDebouncedQuery, selectorPage + 1)}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium py-1.5 px-4 rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {isSelectorLoadingMore ? 'Загрузка...' : 'Загрузить ещё'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Modal Actions */}
+          <div className="pt-4 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-xs text-gray-500">
+              {selectorMode === 'INCLUDE' ? (
+                <>Выбрано: <span className="font-semibold text-gray-900">{draftProductIds.length}</span></>
+              ) : (
+                <>Исключено: <span className="font-semibold text-gray-900">{draftProductIds.length}</span></>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                data-testid="btn-cancel-selector"
+                onClick={closeSelector}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                data-testid="btn-apply-selector"
+                onClick={applySelector}
+                className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors shadow-xs cursor-pointer"
+              >
+                Применить
+              </button>
+            </div>
+          </div>
+        </div>
       </SellerModal>
 
       {/* EDIT MODAL (MUTABLE FIELDS ONLY) */}
@@ -831,6 +1487,30 @@ export function SellerPromotions() {
                 <div>
                   <span className="text-gray-500">Финансирование: </span>
                   <span className="font-semibold text-gray-900">Продавец (SELLER)</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Область действия: </span>
+                  <span className="font-semibold text-gray-900" data-testid="edit-promo-scope">
+                    {editPromo.productScope === 'SELECTED_PRODUCTS'
+                      ? `${(editPromo.includedProductIds || []).length} выбранных товаров`
+                      : 'Все товары'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Исключения: </span>
+                  <span className="font-semibold text-gray-900" data-testid="edit-promo-exclusions">
+                    {(editPromo.excludedProductIds || []).length > 0
+                      ? `${editPromo.excludedProductIds!.length} товаров`
+                      : 'Нет'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Максимальная скидка: </span>
+                  <span className="font-semibold text-gray-900" data-testid="edit-promo-max-discount">
+                    {editPromo.maxDiscountCents
+                      ? currencyFormatter.format(editPromo.maxDiscountCents / 100)
+                      : 'Без ограничения'}
+                  </span>
                 </div>
               </div>
               <p className="text-[11px] text-gray-400 mt-1">

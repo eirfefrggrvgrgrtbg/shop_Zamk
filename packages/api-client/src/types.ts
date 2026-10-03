@@ -677,6 +677,18 @@ export interface SellerProduct extends ProductDetail {
   // Any extra fields specific to SellerProduct can go here.
 }
 
+export interface GetSellerProductsParams {
+  q?: string;
+  limit?: number;
+  offset?: number;
+  page?: number;
+}
+
+export interface SellerProductListResponse {
+  items: SellerProduct[];
+  totalCount: number;
+}
+
 export interface SellerInventoryItem {
   variantId: string;
   productId: string;
@@ -2628,6 +2640,7 @@ export interface UpdateStaffMemberProfileRequest {
 
 export type SellerPromoDiscountType = 'percent' | 'fixed';
 export type SellerPromoStatus = 'scheduled' | 'active' | 'paused' | 'expired' | 'exhausted';
+export type SellerPromoProductScope = 'ENTIRE_STORE' | 'SELECTED_PRODUCTS';
 
 export interface SellerPromotion {
   id: string;
@@ -2637,6 +2650,10 @@ export interface SellerPromotion {
   discountValueFixedCents: number;
   minOrderSubtotalCents: number;
   firstPaidOrderOnly: boolean;
+  productScope: SellerPromoProductScope;
+  includedProductIds?: string[];
+  excludedProductIds?: string[];
+  maxDiscountCents?: number | null;
   isActive: boolean;
   startsAt: string | null;
   endsAt: string | null;
@@ -2663,6 +2680,10 @@ export interface CreateSellerPromotionRequest {
   discountValueFixedCents?: number;
   minOrderSubtotalCents?: number;
   firstPaidOrderOnly?: boolean;
+  productScope?: SellerPromoProductScope;
+  includedProductIds?: string[];
+  excludedProductIds?: string[];
+  maxDiscountCents?: number | null;
   startsAt?: string | null;
   endsAt?: string | null;
   globalUsageLimit?: number | null;

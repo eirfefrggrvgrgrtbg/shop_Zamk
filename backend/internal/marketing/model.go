@@ -80,6 +80,29 @@ type MarketingCampaign struct {
 	UpdatedAt                  time.Time      `json:"updatedAt" db:"updated_at"`
 }
 
+type ProductScope string
+
+const (
+	ProductScopeEntireStore      ProductScope = "ENTIRE_STORE"
+	ProductScopeSelectedProducts ProductScope = "SELECTED_PRODUCTS"
+)
+
+type TargetType string
+
+const (
+	TargetTypeInclude TargetType = "INCLUDE"
+	TargetTypeExclude TargetType = "EXCLUDE"
+)
+
+// PromoCodeProductTarget maps promo codes to explicitly included or excluded products.
+type PromoCodeProductTarget struct {
+	ID          uuid.UUID  `json:"id" db:"id"`
+	PromoCodeID uuid.UUID  `json:"promoCodeId" db:"promo_code_id"`
+	ProductID   uuid.UUID  `json:"productId" db:"product_id"`
+	TargetType  TargetType `json:"targetType" db:"target_type"`
+	CreatedAt   time.Time  `json:"createdAt" db:"created_at"`
+}
+
 // PromoCode represents a customer-facing promotional voucher linked to a campaign.
 type PromoCode struct {
 	ID                      uuid.UUID    `json:"id" db:"id"`
@@ -93,6 +116,8 @@ type PromoCode struct {
 	GlobalUsageLimit        *int         `json:"globalUsageLimit,omitempty" db:"global_usage_limit"`
 	PerCustomerUsageLimit   int          `json:"perCustomerUsageLimit" db:"per_customer_usage_limit"`
 	FirstPaidOrderOnly      bool         `json:"firstPaidOrderOnly" db:"first_paid_order_only"`
+	ProductScope            ProductScope `json:"productScope" db:"product_scope"`
+	MaxDiscountCents        *int64       `json:"maxDiscountCents,omitempty" db:"max_discount_cents"`
 	IsActive                bool         `json:"isActive" db:"is_active"`
 	StartsAt                *time.Time   `json:"startsAt,omitempty" db:"starts_at"`
 	EndsAt                  *time.Time   `json:"endsAt,omitempty" db:"ends_at"`

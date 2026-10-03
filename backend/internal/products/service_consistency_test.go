@@ -46,7 +46,7 @@ func TestProductPricePersistenceAndReadback(t *testing.T) {
 	assert.Equal(t, priceRubles1222, *pSellerGet.Variants[0].PriceCents)
 
 	// 3. Read back via ListSellerProducts
-	pSellerList, err := svc.ListSellerProducts(ctx, sellerUserID, 50, 0)
+	pSellerList, err := svc.ListSellerProducts(ctx, sellerUserID, "", 50, 0)
 	require.NoError(t, err)
 	var foundSellerProd *products.Product
 	for i := range pSellerList.Items {
@@ -154,7 +154,7 @@ func TestModerationFirstAttemptPersistsAndExposesStatus(t *testing.T) {
 	assert.Equal(t, products.StatusPublished, pSellerApproved.Status, "Product status must be published in seller detail")
 
 	// Verify ListSellerProducts reflects published status
-	sellerList, err := svc.ListSellerProducts(ctx, sellerUserID, 50, 0)
+	sellerList, err := svc.ListSellerProducts(ctx, sellerUserID, "", 50, 0)
 	require.NoError(t, err)
 	for _, item := range sellerList.Items {
 		if item.ID == p.ID {

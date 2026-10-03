@@ -50,4 +50,8 @@ var (
 	ErrPromoAlreadyExpired           = errors.New("cannot create an already expired promo code")
 	ErrInvalidDiscountValue          = errors.New("invalid discount value")
 	ErrInvalidLimit                  = errors.New("usage limit must be positive")
+	ErrProductNotOwnedBySeller       = errors.New("one or more products do not belong to the seller")
+	ErrInvalidProductScope           = errors.New("invalid product scope")
+	ErrProductConflict               = errors.New("product cannot be simultaneously included and excluded")
+	ErrInvalidMaxDiscount            = errors.New("max discount must be positive")
 )

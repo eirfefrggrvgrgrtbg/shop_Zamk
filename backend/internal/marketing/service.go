@@ -399,14 +399,38 @@ func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 		}
 	}
 
-	// 7. Filter eligible items (strictly belonging to promo's seller)
+	// 7. Load targets and filter eligible items (strictly belonging to promo's seller, matching scope and exclusions)
+	targets, err := s.repo.GetPromoCodeProductTargetsTx(ctx, tx, promo.ID)
+	if err != nil {
+		return nil, err
+	}
+	includeMap := make(map[uuid.UUID]bool)
+	excludeMap := make(map[uuid.UUID]bool)
+	for _, t := range targets {
+		if t.TargetType == TargetTypeInclude {
+			includeMap[t.ProductID] = true
+		} else if t.TargetType == TargetTypeExclude {
+			excludeMap[t.ProductID] = true
+		}
+	}
+
 	var eligibleItems []PromotedOrderItemInput
 	var eligibleSubtotal int64
 	for _, it := range items {
-		if it.SellerID == promo.SellerID {
-			eligibleItems = append(eligibleItems, it)
-			eligibleSubtotal += it.BaseUnitPriceCents * int64(it.Quantity)
+		if it.SellerID != promo.SellerID {
+			continue
 		}
+		// Exclusion always wins
+		if excludeMap[it.ProductID] {
+			continue
+		}
+		if promo.ProductScope == ProductScopeSelectedProducts {
+			if !includeMap[it.ProductID] {
+				continue
+			}
+		}
+		eligibleItems = append(eligibleItems, it)
+		eligibleSubtotal += it.BaseUnitPriceCents * int64(it.Quantity)
 	}
 	if len(eligibleItems) == 0 {
 		return nil, ErrPromoNotApplicable
@@ -454,8 +478,56 @@ func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 			totalZamkSubsidy += lineRes.TotalZamkSubsidyCents
 			totalCustomerPaid += lineRes.TotalCustomerPaidCents
 		}
+
+		// Apply maximum discount cap if order-level discount exceeds cap
+		if promo.MaxDiscountCents != nil && *promo.MaxDiscountCents > 0 && totalSellerDiscount > *promo.MaxDiscountCents {
+			targetDiscount := *promo.MaxDiscountCents
+			fixedInputs := make([]PromotedItemInput, len(eligibleItems))
+			for i, it := range eligibleItems {
+				fixedInputs[i] = PromotedItemInput{
+					ID:                 it.OrderItemID.String(),
+					BaseUnitPriceCents: it.BaseUnitPriceCents,
+					Quantity:           it.Quantity,
+					CommissionRateBps:  commissionBps,
+				}
+			}
+			fixedResults, err := AllocateSellerFixedDiscount(targetDiscount, fixedInputs)
+			if err != nil {
+				return nil, err
+			}
+			promotedLines = nil
+			totalSellerDiscount = 0
+			totalZamkSubsidy = 0
+			totalCustomerPaid = 0
+			for i, lineRes := range fixedResults {
+				it := eligibleItems[i]
+				promotedLines = append(promotedLines, PromotedLineResult{
+					OrderItemID:                 it.OrderItemID,
+					ProductID:                   it.ProductID,
+					ProductVariantID:            it.ProductVariantID,
+					SellerID:                    it.SellerID,
+					BaseUnitPriceCents:          lineRes.BaseUnitPriceCents,
+					Quantity:                    lineRes.Quantity,
+					SellerDiscountUnitCents:     lineRes.SellerDiscountUnitCents,
+					ZamkSubsidyUnitCents:        0,
+					CustomerPaidUnitPriceCents:  lineRes.CustomerPaidUnitPriceCents,
+					CommissionBaseUnitCents:     lineRes.CommissionBaseUnitCents,
+					TotalSellerDiscountCents:    lineRes.TotalSellerDiscountCents,
+					TotalZamkSubsidyCents:       0,
+					TotalCustomerPaidCents:      lineRes.TotalCustomerPaidCents,
+					TotalCommissionBaseCents:    lineRes.TotalCommissionBaseCents,
+					CommissionRateBps:           lineRes.CommissionRateBps,
+					TotalCommissionChargedCents: lineRes.TotalCommissionChargedCents,
+				})
+				totalSellerDiscount += lineRes.TotalSellerDiscountCents
+				totalCustomerPaid += lineRes.TotalCustomerPaidCents
+			}
+		}
 	} else if campaign.DiscountType == DiscountTypeFixed {
-		// FIXED discount is seller-only
+		discountToAllocate := promo.DiscountValueFixedCents
+		if promo.MaxDiscountCents != nil && *promo.MaxDiscountCents > 0 && *promo.MaxDiscountCents < discountToAllocate {
+			discountToAllocate = *promo.MaxDiscountCents
+		}
 		fixedInputs := make([]PromotedItemInput, len(eligibleItems))
 		for i, it := range eligibleItems {
 			fixedInputs[i] = PromotedItemInput{
@@ -465,7 +537,7 @@ func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 				CommissionRateBps:  commissionBps,
 			}
 		}
-		fixedResults, err := AllocateSellerFixedDiscount(promo.DiscountValueFixedCents, fixedInputs)
+		fixedResults, err := AllocateSellerFixedDiscount(discountToAllocate, fixedInputs)
 		if err != nil {
 			return nil, err
 		}
@@ -796,6 +868,48 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		return nil, ErrInvalidDates
 	}
 
+	productScope := ProductScopeEntireStore
+	if req.ProductScope != nil {
+		productScope = *req.ProductScope
+	}
+	if productScope != ProductScopeEntireStore && productScope != ProductScopeSelectedProducts {
+		return nil, ErrInvalidProductScope
+	}
+
+	if productScope == ProductScopeSelectedProducts {
+		if len(req.IncludedProductIDs) == 0 {
+			return nil, fmt.Errorf("SELECTED_PRODUCTS requires at least one included product")
+		}
+	} else if productScope == ProductScopeEntireStore {
+		if len(req.IncludedProductIDs) > 0 {
+			return nil, fmt.Errorf("ENTIRE_STORE cannot specify included products")
+		}
+	}
+
+	// Validate duplicate IDs in includes and excludes
+	incMap := make(map[uuid.UUID]struct{}, len(req.IncludedProductIDs))
+	for _, id := range req.IncludedProductIDs {
+		if _, exists := incMap[id]; exists {
+			return nil, fmt.Errorf("%w: duplicate product ID in included products", ErrInvalidProductScope)
+		}
+		incMap[id] = struct{}{}
+	}
+
+	excMap := make(map[uuid.UUID]struct{}, len(req.ExcludedProductIDs))
+	for _, id := range req.ExcludedProductIDs {
+		if _, exists := excMap[id]; exists {
+			return nil, fmt.Errorf("%w: duplicate product ID in excluded products", ErrInvalidProductScope)
+		}
+		if _, inInc := incMap[id]; inInc {
+			return nil, ErrProductConflict
+		}
+		excMap[id] = struct{}{}
+	}
+
+	if req.MaxDiscountCents != nil && *req.MaxDiscountCents <= 0 {
+		return nil, ErrInvalidMaxDiscount
+	}
+
 	isActive := true
 	if req.IsActive != nil {
 		isActive = *req.IsActive
@@ -806,6 +920,20 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
+
+	// Validate that all specified products belong to seller
+	allTargetIDs := make([]uuid.UUID, 0, len(req.IncludedProductIDs)+len(req.ExcludedProductIDs))
+	allTargetIDs = append(allTargetIDs, req.IncludedProductIDs...)
+	allTargetIDs = append(allTargetIDs, req.ExcludedProductIDs...)
+	if len(allTargetIDs) > 0 {
+		owned, err := s.repo.ValidateProductsBelongToSellerTx(ctx, tx, sellerID, allTargetIDs)
+		if err != nil {
+			return nil, err
+		}
+		if !owned {
+			return nil, ErrProductNotOwnedBySeller
+		}
+	}
 
 	// 1. Backing campaign: funding_mode = seller, status = active, zero ZAMK authority
 	campaign := &MarketingCampaign{
@@ -852,6 +980,8 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		GlobalUsageLimit:        req.GlobalUsageLimit,
 		PerCustomerUsageLimit:   perCustLimit,
 		FirstPaidOrderOnly:      req.FirstPaidOrderOnly,
+		ProductScope:            productScope,
+		MaxDiscountCents:        req.MaxDiscountCents,
 		IsActive:                isActive,
 		StartsAt:                req.StartsAt,
 		EndsAt:                  req.EndsAt,
@@ -864,8 +994,39 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		return nil, err
 	}
 
+	// 3. Persist product targets
+	var targets []PromoCodeProductTarget
+	for _, id := range req.IncludedProductIDs {
+		targets = append(targets, PromoCodeProductTarget{
+			PromoCodeID: promo.ID,
+			ProductID:   id,
+			TargetType:  TargetTypeInclude,
+		})
+	}
+	for _, id := range req.ExcludedProductIDs {
+		targets = append(targets, PromoCodeProductTarget{
+			PromoCodeID: promo.ID,
+			ProductID:   id,
+			TargetType:  TargetTypeExclude,
+		})
+	}
+	if len(targets) > 0 {
+		if err := s.repo.CreatePromoCodeProductTargetsTx(ctx, tx, targets); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("failed to commit promotion creation: %w", err)
+	}
+
+	includedIDs := req.IncludedProductIDs
+	if includedIDs == nil {
+		includedIDs = []uuid.UUID{}
+	}
+	excludedIDs := req.ExcludedProductIDs
+	if excludedIDs == nil {
+		excludedIDs = []uuid.UUID{}
 	}
 
 	return &SellerPromoResponse{
@@ -880,6 +1041,10 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		GlobalUsageLimit:        promo.GlobalUsageLimit,
 		PerCustomerUsageLimit:   promo.PerCustomerUsageLimit,
 		FirstPaidOrderOnly:      promo.FirstPaidOrderOnly,
+		ProductScope:            promo.ProductScope,
+		IncludedProductIDs:      includedIDs,
+		ExcludedProductIDs:      excludedIDs,
+		MaxDiscountCents:        promo.MaxDiscountCents,
 		IsActive:                promo.IsActive,
 		StartsAt:                promo.StartsAt,
 		EndsAt:                  promo.EndsAt,
@@ -900,6 +1065,14 @@ func (s *Service) ListSellerPromotions(ctx context.Context, sellerID uuid.UUID) 
 	now := time.Now().UTC()
 	res := make([]SellerPromoResponse, len(items))
 	for i, it := range items {
+		inc := it.IncludedProductIDs
+		if inc == nil {
+			inc = []uuid.UUID{}
+		}
+		exc := it.ExcludedProductIDs
+		if exc == nil {
+			exc = []uuid.UUID{}
+		}
 		res[i] = SellerPromoResponse{
 			ID:                      it.ID,
 			CampaignID:              it.CampaignID,
@@ -912,6 +1085,10 @@ func (s *Service) ListSellerPromotions(ctx context.Context, sellerID uuid.UUID) 
 			GlobalUsageLimit:        it.GlobalUsageLimit,
 			PerCustomerUsageLimit:   it.PerCustomerUsageLimit,
 			FirstPaidOrderOnly:      it.FirstPaidOrderOnly,
+			ProductScope:            it.ProductScope,
+			IncludedProductIDs:      inc,
+			ExcludedProductIDs:      exc,
+			MaxDiscountCents:        it.MaxDiscountCents,
 			IsActive:                it.IsActive,
 			StartsAt:                it.StartsAt,
 			EndsAt:                  it.EndsAt,
@@ -995,6 +1172,21 @@ func (s *Service) UpdateSellerPromotion(ctx context.Context, sellerID, promoID u
 		return nil, err
 	}
 
+	// 8. Load targets
+	targets, err := s.repo.GetPromoCodeProductTargetsTx(ctx, tx, promo.ID)
+	if err != nil {
+		return nil, err
+	}
+	inc := []uuid.UUID{}
+	exc := []uuid.UUID{}
+	for _, t := range targets {
+		if t.TargetType == TargetTypeInclude {
+			inc = append(inc, t.ProductID)
+		} else if t.TargetType == TargetTypeExclude {
+			exc = append(exc, t.ProductID)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("failed to commit promotion update: %w", err)
 	}
@@ -1012,6 +1204,10 @@ func (s *Service) UpdateSellerPromotion(ctx context.Context, sellerID, promoID u
 		GlobalUsageLimit:        promo.GlobalUsageLimit,
 		PerCustomerUsageLimit:   promo.PerCustomerUsageLimit,
 		FirstPaidOrderOnly:      promo.FirstPaidOrderOnly,
+		ProductScope:            promo.ProductScope,
+		IncludedProductIDs:      inc,
+		ExcludedProductIDs:      exc,
+		MaxDiscountCents:        promo.MaxDiscountCents,
 		IsActive:                promo.IsActive,
 		StartsAt:                promo.StartsAt,
 		EndsAt:                  promo.EndsAt,

@@ -291,26 +291,33 @@ func (r *Repository) CreatePromoCodeTx(ctx context.Context, db DBExecutor, p *Pr
 	p.UpdatedAt = now
 	p.Code = strings.ToUpper(strings.TrimSpace(p.Code))
 
+	if p.ProductScope == "" {
+		p.ProductScope = ProductScopeEntireStore
+	}
+
 	query := `
 		INSERT INTO promo_codes (
 			id, campaign_id, seller_id, code, discount_type,
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
-			first_paid_order_only, is_active, starts_at, ends_at,
+			first_paid_order_only, product_scope, max_discount_cents,
+			is_active, starts_at, ends_at,
 			created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7,
 			$8, $9, $10,
-			$11, $12, $13, $14,
-			$15, $16
+			$11, $12, $13,
+			$14, $15, $16,
+			$17, $18
 		)
 	`
 	_, err := db.Exec(ctx, query,
 		p.ID, p.CampaignID, p.SellerID, p.Code, string(p.DiscountType),
 		p.DiscountValueBps, p.DiscountValueFixedCents,
 		p.MinOrderSubtotalCents, p.GlobalUsageLimit, p.PerCustomerUsageLimit,
-		p.FirstPaidOrderOnly, p.IsActive, p.StartsAt, p.EndsAt,
+		p.FirstPaidOrderOnly, string(p.ProductScope), p.MaxDiscountCents,
+		p.IsActive, p.StartsAt, p.EndsAt,
 		p.CreatedAt, p.UpdatedAt,
 	)
 	if err != nil {
@@ -332,18 +339,20 @@ func (r *Repository) GetPromoCodeByCode(ctx context.Context, code string) (*Prom
 			id, campaign_id, seller_id, code, discount_type,
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
-			first_paid_order_only, is_active, starts_at, ends_at,
+			first_paid_order_only, product_scope, max_discount_cents,
+			is_active, starts_at, ends_at,
 			created_at, updated_at
 		FROM promo_codes
 		WHERE LOWER(code) = LOWER($1)
 	`
 	var p PromoCode
-	var dType string
+	var dType, pScope string
 	err := r.pool.QueryRow(ctx, query, normalized).Scan(
 		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
 		&p.DiscountValueBps, &p.DiscountValueFixedCents,
 		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
-		&p.FirstPaidOrderOnly, &p.IsActive, &p.StartsAt, &p.EndsAt,
+		&p.FirstPaidOrderOnly, &pScope, &p.MaxDiscountCents,
+		&p.IsActive, &p.StartsAt, &p.EndsAt,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -353,6 +362,7 @@ func (r *Repository) GetPromoCodeByCode(ctx context.Context, code string) (*Prom
 		return nil, fmt.Errorf("failed to get promo code: %w", err)
 	}
 	p.DiscountType = DiscountType(dType)
+	p.ProductScope = ProductScope(pScope)
 	return &p, nil
 }
 
@@ -498,18 +508,20 @@ func (r *Repository) GetPromoCodeByCodeTx(ctx context.Context, db DBExecutor, co
 			id, campaign_id, seller_id, code, discount_type,
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
-			first_paid_order_only, is_active, starts_at, ends_at,
+			first_paid_order_only, product_scope, max_discount_cents,
+			is_active, starts_at, ends_at,
 			created_at, updated_at
 		FROM promo_codes
 		WHERE LOWER(code) = LOWER($1)
 	`
 	var p PromoCode
-	var dType string
+	var dType, pScope string
 	err := db.QueryRow(ctx, query, normalized).Scan(
 		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
 		&p.DiscountValueBps, &p.DiscountValueFixedCents,
 		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
-		&p.FirstPaidOrderOnly, &p.IsActive, &p.StartsAt, &p.EndsAt,
+		&p.FirstPaidOrderOnly, &pScope, &p.MaxDiscountCents,
+		&p.IsActive, &p.StartsAt, &p.EndsAt,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -519,6 +531,7 @@ func (r *Repository) GetPromoCodeByCodeTx(ctx context.Context, db DBExecutor, co
 		return nil, fmt.Errorf("failed to get promo code in tx: %w", err)
 	}
 	p.DiscountType = DiscountType(dType)
+	p.ProductScope = ProductScope(pScope)
 	return &p, nil
 }
 
@@ -529,19 +542,21 @@ func (r *Repository) GetPromoCodeForUpdateTx(ctx context.Context, db DBExecutor,
 			id, campaign_id, seller_id, code, discount_type,
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
-			first_paid_order_only, is_active, starts_at, ends_at,
+			first_paid_order_only, product_scope, max_discount_cents,
+			is_active, starts_at, ends_at,
 			created_at, updated_at
 		FROM promo_codes
 		WHERE id = $1
 		FOR UPDATE
 	`
 	var p PromoCode
-	var dType string
+	var dType, pScope string
 	err := db.QueryRow(ctx, query, id).Scan(
 		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
 		&p.DiscountValueBps, &p.DiscountValueFixedCents,
 		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
-		&p.FirstPaidOrderOnly, &p.IsActive, &p.StartsAt, &p.EndsAt,
+		&p.FirstPaidOrderOnly, &pScope, &p.MaxDiscountCents,
+		&p.IsActive, &p.StartsAt, &p.EndsAt,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -551,6 +566,7 @@ func (r *Repository) GetPromoCodeForUpdateTx(ctx context.Context, db DBExecutor,
 		return nil, fmt.Errorf("failed to lock promo code for update: %w", err)
 	}
 	p.DiscountType = DiscountType(dType)
+	p.ProductScope = ProductScope(pScope)
 	return &p, nil
 }
 
@@ -802,14 +818,15 @@ func (r *Repository) SetPromoCodeUsageStatusTx(ctx context.Context, db DBExecuto
 	return tag.RowsAffected() > 0, nil
 }
 
-// ListSellerPromos fetches all promo codes for an authenticated seller with aggregated usage counts.
+// ListSellerPromos fetches all promo codes for an authenticated seller with aggregated usage counts and targets.
 func (r *Repository) ListSellerPromos(ctx context.Context, sellerID uuid.UUID) ([]SellerPromoItem, error) {
 	query := `
 		SELECT
 			p.id, p.campaign_id, p.seller_id, p.code, p.discount_type,
 			p.discount_value_bps, p.discount_value_fixed_cents,
 			p.min_order_subtotal_cents, p.global_usage_limit, p.per_customer_usage_limit,
-			p.first_paid_order_only, p.is_active, p.starts_at, p.ends_at,
+			p.first_paid_order_only, p.product_scope, p.max_discount_cents,
+			p.is_active, p.starts_at, p.ends_at,
 			p.created_at, p.updated_at,
 			COALESCE(COUNT(CASE WHEN u.status = 'reserved' THEN 1 END), 0) AS reserved_count,
 			COALESCE(COUNT(CASE WHEN u.status = 'consumed' THEN 1 END), 0) AS consumed_count
@@ -826,23 +843,80 @@ func (r *Repository) ListSellerPromos(ctx context.Context, sellerID uuid.UUID) (
 	defer rows.Close()
 
 	var items []SellerPromoItem
+	var promoIDs []uuid.UUID
 	for rows.Next() {
 		var it SellerPromoItem
-		var dType string
+		var dType, pScope string
 		if err := rows.Scan(
 			&it.ID, &it.CampaignID, &it.SellerID, &it.Code, &dType,
 			&it.DiscountValueBps, &it.DiscountValueFixedCents,
 			&it.MinOrderSubtotalCents, &it.GlobalUsageLimit, &it.PerCustomerUsageLimit,
-			&it.FirstPaidOrderOnly, &it.IsActive, &it.StartsAt, &it.EndsAt,
+			&it.FirstPaidOrderOnly, &pScope, &it.MaxDiscountCents,
+			&it.IsActive, &it.StartsAt, &it.EndsAt,
 			&it.CreatedAt, &it.UpdatedAt,
 			&it.ReservedCount, &it.ConsumedCount,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan seller promo item: %w", err)
 		}
 		it.DiscountType = DiscountType(dType)
+		it.ProductScope = ProductScope(pScope)
+		it.IncludedProductIDs = []uuid.UUID{}
+		it.ExcludedProductIDs = []uuid.UUID{}
 		items = append(items, it)
+		promoIDs = append(promoIDs, it.ID)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(promoIDs) > 0 {
+		targetsQuery := `
+			SELECT promo_code_id, product_id, target_type
+			FROM promo_code_product_targets
+			WHERE promo_code_id = ANY($1)
+			ORDER BY created_at ASC
+		`
+		tRows, err := r.pool.Query(ctx, targetsQuery, promoIDs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query promo targets: %w", err)
+		}
+		defer tRows.Close()
+
+		targetsMap := make(map[uuid.UUID]struct {
+			inc []uuid.UUID
+			exc []uuid.UUID
+		})
+		for tRows.Next() {
+			var pID, prodID uuid.UUID
+			var tType string
+			if err := tRows.Scan(&pID, &prodID, &tType); err != nil {
+				return nil, fmt.Errorf("failed to scan promo target: %w", err)
+			}
+			entry := targetsMap[pID]
+			if TargetType(tType) == TargetTypeInclude {
+				entry.inc = append(entry.inc, prodID)
+			} else if TargetType(tType) == TargetTypeExclude {
+				entry.exc = append(entry.exc, prodID)
+			}
+			targetsMap[pID] = entry
+		}
+		if err := tRows.Err(); err != nil {
+			return nil, err
+		}
+
+		for i := range items {
+			if entry, ok := targetsMap[items[i].ID]; ok {
+				if len(entry.inc) > 0 {
+					items[i].IncludedProductIDs = entry.inc
+				}
+				if len(entry.exc) > 0 {
+					items[i].ExcludedProductIDs = entry.exc
+				}
+			}
+		}
+	}
+
+	return items, nil
 }
 
 // GetSellerPromoForUpdateTx locks a promo code row belonging strictly to sellerID for update.
@@ -852,19 +926,21 @@ func (r *Repository) GetSellerPromoForUpdateTx(ctx context.Context, db DBExecuto
 			id, campaign_id, seller_id, code, discount_type,
 			discount_value_bps, discount_value_fixed_cents,
 			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
-			first_paid_order_only, is_active, starts_at, ends_at,
+			first_paid_order_only, product_scope, max_discount_cents,
+			is_active, starts_at, ends_at,
 			created_at, updated_at
 		FROM promo_codes
 		WHERE id = $1 AND seller_id = $2
 		FOR UPDATE
 	`
 	var p PromoCode
-	var dType string
+	var dType, pScope string
 	err := db.QueryRow(ctx, query, promoID, sellerID).Scan(
 		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
 		&p.DiscountValueBps, &p.DiscountValueFixedCents,
 		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
-		&p.FirstPaidOrderOnly, &p.IsActive, &p.StartsAt, &p.EndsAt,
+		&p.FirstPaidOrderOnly, &pScope, &p.MaxDiscountCents,
+		&p.IsActive, &p.StartsAt, &p.EndsAt,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -874,7 +950,88 @@ func (r *Repository) GetSellerPromoForUpdateTx(ctx context.Context, db DBExecuto
 		return nil, fmt.Errorf("failed to lock seller promo code for update: %w", err)
 	}
 	p.DiscountType = DiscountType(dType)
+	p.ProductScope = ProductScope(pScope)
 	return &p, nil
+}
+
+// CreatePromoCodeProductTargetsTx inserts target entries for a promo code.
+func (r *Repository) CreatePromoCodeProductTargetsTx(ctx context.Context, db DBExecutor, targets []PromoCodeProductTarget) error {
+	if len(targets) == 0 {
+		return nil
+	}
+	query := `
+		INSERT INTO promo_code_product_targets (id, promo_code_id, product_id, target_type, created_at)
+		VALUES ($1, $2, $3, $4, $5)
+	`
+	now := time.Now().UTC()
+	for _, t := range targets {
+		id := t.ID
+		if id == uuid.Nil {
+			id = uuid.New()
+		}
+		createdAt := t.CreatedAt
+		if createdAt.IsZero() {
+			createdAt = now
+		}
+		if _, err := db.Exec(ctx, query, id, t.PromoCodeID, t.ProductID, string(t.TargetType), createdAt); err != nil {
+			return fmt.Errorf("failed to insert promo code product target: %w", err)
+		}
+	}
+	return nil
+}
+
+// GetPromoCodeProductTargetsTx loads all product targets for a promo code within a transaction.
+func (r *Repository) GetPromoCodeProductTargetsTx(ctx context.Context, db DBExecutor, promoID uuid.UUID) ([]PromoCodeProductTarget, error) {
+	query := `
+		SELECT id, promo_code_id, product_id, target_type, created_at
+		FROM promo_code_product_targets
+		WHERE promo_code_id = $1
+		ORDER BY created_at ASC
+	`
+	rows, err := db.Query(ctx, query, promoID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query promo code product targets: %w", err)
+	}
+	defer rows.Close()
+
+	var targets []PromoCodeProductTarget
+	for rows.Next() {
+		var t PromoCodeProductTarget
+		var tType string
+		if err := rows.Scan(&t.ID, &t.PromoCodeID, &t.ProductID, &tType, &t.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan promo code product target: %w", err)
+		}
+		t.TargetType = TargetType(tType)
+		targets = append(targets, t)
+	}
+	return targets, rows.Err()
+}
+
+// GetPromoCodeProductTargets loads all product targets for a promo code on the pool.
+func (r *Repository) GetPromoCodeProductTargets(ctx context.Context, promoID uuid.UUID) ([]PromoCodeProductTarget, error) {
+	return r.GetPromoCodeProductTargetsTx(ctx, r.pool, promoID)
+}
+
+// ValidateProductsBelongToSellerTx checks that all provided product IDs exist and belong strictly to sellerID.
+func (r *Repository) ValidateProductsBelongToSellerTx(ctx context.Context, db DBExecutor, sellerID uuid.UUID, productIDs []uuid.UUID) (bool, error) {
+	if len(productIDs) == 0 {
+		return true, nil
+	}
+	uniqueMap := make(map[uuid.UUID]struct{}, len(productIDs))
+	for _, id := range productIDs {
+		uniqueMap[id] = struct{}{}
+	}
+	uniqueIDs := make([]uuid.UUID, 0, len(uniqueMap))
+	for id := range uniqueMap {
+		uniqueIDs = append(uniqueIDs, id)
+	}
+
+	query := `SELECT COUNT(*) FROM products WHERE seller_id = $1 AND id = ANY($2)`
+	var count int
+	if err := db.QueryRow(ctx, query, sellerID, uniqueIDs).Scan(&count); err != nil {
+		return false, fmt.Errorf("failed to validate product ownership: %w", err)
+	}
+	return count == len(uniqueIDs), nil
 }
 
 // CountPromoUsageCommittedTx returns both reserved and consumed usage counts for a promo.

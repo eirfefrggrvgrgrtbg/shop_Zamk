@@ -1054,20 +1054,20 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 	return *p, nil
 }
 
-func (s *Service) ListSellerProducts(ctx context.Context, currentUserID uuid.UUID, limit, offset int) (ProductListResponse, error) {
+func (s *Service) ListSellerProducts(ctx context.Context, currentUserID uuid.UUID, search string, limit, offset int) (ProductListResponse, error) {
 	seller, err := s.getSellerForUser(ctx, currentUserID)
 	if err != nil {
 		return ProductListResponse{}, err
 	}
 
-	items, err := s.repo.ListProductsBySeller(ctx, seller.ID, limit, offset)
+	items, totalCount, err := s.repo.ListProductsBySeller(ctx, seller.ID, search, limit, offset)
 	if err != nil {
 		return ProductListResponse{}, err
 	}
 	if items == nil {
 		items = []Product{}
 	}
-	return ProductListResponse{Items: items, TotalCount: len(items)}, nil
+	return ProductListResponse{Items: items, TotalCount: totalCount}, nil
 }
 
 func (s *Service) GetSellerProduct(ctx context.Context, currentUserID, productID uuid.UUID) (Product, error) {

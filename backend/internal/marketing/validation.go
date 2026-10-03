@@ -174,6 +174,12 @@ func ValidatePromoCode(p *PromoCode) error {
 	if p.GlobalUsageLimit != nil && *p.GlobalUsageLimit <= 0 {
 		return fmt.Errorf("global usage limit must be positive if specified")
 	}
+	if p.ProductScope != "" && p.ProductScope != ProductScopeEntireStore && p.ProductScope != ProductScopeSelectedProducts {
+		return ErrInvalidProductScope
+	}
+	if p.MaxDiscountCents != nil && *p.MaxDiscountCents <= 0 {
+		return ErrInvalidMaxDiscount
+	}
 
 	return nil
 }

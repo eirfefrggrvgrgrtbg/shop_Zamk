@@ -155,7 +155,7 @@ func EnsureMarketingMigrations(ctx context.Context, db DBExecutor) error {
 		return err
 	}
 
-	var hasIndex, hasClaimsTable, hasInitOutcomeCol, hasReconCol, hasProviderPIDIndex bool
+	var hasIndex, hasClaimsTable, hasInitOutcomeCol, hasReconCol, hasProviderPIDIndex, hasTargetsTable bool
 	_ = db.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT FROM pg_indexes
@@ -186,7 +186,13 @@ func EnsureMarketingMigrations(ctx context.Context, db DBExecutor) error {
 			WHERE indexname = 'uq_payments_provider_payment_id'
 		)
 	`).Scan(&hasProviderPIDIndex)
-	if hasIndex && hasClaimsTable && hasInitOutcomeCol && hasReconCol && hasProviderPIDIndex {
+	_ = db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables
+			WHERE table_name = 'promo_code_product_targets'
+		)
+	`).Scan(&hasTargetsTable)
+	if hasIndex && hasClaimsTable && hasInitOutcomeCol && hasReconCol && hasProviderPIDIndex && hasTargetsTable {
 		return nil
 	}
 
@@ -200,6 +206,7 @@ func EnsureMarketingMigrations(ctx context.Context, db DBExecutor) error {
 		"000096_create_product_price_history.up.sql",
 		"000097_create_order_item_promotions.up.sql",
 		"000098_harden_promotion_allocations_and_first_order.up.sql",
+		"000099_add_promotion_product_scope_and_max_discount.up.sql",
 	}
 
 	for _, mig := range migs {

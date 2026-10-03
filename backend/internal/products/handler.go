@@ -198,7 +198,11 @@ func (h *Handler) ListSellerProducts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	page := pagination.FromRequest(r)
-	resp, err := h.service.ListSellerProducts(r.Context(), userID, page.Limit, page.Offset)
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		q = strings.TrimSpace(r.URL.Query().Get("query"))
+	}
+	resp, err := h.service.ListSellerProducts(r.Context(), userID, q, page.Limit, page.Offset)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list products")
 		return

@@ -22,6 +22,8 @@ import type {
   SellerPromotionsResponse,
   CreateSellerPromotionRequest,
   UpdateSellerPromotionRequest,
+  GetSellerProductsParams,
+  SellerProductListResponse,
 } from './types';
 
 export type {
@@ -38,9 +40,32 @@ export const getSellerMe = async (): Promise<SellerMe> => {
   return request<SellerMe>('GET', '/seller/me');
 };
 
-export const getSellerProducts = async (): Promise<SellerProduct[]> => {
-  const res = await request<any>('GET', '/seller/products');
+export const getSellerProducts = async (params?: GetSellerProductsParams): Promise<SellerProduct[]> => {
+  const query = new URLSearchParams();
+  if (params?.q) query.set('q', params.q);
+  if (params?.limit !== undefined) query.set('limit', String(params.limit));
+  if (params?.offset !== undefined) query.set('offset', String(params.offset));
+  if (params?.page !== undefined) query.set('page', String(params.page));
+  const queryString = query.toString();
+  const url = queryString ? `/seller/products?${queryString}` : '/seller/products';
+  const res = await request<any>('GET', url);
   return res?.items || (Array.isArray(res) ? res : []);
+};
+
+export const getSellerProductsPaginated = async (
+  params?: GetSellerProductsParams
+): Promise<SellerProductListResponse> => {
+  const query = new URLSearchParams();
+  if (params?.q) query.set('q', params.q);
+  if (params?.limit !== undefined) query.set('limit', String(params.limit));
+  if (params?.offset !== undefined) query.set('offset', String(params.offset));
+  if (params?.page !== undefined) query.set('page', String(params.page));
+  const queryString = query.toString();
+  const url = queryString ? `/seller/products?${queryString}` : '/seller/products';
+  const res = await request<any>('GET', url);
+  const items = res?.items || (Array.isArray(res) ? res : []);
+  const totalCount = typeof res?.totalCount === 'number' ? res.totalCount : items.length;
+  return { items, totalCount };
 };
 
 export const createSellerProduct = async (

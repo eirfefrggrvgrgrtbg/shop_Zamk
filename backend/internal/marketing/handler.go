@@ -131,6 +131,22 @@ func (h *Handler) CreateSellerPromotion(w http.ResponseWriter, r *http.Request) 
 			h.writeError(w, http.StatusBadRequest, "invalid_limit", err.Error())
 			return
 		}
+		if errors.Is(err, ErrProductNotOwnedBySeller) {
+			h.writeError(w, http.StatusBadRequest, "foreign_product", err.Error())
+			return
+		}
+		if errors.Is(err, ErrProductConflict) {
+			h.writeError(w, http.StatusBadRequest, "product_conflict", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidProductScope) {
+			h.writeError(w, http.StatusBadRequest, "invalid_scope", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidMaxDiscount) {
+			h.writeError(w, http.StatusBadRequest, "invalid_max_discount", err.Error())
+			return
+		}
 		h.writeError(w, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
@@ -170,6 +186,12 @@ func (h *Handler) UpdateSellerPromotion(w http.ResponseWriter, r *http.Request) 
 		"sellerid":                true,
 		"campaignid":              true,
 		"fundingmode":             true,
+		"productscope":            true,
+		"includedproductids":      true,
+		"excludedproductids":      true,
+		"maxdiscountcents":        true,
+		"maxdiscountrub":          true,
+		"producttargets":          true,
 	}
 
 	for k := range rawMap {

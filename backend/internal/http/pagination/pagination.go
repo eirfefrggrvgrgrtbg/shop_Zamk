@@ -21,7 +21,11 @@ func FromRequest(r *http.Request) Params {
 	if limit > MaxLimit {
 		limit = MaxLimit
 	}
-	offset := parseNonNegativeInt(query.Get("offset"), 0)
+	offset := parseNonNegativeInt(query.Get("offset"), -1)
+	if offset < 0 {
+		page := parsePositiveInt(query.Get("page"), 1)
+		offset = (page - 1) * limit
+	}
 
 	return Params{Limit: limit, Offset: offset}
 }
