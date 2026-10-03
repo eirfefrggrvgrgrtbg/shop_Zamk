@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS support_requester_reads;
+DROP TABLE IF EXISTS support_staff_reads;
+DROP TABLE IF EXISTS support_attachments;
+DROP TABLE IF EXISTS support_staged_attachments;
+DROP TABLE IF EXISTS support_context_links;
+DROP TABLE IF EXISTS support_internal_notes;
+DROP TABLE IF EXISTS support_messages;
+DROP TABLE IF EXISTS support_sessions;
+DROP TABLE IF EXISTS support_conversations;
+DROP TABLE IF EXISTS support_categories;

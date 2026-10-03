@@ -257,3 +257,36 @@ func EnsureMarketingMigrations(ctx context.Context, db DBExecutor) error {
 
 	return nil
 }
+
+// EnsureSupportMigrations ensures migration 000104 is applied safely on test database.
+func EnsureSupportMigrations(ctx context.Context, db DBExecutor) error {
+	if err := VerifyTestDatabase(ctx, db); err != nil {
+		return err
+	}
+
+	root := findRepoRoot()
+	if root == "" {
+		return fmt.Errorf("failed to locate repo root (go.mod)")
+	}
+	migPath := filepath.Join(root, "migrations", "000104_create_support_conversations.up.sql")
+	content, err := os.ReadFile(migPath)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", migPath, err)
+	}
+
+	statements := strings.Split(string(content), ";")
+	for _, stmt := range statements {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if _, err := db.Exec(ctx, stmt); err != nil {
+			errStr := err.Error()
+			if !strings.Contains(errStr, "already exists") && !strings.Contains(errStr, "duplicate key") {
+				return fmt.Errorf("failed to apply statement in 000104: %w (stmt: %s)", err, stmt)
+			}
+		}
+	}
+
+	return nil
+}

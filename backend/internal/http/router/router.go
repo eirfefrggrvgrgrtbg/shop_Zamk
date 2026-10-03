@@ -44,6 +44,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/staff"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/support"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/supplies"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testlab"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
@@ -96,6 +97,10 @@ func New(
 	merchRepo := merchandising.NewRepository(pg.Pool)
 	merchSvc := merchandising.NewService(merchRepo, pg.Pool)
 	merchHandler := merchandising.NewHandler(merchSvc)
+
+	supportRepo := support.NewRepository(pg.Pool)
+	supportSvc := support.NewService(supportRepo, pg.Pool, nil)
+	supportHandler := support.NewHandler(supportSvc, logger)
 
 
 	var obsProvider *observability.Provider
@@ -320,6 +325,13 @@ func New(
 		r.Post("/returns/{id}/shipment", returnsHandler.CreateCustomerReturnShipment)
 		r.Get("/returns/{id}/cdek/offices", returnsHandler.GetCDEKOffices)
 
+		// Support (Customer)
+		r.Get("/support", supportHandler.GetCustomerConversation)
+		r.Post("/support/messages", supportHandler.SendCustomerMessage)
+		r.With(uploadLimit).Post("/support/attachments", supportHandler.UploadCustomerAttachment)
+		r.Get("/support/attachments/{id}", supportHandler.DownloadCustomerAttachment)
+		r.Post("/support/read", supportHandler.MarkCustomerRead)
+
 		r.Get("/favorites", favoritesHandler.ListFavorites)
 		r.Post("/favorites/{productId}", favoritesHandler.AddFavorite)
 		r.Delete("/favorites/{productId}", favoritesHandler.RemoveFavorite)
@@ -460,6 +472,17 @@ func New(
 		r.Get("/", marketingHandler.ListSellerPromotions)
 		r.Post("/", marketingHandler.CreateSellerPromotion)
 		r.Patch("/{id}", marketingHandler.UpdateSellerPromotion)
+	})
+
+	r.Route("/api/seller/support", func(r chi.Router) {
+		r.Use(appMiddleware.AuthMiddleware(tokenService))
+		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
+
+		r.Get("/", supportHandler.GetSellerConversation)
+		r.Post("/messages", supportHandler.SendSellerMessage)
+		r.With(uploadLimit).Post("/attachments", supportHandler.UploadSellerAttachment)
+		r.Get("/attachments/{id}", supportHandler.DownloadSellerAttachment)
+		r.Post("/read", supportHandler.MarkSellerRead)
 	})
 
 	r.Route("/api/admin", func(r chi.Router) {
@@ -659,6 +682,19 @@ func New(
 		r.With(perm("auctions.update")).Post("/auction-lots/{id}/mark-unpaid-review", auctionsAdminHandler.MarkLotUnpaid)
 		r.With(perm("auctions.move_to_direct_sale")).Post("/auction-lots/{id}/move-to-direct-sale", auctionsAdminHandler.MoveToDirectSale)
 
+		// Support (Admin)
+		r.Route("/support", func(r chi.Router) {
+			r.With(perm("support.read")).Get("/categories", supportHandler.ListCategories)
+			r.With(perm("support.read")).Get("/conversations", supportHandler.ListConversations)
+			r.With(perm("support.read")).Get("/conversations/{id}", supportHandler.GetAdminConversation)
+			r.With(perm("support.respond")).Post("/conversations/{id}/messages", supportHandler.SendStaffReply)
+			r.With(perm("support.respond")).Post("/conversations/{id}/internal-notes", supportHandler.CreateInternalNote)
+			r.With(perm("support.read")).Post("/conversations/{id}/read", supportHandler.MarkStaffRead)
+			r.With(perm("support.close")).Post("/conversations/{id}/complete", supportHandler.CompleteSession)
+			r.With(perm("support.close")).Post("/sessions/{sessionId}/reopen", supportHandler.ReopenSession)
+			r.With(perm("support.respond")).Patch("/conversations/{id}/session", supportHandler.UpdateSession)
+			r.With(perm("support.read")).Get("/attachments/{id}", supportHandler.DownloadAdminAttachment)
+		})
 	})
 
 	r.Group(func(r chi.Router) {
