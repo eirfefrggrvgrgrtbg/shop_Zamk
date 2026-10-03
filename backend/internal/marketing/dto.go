@@ -67,6 +67,8 @@ type CreateSellerPromoRequest struct {
 	ProductScope            *ProductScope `json:"productScope,omitempty"`
 	IncludedProductIDs      []uuid.UUID   `json:"includedProductIds,omitempty"`
 	ExcludedProductIDs      []uuid.UUID   `json:"excludedProductIds,omitempty"`
+	IncludedCategoryIDs     []uuid.UUID   `json:"includedCategoryIds,omitempty"`
+	ExcludedCategoryIDs     []uuid.UUID   `json:"excludedCategoryIds,omitempty"`
 	MaxDiscountCents        *int64        `json:"maxDiscountCents,omitempty"`
 	StartsAt                *time.Time    `json:"startsAt,omitempty"`
 	EndsAt                  *time.Time    `json:"endsAt,omitempty"`
@@ -100,6 +102,8 @@ type SellerPromoResponse struct {
 	ProductScope            ProductScope `json:"productScope"`
 	IncludedProductIDs      []uuid.UUID  `json:"includedProductIds"`
 	ExcludedProductIDs      []uuid.UUID  `json:"excludedProductIds"`
+	IncludedCategoryIDs     []uuid.UUID  `json:"includedCategoryIds"`
+	ExcludedCategoryIDs     []uuid.UUID  `json:"excludedCategoryIds"`
 	MaxDiscountCents        *int64       `json:"maxDiscountCents,omitempty"`
 	IsActive                bool         `json:"isActive"`
 	StartsAt                *time.Time   `json:"startsAt,omitempty"`
@@ -120,10 +124,12 @@ type SellerPromotionsResponse struct {
 // SellerPromoItem holds database projection of promo_codes joined with usage counters.
 type SellerPromoItem struct {
 	PromoCode
-	IncludedProductIDs []uuid.UUID
-	ExcludedProductIDs []uuid.UUID
-	ReservedCount      int
-	ConsumedCount      int
+	IncludedProductIDs  []uuid.UUID
+	ExcludedProductIDs  []uuid.UUID
+	IncludedCategoryIDs []uuid.UUID
+	ExcludedCategoryIDs []uuid.UUID
+	ReservedCount       int
+	ConsumedCount       int
 }
 
 // DerivePromoStatus calculates the exact derived display status matching checkout semantics.

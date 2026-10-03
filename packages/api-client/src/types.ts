@@ -2640,7 +2640,7 @@ export interface UpdateStaffMemberProfileRequest {
 
 export type SellerPromoDiscountType = 'percent' | 'fixed';
 export type SellerPromoStatus = 'scheduled' | 'active' | 'paused' | 'expired' | 'exhausted';
-export type SellerPromoProductScope = 'ENTIRE_STORE' | 'SELECTED_PRODUCTS';
+export type SellerPromoProductScope = 'ENTIRE_STORE' | 'SELECTED_PRODUCTS' | 'SELECTED_CATEGORIES';
 
 export interface SellerPromotion {
   id: string;
@@ -2653,6 +2653,8 @@ export interface SellerPromotion {
   productScope: SellerPromoProductScope;
   includedProductIds?: string[];
   excludedProductIds?: string[];
+  includedCategoryIds?: string[];
+  excludedCategoryIds?: string[];
   maxDiscountCents?: number | null;
   isActive: boolean;
   startsAt: string | null;
@@ -2683,6 +2685,8 @@ export interface CreateSellerPromotionRequest {
   productScope?: SellerPromoProductScope;
   includedProductIds?: string[];
   excludedProductIds?: string[];
+  includedCategoryIds?: string[];
+  excludedCategoryIds?: string[];
   maxDiscountCents?: number | null;
   startsAt?: string | null;
   endsAt?: string | null;

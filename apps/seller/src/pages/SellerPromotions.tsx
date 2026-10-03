@@ -5,6 +5,8 @@ import {
   updateSellerPromotion,
   getSellerProducts,
   getSellerProductsPaginated,
+  getSellerCategories,
+  type SellerCategory,
 } from '@zamk/api-client/src/seller';
 import type {
   SellerPromotion,
@@ -31,6 +33,8 @@ import {
   Search,
   Check,
   Package,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react';
 import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 import { SellerSurface, SellerModal } from '../components/SellerSurface';
@@ -87,6 +91,77 @@ const STATUS_CONFIG: Record<
 
 type SelectorMode = 'INCLUDE' | 'EXCLUDE' | null;
 
+interface CategoryTreeNode {
+  category: SellerCategory;
+  children: CategoryTreeNode[];
+  level: number;
+}
+
+const buildCategoryTree = (
+  categoriesList: SellerCategory[],
+  lookup: Record<string, SellerCategory>
+): CategoryTreeNode[] => {
+  const childrenMap = new Map<string, SellerCategory[]>();
+  const rootItems: SellerCategory[] = [];
+
+  for (const cat of categoriesList) {
+    if (cat.parentId && lookup[cat.parentId]) {
+      const existing = childrenMap.get(cat.parentId) || [];
+      existing.push(cat);
+      childrenMap.set(cat.parentId, existing);
+    } else {
+      rootItems.push(cat);
+    }
+  }
+
+  const sortCats = (a: SellerCategory, b: SellerCategory) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return a.name.localeCompare(b.name, 'ru');
+  };
+
+  rootItems.sort(sortCats);
+  childrenMap.forEach((list) => list.sort(sortCats));
+
+  const buildNodes = (list: SellerCategory[], level: number): CategoryTreeNode[] => {
+    return list.map((cat) => {
+      const kids = childrenMap.get(cat.id) || [];
+      return {
+        category: cat,
+        children: buildNodes(kids, level + 1),
+        level,
+      };
+    });
+  };
+
+  return buildNodes(rootItems, 0);
+};
+
+const getCategoryAncestors = (
+  catId: string,
+  lookup: Record<string, SellerCategory>
+): string[] => {
+  const ancestors: string[] = [];
+  let cur = lookup[catId]?.parentId ? lookup[lookup[catId].parentId!] : undefined;
+  while (cur) {
+    ancestors.push(cur.id);
+    cur = cur.parentId ? lookup[cur.parentId] : undefined;
+  }
+  return ancestors;
+};
+
+const isAncestorSelected = (
+  cat: SellerCategory,
+  selectedIds: string[],
+  lookup: Record<string, SellerCategory>
+): boolean => {
+  let cur = cat.parentId ? lookup[cat.parentId] : undefined;
+  while (cur) {
+    if (selectedIds.includes(cur.id)) return true;
+    cur = cur.parentId ? lookup[cur.parentId] : undefined;
+  }
+  return false;
+};
+
 export function SellerPromotions() {
   const [promotions, setPromotions] = useState<SellerPromotion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -100,10 +175,17 @@ export function SellerPromotions() {
   const [productLookup, setProductLookup] = useState<Record<string, SellerProduct>>({});
   const [sellerProducts, setSellerProducts] = useState<SellerProduct[]>([]);
 
+  // Categories state & lookup dictionary
+  const [categories, setCategories] = useState<SellerCategory[]>([]);
+  const [categoryLookup, setCategoryLookup] = useState<Record<string, SellerCategory>>({});
+  const [isCategoriesLoading, setIsCategoriesLoading] = useState(false);
+
   // Advanced Rules Form State
   const [createScope, setCreateScope] = useState<SellerPromoProductScope>('ENTIRE_STORE');
   const [createIncludedProductIds, setCreateIncludedProductIds] = useState<string[]>([]);
   const [createExcludedProductIds, setCreateExcludedProductIds] = useState<string[]>([]);
+  const [createIncludedCategoryIds, setCreateIncludedCategoryIds] = useState<string[]>([]);
+  const [createExcludedCategoryIds, setCreateExcludedCategoryIds] = useState<string[]>([]);
   const [createMaxDiscountRub, setCreateMaxDiscountRub] = useState('');
 
   // Catalog Selector Modal State
@@ -117,6 +199,13 @@ export function SellerPromotions() {
   const [isSelectorLoading, setIsSelectorLoading] = useState(false);
   const [isSelectorLoadingMore, setIsSelectorLoadingMore] = useState(false);
   const [selectorError, setSelectorError] = useState('');
+
+  // Category Selector Modal State
+  const [categorySelectorMode, setCategorySelectorMode] = useState<SelectorMode>(null);
+  const [draftCategoryIds, setDraftCategoryIds] = useState<string[]>([]);
+  const [categorySearchQuery, setCategorySearchQuery] = useState('');
+  const [categorySelectorError, setCategorySelectorError] = useState('');
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set());
 
   // Create Form State
   const [createCode, setCreateCode] = useState('');
@@ -202,6 +291,31 @@ export function SellerPromotions() {
       loadSellerProducts();
     }
   }, [isCreateOpen, sellerProducts.length, loadSellerProducts]);
+
+  const loadCategories = useCallback(async () => {
+    setIsCategoriesLoading(true);
+    setCategorySelectorError('');
+    try {
+      const list = await getSellerCategories();
+      const safeList = Array.isArray(list) ? list : [];
+      setCategories(safeList);
+      const lookup: Record<string, SellerCategory> = {};
+      safeList.forEach((c) => {
+        lookup[c.id] = c;
+      });
+      setCategoryLookup(lookup);
+    } catch {
+      setCategorySelectorError('Не удалось загрузить категории');
+    } finally {
+      setIsCategoriesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isCreateOpen && categories.length === 0) {
+      loadCategories();
+    }
+  }, [isCreateOpen, categories.length, loadCategories]);
 
   useEffect(() => {
     if (selectorMode) {
@@ -296,6 +410,97 @@ export function SellerPromotions() {
     });
   };
 
+  const openCategorySelector = (mode: 'INCLUDE' | 'EXCLUDE') => {
+    setCategorySelectorMode(mode);
+    const initialDraft = mode === 'INCLUDE' ? [...createIncludedCategoryIds] : [...createExcludedCategoryIds];
+    setDraftCategoryIds(initialDraft);
+    setCategorySearchQuery('');
+    setCategorySelectorError('');
+
+    const expanded = new Set<string>();
+    const initialIdsToExpand = [
+      ...initialDraft,
+      ...(mode === 'INCLUDE' ? createExcludedCategoryIds : createIncludedCategoryIds),
+    ];
+
+    initialIdsToExpand.forEach((id) => {
+      const ancestors = getCategoryAncestors(id, categoryLookup);
+      ancestors.forEach((ancId) => expanded.add(ancId));
+    });
+
+    setExpandedCategoryIds(expanded);
+
+    if (categories.length === 0) {
+      loadCategories();
+    }
+  };
+
+  useEffect(() => {
+    if (categorySelectorMode && categories.length > 0) {
+      setExpandedCategoryIds((prev) => {
+        const next = new Set(prev);
+        const idsToExpand = [
+          ...draftCategoryIds,
+          ...(categorySelectorMode === 'INCLUDE' ? createExcludedCategoryIds : createIncludedCategoryIds),
+        ];
+        idsToExpand.forEach((id) => {
+          const ancestors = getCategoryAncestors(id, categoryLookup);
+          ancestors.forEach((ancId) => next.add(ancId));
+        });
+        return next;
+      });
+    }
+  }, [categorySelectorMode, categories, categoryLookup]);
+
+  const closeCategorySelector = () => {
+    setCategorySelectorMode(null);
+    setDraftCategoryIds([]);
+    setCategorySearchQuery('');
+    setCategorySelectorError('');
+  };
+
+  const applyCategorySelector = () => {
+    if (categorySelectorMode === 'INCLUDE') {
+      setCreateIncludedCategoryIds(draftCategoryIds);
+    } else if (categorySelectorMode === 'EXCLUDE') {
+      setCreateExcludedCategoryIds(draftCategoryIds);
+    }
+    closeCategorySelector();
+  };
+
+  const handleToggleCategoryDraft = (categoryId: string) => {
+    setDraftCategoryIds((prev) => {
+      if (prev.includes(categoryId)) {
+        return prev.filter((id) => id !== categoryId);
+      } else {
+        return [...prev, categoryId];
+      }
+    });
+    const ancestors = getCategoryAncestors(categoryId, categoryLookup);
+    if (ancestors.length > 0) {
+      setExpandedCategoryIds((prev) => {
+        const next = new Set(prev);
+        ancestors.forEach((aId) => next.add(aId));
+        return next;
+      });
+    }
+  };
+
+  const toggleExpandCategory = (categoryId: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    setExpandedCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) {
+        next.delete(categoryId);
+      } else {
+        next.add(categoryId);
+      }
+      return next;
+    });
+  };
+
   const resetCreateForm = () => {
     setCreateCode('');
     setCreateDiscountType('percent');
@@ -310,8 +515,11 @@ export function SellerPromotions() {
     setCreateScope('ENTIRE_STORE');
     setCreateIncludedProductIds([]);
     setCreateExcludedProductIds([]);
+    setCreateIncludedCategoryIds([]);
+    setCreateExcludedCategoryIds([]);
     setCreateMaxDiscountRub('');
     closeSelector();
+    closeCategorySelector();
     setCreateError('');
     setCreateDateError('');
   };
@@ -367,6 +575,18 @@ export function SellerPromotions() {
           throw new Error('Выберите хотя бы один товар для области действия «На выбранные товары».');
         }
         req.includedProductIds = createIncludedProductIds;
+      } else if (createScope === 'SELECTED_CATEGORIES') {
+        if (createIncludedCategoryIds.length === 0) {
+          throw new Error('Выберите хотя бы одну категорию для области действия «По категориям».');
+        }
+        req.includedCategoryIds = createIncludedCategoryIds;
+        if (createExcludedCategoryIds.length > 0) {
+          req.excludedCategoryIds = createExcludedCategoryIds;
+        }
+      } else if (createScope === 'ENTIRE_STORE') {
+        if (createExcludedCategoryIds.length > 0) {
+          req.excludedCategoryIds = createExcludedCategoryIds;
+        }
       }
 
       if (createExcludedProductIds.length > 0) {
@@ -422,6 +642,12 @@ export function SellerPromotions() {
         setCreateError('Один или несколько выбранных товаров не принадлежат вашему магазину.');
       } else if (err.data?.code === 'product_conflict' || err.code === 'product_conflict') {
         setCreateError('Товар не может одновременно находиться в списке включений и исключений.');
+      } else if (err.data?.code === 'category_conflict' || err.code === 'category_conflict') {
+        setCreateError('Категория не может одновременно находиться в списке включений и исключений.');
+      } else if (err.data?.code === 'invalid_category' || err.code === 'invalid_category') {
+        setCreateError('Одна или несколько категорий не найдены или неактивны.');
+      } else if (err.data?.code === 'category_requires_include' || err.code === 'category_requires_include') {
+        setCreateError('Для области действия «По категориям» необходимо выбрать хотя бы одну категорию.');
       } else if (err.data?.code === 'invalid_product_scope' || err.code === 'invalid_product_scope') {
         setCreateError('Некорректная область действия промокода.');
       } else if (err.data?.code === 'invalid_max_discount' || err.code === 'invalid_max_discount') {
@@ -647,8 +873,10 @@ export function SellerPromotions() {
                           >
                             {p.productScope === 'SELECTED_PRODUCTS'
                               ? `${(p.includedProductIds || []).length} тов.`
-                              : (p.excludedProductIds || []).length > 0
-                              ? `Все товары (искл. ${p.excludedProductIds!.length})`
+                              : p.productScope === 'SELECTED_CATEGORIES'
+                              ? `${(p.includedCategoryIds || []).length} кат.`
+                              : ((p.excludedProductIds || []).length > 0 || (p.excludedCategoryIds || []).length > 0)
+                              ? `Все товары (искл. ${(p.excludedProductIds?.length || 0) + (p.excludedCategoryIds?.length || 0)})`
                               : 'Все товары'}
                           </span>
                           {p.firstPaidOrderOnly && (
@@ -749,7 +977,10 @@ export function SellerPromotions() {
       {/* CREATE MODAL */}
       <SellerModal
         isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
+        onClose={() => {
+          if (Boolean(categorySelectorMode) || Boolean(selectorMode)) return;
+          setIsCreateOpen(false);
+        }}
         title="Создание промокода"
         data-testid="create-promo-modal"
       >
@@ -917,11 +1148,16 @@ export function SellerPromotions() {
             <h4 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-3">
               Область действия промокода <span className="text-red-500">*</span>
             </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
               <button
                 type="button"
                 data-testid="radio-scope-entire-store"
-                onClick={() => setCreateScope('ENTIRE_STORE')}
+                onClick={() => {
+                  setCreateScope('ENTIRE_STORE');
+                  setCreateIncludedProductIds([]);
+                  setCreateIncludedCategoryIds([]);
+                  setCreateExcludedCategoryIds([]);
+                }}
                 className={`py-2.5 px-3 border rounded-lg text-sm font-medium transition-colors cursor-pointer text-left ${
                   createScope === 'ENTIRE_STORE'
                     ? 'border-black bg-black text-white'
@@ -938,6 +1174,8 @@ export function SellerPromotions() {
                 data-testid="radio-scope-selected-products"
                 onClick={() => {
                   setCreateScope('SELECTED_PRODUCTS');
+                  setCreateIncludedCategoryIds([]);
+                  setCreateExcludedCategoryIds([]);
                   openSelector('INCLUDE');
                 }}
                 className={`py-2.5 px-3 border rounded-lg text-sm font-medium transition-colors cursor-pointer text-left ${
@@ -949,6 +1187,25 @@ export function SellerPromotions() {
                 <div className="font-semibold">На выбранные товары</div>
                 <div className={`text-xs mt-0.5 ${createScope === 'SELECTED_PRODUCTS' ? 'text-gray-300' : 'text-gray-400'}`}>
                   Только на указанные позиции
+                </div>
+              </button>
+              <button
+                type="button"
+                data-testid="radio-scope-selected-categories"
+                onClick={() => {
+                  setCreateScope('SELECTED_CATEGORIES');
+                  setCreateIncludedProductIds([]);
+                  openCategorySelector('INCLUDE');
+                }}
+                className={`py-2.5 px-3 border rounded-lg text-sm font-medium transition-colors cursor-pointer text-left ${
+                  createScope === 'SELECTED_CATEGORIES'
+                    ? 'border-black bg-black text-white'
+                    : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <div className="font-semibold">По категориям</div>
+                <div className={`text-xs mt-0.5 ${createScope === 'SELECTED_CATEGORIES' ? 'text-gray-300' : 'text-gray-400'}`}>
+                  На выбранные категории
                 </div>
               </button>
             </div>
@@ -1013,6 +1270,66 @@ export function SellerPromotions() {
                         +{createIncludedProductIds.length - 3} ещё
                       </span>
                     )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Compact Included Categories State */}
+            {createScope === 'SELECTED_CATEGORIES' && (
+              <div className="mt-3 p-3.5 bg-gray-50 rounded-lg border border-gray-200" data-testid="selected-categories-section">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider" data-testid="selected-categories-summary">
+                    {createIncludedCategoryIds.length > 0 ? (
+                      <>Выбрано категорий: <span className="text-gray-900 font-bold" data-testid="selected-categories-count">{createIncludedCategoryIds.length}</span></>
+                    ) : (
+                      <span className="text-amber-700">Категории не выбраны</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {createIncludedCategoryIds.length > 0 && (
+                      <button
+                        type="button"
+                        data-testid="btn-clear-included-categories"
+                        onClick={() => setCreateIncludedCategoryIds([])}
+                        className="text-xs text-gray-500 hover:text-red-600 font-medium cursor-pointer"
+                      >
+                        Очистить
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      data-testid="btn-edit-included-categories"
+                      onClick={() => openCategorySelector('INCLUDE')}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                    >
+                      {createIncludedCategoryIds.length > 0 ? 'Изменить' : 'Выбрать категории'}
+                    </button>
+                  </div>
+                </div>
+
+                {createIncludedCategoryIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {createIncludedCategoryIds.map((id) => {
+                      const cat = categoryLookup[id];
+                      return (
+                        <span
+                          key={id}
+                          data-testid={`selected-included-category-${id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-black text-white"
+                        >
+                          <span className="max-w-[180px] truncate">{cat ? cat.name : id}</span>
+                          <button
+                            type="button"
+                            data-testid={`remove-included-category-${id}`}
+                            onClick={() => setCreateIncludedCategoryIds((prev) => prev.filter((cId) => cId !== id))}
+                            className="hover:text-red-300 cursor-pointer ml-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1095,6 +1412,79 @@ export function SellerPromotions() {
             )}
           </div>
 
+          {/* Category Exclusions Section - only for ENTIRE_STORE and SELECTED_CATEGORIES */}
+          {createScope !== 'SELECTED_PRODUCTS' && (
+            <div className="border-t border-gray-200 pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                  Категории-исключения (опционально)
+                </h4>
+                {createExcludedCategoryIds.length === 0 ? (
+                  <button
+                    type="button"
+                    data-testid="btn-toggle-category-exclusions"
+                    onClick={() => openCategorySelector('EXCLUDE')}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                  >
+                    + Добавить категории-исключения
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      data-testid="btn-clear-excluded-categories"
+                      onClick={() => setCreateExcludedCategoryIds([])}
+                      className="text-xs text-gray-500 hover:text-red-600 font-medium cursor-pointer"
+                    >
+                      Очистить
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="btn-edit-excluded-categories"
+                      onClick={() => openCategorySelector('EXCLUDE')}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                    >
+                      Изменить
+                    </button>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mb-3">
+                Товары из исключённых категорий никогда не получат скидку (приоритет над включением категорий).
+              </p>
+
+              {createExcludedCategoryIds.length > 0 && (
+                <div className="space-y-2 p-3.5 bg-gray-50 rounded-lg border border-gray-200" data-testid="excluded-categories-section">
+                  <div className="text-xs font-semibold text-gray-700 uppercase tracking-wider" data-testid="excluded-categories-summary">
+                    Исключено категорий: <span className="text-gray-900 font-bold" data-testid="excluded-categories-count">{createExcludedCategoryIds.length}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {createExcludedCategoryIds.map((id) => {
+                      const cat = categoryLookup[id];
+                      return (
+                        <span
+                          key={id}
+                          data-testid={`selected-excluded-category-${id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-red-100 text-red-800 border border-red-200"
+                        >
+                          <span className="max-w-[180px] truncate">{cat ? cat.name : id}</span>
+                          <button
+                            type="button"
+                            data-testid={`remove-excluded-category-${id}`}
+                            onClick={() => setCreateExcludedCategoryIds((prev) => prev.filter((cId) => cId !== id))}
+                            className="hover:text-red-900 cursor-pointer ml-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="border-t border-gray-200 pt-4">
             <h4 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-3">
               Период действия (опционально)
@@ -1176,9 +1566,26 @@ export function SellerPromotions() {
             <div className="text-gray-700">
               <span className="font-medium text-gray-500">Где действует:</span>{' '}
               <span className="font-semibold text-gray-900">
-                {createScope === 'ENTIRE_STORE'
-                  ? `Все товары магазина${createExcludedProductIds.length > 0 ? ` (искл. ${createExcludedProductIds.length})` : ''}`
-                  : `Выбранные товары (${createIncludedProductIds.length} шт.)${createExcludedProductIds.length > 0 ? ` (искл. ${createExcludedProductIds.length})` : ''}`}
+                {createScope === 'ENTIRE_STORE' && (
+                  <>
+                    Все товары магазина
+                    {createExcludedProductIds.length > 0 && ` (искл. ${createExcludedProductIds.length})`}
+                    {createExcludedCategoryIds.length > 0 && ` (искл. ${createExcludedCategoryIds.length} категорий)`}
+                  </>
+                )}
+                {createScope === 'SELECTED_PRODUCTS' && (
+                  <>
+                    Выбранные товары ({createIncludedProductIds.length} шт.)
+                    {createExcludedProductIds.length > 0 && ` (искл. ${createExcludedProductIds.length})`}
+                  </>
+                )}
+                {createScope === 'SELECTED_CATEGORIES' && (
+                  <>
+                    Выбранные категории ({createIncludedCategoryIds.length} шт.)
+                    {createExcludedProductIds.length > 0 && ` (искл. ${createExcludedProductIds.length})`}
+                    {createExcludedCategoryIds.length > 0 && ` (искл. ${createExcludedCategoryIds.length} категорий)`}
+                  </>
+                )}
               </span>
             </div>
             {createMinOrderSubtotalRub && (
@@ -1437,6 +1844,362 @@ export function SellerPromotions() {
         </div>
       </SellerModal>
 
+      {/* CATEGORY SELECTOR MODAL */}
+      <SellerModal
+        isOpen={Boolean(categorySelectorMode)}
+        onClose={closeCategorySelector}
+        title={categorySelectorMode === 'INCLUDE' ? 'Выберите категории' : 'Исключить категории'}
+        maxWidthClass="max-w-2xl"
+        data-testid="category-selector-modal"
+      >
+        <div className="p-1 space-y-4">
+          {/* Search Input */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+            <input
+              type="text"
+              data-testid="category-search-input"
+              placeholder="Поиск категорий"
+              value={categorySearchQuery}
+              onChange={(e) => setCategorySearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-black"
+            />
+          </div>
+
+          {/* Error Banner */}
+          {categorySelectorError && (
+            <div
+              className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{categorySelectorError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={loadCategories}
+                className="text-xs font-semibold text-red-700 underline hover:text-red-900 cursor-pointer ml-2"
+              >
+                Повторить
+              </button>
+            </div>
+          )}
+
+          {/* Category Tree */}
+          <div className="max-h-[55vh] overflow-y-auto pr-1" data-testid="category-tree-container">
+            {isCategoriesLoading ? (
+              <div className="py-16 text-center text-sm text-gray-400">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
+                Загрузка категорий...
+              </div>
+            ) : categories.length === 0 ? (
+              <div className="py-16 text-center text-sm text-gray-400">
+                Нет доступных категорий
+              </div>
+            ) : (() => {
+              const query = categorySearchQuery.trim().toLowerCase();
+              const isSearchActive = query.length > 0;
+
+              const matchingOrAncestorIds = new Set<string>();
+              if (isSearchActive) {
+                const addDescendants = (parentId: string) => {
+                  categories.forEach((cat) => {
+                    if (cat.parentId === parentId) {
+                      matchingOrAncestorIds.add(cat.id);
+                      addDescendants(cat.id);
+                    }
+                  });
+                };
+
+                categories.forEach((cat) => {
+                  if (cat.name.toLowerCase().includes(query)) {
+                    matchingOrAncestorIds.add(cat.id);
+                    const ancestors = getCategoryAncestors(cat.id, categoryLookup);
+                    ancestors.forEach((ancId) => matchingOrAncestorIds.add(ancId));
+                    addDescendants(cat.id);
+                  }
+                });
+
+                if (matchingOrAncestorIds.size === 0) {
+                  return (
+                    <div
+                      data-testid={categorySelectorMode === 'INCLUDE' ? 'empty-included-category-search' : 'empty-excluded-category-search'}
+                      className="py-16 text-center text-sm text-gray-400"
+                    >
+                      Ничего не найдено
+                    </div>
+                  );
+                }
+              }
+
+              const tree = buildCategoryTree(categories, categoryLookup);
+
+              const renderTree = (nodes: CategoryTreeNode[]): React.ReactNode => {
+                return nodes.map((node) => {
+                  const c = node.category;
+                  const hasChildren = node.children.length > 0;
+
+                  if (isSearchActive && !matchingOrAncestorIds.has(c.id)) {
+                    return null;
+                  }
+
+                  const isExpanded = isSearchActive ? true : expandedCategoryIds.has(c.id);
+                  const isSelected = draftCategoryIds.includes(c.id);
+                  const isConflicting =
+                    categorySelectorMode === 'INCLUDE'
+                      ? createExcludedCategoryIds.includes(c.id)
+                      : createIncludedCategoryIds.includes(c.id);
+                  const conflictReason =
+                    categorySelectorMode === 'INCLUDE'
+                      ? 'Категория уже находится в списке исключений'
+                      : 'Категория уже находится в списке включений';
+
+                  const isInherited = isAncestorSelected(c, draftCategoryIds, categoryLookup);
+
+                  return (
+                    <div key={c.id} className="flex flex-col">
+                      <div
+                        data-testid={`category-option-${c.id}`}
+                        role="treeitem"
+                        aria-selected={isSelected}
+                        aria-expanded={hasChildren ? isExpanded : undefined}
+                        className={cn(
+                          "group relative flex items-stretch justify-between p-1 rounded-xl border transition-all text-xs select-none bg-white mb-1.5",
+                          isConflicting && "opacity-50 bg-gray-50 border-gray-200",
+                          !isConflicting && !isSelected && "border-gray-200 hover:border-gray-300 hover:shadow-xs",
+                          !isConflicting && isSelected && categorySelectorMode === 'INCLUDE' && "border-black ring-1 ring-black bg-gray-50/50 shadow-xs",
+                          !isConflicting && isSelected && categorySelectorMode === 'EXCLUDE' && "border-red-500 ring-1 ring-red-500 bg-red-50/30 shadow-xs"
+                        )}
+                        style={{ paddingLeft: `${node.level * 20 + 8}px` }}
+                      >
+                        {hasChildren ? (
+                          <>
+                            {/* LEFT / MAIN DISCLOSURE ZONE (~65-75% width hit target) */}
+                            <button
+                              type="button"
+                              data-testid={`category-disclosure-${c.id}`}
+                              aria-label={isExpanded ? `Свернуть ${c.name}` : `Раскрыть ${c.name}`}
+                              aria-expanded={isExpanded}
+                              onClick={(e) => toggleExpandCategory(c.id, e)}
+                              className="flex items-center gap-2 flex-1 min-w-0 pr-3 p-1.5 text-left rounded-lg hover:bg-gray-100/70 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-black"
+                            >
+                              <div className="p-0.5 text-gray-400 group-hover:text-gray-900 shrink-0 -ml-0.5">
+                                {isExpanded ? (
+                                  <ChevronDown className="w-4 h-4" />
+                                ) : (
+                                  <ChevronRight className="w-4 h-4" />
+                                )}
+                              </div>
+
+                              <div className="flex flex-col min-w-0">
+                                <div
+                                  data-testid={`category-title-${c.id}`}
+                                  className={cn("font-medium text-sm text-gray-900 truncate", isConflicting && "text-gray-400")}
+                                >
+                                  {c.name}
+                                </div>
+
+                                {isSelected && (
+                                  <div
+                                    data-testid={`category-parent-hint-${c.id}`}
+                                    className={cn(
+                                      "text-[11px] font-medium mt-0.5",
+                                      categorySelectorMode === 'INCLUDE' ? "text-blue-600" : "text-red-600"
+                                    )}
+                                  >
+                                    {categorySelectorMode === 'INCLUDE'
+                                      ? "Включает все подкатегории"
+                                      : "Исключает все подкатегории"}
+                                  </div>
+                                )}
+
+                                {!isSelected && isInherited && (
+                                  <div
+                                    data-testid={`category-inherited-hint-${c.id}`}
+                                    className="text-[11px] text-gray-400 font-medium mt-0.5"
+                                  >
+                                    {categorySelectorMode === 'INCLUDE'
+                                      ? "Включено родительской категорией"
+                                      : "Исключено родительской категорией"}
+                                  </div>
+                                )}
+
+                                {isConflicting && (
+                                  <div
+                                    data-testid={`category-conflict-notice-${c.id}`}
+                                    className="mt-1 text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded leading-tight inline-block"
+                                  >
+                                    {conflictReason}
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+
+                            {/* RIGHT SELECTION ZONE (~25-30% width hit target) */}
+                            <button
+                              type="button"
+                              data-testid={`category-select-${c.id}`}
+                              disabled={isConflicting}
+                              aria-label={isSelected ? `Отменить выбор ${c.name}` : `Выбрать ${c.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!isConflicting) handleToggleCategoryDraft(c.id);
+                              }}
+                              className={cn(
+                                "shrink-0 flex items-center justify-end px-3 py-1.5 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-black",
+                                !isConflicting && "hover:bg-gray-100 cursor-pointer",
+                                isConflicting && "cursor-not-allowed"
+                              )}
+                            >
+                              <div className="flex items-center gap-2">
+                                {isSelected && categorySelectorMode === 'INCLUDE' && (
+                                  <div
+                                    data-testid={`category-item-check-${c.id}`}
+                                    className="w-6 h-6 rounded-full bg-black text-white flex items-center justify-center shadow-xs text-xs font-bold"
+                                  >
+                                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                  </div>
+                                )}
+                                {isSelected && categorySelectorMode === 'EXCLUDE' && (
+                                  <div
+                                    data-testid={`category-item-cross-${c.id}`}
+                                    className="w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center shadow-xs text-xs font-bold"
+                                  >
+                                    <X className="w-3.5 h-3.5 stroke-[3]" />
+                                  </div>
+                                )}
+                                {!isSelected && !isConflicting && (
+                                  <div className="w-6 h-6 rounded-full border border-gray-300 group-hover:border-gray-400" />
+                                )}
+                                {isConflicting && (
+                                  <div className="w-6 h-6 rounded-full border border-gray-200 bg-gray-100 opacity-50" />
+                                )}
+                              </div>
+                            </button>
+                          </>
+                        ) : (
+                          /* LEAF CATEGORY (NO EXPAND/COLLAPSE - DIRECT SELECT) */
+                          <button
+                            type="button"
+                            data-testid={`category-select-${c.id}`}
+                            disabled={isConflicting}
+                            aria-label={isSelected ? `Отменить выбор ${c.name}` : `Выбрать ${c.name}`}
+                            onClick={() => !isConflicting && handleToggleCategoryDraft(c.id)}
+                            className={cn(
+                              "flex items-center justify-between w-full p-1.5 text-left rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-black",
+                              !isConflicting && "hover:bg-gray-100/70 cursor-pointer",
+                              isConflicting && "cursor-not-allowed"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 flex-1 min-w-0 pr-3">
+                              <div className="w-6 h-4 shrink-0 -ml-1" aria-hidden="true" />
+                              <div className="flex flex-col min-w-0">
+                                <div
+                                  data-testid={`category-title-${c.id}`}
+                                  className={cn("font-medium text-sm text-gray-900 truncate", isConflicting && "text-gray-400")}
+                                >
+                                  {c.name}
+                                </div>
+
+                                {!isSelected && isInherited && (
+                                  <div
+                                    data-testid={`category-inherited-hint-${c.id}`}
+                                    className="text-[11px] text-gray-400 font-medium mt-0.5"
+                                  >
+                                    {categorySelectorMode === 'INCLUDE'
+                                      ? "Включено родительской категорией"
+                                      : "Исключено родительской категорией"}
+                                  </div>
+                                )}
+
+                                {isConflicting && (
+                                  <div
+                                    data-testid={`category-conflict-notice-${c.id}`}
+                                    className="mt-1 text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded leading-tight inline-block"
+                                  >
+                                    {conflictReason}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 flex items-center justify-end px-1">
+                              {isSelected && categorySelectorMode === 'INCLUDE' && (
+                                <div
+                                  data-testid={`category-item-check-${c.id}`}
+                                  className="w-6 h-6 rounded-full bg-black text-white flex items-center justify-center shadow-xs text-xs font-bold"
+                                >
+                                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                </div>
+                              )}
+                              {isSelected && categorySelectorMode === 'EXCLUDE' && (
+                                <div
+                                  data-testid={`category-item-cross-${c.id}`}
+                                  className="w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center shadow-xs text-xs font-bold"
+                                >
+                                  <X className="w-3.5 h-3.5 stroke-[3]" />
+                                </div>
+                              )}
+                              {!isSelected && !isConflicting && (
+                                <div className="w-6 h-6 rounded-full border border-gray-300 group-hover:border-gray-400" />
+                              )}
+                              {isConflicting && (
+                                <div className="w-6 h-6 rounded-full border border-gray-200 bg-gray-100 opacity-50" />
+                              )}
+                            </div>
+                          </button>
+                        )}
+                      </div>
+
+                      {hasChildren && isExpanded && (
+                        <div className="flex flex-col">
+                          {renderTree(node.children)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              };
+
+              return (
+                <div className="space-y-1">
+                  {renderTree(tree)}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Modal Actions */}
+          <div className="pt-4 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-xs text-gray-500">
+              {categorySelectorMode === 'INCLUDE' ? (
+                <>Выбрано: <span className="font-semibold text-gray-900">{draftCategoryIds.length}</span></>
+              ) : (
+                <>Исключено: <span className="font-semibold text-gray-900">{draftCategoryIds.length}</span></>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                data-testid="btn-cancel-category-selector"
+                onClick={closeCategorySelector}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                data-testid="btn-apply-category-selector"
+                onClick={applyCategorySelector}
+                className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors shadow-xs cursor-pointer"
+              >
+                Применить
+              </button>
+            </div>
+          </div>
+        </div>
+      </SellerModal>
+
       {/* EDIT MODAL (MUTABLE FIELDS ONLY) */}
       <SellerModal
         isOpen={Boolean(editPromo)}
@@ -1493,6 +2256,8 @@ export function SellerPromotions() {
                   <span className="font-semibold text-gray-900" data-testid="edit-promo-scope">
                     {editPromo.productScope === 'SELECTED_PRODUCTS'
                       ? `${(editPromo.includedProductIds || []).length} выбранных товаров`
+                      : editPromo.productScope === 'SELECTED_CATEGORIES'
+                      ? `${(editPromo.includedCategoryIds || []).length} выбранных категорий`
                       : 'Все товары'}
                   </span>
                 </div>
@@ -1501,6 +2266,24 @@ export function SellerPromotions() {
                   <span className="font-semibold text-gray-900" data-testid="edit-promo-exclusions">
                     {(editPromo.excludedProductIds || []).length > 0
                       ? `${editPromo.excludedProductIds!.length} товаров`
+                      : 'Нет'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Выбранные категории: </span>
+                  <span className="font-semibold text-gray-900" data-testid="edit-promo-selected-categories">
+                    {editPromo.productScope === 'SELECTED_CATEGORIES'
+                      ? `${(editPromo.includedCategoryIds || []).length} категорий`
+                      : 'Не применимо'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Категории-исключения: </span>
+                  <span className="font-semibold text-gray-900" data-testid="edit-promo-excluded-categories">
+                    {editPromo.productScope === 'SELECTED_PRODUCTS'
+                      ? 'Не применимо'
+                      : (editPromo.excludedCategoryIds || []).length > 0
+                      ? `${editPromo.excludedCategoryIds!.length} категорий`
                       : 'Нет'}
                   </span>
                 </div>

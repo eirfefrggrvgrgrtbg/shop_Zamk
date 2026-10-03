@@ -862,6 +862,8 @@ func (r *Repository) ListSellerPromos(ctx context.Context, sellerID uuid.UUID) (
 		it.ProductScope = ProductScope(pScope)
 		it.IncludedProductIDs = []uuid.UUID{}
 		it.ExcludedProductIDs = []uuid.UUID{}
+		it.IncludedCategoryIDs = []uuid.UUID{}
+		it.ExcludedCategoryIDs = []uuid.UUID{}
 		items = append(items, it)
 		promoIDs = append(promoIDs, it.ID)
 	}
@@ -904,6 +906,40 @@ func (r *Repository) ListSellerPromos(ctx context.Context, sellerID uuid.UUID) (
 			return nil, err
 		}
 
+		catTargetsQuery := `
+			SELECT promo_code_id, category_id, target_type
+			FROM promo_code_category_targets
+			WHERE promo_code_id = ANY($1)
+			ORDER BY created_at ASC
+		`
+		ctRows, err := r.pool.Query(ctx, catTargetsQuery, promoIDs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query promo category targets: %w", err)
+		}
+		defer ctRows.Close()
+
+		catTargetsMap := make(map[uuid.UUID]struct {
+			inc []uuid.UUID
+			exc []uuid.UUID
+		})
+		for ctRows.Next() {
+			var pID, catID uuid.UUID
+			var tType string
+			if err := ctRows.Scan(&pID, &catID, &tType); err != nil {
+				return nil, fmt.Errorf("failed to scan promo category target: %w", err)
+			}
+			entry := catTargetsMap[pID]
+			if TargetType(tType) == TargetTypeInclude {
+				entry.inc = append(entry.inc, catID)
+			} else if TargetType(tType) == TargetTypeExclude {
+				entry.exc = append(entry.exc, catID)
+			}
+			catTargetsMap[pID] = entry
+		}
+		if err := ctRows.Err(); err != nil {
+			return nil, err
+		}
+
 		for i := range items {
 			if entry, ok := targetsMap[items[i].ID]; ok {
 				if len(entry.inc) > 0 {
@@ -911,6 +947,14 @@ func (r *Repository) ListSellerPromos(ctx context.Context, sellerID uuid.UUID) (
 				}
 				if len(entry.exc) > 0 {
 					items[i].ExcludedProductIDs = entry.exc
+				}
+			}
+			if catEntry, ok := catTargetsMap[items[i].ID]; ok {
+				if len(catEntry.inc) > 0 {
+					items[i].IncludedCategoryIDs = catEntry.inc
+				}
+				if len(catEntry.exc) > 0 {
+					items[i].ExcludedCategoryIDs = catEntry.exc
 				}
 			}
 		}
@@ -1010,6 +1054,162 @@ func (r *Repository) GetPromoCodeProductTargetsTx(ctx context.Context, db DBExec
 // GetPromoCodeProductTargets loads all product targets for a promo code on the pool.
 func (r *Repository) GetPromoCodeProductTargets(ctx context.Context, promoID uuid.UUID) ([]PromoCodeProductTarget, error) {
 	return r.GetPromoCodeProductTargetsTx(ctx, r.pool, promoID)
+}
+
+// CreatePromoCodeCategoryTargetsTx inserts target entries for a promo code.
+func (r *Repository) CreatePromoCodeCategoryTargetsTx(ctx context.Context, db DBExecutor, targets []PromoCodeCategoryTarget) error {
+	if len(targets) == 0 {
+		return nil
+	}
+	query := `
+		INSERT INTO promo_code_category_targets (id, promo_code_id, category_id, target_type, created_at)
+		VALUES ($1, $2, $3, $4, $5)
+	`
+	now := time.Now().UTC()
+	for _, t := range targets {
+		id := t.ID
+		if id == uuid.Nil {
+			id = uuid.New()
+		}
+		createdAt := t.CreatedAt
+		if createdAt.IsZero() {
+			createdAt = now
+		}
+		if _, err := db.Exec(ctx, query, id, t.PromoCodeID, t.CategoryID, string(t.TargetType), createdAt); err != nil {
+			return fmt.Errorf("failed to insert promo code category target: %w", err)
+		}
+	}
+	return nil
+}
+
+// GetPromoCodeCategoryTargetsTx loads all category targets for a promo code within a transaction.
+func (r *Repository) GetPromoCodeCategoryTargetsTx(ctx context.Context, db DBExecutor, promoID uuid.UUID) ([]PromoCodeCategoryTarget, error) {
+	query := `
+		SELECT id, promo_code_id, category_id, target_type, created_at
+		FROM promo_code_category_targets
+		WHERE promo_code_id = $1
+		ORDER BY created_at ASC
+	`
+	rows, err := db.Query(ctx, query, promoID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query promo code category targets: %w", err)
+	}
+	defer rows.Close()
+
+	var targets []PromoCodeCategoryTarget
+	for rows.Next() {
+		var t PromoCodeCategoryTarget
+		var tType string
+		if err := rows.Scan(&t.ID, &t.PromoCodeID, &t.CategoryID, &tType, &t.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan promo code category target: %w", err)
+		}
+		t.TargetType = TargetType(tType)
+		targets = append(targets, t)
+	}
+	return targets, rows.Err()
+}
+
+// GetPromoCodeCategoryTargets loads all category targets for a promo code on the pool.
+func (r *Repository) GetPromoCodeCategoryTargets(ctx context.Context, promoID uuid.UUID) ([]PromoCodeCategoryTarget, error) {
+	return r.GetPromoCodeCategoryTargetsTx(ctx, r.pool, promoID)
+}
+
+// ValidateCategoriesExistTx checks that all provided category IDs exist and are active.
+func (r *Repository) ValidateCategoriesExistTx(ctx context.Context, db DBExecutor, categoryIDs []uuid.UUID) (bool, error) {
+	if len(categoryIDs) == 0 {
+		return true, nil
+	}
+	uniqueMap := make(map[uuid.UUID]struct{}, len(categoryIDs))
+	for _, id := range categoryIDs {
+		uniqueMap[id] = struct{}{}
+	}
+	uniqueIDs := make([]uuid.UUID, 0, len(uniqueMap))
+	for id := range uniqueMap {
+		uniqueIDs = append(uniqueIDs, id)
+	}
+
+	query := `SELECT COUNT(*) FROM categories WHERE id = ANY($1) AND is_active = true`
+	var count int
+	if err := db.QueryRow(ctx, query, uniqueIDs).Scan(&count); err != nil {
+		return false, fmt.Errorf("failed to validate categories existence: %w", err)
+	}
+	return count == len(uniqueIDs), nil
+}
+
+// GetProductCategoryIDsTx retrieves category IDs for a slice of product IDs.
+func (r *Repository) GetProductCategoryIDsTx(ctx context.Context, db DBExecutor, productIDs []uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
+	if len(productIDs) == 0 {
+		return map[uuid.UUID]uuid.UUID{}, nil
+	}
+	uniqueMap := make(map[uuid.UUID]struct{}, len(productIDs))
+	for _, id := range productIDs {
+		uniqueMap[id] = struct{}{}
+	}
+	uniqueIDs := make([]uuid.UUID, 0, len(uniqueMap))
+	for id := range uniqueMap {
+		uniqueIDs = append(uniqueIDs, id)
+	}
+
+	query := `SELECT id, category_id FROM products WHERE id = ANY($1)`
+	rows, err := db.Query(ctx, query, uniqueIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query product category IDs: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[uuid.UUID]uuid.UUID, len(uniqueIDs))
+	for rows.Next() {
+		var pID, catID uuid.UUID
+		if err := rows.Scan(&pID, &catID); err != nil {
+			return nil, fmt.Errorf("failed to scan product category ID: %w", err)
+		}
+		result[pID] = catID
+	}
+	return result, rows.Err()
+}
+
+// ResolveCategorySubtreeIDsTx resolves category IDs and all their descendants in a single recursive CTE.
+func (r *Repository) ResolveCategorySubtreeIDsTx(ctx context.Context, db DBExecutor, categoryIDs []uuid.UUID, activeOnly bool) ([]uuid.UUID, error) {
+	if len(categoryIDs) == 0 {
+		return []uuid.UUID{}, nil
+	}
+	uniqueMap := make(map[uuid.UUID]struct{}, len(categoryIDs))
+	for _, id := range categoryIDs {
+		uniqueMap[id] = struct{}{}
+	}
+	uniqueIDs := make([]uuid.UUID, 0, len(uniqueMap))
+	for id := range uniqueMap {
+		uniqueIDs = append(uniqueIDs, id)
+	}
+
+	query := `
+		WITH RECURSIVE cat_tree AS (
+			SELECT id
+			FROM categories
+			WHERE id = ANY($1) AND ($2::boolean = false OR is_active = true)
+			UNION
+			SELECT c.id
+			FROM categories c
+			JOIN cat_tree ct ON c.parent_id = ct.id
+			WHERE ($2::boolean = false OR c.is_active = true)
+		)
+		SELECT id FROM cat_tree
+	`
+	rows, err := db.Query(ctx, query, uniqueIDs, activeOnly)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve category subtree IDs: %w", err)
+	}
+	defer rows.Close()
+
+	var result []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan category subtree ID: %w", err)
+		}
+		result = append(result, id)
+	}
+	return result, rows.Err()
 }
 
 // ValidateProductsBelongToSellerTx checks that all provided product IDs exist and belong strictly to sellerID.

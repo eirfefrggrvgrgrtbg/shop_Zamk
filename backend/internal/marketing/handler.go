@@ -139,6 +139,22 @@ func (h *Handler) CreateSellerPromotion(w http.ResponseWriter, r *http.Request) 
 			h.writeError(w, http.StatusBadRequest, "product_conflict", err.Error())
 			return
 		}
+		if errors.Is(err, ErrCategoryConflict) {
+			h.writeError(w, http.StatusBadRequest, "category_conflict", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidCategory) {
+			h.writeError(w, http.StatusBadRequest, "invalid_category", err.Error())
+			return
+		}
+		if errors.Is(err, ErrCategoryRequiresInclude) {
+			h.writeError(w, http.StatusBadRequest, "category_requires_include", err.Error())
+			return
+		}
+		if errors.Is(err, ErrCategoryNotAllowed) {
+			h.writeError(w, http.StatusBadRequest, "category_not_allowed", err.Error())
+			return
+		}
 		if errors.Is(err, ErrInvalidProductScope) {
 			h.writeError(w, http.StatusBadRequest, "invalid_scope", err.Error())
 			return
@@ -189,6 +205,10 @@ func (h *Handler) UpdateSellerPromotion(w http.ResponseWriter, r *http.Request) 
 		"productscope":            true,
 		"includedproductids":      true,
 		"excludedproductids":      true,
+		"includedcategoryids":     true,
+		"excludedcategoryids":     true,
+		"categorytargets":         true,
+		"categoryscope":           true,
 		"maxdiscountcents":        true,
 		"maxdiscountrub":          true,
 		"producttargets":          true,

@@ -9,6 +9,8 @@ import {
   updateSellerPromotion,
   getSellerProducts,
   getSellerProductsPaginated,
+  getSellerCategories,
+  type SellerCategory,
 } from '@zamk/api-client/src/seller';
 import type { SellerPromotion, SellerProduct } from '@zamk/api-client/src/types';
 
@@ -18,9 +20,25 @@ vi.mock('@zamk/api-client/src/seller', () => ({
   updateSellerPromotion: vi.fn(),
   getSellerProducts: vi.fn(),
   getSellerProductsPaginated: vi.fn(),
+  getSellerCategories: vi.fn(),
 }));
 
 describe('SellerPromotions Component & Interaction Tests', () => {
+  const makeCatalog = (count: number, prefix = 'Product') =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `prod-${prefix.toLowerCase()}-${i + 1}`,
+      sellerId: 'seller-1',
+      title: `${prefix} ${i + 1}`,
+      slug: `${prefix.toLowerCase()}-${i + 1}`,
+      description: `${prefix} description`,
+      status: 'published',
+      priceCents: 50000,
+      currency: 'RUB',
+      variants: [],
+      images: [],
+      createdAt: '2026-01-01T00:00:00Z',
+    } as any));
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getSellerPromotions).mockImplementation(async () => ({ items: [], count: 0 }));
@@ -29,6 +47,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
       const items = await getSellerProducts(params);
       return { items: items || [], totalCount: items?.length || 0 };
     });
+    vi.mocked(getSellerCategories).mockResolvedValue([]);
   });
   afterEach(() => {
     cleanup();
@@ -3171,5 +3190,862 @@ describe('SellerPromotions Component & Interaction Tests', () => {
       expect(screen.getByTestId('create-promo-modal')).toBeTruthy();
       expect(screen.getByRole('dialog', { name: 'Создание промокода' })).toBeTruthy();
     });
+  });
+
+  describe('PROMO.2C Category Targeting Tests (1 - 25)', () => {
+    const mockCategories: SellerCategory[] = [
+      { id: 'cat-clothing', name: 'Одежда', slug: 'clothing', sortOrder: 1 },
+      { id: 'cat-outerwear', name: 'Верхняя одежда', slug: 'outerwear', parentId: 'cat-clothing', sortOrder: 1 },
+      { id: 'cat-coats', name: 'Пальто', slug: 'coats', parentId: 'cat-outerwear', sortOrder: 1 },
+      { id: 'cat-shoes', name: 'Обувь', slug: 'shoes', sortOrder: 2 },
+      { id: 'cat-boots', name: 'Ботинки', slug: 'boots', parentId: 'cat-shoes', sortOrder: 1 },
+    ];
+
+    beforeEach(() => {
+      vi.mocked(getSellerCategories).mockResolvedValue(mockCategories);
     });
+
+    const openCreatePromoModal = async () => {
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('create-first-promo-button')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('create-first-promo-button'));
+      expect(screen.getByTestId('create-promo-modal')).toBeTruthy();
+    };
+
+    it('1. Scope radio shows 3 options: all products, selected products, selected categories', async () => {
+      await openCreatePromoModal();
+      expect(screen.getByTestId('radio-scope-entire-store')).toBeTruthy();
+      expect(screen.getByTestId('radio-scope-selected-products')).toBeTruthy();
+      expect(screen.getByTestId('radio-scope-selected-categories')).toBeTruthy();
+    });
+
+    it('2. Clicking "По категориям" reveals category selector section', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      expect(screen.getByTestId('selected-categories-section')).toBeTruthy();
+    });
+
+    it('3. Category selector modal opens with title "Выберите категории"', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      expect(screen.getByTestId('category-selector-modal')).toBeTruthy();
+      expect(within(screen.getByTestId('category-selector-modal')).getByText('Выберите категории')).toBeTruthy();
+    });
+
+    it('A. root categories render as tree roots', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-title-cat-clothing')).toBeTruthy();
+        expect(screen.getByTestId('category-title-cat-shoes')).toBeTruthy();
+      });
+    });
+
+    it('B. child categories render under correct parent', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+      });
+      // Expand cat-clothing
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      expect(screen.getByTestId('category-title-cat-outerwear')).toBeTruthy();
+      expect(screen.getByTestId('category-title-cat-outerwear').textContent).toBe('Верхняя одежда');
+    });
+
+    it('C. collapsed parent hides children', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-title-cat-shoes')).toBeTruthy();
+      });
+      // cat-boots should be hidden when cat-shoes is collapsed
+      expect(screen.queryByTestId('category-title-cat-boots')).toBeNull();
+    });
+
+    it('D. disclosure expands children', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-shoes')).toBeTruthy();
+      });
+      // Click disclosure to expand
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-shoes'));
+      expect(screen.getByTestId('category-title-cat-boots')).toBeTruthy();
+      expect(screen.getByTestId('category-title-cat-boots').textContent).toBe('Ботинки');
+    });
+
+    it('E. disclosure click does not select category', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+      });
+      // Click disclosure
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      // Must NOT select cat-clothing
+      expect(screen.queryByTestId('category-item-check-cat-clothing')).toBeNull();
+    });
+
+    it('F. row selection does not unexpectedly collapse branch', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+      });
+      // Expand cat-clothing
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      expect(screen.getByTestId('category-title-cat-outerwear')).toBeTruthy();
+
+      // Click cat-clothing selection zone to select
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      expect(screen.getByTestId('category-item-check-cat-clothing')).toBeTruthy();
+      // Child must still remain visible and not collapsed
+      expect(screen.getByTestId('category-title-cat-outerwear')).toBeTruthy();
+    });
+
+    it('G. selected parent shows explicit ✓', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      expect(screen.getByTestId('category-item-check-cat-clothing')).toBeTruthy();
+    });
+
+    it('H. selected parent does not give explicit ✓ to descendants', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+      });
+      // Expand and select parent
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+
+      // Descendant must NOT have explicit checkmark
+      expect(screen.queryByTestId('category-item-check-cat-outerwear')).toBeNull();
+    });
+
+    it('I. helper explains parent includes descendants', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+      });
+      // Expand and select parent
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+
+      expect(screen.getByTestId('category-parent-hint-cat-clothing').textContent).toBe('Включает все подкатегории');
+      expect(screen.getByTestId('category-inherited-hint-cat-outerwear').textContent).toBe('Включено родительской категорией');
+    });
+
+    it('J. EXCLUDE descendant under included parent can receive ×', async () => {
+      await openCreatePromoModal();
+      // Include cat-clothing
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      // Open EXCLUDE modal
+      fireEvent.click(screen.getByTestId('btn-toggle-category-exclusions'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+      });
+
+      // Expand to grandchild cat-coats
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-outerwear'));
+      expect(screen.getByTestId('category-option-cat-coats')).toBeTruthy();
+
+      // Select cat-coats with ×
+      fireEvent.click(screen.getByTestId('category-select-cat-coats'));
+      expect(screen.getByTestId('category-item-cross-cat-coats')).toBeTruthy();
+    });
+
+    it('K. exact included category remains forbidden as exact exclusion', async () => {
+      await openCreatePromoModal();
+      // Include cat-clothing
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      // Open EXCLUDE modal
+      fireEvent.click(screen.getByTestId('btn-toggle-category-exclusions'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-option-cat-clothing')).toBeTruthy();
+      });
+
+      expect(screen.getByTestId('category-conflict-notice-cat-clothing').textContent).toContain('списке включений');
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      expect(screen.queryByTestId('category-item-cross-cat-clothing')).toBeNull();
+    });
+
+    it('L. forbidden exact category remains visible in hierarchy', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      fireEvent.click(screen.getByTestId('btn-toggle-category-exclusions'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-title-cat-clothing')).toBeTruthy();
+      });
+      expect(screen.getByTestId('category-title-cat-clothing').textContent).toBe('Одежда');
+    });
+
+    it('M. parent exclusion represents subtree without generating descendant target IDs', async () => {
+      vi.mocked(createSellerPromotion).mockResolvedValue(mockPromoPercent);
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'EXCPARENT' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '15' } });
+
+      fireEvent.click(screen.getByTestId('btn-toggle-category-exclusions'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(createSellerPromotion).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: 'EXCPARENT',
+            productScope: 'ENTIRE_STORE',
+            excludedCategoryIds: ['cat-clothing'],
+          })
+        );
+      });
+    });
+
+    it('N. existing explicit selections cause their ancestor branches to open', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+      });
+
+      // Expand down to cat-coats and select it
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-outerwear'));
+      fireEvent.click(screen.getByTestId('category-select-cat-coats'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      // Re-open category selector modal
+      fireEvent.click(screen.getByTestId('btn-edit-included-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-option-cat-coats')).toBeTruthy();
+      });
+      // Grandchild cat-coats must be immediately visible without manual expansion
+      expect(screen.getByTestId('category-title-cat-coats')).toBeTruthy();
+      expect(screen.getByTestId('category-item-check-cat-coats')).toBeTruthy();
+    });
+
+    it('O. search exposes matching node with ancestor context', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-option-cat-clothing')).toBeTruthy();
+      });
+
+      fireEvent.change(screen.getByTestId('category-search-input'), { target: { value: 'Ботинки' } });
+      // Search reveals ancestor cat-shoes and matched cat-boots
+      expect(screen.getByTestId('category-title-cat-shoes')).toBeTruthy();
+      expect(screen.getByTestId('category-title-cat-boots')).toBeTruthy();
+      // Non-matching branch is hidden
+      expect(screen.queryByTestId('category-title-cat-clothing')).toBeNull();
+    });
+
+    it('P. search does not mutate selections', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      // Select cat-clothing
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      expect(screen.getByTestId('category-item-check-cat-clothing')).toBeTruthy();
+
+      // Search something else
+      fireEvent.change(screen.getByTestId('category-search-input'), { target: { value: 'Обувь' } });
+      // Clear search
+      fireEvent.change(screen.getByTestId('category-search-input'), { target: { value: '' } });
+
+      // cat-clothing remains selected
+      expect(screen.getByTestId('category-item-check-cat-clothing')).toBeTruthy();
+    });
+
+    it('Q. clearing search preserves selections', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-option-cat-clothing')).toBeTruthy();
+      });
+
+      fireEvent.change(screen.getByTestId('category-search-input'), { target: { value: 'Ботинки' } });
+      fireEvent.click(screen.getByTestId('category-select-cat-boots'));
+      expect(screen.getByTestId('category-item-check-cat-boots')).toBeTruthy();
+
+      // Clear search
+      fireEvent.change(screen.getByTestId('category-search-input'), { target: { value: '' } });
+
+      // cat-boots remains selected and its ancestors are expanded
+      expect(screen.getByTestId('category-item-check-cat-boots')).toBeTruthy();
+    });
+
+    it('R. Apply commits draft', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      expect(screen.queryByTestId('category-selector-modal')).toBeNull();
+      expect(screen.getByTestId('selected-categories-summary').textContent).toContain('1');
+      expect(screen.getByTestId('selected-included-category-cat-clothing')).toBeTruthy();
+    });
+
+    it('S. Cancel discards draft', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-cancel-category-selector'));
+
+      expect(screen.queryByTestId('category-selector-modal')).toBeNull();
+      expect(screen.getByTestId('selected-categories-summary').textContent).toContain('не выбраны');
+    });
+
+    it('T. X discards draft', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      const closeBtn = within(screen.getByTestId('category-selector-modal')).getByRole('button', { name: /закрыть/i });
+      fireEvent.click(closeBtn);
+
+      expect(screen.queryByTestId('category-selector-modal')).toBeNull();
+      expect(screen.getByTestId('selected-categories-summary').textContent).toContain('не выбраны');
+    });
+
+    it('U. Escape discards draft', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.keyDown(window, { key: 'Escape' });
+
+      expect(screen.queryByTestId('category-selector-modal')).toBeNull();
+      expect(screen.getByTestId('selected-categories-summary').textContent).toContain('не выбраны');
+    });
+
+    it('V. include payload remains exact explicit IDs only', async () => {
+      vi.mocked(createSellerPromotion).mockResolvedValue(mockPromoPercent);
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'EXPLICIT_INC' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '20' } });
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      // Select parent cat-clothing only
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(createSellerPromotion).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: 'EXPLICIT_INC',
+            productScope: 'SELECTED_CATEGORIES',
+            includedCategoryIds: ['cat-clothing'],
+          })
+        );
+      });
+    });
+
+    it('W. exclude payload remains exact explicit IDs only', async () => {
+      vi.mocked(createSellerPromotion).mockResolvedValue(mockPromoPercent);
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'EXPLICIT_EXC' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '20' } });
+
+      fireEvent.click(screen.getByTestId('btn-toggle-category-exclusions'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-shoes')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-shoes'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(createSellerPromotion).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: 'EXPLICIT_EXC',
+            productScope: 'ENTIRE_STORE',
+            excludedCategoryIds: ['cat-shoes'],
+          })
+        );
+      });
+    });
+
+    it('X. existing product selector unchanged', async () => {
+      const products = makeCatalog(3, 'Item');
+      vi.mocked(getSellerProductsPaginated).mockImplementation(async () => ({ items: products, totalCount: 3 }));
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-products'));
+      await waitFor(() => {
+        expect(screen.getByTestId('product-selector-modal')).toBeTruthy();
+        expect(screen.getByTestId('product-option-include-prod-item-1')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('product-option-include-prod-item-1'));
+      fireEvent.click(screen.getByTestId('btn-apply-selector'));
+
+      expect(screen.getByTestId('selected-products-summary').textContent).toContain('1');
+    });
+
+    it('Y. scope switching H1 behavior unchanged', async () => {
+      const products = makeCatalog(2, 'Item');
+      vi.mocked(getSellerProductsPaginated).mockImplementation(async () => ({ items: products, totalCount: 2 }));
+      vi.mocked(createSellerPromotion).mockResolvedValue(mockPromoPercent);
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'SWITCH_H1' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '10' } });
+
+      // 1. Select categories first
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      // 2. Switch to SELECTED_PRODUCTS
+      fireEvent.click(screen.getByTestId('radio-scope-selected-products'));
+      await waitFor(() => {
+        expect(screen.getByTestId('product-option-include-prod-item-1')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('product-option-include-prod-item-1'));
+      fireEvent.click(screen.getByTestId('btn-apply-selector'));
+
+      // In SELECTED_PRODUCTS scope, category exclusion UI is hidden
+      expect(screen.queryByTestId('btn-toggle-category-exclusions')).toBeNull();
+
+      // Submit
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(createSellerPromotion).toHaveBeenCalled();
+        const callArgs = vi.mocked(createSellerPromotion).mock.calls[0][0];
+        expect(callArgs.productScope).toBe('SELECTED_PRODUCTS');
+        expect(callArgs.includedProductIds).toEqual(['prod-item-1']);
+        expect(callArgs.includedCategoryIds).toBeUndefined();
+        expect(callArgs.excludedCategoryIds).toBeUndefined();
+      });
+    });
+
+    it('Z. edit read-only presentation unchanged', async () => {
+      const promoWithCategories: SellerPromotion = {
+        ...mockPromoPercent,
+        id: 'promo-cat-readonly',
+        code: 'CATREADONLY',
+        productScope: 'SELECTED_CATEGORIES',
+        includedCategoryIds: ['cat-clothing', 'cat-shoes'],
+        excludedCategoryIds: ['cat-coats'],
+      };
+
+      vi.mocked(getSellerPromotions).mockResolvedValue({
+        items: [promoWithCategories],
+        count: 1,
+      });
+
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('promo-row-CATREADONLY')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('promo-edit-button-CATREADONLY'));
+      expect(screen.getByTestId('edit-promo-modal')).toBeTruthy();
+
+      expect(screen.getByTestId('edit-promo-scope').textContent).toContain('2 выбранных категорий');
+      expect(screen.getByTestId('edit-promo-selected-categories').textContent).toContain('2 категорий');
+      expect(screen.getByTestId('edit-promo-excluded-categories').textContent).toContain('1 категорий');
+    });
+  });
+
+  describe('PROMO.2C-UI1-H1 Category Tree Click Zones Tests (A - P)', () => {
+    const mockCategories: SellerCategory[] = [
+      { id: 'cat-clothing', name: 'Одежда', slug: 'clothing', sortOrder: 1 },
+      { id: 'cat-outerwear', name: 'Верхняя одежда', slug: 'outerwear', parentId: 'cat-clothing', sortOrder: 1 },
+      { id: 'cat-coats', name: 'Пальто и куртки', slug: 'coats', parentId: 'cat-outerwear', sortOrder: 1 },
+      { id: 'cat-shoes', name: 'Обувь', slug: 'shoes', sortOrder: 2 },
+      { id: 'cat-boots', name: 'Ботинки', slug: 'boots', parentId: 'cat-shoes', sortOrder: 1 },
+    ];
+
+    beforeEach(() => {
+      vi.mocked(getSellerCategories).mockResolvedValue(mockCategories);
+    });
+
+    const openCreatePromoModal = async () => {
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('create-first-promo-button')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('create-first-promo-button'));
+      expect(screen.getByTestId('create-promo-modal')).toBeTruthy();
+    };
+
+    it('A. parent row exposes separate disclosure and selection controls', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+    });
+
+    it('B. clicking main/left parent zone expands branch', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      expect(screen.getByTestId('category-title-cat-outerwear')).toBeTruthy();
+    });
+
+    it('C. clicking main/left parent zone again collapses branch', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+      });
+      // Expand
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      expect(screen.getByTestId('category-title-cat-outerwear')).toBeTruthy();
+      // Collapse
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      expect(screen.queryByTestId('category-title-cat-outerwear')).toBeNull();
+    });
+
+    it('D. disclosure click does not select category', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      expect(screen.queryByTestId('category-item-check-cat-clothing')).toBeNull();
+    });
+
+    it('E. selection-zone click selects parent ✓ in INCLUDE mode', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      expect(screen.getByTestId('category-item-check-cat-clothing')).toBeTruthy();
+    });
+
+    it('F. selection-zone click does not expand/collapse branch', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      expect(screen.getByTestId('category-item-check-cat-clothing')).toBeTruthy();
+      // Branch remains collapsed!
+      expect(screen.queryByTestId('category-title-cat-outerwear')).toBeNull();
+    });
+
+    it('G. second selection-zone click deselects parent', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      expect(screen.getByTestId('category-item-check-cat-clothing')).toBeTruthy();
+
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      expect(screen.queryByTestId('category-item-check-cat-clothing')).toBeNull();
+    });
+
+    it('H. EXCLUDE right-zone click produces ×', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('btn-toggle-category-exclusions'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      expect(screen.getByTestId('category-item-cross-cat-clothing')).toBeTruthy();
+    });
+
+    it('I. EXCLUDE selection does not change expansion state', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('btn-toggle-category-exclusions'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      expect(screen.getByTestId('category-item-cross-cat-clothing')).toBeTruthy();
+      expect(screen.queryByTestId('category-title-cat-outerwear')).toBeNull();
+    });
+
+    it('J. leaf category remains directly selectable and has no fake expand/collapse action', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-shoes'));
+
+      // Leaf node cat-boots has no disclosure button
+      expect(screen.queryByTestId('category-disclosure-cat-boots')).toBeNull();
+
+      // Leaf node can be directly selected
+      fireEvent.click(screen.getByTestId('category-select-cat-boots'));
+      expect(screen.getByTestId('category-item-check-cat-boots')).toBeTruthy();
+    });
+
+    it('K. keyboard activation works independently for disclosure and selection', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+
+      const disclosureBtn = screen.getByTestId('category-disclosure-cat-clothing');
+      disclosureBtn.focus();
+      fireEvent.click(disclosureBtn);
+      expect(screen.getByTestId('category-title-cat-outerwear')).toBeTruthy();
+
+      const selectBtn = screen.getByTestId('category-select-cat-clothing');
+      selectBtn.focus();
+      fireEvent.click(selectBtn);
+      expect(screen.getByTestId('category-item-check-cat-clothing')).toBeTruthy();
+    });
+
+    it('L. existing parent INCLUDE + descendant EXCLUDE behavior unchanged', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      fireEvent.click(screen.getByTestId('btn-toggle-category-exclusions'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-disclosure-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-clothing'));
+      fireEvent.click(screen.getByTestId('category-disclosure-cat-outerwear'));
+
+      fireEvent.click(screen.getByTestId('category-select-cat-coats'));
+      expect(screen.getByTestId('category-item-cross-cat-coats')).toBeTruthy();
+    });
+
+    it('M. exact conflict behavior unchanged', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      fireEvent.click(screen.getByTestId('btn-toggle-category-exclusions'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-conflict-notice-cat-clothing')).toBeTruthy();
+      });
+      expect(screen.getByTestId('category-conflict-notice-cat-clothing').textContent).toContain('списке включений');
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      expect(screen.queryByTestId('category-item-cross-cat-clothing')).toBeNull();
+    });
+
+    it('N. search behavior unchanged', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-search-input')).toBeTruthy();
+      });
+      fireEvent.change(screen.getByTestId('category-search-input'), { target: { value: 'Ботинки' } });
+      expect(screen.getByTestId('category-title-cat-shoes')).toBeTruthy();
+      expect(screen.getByTestId('category-title-cat-boots')).toBeTruthy();
+      expect(screen.queryByTestId('category-title-cat-clothing')).toBeNull();
+    });
+
+    it('O. Apply/Cancel/X/Escape draft behavior unchanged', async () => {
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-cancel-category-selector'));
+      expect(screen.queryByTestId('category-selector-modal')).toBeNull();
+      expect(screen.getByTestId('selected-categories-summary').textContent).toContain('не выбраны');
+    });
+
+    it('P. payload contains only explicit category IDs', async () => {
+      vi.mocked(createSellerPromotion).mockResolvedValue(mockPromoPercent);
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'EXPLICIT_PAYLOAD' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '25' } });
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-select-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-select-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+      await waitFor(() => {
+        expect(createSellerPromotion).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: 'EXPLICIT_PAYLOAD',
+            productScope: 'SELECTED_CATEGORIES',
+            includedCategoryIds: ['cat-clothing'],
+          })
+        );
+      });
+    });
+
+    it('X. existing product selector unchanged', async () => {
+      const products = makeCatalog(3, 'Item');
+      vi.mocked(getSellerProductsPaginated).mockImplementation(async () => ({ items: products, totalCount: 3 }));
+      await openCreatePromoModal();
+      fireEvent.click(screen.getByTestId('radio-scope-selected-products'));
+      await waitFor(() => {
+        expect(screen.getByTestId('product-selector-modal')).toBeTruthy();
+        expect(screen.getByTestId('product-option-include-prod-item-1')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('product-option-include-prod-item-1'));
+      fireEvent.click(screen.getByTestId('btn-apply-selector'));
+
+      expect(screen.getByTestId('selected-products-summary').textContent).toContain('1');
+    });
+
+    it('Y. scope switching H1 behavior unchanged', async () => {
+      const products = makeCatalog(2, 'Item');
+      vi.mocked(getSellerProductsPaginated).mockImplementation(async () => ({ items: products, totalCount: 2 }));
+      vi.mocked(createSellerPromotion).mockResolvedValue(mockPromoPercent);
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'SWITCH_H1' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '10' } });
+
+      // 1. Select categories first
+      fireEvent.click(screen.getByTestId('radio-scope-selected-categories'));
+      await waitFor(() => {
+        expect(screen.getByTestId('category-option-cat-clothing')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('category-option-cat-clothing'));
+      fireEvent.click(screen.getByTestId('btn-apply-category-selector'));
+
+      // 2. Switch to SELECTED_PRODUCTS
+      fireEvent.click(screen.getByTestId('radio-scope-selected-products'));
+      await waitFor(() => {
+        expect(screen.getByTestId('product-option-include-prod-item-1')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('product-option-include-prod-item-1'));
+      fireEvent.click(screen.getByTestId('btn-apply-selector'));
+
+      // In SELECTED_PRODUCTS scope, category exclusion UI is hidden
+      expect(screen.queryByTestId('btn-toggle-category-exclusions')).toBeNull();
+
+      // Submit
+      fireEvent.click(screen.getByTestId('submit-create-promo'));
+
+      await waitFor(() => {
+        expect(createSellerPromotion).toHaveBeenCalled();
+        const callArgs = vi.mocked(createSellerPromotion).mock.calls[0][0];
+        expect(callArgs.productScope).toBe('SELECTED_PRODUCTS');
+        expect(callArgs.includedProductIds).toEqual(['prod-item-1']);
+        expect(callArgs.includedCategoryIds).toBeUndefined();
+        expect(callArgs.excludedCategoryIds).toBeUndefined();
+      });
+    });
+
+    it('Z. edit read-only presentation unchanged', async () => {
+      const promoWithCategories: SellerPromotion = {
+        ...mockPromoPercent,
+        id: 'promo-cat-readonly',
+        code: 'CATREADONLY',
+        productScope: 'SELECTED_CATEGORIES',
+        includedCategoryIds: ['cat-clothing', 'cat-shoes'],
+        excludedCategoryIds: ['cat-coats'],
+      };
+
+      vi.mocked(getSellerPromotions).mockResolvedValue({
+        items: [promoWithCategories],
+        count: 1,
+      });
+
+      render(
+        <MemoryRouter>
+          <SellerPromotions />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('promo-row-CATREADONLY')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('promo-edit-button-CATREADONLY'));
+      expect(screen.getByTestId('edit-promo-modal')).toBeTruthy();
+
+      expect(screen.getByTestId('edit-promo-scope').textContent).toContain('2 выбранных категорий');
+      expect(screen.getByTestId('edit-promo-selected-categories').textContent).toContain('2 категорий');
+      expect(screen.getByTestId('edit-promo-excluded-categories').textContent).toContain('1 категорий');
+    });
+  });
 });

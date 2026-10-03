@@ -83,8 +83,9 @@ type MarketingCampaign struct {
 type ProductScope string
 
 const (
-	ProductScopeEntireStore      ProductScope = "ENTIRE_STORE"
-	ProductScopeSelectedProducts ProductScope = "SELECTED_PRODUCTS"
+	ProductScopeEntireStore        ProductScope = "ENTIRE_STORE"
+	ProductScopeSelectedProducts   ProductScope = "SELECTED_PRODUCTS"
+	ProductScopeSelectedCategories ProductScope = "SELECTED_CATEGORIES"
 )
 
 type TargetType string
@@ -99,6 +100,15 @@ type PromoCodeProductTarget struct {
 	ID          uuid.UUID  `json:"id" db:"id"`
 	PromoCodeID uuid.UUID  `json:"promoCodeId" db:"promo_code_id"`
 	ProductID   uuid.UUID  `json:"productId" db:"product_id"`
+	TargetType  TargetType `json:"targetType" db:"target_type"`
+	CreatedAt   time.Time  `json:"createdAt" db:"created_at"`
+}
+
+// PromoCodeCategoryTarget maps promo codes to explicitly included or excluded categories.
+type PromoCodeCategoryTarget struct {
+	ID          uuid.UUID  `json:"id" db:"id"`
+	PromoCodeID uuid.UUID  `json:"promoCodeId" db:"promo_code_id"`
+	CategoryID  uuid.UUID  `json:"categoryId" db:"category_id"`
 	TargetType  TargetType `json:"targetType" db:"target_type"`
 	CreatedAt   time.Time  `json:"createdAt" db:"created_at"`
 }

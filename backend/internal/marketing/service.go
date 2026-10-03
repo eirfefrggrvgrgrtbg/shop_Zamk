@@ -404,13 +404,67 @@ func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 	if err != nil {
 		return nil, err
 	}
-	includeMap := make(map[uuid.UUID]bool)
-	excludeMap := make(map[uuid.UUID]bool)
+	productIncludeMap := make(map[uuid.UUID]bool)
+	productExcludeMap := make(map[uuid.UUID]bool)
 	for _, t := range targets {
 		if t.TargetType == TargetTypeInclude {
-			includeMap[t.ProductID] = true
+			productIncludeMap[t.ProductID] = true
 		} else if t.TargetType == TargetTypeExclude {
-			excludeMap[t.ProductID] = true
+			productExcludeMap[t.ProductID] = true
+		}
+	}
+
+	categoryTargets, err := s.repo.GetPromoCodeCategoryTargetsTx(ctx, tx, promo.ID)
+	if err != nil {
+		return nil, err
+	}
+	var incCatIDs []uuid.UUID
+	var excCatIDs []uuid.UUID
+	for _, ct := range categoryTargets {
+		if ct.TargetType == TargetTypeInclude {
+			incCatIDs = append(incCatIDs, ct.CategoryID)
+		} else if ct.TargetType == TargetTypeExclude {
+			excCatIDs = append(excCatIDs, ct.CategoryID)
+		}
+	}
+
+	// If category scope or category exclusions exist, resolve product category IDs and category subtrees
+	var productCategoryMap map[uuid.UUID]uuid.UUID
+	categoryIncludeMap := make(map[uuid.UUID]bool)
+	categoryExcludeMap := make(map[uuid.UUID]bool)
+
+	if promo.ProductScope == ProductScopeSelectedCategories || len(excCatIDs) > 0 {
+		allProdIDs := make([]uuid.UUID, 0, len(items))
+		for _, it := range items {
+			if it.SellerID == promo.SellerID {
+				allProdIDs = append(allProdIDs, it.ProductID)
+			}
+		}
+		if len(allProdIDs) > 0 {
+			productCategoryMap, err = s.repo.GetProductCategoryIDsTx(ctx, tx, allProdIDs)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if len(incCatIDs) > 0 {
+			expandedInc, err := s.repo.ResolveCategorySubtreeIDsTx(ctx, tx, incCatIDs, true)
+			if err != nil {
+				return nil, err
+			}
+			for _, cid := range expandedInc {
+				categoryIncludeMap[cid] = true
+			}
+		}
+
+		if len(excCatIDs) > 0 {
+			expandedExc, err := s.repo.ResolveCategorySubtreeIDsTx(ctx, tx, excCatIDs, false)
+			if err != nil {
+				return nil, err
+			}
+			for _, cid := range expandedExc {
+				categoryExcludeMap[cid] = true
+			}
 		}
 	}
 
@@ -420,15 +474,28 @@ func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 		if it.SellerID != promo.SellerID {
 			continue
 		}
-		// Exclusion always wins
-		if excludeMap[it.ProductID] {
+		// 1. Explicit product exclusion is the final catalog-level veto
+		if productExcludeMap[it.ProductID] {
 			continue
 		}
+		// 2. Category exclusion always wins
+		prodCatID := productCategoryMap[it.ProductID]
+		if categoryExcludeMap[prodCatID] {
+			continue
+		}
+		// 3. Scope evaluation
 		if promo.ProductScope == ProductScopeSelectedProducts {
-			if !includeMap[it.ProductID] {
+			if !productIncludeMap[it.ProductID] {
+				continue
+			}
+		} else if promo.ProductScope == ProductScopeSelectedCategories {
+			// Fail-closed: zero effective included categories or category not matched => ineligible
+			if !categoryIncludeMap[prodCatID] {
 				continue
 			}
 		}
+		// ENTIRE_STORE allows all seller products not removed by product or category exclusions
+
 		eligibleItems = append(eligibleItems, it)
 		eligibleSubtotal += it.BaseUnitPriceCents * int64(it.Quantity)
 	}
@@ -872,7 +939,7 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 	if req.ProductScope != nil {
 		productScope = *req.ProductScope
 	}
-	if productScope != ProductScopeEntireStore && productScope != ProductScopeSelectedProducts {
+	if productScope != ProductScopeEntireStore && productScope != ProductScopeSelectedProducts && productScope != ProductScopeSelectedCategories {
 		return nil, ErrInvalidProductScope
 	}
 
@@ -880,13 +947,29 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		if len(req.IncludedProductIDs) == 0 {
 			return nil, fmt.Errorf("SELECTED_PRODUCTS requires at least one included product")
 		}
+		if len(req.IncludedCategoryIDs) > 0 {
+			return nil, fmt.Errorf("SELECTED_PRODUCTS cannot specify included categories")
+		}
+		if len(req.ExcludedCategoryIDs) > 0 {
+			return nil, ErrCategoryNotAllowed
+		}
+	} else if productScope == ProductScopeSelectedCategories {
+		if len(req.IncludedCategoryIDs) == 0 {
+			return nil, ErrCategoryRequiresInclude
+		}
+		if len(req.IncludedProductIDs) > 0 {
+			return nil, fmt.Errorf("SELECTED_CATEGORIES cannot specify included products")
+		}
 	} else if productScope == ProductScopeEntireStore {
 		if len(req.IncludedProductIDs) > 0 {
 			return nil, fmt.Errorf("ENTIRE_STORE cannot specify included products")
 		}
+		if len(req.IncludedCategoryIDs) > 0 {
+			return nil, fmt.Errorf("ENTIRE_STORE cannot specify included categories")
+		}
 	}
 
-	// Validate duplicate IDs in includes and excludes
+	// Validate duplicate IDs in product includes and excludes
 	incMap := make(map[uuid.UUID]struct{}, len(req.IncludedProductIDs))
 	for _, id := range req.IncludedProductIDs {
 		if _, exists := incMap[id]; exists {
@@ -904,6 +987,26 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 			return nil, ErrProductConflict
 		}
 		excMap[id] = struct{}{}
+	}
+
+	// Validate duplicate IDs in category includes and excludes
+	catIncMap := make(map[uuid.UUID]struct{}, len(req.IncludedCategoryIDs))
+	for _, id := range req.IncludedCategoryIDs {
+		if _, exists := catIncMap[id]; exists {
+			return nil, fmt.Errorf("duplicate category ID in included categories")
+		}
+		catIncMap[id] = struct{}{}
+	}
+
+	catExcMap := make(map[uuid.UUID]struct{}, len(req.ExcludedCategoryIDs))
+	for _, id := range req.ExcludedCategoryIDs {
+		if _, exists := catExcMap[id]; exists {
+			return nil, fmt.Errorf("duplicate category ID in excluded categories")
+		}
+		if _, inInc := catIncMap[id]; inInc {
+			return nil, ErrCategoryConflict
+		}
+		catExcMap[id] = struct{}{}
 	}
 
 	if req.MaxDiscountCents != nil && *req.MaxDiscountCents <= 0 {
@@ -932,6 +1035,20 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		}
 		if !owned {
 			return nil, ErrProductNotOwnedBySeller
+		}
+	}
+
+	// Validate that all specified categories exist and are active
+	allCatIDs := make([]uuid.UUID, 0, len(req.IncludedCategoryIDs)+len(req.ExcludedCategoryIDs))
+	allCatIDs = append(allCatIDs, req.IncludedCategoryIDs...)
+	allCatIDs = append(allCatIDs, req.ExcludedCategoryIDs...)
+	if len(allCatIDs) > 0 {
+		valid, err := s.repo.ValidateCategoriesExistTx(ctx, tx, allCatIDs)
+		if err != nil {
+			return nil, err
+		}
+		if !valid {
+			return nil, ErrInvalidCategory
 		}
 	}
 
@@ -1016,6 +1133,28 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		}
 	}
 
+	// 4. Persist category targets
+	var catTargets []PromoCodeCategoryTarget
+	for _, id := range req.IncludedCategoryIDs {
+		catTargets = append(catTargets, PromoCodeCategoryTarget{
+			PromoCodeID: promo.ID,
+			CategoryID:  id,
+			TargetType:  TargetTypeInclude,
+		})
+	}
+	for _, id := range req.ExcludedCategoryIDs {
+		catTargets = append(catTargets, PromoCodeCategoryTarget{
+			PromoCodeID: promo.ID,
+			CategoryID:  id,
+			TargetType:  TargetTypeExclude,
+		})
+	}
+	if len(catTargets) > 0 {
+		if err := s.repo.CreatePromoCodeCategoryTargetsTx(ctx, tx, catTargets); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("failed to commit promotion creation: %w", err)
 	}
@@ -1027,6 +1166,14 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 	excludedIDs := req.ExcludedProductIDs
 	if excludedIDs == nil {
 		excludedIDs = []uuid.UUID{}
+	}
+	includedCatIDs := req.IncludedCategoryIDs
+	if includedCatIDs == nil {
+		includedCatIDs = []uuid.UUID{}
+	}
+	excludedCatIDs := req.ExcludedCategoryIDs
+	if excludedCatIDs == nil {
+		excludedCatIDs = []uuid.UUID{}
 	}
 
 	return &SellerPromoResponse{
@@ -1044,6 +1191,8 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		ProductScope:            promo.ProductScope,
 		IncludedProductIDs:      includedIDs,
 		ExcludedProductIDs:      excludedIDs,
+		IncludedCategoryIDs:     includedCatIDs,
+		ExcludedCategoryIDs:     excludedCatIDs,
 		MaxDiscountCents:        promo.MaxDiscountCents,
 		IsActive:                promo.IsActive,
 		StartsAt:                promo.StartsAt,
@@ -1073,6 +1222,14 @@ func (s *Service) ListSellerPromotions(ctx context.Context, sellerID uuid.UUID) 
 		if exc == nil {
 			exc = []uuid.UUID{}
 		}
+		incCat := it.IncludedCategoryIDs
+		if incCat == nil {
+			incCat = []uuid.UUID{}
+		}
+		excCat := it.ExcludedCategoryIDs
+		if excCat == nil {
+			excCat = []uuid.UUID{}
+		}
 		res[i] = SellerPromoResponse{
 			ID:                      it.ID,
 			CampaignID:              it.CampaignID,
@@ -1088,6 +1245,8 @@ func (s *Service) ListSellerPromotions(ctx context.Context, sellerID uuid.UUID) 
 			ProductScope:            it.ProductScope,
 			IncludedProductIDs:      inc,
 			ExcludedProductIDs:      exc,
+			IncludedCategoryIDs:     incCat,
+			ExcludedCategoryIDs:     excCat,
 			MaxDiscountCents:        it.MaxDiscountCents,
 			IsActive:                it.IsActive,
 			StartsAt:                it.StartsAt,
@@ -1187,6 +1346,20 @@ func (s *Service) UpdateSellerPromotion(ctx context.Context, sellerID, promoID u
 		}
 	}
 
+	catTargets, err := s.repo.GetPromoCodeCategoryTargetsTx(ctx, tx, promo.ID)
+	if err != nil {
+		return nil, err
+	}
+	incCat := []uuid.UUID{}
+	excCat := []uuid.UUID{}
+	for _, ct := range catTargets {
+		if ct.TargetType == TargetTypeInclude {
+			incCat = append(incCat, ct.CategoryID)
+		} else if ct.TargetType == TargetTypeExclude {
+			excCat = append(excCat, ct.CategoryID)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("failed to commit promotion update: %w", err)
 	}
@@ -1207,6 +1380,8 @@ func (s *Service) UpdateSellerPromotion(ctx context.Context, sellerID, promoID u
 		ProductScope:            promo.ProductScope,
 		IncludedProductIDs:      inc,
 		ExcludedProductIDs:      exc,
+		IncludedCategoryIDs:     incCat,
+		ExcludedCategoryIDs:     excCat,
 		MaxDiscountCents:        promo.MaxDiscountCents,
 		IsActive:                promo.IsActive,
 		StartsAt:                promo.StartsAt,
