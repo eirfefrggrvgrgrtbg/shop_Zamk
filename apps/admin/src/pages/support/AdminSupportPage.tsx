@@ -21,6 +21,8 @@ import { SupportInbox } from '../../components/support/SupportInbox';
 import { SupportConversationView } from '../../components/support/SupportConversationView';
 import { SupportComposer } from '../../components/support/SupportComposer';
 import { SupportContextPanel } from '../../components/support/SupportContextPanel';
+import { OrderQuickView } from '../../components/support/OrderQuickView';
+import { ReturnQuickView } from '../../components/support/ReturnQuickView';
 
 export function AdminSupportPage() {
   const [conversations, setConversations] = useState<SupportConversation[]>([]);
@@ -33,7 +35,9 @@ export function AdminSupportPage() {
   const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
   const [sending, setSending] = useState<boolean>(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
-  const [isContextPanelOpen, setIsContextPanelOpen] = useState<boolean>(true);
+  const [inspectorStack, setInspectorStack] = useState<Array<{ type: 'ROOT' } | { type: 'ORDER', id: string } | { type: 'RETURN', id: string }>>([]);
+  const isContextPanelOpen = inspectorStack.length > 0;
+  const activeView = inspectorStack[inspectorStack.length - 1];
 
   // Load Inbox Conversations
   const loadConversations = useCallback(async () => {
@@ -64,6 +68,7 @@ export function AdminSupportPage() {
   // Load Selected Conversation Detail
   const handleSelectConversation = async (conv: SupportConversation) => {
     setSelectedConvId(conv.id);
+    if (inspectorStack.length > 0) setInspectorStack([{ type: 'ROOT' }]);
     setLoadingDetail(true);
     try {
       const detail = await getAdminSupportConversation(conv.id);
@@ -187,8 +192,30 @@ export function AdminSupportPage() {
     !currentDetail?.conversation.activeSession ||
     currentDetail.conversation.activeSession.status === 'COMPLETED';
 
+  const handleContextClick = (type: 'ORDER' | 'RETURN' | 'PRODUCT', id: string) => {
+    if (type === 'ORDER' || type === 'RETURN') {
+      setInspectorStack(prev => [...prev, { type, id }]);
+    }
+  };
+
+  const handleToggleInspector = () => {
+    if (inspectorStack.length > 0) {
+      setInspectorStack([]);
+    } else {
+      setInspectorStack([{ type: 'ROOT' }]);
+    }
+  };
+
+  const handleInspectorBack = () => {
+    setInspectorStack(prev => prev.slice(0, -1));
+  };
+
+  const handleInspectorClose = () => {
+    setInspectorStack([]);
+  };
+
   return (
-    <div className="flex h-[calc(100vh-64px)] w-full overflow-hidden bg-white">
+    <div className="flex -m-4 sm:-m-6 h-[calc(100vh-4rem)] w-[calc(100%+2rem)] sm:w-[calc(100%+3rem)] overflow-hidden bg-white">
       {/* Left Pane: Inbox */}
       <SupportInbox
         conversations={conversations}
@@ -202,7 +229,7 @@ export function AdminSupportPage() {
       />
 
       {/* Center & Right Panes */}
-      <div className="flex flex-1 min-w-0 h-full overflow-hidden">
+      <div className="flex flex-1 min-w-0 h-full relative overflow-hidden">
         {inboxError && (
           <div
             data-testid="support-inbox-error"
@@ -233,7 +260,8 @@ export function AdminSupportPage() {
                 messages={currentDetail.messages}
                 internalNotes={currentDetail.internalNotes}
                 isContextPanelOpen={isContextPanelOpen}
-                onToggleContextPanel={() => setIsContextPanelOpen((prev) => !prev)}
+                onToggleContextPanel={handleToggleInspector}
+                onContextClick={handleContextClick}
               />
               <SupportComposer
                 onSendReply={handleSendReply}
@@ -243,14 +271,36 @@ export function AdminSupportPage() {
               />
             </div>
 
-            {/* Right: Context & Operator Controls */}
-            <SupportContextPanel
-              conversation={currentDetail.conversation}
-              onUpdateSession={handleUpdateSession}
-              onCompleteSession={handleCompleteSession}
-              isOpen={isContextPanelOpen}
-              onClose={() => setIsContextPanelOpen(false)}
-            />
+            {/* Right: Inspector */}
+            {isContextPanelOpen && activeView && (
+              <div className="absolute top-0 right-0 bottom-0 z-10 shadow-2xl bg-white border-l border-gray-200 transition-transform">
+                {activeView.type === 'ROOT' && (
+                  <SupportContextPanel
+                    conversation={currentDetail.conversation}
+                    onUpdateSession={handleUpdateSession}
+                    onCompleteSession={handleCompleteSession}
+                    isOpen={true}
+                    onClose={handleInspectorClose}
+                    onContextClick={handleContextClick}
+                  />
+                )}
+                {activeView.type === 'ORDER' && (
+                  <OrderQuickView
+                    orderId={activeView.id}
+                    onClose={handleInspectorClose}
+                    onBack={inspectorStack.length > 1 ? handleInspectorBack : undefined}
+                  />
+                )}
+                {activeView.type === 'RETURN' && (
+                  <ReturnQuickView
+                    returnId={activeView.id}
+                    onClose={handleInspectorClose}
+                    onBack={inspectorStack.length > 1 ? handleInspectorBack : undefined}
+                    onContextClick={handleContextClick}
+                  />
+                )}
+              </div>
+            )}
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 p-6 text-center text-gray-400 select-none">

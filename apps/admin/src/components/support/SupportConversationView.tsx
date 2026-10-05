@@ -9,6 +9,7 @@ import {
   ShoppingBag,
   ExternalLink,
   SlidersHorizontal,
+  ChevronRight,
 } from 'lucide-react';
 import type {
   SupportConversation,
@@ -25,6 +26,7 @@ interface SupportConversationViewProps {
   internalNotes?: SupportInternalNote[];
   isContextPanelOpen: boolean;
   onToggleContextPanel: () => void;
+  onContextClick?: (type: 'ORDER' | 'RETURN' | 'PRODUCT', id: string) => void;
 }
 
 type TimelineItem =
@@ -37,11 +39,14 @@ export function SupportConversationView({
   internalNotes = [],
   isContextPanelOpen,
   onToggleContextPanel,
+  onContextClick,
 }: SupportConversationViewProps) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
   }, [messages, internalNotes]);
 
   // Combine and sort chronologically
@@ -91,28 +96,58 @@ export function SupportConversationView({
     const label = link.label || link.contextId.slice(0, 8);
 
     if (link.contextType === 'ORDER') {
+      if (onContextClick) {
+        return (
+          <button
+            key={link.id}
+            type="button"
+            onClick={() => onContextClick('ORDER', link.contextId)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50/90 hover:bg-blue-100 text-blue-800 transition-all border border-blue-200/80 shadow-2xs hover:shadow-xs cursor-pointer group focus:outline-none focus:ring-2 focus:ring-blue-600 active:scale-[0.98]"
+            title={`Просмотреть заказ ${label}`}
+          >
+            <Package className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span>Заказ {label}</span>
+            <ChevronRight className="w-3 h-3 text-blue-400 group-hover:text-blue-700 group-hover:translate-x-0.5 transition-all" />
+          </button>
+        );
+      }
       return (
         <Link
           key={link.id}
           to={`/orders/${link.contextId}`}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200/60"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50/90 hover:bg-blue-100 text-blue-800 transition-all border border-blue-200/80 shadow-2xs hover:shadow-xs cursor-pointer group focus:outline-none focus:ring-2 focus:ring-blue-600"
         >
-          <Package className="w-3.5 h-3.5 text-blue-600" />
+          <Package className="w-3.5 h-3.5 text-blue-600 shrink-0" />
           <span>Заказ {label}</span>
-          <ExternalLink className="w-3 h-3 text-blue-400 ml-0.5" />
+          <ExternalLink className="w-3 h-3 text-blue-400 ml-0.5 group-hover:text-blue-700" />
         </Link>
       );
     }
     if (link.contextType === 'RETURN') {
+      if (onContextClick) {
+        return (
+          <button
+            key={link.id}
+            type="button"
+            onClick={() => onContextClick('RETURN', link.contextId)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-50/90 hover:bg-purple-100 text-purple-800 transition-all border border-purple-200/80 shadow-2xs hover:shadow-xs cursor-pointer group focus:outline-none focus:ring-2 focus:ring-purple-600 active:scale-[0.98]"
+            title={`Просмотреть возврат ${label}`}
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+            <span>Возврат {label}</span>
+            <ChevronRight className="w-3 h-3 text-purple-400 group-hover:text-purple-700 group-hover:translate-x-0.5 transition-all" />
+          </button>
+        );
+      }
       return (
         <Link
           key={link.id}
           to={`/returns?id=${link.contextId}`}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors border border-purple-200/60"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-50/90 hover:bg-purple-100 text-purple-800 transition-all border border-purple-200/80 shadow-2xs hover:shadow-xs cursor-pointer group focus:outline-none focus:ring-2 focus:ring-purple-600"
         >
-          <RotateCcw className="w-3.5 h-3.5 text-purple-600" />
+          <RotateCcw className="w-3.5 h-3.5 text-purple-600 shrink-0" />
           <span>Возврат {label}</span>
-          <ExternalLink className="w-3 h-3 text-purple-400 ml-0.5" />
+          <ExternalLink className="w-3 h-3 text-purple-400 ml-0.5 group-hover:text-purple-700" />
         </Link>
       );
     }
@@ -121,11 +156,11 @@ export function SupportConversationView({
         <Link
           key={link.id}
           to={`/products/${link.contextId}`}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors border border-emerald-200/60"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50/90 hover:bg-emerald-100 text-emerald-800 transition-all border border-emerald-200/80 shadow-2xs hover:shadow-xs cursor-pointer group focus:outline-none focus:ring-2 focus:ring-emerald-600"
         >
-          <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
+          <ShoppingBag className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
           <span>Товар {label}</span>
-          <ExternalLink className="w-3 h-3 text-emerald-400 ml-0.5" />
+          <ExternalLink className="w-3 h-3 text-emerald-400 ml-0.5 group-hover:text-emerald-700" />
         </Link>
       );
     }
@@ -182,44 +217,48 @@ export function SupportConversationView({
   return (
     <div className="flex flex-col h-full bg-slate-50 flex-1 min-w-0">
       {/* Conversation Top Header */}
-      <div className="px-6 py-3.5 bg-white border-b border-gray-200 flex items-center justify-between shadow-sm z-10">
+      <div className="px-6 py-3 bg-white border-b border-gray-200 flex items-center justify-between shadow-2xs z-10 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-gray-900 truncate">{headerTitle}</h2>
+              <h2 className="text-sm font-bold text-gray-900 truncate tracking-tight">{headerTitle}</h2>
               <span
-                className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
                   isCustomer
-                    ? 'bg-gray-100 text-gray-700'
-                    : 'bg-amber-100 text-amber-800'
+                    ? 'bg-gray-100 text-gray-700 border border-gray-200/60'
+                    : 'bg-amber-50 text-amber-800 border border-amber-200/60'
                 }`}
               >
                 {isCustomer ? 'Покупатель' : 'Продавец'}
               </span>
             </div>
             {isCustomer && conversation.requesterEmail && (
-              <p className="text-xs text-gray-500 truncate">{conversation.requesterEmail}</p>
+              <p className="text-xs text-gray-500 truncate mt-0.5">{conversation.requesterEmail}</p>
+            )}
+            {!isCustomer && conversation.requesterStoreName && (
+              <p className="text-xs text-gray-500 truncate mt-0.5">{conversation.requesterStoreName}</p>
             )}
           </div>
         </div>
 
-        {/* Toggle Context Panel Button */}
+        {/* Action: Контекст */}
         <button
+          type="button"
           onClick={onToggleContextPanel}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
             isContextPanelOpen
-              ? 'bg-gray-100 border-gray-300 text-gray-900'
-              : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+              ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+              : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900 shadow-2xs'
           }`}
           title="Панель контекста и управления"
         >
-          <SlidersHorizontal className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Панель деталей</span>
+          <SlidersHorizontal className={`w-3.5 h-3.5 ${isContextPanelOpen ? 'text-white' : 'text-gray-500'}`} />
+          <span>Детали</span>
         </button>
       </div>
 
       {/* Messages Stream */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-6 space-y-4">
         {timeline.length === 0 ? (
           <div className="flex items-center justify-center h-48 text-gray-400 text-sm">
             История диалога пуста
@@ -326,7 +365,6 @@ export function SupportConversationView({
             );
           })
         )}
-        <div ref={bottomRef} />
       </div>
     </div>
   );
