@@ -2,12 +2,13 @@
 name: zamk-seller-ui
 description: ZAMK Seller UI Rules
 trigger: glob
-glob: "apps/seller/**,packages/api-client/**"
+glob: "{apps/seller/**,packages/api-client/**}"
 ---
 
 # ZAMK Seller UI Rules
 
 - Seller UI target: clean, premium, quiet fashion marketplace; not ERP/admin-looking.
+- Frontend unit/component mocks are allowed only as unit tests.
 - Do not hardcode canonical category/color/size/material/filter dictionaries when backend reference data exists.
 - Seller never invents canonical taxonomy or Product variant axes.
 - Seller V1 does not choose Brand; Brand is backend-derived.
@@ -20,4 +21,3 @@ glob: "apps/seller/**,packages/api-client/**"
 - Existing Product Variant IDs must be preserved for unchanged combinations.
 - Draft may be incomplete; moderation submission is strict.
 - Agent does not visually approve UI.
-- After technical implementation, return a short manual Product Owner checklist.
