@@ -17,6 +17,8 @@ Current user task instructions override reusable workflow defaults unless they w
 - **READ != ACTION**.
 
 ## Global Git Safety
+- Never run direct `git add`, `git stage`, `git commit`, or `git push` before explicit Product Owner acceptance. All staging, committing, and pushing must occur strictly through canonical `zamk-finalize` (`.agents/scripts/finalize.sh`) after owner review.
+- Canonical finalization via `.agents/scripts/finalize.sh` requires explicit Product Owner authorization line `ZAMK_OWNER_ACCEPTED_FINALIZE=YES` in the latest user request.
 - Stage only exact approved paths. Never run `git add .` or `git add -A`.
 - Never force-push or amend without explicit Product Owner approval.
 - Preserve unrelated stashes and dirty files. Stop and report if unexpected dirty files are found.
