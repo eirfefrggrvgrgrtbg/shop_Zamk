@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation, Outlet } from 'react-router-dom';
+import { useLocation, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard,
   Store,
@@ -19,17 +19,16 @@ import {
   Shield,
   ClipboardList,
   FileText,
-  PanelLeftClose,
-  PanelLeftOpen,
   PackageCheck,
   PackageSearch,
   Search,
+  Menu,
   MessageSquare,
 } from 'lucide-react';
 
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 import { NotificationBell } from './notifications/NotificationBell';
-import { AdminSearchPalette } from './search/AdminSearchPalette';
+import { AdminSearchPalette, NavGroup, NavItem } from './search/AdminSearchPalette';
 import { useAdminGlobalSearchShortcut } from './search/useAdminGlobalSearchShortcut';
 import { getAdminSellers } from '@zamk/api-client/src/admin';
 import { getModerationProducts } from '../api/adminProducts';
@@ -40,13 +39,6 @@ import {
   isScreenRuleVisible,
 } from '../config/staffWorkModules';
 
-interface NavItem {
-  name: string;
-  path: string;
-  icon: React.ElementType;
-  permission?: string | string[];
-}
-
 export function AdminLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
   const { logout, user, staff, hasPermission, hasAnyPermission } = useAdminAuth();
@@ -56,25 +48,6 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
   useAdminGlobalSearchShortcut(isSearchOpen, setIsSearchOpen);
 
   const isMac = typeof window !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-
-  // Collapsed sidebar state from localStorage ONLY (Manual control)
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('adminSidebarCollapsed') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  const toggleSidebar = () => {
-    setIsCollapsed(prev => {
-      const next = !prev;
-      try {
-        localStorage.setItem('adminSidebarCollapsed', String(next));
-      } catch {}
-      return next;
-    });
-  };
 
   const isPermissionVisible = (permission?: string | string[]) => {
     if (!permission) return true;
@@ -164,60 +137,67 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     };
   }, [location.pathname, staff]);
 
-  const baseNavItems: NavItem[] = [
+  const isModerationActive = location.pathname.startsWith('/moderation');
+
+  const moderationSubItems: NavItem[] = isModerationActive ? [
+    { name: 'Очередь', path: '/moderation/queue', icon: ShieldAlert, count: moderationCounts.total, permission: ['products.moderate', 'reviews.read', 'sellers.read'] },
+    { name: 'Продавцы', path: '/moderation/sellers', icon: Store, count: moderationCounts.sellers, permission: 'sellers.read' },
+    { name: 'Товары', path: '/moderation/products', icon: Package, count: moderationCounts.products, permission: 'products.moderate' },
+    { name: 'Отзывы', path: '/moderation/reviews', icon: ShieldAlert, count: moderationCounts.reviews, permission: 'reviews.read' },
+  ].filter(isNavItemVisible) : [];
+
+  const baseCommerceItems: NavItem[] = [
     { name: 'Главная', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Продавцы', path: '/sellers', icon: Store },
     { name: 'Аукционы', path: '/auctions', icon: Gavel },
     { name: 'Товары', path: '/products', icon: Package },
-    { name: 'Модерация', path: '/moderation', icon: ShieldAlert },
+    { name: 'Модерация', path: '/moderation', icon: ShieldAlert, count: moderationCounts.total },
+    ...moderationSubItems,
     { name: 'Категории и бренды', path: '/catalog', icon: BookOpen },
     { name: 'Заказы', path: '/orders', icon: ShoppingCart },
     { name: 'Отправления', path: '/shipments', icon: Truck },
     { name: 'Платежи покупателей', path: '/payments', icon: CreditCard },
     { name: 'Возвраты', path: '/returns', icon: RotateCcw },
-    { name: 'Поддержка', path: '/support', icon: MessageSquare, permission: 'support.read' },
     { name: 'Возмещения', path: '/refunds', icon: ReceiptText },
     { name: 'Выплаты продавцам', path: '/payouts', icon: Wallet },
-  ];
+  ].filter(isNavItemVisible);
 
   const warehouseNavItems: NavItem[] = [
-    { name: 'Сборка', path: '/fulfillment/picking', icon: PackageCheck },
-    { name: 'Упаковка', path: '/fulfillment/packing', icon: Package },
+    { name: 'Сборка', path: '/fulfillment/picking', icon: PackageCheck, count: pickingCount },
+    { name: 'Упаковка', path: '/fulfillment/packing', icon: Package, count: packingCount },
     { name: 'Отгрузка', path: '/fulfillment/dispatch', icon: Truck },
     { name: 'Приёмка поставок', path: '/supplies/receiving', icon: Truck },
     { name: 'Приёмка возвратов', path: '/returns/receiving', icon: RotateCcw },
     { name: 'Остатки', path: '/inventory', icon: Boxes },
     { name: 'Свободный сканер', path: '/warehouse/free-scan', icon: PackageSearch },
-  ];
+  ].filter(isNavItemVisible);
 
   const staffNavItems: NavItem[] = [
     { name: 'Сводные отчеты', path: '/reports', icon: FileText },
     { name: 'Доступы и роли', path: '/roles', icon: Shield },
     { name: 'Сотрудники', path: '/staff', icon: Users },
     { name: 'Журнал действий', path: '/audit', icon: ClipboardList },
-  ];
+  ].filter(isNavItemVisible);
 
-  const canReadSellers = isPermissionVisible(getStaffScreenVisibility('/sellers'));
-  const canModerateProducts = isPermissionVisible('products.moderate');
-  const canReadReviews = isPermissionVisible('reviews.read');
+  const supportNavItems: NavItem[] = [
+    { name: 'Поддержка', path: '/support', icon: MessageSquare, permission: 'support.read' },
+  ].filter(isNavItemVisible);
 
-  const moderationSubItems = [
-    { name: 'Очередь', path: '/moderation/queue', count: moderationCounts.total, visible: canReadSellers || canModerateProducts || canReadReviews },
-    { name: 'Продавцы', path: '/moderation/sellers', count: moderationCounts.sellers, visible: canReadSellers },
-    { name: 'Товары', path: '/moderation/products', count: moderationCounts.products, visible: canModerateProducts },
-    { name: 'Отзывы', path: '/moderation/reviews', count: moderationCounts.reviews, visible: canReadReviews },
-  ].filter((s) => s.visible);
+  const navGroups: NavGroup[] = [
+    { title: 'Коммерция и сервисы', items: baseCommerceItems },
+    { title: 'Поддержка', items: supportNavItems },
+    { title: 'СКЛАД', items: warehouseNavItems },
+    { title: 'Администрирование', items: staffNavItems },
+  ].filter((g) => g.items.length > 0);
 
-  const visibleBaseItems = baseNavItems.filter(isNavItemVisible);
-  const visibleWarehouseItems = warehouseNavItems.filter(isNavItemVisible);
-  const visibleStaffItems = staffNavItems.filter(isNavItemVisible);
-  const allNavItems = [...visibleBaseItems, ...visibleWarehouseItems, ...visibleStaffItems];
-
-  const isModerationActive = location.pathname.startsWith('/moderation');
+  const allNavItems = navGroups.flatMap((g) => g.items);
 
   const isRouteActive = (itemPath: string) => {
     if (itemPath === '/moderation') {
       return isModerationActive;
+    }
+    if (itemPath === '/support') {
+      return location.pathname === '/support' || location.pathname.startsWith('/support/');
     }
     if (itemPath === '/returns') {
       if (location.pathname === '/returns/receiving' || location.pathname.startsWith('/returns/receiving/')) {
@@ -264,226 +244,86 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     return location.pathname === itemPath || (location.pathname.startsWith(itemPath + '/') && itemPath !== '/');
   };
 
+  const currentPageTitle = isModerationActive
+    ? 'Модерация'
+    : (allNavItems.find((item) => isRouteActive(item.path))?.name || 'Панель администратора');
+
   return (
-    <div data-testid="admin-layout" className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <aside
-        className={`${
-          isCollapsed ? 'w-[72px]' : 'w-64'
-        } bg-slate-900 text-white flex flex-col hidden md:flex shrink-0 transition-all duration-300 ease-in-out`}
-      >
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <Link to="/dashboard" className="font-bold tracking-wider truncate">
-            {isCollapsed ? 'ZAMK' : 'ZAMK Admin'}
-          </Link>
+    <div data-testid="admin-layout" className="flex h-screen bg-gray-50 flex-col overflow-hidden">
+      {/* Compact Top Header Shell */}
+      <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 sm:px-6 shrink-0 z-10 relative">
+        <div className="flex items-center space-x-3">
+          {/* Upper-left Compact Navigation Trigger */}
           <button
-            onClick={toggleSidebar}
-            title={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-            className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors ml-1"
+            type="button"
+            data-testid="admin-nav-trigger"
+            onClick={() => setIsSearchOpen(true)}
+            className="flex items-center space-x-2 px-3 py-1.5 text-slate-700 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 border border-slate-200 rounded-xl transition-colors shrink-0"
+            title={`Меню и каталог (${isMac ? '⌘K' : 'Ctrl+K'})`}
           >
-            {isCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+            <Menu className="w-4 h-4 text-indigo-600" />
+            <span className="text-sm font-semibold">Меню</span>
           </button>
-        </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {visibleBaseItems.map((item) => {
-            const isModerationItem = item.path === '/moderation';
-            const isActive = isRouteActive(item.path);
-
-            return (
-              <div key={item.path}>
-                <Link
-                  to={item.path}
-                  title={isCollapsed ? item.name : undefined}
-                  className={`flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-xl group transition-colors ${
-                    isActive ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  } ${isCollapsed ? 'justify-center' : ''}`}
-                >
-                  <div className="flex items-center min-w-0">
-                    <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-400 group-hover:text-slate-300'} ${!isCollapsed ? 'mr-3' : ''}`} />
-                    {!isCollapsed && <span className="truncate">{item.name}</span>}
-                  </div>
-
-                  {!isCollapsed && isModerationItem && moderationCounts.total > 0 && (
-                    <span className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                      {moderationCounts.total}
-                    </span>
-                  )}
-                </Link>
-
-                {/* Sub-items for Moderation */}
-                {!isCollapsed && isModerationItem && isModerationActive && (
-                  <div className="ml-5 pl-3 border-l border-slate-700/60 my-1 space-y-0.5">
-                    {moderationSubItems.map((sub) => {
-                      const isSubActive =
-                        location.pathname === sub.path ||
-                        (sub.path === '/moderation/queue' && (location.pathname === '/moderation' || location.pathname === '/moderation/')) ||
-                        (sub.path === '/moderation/products' && location.pathname.startsWith('/moderation/products')) ||
-                        (sub.path === '/moderation/sellers' && location.pathname.startsWith('/moderation/sellers')) ||
-                        (sub.path === '/moderation/reviews' && location.pathname.startsWith('/moderation/reviews'));
-
-                      return (
-                        <Link
-                          key={sub.path}
-                          to={sub.path}
-                          className={`flex items-center justify-between px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                            isSubActive
-                              ? 'bg-indigo-600/30 text-indigo-300 font-semibold'
-                              : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'
-                          }`}
-                        >
-                          <span className="truncate">{sub.name}</span>
-                          {sub.count > 0 && (
-                            <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                              {sub.count}
-                            </span>
-                          )}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {visibleWarehouseItems.length > 0 && (
-            <>
-              <div className="pt-4 pb-1">
-                {!isCollapsed ? (
-                  <p className="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">СКЛАД</p>
-                ) : (
-                  <div className="w-full h-px bg-slate-800 my-2" />
-                )}
-              </div>
-              {visibleWarehouseItems.map((item) => {
-                const isActive = isRouteActive(item.path);
-
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    title={isCollapsed ? item.name : undefined}
-                    className={`flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-xl group transition-colors ${
-                      isActive ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    } ${isCollapsed ? 'justify-center' : ''}`}
-                  >
-                    <div className="flex items-center min-w-0">
-                      <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-400 group-hover:text-slate-300'} ${!isCollapsed ? 'mr-3' : ''}`} />
-                      {!isCollapsed && <span className="truncate">{item.name}</span>}
-                    </div>
-
-                    {!isCollapsed && item.path === '/fulfillment/picking' && pickingCount > 0 && (
-                      <span
-                        data-testid="sidebar-picking-count"
-                        className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
-                      >
-                        {pickingCount}
-                      </span>
-                    )}
-
-                    {!isCollapsed && item.path === '/fulfillment/packing' && packingCount > 0 && (
-                      <span
-                        data-testid="sidebar-packing-count"
-                        className="ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
-                      >
-                        {packingCount}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </>
-          )}
-
-          {visibleStaffItems.length > 0 && (
-            <>
-              <div className="pt-4 pb-1">
-                {!isCollapsed ? (
-                  <p className="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Администрирование</p>
-                ) : (
-                  <div className="w-full h-px bg-slate-800 my-2" />
-                )}
-              </div>
-              {visibleStaffItems.map((item) => {
-                const isActive = isRouteActive(item.path);
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    title={isCollapsed ? item.name : undefined}
-                    className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-xl group transition-colors ${
-                      isActive ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    } ${isCollapsed ? 'justify-center' : ''}`}
-                  >
-                    <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-400 group-hover:text-slate-300'} ${!isCollapsed ? 'mr-3' : ''}`} />
-                    {!isCollapsed && <span className="truncate">{item.name}</span>}
-                  </Link>
-                );
-              })}
-            </>
-          )}
-        </nav>
-
-        <div className="p-3 border-t border-slate-800">
-          <button
-            onClick={() => logout()}
-            title={isCollapsed ? 'Выйти' : undefined}
-            className={`w-full flex items-center px-3 py-2.5 text-sm font-medium text-slate-300 rounded-xl hover:bg-slate-800 transition-colors ${
-              isCollapsed ? 'justify-center' : ''
-            }`}
-          >
-            <LogOut className={`h-5 w-5 flex-shrink-0 text-slate-400 ${!isCollapsed ? 'mr-3' : ''}`} />
-            {!isCollapsed && <span>Выйти</span>}
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Header */}
-        <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6 shrink-0">
+          {/* Current Page Context Breadcrumb */}
           <div className="flex items-center text-sm font-medium text-gray-500">
-            <span className="hidden sm:inline">ZAMK Admin</span>
+            <span className="hidden sm:inline font-bold text-gray-900 tracking-wider">ZAMK Admin</span>
             <span className="hidden sm:inline mx-2 text-gray-300">/</span>
-            <span className="text-gray-800 font-semibold">
-              {isModerationActive
-                ? 'Модерация'
-                : (allNavItems.find(item => isRouteActive(item.path))?.name || 'Панель администратора')}
+            <span className="text-gray-800 font-semibold truncate max-w-[200px] sm:max-w-xs">
+              {currentPageTitle}
             </span>
           </div>
-          <div className="flex items-center space-x-3 sm:space-x-4">
-            {/* Global Search Button */}
-            <button
-              type="button"
-              data-testid="admin-global-search-trigger"
-              onClick={() => setIsSearchOpen(true)}
-              className="flex items-center space-x-2 px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 bg-gray-100/80 hover:bg-gray-200/80 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 rounded-xl border border-gray-200/60 dark:border-slate-700/60 transition-colors shadow-2xs"
-              title={`Поиск (${isMac ? '⌘K' : 'Ctrl+K'})`}
-            >
-              <Search className="w-4 h-4 text-gray-400 dark:text-slate-400 shrink-0" />
-              <span className="hidden md:inline font-normal text-gray-600 dark:text-slate-300">Поиск...</span>
-              <span className="md:hidden font-normal text-gray-600 dark:text-slate-300">Поиск</span>
-              <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold text-gray-400 dark:text-slate-500 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded font-mono">
-                {isMac ? '⌘K' : 'Ctrl+K'}
-              </kbd>
-            </button>
+        </div>
 
-            <NotificationBell />
-            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold uppercase" title={user?.email}>
-              {user?.email?.charAt(0) || 'A'}
-            </div>
+        <div className="flex items-center space-x-3 sm:space-x-4">
+          {/* Global Search Button / Trigger */}
+          <button
+            type="button"
+            data-testid="admin-global-search-trigger"
+            onClick={() => setIsSearchOpen(true)}
+            className="flex items-center space-x-2 px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 bg-gray-100/80 hover:bg-gray-200/80 rounded-xl border border-gray-200/60 transition-colors shadow-2xs"
+            title={`Поиск (${isMac ? '⌘K' : 'Ctrl+K'})`}
+          >
+            <Search className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="hidden md:inline font-normal text-gray-600">Поиск...</span>
+            <span className="md:hidden font-normal text-gray-600">Поиск</span>
+            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold text-gray-400 bg-white border border-gray-200 rounded font-mono">
+              {isMac ? '⌘K' : 'Ctrl+K'}
+            </kbd>
+          </button>
+
+          <NotificationBell />
+          <div
+            className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold uppercase"
+            title={user?.email}
+          >
+            {user?.email?.charAt(0) || 'A'}
           </div>
-        </header>
 
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900">
-          {children || <Outlet />}
-        </main>
-      </div>
+          <button
+            type="button"
+            data-testid="admin-logout-trigger"
+            onClick={() => logout()}
+            title="Выйти"
+            className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
+      </header>
 
-      {/* Global Search Palette */}
-      <AdminSearchPalette isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+      {/* Main Content Workspace — Full Horizontal Space */}
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-900 w-full">
+        {children || <Outlet />}
+      </main>
+
+      {/* Unified On-Demand Search & Navigation Catalog Surface */}
+      <AdminSearchPalette
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        navGroups={navGroups}
+        isRouteActive={isRouteActive}
+      />
     </div>
   );
 }

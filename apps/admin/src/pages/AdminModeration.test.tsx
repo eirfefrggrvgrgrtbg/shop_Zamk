@@ -131,7 +131,10 @@ describe('Admin Moderation Information Architecture', () => {
       </MemoryRouter>
     );
 
-    // Sidebar should contain "Модерация"
+    // Open on-demand navigation catalog
+    fireEvent.click(screen.getByTestId('admin-nav-trigger'));
+
+    // Navigation should contain "Модерация"
     expect(screen.getAllByText('Модерация').length).toBeGreaterThan(0);
 
     // Sidebar sub-items should be present

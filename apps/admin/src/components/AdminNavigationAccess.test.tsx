@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, cleanup, within } from '@testing-library/react';
+import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { AdminLayout } from './AdminLayout';
 import { AdminProtectedRoute } from './AdminProtectedRoute';
@@ -65,10 +65,13 @@ function mockAuth(permissions: string[], roleCode: string = 'manager') {
 }
 
 function getSidebar() {
-  const layout = screen.getByTestId('admin-layout');
-  const aside = layout.querySelector('aside');
-  if (!aside) throw new Error('aside not found');
-  return aside;
+  let nav = screen.queryByTestId('admin-search-palette');
+  if (!nav) {
+    const trigger = screen.getByTestId('admin-nav-trigger');
+    fireEvent.click(trigger);
+    nav = screen.getByTestId('admin-search-palette');
+  }
+  return nav;
 }
 
 describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => {
@@ -908,20 +911,20 @@ describe('WH.5 — Warehouse Navigation & Workspace Pass', () => {
       );
       const sidebar = getSidebar();
       const activeLink = within(sidebar).getByText(tc.expectedActive).closest('a');
-      expect(activeLink?.className, `Route ${tc.route} should highlight ${tc.expectedActive}`).toContain('shadow-sm');
+      expect(activeLink?.className, `Route ${tc.route} should highlight ${tc.expectedActive}`).toContain('border-indigo-600');
 
       // Specifically check that when on /returns/receiving or /returns/:id/receiving, support 'Возвраты' is NOT active
       if (tc.expectedActive === 'Приёмка возвратов') {
         const supportReturnsLink = within(sidebar).getByText('Возвраты').closest('a');
-        expect(supportReturnsLink?.className).toContain('text-slate-300');
-        expect(supportReturnsLink?.className).not.toContain('shadow-sm');
+        expect(supportReturnsLink?.className).toContain('text-slate-700');
+        expect(supportReturnsLink?.className).not.toContain('border-indigo-600');
       }
 
       // And when on support /returns, 'Приёмка возвратов' is NOT active
       if (tc.expectedActive === 'Возвраты') {
         const warehouseReturnsLink = within(sidebar).getByText('Приёмка возвратов').closest('a');
-        expect(warehouseReturnsLink?.className).toContain('text-slate-300');
-        expect(warehouseReturnsLink?.className).not.toContain('shadow-sm');
+        expect(warehouseReturnsLink?.className).toContain('text-slate-700');
+        expect(warehouseReturnsLink?.className).not.toContain('border-indigo-600');
       }
 
       unmount();
