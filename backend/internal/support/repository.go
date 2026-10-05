@@ -107,13 +107,16 @@ func (r *Repository) GetSellerConversation(ctx context.Context, sellerID uuid.UU
 
 func (r *Repository) GetConversationByID(ctx context.Context, id uuid.UUID) (*Conversation, error) {
 	query := `
-		SELECT id, requester_type, requester_user_id, requester_seller_id, created_at, updated_at
-		FROM support_conversations
-		WHERE id = $1
+		SELECT c.id, c.requester_type, c.requester_user_id, c.requester_seller_id, c.created_at, c.updated_at,
+		       COALESCE(u.name, ''), COALESCE(u.email, ''), COALESCE(sel.brand_name, '')
+		FROM support_conversations c
+		LEFT JOIN users u ON u.id = c.requester_user_id
+		LEFT JOIN sellers sel ON sel.id = c.requester_seller_id
+		WHERE c.id = $1
 	`
 	var c Conversation
 	var reqType string
-	err := r.db.QueryRow(ctx, query, id).Scan(&c.ID, &reqType, &c.RequesterUserID, &c.RequesterSellerID, &c.CreatedAt, &c.UpdatedAt)
+	err := r.db.QueryRow(ctx, query, id).Scan(&c.ID, &reqType, &c.RequesterUserID, &c.RequesterSellerID, &c.CreatedAt, &c.UpdatedAt, &c.RequesterName, &c.RequesterEmail, &c.RequesterStoreName)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrConversationNotFound
@@ -160,7 +163,7 @@ func (r *Repository) GetOrCreateSellerConversationTx(ctx context.Context, tx pgx
 	return &c, nil
 }
 
-func (r *Repository) ListConversations(ctx context.Context, filter RequesterType, staffUserID uuid.UUID) ([]Conversation, error) {
+func (r *Repository) ListConversations(ctx context.Context, filter RequesterType, search string, staffUserID uuid.UUID) ([]Conversation, error) {
 	// Only list conversations that have an ACTIVE session (active support inbox).
 	// Abandoned uploads with 0 sessions do not appear.
 	query := `
@@ -174,13 +177,39 @@ func (r *Repository) ListConversations(ctx context.Context, filter RequesterType
 		           WHERE ms.conversation_id = c.id
 		             AND m.sender_type != 'STAFF'
 		             AND m.created_at > COALESCE(r.last_read_at, '1970-01-01'::timestamptz)
-		       ) AS unread_count
+		       ) AS unread_count,
+		       COALESCE(u.name, '') AS requester_name,
+		       COALESCE(u.email, '') AS requester_email,
+		       COALESCE(sel.brand_name, '') AS requester_store_name,
+		       COALESCE(lm.text_content, '') AS latest_msg_text,
+		       lm.created_at AS latest_msg_at
 		FROM support_conversations c
 		JOIN support_sessions s ON s.conversation_id = c.id AND s.status = 'ACTIVE'
+		LEFT JOIN users u ON u.id = c.requester_user_id
+		LEFT JOIN sellers sel ON sel.id = c.requester_seller_id
+		LEFT JOIN LATERAL (
+		    SELECT sm.text_content, sm.created_at
+		    FROM support_messages sm
+		    JOIN support_sessions ss ON ss.id = sm.session_id
+		    WHERE ss.conversation_id = c.id
+		    ORDER BY sm.created_at DESC
+		    LIMIT 1
+		) lm ON true
 		WHERE ($1 = '' OR c.requester_type = $1)
+		  AND ($3 = '' OR
+		       u.name ILIKE '%' || $3 || '%' OR
+		       u.email ILIKE '%' || $3 || '%' OR
+		       sel.brand_name ILIKE '%' || $3 || '%' OR
+		       EXISTS (
+		           SELECT 1
+		           FROM support_messages sm2
+		           JOIN support_sessions ss2 ON ss2.id = sm2.session_id
+		           WHERE ss2.conversation_id = c.id AND sm2.text_content ILIKE '%' || $3 || '%'
+		       )
+		  )
 		ORDER BY c.updated_at DESC
 	`
-	rows, err := r.db.Query(ctx, query, string(filter), staffUserID)
+	rows, err := r.db.Query(ctx, query, string(filter), staffUserID, search)
 	if err != nil {
 		return nil, err
 	}
@@ -195,16 +224,24 @@ func (r *Repository) ListConversations(ctx context.Context, filter RequesterType
 		var sCatID, sAssigned *uuid.UUID
 		var sCreated, sUpdated *time.Time
 		var unread int
+		var reqName, reqEmail, reqStore, latestText string
+		var latestAt *time.Time
 
 		if err := rows.Scan(
 			&c.ID, &reqType, &c.RequesterUserID, &c.RequesterSellerID, &c.CreatedAt, &c.UpdatedAt,
 			&sID, &sStatus, &sPriority, &sCatID, &sAssigned, &sCreated, &sUpdated,
 			&unread,
+			&reqName, &reqEmail, &reqStore, &latestText, &latestAt,
 		); err != nil {
 			return nil, err
 		}
 		c.RequesterType = RequesterType(reqType)
 		c.UnreadCount = unread
+		c.RequesterName = reqName
+		c.RequesterEmail = reqEmail
+		c.RequesterStoreName = reqStore
+		c.LatestMessageText = latestText
+		c.LatestMessageAt = latestAt
 
 		if sID != nil {
 			c.ActiveSession = &Session{
@@ -481,10 +518,20 @@ func (r *Repository) ListMessagesByConversation(ctx context.Context, conversatio
 
 	// Fetch context links
 	ctxQuery := `
-		SELECT id, message_id, context_type, context_id, created_at
-		FROM support_context_links
-		WHERE message_id = ANY($1)
-		ORDER BY message_id, created_at ASC
+		SELECT cl.id, cl.message_id, cl.context_type, cl.context_id, cl.created_at,
+		       CASE cl.context_type
+		           WHEN 'ORDER' THEN COALESCE(o.order_number, SUBSTRING(o.id::text, 1, 8))
+		           WHEN 'PRODUCT' THEN COALESCE(p.title, '')
+		           WHEN 'RETURN' THEN COALESCE(ro.order_number, SUBSTRING(ret.id::text, 1, 8))
+		           ELSE ''
+		       END AS label
+		FROM support_context_links cl
+		LEFT JOIN orders o ON cl.context_type = 'ORDER' AND o.id = cl.context_id
+		LEFT JOIN products p ON cl.context_type = 'PRODUCT' AND p.id = cl.context_id
+		LEFT JOIN returns ret ON cl.context_type = 'RETURN' AND ret.id = cl.context_id
+		LEFT JOIN orders ro ON ret.order_id = ro.id
+		WHERE cl.message_id = ANY($1)
+		ORDER BY cl.message_id, cl.created_at ASC
 	`
 	ctxRows, err := r.db.Query(ctx, ctxQuery, msgIDs)
 	if err != nil {
@@ -496,7 +543,7 @@ func (r *Repository) ListMessagesByConversation(ctx context.Context, conversatio
 	for ctxRows.Next() {
 		var cl ContextLink
 		var cType string
-		if err := ctxRows.Scan(&cl.ID, &cl.MessageID, &cType, &cl.ContextID, &cl.CreatedAt); err != nil {
+		if err := ctxRows.Scan(&cl.ID, &cl.MessageID, &cType, &cl.ContextID, &cl.CreatedAt, &cl.Label); err != nil {
 			return nil, err
 		}
 		cl.ContextType = ContextType(cType)

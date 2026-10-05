@@ -48,6 +48,7 @@ import { AdminChangePassword } from './pages/AdminChangePassword';
 import { AdminRoles } from './pages/AdminRoles';
 import { AdminStaff } from './pages/AdminStaff';
 import { AdminStaffDetail } from './pages/AdminStaffDetail';
+import { AdminSupportPage } from './pages/support/AdminSupportPage';
 import { AdminAuthProvider } from './contexts/AdminAuthContext';
 import { AdminProtectedRoute } from './components/AdminProtectedRoute';
 import { getStaffScreenVisibility } from './config/staffWorkModules';
@@ -106,6 +107,7 @@ export default function App() {
             <Route path="/inventory" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/inventory')}><AdminInventory /></AdminProtectedRoute>} />
             <Route path="/inventory/reconciliation/:id" element={<AdminProtectedRoute permission="inventory.adjust"><AdminInventoryReconciliation /></AdminProtectedRoute>} />
             <Route path="/returns" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/returns')}><AdminReturns /></AdminProtectedRoute>} />
+            <Route path="/support" element={<AdminProtectedRoute permission="support.read"><AdminSupportPage /></AdminProtectedRoute>} />
             <Route path="/returns/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/returns/receiving')}><AdminReturnReceivingQueue /></AdminProtectedRoute>} />
             <Route path="/returns/:id/receiving" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/returns/receiving')}><AdminReturnReceiving /></AdminProtectedRoute>} />
             <Route path="/refunds" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/refunds')}><AdminRefunds /></AdminProtectedRoute>} />

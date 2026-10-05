@@ -24,6 +24,7 @@ import {
   PackageCheck,
   PackageSearch,
   Search,
+  MessageSquare,
 } from 'lucide-react';
 
 import { useAdminAuth } from '../contexts/AdminAuthContext';
@@ -174,6 +175,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     { name: 'Отправления', path: '/shipments', icon: Truck },
     { name: 'Платежи покупателей', path: '/payments', icon: CreditCard },
     { name: 'Возвраты', path: '/returns', icon: RotateCcw },
+    { name: 'Поддержка', path: '/support', icon: MessageSquare, permission: 'support.read' },
     { name: 'Возмещения', path: '/refunds', icon: ReceiptText },
     { name: 'Выплаты продавцам', path: '/payouts', icon: Wallet },
   ];

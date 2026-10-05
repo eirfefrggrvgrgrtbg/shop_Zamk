@@ -341,8 +341,12 @@ func (h *Handler) ListCategories(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListConversations(w http.ResponseWriter, r *http.Request) {
 	staffUserID := auth.GetUserID(r.Context())
 	filter := RequesterType(r.URL.Query().Get("filter"))
+	search := r.URL.Query().Get("q")
+	if search == "" {
+		search = r.URL.Query().Get("search")
+	}
 
-	convs, err := h.service.ListConversations(r.Context(), filter, staffUserID)
+	convs, err := h.service.ListConversations(r.Context(), filter, search, staffUserID)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return

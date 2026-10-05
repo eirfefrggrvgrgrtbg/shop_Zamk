@@ -260,7 +260,7 @@ func TestSupport_CaseAO_AbandonedStagedUploadCreatesNoActiveSupportRequest(t *te
 	require.NoError(t, err)
 
 	// Staff lists conversations (active inbox)
-	convs, err := svc.ListConversations(ctx, "", staffID)
+	convs, err := svc.ListConversations(ctx, "", "", staffID)
 	require.NoError(t, err)
 
 	for _, c := range convs {

@@ -399,8 +399,8 @@ func (s *Service) UploadSellerAttachment(ctx context.Context, sellerID, memberUs
 
 // Staff / Admin Methods
 
-func (s *Service) ListConversations(ctx context.Context, filter RequesterType, staffUserID uuid.UUID) ([]Conversation, error) {
-	return s.repo.ListConversations(ctx, filter, staffUserID)
+func (s *Service) ListConversations(ctx context.Context, filter RequesterType, search string, staffUserID uuid.UUID) ([]Conversation, error) {
+	return s.repo.ListConversations(ctx, filter, search, staffUserID)
 }
 
 func (s *Service) GetAdminConversation(ctx context.Context, conversationID, staffUserID uuid.UUID) (*ConversationDetailResponse, error) {

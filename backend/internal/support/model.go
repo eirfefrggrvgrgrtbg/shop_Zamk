@@ -92,8 +92,13 @@ type Conversation struct {
 	UpdatedAt         time.Time     `json:"updatedAt"`
 
 	// Derived / computed properties
-	ActiveSession *Session `json:"activeSession,omitempty"`
-	UnreadCount   int      `json:"unreadCount"`
+	ActiveSession      *Session   `json:"activeSession,omitempty"`
+	UnreadCount        int        `json:"unreadCount"`
+	RequesterName      string     `json:"requesterName,omitempty"`
+	RequesterEmail     string     `json:"requesterEmail,omitempty"`
+	RequesterStoreName string     `json:"requesterStoreName,omitempty"`
+	LatestMessageText  string     `json:"latestMessageText,omitempty"`
+	LatestMessageAt    *time.Time `json:"latestMessageAt,omitempty"`
 }
 
 type Session struct {
@@ -135,6 +140,7 @@ type ContextLink struct {
 	ContextType ContextType `json:"contextType"`
 	ContextID   uuid.UUID   `json:"contextId"`
 	CreatedAt   time.Time   `json:"createdAt"`
+	Label       string      `json:"label,omitempty"`
 }
 
 type StagedAttachment struct {

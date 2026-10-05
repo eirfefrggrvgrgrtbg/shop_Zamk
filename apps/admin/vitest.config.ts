@@ -31,6 +31,7 @@ export default defineConfig({
       'src/pages/AdminStaffDetail.test.tsx',
       'src/pages/AdminSupplyReceiving.test.tsx',
       'src/components/AdminNavigationAccess.test.tsx',
+      'src/pages/support/**/*.test.{ts,tsx}',
       'src/config/**/*.test.{ts,tsx}',
       'src/utils/**/*.test.{ts,tsx}',
     ],
