@@ -154,3 +154,37 @@ func DerivePromoStatus(p *PromoCode, reservedCount, consumedCount int, now time.
 	}
 	return "active"
 }
+
+type AdminCreateCampaignRequest struct {
+	SellerID                 *uuid.UUID         `json:"sellerId,omitempty"`
+	Title                    string             `json:"title" validate:"required"`
+	Description              *string            `json:"description,omitempty"`
+	FundingMode              FundingMode        `json:"fundingMode" validate:"required"`
+	CampaignChannel          *CampaignChannel   `json:"campaignChannel,omitempty"`
+	CampaignType             *CampaignType      `json:"campaignType,omitempty"`
+	PlannedBudgetCents       *int64             `json:"plannedBudgetCents,omitempty"`
+	DiscountType             DiscountType       `json:"discountType" validate:"required"`
+	SellerDiscountBps        int                `json:"sellerDiscountBps"`
+	SellerDiscountFixedCents int64              `json:"sellerDiscountFixedCents"`
+	StartsAt                 *time.Time         `json:"startsAt,omitempty"`
+	EndsAt                   *time.Time         `json:"endsAt,omitempty"`
+}
+
+type AdminUpdateCampaignRequest struct {
+	Title              *string          `json:"title,omitempty"`
+	Description        *string          `json:"description,omitempty"`
+	Status             *CampaignStatus  `json:"status,omitempty"`
+	CampaignChannel    *CampaignChannel `json:"campaignChannel,omitempty"`
+	CampaignType       *CampaignType    `json:"campaignType,omitempty"`
+	PlannedBudgetCents *int64           `json:"plannedBudgetCents,omitempty"`
+	StartsAt           *time.Time       `json:"startsAt,omitempty"`
+	EndsAt             *time.Time       `json:"endsAt,omitempty"`
+}
+
+type AdminCreateTrackingLinkRequest struct {
+	TargetType      CampaignTargetType `json:"targetType" validate:"required"`
+	TargetProductID *uuid.UUID         `json:"targetProductId,omitempty"`
+	TargetSellerID  *uuid.UUID         `json:"targetSellerId,omitempty"`
+	LandingPath     *string            `json:"landingPath,omitempty"`
+	PromoCodeID     *uuid.UUID         `json:"promoCodeId,omitempty"`
+}

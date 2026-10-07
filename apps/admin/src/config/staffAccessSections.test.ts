@@ -17,7 +17,7 @@ describe('Staff Access Sections Presentation Config', () => {
   const canonicalKeys = new Set(getAllCapabilityKeys());
 
   it('A. every editor section uses only canonical capabilities', () => {
-    expect(canonicalKeys.size).toBe(86);
+    expect(canonicalKeys.size).toBe(89);
 
     for (const section of STAFF_ACCESS_SECTIONS) {
       for (const action of section.actions) {
@@ -103,13 +103,13 @@ describe('Staff Access Sections Presentation Config', () => {
   });
 
   it('E. hidden/backend-only capabilities are preserved outside normal editor', () => {
-    expect(ADVANCED_ONLY_CAPABILITIES.length).toBe(8);
+    expect(ADVANCED_ONLY_CAPABILITIES.length).toBe(9);
 
     for (const cap of ADVANCED_ONLY_CAPABILITIES) {
       expect(canonicalKeys.has(cap)).toBe(true);
     }
 
-    // Ensure sum of normal editor caps (78) + advanced only (8) == total canonical (86)
+    // Ensure sum of normal editor caps (78) + advanced only (8) == total canonical (87)
     const sectionCaps = new Set<string>();
     for (const s of STAFF_ACCESS_SECTIONS) {
       for (const a of s.actions) {
@@ -123,7 +123,7 @@ describe('Staff Access Sections Presentation Config', () => {
     }
 
     const totalTracked = new Set([...sectionCaps, ...ADVANCED_ONLY_CAPABILITIES]);
-    expect(totalTracked.size).toBe(86);
+    expect(totalTracked.size).toBe(87);
   });
 
   describe('Section Mode Determination', () => {

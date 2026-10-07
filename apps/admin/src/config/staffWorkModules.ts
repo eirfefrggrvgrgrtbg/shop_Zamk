@@ -10,7 +10,8 @@ export type StaffWorkModuleKey =
   | 'finance'
   | 'support'
   | 'auctions'
-  | 'analytics';
+  | 'analytics'
+  | 'marketing';
 
 export type ActionClass = 'read' | 'write' | 'destructive' | 'security';
 export type ActionCriticality = 'normal' | 'sensitive' | 'critical';
@@ -76,9 +77,9 @@ export const STAFF_SCREEN_ACCESS_RULES: StaffScreenAccessRule[] = [
   { key: 'moderation', title: 'Модерация', route: '/moderation', visibility: ['products.moderate', 'reviews.read', 'sellers.read'] },
   { key: 'catalog', title: 'Категории и бренды', route: '/catalog', visibility: ['categories.read', 'brands.read'] },
   { key: 'orders', title: 'Заказы', route: '/orders', visibility: 'orders.read' },
-  { key: 'picking', title: 'Сборка', route: '/fulfillment/picking', visibility: 'warehouse.picking' },
-  { key: 'packing', title: 'Упаковка', route: '/fulfillment/packing', visibility: 'warehouse.packing' },
-  { key: 'dispatch', title: 'Отгрузка', route: '/fulfillment/dispatch', visibility: 'warehouse.dispatch' },
+  { key: 'picking', title: 'Сборка', route: '/fulfillment/picking', visibility: ['warehouse.picking', 'fulfillment.read'] },
+  { key: 'packing', title: 'Упаковка', route: '/fulfillment/packing', visibility: ['warehouse.packing', 'fulfillment.read'] },
+  { key: 'dispatch', title: 'Отгрузка', route: '/fulfillment/dispatch', visibility: ['warehouse.dispatch', 'fulfillment.read'] },
   { key: 'orders_receiving', title: 'Приемка заказов', route: '/orders/receiving', visibility: 'warehouse.receiving' },
   { key: 'receiving', title: 'Приемка поставок', route: '/supplies/receiving', visibility: 'inventory.receipt' },
   { key: 'returns_receiving', title: 'Приемка возвратов', route: '/returns/receiving', visibility: 'warehouse.returns' },
@@ -95,6 +96,7 @@ export const STAFF_SCREEN_ACCESS_RULES: StaffScreenAccessRule[] = [
   { key: 'staff', title: 'Сотрудники', route: '/staff', visibility: 'staff.read' },
   { key: 'audit', title: 'Журнал действий', route: '/audit', visibility: 'audit.read' },
   { key: 'settings', title: 'Настройки', route: '/settings', visibility: 'settings.read' },
+  { key: 'marketing', title: 'Маркетинг', route: '/marketing', visibility: 'marketing.campaigns.read' },
 ];
 
 /**
@@ -629,6 +631,14 @@ export const STAFF_WORK_MODULES: StaffWorkModule[] = [
             surface: 'current_ui',
           },
           {
+            capability: 'fulfillment.read',
+            title: 'Просмотр сборок и отгрузок',
+            description: 'Просмотр очередей сборки, упаковки и отгрузки заказов',
+            class: 'read',
+            criticality: 'normal',
+            surface: 'current_ui',
+          },
+          {
             capability: 'warehouse.picking',
             title: 'Сборка заказов',
             description: 'Отбор товаров по сборочным листам и сканирование ZMU',
@@ -1106,6 +1116,37 @@ export const STAFF_WORK_MODULES: StaffWorkModule[] = [
             capability: 'exports.excel',
             title: 'Выгрузка в Excel',
             description: 'Экспорт аналитических и финансовых данных в таблицы',
+            class: 'write',
+            criticality: 'normal',
+            surface: 'current_ui',
+          },
+        ],
+      },
+    ],
+  },
+  // 13. Marketing
+  {
+    key: 'marketing',
+    title: 'Маркетинг и реклама',
+    description: 'Управление рекламными кампаниями и трекинговыми ссылками',
+    iconName: 'Megaphone',
+    sections: [
+      {
+        key: 'marketing_campaigns',
+        title: 'Рекламные кампании',
+        actions: [
+          {
+            capability: 'marketing.campaigns.read',
+            title: 'Просмотр рекламных кампаний',
+            description: 'Просмотр активных рекламных кампаний и ссылок',
+            class: 'read',
+            criticality: 'normal',
+            surface: 'current_ui',
+          },
+          {
+            capability: 'marketing.campaigns.write',
+            title: 'Управление рекламными кампаниями',
+            description: 'Создание и редактирование маркетинговых кампаний и трекинг-ссылок',
             class: 'write',
             criticality: 'normal',
             surface: 'current_ui',

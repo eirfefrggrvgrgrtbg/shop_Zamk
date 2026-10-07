@@ -47,6 +47,7 @@ export const ADVANCED_ONLY_CAPABILITIES: string[] = [
   'security.read',
   'storefront.manage',
   'testing.manage',
+  'fulfillment.read',
   'support.read',
   'support.respond',
   'support.close',

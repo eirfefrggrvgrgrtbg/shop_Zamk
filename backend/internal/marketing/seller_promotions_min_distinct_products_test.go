@@ -980,23 +980,29 @@ func TestMinDistinct_CaseW_ErrorContract(t *testing.T) {
 	assert.Equal(t, "min distinct products must be positive", marketing.ErrInvalidMinDistinctProducts.Error())
 }
 
-// Case X: DEV database remains strictly untouched at version 102 dirty=false.
-func TestMinDistinct_CaseX_DevDatabaseUntouched(t *testing.T) {
+// Case X: the canonical destructive-test guard rejects the development database
+// before any setup, cleanup, or fixture mutation can run.
+func TestMinDistinct_CaseX_DevDatabaseGuardRejectsMutation(t *testing.T) {
 	devURL := "postgres://zamk:zamk_password@localhost:5433/zamk?sslmode=disable"
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, devURL)
 	require.NoError(t, err)
 	defer conn.Close(ctx)
 
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
 	var devDB string
-	err = conn.QueryRow(ctx, "SELECT current_database()").Scan(&devDB)
+	err = tx.QueryRow(ctx, "SELECT current_database()").Scan(&devDB)
 	require.NoError(t, err)
 	assert.Equal(t, "zamk", devDB)
 
-	var version int
 	var dirty bool
-	err = conn.QueryRow(ctx, "SELECT version, dirty FROM schema_migrations").Scan(&version, &dirty)
+	err = tx.QueryRow(ctx, "SELECT dirty FROM schema_migrations").Scan(&dirty)
 	require.NoError(t, err)
-	assert.Equal(t, 102, version, "DEV database MUST remain at version 102")
 	assert.False(t, dirty, "DEV database MUST NOT be dirty")
+
+	err = testutil.VerifyTestDatabase(ctx, tx)
+	require.EqualError(t, err, `REFUSING DESTRUCTIVE TEST SETUP: expected database "zamk_test", connected to "zamk"`)
 }

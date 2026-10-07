@@ -54,7 +54,7 @@ func TestResolveCategoriesTx_DistinguishesNullCategoryFromMissingProduct(t *test
 	testutil.AssertTestDatabase(t, client.Pool)
 
 	repo := NewRepository(client)
-	svc := NewService(repo)
+	svc := NewService(repo, nil)
 
 	sellerID := uuid.New()
 	catID := uuid.New()
@@ -121,7 +121,7 @@ func TestInsertServerEventsTx_DeterministicIdempotency(t *testing.T) {
 	t.Cleanup(func() { client.Close() })
 	testutil.AssertTestDatabase(t, client.Pool)
 
-	svc := NewService(NewRepository(client))
+	svc := NewService(NewRepository(client), nil)
 
 	orderID := uuid.New()
 	orderItemID := uuid.New()

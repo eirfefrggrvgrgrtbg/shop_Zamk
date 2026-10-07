@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAuctionWins, createOrderForLot, createPayment } from '@zamk/api-client';
+import { getOrRenewSession } from '../lib/behavior/session';
+import { getOrCreateVisitorId } from '../lib/behavior/visitorId';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { CustomerProtectedRoute } from '../components/account/CustomerProtectedRoute';
@@ -41,8 +43,16 @@ function AuctionWinsContent() {
   const handlePay = async (lotId: string) => {
     try {
       setProcessingId(lotId);
+
+      const visitorId = getOrCreateVisitorId();
+      const sessionInfo = visitorId ? getOrRenewSession(visitorId) : null;
+      const analyticsContext = sessionInfo && visitorId ? {
+        visitorId: visitorId,
+        sessionId: sessionInfo.sessionId
+      } : undefined;
+
       // 1. Create specialized order
-      const orderRes = await createOrderForLot(lotId);
+      const orderRes = await createOrderForLot(lotId, analyticsContext);
       
       // 2. Request payment link
       const payRes = await createPayment(orderRes.OrderID);

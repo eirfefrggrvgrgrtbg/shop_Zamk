@@ -136,7 +136,7 @@ func TestAdminPickingScanRouter(t *testing.T) {
 	require.NoError(t, err)
 
 	adminReadID := insertUser("admin")
-	insertAdminWithPerms(adminReadID, []string{"orders.read"})
+	insertAdminWithPerms(adminReadID, []string{"orders.read", "fulfillment.read"})
 	adminReadTok := makeToken(adminReadID, "admin")
 
 	adminUpdateID := insertUser("admin")
@@ -152,7 +152,7 @@ func TestAdminPickingScanRouter(t *testing.T) {
 	adminShipmentCreateTok := makeToken(adminShipmentCreateID, "admin")
 
 	adminFullID := insertUser("admin")
-	insertAdminWithPerms(adminFullID, []string{"orders.read", "warehouse.picking"})
+	insertAdminWithPerms(adminFullID, []string{"orders.read", "fulfillment.read", "warehouse.picking"})
 	adminTok := makeToken(adminFullID, "admin")
 
 	type errResponse struct {
@@ -240,6 +240,50 @@ func TestAdminPickingScanRouter(t *testing.T) {
 		rr := httptest.NewRecorder()
 		r.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
+	// 3d. Admin with orders.read ONLY: order GET is 200, picking GET is 403
+	t.Run("admin with orders.read only -> order GET 200, picking GET 403", func(t *testing.T) {
+		adminOrdersOnlyID := insertUser("admin")
+		insertAdminWithPerms(adminOrdersOnlyID, []string{"orders.read"})
+		ordersOnlyTok := makeToken(adminOrdersOnlyID, "admin")
+
+		// Order read -> 200 OK
+		reqOrder := httptest.NewRequest("GET", "/api/admin/orders/"+orderID.String(), nil)
+		reqOrder.Header.Set("Authorization", "Bearer "+ordersOnlyTok)
+		rrOrder := httptest.NewRecorder()
+		r.ServeHTTP(rrOrder, reqOrder)
+		assert.Equal(t, http.StatusOK, rrOrder.Code)
+
+		// Picking read -> 403 Forbidden
+		reqPick := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking", nil)
+		reqPick.Header.Set("Authorization", "Bearer "+ordersOnlyTok)
+		rrPick := httptest.NewRecorder()
+		r.ServeHTTP(rrPick, reqPick)
+		assert.Equal(t, http.StatusForbidden, rrPick.Code)
+	})
+
+	// 3e. Admin with fulfillment.read ONLY: picking GET is 200, picking scan is 403
+	t.Run("admin with fulfillment.read only -> picking GET 200, picking scan 403", func(t *testing.T) {
+		adminFulfOnlyID := insertUser("admin")
+		insertAdminWithPerms(adminFulfOnlyID, []string{"fulfillment.read"})
+		fulfOnlyTok := makeToken(adminFulfOnlyID, "admin")
+
+		// Picking read -> 200 OK
+		reqPick := httptest.NewRequest("GET", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking", nil)
+		reqPick.Header.Set("Authorization", "Bearer "+fulfOnlyTok)
+		rrPick := httptest.NewRecorder()
+		r.ServeHTTP(rrPick, reqPick)
+		assert.Equal(t, http.StatusOK, rrPick.Code)
+
+		// Picking scan mutation -> 403 Forbidden
+		body, _ := json.Marshal(map[string]string{"code": unitCode})
+		reqScan := httptest.NewRequest("POST", "/api/admin/fulfillments/"+fulfillmentID.String()+"/picking/scan", bytes.NewReader(body))
+		reqScan.Header.Set("Authorization", "Bearer "+fulfOnlyTok)
+		reqScan.Header.Set("Content-Type", "application/json")
+		rrScan := httptest.NewRecorder()
+		r.ServeHTTP(rrScan, reqScan)
+		assert.Equal(t, http.StatusForbidden, rrScan.Code)
 	})
 
 	// 3d. Admin with warehouse.picking only (mutation permitted, no read needed) -> passes auth

@@ -2706,3 +2706,144 @@ export interface UpdateSellerPromotionRequest {
   globalUsageLimit?: number | null;
   perCustomerUsageLimit?: number | null;
 }
+
+// ---------------------------------------------------------
+// MARKETING CAMPAIGNS & TRACKING LINKS (ADS.2A)
+// ---------------------------------------------------------
+
+export type CampaignPurpose = 'advertising' | 'promotion';
+export type CampaignFundingMode = 'seller' | 'zamk' | 'cofunded';
+export type CampaignStatus = 'draft' | 'submitted' | 'counter_offered' | 'approved' | 'active' | 'ended' | 'rejected' | 'cancelled';
+export type CampaignDiscountType = 'percent' | 'fixed';
+export type CampaignChannel = 'telegram' | 'vk' | 'instagram' | 'influencer' | 'email' | 'direct' | 'search_ads';
+export type CampaignType = 'influencer' | 'drop' | 'seasonal_sale' | 'brand_awareness' | 'retargeting' | 'special_promo';
+export type CampaignTargetType = 'product' | 'seller' | 'landing';
+
+export interface AdminCampaign {
+  purpose: CampaignPurpose;
+  id: string;
+  sellerId?: string | null;
+  title: string;
+  description?: string | null;
+  fundingMode: CampaignFundingMode;
+  status: CampaignStatus;
+  campaignChannel?: CampaignChannel | null;
+  campaignType?: CampaignType | null;
+  plannedBudgetCents?: number | null;
+  discountType: CampaignDiscountType;
+  sellerDiscountBps?: number;
+  sellerDiscountFixedCents?: number;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  trackingLinkCount?: number;
+}
+
+export interface AdminCampaignTrackingLink {
+  id: string;
+  campaignId: string;
+  token: string;
+  targetType: CampaignTargetType;
+  targetProductId?: string | null;
+  targetSellerId?: string | null;
+  landingPath?: string | null;
+  promoCodeId?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAdminCampaignRequest {
+  sellerId?: string | null;
+  title: string;
+  description?: string;
+  fundingMode: CampaignFundingMode;
+  campaignChannel?: CampaignChannel;
+  campaignType?: CampaignType;
+  plannedBudgetCents?: number;
+  discountType: CampaignDiscountType;
+  sellerDiscountBps?: number;
+  sellerDiscountFixedCents?: number;
+  startsAt?: string;
+  endsAt?: string;
+}
+
+export interface UpdateAdminCampaignRequest {
+  title?: string;
+  description?: string;
+  status?: CampaignStatus;
+  campaignChannel?: CampaignChannel;
+  campaignType?: CampaignType;
+  plannedBudgetCents?: number;
+  startsAt?: string;
+  endsAt?: string;
+}
+
+export interface CreateAdminTrackingLinkRequest {
+  targetType: CampaignTargetType;
+  targetProductId?: string;
+  targetSellerId?: string;
+  landingPath?: string;
+  promoCodeId?: string;
+}
+
+// ---------------------------------------------------------
+// MARKETING ANALYTICS & OVERVIEW (ADS.3A)
+// ---------------------------------------------------------
+
+export interface AdminAnalyticsMetrics {
+  visits: number;
+  paidOrders: number;
+  soldUnits: number;
+  revenueCents: number;
+  aovCents: number;
+  conversionRateBps: number;
+  newCustomers: number;
+  repeatCustomers: number;
+  returnsCount: number;
+  returnedUnits: number;
+  returnedAmountCents: number;
+}
+
+export interface AdminMarketingOverviewResponse {
+  current: AdminAnalyticsMetrics;
+  previous: AdminAnalyticsMetrics;
+}
+
+export interface AdminSourceMetrics {
+  conversionRateBps?: number;
+  source: string;
+  visits: number;
+  paidOrders: number;
+  revenueCents: number;
+}
+
+export interface AdminMarketingSourcesResponse {
+  sources: AdminSourceMetrics[];
+}
+
+export interface AdminCampaignMetrics {
+  status?: CampaignStatus;
+  plannedBudgetCents?: number | null;
+  conversionRateBps?: number;
+  campaignId: string | null;
+  name: string;
+  visits: number;
+  paidOrders: number;
+  revenueCents: number;
+}
+
+export interface AdminMarketingCampaignsAnalyticsResponse {
+  campaigns: AdminCampaignMetrics[];
+}
+
+export interface TrendDataPoint {
+  date: string;
+  revenueCents: number;
+  paidOrders: number;
+}
+
+export interface AdminMarketingTrendResponse {
+  trend: TrendDataPoint[];
+}

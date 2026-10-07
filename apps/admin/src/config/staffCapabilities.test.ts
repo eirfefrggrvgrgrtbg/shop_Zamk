@@ -9,7 +9,7 @@ import {
   type StaffCapabilityGroupKey,
 } from './staffCapabilities';
 
-// Canonical 86 backend capabilities for ZAMK staff RBAC
+// Canonical 89 backend capabilities for ZAMK staff RBAC
 const EXPECTED_CAPABILITIES: string[] = [
   'analytics.read',
   'auctions.cancel',
@@ -36,11 +36,14 @@ const EXPECTED_CAPABILITIES: string[] = [
   'complaints.resolve',
   'dashboard.read',
   'exports.excel',
+  'fulfillment.read',
   'inventory.adjust',
   'inventory.movements.read',
   'inventory.read',
   'inventory.receipt',
   'inventory.write_off',
+  'marketing.campaigns.read',
+  'marketing.campaigns.write',
   'orders.read',
   'orders.update_status',
   'payments.read',
@@ -111,18 +114,19 @@ const EXPECTED_GROUPS: StaffCapabilityGroupKey[] = [
   'auctions',
   'support',
   'analytics',
+  'marketing',
 ];
 
 describe('Staff Capability Presentation Config (EMP.1C2A)', () => {
-  it('contains exactly 86 capabilities', () => {
-    expect(STAFF_CAPABILITIES.length).toBe(86);
-    expect(getAllCapabilityKeys().length).toBe(86);
+  it('contains exactly 89 capabilities', () => {
+    expect(STAFF_CAPABILITIES.length).toBe(89);
+    expect(getAllCapabilityKeys().length).toBe(89);
   });
 
   it('contains no duplicate keys', () => {
     const keys = STAFF_CAPABILITIES.map((c) => c.key);
     const uniqueKeys = new Set(keys);
-    expect(uniqueKeys.size).toBe(86);
+    expect(uniqueKeys.size).toBe(89);
   });
 
   it('matches canonical backend registry capabilities exactly', () => {
@@ -131,8 +135,8 @@ describe('Staff Capability Presentation Config (EMP.1C2A)', () => {
     expect(configKeys).toEqual(expectedKeysSorted);
   });
 
-  it('defines exactly 11 deterministic groups with non-empty Russian labels', () => {
-    expect(STAFF_CAPABILITY_GROUPS.length).toBe(11);
+  it('defines exactly 12 deterministic groups with non-empty Russian labels', () => {
+    expect(STAFF_CAPABILITY_GROUPS.length).toBe(12);
     const groupKeys = STAFF_CAPABILITY_GROUPS.map((g) => g.key);
     expect(groupKeys).toEqual(EXPECTED_GROUPS);
 
@@ -193,7 +197,7 @@ describe('Staff Capability Presentation Config (EMP.1C2A)', () => {
       }
       totalFromGroups += groupCaps.length;
     }
-    expect(totalFromGroups).toBe(86);
+    expect(totalFromGroups).toBe(89);
   });
 
   it('provides O(1) map access for all capabilities', () => {

@@ -11,8 +11,14 @@ type CreateOrderRequest struct {
 	CustomerPhone    string    `json:"customerPhone" validate:"required"`
 	CustomerEmail    string    `json:"customerEmail" validate:"required,email"`
 	DeliveryAddress  string    `json:"deliveryAddress" validate:"required"`
-	DeliveryMethodID uuid.UUID `json:"deliveryMethodId" validate:"required"`
-	PromoCode        *string   `json:"promoCode,omitempty"`
+	DeliveryMethodID uuid.UUID            `json:"deliveryMethodId" validate:"required"`
+	PromoCode        *string              `json:"promoCode,omitempty"`
+	AnalyticsContext *AnalyticsContextDTO `json:"analyticsContext,omitempty"`
+}
+
+type AnalyticsContextDTO struct {
+	VisitorID uuid.UUID `json:"visitorId"`
+	SessionID uuid.UUID `json:"sessionId"`
 }
 
 

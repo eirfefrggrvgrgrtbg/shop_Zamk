@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/behavior"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/ratelimit"
 )
@@ -31,6 +32,7 @@ type Service struct {
 	notifications *notifications.Service
 	rateLimiter   *ratelimit.Limiter
 	hub           *SSEHub
+	behaviorSvc   *behavior.Service
 }
 
 func NewService(repo *Repository, notifs *notifications.Service, limiter *ratelimit.Limiter, hub *SSEHub) *Service {
@@ -40,6 +42,11 @@ func NewService(repo *Repository, notifs *notifications.Service, limiter *rateli
 		rateLimiter:   limiter,
 		hub:           hub,
 	}
+}
+
+func (s *Service) WithBehavior(b *behavior.Service) *Service {
+	s.behaviorSvc = b
+	return s
 }
 
 func (s *Service) PlaceBid(ctx context.Context, lotID, userID uuid.UUID, req BidRequest) (*BidResponse, error) {
@@ -610,7 +617,7 @@ type CreateAuctionOrderResult struct {
 	AmountCents int64
 }
 
-func (s *Service) CreateOrderForLot(ctx context.Context, lotID, userID uuid.UUID) (*CreateAuctionOrderResult, error) {
+func (s *Service) CreateOrderForLot(ctx context.Context, lotID, userID uuid.UUID, req CreateAuctionOrderRequest) (*CreateAuctionOrderResult, error) {
 	var result CreateAuctionOrderResult
 
 	err := s.repo.ExecTx(ctx, func(tx pgx.Tx) error {
@@ -663,6 +670,20 @@ func (s *Service) CreateOrderForLot(ctx context.Context, lotID, userID uuid.UUID
 
 		if err := s.repo.CreateAuctionOrderTx(ctx, tx, orderID, userID, lot.AuctionID, lotID, amount); err != nil {
 			return err
+		}
+
+		if s.behaviorSvc != nil {
+			var visitorID *uuid.UUID
+			var sessionID *uuid.UUID
+
+			if req.AnalyticsContext != nil {
+				visitorID = &req.AnalyticsContext.VisitorID
+				sessionID = &req.AnalyticsContext.SessionID
+			}
+
+			if _, errAttr := s.behaviorSvc.RecordOrderAttributionTx(ctx, tx, orderID, userID, visitorID, sessionID, nil, time.Now().UTC()); errAttr != nil {
+				return errAttr
+			}
 		}
 
 		result.OrderID = orderID

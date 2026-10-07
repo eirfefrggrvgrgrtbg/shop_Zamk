@@ -57,7 +57,7 @@ export function AdminPackingDetail() {
   }, [id]);
 
   const handleConfirmPacking = async () => {
-    if (!id || isPacking) return;
+    if (!id || isPacking || !canPack) return;
 
     setIsPacking(true);
     setPackError(null);

@@ -2,10 +2,14 @@ package marketing
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,14 +18,16 @@ import (
 const RequiredSalesEligibilityThreshold = 35
 
 type Service struct {
-	repo *Repository
-	pool *pgxpool.Pool
+	repo      *Repository
+	pool      *pgxpool.Pool
+	Analytics *AnalyticsService
 }
 
 func NewService(repo *Repository, pool *pgxpool.Pool) *Service {
 	return &Service{
-		repo: repo,
-		pool: pool,
+		repo:      repo,
+		pool:      pool,
+		Analytics: NewAnalyticsService(NewAnalyticsRepository(pool)),
 	}
 }
 
@@ -49,8 +55,9 @@ func (s *Service) GetSellerEligibility(ctx context.Context, sellerID uuid.UUID) 
 // CreateSellerCampaign creates a purely seller-funded campaign (no ZAMK approval required).
 func (s *Service) CreateSellerCampaign(ctx context.Context, sellerID uuid.UUID, req CreateSellerCampaignRequest) (*MarketingCampaign, error) {
 	campaign := &MarketingCampaign{
+		Purpose:                  CampaignPurposePromotion,
 		ID:                       uuid.New(),
-		SellerID:                 sellerID,
+		SellerID:                 &sellerID,
 		Title:                    strings.TrimSpace(req.Title),
 		Description:              req.Description,
 		FundingMode:              FundingModeSeller,
@@ -87,8 +94,9 @@ func (s *Service) CreateCofundedApplication(ctx context.Context, sellerID uuid.U
 	}
 
 	campaign := &MarketingCampaign{
+		Purpose:                     CampaignPurposePromotion,
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID:                    &sellerID,
 		Title:                       strings.TrimSpace(req.Title),
 		Description:                 req.Description,
 		FundingMode:                 FundingModeCofunded,
@@ -118,7 +126,7 @@ func (s *Service) SubmitCampaign(ctx context.Context, sellerID uuid.UUID, campai
 	if err != nil {
 		return nil, err
 	}
-	if c.SellerID != sellerID {
+	if c.SellerID == nil || *c.SellerID != sellerID {
 		return nil, ErrSellerUnauthorized
 	}
 	if c.Status != CampaignStatusDraft {
@@ -200,7 +208,7 @@ func (s *Service) SellerAcceptCounterOffer(ctx context.Context, sellerID uuid.UU
 	if err != nil {
 		return nil, err
 	}
-	if c.SellerID != sellerID {
+	if c.SellerID == nil || *c.SellerID != sellerID {
 		return nil, ErrSellerUnauthorized
 	}
 	if c.Status != CampaignStatusCounterOffered {
@@ -220,7 +228,7 @@ func (s *Service) SellerRejectCounterOffer(ctx context.Context, sellerID uuid.UU
 	if err != nil {
 		return nil, err
 	}
-	if c.SellerID != sellerID {
+	if c.SellerID == nil || *c.SellerID != sellerID {
 		return nil, ErrSellerUnauthorized
 	}
 	if c.Status != CampaignStatusCounterOffered {
@@ -240,7 +248,10 @@ func (s *Service) CreatePromoCode(ctx context.Context, sellerID uuid.UUID, req C
 	if err != nil {
 		return nil, err
 	}
-	if c.SellerID != sellerID {
+	if c.Purpose != CampaignPurposePromotion {
+		return nil, ErrCampaignNotFound
+	}
+	if c.SellerID == nil || *c.SellerID != sellerID {
 		return nil, ErrSellerUnauthorized
 	}
 
@@ -360,6 +371,9 @@ func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 	campaign, err := s.repo.GetCampaignForUpdateTx(ctx, tx, promo.CampaignID)
 	if err != nil {
 		return nil, err
+	}
+	if campaign.Purpose != CampaignPurposePromotion {
+		return nil, ErrPromoNotFound
 	}
 	if campaign.Status != CampaignStatusActive && campaign.Status != CampaignStatusApproved {
 		return nil, ErrPromoInactive
@@ -1101,8 +1115,9 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 
 	// 1. Backing campaign: funding_mode = seller, status = active, zero ZAMK authority
 	campaign := &MarketingCampaign{
+		Purpose:                     CampaignPurposePromotion,
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID:                    &sellerID,
 		Title:                       "Промокод " + code,
 		FundingMode:                 FundingModeSeller,
 		Status:                      CampaignStatusActive,
@@ -1113,8 +1128,8 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 		RequestedZamkBudgetCapCents: 0,
 		ApprovedZamkShareBps:        0,
 		ApprovedZamkBudgetCapCents:  0,
-		ZamkReservedCents:          0,
-		ZamkSpentCents:             0,
+		ZamkReservedCents:           0,
+		ZamkSpentCents:              0,
 	}
 	if req.DiscountType == DiscountTypePercent {
 		campaign.SellerDiscountBps = req.DiscountValueBps
@@ -1455,4 +1470,376 @@ func (s *Service) UpdateSellerPromotion(ctx context.Context, sellerID, promoID u
 		UpdatedAt:               promo.UpdatedAt,
 		Status:                  DerivePromoStatus(promo, reservedCount, consumedCount, now),
 	}, nil
+}
+
+// ValidateLandingPath checks that a landing path is an internal Shop absolute path only.
+func ValidateLandingPath(path string) (string, error) {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return "", ErrInvalidLandingPath
+	}
+	if !strings.HasPrefix(trimmed, "/") {
+		return "", ErrInvalidLandingPath
+	}
+	if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/\\") || strings.HasPrefix(trimmed, "\\") {
+		return "", ErrInvalidLandingPath
+	}
+	if strings.Contains(trimmed, "\\") || strings.Contains(trimmed, " ") {
+		return "", ErrInvalidLandingPath
+	}
+
+	for i := 0; i < len(trimmed); i++ {
+		c := trimmed[i]
+		if c < 32 || c == 127 {
+			return "", ErrInvalidLandingPath
+		}
+	}
+
+	unescaped, err := url.PathUnescape(trimmed)
+	if err != nil {
+		return "", ErrInvalidLandingPath
+	}
+	if strings.HasPrefix(unescaped, "//") || strings.HasPrefix(unescaped, "/\\") || strings.Contains(unescaped, "\\") {
+		return "", ErrInvalidLandingPath
+	}
+	for i := 0; i < len(unescaped); i++ {
+		c := unescaped[i]
+		if c < 32 || c == 127 {
+			return "", ErrInvalidLandingPath
+		}
+	}
+
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return "", ErrInvalidLandingPath
+	}
+	if u.Scheme != "" || u.Host != "" || u.User != nil {
+		return "", ErrInvalidLandingPath
+	}
+	if !strings.HasPrefix(u.Path, "/") || strings.HasPrefix(u.Path, "//") {
+		return "", ErrInvalidLandingPath
+	}
+
+	return trimmed, nil
+}
+
+// GenerateTrackingToken generates a cryptographically strong URL-safe token (192 bits entropy).
+func GenerateTrackingToken() (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("failed to generate random token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// Slugify generates a URL-friendly descriptive reporting slug from title.
+func Slugify(s string) string {
+	var sb strings.Builder
+	lastHyphen := false
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			sb.WriteRune(r)
+			lastHyphen = false
+		} else if !lastHyphen {
+			sb.WriteRune('-')
+			lastHyphen = true
+		}
+	}
+	res := strings.Trim(sb.String(), "-")
+	if res == "" {
+		return "campaign"
+	}
+	if len(res) > 64 {
+		res = res[:64]
+	}
+	return res
+}
+
+// ValidateTrackingLink verifies exact-one target configuration and safe landing path.
+func ValidateTrackingLink(link *CampaignTrackingLink) error {
+	hasProduct := link.TargetProductID != nil
+	hasSeller := link.TargetSellerID != nil
+	hasLanding := link.LandingPath != nil && strings.TrimSpace(*link.LandingPath) != ""
+
+	switch link.TargetType {
+	case CampaignTargetProduct:
+		if !hasProduct || hasSeller || hasLanding {
+			return ErrInvalidTargetConfig
+		}
+	case CampaignTargetSeller:
+		if !hasSeller || hasProduct || hasLanding {
+			return ErrInvalidTargetConfig
+		}
+	case CampaignTargetLanding:
+		if !hasLanding || hasProduct || hasSeller {
+			return ErrInvalidTargetConfig
+		}
+		cleanPath, err := ValidateLandingPath(*link.LandingPath)
+		if err != nil {
+			return err
+		}
+		link.LandingPath = &cleanPath
+	default:
+		return ErrInvalidTargetConfig
+	}
+	return nil
+}
+
+// CreateAdminCampaign creates a new marketing campaign by an admin.
+func (s *Service) CreateAdminCampaign(ctx context.Context, campaign *MarketingCampaign) error {
+	campaign.Purpose = CampaignPurposeAdvertising
+	if campaign.ID == uuid.Nil {
+		campaign.ID = uuid.New()
+	}
+	if campaign.FundingMode == FundingModeZamk {
+		if campaign.RequestedZamkShareBps == 0 {
+			campaign.RequestedZamkShareBps = 1000 // default 10%
+		}
+		if campaign.ApprovedZamkShareBps == 0 && (campaign.Status == CampaignStatusApproved || campaign.Status == CampaignStatusActive) {
+			campaign.ApprovedZamkShareBps = campaign.RequestedZamkShareBps
+		}
+		if campaign.RequestedZamkBudgetCapCents == 0 {
+			if campaign.PlannedBudgetCents != nil && *campaign.PlannedBudgetCents > 0 {
+				campaign.RequestedZamkBudgetCapCents = *campaign.PlannedBudgetCents
+			} else {
+				campaign.RequestedZamkBudgetCapCents = 100000000 // default 1M rub
+			}
+		}
+		if campaign.ApprovedZamkBudgetCapCents == 0 && (campaign.Status == CampaignStatusApproved || campaign.Status == CampaignStatusActive) {
+			campaign.ApprovedZamkBudgetCapCents = campaign.RequestedZamkBudgetCapCents
+		}
+	} else if campaign.FundingMode == FundingModeSeller {
+		if campaign.SellerDiscountBps == 0 && campaign.SellerDiscountFixedCents == 0 && campaign.DiscountType == DiscountTypePercent {
+			campaign.SellerDiscountBps = 1000
+		}
+	}
+	if err := ValidateCampaign(campaign); err != nil {
+		return err
+	}
+	return s.repo.CreateCampaign(ctx, campaign)
+}
+
+// CreateTrackingLink creates a new tracking link enforcing exact-one target integrity and generating a token.
+func (s *Service) CreateTrackingLink(ctx context.Context, link *CampaignTrackingLink) error {
+	campaign, err := s.repo.GetCampaignByID(ctx, link.CampaignID)
+	if err != nil {
+		return err
+	}
+
+	if link.PromoCodeID != nil {
+		promo, err := s.repo.GetPromoCodeByID(ctx, *link.PromoCodeID)
+		if err != nil {
+			return err
+		}
+		// If campaign belongs to a seller, promo must belong to same seller
+		if campaign.SellerID != nil && promo.SellerID != *campaign.SellerID {
+			return ErrSellerUnauthorized
+		}
+	}
+
+	if err := ValidateTrackingLink(link); err != nil {
+		return err
+	}
+
+	if link.ID == uuid.Nil {
+		link.ID = uuid.New()
+	}
+	link.IsActive = true
+	now := time.Now().UTC()
+	link.CreatedAt = now
+	link.UpdatedAt = now
+
+	// Try inserting with token generation retry
+	const maxRetries = 5
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if link.Token == "" {
+			tok, err := GenerateTrackingToken()
+			if err != nil {
+				return err
+			}
+			link.Token = tok
+		}
+
+		err := s.repo.CreateCampaignTrackingLink(ctx, link)
+		if err == nil {
+			return nil
+		}
+		// If duplicate token, generate fresh token and retry
+		link.Token = ""
+	}
+
+	return errors.New("failed to generate unique tracking link token")
+}
+
+// ResolveTrackingLink resolves a tracking link token to its destination URL.
+func (s *Service) ResolveTrackingLink(ctx context.Context, token string, baseURL string) (string, error) {
+	link, err := s.repo.GetTrackingLinkByToken(ctx, token)
+	if err != nil {
+		return "", err
+	}
+	if !link.IsActive {
+		return "", ErrTrackingLinkDisabled
+	}
+
+	campaign, err := s.repo.GetCampaignByID(ctx, link.CampaignID)
+	if err != nil {
+		return "", err
+	}
+
+	// Only active or approved campaigns can be tracked
+	if campaign.Status != CampaignStatusActive && campaign.Status != CampaignStatusApproved {
+		return "", ErrCampaignNotActive
+	}
+
+	now := time.Now().UTC()
+	if campaign.StartsAt != nil && now.Before(*campaign.StartsAt) {
+		return "", ErrCampaignNotStarted
+	}
+	if campaign.EndsAt != nil && now.After(*campaign.EndsAt) {
+		return "", ErrCampaignExpired
+	}
+
+	cleanBase := strings.TrimRight(baseURL, "/")
+	targetURL := cleanBase
+
+	switch link.TargetType {
+	case CampaignTargetProduct:
+		if link.TargetProductID != nil {
+			targetURL = fmt.Sprintf("%s/product/%s", cleanBase, link.TargetProductID.String())
+		}
+	case CampaignTargetSeller:
+		if link.TargetSellerID != nil {
+			targetURL = fmt.Sprintf("%s/designer/%s", cleanBase, link.TargetSellerID.String())
+		}
+	case CampaignTargetLanding:
+		if link.LandingPath != nil {
+			cleanPath, err := ValidateLandingPath(*link.LandingPath)
+			if err != nil {
+				return "", err
+			}
+			targetURL = fmt.Sprintf("%s%s", cleanBase, cleanPath)
+		}
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return targetURL, nil
+	}
+
+	q := u.Query()
+	utmSource := "zamk_tracking"
+	if campaign.CampaignChannel != nil && *campaign.CampaignChannel != "" {
+		utmSource = string(*campaign.CampaignChannel)
+	}
+	utmMedium := "referral"
+	if campaign.CampaignType != nil && *campaign.CampaignType != "" {
+		utmMedium = string(*campaign.CampaignType)
+	}
+	utmCampaign := Slugify(campaign.Title)
+
+	q.Set("utm_source", utmSource)
+	q.Set("utm_medium", utmMedium)
+	q.Set("utm_campaign", utmCampaign)
+	q.Set("zamk_token", link.Token)
+	u.RawQuery = q.Encode()
+
+	return u.String(), nil
+}
+
+// ResolveCampaignToken resolves a token directly to a trusted Campaign ID if valid.
+func (s *Service) ResolveCampaignToken(ctx context.Context, token string) (*uuid.UUID, error) {
+	link, err := s.repo.GetTrackingLinkByToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if !link.IsActive {
+		return nil, ErrTrackingLinkDisabled
+	}
+
+	campaign, err := s.repo.GetCampaignByID(ctx, link.CampaignID)
+	if err != nil {
+		return nil, err
+	}
+	if campaign.Status != CampaignStatusActive && campaign.Status != CampaignStatusApproved {
+		return nil, ErrCampaignNotActive
+	}
+
+	now := time.Now().UTC()
+	if campaign.StartsAt != nil && now.Before(*campaign.StartsAt) {
+		return nil, ErrCampaignNotStarted
+	}
+	if campaign.EndsAt != nil && now.After(*campaign.EndsAt) {
+		return nil, ErrCampaignExpired
+	}
+	return &campaign.ID, nil
+}
+
+// ListAdminCampaigns lists campaigns with link counts.
+func (s *Service) ListAdminCampaigns(ctx context.Context) ([]CampaignDetailView, error) {
+	return s.repo.ListAdminCampaigns(ctx)
+}
+
+// GetAdminCampaign gets campaign detail with link counts.
+func (s *Service) GetAdminCampaign(ctx context.Context, id uuid.UUID) (*CampaignDetailView, error) {
+	return s.repo.GetAdminCampaign(ctx, id)
+}
+
+// UpdateAdminCampaign updates campaign fields.
+func (s *Service) UpdateAdminCampaign(ctx context.Context, id uuid.UUID, req AdminUpdateCampaignRequest) (*CampaignDetailView, error) {
+	campaign, err := s.repo.GetCampaignByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if campaign.Purpose != CampaignPurposeAdvertising {
+		return nil, ErrCampaignNotFound
+	}
+
+	if req.Title != nil {
+		if strings.TrimSpace(*req.Title) == "" {
+			return nil, fmt.Errorf("campaign title cannot be empty")
+		}
+		campaign.Title = *req.Title
+	}
+	if req.Description != nil {
+		campaign.Description = req.Description
+	}
+	if req.Status != nil {
+		campaign.Status = *req.Status
+	}
+	if req.CampaignChannel != nil {
+		campaign.CampaignChannel = req.CampaignChannel
+	}
+	if req.CampaignType != nil {
+		campaign.CampaignType = req.CampaignType
+	}
+	if req.PlannedBudgetCents != nil {
+		campaign.PlannedBudgetCents = req.PlannedBudgetCents
+	}
+	if req.StartsAt != nil {
+		campaign.StartsAt = req.StartsAt
+	}
+	if req.EndsAt != nil {
+		campaign.EndsAt = req.EndsAt
+	}
+
+	if err := ValidateCampaign(campaign); err != nil {
+		return nil, err
+	}
+
+	if err := s.repo.UpdateCampaign(ctx, campaign); err != nil {
+		return nil, err
+	}
+
+	return s.repo.GetAdminCampaign(ctx, id)
+}
+
+// ListCampaignTrackingLinks lists tracking links for a campaign.
+func (s *Service) ListCampaignTrackingLinks(ctx context.Context, campaignID uuid.UUID) ([]CampaignTrackingLink, error) {
+	return s.repo.ListCampaignTrackingLinks(ctx, campaignID)
+}
+
+// DisableTrackingLink disables a tracking link.
+func (s *Service) DisableTrackingLink(ctx context.Context, campaignID, linkID uuid.UUID) (*CampaignTrackingLink, error) {
+	return s.repo.DisableTrackingLink(ctx, campaignID, linkID)
 }

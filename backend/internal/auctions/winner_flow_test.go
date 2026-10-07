@@ -113,25 +113,25 @@ func TestWinnerFlow(t *testing.T) {
 	_ = repo.CreateLot(ctx, lot3)
 
 	// Test 1: Non-winner rejected
-	_, err = svc.CreateOrderForLot(ctx, lot1.ID, nonWinnerID)
+	_, err = svc.CreateOrderForLot(ctx, lot1.ID, nonWinnerID, CreateAuctionOrderRequest{})
 	if err == nil || err.Error() != "not the winner of this lot" {
 		t.Fatalf("Expected non-winner error, got: %v", err)
 	}
 
 	// Test 2: Expired deadline rejected
-	_, err = svc.CreateOrderForLot(ctx, lot2.ID, winnerID)
+	_, err = svc.CreateOrderForLot(ctx, lot2.ID, winnerID, CreateAuctionOrderRequest{})
 	if err == nil || err.Error() != "payment deadline expired" {
 		t.Fatalf("Expected deadline expired error, got: %v", err)
 	}
 
 	// Test 3: Wrong status rejected
-	_, err = svc.CreateOrderForLot(ctx, lot3.ID, winnerID)
+	_, err = svc.CreateOrderForLot(ctx, lot3.ID, winnerID, CreateAuctionOrderRequest{})
 	if err == nil || err.Error() != "lot is not pending payment" {
 		t.Fatalf("Expected lot not pending payment error, got: %v", err)
 	}
 
 	// Test 4: Winner can create order
-	res, err := svc.CreateOrderForLot(ctx, lot1.ID, winnerID)
+	res, err := svc.CreateOrderForLot(ctx, lot1.ID, winnerID, CreateAuctionOrderRequest{})
 	if err != nil {
 		t.Fatalf("Expected success, got: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestWinnerFlow(t *testing.T) {
 	}
 
 	// Test 5: Existing order returned idempotently
-	res2, err := svc.CreateOrderForLot(ctx, lot1.ID, winnerID)
+	res2, err := svc.CreateOrderForLot(ctx, lot1.ID, winnerID, CreateAuctionOrderRequest{})
 	if err != nil {
 		t.Fatalf("Expected idempotent success, got: %v", err)
 	}

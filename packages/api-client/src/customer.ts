@@ -37,7 +37,7 @@ export const clearCart = async (): Promise<void> => {
   return request<void>('DELETE', '/customer/cart');
 };
 
-export const createOrder = async (input: { customerName: string; customerPhone: string; customerEmail: string; deliveryAddress: string; deliveryMethodId: string }, idempotencyKey?: string): Promise<Order> => {
+export const createOrder = async (input: { customerName: string; customerPhone: string; customerEmail: string; deliveryAddress: string; deliveryMethodId: string; analyticsContext?: { visitorId: string, sessionId: string } }, idempotencyKey?: string): Promise<Order> => {
   const headers: Record<string, string> = {};
   if (idempotencyKey) {
     headers['Idempotency-Key'] = idempotencyKey;
@@ -216,8 +216,8 @@ export const getAuctionWins = async (): Promise<any[]> => {
   return res?.items || (Array.isArray(res) ? res : []);
 };
 
-export const createOrderForLot = async (lotId: string): Promise<{ OrderID: string; AmountCents: number }> => {
-  return request<{ OrderID: string; AmountCents: number }>('POST', `/customer/auction-lots/${lotId}/create-order`);
+export const createOrderForLot = async (lotId: string, analyticsContext?: { visitorId: string, sessionId: string }): Promise<{ OrderID: string; AmountCents: number }> => {
+  return request<{ OrderID: string; AmountCents: number }>('POST', `/customer/auction-lots/${lotId}/create-order`, { body: { analyticsContext } });
 };
 
 export const getCustomerNotifications = async (limit = 20, offset = 0): Promise<import('./types').PaginatedNotifications> => {

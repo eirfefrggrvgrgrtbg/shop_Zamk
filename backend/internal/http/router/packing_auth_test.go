@@ -134,7 +134,7 @@ func TestAdminPackingRouter(t *testing.T) {
 	require.NoError(t, err)
 
 	adminReadID := insertUser("admin")
-	insertAdminWithPerms(adminReadID, []string{"orders.read"})
+	insertAdminWithPerms(adminReadID, []string{"orders.read", "fulfillment.read"})
 	adminReadTok := makeToken(adminReadID, "admin")
 
 	adminPackID := insertUser("admin")

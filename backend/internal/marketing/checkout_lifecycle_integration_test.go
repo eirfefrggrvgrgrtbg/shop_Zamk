@@ -33,7 +33,7 @@ func TestMatrixA_ConcurrentGlobalLimit(t *testing.T) {
 	limit := 1
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeSeller, marketing.DiscountTypePercent, 1000, 0, 0, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "GLOBAL1", marketing.DiscountTypePercent, 1000, 0, 0, &limit, 10, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("GLOBAL1%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 1000, 0, 0, &limit, 10, false)
 
 	user1 := createTestUser(t, client, "u1")
 	user2 := createTestUser(t, client, "u2")
@@ -48,7 +48,7 @@ func TestMatrixA_ConcurrentGlobalLimit(t *testing.T) {
 		OrderItemID:        item1ID,
 		ProductID:          prod1ID,
 		ProductVariantID:   var1ID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 100000,
 		Quantity:           1,
 	}}
@@ -56,7 +56,7 @@ func TestMatrixA_ConcurrentGlobalLimit(t *testing.T) {
 		OrderItemID:        item2ID,
 		ProductID:          prod2ID,
 		ProductVariantID:   var2ID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 100000,
 		Quantity:           1,
 	}}
@@ -124,7 +124,7 @@ func TestMatrixB_ConcurrentCustomerLimit(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeSeller, marketing.DiscountTypePercent, 1000, 0, 0, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "CUSTLIMIT1", marketing.DiscountTypePercent, 1000, 0, 0, nil, 1, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("CUSTLIMIT1%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 1000, 0, 0, nil, 1, false)
 
 	user := createTestUser(t, client, "cust1")
 	order1 := createTestOrder(t, client, user)
@@ -138,7 +138,7 @@ func TestMatrixB_ConcurrentCustomerLimit(t *testing.T) {
 		OrderItemID:        item1ID,
 		ProductID:          prod1ID,
 		ProductVariantID:   var1ID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 100000,
 		Quantity:           1,
 	}}
@@ -146,7 +146,7 @@ func TestMatrixB_ConcurrentCustomerLimit(t *testing.T) {
 		OrderItemID:        item2ID,
 		ProductID:          prod2ID,
 		ProductVariantID:   var2ID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 100000,
 		Quantity:           1,
 	}}
@@ -215,7 +215,7 @@ func TestMatrixC_ConcurrentPlatformBudgetContention(t *testing.T) {
 	// Budget cap: 600 RUB (60,000 cents). Subsidy per order of 5000 RUB @ 10% is 500 RUB (50,000 cents).
 	// Two orders would require 100,000 cents, so only 1 can succeed!
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 60000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "BUDGETCAP1", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("BUDGETCAP1%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user1 := createTestUser(t, client, "b1")
 	user2 := createTestUser(t, client, "b2")
@@ -230,7 +230,7 @@ func TestMatrixC_ConcurrentPlatformBudgetContention(t *testing.T) {
 		OrderItemID:        item1ID,
 		ProductID:          prod1ID,
 		ProductVariantID:   var1ID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -238,7 +238,7 @@ func TestMatrixC_ConcurrentPlatformBudgetContention(t *testing.T) {
 		OrderItemID:        item2ID,
 		ProductID:          prod2ID,
 		ProductVariantID:   var2ID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -305,7 +305,7 @@ func TestMatrixD_DuplicatePaymentSuccessWebhook(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 200000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "DUPWEBHOOK1", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("DUPWEBHOOK1%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "dupu")
 	orderID := createTestOrder(t, client, user)
@@ -317,7 +317,7 @@ func TestMatrixD_DuplicatePaymentSuccessWebhook(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -363,7 +363,7 @@ func TestMatrixE_DuplicatePaymentFailureWebhook(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 200000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "DUPFAIL1", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("DUPFAIL1%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "dupfailu")
 	orderID := createTestOrder(t, client, user)
@@ -375,7 +375,7 @@ func TestMatrixE_DuplicatePaymentFailureWebhook(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -421,7 +421,7 @@ func TestMatrixF_SuccessVsFailureRace(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 200000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RACECONS1", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RACECONS1%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "raceu")
 	orderID := createTestOrder(t, client, user)
@@ -433,7 +433,7 @@ func TestMatrixF_SuccessVsFailureRace(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -480,7 +480,7 @@ func TestMatrixG_ConcurrentFirstOrderPromo(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeSeller, marketing.DiscountTypePercent, 1000, 0, 0, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "FIRSTORDER1", marketing.DiscountTypePercent, 1000, 0, 0, nil, 5, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("FIRSTORDER1%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 1000, 0, 0, nil, 5, true)
 
 	user := createTestUser(t, client, "newcust")
 	order1 := createTestOrder(t, client, user)
@@ -494,7 +494,7 @@ func TestMatrixG_ConcurrentFirstOrderPromo(t *testing.T) {
 		OrderItemID:        item1ID,
 		ProductID:          prod1ID,
 		ProductVariantID:   var1ID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 100000,
 		Quantity:           1,
 	}}
@@ -502,7 +502,7 @@ func TestMatrixG_ConcurrentFirstOrderPromo(t *testing.T) {
 		OrderItemID:        item2ID,
 		ProductID:          prod2ID,
 		ProductVariantID:   var2ID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 100000,
 		Quantity:           1,
 	}}
@@ -563,7 +563,7 @@ func TestMatrixH_ReleasedUsageCannotDoubleDecrementBudget(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 200000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "DOUBLEDEC1", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("DBLDEC%s", uuid.New().String()[:6]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "doubledec")
 	promoOrder := createTestOrder(t, client, user)
@@ -575,7 +575,7 @@ func TestMatrixH_ReleasedUsageCannotDoubleDecrementBudget(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -636,7 +636,7 @@ func TestMatrixI_SellerPromoNeverMutatesZamkBudget(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeSeller, marketing.DiscountTypePercent, 2000, 0, 0, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "SELLERONLY1", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("SELLERONLY1%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "sellerp")
 	orderID := createTestOrder(t, client, user)
@@ -648,7 +648,7 @@ func TestMatrixI_SellerPromoNeverMutatesZamkBudget(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -688,7 +688,7 @@ func TestMatrixJ_CofundedCanonical5000Example(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1500, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "CANON5000", marketing.DiscountTypePercent, 2500, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("CANON5000%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2500, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "canonuser")
 	orderID := createTestOrder(t, client, user)
@@ -699,7 +699,7 @@ func TestMatrixJ_CofundedCanonical5000Example(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000, // 5000 RUB
 		Quantity:           1,
 	}}
@@ -802,7 +802,7 @@ func TestMatrixL_SellerFixedCentRemainder(t *testing.T) {
 
 	// Fixed discount 100 RUB (10,000 cents)
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeSeller, marketing.DiscountTypeFixed, 0, 0, 0, 10000)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "FIXED100", marketing.DiscountTypeFixed, 0, 10000, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("FIXED100%s", uuid.New().String()[:4]), marketing.DiscountTypeFixed, 0, 10000, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "fixedu")
 	defer cleanupMarketingFixtures(client, []uuid.UUID{sellerID}, []uuid.UUID{user}, []uuid.UUID{camp.ID})
@@ -812,7 +812,7 @@ func TestMatrixL_SellerFixedCentRemainder(t *testing.T) {
 		OrderItemID:        uuid.New(),
 		ProductID:          uuid.New(),
 		ProductVariantID:   uuid.New(),
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           3,
 	}}
@@ -844,7 +844,7 @@ func TestMatrixM_PaymentInitializationFailure(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 200000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "PAYFAIL1", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("PAYFAIL1%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "payfailu")
 	orderID := createTestOrder(t, client, user)
@@ -856,7 +856,7 @@ func TestMatrixM_PaymentInitializationFailure(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -895,7 +895,7 @@ func TestMatrixN_TransactionRollbackDuringReservation(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 200000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "ROLLBACK1", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("ROLLBACK1%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "rollu")
 	orderID := createTestOrder(t, client, user)
@@ -907,7 +907,7 @@ func TestMatrixN_TransactionRollbackDuringReservation(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -945,7 +945,7 @@ func TestMatrixO_CampaignDisabledAfterReservation(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 200000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "DISABLEDAFTER1", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("DISABLEDAFTER1%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "disafteru")
 	orderID := createTestOrder(t, client, user)
@@ -957,7 +957,7 @@ func TestMatrixO_CampaignDisabledAfterReservation(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -1069,7 +1069,7 @@ func createApprovedCampaign(
 	ctx := context.Background()
 	c := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Campaign " + uuid.New().String()[:6],
 		FundingMode:                 mode,
 		Status:                      marketing.CampaignStatusActive,
@@ -1243,7 +1243,7 @@ func TestMatrixP_Canonical5000Seller15Zamk10Economics(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1500, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "CANONP", marketing.DiscountTypePercent, 2500, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("CANONP%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2500, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "canonp")
 	orderID := createTestOrder(t, client, user)
@@ -1254,7 +1254,7 @@ func TestMatrixP_Canonical5000Seller15Zamk10Economics(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000, // 5000 RUB
 		Quantity:           1,
 	}}
@@ -1310,7 +1310,7 @@ func TestMatrixQ_FirstOrderPromoReservedNonPromoPaidFirst(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "FIRSTQ", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("FIRSTQ%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "userq")
 	orderA := createTestOrder(t, client, user)
@@ -1322,7 +1322,7 @@ func TestMatrixQ_FirstOrderPromoReservedNonPromoPaidFirst(t *testing.T) {
 		OrderItemID:        itemAID,
 		ProductID:          prodAID,
 		ProductVariantID:   varAID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -1381,7 +1381,7 @@ func TestMatrixR_PromoVsNonPromoSuccessfulPaymentRace(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "FIRSTR", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("FIRSTR%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "userr")
 	promoOrder := createTestOrder(t, client, user)
@@ -1393,7 +1393,7 @@ func TestMatrixR_PromoVsNonPromoSuccessfulPaymentRace(t *testing.T) {
 		OrderItemID:        itemAID,
 		ProductID:          prodAID,
 		ProductVariantID:   varAID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -1512,7 +1512,7 @@ func TestMatrix_Scenario2_NonPromoFirstBlocksPromo(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "SCEN2", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("SCEN2%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "scen2")
 	promoOrder := createTestOrder(t, client, user)
@@ -1524,7 +1524,7 @@ func TestMatrix_Scenario2_NonPromoFirstBlocksPromo(t *testing.T) {
 		OrderItemID:        itemAID,
 		ProductID:          prodAID,
 		ProductVariantID:   varAID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -1620,7 +1620,7 @@ func TestMatrix_Scenario2B_NonPromoFailsUnblocksPromo(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "SCEN2B", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("SCEN2B%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "scen2b")
 	promoOrder := createTestOrder(t, client, user)
@@ -1632,7 +1632,7 @@ func TestMatrix_Scenario2B_NonPromoFailsUnblocksPromo(t *testing.T) {
 		OrderItemID:        itemAID,
 		ProductID:          prodAID,
 		ProductVariantID:   varAID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -1738,7 +1738,7 @@ func TestMatrix_Scenario1B_PromoFailsUnblocksNonPromo(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "SCEN1B", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("SCEN1B%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "scen1b")
 	promoOrder := createTestOrder(t, client, user)
@@ -1750,7 +1750,7 @@ func TestMatrix_Scenario1B_PromoFailsUnblocksNonPromo(t *testing.T) {
 		OrderItemID:        itemAID,
 		ProductID:          prodAID,
 		ProductVariantID:   varAID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -1853,7 +1853,7 @@ func TestMatrix_AuthorizedDoesNotConsumePromoOrMarkPaid(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "AUTHNOTPAID", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("AUTHNOTPAID%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "authnp")
 	orderID := createTestOrder(t, client, user)
@@ -1864,7 +1864,7 @@ func TestMatrix_AuthorizedDoesNotConsumePromoOrMarkPaid(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -1983,7 +1983,7 @@ func TestMatrixS_AmbiguousProviderInitTimeout(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "TIMEOUTS", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("TIMEOUTS%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "timeouts")
 	orderID := createTestOrder(t, client, user)
@@ -1994,7 +1994,7 @@ func TestMatrixS_AmbiguousProviderInitTimeout(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2046,7 +2046,7 @@ func TestMatrixT_DefinitiveProviderInitRejection(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "REJECTT", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("REJECTT%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "rejectt")
 	orderID := createTestOrder(t, client, user)
@@ -2057,7 +2057,7 @@ func TestMatrixT_DefinitiveProviderInitRejection(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2111,7 +2111,7 @@ func TestMatrixU_TransientPaymentFailureDoesNotRelease(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "TRANSU", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("TRANSU%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "transu")
 	orderID := createTestOrder(t, client, user)
@@ -2122,7 +2122,7 @@ func TestMatrixU_TransientPaymentFailureDoesNotRelease(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2210,7 +2210,7 @@ func TestMatrixV_DefinitiveTerminalPaymentFailureReleasesOnce(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "TERMFAILV", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("TERMFAILV%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "termfailv")
 	orderID := createTestOrder(t, client, user)
@@ -2221,7 +2221,7 @@ func TestMatrixV_DefinitiveTerminalPaymentFailureReleasesOnce(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2291,7 +2291,7 @@ func TestMatrixW_PaymentRetryPreservesOneOrderLevelPromoHold(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RETRYW", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RETRYW%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "retryw")
 	orderID := createTestOrder(t, client, user)
@@ -2302,7 +2302,7 @@ func TestMatrixW_PaymentRetryPreservesOneOrderLevelPromoHold(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2385,7 +2385,7 @@ func TestMatrixX_ReleasedDiscountedOrderCannotBePaidWithoutValidHold(t *testing.
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "HOLDX", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("HOLDX%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "userx")
 	orderID := createTestOrder(t, client, user)
@@ -2396,7 +2396,7 @@ func TestMatrixX_ReleasedDiscountedOrderCannotBePaidWithoutValidHold(t *testing.
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2439,7 +2439,7 @@ func TestMatrixY_SuccessFollowedByRefundReversalKeepsUsageConsumed(t *testing.T)
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "REFUNDY", marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("REFUNDY%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 5, false)
 
 	user := createTestUser(t, client, "usery")
 	orderID := createTestOrder(t, client, user)
@@ -2450,7 +2450,7 @@ func TestMatrixY_SuccessFollowedByRefundReversalKeepsUsageConsumed(t *testing.T)
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2535,7 +2535,7 @@ func TestMatrixZ_DBInvariantPreventsSimultaneousFirstOrderReservedAndConsumed(t 
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "INDEXZ", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("INDEXZ%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "userz")
 	order1 := createTestOrder(t, client, user)
@@ -2587,7 +2587,7 @@ func TestMatrixAA_TX1Durability_PreInitCommit(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "TX1DUR", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("TX1DUR%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-aa")
 	orderID := createTestOrder(t, client, user)
@@ -2598,7 +2598,7 @@ func TestMatrixAA_TX1Durability_PreInitCommit(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2655,7 +2655,7 @@ func TestMatrixAB_AmbiguousInit_RetainsClaim(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "AMBIGAB", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("AMBIGAB%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-ab")
 	orderID := createTestOrder(t, client, user)
@@ -2666,7 +2666,7 @@ func TestMatrixAB_AmbiguousInit_RetainsClaim(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2717,7 +2717,7 @@ func TestMatrixAC_AmbiguousInit_PreservesPromoHold(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "AMBIGAC", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("AMBIGAC%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-ac")
 	orderID := createTestOrder(t, client, user)
@@ -2728,7 +2728,7 @@ func TestMatrixAC_AmbiguousInit_PreservesPromoHold(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2769,7 +2769,7 @@ func TestMatrixAD_AmbiguousInit_PreservesBudget(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "AMBIGAD", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("AMBIGAD%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-ad")
 	orderID := createTestOrder(t, client, user)
@@ -2780,7 +2780,7 @@ func TestMatrixAD_AmbiguousInit_PreservesBudget(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2822,7 +2822,7 @@ func TestMatrixAE_CompetingOrderBlocked_UnderAmbiguousInit(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "AMBIGAE", marketing.DiscountTypePercent, 2000, 0, 0, nil, 2, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("AMBIGAE%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 2, true)
 
 	user := createTestUser(t, client, "user-ae")
 	order1 := createTestOrder(t, client, user)
@@ -2834,7 +2834,7 @@ func TestMatrixAE_CompetingOrderBlocked_UnderAmbiguousInit(t *testing.T) {
 		OrderItemID:        item1ID,
 		ProductID:          prod1ID,
 		ProductVariantID:   var1ID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2878,7 +2878,7 @@ func TestMatrixAF_CancellationBlocked_UnderAmbiguousInit(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "AMBIGAF", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("AMBIGAF%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-af")
 	orderID := createTestOrder(t, client, user)
@@ -2889,7 +2889,7 @@ func TestMatrixAF_CancellationBlocked_UnderAmbiguousInit(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -2943,7 +2943,7 @@ func TestMatrixAG_LateConfirmedWebhookReconciles(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "AMBIGAG", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("AMBIGAG%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-ag")
 	orderID := createTestOrder(t, client, user)
@@ -2954,7 +2954,7 @@ func TestMatrixAG_LateConfirmedWebhookReconciles(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -3039,7 +3039,7 @@ func TestMatrixAH_LateTerminalFailureWebhookReconciles(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "AMBIGAH", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("AMBIGAH%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-ah")
 	orderID := createTestOrder(t, client, user)
@@ -3050,7 +3050,7 @@ func TestMatrixAH_LateTerminalFailureWebhookReconciles(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -3130,7 +3130,7 @@ func TestMatrixAI_DuplicateWebhookIdempotency(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "AMBIGAI", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("AMBIGAI%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-ai")
 	orderID := createTestOrder(t, client, user)
@@ -3141,7 +3141,7 @@ func TestMatrixAI_DuplicateWebhookIdempotency(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -3208,7 +3208,7 @@ func TestMatrixAJ_SameOrderRetryBlocked_UnderAmbiguousInit(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "AMBIGAJ", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("AMBIGAJ%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-aj")
 	orderID := createTestOrder(t, client, user)
@@ -3219,7 +3219,7 @@ func TestMatrixAJ_SameOrderRetryBlocked_UnderAmbiguousInit(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -3266,7 +3266,7 @@ func TestMatrixAK_DefinitiveInitRejection_AllowsCancellationAndRelease(t *testin
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "AMBIGAK", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("AMBIGAK%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-ak")
 	orderID := createTestOrder(t, client, user)
@@ -3277,7 +3277,7 @@ func TestMatrixAK_DefinitiveInitRejection_AllowsCancellationAndRelease(t *testin
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -3339,7 +3339,7 @@ func TestMatrixAL_DefinitiveInitRejection_ReleasesPromoAndBudgetImmediately(t *t
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "REJECTAL", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("REJECTAL%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-al")
 	orderID := createTestOrder(t, client, user)
@@ -3350,7 +3350,7 @@ func TestMatrixAL_DefinitiveInitRejection_ReleasesPromoAndBudgetImmediately(t *t
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -3419,7 +3419,7 @@ func TestMatrixAM_CheckOrder_UnknownToConfirmed_ReconcilesConsistentlyWithWebhoo
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAM", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAM%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-am")
 	orderID := createTestOrder(t, client, user)
@@ -3430,7 +3430,7 @@ func TestMatrixAM_CheckOrder_UnknownToConfirmed_ReconcilesConsistentlyWithWebhoo
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -3524,7 +3524,7 @@ func TestMatrixAN_CheckOrder_UnknownToRejected_ReleasesOnce(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAN", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAN%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-an")
 	orderID := createTestOrder(t, client, user)
@@ -3535,7 +3535,7 @@ func TestMatrixAN_CheckOrder_UnknownToRejected_ReleasesOnce(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -3627,7 +3627,7 @@ func TestMatrixAO_CheckOrder_Authorized_HoldsPromoBudgetClaimWithoutConsumingOrR
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAO", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAO%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-ao")
 	orderID := createTestOrder(t, client, user)
@@ -3638,7 +3638,7 @@ func TestMatrixAO_CheckOrder_Authorized_HoldsPromoBudgetClaimWithoutConsumingOrR
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -3726,7 +3726,7 @@ func TestMatrixAP_CheckOrder_ZeroPayments_StaysUnknownNoRelease(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAP", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAP%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-ap")
 	orderID := createTestOrder(t, client, user)
@@ -3737,7 +3737,7 @@ func TestMatrixAP_CheckOrder_ZeroPayments_StaysUnknownNoRelease(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -3802,7 +3802,7 @@ func TestMatrixAQ_CheckOrder_TransportTimeout_StaysUnknownNoRelease(t *testing.T
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAQ", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAQ%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-aq")
 	orderID := createTestOrder(t, client, user)
@@ -3813,7 +3813,7 @@ func TestMatrixAQ_CheckOrder_TransportTimeout_StaysUnknownNoRelease(t *testing.T
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -3870,7 +3870,7 @@ func TestMatrixAR_CheckOrder_AmountMismatch_FailsClosed(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAR", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAR%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-ar")
 	orderID := createTestOrder(t, client, user)
@@ -3881,7 +3881,7 @@ func TestMatrixAR_CheckOrder_AmountMismatch_FailsClosed(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -3945,7 +3945,7 @@ func TestMatrixAS_CheckOrder_MultiplePlausiblePayments_FailsClosed(t *testing.T)
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAS", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAS%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-as")
 	orderID := createTestOrder(t, client, user)
@@ -3956,7 +3956,7 @@ func TestMatrixAS_CheckOrder_MultiplePlausiblePayments_FailsClosed(t *testing.T)
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -4024,7 +4024,7 @@ func TestMatrixAT_CheckOrder_ProviderPIDAssignedToOtherPayment_FailsClosed(t *te
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAT", marketing.DiscountTypePercent, 2000, 0, 0, nil, 2, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAT%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 2, false)
 	_ = promo
 
 	user1 := createTestUser(t, client, "user-at1")
@@ -4094,7 +4094,7 @@ func TestMatrixAU_ConcurrentWebhookAndReconciliation_ConfirmedExactlyOnce(t *tes
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAU", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAU%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-au")
 	orderID := createTestOrder(t, client, user)
@@ -4105,7 +4105,7 @@ func TestMatrixAU_ConcurrentWebhookAndReconciliation_ConfirmedExactlyOnce(t *tes
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -4218,7 +4218,7 @@ func TestMatrixAV_ConcurrentWebhookAndReconciliation_TerminalFailureReleaseOnce(
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAV", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAV%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-av")
 	orderID := createTestOrder(t, client, user)
@@ -4229,7 +4229,7 @@ func TestMatrixAV_ConcurrentWebhookAndReconciliation_TerminalFailureReleaseOnce(
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -4331,7 +4331,7 @@ func TestMatrixAW_Reconciliation_BackfillsProviderPaymentIDExactlyOnce(t *testin
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAW", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAW%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 	_ = promo
 
 	user := createTestUser(t, client, "user-aw")
@@ -4393,7 +4393,7 @@ func TestMatrixAX_SameOrderCreatePaymentWhileUnknown_MakesZeroSecondInitCalls(t 
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAX", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAX%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 	_ = promo
 
 	user := createTestUser(t, client, "user-ax")
@@ -4434,7 +4434,7 @@ func TestMatrixAY_WorkerRestart_DuplicateReconciliation_IsIdempotent(t *testing.
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAY", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAY%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-ay")
 	orderID := createTestOrder(t, client, user)
@@ -4445,7 +4445,7 @@ func TestMatrixAY_WorkerRestart_DuplicateReconciliation_IsIdempotent(t *testing.
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -4520,7 +4520,7 @@ func TestMatrixAZ_TwoWorkerInstances_CannotDoubleApplyTransition(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONAZ", marketing.DiscountTypePercent, 2000, 0, 0, nil, 10, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONAZ%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 10, false)
 
 	user1 := createTestUser(t, client, "u-az-1")
 	user2 := createTestUser(t, client, "u-az-2")
@@ -4539,8 +4539,8 @@ func TestMatrixAZ_TwoWorkerInstances_CannotDoubleApplyTransition(t *testing.T) {
 			OrderItemID:        itemID,
 			ProductID:          prodID,
 			ProductVariantID:   varID,
-			SellerID:           sellerID,
-			BaseUnitPriceCents: 500000,
+			SellerID: sellerID,
+		BaseUnitPriceCents: 500000,
 			Quantity:           1,
 		}}
 		uID := user1
@@ -4629,7 +4629,7 @@ func TestMatrixBA_CustomerCancellationBlockedForNonTerminalReconciledState(t *te
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONBA", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONBA%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-ba")
 	orderID := createTestOrder(t, client, user)
@@ -4640,7 +4640,7 @@ func TestMatrixBA_CustomerCancellationBlockedForNonTerminalReconciledState(t *te
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -4707,7 +4707,7 @@ func TestMatrixBB_AfterAuthoritativeTerminalReconciliation_NormalCancellationRes
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONBB", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONBB%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-bb")
 	orderID := createTestOrder(t, client, user)
@@ -4718,7 +4718,7 @@ func TestMatrixBB_AfterAuthoritativeTerminalReconciliation_NormalCancellationRes
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -4788,7 +4788,7 @@ func TestMatrixBC_CanonicalPromotionEconomics_RemainUnchanged(t *testing.T) {
 
 	// Co-funded campaign: seller discount 15% (1500 bps), ZAMK share 10% (1000 bps)
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1500, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "CANONBC", marketing.DiscountTypePercent, 2500, 0, 0, nil, 1, false)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("CANONBC%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2500, 0, 0, nil, 1, false)
 
 	user := createTestUser(t, client, "user-bc")
 	orderID := createTestOrder(t, client, user)
@@ -4799,7 +4799,7 @@ func TestMatrixBC_CanonicalPromotionEconomics_RemainUnchanged(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -4897,7 +4897,7 @@ func TestMatrixBD_CheckOrder_AuthFail_RemainsNonTerminal(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONBD", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONBD%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-bd")
 	orderID := createTestOrder(t, client, user)
@@ -4908,7 +4908,7 @@ func TestMatrixBD_CheckOrder_AuthFail_RemainsNonTerminal(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -4998,7 +4998,7 @@ func TestMatrixBE_CheckOrder_AuthFail_ThenConfirmed_SuccessOnce(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONBE", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONBE%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-be")
 	orderID := createTestOrder(t, client, user)
@@ -5009,7 +5009,7 @@ func TestMatrixBE_CheckOrder_AuthFail_ThenConfirmed_SuccessOnce(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -5101,7 +5101,7 @@ func TestMatrixBF_CheckOrder_AuthFail_ThenRejected_ReleaseOnce(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "RECONBF", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("RECONBF%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-bf")
 	orderID := createTestOrder(t, client, user)
@@ -5112,7 +5112,7 @@ func TestMatrixBF_CheckOrder_AuthFail_ThenRejected_ReleaseOnce(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -5200,7 +5200,7 @@ func TestMatrixBG_Webhook_AuthFail_RemainsNonTerminal(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "HOOKBG", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("HOOKBG%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-bg")
 	orderID := createTestOrder(t, client, user)
@@ -5211,7 +5211,7 @@ func TestMatrixBG_Webhook_AuthFail_RemainsNonTerminal(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -5290,7 +5290,7 @@ func TestMatrixBH_Webhook_AuthFail_ThenConfirmed_SuccessOnce(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "HOOKBH", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("HOOKBH%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-bh")
 	orderID := createTestOrder(t, client, user)
@@ -5301,7 +5301,7 @@ func TestMatrixBH_Webhook_AuthFail_ThenConfirmed_SuccessOnce(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -5390,7 +5390,7 @@ func TestMatrixBI_Webhook_AuthFail_ThenRejected_ReleaseOnce(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "HOOKBI", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("HOOKBI%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-bi")
 	orderID := createTestOrder(t, client, user)
@@ -5401,7 +5401,7 @@ func TestMatrixBI_Webhook_AuthFail_ThenRejected_ReleaseOnce(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -5486,7 +5486,7 @@ func TestMatrixBJ_DuplicateAuthFail_ZeroFinancialSideEffects(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "HOOKBJ", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("HOOKBJ%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-bj")
 	orderID := createTestOrder(t, client, user)
@@ -5497,7 +5497,7 @@ func TestMatrixBJ_DuplicateAuthFail_ZeroFinancialSideEffects(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -5569,7 +5569,7 @@ func TestMatrixBK_AuthFail_CompetingOrderBlockedByClaim(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "CLAIMBK", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("CLAIMBK%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-bk")
 	order1 := createTestOrder(t, client, user)
@@ -5580,7 +5580,7 @@ func TestMatrixBK_AuthFail_CompetingOrderBlockedByClaim(t *testing.T) {
 		OrderItemID:        itemID1,
 		ProductID:          prodID1,
 		ProductVariantID:   varID1,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -5647,7 +5647,7 @@ func TestMatrixBL_Confirmed_ThenStaleAuthFail_NoDowngrade(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "HOOKBL", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("HOOKBL%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-bl")
 	orderID := createTestOrder(t, client, user)
@@ -5658,7 +5658,7 @@ func TestMatrixBL_Confirmed_ThenStaleAuthFail_NoDowngrade(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -5749,7 +5749,7 @@ func TestMatrixBM_Rejected_ThenStaleAuthFail_NoReopening(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "HOOKBM", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("HOOKBM%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-bm")
 	orderID := createTestOrder(t, client, user)
@@ -5760,7 +5760,7 @@ func TestMatrixBM_Rejected_ThenStaleAuthFail_NoReopening(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -5843,7 +5843,7 @@ func TestMatrixBN_AuthFail_RemainsEligibleForLaterCheckOrderReconciliation(t *te
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "POLLBN", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("POLLBN%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-bn")
 	orderID := createTestOrder(t, client, user)
@@ -5854,7 +5854,7 @@ func TestMatrixBN_AuthFail_RemainsEligibleForLaterCheckOrderReconciliation(t *te
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}
@@ -5945,7 +5945,7 @@ func TestMatrixBO_UnknownProviderStatus_FailsClosed(t *testing.T) {
 	staffID := createTestStaffUser(t, client)
 
 	camp := createApprovedCampaign(t, repo, sellerID, staffID, marketing.FundingModeCofunded, marketing.DiscountTypePercent, 1000, 1000, 1000000, 0)
-	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, "HOOKBO", marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
+	promo := createPromoWithLimits(t, svc, sellerID, camp.ID, fmt.Sprintf("HOOKBO%s", uuid.New().String()[:4]), marketing.DiscountTypePercent, 2000, 0, 0, nil, 1, true)
 
 	user := createTestUser(t, client, "user-bo")
 	orderID := createTestOrder(t, client, user)
@@ -5956,7 +5956,7 @@ func TestMatrixBO_UnknownProviderStatus_FailsClosed(t *testing.T) {
 		OrderItemID:        itemID,
 		ProductID:          prodID,
 		ProductVariantID:   varID,
-		SellerID:           sellerID,
+		SellerID: sellerID,
 		BaseUnitPriceCents: 500000,
 		Quantity:           1,
 	}}

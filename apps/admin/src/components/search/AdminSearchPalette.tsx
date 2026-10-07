@@ -38,6 +38,7 @@ export interface AdminSearchPaletteProps {
   isOpen: boolean;
   onClose: () => void;
   navGroups?: NavGroup[];
+  extraSearchItems?: NavItem[];
   isRouteActive?: (path: string) => boolean;
 }
 
@@ -54,6 +55,7 @@ export function AdminSearchPalette({
   isOpen,
   onClose,
   navGroups = [],
+  extraSearchItems = [],
   isRouteActive = () => false,
 }: AdminSearchPaletteProps) {
   const navigate = useNavigate();
@@ -70,10 +72,18 @@ export function AdminSearchPalette({
 
   // Filter navigation items immediately based on search query
   const filteredNavGroups = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return navGroups;
+    const allGroups = [...navGroups];
+    if (extraSearchItems && extraSearchItems.length > 0 && !allGroups.some((g) => g.title === 'Поддержка')) {
+      allGroups.push({
+        title: 'Поддержка',
+        items: extraSearchItems,
+      });
+    }
 
-    return navGroups
+    const q = query.trim().toLowerCase();
+    if (!q) return allGroups;
+
+    return allGroups
       .map((group) => ({
         ...group,
         items: group.items.filter((item) =>
@@ -81,7 +91,7 @@ export function AdminSearchPalette({
         ),
       }))
       .filter((g) => g.items.length > 0);
-  }, [navGroups, query]);
+  }, [navGroups, extraSearchItems, query]);
 
   const flatNavItems = useMemo(() => {
     return filteredNavGroups.flatMap((g) => g.items);
@@ -296,82 +306,110 @@ export function AdminSearchPalette({
                     : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
                 }`}
               >
-                {filteredNavGroups.map((group) => (
-                  <div
-                    key={group.title}
-                    data-testid={`admin-nav-group-${group.title}`}
-                    className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-200/80 dark:border-slate-700/60 flex flex-col"
-                  >
-                    <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider px-2 pb-2 mb-1.5 border-b border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
-                      <span>{group.title}</span>
-                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-700/60 px-1.5 py-0.5 rounded-full">{group.items.length}</span>
-                    </div>
-                    <div className="space-y-0.5 flex-1">
-                      {group.items.map((item) => {
-                        currentFlatIndex++;
-                        const itemIndex = currentFlatIndex;
-                        const isSelected = itemIndex === activeIndex;
-                        const isActive = isRouteActive(item.path);
-                        const Icon = item.icon;
+                {(() => {
+                  const commerceGroup = filteredNavGroups.find((g) => g.title === 'Коммерция и сервисы');
+                  const marketingGroup = filteredNavGroups.find((g) => g.title === 'Маркетинг');
+                  const supportGroup = filteredNavGroups.find((g) => g.title === 'Поддержка');
+                  const warehouseGroup = filteredNavGroups.find((g) => g.title === 'СКЛАД');
+                  const staffGroup = filteredNavGroups.find((g) => g.title === 'Администрирование');
+                  const otherGroups = filteredNavGroups.filter(
+                    (g) => !['Коммерция и сервисы', 'Маркетинг', 'Поддержка', 'СКЛАД', 'Администрирование'].includes(g.title)
+                  );
 
-                        return (
-                          <Link
-                            key={item.path}
-                            to={item.path}
-                            ref={isSelected ? (activeItemRef as any) : null}
-                            data-testid={`admin-nav-item-${item.path.replace(/\//g, '-')}`}
-                            onClick={() => {
-                              onClose();
-                              resetSearch();
-                            }}
-                            onMouseEnter={() => setActiveIndex(itemIndex)}
-                            className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-600 dark:focus-visible:ring-indigo-400 ${
-                              isActive && isSelected
-                                ? 'bg-indigo-600 text-white font-semibold shadow-xs ring-1 ring-indigo-700'
-                                : isActive
-                                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 font-semibold border-l-2 border-indigo-600'
-                                : isSelected
-                                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-950 dark:text-indigo-100 border border-indigo-200/80 dark:border-indigo-800/60 font-semibold shadow-xs'
-                                : 'text-slate-700 dark:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700/60 hover:text-slate-900 dark:hover:text-white'
-                            }`}
-                          >
-                            <div className="flex items-center min-w-0">
-                              <Icon
-                                className={`w-4 h-4 mr-2.5 shrink-0 transition-colors ${
-                                  isActive && isSelected
-                                    ? 'text-white'
-                                    : isActive
-                                    ? 'text-indigo-600 dark:text-indigo-400'
-                                    : isSelected
-                                    ? 'text-indigo-600 dark:text-indigo-400'
-                                    : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200'
-                                }`}
-                              />
-                              <span className="truncate">
-                                {item.name}
-                              </span>
-                            </div>
-                            {item.count !== undefined && item.count > 0 && (
-                              <span
-                                className={`ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold transition-colors ${
-                                  isActive && isSelected
-                                    ? 'bg-white/20 text-white'
-                                    : isActive
-                                    ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300'
-                                    : isSelected
-                                    ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-300'
-                                    : 'bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-300 group-hover:bg-slate-300 dark:group-hover:bg-slate-600'
-                                }`}
-                              >
-                                {item.count}
-                              </span>
-                            )}
-                          </Link>
-                        );
-                      })}
+                  const renderNavGroupCard = (group: NavGroup, isHalfCard = false) => (
+                    <div
+                      key={group.title}
+                      data-testid={`admin-nav-group-${group.title}`}
+                      className={`bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-200/80 dark:border-slate-700/60 flex flex-col ${
+                        isHalfCard ? 'flex-1 justify-start' : ''
+                      }`}
+                    >
+                      <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider px-2 pb-2 mb-1.5 border-b border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+                        <span>{group.title}</span>
+                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-700/60 px-1.5 py-0.5 rounded-full">
+                          {group.items.length}
+                        </span>
+                      </div>
+                      <div className="space-y-0.5 flex-1">
+                        {group.items.map((item) => {
+                          currentFlatIndex++;
+                          const itemIndex = currentFlatIndex;
+                          const isSelected = itemIndex === activeIndex;
+                          const isActive = isRouteActive(item.path);
+                          const Icon = item.icon;
+
+                          return (
+                            <Link
+                              key={item.path}
+                              to={item.path}
+                              ref={isSelected ? (activeItemRef as any) : null}
+                              data-testid={`admin-nav-item-${item.path.replace(/\//g, '-')}`}
+                              onClick={() => {
+                                onClose();
+                                resetSearch();
+                              }}
+                              onMouseEnter={() => setActiveIndex(itemIndex)}
+                              className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-600 dark:focus-visible:ring-indigo-400 ${
+                                isActive && isSelected
+                                  ? 'bg-indigo-600 text-white font-semibold shadow-xs ring-1 ring-indigo-700'
+                                  : isActive
+                                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 font-semibold border-l-2 border-indigo-600'
+                                  : isSelected
+                                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-950 dark:text-indigo-100 border border-indigo-200/80 dark:border-indigo-800/60 font-semibold shadow-xs'
+                                  : 'text-slate-700 dark:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-700/60 hover:text-slate-900 dark:hover:text-white'
+                              }`}
+                            >
+                              <div className="flex items-center min-w-0">
+                                <Icon
+                                  className={`w-4 h-4 mr-2.5 shrink-0 transition-colors ${
+                                    isActive && isSelected
+                                      ? 'text-white'
+                                      : isActive
+                                      ? 'text-indigo-600 dark:text-indigo-400'
+                                      : isSelected
+                                      ? 'text-indigo-600 dark:text-indigo-400'
+                                      : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200'
+                                  }`}
+                                />
+                                <span className="truncate">{item.name}</span>
+                              </div>
+                              {item.count !== undefined && item.count > 0 && (
+                                <span
+                                  className={`ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold transition-colors ${
+                                    isActive && isSelected
+                                      ? 'bg-white/20 text-white'
+                                      : isActive
+                                      ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300'
+                                      : isSelected
+                                      ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-300'
+                                      : 'bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-300 group-hover:bg-slate-300 dark:group-hover:bg-slate-600'
+                                  }`}
+                                >
+                                  {item.count}
+                                </span>
+                              )}
+                            </Link>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+
+                  return (
+                    <>
+                      {commerceGroup && renderNavGroupCard(commerceGroup)}
+                      {(marketingGroup || supportGroup) && (
+                        <div data-testid="admin-nav-center-stack" className="flex flex-col gap-4 h-full">
+                          {marketingGroup && renderNavGroupCard(marketingGroup, Boolean(supportGroup))}
+                          {supportGroup && renderNavGroupCard(supportGroup, Boolean(marketingGroup))}
+                        </div>
+                      )}
+                      {warehouseGroup && renderNavGroupCard(warehouseGroup)}
+                      {staffGroup && renderNavGroupCard(staffGroup)}
+                      {otherGroups.map((group) => renderNavGroupCard(group))}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}

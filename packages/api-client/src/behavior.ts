@@ -1,6 +1,8 @@
 import { request, type RequestOptions } from './client';
 
 export type ClientSafeEventType =
+  | 'session_started'
+  | 'page_view'
   | 'catalog_impression'
   | 'product_view'
   | 'product_variant_selected'
@@ -10,17 +12,31 @@ export type ClientSafeEventType =
   | 'remove_from_cart'
   | 'checkout_started';
 
+export interface AttributionMetadata {
+  referrer?: string;
+  landing_path?: string;
+  source?: string;
+  medium?: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_term?: string;
+  utm_content?: string;
+  zamk_token?: string;
+}
+
 export interface BehavioralIngestionEvent {
   eventId: string;
   eventType: ClientSafeEventType;
   visitorId: string;
+  sessionId?: string;
   occurredAt: string;
   productId?: string;
   variantId?: string;
   quantity?: number;
   placement?: string;
   route?: string;
-  metadata?: Record<string, never>;
+  metadata?: AttributionMetadata;
 }
 
 export interface IngestEventsRequest {

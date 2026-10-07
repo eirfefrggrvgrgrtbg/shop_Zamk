@@ -2,7 +2,18 @@ package auctions
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 )
+
+type AnalyticsContextDTO struct {
+	VisitorID uuid.UUID `json:"visitorId"`
+	SessionID uuid.UUID `json:"sessionId"`
+}
+
+type CreateAuctionOrderRequest struct {
+	AnalyticsContext *AnalyticsContextDTO `json:"analyticsContext,omitempty"`
+}
 
 type BidRequest struct {
 	AmountCents         *int64  `json:"amountCents"`

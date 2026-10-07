@@ -52,32 +52,93 @@ const (
 	PriceChangeSourceImport PriceChangeSource = "import"
 )
 
-// MarketingCampaign represents a unified marketing promotion or co-funding application.
+type CampaignChannel string
+
+const (
+	CampaignChannelTelegram   CampaignChannel = "telegram"
+	CampaignChannelVK         CampaignChannel = "vk"
+	CampaignChannelInstagram  CampaignChannel = "instagram"
+	CampaignChannelInfluencer CampaignChannel = "influencer"
+	CampaignChannelEmail      CampaignChannel = "email"
+	CampaignChannelDirect     CampaignChannel = "direct"
+	CampaignChannelSearchAds  CampaignChannel = "search_ads"
+)
+
+func IsValidCampaignChannel(c CampaignChannel) bool {
+	switch c {
+	case CampaignChannelTelegram, CampaignChannelVK, CampaignChannelInstagram,
+		CampaignChannelInfluencer, CampaignChannelEmail, CampaignChannelDirect,
+		CampaignChannelSearchAds:
+		return true
+	default:
+		return false
+	}
+}
+
+type CampaignType string
+
+const (
+	CampaignTypeInfluencer     CampaignType = "influencer"
+	CampaignTypeDrop           CampaignType = "drop"
+	CampaignTypeSeasonalSale   CampaignType = "seasonal_sale"
+	CampaignTypeBrandAwareness CampaignType = "brand_awareness"
+	CampaignTypeRetargeting    CampaignType = "retargeting"
+	CampaignTypeSpecialPromo   CampaignType = "special_promo"
+)
+
+func IsValidCampaignType(t CampaignType) bool {
+	switch t {
+	case CampaignTypeInfluencer, CampaignTypeDrop, CampaignTypeSeasonalSale,
+		CampaignTypeBrandAwareness, CampaignTypeRetargeting, CampaignTypeSpecialPromo:
+		return true
+	default:
+		return false
+	}
+}
+
+// CampaignPurpose is immutable and assigned by the creating domain, never by titles.
+type CampaignPurpose string
+
+const (
+	CampaignPurposeAdvertising CampaignPurpose = "advertising"
+	CampaignPurposePromotion   CampaignPurpose = "promotion"
+)
+
+// MarketingCampaign carries advertising or seller promotion data.
 type MarketingCampaign struct {
-	ID                         uuid.UUID      `json:"id" db:"id"`
-	SellerID                   uuid.UUID      `json:"sellerId" db:"seller_id"`
-	Title                      string         `json:"title" db:"title"`
-	Description                *string        `json:"description,omitempty" db:"description"`
-	FundingMode                FundingMode    `json:"fundingMode" db:"funding_mode"`
-	Status                     CampaignStatus `json:"status" db:"status"`
-	DiscountType               DiscountType   `json:"discountType" db:"discount_type"`
-	SellerDiscountBps          int            `json:"sellerDiscountBps" db:"seller_discount_bps"`
-	SellerDiscountFixedCents   int64          `json:"sellerDiscountFixedCents" db:"seller_discount_fixed_cents"`
-	RequestedZamkShareBps      int            `json:"requestedZamkShareBps" db:"requested_zamk_share_bps"`
-	RequestedZamkBudgetCapCents int64         `json:"requestedZamkBudgetCapCents" db:"requested_zamk_budget_cap_cents"`
-	ApprovedZamkShareBps       int            `json:"approvedZamkShareBps" db:"approved_zamk_share_bps"`
-	ApprovedZamkBudgetCapCents int64          `json:"approvedZamkBudgetCapCents" db:"approved_zamk_budget_cap_cents"`
-	ZamkReservedCents          int64          `json:"zamkReservedCents" db:"zamk_reserved_cents"`
-	ZamkSpentCents             int64          `json:"zamkSpentCents" db:"zamk_spent_cents"`
-	RejectionReason            *string        `json:"rejectionReason,omitempty" db:"rejection_reason"`
-	AdminComment               *string        `json:"adminComment,omitempty" db:"admin_comment"`
-	StartsAt                   *time.Time     `json:"startsAt,omitempty" db:"starts_at"`
-	EndsAt                     *time.Time     `json:"endsAt,omitempty" db:"ends_at"`
-	SubmittedAt                *time.Time     `json:"submittedAt,omitempty" db:"submitted_at"`
-	DecidedAt                  *time.Time     `json:"decidedAt,omitempty" db:"decided_at"`
-	DecidedByStaffID           *uuid.UUID     `json:"decidedByStaffId,omitempty" db:"decided_by_staff_id"`
-	CreatedAt                  time.Time      `json:"createdAt" db:"created_at"`
-	UpdatedAt                  time.Time      `json:"updatedAt" db:"updated_at"`
+	Purpose                     CampaignPurpose  `json:"purpose" db:"purpose"`
+	ID                          uuid.UUID        `json:"id" db:"id"`
+	SellerID                    *uuid.UUID       `json:"sellerId,omitempty" db:"seller_id"`
+	Title                       string           `json:"title" db:"title"`
+	Description                 *string          `json:"description,omitempty" db:"description"`
+	FundingMode                 FundingMode      `json:"fundingMode" db:"funding_mode"`
+	Status                      CampaignStatus   `json:"status" db:"status"`
+	CampaignChannel             *CampaignChannel `json:"campaignChannel,omitempty" db:"campaign_channel"`
+	CampaignType                *CampaignType    `json:"campaignType,omitempty" db:"campaign_type"`
+	PlannedBudgetCents          *int64           `json:"plannedBudgetCents,omitempty" db:"planned_budget_cents"`
+	DiscountType                DiscountType     `json:"discountType" db:"discount_type"`
+	SellerDiscountBps           int              `json:"sellerDiscountBps" db:"seller_discount_bps"`
+	SellerDiscountFixedCents    int64            `json:"sellerDiscountFixedCents" db:"seller_discount_fixed_cents"`
+	RequestedZamkShareBps       int              `json:"requestedZamkShareBps" db:"requested_zamk_share_bps"`
+	RequestedZamkBudgetCapCents int64            `json:"requestedZamkBudgetCapCents" db:"requested_zamk_budget_cap_cents"`
+	ApprovedZamkShareBps        int              `json:"approvedZamkShareBps" db:"approved_zamk_share_bps"`
+	ApprovedZamkBudgetCapCents  int64            `json:"approvedZamkBudgetCapCents" db:"approved_zamk_budget_cap_cents"`
+	ZamkReservedCents           int64            `json:"zamkReservedCents" db:"zamk_reserved_cents"`
+	ZamkSpentCents              int64            `json:"zamkSpentCents" db:"zamk_spent_cents"`
+	RejectionReason             *string          `json:"rejectionReason,omitempty" db:"rejection_reason"`
+	AdminComment                *string          `json:"adminComment,omitempty" db:"admin_comment"`
+	StartsAt                    *time.Time       `json:"startsAt,omitempty" db:"starts_at"`
+	EndsAt                      *time.Time       `json:"endsAt,omitempty" db:"ends_at"`
+	SubmittedAt                 *time.Time       `json:"submittedAt,omitempty" db:"submitted_at"`
+	DecidedAt                   *time.Time       `json:"decidedAt,omitempty" db:"decided_at"`
+	DecidedByStaffID            *uuid.UUID       `json:"decidedByStaffId,omitempty" db:"decided_by_staff_id"`
+	CreatedAt                   time.Time        `json:"createdAt" db:"created_at"`
+	UpdatedAt                   time.Time        `json:"updatedAt" db:"updated_at"`
+}
+
+type CampaignDetailView struct {
+	MarketingCampaign
+	TrackingLinkCount int `json:"trackingLinkCount"`
 }
 
 type ProductScope string
@@ -93,6 +154,14 @@ type TargetType string
 const (
 	TargetTypeInclude TargetType = "INCLUDE"
 	TargetTypeExclude TargetType = "EXCLUDE"
+)
+
+type CampaignTargetType string
+
+const (
+	CampaignTargetProduct CampaignTargetType = "product"
+	CampaignTargetSeller  CampaignTargetType = "seller"
+	CampaignTargetLanding CampaignTargetType = "landing"
 )
 
 // PromoCodeProductTarget maps promo codes to explicitly included or excluded products.
@@ -111,6 +180,21 @@ type PromoCodeCategoryTarget struct {
 	CategoryID  uuid.UUID  `json:"categoryId" db:"category_id"`
 	TargetType  TargetType `json:"targetType" db:"target_type"`
 	CreatedAt   time.Time  `json:"createdAt" db:"created_at"`
+}
+
+// CampaignTrackingLink represents a generated short link for a marketing campaign.
+type CampaignTrackingLink struct {
+	ID              uuid.UUID          `json:"id" db:"id"`
+	CampaignID      uuid.UUID          `json:"campaignId" db:"campaign_id"`
+	Token           string             `json:"token" db:"token"`
+	TargetType      CampaignTargetType `json:"targetType" db:"target_type"`
+	TargetProductID *uuid.UUID         `json:"targetProductId,omitempty" db:"target_product_id"`
+	TargetSellerID  *uuid.UUID         `json:"targetSellerId,omitempty" db:"target_seller_id"`
+	LandingPath     *string            `json:"landingPath,omitempty" db:"landing_path"`
+	PromoCodeID     *uuid.UUID         `json:"promoCodeId,omitempty" db:"promo_code_id"`
+	IsActive        bool               `json:"isActive" db:"is_active"`
+	CreatedAt       time.Time          `json:"createdAt" db:"created_at"`
+	UpdatedAt       time.Time          `json:"updatedAt" db:"updated_at"`
 }
 
 type AudienceType string

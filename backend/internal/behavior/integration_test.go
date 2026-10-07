@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +24,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1102,4 +1104,727 @@ func TestBehaviorIngestion_RateLimit(t *testing.T) {
 	require.Equal(t, http.StatusTooManyRequests, w3.Code)
 	require.Contains(t, w3.Body.String(), "rate_limited")
 	require.NotEmpty(t, w3.Header().Get("Retry-After"))
+}
+// Comprehensive ADS.1A Attribution & Session Hardening Test Suite
+func TestBehaviorSessionAttribution_TrueLNDC(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := connectTestDB(t)
+	repo := behavior.NewRepository(db)
+	service := behavior.NewService(repo)
+
+	visitorID := uuid.New()
+	sessionID := uuid.New()
+	t0 := time.Now().UTC().Add(-1 * time.Hour).Truncate(time.Microsecond)
+
+	// Step A: T0 - Google non-direct touch -> stored
+	t.Run("A. Google non-direct -> stored with canonical 30-day expiry", func(t *testing.T) {
+		req := behavior.EventIngestionRequest{
+			Events: []behavior.IngestionEvent{
+				{
+					EventID:    uuid.New(),
+					EventType:  "session_started",
+					VisitorID:  visitorID,
+					SessionID:  &sessionID,
+					OccurredAt: t0,
+					Metadata: map[string]interface{}{
+						"utm_source":   "google",
+						"utm_medium":   "cpc",
+						"utm_campaign": "campaign-A",
+						"referrer":     "https://google.com",
+					},
+				},
+			},
+		}
+
+		resp, err := service.IngestEvents(ctx, nil, req)
+		require.NoError(t, err)
+		assert.Equal(t, 1, resp.Accepted)
+		assert.Empty(t, resp.Rejected)
+
+		var utmSource, utmCampaign string
+		var capturedAt, expiresAt time.Time
+		err = db.Pool.QueryRow(ctx, "SELECT utm_source, utm_campaign, attribution_captured_at, attribution_expires_at FROM analytics_sessions WHERE id = $1", sessionID).
+			Scan(&utmSource, &utmCampaign, &capturedAt, &expiresAt)
+		require.NoError(t, err)
+		assert.Equal(t, "google", utmSource)
+		assert.Equal(t, "campaign-A", utmCampaign)
+		assert.Equal(t, t0.Unix(), capturedAt.Unix(), "captured_at must be touch time")
+		expectedExpiry := behavior.CalculateAttributionExpiry(t0)
+		assert.Equal(t, expectedExpiry.Unix(), expiresAt.Unix(), "expiry must be touch time + 30 days")
+	})
+
+	// Step B: T0 + 5m - Direct navigation -> Google preserved
+	t.Run("B. direct -> Google preserved", func(t *testing.T) {
+		t5m := t0.Add(5 * time.Minute)
+		req := behavior.EventIngestionRequest{
+			Events: []behavior.IngestionEvent{
+				{
+					EventID:    uuid.New(),
+					EventType:  "page_view",
+					VisitorID:  visitorID,
+					SessionID:  &sessionID,
+					OccurredAt: t5m,
+				},
+			},
+		}
+
+		resp, err := service.IngestEvents(ctx, nil, req)
+		require.NoError(t, err)
+		assert.Equal(t, 1, resp.Accepted)
+
+		var utmSource, utmCampaign string
+		var lastSeen, capturedAt time.Time
+		err = db.Pool.QueryRow(ctx, "SELECT utm_source, utm_campaign, last_seen_at, attribution_captured_at FROM analytics_sessions WHERE id = $1", sessionID).
+			Scan(&utmSource, &utmCampaign, &lastSeen, &capturedAt)
+		require.NoError(t, err)
+		assert.Equal(t, "google", utmSource, "direct touch must not overwrite existing non-direct utm_source")
+		assert.Equal(t, "campaign-A", utmCampaign)
+		assert.Equal(t, t0.Unix(), capturedAt.Unix(), "captured_at must remain original touch time")
+		assert.Equal(t, t5m.Unix(), lastSeen.Unix(), "last_seen_at must be updated")
+	})
+
+	// Step C: T0 + 10m - VK non-direct touch -> VK replaces Google
+	t.Run("C. VK non-direct -> VK replaces Google", func(t *testing.T) {
+		t10m := t0.Add(10 * time.Minute)
+		req := behavior.EventIngestionRequest{
+			Events: []behavior.IngestionEvent{
+				{
+					EventID:    uuid.New(),
+					EventType:  "page_view",
+					VisitorID:  visitorID,
+					SessionID:  &sessionID,
+					OccurredAt: t10m,
+					Metadata: map[string]interface{}{
+						"utm_source":   "vk",
+						"utm_medium":   "paid_social",
+						"utm_campaign": "campaign-B",
+					},
+				},
+			},
+		}
+
+		resp, err := service.IngestEvents(ctx, nil, req)
+		require.NoError(t, err)
+		assert.Equal(t, 1, resp.Accepted)
+
+		var utmSource, utmMedium, utmCampaign string
+		var capturedAt, expiresAt time.Time
+		err = db.Pool.QueryRow(ctx, "SELECT utm_source, utm_medium, utm_campaign, attribution_captured_at, attribution_expires_at FROM analytics_sessions WHERE id = $1", sessionID).
+			Scan(&utmSource, &utmMedium, &utmCampaign, &capturedAt, &expiresAt)
+		require.NoError(t, err)
+		assert.Equal(t, "vk", utmSource, "new non-direct touch must replace attribution source")
+		assert.Equal(t, "paid_social", utmMedium)
+		assert.Equal(t, "campaign-B", utmCampaign)
+		assert.Equal(t, t10m.Unix(), capturedAt.Unix(), "captured_at must reset to new non-direct touch time")
+		expectedExpiry := behavior.CalculateAttributionExpiry(t10m)
+		assert.Equal(t, expectedExpiry.Unix(), expiresAt.Unix(), "expiry must reset to new touch time + 30 days")
+	})
+
+	// Step D: T0 + 20m - Direct navigation -> VK preserved
+	t.Run("D. direct -> VK preserved", func(t *testing.T) {
+		t20m := t0.Add(20 * time.Minute)
+		req := behavior.EventIngestionRequest{
+			Events: []behavior.IngestionEvent{
+				{
+					EventID:    uuid.New(),
+					EventType:  "page_view",
+					VisitorID:  visitorID,
+					SessionID:  &sessionID,
+					OccurredAt: t20m,
+				},
+			},
+		}
+
+		resp, err := service.IngestEvents(ctx, nil, req)
+		require.NoError(t, err)
+		assert.Equal(t, 1, resp.Accepted)
+
+		var utmSource, utmCampaign string
+		var lastSeen, capturedAt time.Time
+		err = db.Pool.QueryRow(ctx, "SELECT utm_source, utm_campaign, last_seen_at, attribution_captured_at FROM analytics_sessions WHERE id = $1", sessionID).
+			Scan(&utmSource, &utmCampaign, &lastSeen, &capturedAt)
+		require.NoError(t, err)
+		assert.Equal(t, "vk", utmSource, "subsequent direct touch must preserve VK attribution")
+		assert.Equal(t, "campaign-B", utmCampaign)
+		assert.Equal(t, t0.Add(10*time.Minute).Unix(), capturedAt.Unix())
+		assert.Equal(t, t20m.Unix(), lastSeen.Unix())
+	})
+}
+
+func TestBehaviorSessionAttribution_30DayExpiryAndOrderResolution(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := connectTestDB(t)
+	repo := behavior.NewRepository(db)
+	service := behavior.NewService(repo)
+
+	visitorID := uuid.New()
+	sessionID := uuid.New()
+	t0 := time.Now().UTC().Add(-35 * 24 * time.Hour) // 35 days ago
+
+	// Seed session 35 days ago with Google attribution directly in DB
+	src := "google"
+	camp := "old-campaign"
+	cAt := t0
+	eAt := behavior.CalculateAttributionExpiry(t0)
+	sess := behavior.AnalyticsSession{
+		ID:                    sessionID,
+		VisitorID:             visitorID,
+		StartedAt:             t0,
+		LastSeenAt:            t0,
+		Source:                &src,
+		UTMSource:             &src,
+		UTMCampaign:           &camp,
+		AttributionCapturedAt: &cAt,
+		AttributionExpiresAt:  &eAt,
+	}
+	err := repo.UpsertSessions(ctx, []behavior.AnalyticsSession{sess})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+
+	// 1. Check active attribution within 30 days (e.g. at t0 + 20 days)
+	t.Run("Active within 30 days", func(t *testing.T) {
+		active, err := service.GetActiveAttribution(ctx, visitorID, t0.Add(20*24*time.Hour))
+		require.NoError(t, err)
+		require.NotNil(t, active)
+		assert.Equal(t, "google", *active.UTMSource)
+	})
+
+	// 2. Check active attribution after 30 days (now is 35 days later) -> expired!
+	t.Run("Expired after 30 days", func(t *testing.T) {
+		active, err := service.GetActiveAttribution(ctx, visitorID, now)
+		require.NoError(t, err)
+		assert.Nil(t, active, "attribution older than 30 days must be expired")
+	})
+
+	// 3. Create order snapshot after expiry -> must NOT receive expired attribution
+	t.Run("Order after expiry does not use expired attribution", func(t *testing.T) {
+		orderID := uuid.New()
+		_, err := db.Pool.Exec(ctx, "INSERT INTO users (id, email, password_hash, name, first_name, last_name) VALUES ($1, $2, 'hash', 'Test', 'T', 'T')", visitorID, uuid.New().String()+"@zamk.app")
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(ctx, "INSERT INTO orders (id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address) VALUES ($1, $2, 'created', 100, 'RUB', 'T', '1', 't@e.com', 'A')", orderID, visitorID)
+		require.NoError(t, err)
+
+		snapshot, err := service.CreateOrderAttributionFromActive(ctx, orderID, visitorID, nil, now)
+		require.NoError(t, err)
+		require.NotNil(t, snapshot)
+		assert.Nil(t, snapshot.UTMSource, "expired attribution must not be applied to new order")
+		assert.Nil(t, snapshot.SessionID)
+	})
+}
+
+func TestBehaviorSessionAttribution_SessionOwnershipFailClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := connectTestDB(t)
+	repo := behavior.NewRepository(db)
+	service := behavior.NewService(repo)
+
+	visitor1 := uuid.New()
+	visitor2 := uuid.New()
+	sessionID := uuid.New()
+	t0 := time.Now().UTC()
+
+	// 1. Session created by visitor1
+	req1 := behavior.EventIngestionRequest{
+		Events: []behavior.IngestionEvent{
+			{
+				EventID:    uuid.New(),
+				EventType:  "session_started",
+				VisitorID:  visitor1,
+				SessionID:  &sessionID,
+				OccurredAt: t0,
+			},
+		},
+	}
+	resp1, err := service.IngestEvents(ctx, nil, req1)
+	require.NoError(t, err)
+	assert.Equal(t, 1, resp1.Accepted)
+
+	// 2. Later event arrives with SAME session_id but DIFFERENT visitor2 -> MUST FAIL CLOSED
+	req2 := behavior.EventIngestionRequest{
+		Events: []behavior.IngestionEvent{
+			{
+				EventID:    uuid.New(),
+				EventType:  "page_view",
+				VisitorID:  visitor2,
+				SessionID:  &sessionID,
+				OccurredAt: t0.Add(2 * time.Minute),
+			},
+		},
+	}
+	resp2, err := service.IngestEvents(ctx, nil, req2)
+	require.NoError(t, err)
+	assert.Equal(t, 0, resp2.Accepted, "must not accept event for hijacked session")
+	require.Len(t, resp2.Rejected, 1)
+	assert.Equal(t, "session_visitor_mismatch", resp2.Rejected[0].Code)
+
+	// Verify visitor_id in DB was NOT overwritten
+	var dbVisitor uuid.UUID
+	err = db.Pool.QueryRow(ctx, "SELECT visitor_id FROM analytics_sessions WHERE id = $1", sessionID).Scan(&dbVisitor)
+	require.NoError(t, err)
+	assert.Equal(t, visitor1, dbVisitor, "session visitor_id must remain original visitor1")
+}
+
+func TestBehaviorSessionAttribution_UserBindingCannotBeStolen(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := connectTestDB(t)
+	repo := behavior.NewRepository(db)
+	service := behavior.NewService(repo)
+
+	visitorID := uuid.New()
+	sessionID := uuid.New()
+	user1 := uuid.New()
+	user2 := uuid.New()
+	t0 := time.Now().UTC()
+
+	// Insert test users
+	_, err := db.Pool.Exec(ctx, "INSERT INTO users (id, email, password_hash, name, first_name, last_name) VALUES ($1, $2, 'h', 'U1', 'U', '1')", user1, uuid.New().String()+"@zamk.app")
+	require.NoError(t, err)
+	_, err = db.Pool.Exec(ctx, "INSERT INTO users (id, email, password_hash, name, first_name, last_name) VALUES ($1, $2, 'h', 'U2', 'U', '2')", user2, uuid.New().String()+"@zamk.app")
+	require.NoError(t, err)
+
+	// 1. Session associated with User 1
+	req1 := behavior.EventIngestionRequest{
+		Events: []behavior.IngestionEvent{
+			{
+				EventID:    uuid.New(),
+				EventType:  "session_started",
+				VisitorID:  visitorID,
+				SessionID:  &sessionID,
+				OccurredAt: t0,
+			},
+		},
+	}
+	resp1, err := service.IngestEvents(ctx, &user1, req1)
+	require.NoError(t, err)
+	assert.Equal(t, 1, resp1.Accepted)
+
+	// 2. Later event arrives with User 2 credentials for SAME session -> MUST FAIL CLOSED
+	req2 := behavior.EventIngestionRequest{
+		Events: []behavior.IngestionEvent{
+			{
+				EventID:    uuid.New(),
+				EventType:  "page_view",
+				VisitorID:  visitorID,
+				SessionID:  &sessionID,
+				OccurredAt: t0.Add(3 * time.Minute),
+			},
+		},
+	}
+	resp2, err := service.IngestEvents(ctx, &user2, req2)
+	require.NoError(t, err)
+	assert.Equal(t, 0, resp2.Accepted, "must not accept event with conflicting user credentials")
+	require.Len(t, resp2.Rejected, 1)
+	assert.Equal(t, "session_user_mismatch", resp2.Rejected[0].Code)
+
+	// Verify user_id in DB was NOT overwritten
+	var dbUser uuid.UUID
+	err = db.Pool.QueryRow(ctx, "SELECT user_id FROM analytics_sessions WHERE id = $1", sessionID).Scan(&dbUser)
+	require.NoError(t, err)
+	assert.Equal(t, user1, dbUser, "session user_id must remain user1")
+}
+
+func TestBehaviorSessionAttribution_MetadataWhitelistAndPIIRejection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := connectTestDB(t)
+	repo := behavior.NewRepository(db)
+	service := behavior.NewService(repo)
+
+	visitorID := uuid.New()
+	sessionID := uuid.New()
+	t0 := time.Now().UTC()
+
+	// Prohibited PII / unwhitelisted keys must be rejected with HTTP 400 invalid_metadata
+	forbiddenKeys := []string{"email", "phone", "address", "user_id", "campaign_id", "secretToken", "password"}
+	for _, key := range forbiddenKeys {
+		t.Run("Forbidden metadata key: "+key, func(t *testing.T) {
+			req := behavior.EventIngestionRequest{
+				Events: []behavior.IngestionEvent{
+					{
+						EventID:    uuid.New(),
+						EventType:  "session_started",
+						VisitorID:  visitorID,
+						SessionID:  &sessionID,
+						OccurredAt: t0,
+						Metadata: map[string]interface{}{
+							key: "malicious_or_pii_value",
+						},
+					},
+				},
+			}
+			_, err := service.IngestEvents(ctx, nil, req)
+			require.Error(t, err)
+			var structErr *behavior.StructuralError
+			require.True(t, errors.As(err, &structErr))
+			assert.Equal(t, "invalid_metadata", structErr.Code)
+		})
+	}
+
+	// Length bounds check on metadata fields
+	t.Run("Oversized metadata value rejected", func(t *testing.T) {
+		req := behavior.EventIngestionRequest{
+			Events: []behavior.IngestionEvent{
+				{
+					EventID:    uuid.New(),
+					EventType:  "session_started",
+					VisitorID:  visitorID,
+					SessionID:  &sessionID,
+					OccurredAt: t0,
+					Metadata: map[string]interface{}{
+						"utm_source": strings.Repeat("x", 256), // max is 255
+					},
+				},
+			},
+		}
+		_, err := service.IngestEvents(ctx, nil, req)
+		require.Error(t, err)
+		var structErr *behavior.StructuralError
+		require.True(t, errors.As(err, &structErr))
+		assert.Equal(t, "invalid_metadata", structErr.Code)
+	})
+}
+
+func TestBehaviorSessionAttribution_OrderSnapshotImmutability(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := connectTestDB(t)
+	repo := behavior.NewRepository(db)
+
+	orderID := uuid.New()
+	visitorID := uuid.New()
+	sessionID := uuid.New()
+	now := time.Now().UTC()
+
+	// Seed user and order
+	_, err := db.Pool.Exec(ctx, "INSERT INTO users (id, email, password_hash, name, first_name, last_name) VALUES ($1, $2, 'hash', 'Test', 'T', 'T')", visitorID, uuid.New().String()+"@zamk.app")
+	require.NoError(t, err)
+	_, err = db.Pool.Exec(ctx, "INSERT INTO orders (id, user_id, status, total_price_cents, currency, customer_name, customer_phone, customer_email, delivery_address) VALUES ($1, $2, 'created', 100, 'RUB', 'T', '1', 't@e.com', 'A')", orderID, visitorID)
+	// Seed session so session_id FK is valid
+	err = repo.UpsertSessions(ctx, []behavior.AnalyticsSession{{
+		ID:         sessionID,
+		VisitorID:  visitorID,
+		StartedAt:  now,
+		LastSeenAt: now,
+	}})
+	require.NoError(t, err)
+
+	googleSource := "google"
+	attr1 := behavior.OrderAttribution{
+		OrderID:      orderID,
+		SessionID:    &sessionID,
+		VisitorID:    &visitorID,
+		UTMSource:    &googleSource,
+		AttributedAt: now,
+	}
+
+	// First insert persists snapshot
+	err = repo.CreateOrderAttributionSnapshot(ctx, db.Pool, attr1)
+	require.NoError(t, err)
+
+	snapshot1, err := repo.GetOrderAttribution(ctx, orderID)
+	require.NoError(t, err)
+	require.NotNil(t, snapshot1)
+	assert.Equal(t, "google", *snapshot1.UTMSource)
+
+	// Second insert with different attribution for same order -> must NOT overwrite
+	vkSource := "vk"
+	attr2 := behavior.OrderAttribution{
+		OrderID:      orderID,
+		SessionID:    &sessionID,
+		VisitorID:    &visitorID,
+		UTMSource:    &vkSource,
+		AttributedAt: now.Add(1 * time.Hour),
+	}
+	err = repo.CreateOrderAttributionSnapshot(ctx, db.Pool, attr2)
+	require.NoError(t, err)
+
+	snapshot2, err := repo.GetOrderAttribution(ctx, orderID)
+	require.NoError(t, err)
+	require.NotNil(t, snapshot2)
+	assert.Equal(t, "google", *snapshot2.UTMSource, "second insert must not mutate original snapshot")
+}
+
+func TestBehaviorSessionAttribution_LifetimesAndHelpers(t *testing.T) {
+	t0 := time.Now().UTC()
+
+	// 30-minute inactivity timeout
+	assert.Equal(t, 30*time.Minute, behavior.SessionInactivityTimeout)
+	assert.False(t, behavior.IsSessionExpired(t0, t0.Add(29*time.Minute)))
+	assert.True(t, behavior.IsSessionExpired(t0, t0.Add(31*time.Minute)))
+
+	// 30-day attribution lifetime
+	assert.Equal(t, 30*24*time.Hour, behavior.AttributionLifetime)
+	expiry := behavior.CalculateAttributionExpiry(t0)
+	assert.Equal(t, t0.Add(30*24*time.Hour), expiry)
+	assert.False(t, behavior.IsAttributionExpired(&expiry, t0.Add(29*24*time.Hour)))
+	assert.True(t, behavior.IsAttributionExpired(&expiry, t0.Add(31*24*time.Hour)))
+	assert.True(t, behavior.IsAttributionExpired(nil, t0))
+}
+
+func TestBehaviorSessionAttribution_ServerResolvedCampaignID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := connectTestDB(t)
+	repo := behavior.NewRepository(db)
+
+	visitorID := uuid.New()
+	sessionID := uuid.New()
+	now := time.Now().UTC()
+	campaignID := uuid.New()
+
+	// Create test seller and marketing campaign
+	sellerID := uuid.New()
+	sellerSlug := fmt.Sprintf("seller-campaign-%s", sellerID.String()[:8])
+	_, err := db.Pool.Exec(ctx, `
+		INSERT INTO sellers (id, brand_name, slug, status)
+		VALUES ($1, 'Test Seller Brand', $2, 'active')
+	`, sellerID, sellerSlug)
+	require.NoError(t, err)
+
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO marketing_campaigns (id, seller_id, title, funding_mode, status, discount_type, seller_discount_bps, created_at, updated_at)
+		VALUES ($1, $2, 'Summer Ad Campaign', 'seller', 'active', 'percent', 1000, now(), now())
+	`, campaignID, sellerID)
+	require.NoError(t, err)
+
+	src := "yandex"
+	cAt := now
+	eAt := behavior.CalculateAttributionExpiry(now)
+	sess := behavior.AnalyticsSession{
+		ID:                    sessionID,
+		VisitorID:             visitorID,
+		StartedAt:             now,
+		LastSeenAt:            now,
+		Source:                &src,
+		UTMSource:             &src,
+		CampaignID:            &campaignID,
+		AttributionCapturedAt: &cAt,
+		AttributionExpiresAt:  &eAt,
+	}
+
+	err = repo.UpsertSessions(ctx, []behavior.AnalyticsSession{sess})
+	require.NoError(t, err)
+
+	active, err := repo.GetActiveAttribution(ctx, visitorID, now)
+	require.NoError(t, err)
+	require.NotNil(t, active)
+	assert.Equal(t, campaignID, *active.CampaignID, "server-resolved campaign_id must be persisted and retrieved")
+}
+
+func TestBehaviorSessionAttribution_ShopIngestionStorageProof(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := connectTestDB(t)
+	validator := &mockSessionValidator{sessions: make(map[string]uuid.UUID)}
+	router, _, tokenSvc := setupTestRouter(t, db, validator)
+
+	visitorID := uuid.New()
+	sessionID := uuid.New()
+	eventID1 := uuid.New()
+	eventID2 := uuid.New()
+	eventID3 := uuid.New()
+	now := time.Now().UTC()
+
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		db.Pool.Exec(cleanupCtx, "DELETE FROM behavioral_events WHERE session_id = $1", sessionID)
+		db.Pool.Exec(cleanupCtx, "DELETE FROM analytics_sessions WHERE id = $1", sessionID)
+	})
+
+	// 1. Anonymous Shop Landing:
+	// session_started with UTM + page_view
+	landingPayload := map[string]interface{}{
+		"events": []map[string]interface{}{
+			{
+				"eventId":    eventID1.String(),
+				"eventType":  "session_started",
+				"visitorId":  visitorID.String(),
+				"sessionId":  sessionID.String(),
+				"occurredAt": now.Format(time.RFC3339Nano),
+				"metadata": map[string]string{
+					"utm_source":   "vk",
+					"utm_medium":   "paid_social",
+					"utm_campaign": "drop2",
+					"landing_path": "/catalog",
+				},
+			},
+			{
+				"eventId":    eventID2.String(),
+				"eventType":  "page_view",
+				"visitorId":  visitorID.String(),
+				"sessionId":  sessionID.String(),
+				"occurredAt": now.Add(500 * time.Millisecond).Format(time.RFC3339Nano),
+				"route":      "/catalog",
+			},
+		},
+	}
+
+	bodyBytes, err := json.Marshal(landingPayload)
+	require.NoError(t, err)
+
+	req1 := httptest.NewRequest(http.MethodPost, "/api/behavior/events", bytes.NewReader(bodyBytes))
+	req1.Header.Set("Content-Type", "application/json")
+	w1 := httptest.NewRecorder()
+	router.ServeHTTP(w1, req1)
+
+	require.True(t, w1.Code == http.StatusOK || w1.Code == http.StatusAccepted, "ingestion status: %d, body: %s", w1.Code, w1.Body.String())
+
+	var resp1 behavior.EventIngestionResponse
+	err = json.Unmarshal(w1.Body.Bytes(), &resp1)
+	require.NoError(t, err)
+	assert.Equal(t, 2, resp1.Accepted)
+	assert.Empty(t, resp1.Rejected)
+
+	// Verify analytics_sessions storage row
+	var sessRow struct {
+		ID                  uuid.UUID
+		VisitorID           uuid.UUID
+		UserID              *uuid.UUID
+		UTMSource           *string
+		UTMMedium           *string
+		UTMCampaign         *string
+		LandingPath         *string
+		AttributionCaptured *time.Time
+		AttributionExpires  *time.Time
+	}
+	err = db.Pool.QueryRow(ctx, `
+		SELECT id, visitor_id, user_id, utm_source, utm_medium, utm_campaign, landing_path,
+		       attribution_captured_at, attribution_expires_at
+		FROM analytics_sessions
+		WHERE id = $1
+	`, sessionID).Scan(
+		&sessRow.ID, &sessRow.VisitorID, &sessRow.UserID,
+		&sessRow.UTMSource, &sessRow.UTMMedium, &sessRow.UTMCampaign, &sessRow.LandingPath,
+		&sessRow.AttributionCaptured, &sessRow.AttributionExpires,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, sessionID, sessRow.ID)
+	assert.Equal(t, visitorID, sessRow.VisitorID)
+	assert.Nil(t, sessRow.UserID, "anonymous session user_id must be nil initially")
+	require.NotNil(t, sessRow.UTMSource)
+	assert.Equal(t, "vk", *sessRow.UTMSource)
+	require.NotNil(t, sessRow.UTMMedium)
+	assert.Equal(t, "paid_social", *sessRow.UTMMedium)
+	require.NotNil(t, sessRow.UTMCampaign)
+	assert.Equal(t, "drop2", *sessRow.UTMCampaign)
+	require.NotNil(t, sessRow.LandingPath)
+	assert.Equal(t, "/catalog", *sessRow.LandingPath)
+	assert.NotNil(t, sessRow.AttributionCaptured)
+	assert.NotNil(t, sessRow.AttributionExpires)
+
+	// Verify behavioral_events rows have same session_id and visitor_id
+	rows, err := db.Pool.Query(ctx, `
+		SELECT id, event_type, visitor_id, session_id, user_id
+		FROM behavioral_events
+		WHERE session_id = $1
+		ORDER BY occurred_at ASC
+	`, sessionID)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var eventCount int
+	for rows.Next() {
+		var eid uuid.UUID
+		var etype string
+		var vid, sid uuid.UUID
+		var uid *uuid.UUID
+		err := rows.Scan(&eid, &etype, &vid, &sid, &uid)
+		require.NoError(t, err)
+		assert.Equal(t, visitorID, vid)
+		assert.Equal(t, sessionID, sid)
+		assert.Nil(t, uid)
+		eventCount++
+	}
+	assert.Equal(t, 2, eventCount)
+
+	// 2. Authenticated event using same visitor/session:
+	// Server associates user_id without changing visitor/session identity
+	userID := uuid.New()
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		db.Pool.Exec(cleanupCtx, "DELETE FROM users WHERE id = $1", userID)
+	})
+
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO users (id, email, password_hash, role, status, name)
+		VALUES ($1, $2, 'hash', 'customer', 'active', 'Auth Customer')
+	`, userID, fmt.Sprintf("cust-%s@zamk.me", userID.String()[:8]))
+	require.NoError(t, err)
+
+	accessToken, err := tokenSvc.GenerateAccessToken(userID, "customer", "active")
+	require.NoError(t, err)
+
+	authPayload := map[string]interface{}{
+		"events": []map[string]interface{}{
+			{
+				"eventId":    eventID3.String(),
+				"eventType":  "page_view",
+				"visitorId":  visitorID.String(), // SAME visitor_id
+				"sessionId":  sessionID.String(), // SAME session_id
+				"occurredAt": now.Add(2 * time.Minute).Format(time.RFC3339Nano),
+				"route":      "/account",
+			},
+		},
+	}
+	authBytes, err := json.Marshal(authPayload)
+	require.NoError(t, err)
+
+	req2 := httptest.NewRequest(http.MethodPost, "/api/behavior/events", bytes.NewReader(authBytes))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Authorization", "Bearer "+accessToken)
+	w2 := httptest.NewRecorder()
+	router.ServeHTTP(w2, req2)
+
+	require.True(t, w2.Code == http.StatusOK || w2.Code == http.StatusAccepted, "auth ingestion status: %d, body: %s", w2.Code, w2.Body.String())
+
+	// Verify server associated user_id on analytics_sessions without changing visitor_id or session_id
+	var updatedSess struct {
+		ID        uuid.UUID
+		VisitorID uuid.UUID
+		UserID    *uuid.UUID
+		UTMSource *string
+	}
+	err = db.Pool.QueryRow(ctx, `
+		SELECT id, visitor_id, user_id, utm_source
+		FROM analytics_sessions
+		WHERE id = $1
+	`, sessionID).Scan(&updatedSess.ID, &updatedSess.VisitorID, &updatedSess.UserID, &updatedSess.UTMSource)
+	require.NoError(t, err)
+
+	assert.Equal(t, sessionID, updatedSess.ID, "session_id must remain unchanged")
+	assert.Equal(t, visitorID, updatedSess.VisitorID, "visitor_id must remain unchanged")
+	require.NotNil(t, updatedSess.UserID, "user_id must be associated by server")
+	assert.Equal(t, userID, *updatedSess.UserID)
+	require.NotNil(t, updatedSess.UTMSource)
+	assert.Equal(t, "vk", *updatedSess.UTMSource, "attribution must be preserved")
+
+	// Verify event 3 has user_id set in behavioral_events
+	var evt3UserID *uuid.UUID
+	err = db.Pool.QueryRow(ctx, "SELECT user_id FROM behavioral_events WHERE id = $1", eventID3).Scan(&evt3UserID)
+	require.NoError(t, err)
+	require.NotNil(t, evt3UserID)
+	assert.Equal(t, userID, *evt3UserID)
 }

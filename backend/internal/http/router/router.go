@@ -172,6 +172,9 @@ func New(
 	r.Get("/api/health", healthHandler.HealthCheck)
 	r.Get("/api/ready", healthHandler.ReadinessCheck)
 
+	// Tracking Link Redirect
+	r.Get("/r/{token}", marketingHandler.HandleTrackingRedirect)
+
 	r.Route("/api/auth", func(r chi.Router) {
 		r.With(registerLimit).Post("/register", authHandler.Register)
 		r.With(loginLimit).Post("/login", authHandler.Login)
@@ -609,11 +612,11 @@ func New(
 		r.With(perm("shipments.update_status")).Post("/shipments/{id}/deliver", fulfillmentHandler.DeliverShipment)
 
 		// Fulfillments & Receiving
-		r.With(perm("orders.read")).Get("/order-fulfillments", fulfillmentHandler.ListAdminFulfillments)
-		r.With(perm("orders.read")).Get("/order-fulfillments/{id}", fulfillmentHandler.GetAdminFulfillment)
-		r.With(permAny("warehouse.packing", "orders.read")).Get("/fulfillments/packing", fulfillmentHandler.ListPackingQueue)
-		r.With(permAny("warehouse.dispatch", "orders.read")).Get("/fulfillments/dispatch", fulfillmentHandler.ListDispatchQueue)
-		r.With(perm("orders.read")).Get("/fulfillments/{id}", fulfillmentHandler.GetAdminFulfillment)
+		r.With(perm("fulfillment.read")).Get("/order-fulfillments", fulfillmentHandler.ListAdminFulfillments)
+		r.With(perm("fulfillment.read")).Get("/order-fulfillments/{id}", fulfillmentHandler.GetAdminFulfillment)
+		r.With(permAny("warehouse.packing", "fulfillment.read")).Get("/fulfillments/packing", fulfillmentHandler.ListPackingQueue)
+		r.With(permAny("warehouse.dispatch", "fulfillment.read")).Get("/fulfillments/dispatch", fulfillmentHandler.ListDispatchQueue)
+		r.With(perm("fulfillment.read")).Get("/fulfillments/{id}", fulfillmentHandler.GetAdminFulfillment)
 		r.With(perm("shipments.create")).Post("/fulfillments/{id}/shipment", fulfillmentHandler.CreateShipmentForFulfillment)
 		r.With(perm("orders.read")).Post("/fulfillments/resolve-receiving-code", fulfillmentHandler.ResolveReceivingCode)
 		r.With(perm("warehouse.receiving")).Post("/fulfillments/{id}/receiving/start", fulfillmentHandler.StartReceiving)
@@ -621,11 +624,11 @@ func New(
 		r.With(perm("shipments.create")).Post("/fulfillments/{id}/receiving/confirm", fulfillmentHandler.ConfirmReceiving)
 		r.With(perm("warehouse.receiving")).Post("/fulfillments/{id}/receiving/discrepancy", fulfillmentHandler.RecordDiscrepancy)
 
-		r.With(permAny("orders.read", "warehouse.picking", "warehouse.packing")).Get("/fulfillments/{id}/picking", fulfillmentHandler.GetPickingOrder)
-		r.With(permAny("orders.read", "warehouse.picking")).Get("/fulfillments/{id}/picking/compatible-units", fulfillmentHandler.GetCompatibleUnits)
+		r.With(permAny("fulfillment.read", "warehouse.picking", "warehouse.packing")).Get("/fulfillments/{id}/picking", fulfillmentHandler.GetPickingOrder)
+		r.With(permAny("fulfillment.read", "warehouse.picking")).Get("/fulfillments/{id}/picking/compatible-units", fulfillmentHandler.GetCompatibleUnits)
 		r.With(perm("warehouse.picking")).Post("/fulfillments/{id}/picking/scan", fulfillmentHandler.ScanPickingCode)
 		r.With(perm("warehouse.packing")).Post("/fulfillments/{id}/pack", fulfillmentHandler.PackFulfillment)
-		r.With(permAny("orders.read", "warehouse.dispatch")).Get("/fulfillments/{id}/dispatch-context", fulfillmentHandler.GetDispatchContext)
+		r.With(permAny("fulfillment.read", "warehouse.dispatch")).Get("/fulfillments/{id}/dispatch-context", fulfillmentHandler.GetDispatchContext)
 		r.With(perm("warehouse.dispatch")).Post("/fulfillments/{id}/dispatch", fulfillmentHandler.DispatchFulfillment)
 
 		// Returns
@@ -694,6 +697,23 @@ func New(
 			r.With(perm("support.close")).Post("/sessions/{sessionId}/reopen", supportHandler.ReopenSession)
 			r.With(perm("support.respond")).Patch("/conversations/{id}/session", supportHandler.UpdateSession)
 			r.With(perm("support.read")).Get("/attachments/{id}", supportHandler.DownloadAdminAttachment)
+		})
+
+		r.Route("/marketing", func(r chi.Router) {
+			r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/campaigns", marketingHandler.ListAdminCampaigns)
+			r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/campaigns/{id}", marketingHandler.GetAdminCampaign)
+			r.With(perm("marketing.campaigns.write")).Post("/campaigns", marketingHandler.CreateAdminCampaign)
+			r.With(perm("marketing.campaigns.write")).Patch("/campaigns/{id}", marketingHandler.UpdateAdminCampaign)
+			r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/campaigns/{id}/tracking-links", marketingHandler.ListTrackingLinks)
+			r.With(perm("marketing.campaigns.write")).Post("/campaigns/{id}/tracking-links", marketingHandler.CreateTrackingLink)
+			r.With(perm("marketing.campaigns.write")).Patch("/campaigns/{id}/tracking-links/{linkId}/disable", marketingHandler.DisableTrackingLink)
+
+			r.Route("/analytics", func(r chi.Router) {
+				r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/overview", marketingHandler.GetAnalyticsOverview)
+					r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/overview/trend", marketingHandler.GetAnalyticsTrend)
+				r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/sources", marketingHandler.GetAnalyticsSources)
+				r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/campaigns", marketingHandler.GetAnalyticsCampaigns)
+			})
 		})
 	})
 

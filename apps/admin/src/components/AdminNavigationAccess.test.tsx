@@ -80,9 +80,9 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
     vi.clearAllMocks();
   });
 
-  // A. 26 screen rules are consumed by navigation/route helpers
-  it('A: all 26 canonical screen rules are consumed by getStaffScreenVisibility', () => {
-    expect(STAFF_SCREEN_ACCESS_RULES).toHaveLength(26);
+  // A. 27 screen rules are consumed by navigation/route helpers
+  it('A: all 27 canonical screen rules are consumed by getStaffScreenVisibility', () => {
+    expect(STAFF_SCREEN_ACCESS_RULES).toHaveLength(27);
 
     for (const rule of STAFF_SCREEN_ACCESS_RULES) {
       const visibility = getStaffScreenVisibility(rule.route);
@@ -110,7 +110,7 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
   // C. picking uses warehouse.picking
   it('C: picking route and navigation visibility strictly require warehouse.picking', () => {
     const pickingVisibility = getStaffScreenVisibility('/fulfillment/picking');
-    expect(pickingVisibility).toBe('warehouse.picking');
+    expect(pickingVisibility).toEqual(['warehouse.picking', 'fulfillment.read']);
 
     mockAuth(['warehouse.picking']);
     render(
@@ -395,6 +395,56 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
     expect(screen.queryByText('Staff Directory Screen')).toBeNull();
   });
 
+  // M2. marketing.campaigns.read exposes marketing screen
+  it('M2: marketing.campaigns.read exposes Маркетинг in navigation and route guard, and is hidden without it', () => {
+    // 1. Visible with marketing.campaigns.read
+    mockAuth(['marketing.campaigns.read']);
+    const { unmount: unmount1 } = render(
+      <MemoryRouter initialEntries={['/marketing']}>
+        <AdminLayout>
+          <Routes>
+            <Route
+              path="/marketing"
+              element={
+                <AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}>
+                  <div>Marketing Screen</div>
+                </AdminProtectedRoute>
+              }
+            />
+          </Routes>
+        </AdminLayout>
+      </MemoryRouter>
+    );
+
+    expect(within(getSidebar()).getByText('Маркетинг')).toBeDefined();
+    expect(screen.getByText('Marketing Screen')).toBeDefined();
+    unmount1();
+
+    // 2. Hidden without permission
+    mockAuth(['orders.read']);
+    const { unmount: unmount2 } = render(
+      <MemoryRouter initialEntries={['/marketing']}>
+        <AdminLayout>
+          <Routes>
+            <Route
+              path="/marketing"
+              element={
+                <AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}>
+                  <div>Marketing Screen</div>
+                </AdminProtectedRoute>
+              }
+            />
+          </Routes>
+        </AdminLayout>
+      </MemoryRouter>
+    );
+
+    expect(within(getSidebar()).queryByText('Маркетинг')).toBeNull();
+    expect(screen.getByText('Недостаточно прав')).toBeDefined();
+    expect(screen.queryByText('Marketing Screen')).toBeNull();
+    unmount2();
+  });
+
   // N. screenless capabilities do not create sidebar entries
   it('N: screenless capabilities do not create phantom sidebar entries', () => {
     mockAuth([
@@ -526,7 +576,7 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
   // R. packing route visibility and guard requires warehouse.packing
   it('R: packing route guard strictly requires warehouse.packing and rejects orders.read or other roles', () => {
     const packingVisibility = getStaffScreenVisibility('/fulfillment/packing');
-    expect(packingVisibility).toBe('warehouse.packing');
+    expect(packingVisibility).toEqual(['warehouse.packing', 'fulfillment.read']);
 
     // 1. Operator with warehouse.packing -> access granted
     mockAuth(['warehouse.packing']);
@@ -618,7 +668,7 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
   // S. dispatch route visibility and guard requires warehouse.dispatch
   it('S: dispatch route guard strictly requires warehouse.dispatch and rejects orders.read or other roles', () => {
     const dispatchVisibility = getStaffScreenVisibility('/fulfillment/dispatch');
-    expect(dispatchVisibility).toBe('warehouse.dispatch');
+    expect(dispatchVisibility).toEqual(['warehouse.dispatch', 'fulfillment.read']);
 
     // 1. Operator with warehouse.dispatch -> access granted
     mockAuth(['warehouse.dispatch']);
@@ -929,5 +979,322 @@ describe('WH.5 — Warehouse Navigation & Workspace Pass', () => {
 
       unmount();
     }
+  });
+});
+
+describe('RBAC.1 — Fulfillment Read Visibility & Mutation Separation (A through F)', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  // A. orders.read only: Orders visible; picking, packing, dispatch hidden and denied
+  it('A: orders.read only shows Orders and hides/denies all fulfillment workspaces', () => {
+    mockAuth(['orders.read']);
+
+    // 1. Navigation destinations: Orders visible, fulfillment hidden
+    const { unmount: unmountLayout } = render(
+      <MemoryRouter initialEntries={['/orders']}>
+        <AdminLayout>
+          <div>Orders Workspace</div>
+        </AdminLayout>
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).getByText('Заказы')).toBeDefined();
+    expect(within(sidebar).queryByText('Сборка')).toBeNull();
+    expect(within(sidebar).queryByText('Упаковка')).toBeNull();
+    expect(within(sidebar).queryByText('Отгрузка')).toBeNull();
+    unmountLayout();
+
+    // 2. Picking route denied
+    const { unmount: unmountPick } = render(
+      <MemoryRouter initialEntries={['/fulfillment/picking']}>
+        <Routes>
+          <Route
+            path="/fulfillment/picking"
+            element={
+              <AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/picking')}>
+                <div data-testid="picking-view">Picking View</div>
+              </AdminProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Недостаточно прав')).toBeDefined();
+    expect(screen.queryByTestId('picking-view')).toBeNull();
+    unmountPick();
+
+    // 3. Packing route denied
+    const { unmount: unmountPack } = render(
+      <MemoryRouter initialEntries={['/fulfillment/packing/fulf-123']}>
+        <Routes>
+          <Route
+            path="/fulfillment/packing/:id"
+            element={
+              <AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/packing')}>
+                <div data-testid="packing-view">Packing View</div>
+              </AdminProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Недостаточно прав')).toBeDefined();
+    expect(screen.queryByTestId('packing-view')).toBeNull();
+    unmountPack();
+
+    // 4. Dispatch route denied
+    const { unmount: unmountDispatch } = render(
+      <MemoryRouter initialEntries={['/fulfillment/dispatch/fulf-123']}>
+        <Routes>
+          <Route
+            path="/fulfillment/dispatch/:id"
+            element={
+              <AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/dispatch')}>
+                <div data-testid="dispatch-view">Dispatch View</div>
+              </AdminProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Недостаточно прав')).toBeDefined();
+    expect(screen.queryByTestId('dispatch-view')).toBeNull();
+    unmountDispatch();
+  });
+
+  // B. fulfillment.read only: Picking, packing, dispatch visible/readable; mutations unavailable
+  it('B: fulfillment.read only grants access to fulfillment routes and shows navigation, without mutation capabilities', () => {
+    const auth = mockAuth(['fulfillment.read']);
+
+    // 1. Navigation destinations visible
+    const { unmount: unmountLayout } = render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <AdminLayout>
+          <div>Dashboard</div>
+        </AdminLayout>
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).getByText('Сборка')).toBeDefined();
+    expect(within(sidebar).getByText('Упаковка')).toBeDefined();
+    expect(within(sidebar).getByText('Отгрузка')).toBeDefined();
+    expect(within(sidebar).getByText('СКЛАД')).toBeDefined();
+    unmountLayout();
+
+    // 2. Picking route accessible
+    const { unmount: unmountPick } = render(
+      <MemoryRouter initialEntries={['/fulfillment/picking']}>
+        <Routes>
+          <Route
+            path="/fulfillment/picking"
+            element={
+              <AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/picking')}>
+                <div data-testid="picking-view">Picking View</div>
+              </AdminProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByTestId('picking-view')).toBeDefined();
+    expect(screen.queryByText('Недостаточно прав')).toBeNull();
+    unmountPick();
+
+    // 3. Packing route accessible
+    const { unmount: unmountPack } = render(
+      <MemoryRouter initialEntries={['/fulfillment/packing/fulf-123']}>
+        <Routes>
+          <Route
+            path="/fulfillment/packing/:id"
+            element={
+              <AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/packing')}>
+                <div data-testid="packing-view">Packing View</div>
+              </AdminProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByTestId('packing-view')).toBeDefined();
+    expect(screen.queryByText('Недостаточно прав')).toBeNull();
+    unmountPack();
+
+    // 4. Dispatch route accessible
+    const { unmount: unmountDispatch } = render(
+      <MemoryRouter initialEntries={['/fulfillment/dispatch/fulf-123']}>
+        <Routes>
+          <Route
+            path="/fulfillment/dispatch/:id"
+            element={
+              <AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/dispatch')}>
+                <div data-testid="dispatch-view">Dispatch View</div>
+              </AdminProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByTestId('dispatch-view')).toBeDefined();
+    expect(screen.queryByText('Недостаточно прав')).toBeNull();
+    unmountDispatch();
+
+    // 5. Zero warehouse mutation authority
+    expect(auth.hasPermission('warehouse.picking')).toBe(false);
+    expect(auth.hasPermission('warehouse.packing')).toBe(false);
+    expect(auth.hasPermission('warehouse.dispatch')).toBe(false);
+    expect(auth.hasPermission('fulfillment.read')).toBe(true);
+  });
+
+  // C. warehouse.picking: picking workspace and actions available
+  it('C: warehouse.picking grants picking workspace access and navigation', () => {
+    const auth = mockAuth(['warehouse.picking']);
+    render(
+      <MemoryRouter initialEntries={['/fulfillment/picking']}>
+        <AdminLayout>
+          <Routes>
+            <Route
+              path="/fulfillment/picking"
+              element={
+                <AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/picking')}>
+                  <div data-testid="picking-view">Picking View</div>
+                </AdminProtectedRoute>
+              }
+            />
+          </Routes>
+        </AdminLayout>
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).getByText('Сборка')).toBeDefined();
+    expect(screen.getByTestId('picking-view')).toBeDefined();
+    expect(auth.hasPermission('warehouse.picking')).toBe(true);
+  });
+
+  // D. warehouse.packing: packing workspace and actions available
+  it('D: warehouse.packing grants packing workspace access and navigation', () => {
+    const auth = mockAuth(['warehouse.packing']);
+    render(
+      <MemoryRouter initialEntries={['/fulfillment/packing']}>
+        <AdminLayout>
+          <Routes>
+            <Route
+              path="/fulfillment/packing"
+              element={
+                <AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/packing')}>
+                  <div data-testid="packing-view">Packing View</div>
+                </AdminProtectedRoute>
+              }
+            />
+          </Routes>
+        </AdminLayout>
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).getByText('Упаковка')).toBeDefined();
+    expect(screen.getByTestId('packing-view')).toBeDefined();
+    expect(auth.hasPermission('warehouse.packing')).toBe(true);
+  });
+
+  // E. warehouse.dispatch: dispatch workspace and actions available
+  it('E: warehouse.dispatch grants dispatch workspace access and navigation', () => {
+    const auth = mockAuth(['warehouse.dispatch']);
+    render(
+      <MemoryRouter initialEntries={['/fulfillment/dispatch']}>
+        <AdminLayout>
+          <Routes>
+            <Route
+              path="/fulfillment/dispatch"
+              element={
+                <AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/dispatch')}>
+                  <div data-testid="dispatch-view">Dispatch View</div>
+                </AdminProtectedRoute>
+              }
+            />
+          </Routes>
+        </AdminLayout>
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).getByText('Отгрузка')).toBeDefined();
+    expect(screen.getByTestId('dispatch-view')).toBeDefined();
+    expect(auth.hasPermission('warehouse.dispatch')).toBe(true);
+  });
+
+  // F. unrelated/no permission: routes remain denied and navigation hidden
+  it('F: user without orders.read or warehouse capabilities is denied routes and navigation', () => {
+    mockAuth(['users.read']);
+
+    // 1. Navigation destinations hidden
+    const { unmount: unmountLayout } = render(
+      <MemoryRouter initialEntries={['/users']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    const sidebar = getSidebar();
+    expect(within(sidebar).queryByText('Сборка')).toBeNull();
+    expect(within(sidebar).queryByText('Упаковка')).toBeNull();
+    expect(within(sidebar).queryByText('Отгрузка')).toBeNull();
+    expect(within(sidebar).queryByText('СКЛАД')).toBeNull();
+    unmountLayout();
+
+    // 2. Picking route denied
+    const { unmount: unmountPick } = render(
+      <MemoryRouter initialEntries={['/fulfillment/picking']}>
+        <Routes>
+          <Route
+            path="/fulfillment/picking"
+            element={
+              <AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/picking')}>
+                <div>Picking View</div>
+              </AdminProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Недостаточно прав')).toBeDefined();
+    expect(screen.queryByText('Picking View')).toBeNull();
+    unmountPick();
+
+    // 3. Packing route denied
+    const { unmount: unmountPack } = render(
+      <MemoryRouter initialEntries={['/fulfillment/packing/fulf-123']}>
+        <Routes>
+          <Route
+            path="/fulfillment/packing/:id"
+            element={
+              <AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/packing')}>
+                <div>Packing View</div>
+              </AdminProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Недостаточно прав')).toBeDefined();
+    expect(screen.queryByText('Packing View')).toBeNull();
+    unmountPack();
+
+    // 4. Dispatch route denied
+    const { unmount: unmountDispatch } = render(
+      <MemoryRouter initialEntries={['/fulfillment/dispatch/fulf-123']}>
+        <Routes>
+          <Route
+            path="/fulfillment/dispatch/:id"
+            element={
+              <AdminProtectedRoute permission={getStaffScreenVisibility('/fulfillment/dispatch')}>
+                <div>Dispatch View</div>
+              </AdminProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Недостаточно прав')).toBeDefined();
+    expect(screen.queryByText('Dispatch View')).toBeNull();
+    unmountDispatch();
   });
 });

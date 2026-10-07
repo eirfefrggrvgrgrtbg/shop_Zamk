@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/behavior"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/inventory"
@@ -29,6 +30,7 @@ type Service struct {
 	cartRepo     *cart.Repository
 	inventorySvc *inventory.Service
 	marketingSvc *marketing.Service
+	behaviorSvc  *behavior.Service
 	db           *postgres.Client
 	cfg          *config.Config
 	logger       *slog.Logger
@@ -47,6 +49,11 @@ func NewService(repo *Repository, cartRepo *cart.Repository, inventorySvc *inven
 
 func (s *Service) WithMarketing(m *marketing.Service) *Service {
 	s.marketingSvc = m
+	return s
+}
+
+func (s *Service) WithBehavior(b *behavior.Service) *Service {
+	s.behaviorSvc = b
 	return s
 }
 
@@ -331,6 +338,25 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 		// Clear cart
 		if err := s.cartRepo.ClearCartTx(ctx, tx, userCart.ID); err != nil {
 			return err
+		}
+
+		if s.behaviorSvc != nil {
+			var visitorID *uuid.UUID
+			var sessionID *uuid.UUID
+			var promoCodeID *uuid.UUID
+
+			if promoCalc != nil && promoCalc.PromoCodeID != uuid.Nil {
+				promoCodeID = &promoCalc.PromoCodeID
+			}
+
+			if req.AnalyticsContext != nil {
+				visitorID = &req.AnalyticsContext.VisitorID
+				sessionID = &req.AnalyticsContext.SessionID
+			}
+
+			if _, errAttr := s.behaviorSvc.RecordOrderAttributionTx(ctx, tx, orderID, userID, visitorID, sessionID, promoCodeID, time.Now().UTC()); errAttr != nil {
+				return errAttr
+			}
 		}
 
 		order.Items = orderItems

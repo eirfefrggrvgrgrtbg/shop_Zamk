@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, type ReactNode, useEffect } from 'react';
 import { consumeAuthReturnPath } from '../components/account/CustomerProtectedRoute';
+import { rotateBehaviorSession } from '../lib/behavior';
 
 export interface User {
   id: string;
@@ -99,6 +100,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Для входа в магазин используйте аккаунт покупателя');
       }
 
+      // Account switch safety: rotate session only if switching between different authenticated accounts
+      if (user && res.user && user.id !== res.user.id) {
+        rotateBehaviorSession();
+      }
+
       if (res.user.mustChangePassword) {
         setAuthView('change_password');
         setIsAuthModalOpen(true);
@@ -116,6 +122,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (firstName: string, lastName: string, middleName: string, phone: string, email: string, pass: string, passConfirm: string) => {
     try {
       const res = await apiRegister({ firstName, lastName, middleName, phone, email, password: pass, passwordConfirm: passConfirm });
+
+      // Account switch safety: rotate session only if switching between different authenticated accounts
+      if (user && res.user && user.id !== res.user.id) {
+        rotateBehaviorSession();
+      }
 
       setUser(mapApiUser(res.user));
       closeAuthModal();
@@ -136,8 +147,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const changePassword = async (currentPass: string, newPass: string) => {
     try {
       await apiChangePassword({ currentPassword: currentPass, newPassword: newPass });
-      // On success, we generally logout or prompt re-login. The backend might revoke other sessions.
-      // If we are currently in mustChangePassword flow, this sets the password. We should logout and force re-login.
       await logout();
       openAuthModal('login');
     } catch (err: any) {
@@ -151,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error(e);
     } finally {
+      rotateBehaviorSession(); // Isolate session when logging out
       setUser(null);
     }
   };

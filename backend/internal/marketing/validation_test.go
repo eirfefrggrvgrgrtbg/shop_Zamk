@@ -15,7 +15,7 @@ func TestValidateCampaign_FundingModesAndDiscounts(t *testing.T) {
 	// 1. SELLER-funded campaign: percent or fixed are both allowed
 	sellerPct := &marketing.MarketingCampaign{
 		Title:             "Seller 10% Off",
-		SellerID:          sellerID,
+		SellerID: &sellerID,
 		FundingMode:       marketing.FundingModeSeller,
 		Status:            marketing.CampaignStatusDraft,
 		DiscountType:      marketing.DiscountTypePercent,
@@ -25,7 +25,7 @@ func TestValidateCampaign_FundingModesAndDiscounts(t *testing.T) {
 
 	sellerFixed := &marketing.MarketingCampaign{
 		Title:                    "Seller 500 RUB Off",
-		SellerID:                 sellerID,
+		SellerID: &sellerID,
 		FundingMode:              marketing.FundingModeSeller,
 		Status:                   marketing.CampaignStatusDraft,
 		DiscountType:             marketing.DiscountTypeFixed,
@@ -36,7 +36,7 @@ func TestValidateCampaign_FundingModesAndDiscounts(t *testing.T) {
 	// Seller campaign with zero discount must be rejected
 	sellerZero := &marketing.MarketingCampaign{
 		Title:        "Seller 0% Off",
-		SellerID:     sellerID,
+		SellerID: &sellerID,
 		FundingMode:  marketing.FundingModeSeller,
 		Status:       marketing.CampaignStatusDraft,
 		DiscountType: marketing.DiscountTypePercent,
@@ -46,7 +46,7 @@ func TestValidateCampaign_FundingModesAndDiscounts(t *testing.T) {
 	// 2. SELLER-funded cannot request ZAMK money
 	sellerWithZamk := &marketing.MarketingCampaign{
 		Title:                 "Illegal Seller with ZAMK",
-		SellerID:              sellerID,
+		SellerID: &sellerID,
 		FundingMode:           marketing.FundingModeSeller,
 		Status:                marketing.CampaignStatusDraft,
 		DiscountType:          marketing.DiscountTypePercent,
@@ -58,7 +58,7 @@ func TestValidateCampaign_FundingModesAndDiscounts(t *testing.T) {
 	// 3. COFUNDED campaign: FIXED discount is rejected in V1
 	cofundedFixed := &marketing.MarketingCampaign{
 		Title:                       "Illegal Co-funded Fixed",
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusDraft,
 		DiscountType:                marketing.DiscountTypeFixed,
@@ -71,7 +71,7 @@ func TestValidateCampaign_FundingModesAndDiscounts(t *testing.T) {
 	// 4. COFUNDED campaign: Requires positive seller discount contribution
 	cofundedNoSellerContrib := &marketing.MarketingCampaign{
 		Title:                       "Illegal Co-funded Zero Seller Contrib",
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusDraft,
 		DiscountType:                marketing.DiscountTypePercent,
@@ -84,7 +84,7 @@ func TestValidateCampaign_FundingModesAndDiscounts(t *testing.T) {
 	// 5. COFUNDED campaign: Percent discount valid
 	cofundedPct := &marketing.MarketingCampaign{
 		Title:                       "Valid Co-funded 15+10%",
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusDraft,
 		DiscountType:                marketing.DiscountTypePercent,
@@ -97,7 +97,7 @@ func TestValidateCampaign_FundingModesAndDiscounts(t *testing.T) {
 	// 6. Pure ZAMK-funded: cannot have seller discount
 	zamkWithSellerContrib := &marketing.MarketingCampaign{
 		Title:                       "Illegal Pure ZAMK with Seller Discount",
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		FundingMode:                 marketing.FundingModeZamk,
 		Status:                      marketing.CampaignStatusDraft,
 		DiscountType:                marketing.DiscountTypePercent,
@@ -110,7 +110,7 @@ func TestValidateCampaign_FundingModesAndDiscounts(t *testing.T) {
 	// 7. ZAMK share ceiling: > 2500 bps is rejected
 	cofundedExceeds := &marketing.MarketingCampaign{
 		Title:                       "Exceeds 25%",
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusDraft,
 		DiscountType:                marketing.DiscountTypePercent,
@@ -123,7 +123,7 @@ func TestValidateCampaign_FundingModesAndDiscounts(t *testing.T) {
 	// 8. Submitted platform campaign must request positive terms
 	submittedZeroReq := &marketing.MarketingCampaign{
 		Title:                       "Submitted with 0 request",
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusSubmitted,
 		DiscountType:                marketing.DiscountTypePercent,
@@ -136,7 +136,7 @@ func TestValidateCampaign_FundingModesAndDiscounts(t *testing.T) {
 	// 9. Unreviewed platform campaign cannot have approved values
 	draftWithApproved := &marketing.MarketingCampaign{
 		Title:                       "Draft with approved terms",
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusDraft,
 		DiscountType:                marketing.DiscountTypePercent,
@@ -153,7 +153,7 @@ func TestEvaluateAdminDecision_CounterOfferLogic(t *testing.T) {
 	sellerID := uuid.New()
 	requested := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusSubmitted,
 		RequestedZamkShareBps:       1500,    // 15% requested

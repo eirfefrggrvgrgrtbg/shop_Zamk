@@ -11,6 +11,18 @@ func ValidateCampaign(c *MarketingCampaign) error {
 		return fmt.Errorf("campaign title cannot be empty")
 	}
 
+	if c.CampaignChannel != nil && !IsValidCampaignChannel(*c.CampaignChannel) {
+		return ErrInvalidCampaignChannel
+	}
+
+	if c.CampaignType != nil && !IsValidCampaignType(*c.CampaignType) {
+		return ErrInvalidCampaignType
+	}
+
+	if c.PlannedBudgetCents != nil && *c.PlannedBudgetCents < 0 {
+		return ErrInvalidPlannedBudget
+	}
+
 	switch c.FundingMode {
 	case FundingModeSeller, FundingModeZamk, FundingModeCofunded:
 		// valid

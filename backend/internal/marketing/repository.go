@@ -32,6 +32,9 @@ func (r *Repository) CreateCampaign(ctx context.Context, c *MarketingCampaign) e
 }
 
 func (r *Repository) CreateCampaignTx(ctx context.Context, db DBExecutor, c *MarketingCampaign) error {
+	if c.Purpose == "" {
+		c.Purpose = CampaignPurposePromotion
+	}
 	if c.ID == uuid.Nil {
 		c.ID = uuid.New()
 	}
@@ -41,35 +44,36 @@ func (r *Repository) CreateCampaignTx(ctx context.Context, db DBExecutor, c *Mar
 
 	query := `
 		INSERT INTO marketing_campaigns (
-			id, seller_id, title, description, funding_mode, status, discount_type,
+			id, seller_id, title, description, funding_mode, status, campaign_channel, campaign_type, planned_budget_cents, discount_type,
 			seller_discount_bps, seller_discount_fixed_cents,
 			requested_zamk_share_bps, requested_zamk_budget_cap_cents,
 			approved_zamk_share_bps, approved_zamk_budget_cap_cents,
 			zamk_reserved_cents, zamk_spent_cents,
 			rejection_reason, admin_comment,
 			starts_at, ends_at, submitted_at, decided_at, decided_by_staff_id,
-			created_at, updated_at
+			created_at, updated_at, purpose
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7,
-			$8, $9,
-			$10, $11,
-			$12, $13,
-			$14, $15,
-			$16, $17,
-			$18, $19, $20, $21, $22,
-			$23, $24
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+			$11, $12,
+			$13, $14,
+			$15, $16,
+			$17, $18,
+			$19, $20,
+			$21, $22, $23, $24, $25,
+			$26, $27, $28
 		)
 	`
-	_, err := db.Exec(ctx, query,
-		c.ID, c.SellerID, c.Title, c.Description, string(c.FundingMode), string(c.Status), string(c.DiscountType),
+	args := []any{
+		c.ID, c.SellerID, c.Title, c.Description, string(c.FundingMode), string(c.Status), c.CampaignChannel, c.CampaignType, c.PlannedBudgetCents, string(c.DiscountType),
 		c.SellerDiscountBps, c.SellerDiscountFixedCents,
 		c.RequestedZamkShareBps, c.RequestedZamkBudgetCapCents,
 		c.ApprovedZamkShareBps, c.ApprovedZamkBudgetCapCents,
 		c.ZamkReservedCents, c.ZamkSpentCents,
 		c.RejectionReason, c.AdminComment,
 		c.StartsAt, c.EndsAt, c.SubmittedAt, c.DecidedAt, c.DecidedByStaffID,
-		c.CreatedAt, c.UpdatedAt,
-	)
+		c.CreatedAt, c.UpdatedAt, c.Purpose,
+	}
+	_, err := db.Exec(ctx, query, args...)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
@@ -85,28 +89,28 @@ func (r *Repository) CreateCampaignTx(ctx context.Context, db DBExecutor, c *Mar
 func (r *Repository) GetCampaignByID(ctx context.Context, id uuid.UUID) (*MarketingCampaign, error) {
 	query := `
 		SELECT
-			id, seller_id, title, description, funding_mode, status, discount_type,
+			id, seller_id, title, description, funding_mode, status, campaign_channel, campaign_type, planned_budget_cents, discount_type,
 			seller_discount_bps, seller_discount_fixed_cents,
 			requested_zamk_share_bps, requested_zamk_budget_cap_cents,
 			approved_zamk_share_bps, approved_zamk_budget_cap_cents,
 			zamk_reserved_cents, zamk_spent_cents,
 			rejection_reason, admin_comment,
 			starts_at, ends_at, submitted_at, decided_at, decided_by_staff_id,
-			created_at, updated_at
+			created_at, updated_at, purpose
 		FROM marketing_campaigns
 		WHERE id = $1
 	`
 	var c MarketingCampaign
 	var fMode, status, dType string
 	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&c.ID, &c.SellerID, &c.Title, &c.Description, &fMode, &status, &dType,
+		&c.ID, &c.SellerID, &c.Title, &c.Description, &fMode, &status, &c.CampaignChannel, &c.CampaignType, &c.PlannedBudgetCents, &dType,
 		&c.SellerDiscountBps, &c.SellerDiscountFixedCents,
 		&c.RequestedZamkShareBps, &c.RequestedZamkBudgetCapCents,
 		&c.ApprovedZamkShareBps, &c.ApprovedZamkBudgetCapCents,
 		&c.ZamkReservedCents, &c.ZamkSpentCents,
 		&c.RejectionReason, &c.AdminComment,
 		&c.StartsAt, &c.EndsAt, &c.SubmittedAt, &c.DecidedAt, &c.DecidedByStaffID,
-		&c.CreatedAt, &c.UpdatedAt,
+		&c.CreatedAt, &c.UpdatedAt, &c.Purpose,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -589,14 +593,14 @@ func (r *Repository) GetPromoCodeForUpdateTx(ctx context.Context, db DBExecutor,
 func (r *Repository) GetCampaignForUpdateTx(ctx context.Context, db DBExecutor, id uuid.UUID) (*MarketingCampaign, error) {
 	query := `
 		SELECT
-			id, seller_id, title, description, funding_mode, status, discount_type,
+			id, seller_id, title, description, funding_mode, status, campaign_channel, campaign_type, planned_budget_cents, discount_type,
 			seller_discount_bps, seller_discount_fixed_cents,
 			requested_zamk_share_bps, requested_zamk_budget_cap_cents,
 			approved_zamk_share_bps, approved_zamk_budget_cap_cents,
 			zamk_reserved_cents, zamk_spent_cents,
 			rejection_reason, admin_comment,
 			starts_at, ends_at, submitted_at, decided_at, decided_by_staff_id,
-			created_at, updated_at
+			created_at, updated_at, purpose
 		FROM marketing_campaigns
 		WHERE id = $1
 		FOR UPDATE
@@ -604,14 +608,14 @@ func (r *Repository) GetCampaignForUpdateTx(ctx context.Context, db DBExecutor, 
 	var c MarketingCampaign
 	var fMode, status, dType string
 	err := db.QueryRow(ctx, query, id).Scan(
-		&c.ID, &c.SellerID, &c.Title, &c.Description, &fMode, &status, &dType,
+		&c.ID, &c.SellerID, &c.Title, &c.Description, &fMode, &status, &c.CampaignChannel, &c.CampaignType, &c.PlannedBudgetCents, &dType,
 		&c.SellerDiscountBps, &c.SellerDiscountFixedCents,
 		&c.RequestedZamkShareBps, &c.RequestedZamkBudgetCapCents,
 		&c.ApprovedZamkShareBps, &c.ApprovedZamkBudgetCapCents,
 		&c.ZamkReservedCents, &c.ZamkSpentCents,
 		&c.RejectionReason, &c.AdminComment,
 		&c.StartsAt, &c.EndsAt, &c.SubmittedAt, &c.DecidedAt, &c.DecidedByStaffID,
-		&c.CreatedAt, &c.UpdatedAt,
+		&c.CreatedAt, &c.UpdatedAt, &c.Purpose,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1360,4 +1364,302 @@ func (r *Repository) UpdatePromoCodeMutableFieldsTx(ctx context.Context, db DBEx
 		return fmt.Errorf("failed to sync campaign dates: %w", err)
 	}
 	return nil
+}
+
+func (r *Repository) CreateCampaignTrackingLink(ctx context.Context, link *CampaignTrackingLink) error {
+	query := `
+		INSERT INTO campaign_tracking_links (
+			id, campaign_id, token, target_type, target_product_id, target_seller_id, landing_path, promo_code_id, is_active, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+		)
+	`
+	_, err := r.pool.Exec(ctx, query,
+		link.ID, link.CampaignID, link.Token, string(link.TargetType),
+		link.TargetProductID, link.TargetSellerID, link.LandingPath,
+		link.PromoCodeID, link.IsActive, link.CreatedAt, link.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create campaign tracking link: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) GetTrackingLinkByToken(ctx context.Context, token string) (*CampaignTrackingLink, error) {
+	query := `
+		SELECT
+			id, campaign_id, token, target_type, target_product_id, target_seller_id, landing_path, promo_code_id, is_active, created_at, updated_at
+		FROM campaign_tracking_links
+		WHERE token = $1
+	`
+	var l CampaignTrackingLink
+	var tType string
+	err := r.pool.QueryRow(ctx, query, token).Scan(
+		&l.ID, &l.CampaignID, &l.Token, &tType,
+		&l.TargetProductID, &l.TargetSellerID, &l.LandingPath,
+		&l.PromoCodeID, &l.IsActive, &l.CreatedAt, &l.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrTrackingLinkNotFound
+		}
+		return nil, fmt.Errorf("failed to get tracking link by token: %w", err)
+	}
+	l.TargetType = CampaignTargetType(tType)
+	return &l, nil
+}
+
+func (r *Repository) ListCampaignTrackingLinks(ctx context.Context, campaignID uuid.UUID) ([]CampaignTrackingLink, error) {
+	query := `
+		SELECT
+			id, campaign_id, token, target_type, target_product_id, target_seller_id, landing_path, promo_code_id, is_active, created_at, updated_at
+		FROM campaign_tracking_links
+		WHERE campaign_id = $1
+		ORDER BY created_at DESC
+	`
+	rows, err := r.pool.Query(ctx, query, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tracking links: %w", err)
+	}
+	defer rows.Close()
+
+	var links []CampaignTrackingLink
+	for rows.Next() {
+		var l CampaignTrackingLink
+		var tType string
+		if err := rows.Scan(
+			&l.ID, &l.CampaignID, &l.Token, &tType,
+			&l.TargetProductID, &l.TargetSellerID, &l.LandingPath,
+			&l.PromoCodeID, &l.IsActive, &l.CreatedAt, &l.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan tracking link: %w", err)
+		}
+		l.TargetType = CampaignTargetType(tType)
+		links = append(links, l)
+	}
+	return links, nil
+}
+
+func (r *Repository) GetTrackingLinkByID(ctx context.Context, id uuid.UUID) (*CampaignTrackingLink, error) {
+	query := `
+		SELECT
+			id, campaign_id, token, target_type, target_product_id, target_seller_id, landing_path, promo_code_id, is_active, created_at, updated_at
+		FROM campaign_tracking_links
+		WHERE id = $1
+	`
+	var l CampaignTrackingLink
+	var tType string
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&l.ID, &l.CampaignID, &l.Token, &tType,
+		&l.TargetProductID, &l.TargetSellerID, &l.LandingPath,
+		&l.PromoCodeID, &l.IsActive, &l.CreatedAt, &l.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrTrackingLinkNotFound
+		}
+		return nil, fmt.Errorf("failed to get tracking link: %w", err)
+	}
+	l.TargetType = CampaignTargetType(tType)
+	return &l, nil
+}
+
+func (r *Repository) DisableTrackingLink(ctx context.Context, campaignID, linkID uuid.UUID) (*CampaignTrackingLink, error) {
+	query := `
+		UPDATE campaign_tracking_links
+		SET is_active = false, updated_at = now()
+		WHERE id = $1 AND campaign_id = $2
+		RETURNING id, campaign_id, token, target_type, target_product_id, target_seller_id, landing_path, promo_code_id, is_active, created_at, updated_at
+	`
+	var l CampaignTrackingLink
+	var tType string
+	err := r.pool.QueryRow(ctx, query, linkID, campaignID).Scan(
+		&l.ID, &l.CampaignID, &l.Token, &tType,
+		&l.TargetProductID, &l.TargetSellerID, &l.LandingPath,
+		&l.PromoCodeID, &l.IsActive, &l.CreatedAt, &l.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrTrackingLinkNotFound
+		}
+		return nil, fmt.Errorf("failed to disable tracking link: %w", err)
+	}
+	l.TargetType = CampaignTargetType(tType)
+	return &l, nil
+}
+
+func (r *Repository) UpdateCampaign(ctx context.Context, c *MarketingCampaign) error {
+	var chStr, tpStr *string
+	if c.CampaignChannel != nil {
+		s := string(*c.CampaignChannel)
+		chStr = &s
+	}
+	if c.CampaignType != nil {
+		s := string(*c.CampaignType)
+		tpStr = &s
+	}
+	query := `
+		UPDATE marketing_campaigns
+		SET title = $1, description = $2, status = $3, campaign_channel = $4, campaign_type = $5,
+		    planned_budget_cents = $6, starts_at = $7, ends_at = $8, updated_at = now()
+		WHERE id = $9 AND purpose = 'advertising'
+	`
+	cmd, err := r.pool.Exec(ctx, query,
+		c.Title, c.Description, string(c.Status), chStr, tpStr,
+		c.PlannedBudgetCents, c.StartsAt, c.EndsAt, c.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update campaign: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrCampaignNotFound
+	}
+	return nil
+}
+
+func (r *Repository) ListAdminCampaigns(ctx context.Context) ([]CampaignDetailView, error) {
+	query := `
+		SELECT
+			c.id, c.seller_id, c.title, c.description, c.funding_mode, c.status,
+			c.campaign_channel, c.campaign_type, c.planned_budget_cents, c.discount_type,
+			c.seller_discount_bps, c.seller_discount_fixed_cents,
+			c.requested_zamk_share_bps, c.requested_zamk_budget_cap_cents,
+			c.approved_zamk_share_bps, c.approved_zamk_budget_cap_cents,
+			c.zamk_reserved_cents, c.zamk_spent_cents,
+			c.rejection_reason, c.admin_comment,
+			c.starts_at, c.ends_at, c.submitted_at, c.decided_at, c.decided_by_staff_id,
+			c.created_at, c.updated_at, c.purpose,
+			COALESCE(COUNT(l.id), 0) AS tracking_link_count
+		FROM marketing_campaigns c
+		LEFT JOIN campaign_tracking_links l ON l.campaign_id = c.id
+		WHERE c.purpose = 'advertising'
+		GROUP BY c.id
+		ORDER BY c.created_at DESC
+	`
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list admin campaigns: %w", err)
+	}
+	defer rows.Close()
+
+	var list []CampaignDetailView
+	for rows.Next() {
+		var v CampaignDetailView
+		var fMode, status, dType string
+		var chStr, tpStr *string
+		if err := rows.Scan(
+			&v.ID, &v.SellerID, &v.Title, &v.Description, &fMode, &status,
+			&chStr, &tpStr, &v.PlannedBudgetCents, &dType,
+			&v.SellerDiscountBps, &v.SellerDiscountFixedCents,
+			&v.RequestedZamkShareBps, &v.RequestedZamkBudgetCapCents,
+			&v.ApprovedZamkShareBps, &v.ApprovedZamkBudgetCapCents,
+			&v.ZamkReservedCents, &v.ZamkSpentCents,
+			&v.RejectionReason, &v.AdminComment,
+			&v.StartsAt, &v.EndsAt, &v.SubmittedAt, &v.DecidedAt, &v.DecidedByStaffID,
+			&v.CreatedAt, &v.UpdatedAt, &v.Purpose,
+			&v.TrackingLinkCount,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan admin campaign view: %w", err)
+			}
+		v.FundingMode = FundingMode(fMode)
+		v.Status = CampaignStatus(status)
+		v.DiscountType = DiscountType(dType)
+		if chStr != nil {
+			c := CampaignChannel(*chStr)
+			v.CampaignChannel = &c
+		}
+		if tpStr != nil {
+			t := CampaignType(*tpStr)
+			v.CampaignType = &t
+		}
+		list = append(list, v)
+	}
+	return list, nil
+}
+
+func (r *Repository) GetAdminCampaign(ctx context.Context, id uuid.UUID) (*CampaignDetailView, error) {
+	query := `
+		SELECT
+			c.id, c.seller_id, c.title, c.description, c.funding_mode, c.status,
+			c.campaign_channel, c.campaign_type, c.planned_budget_cents, c.discount_type,
+			c.seller_discount_bps, c.seller_discount_fixed_cents,
+			c.requested_zamk_share_bps, c.requested_zamk_budget_cap_cents,
+			c.approved_zamk_share_bps, c.approved_zamk_budget_cap_cents,
+			c.zamk_reserved_cents, c.zamk_spent_cents,
+			c.rejection_reason, c.admin_comment,
+			c.starts_at, c.ends_at, c.submitted_at, c.decided_at, c.decided_by_staff_id,
+			c.created_at, c.updated_at, c.purpose,
+			COALESCE(COUNT(l.id), 0) AS tracking_link_count
+		FROM marketing_campaigns c
+		LEFT JOIN campaign_tracking_links l ON l.campaign_id = c.id
+		WHERE c.id = $1 AND c.purpose = 'advertising'
+		GROUP BY c.id
+	`
+	var v CampaignDetailView
+	var fMode, status, dType string
+	var chStr, tpStr *string
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&v.ID, &v.SellerID, &v.Title, &v.Description, &fMode, &status,
+		&chStr, &tpStr, &v.PlannedBudgetCents, &dType,
+		&v.SellerDiscountBps, &v.SellerDiscountFixedCents,
+		&v.RequestedZamkShareBps, &v.RequestedZamkBudgetCapCents,
+		&v.ApprovedZamkShareBps, &v.ApprovedZamkBudgetCapCents,
+		&v.ZamkReservedCents, &v.ZamkSpentCents,
+		&v.RejectionReason, &v.AdminComment,
+		&v.StartsAt, &v.EndsAt, &v.SubmittedAt, &v.DecidedAt, &v.DecidedByStaffID,
+		&v.CreatedAt, &v.UpdatedAt, &v.Purpose,
+		&v.TrackingLinkCount,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrCampaignNotFound
+		}
+		return nil, fmt.Errorf("failed to get admin campaign: %w", err)
+	}
+	v.FundingMode = FundingMode(fMode)
+	v.Status = CampaignStatus(status)
+	v.DiscountType = DiscountType(dType)
+	if chStr != nil {
+		c := CampaignChannel(*chStr)
+		v.CampaignChannel = &c
+	}
+	if tpStr != nil {
+		t := CampaignType(*tpStr)
+		v.CampaignType = &t
+	}
+	return &v, nil
+}
+
+func (r *Repository) GetPromoCodeByID(ctx context.Context, id uuid.UUID) (*PromoCode, error) {
+	query := `
+		SELECT
+			id, campaign_id, seller_id, code, discount_type,
+			discount_value_bps, discount_value_fixed_cents,
+			min_order_subtotal_cents, global_usage_limit, per_customer_usage_limit,
+			audience_type, product_scope, max_discount_cents,
+			min_eligible_quantity, min_distinct_products,
+			is_active, starts_at, ends_at,
+			created_at, updated_at
+		FROM promo_codes
+		WHERE id = $1
+	`
+	var p PromoCode
+	var dType string
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&p.ID, &p.CampaignID, &p.SellerID, &p.Code, &dType,
+		&p.DiscountValueBps, &p.DiscountValueFixedCents,
+		&p.MinOrderSubtotalCents, &p.GlobalUsageLimit, &p.PerCustomerUsageLimit,
+		&p.AudienceType, &p.ProductScope, &p.MaxDiscountCents,
+		&p.MinEligibleQuantity, &p.MinDistinctProducts,
+		&p.IsActive, &p.StartsAt, &p.EndsAt,
+		&p.CreatedAt, &p.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPromoCodeNotFound
+		}
+		return nil, fmt.Errorf("failed to get promo code by id: %w", err)
+	}
+	p.DiscountType = DiscountType(dType)
+	return &p, nil
 }

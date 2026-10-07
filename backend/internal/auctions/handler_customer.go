@@ -121,7 +121,15 @@ func (h *CustomerHandler) CreateOrderForLot(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	result, err := h.service.CreateOrderForLot(r.Context(), lotID, userID)
+	var req CreateAuctionOrderRequest
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			h.writeError(w, http.StatusBadRequest, "invalid_json", "Invalid JSON payload")
+			return
+		}
+	}
+
+	result, err := h.service.CreateOrderForLot(r.Context(), lotID, userID, req)
 	if err != nil {
 		h.writeError(w, http.StatusBadRequest, "order_error", err.Error())
 		return

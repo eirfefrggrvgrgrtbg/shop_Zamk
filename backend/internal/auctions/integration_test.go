@@ -427,7 +427,7 @@ func TestCreateOrderConcurrency(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		go func() {
-			_, err := svc.CreateOrderForLot(context.Background(), lot.ID, winnerID)
+			_, err := svc.CreateOrderForLot(context.Background(), lot.ID, winnerID, auctions.CreateAuctionOrderRequest{})
 			errs <- err
 		}()
 	}

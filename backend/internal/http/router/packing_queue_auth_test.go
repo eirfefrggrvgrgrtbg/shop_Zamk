@@ -82,6 +82,11 @@ func TestPackingQueue_RouterAuth_CapabilityContract(t *testing.T) {
 	insertAdminWithPerms(ordersReadUserID, []string{"orders.read"})
 	ordersReadToken := makeToken(ordersReadUserID, "admin")
 
+	// 2.5 Staff with fulfillment.read only
+	fulfReadUserID := insertUser("admin")
+	insertAdminWithPerms(fulfReadUserID, []string{"fulfillment.read"})
+	fulfReadToken := makeToken(fulfReadUserID, "admin")
+
 	// 3. Staff with irrelevant role (returns.read only)
 	irrelevantUserID := insertUser("admin")
 	insertAdminWithPerms(irrelevantUserID, []string{"returns.read"})
@@ -100,10 +105,20 @@ func TestPackingQueue_RouterAuth_CapabilityContract(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	// Test B: orders.read accesses GET /api/admin/fulfillments/packing -> 200 OK
-	t.Run("orders.read accesses packing queue -> 200 OK", func(t *testing.T) {
+	// Test B: orders.read accesses GET /api/admin/fulfillments/packing -> 403 Forbidden
+	t.Run("orders.read accesses packing queue -> 403 Forbidden", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/admin/fulfillments/packing", nil)
 		req.Header.Set("Authorization", "Bearer "+ordersReadToken)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	// Test B2: fulfillment.read accesses GET /api/admin/fulfillments/packing -> 200 OK
+	t.Run("fulfillment.read accesses packing queue -> 200 OK", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/admin/fulfillments/packing", nil)
+		req.Header.Set("Authorization", "Bearer "+fulfReadToken)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 

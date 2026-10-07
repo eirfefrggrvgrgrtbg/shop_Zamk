@@ -9,7 +9,8 @@ export type StaffCapabilityGroupKey =
   | 'sellers'
   | 'auctions'
   | 'support'
-  | 'analytics';
+  | 'analytics'
+  | 'marketing';
 
 export interface StaffCapabilityGroup {
   key: StaffCapabilityGroupKey;
@@ -84,10 +85,15 @@ export const STAFF_CAPABILITY_GROUPS: StaffCapabilityGroup[] = [
     title: 'Аналитика и отчёты',
     description: 'Сводные дашборды, операционные отчёты и экспорт данных',
   },
+  {
+    key: 'marketing',
+    title: 'Маркетинг и реклама',
+    description: 'Управление рекламными кампаниями и трекинговыми ссылками',
+  },
 ];
 
 /**
- * Canonical presentation configuration for all 86 ZAMK backend capabilities.
+ * Canonical presentation configuration for all 87 ZAMK backend capabilities.
  */
 export const STAFF_CAPABILITIES: StaffCapabilityDefinition[] = [
   // 1. Staff & Roles (7)
@@ -298,6 +304,12 @@ export const STAFF_CAPABILITIES: StaffCapabilityDefinition[] = [
     title: 'Передача в доставку',
     group: 'warehouse',
     description: 'Отгрузка упакованных отправлений курьерам и службам доставки',
+  },
+  {
+    key: 'fulfillment.read',
+    title: 'Просмотр сборок и отгрузок',
+    group: 'warehouse',
+    description: 'Просмотр очередей сборки, упаковки и отгрузки заказов',
   },
   {
     key: 'warehouse.returns',
@@ -634,6 +646,20 @@ export const STAFF_CAPABILITIES: StaffCapabilityDefinition[] = [
     group: 'analytics',
     description: 'Экспорт аналитических и финансовых данных в таблицы',
   },
+
+  // 12. Marketing (2)
+  {
+    key: 'marketing.campaigns.read',
+    title: 'Просмотр рекламных кампаний',
+    group: 'marketing',
+    description: 'Просмотр активных рекламных кампаний и ссылок',
+  },
+  {
+    key: 'marketing.campaigns.write',
+    title: 'Управление рекламными кампаниями',
+    group: 'marketing',
+    description: 'Создание и редактирование маркетинговых кампаний и трекинг-ссылок',
+  },
 ];
 
 /**
@@ -660,7 +686,7 @@ export function getCapabilitiesByGroup(group: StaffCapabilityGroupKey): StaffCap
 }
 
 /**
- * List all 86 capability keys.
+ * List all 87 capability keys.
  */
 export function getAllCapabilityKeys(): string[] {
   return STAFF_CAPABILITIES.map((cap) => cap.key);

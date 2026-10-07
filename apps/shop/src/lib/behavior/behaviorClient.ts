@@ -1,11 +1,17 @@
 import {
   type ClientSafeEventType,
   type BehavioralIngestionEvent,
+  type AttributionMetadata,
   ingestBehavioralEvents,
 } from '@zamk/api-client/src/behavior';
 import { ApiError } from '@zamk/api-client/src/errors';
 import { getOrCreateVisitorId } from './visitorId';
 import { shouldSuppressEvent, recordEventDeduped } from './semanticDedupe';
+import {
+  getOrRenewSession,
+  isSessionStartedEmitted,
+  markSessionStartedEmitted,
+} from './session';
 
 export interface BehaviorClientConfig {
   flushThreshold: number;
@@ -34,6 +40,7 @@ export interface EmitEventOptions {
   quantity?: number;
   placement?: string;
   route?: string;
+  metadata?: AttributionMetadata;
 }
 
 export class BehaviorEmitter {
@@ -66,6 +73,10 @@ export class BehaviorEmitter {
 
   public getQueueLength(): number {
     return this.queue.length;
+  }
+
+  public getQueue(): BehavioralIngestionEvent[] {
+    return this.queue.map((item) => item.event);
   }
 
   public resetForTesting(): void {
@@ -103,58 +114,75 @@ export class BehaviorEmitter {
     return clean.length > 100 ? clean.substring(0, 100) : clean;
   }
 
+  private enqueueEvent(
+    eventType: ClientSafeEventType,
+    visitorId: string,
+    sessionId: string,
+    options: EmitEventOptions = {}
+  ): void {
+    const { productId, variantId, quantity, placement, metadata } = options;
+
+    // Semantic dedupe check (only applies to product_view and catalog_impression)
+    if (shouldSuppressEvent(visitorId, eventType, productId, placement)) {
+      return;
+    }
+
+    const eventId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          });
+
+    const event: BehavioralIngestionEvent = {
+      eventId,
+      eventType,
+      visitorId,
+      sessionId,
+      occurredAt: new Date().toISOString(),
+    };
+
+    if (productId) event.productId = productId;
+    if (variantId) event.variantId = variantId;
+    if (typeof quantity === 'number') event.quantity = quantity;
+    if (metadata && Object.keys(metadata).length > 0) event.metadata = metadata;
+
+    const safePlacement = this.cleanPlacement(placement);
+    if (safePlacement) event.placement = safePlacement;
+
+    const safeRoute = this.cleanRoute(options.route);
+    if (safeRoute) event.route = safeRoute;
+
+    // Bound queue size: if maxQueueSize reached, drop oldest non-critical events
+    if (this.queue.length >= this.config.maxQueueSize) {
+      this.queue.shift();
+    }
+
+    // Add to queue
+    this.queue.push({ event, retries: 0 });
+
+    // Record semantic dedupe marker only AFTER event is successfully queued
+    recordEventDeduped(visitorId, eventType, productId, placement);
+  }
+
   /**
    * Emits a typed client event into the local queue with dedupe checks and batching.
+   * Centrally resolves visitor_id and active session_id.
    */
   public emit(eventType: ClientSafeEventType, options: EmitEventOptions = {}): void {
     try {
       const visitorId = getOrCreateVisitorId();
-      const { productId, variantId, quantity, placement } = options;
+      const { sessionId } = getOrRenewSession(visitorId);
 
-      // 1. Semantic dedupe check
-      if (shouldSuppressEvent(visitorId, eventType, productId, placement)) {
-        return;
+      if (eventType === 'session_started') {
+        markSessionStartedEmitted(sessionId);
       }
 
-      // 2. Build stable event payload
-      const eventId =
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-              const r = (Math.random() * 16) | 0;
-              const v = c === 'x' ? r : (r & 0x3) | 0x8;
-              return v.toString(16);
-            });
+      this.enqueueEvent(eventType, visitorId, sessionId, options);
 
-      const event: BehavioralIngestionEvent = {
-        eventId,
-        eventType,
-        visitorId,
-        occurredAt: new Date().toISOString(),
-      };
-
-      if (productId) event.productId = productId;
-      if (variantId) event.variantId = variantId;
-      if (typeof quantity === 'number') event.quantity = quantity;
-
-      const safePlacement = this.cleanPlacement(placement);
-      if (safePlacement) event.placement = safePlacement;
-
-      const safeRoute = this.cleanRoute(options.route);
-      if (safeRoute) event.route = safeRoute;
-
-      // Bound queue size: if maxQueueSize reached, drop oldest non-critical events
-      if (this.queue.length >= this.config.maxQueueSize) {
-        this.queue.shift();
-      }
-
-      // Add to queue
-      this.queue.push({ event, retries: 0 });
-
-      // Record semantic dedupe marker only AFTER event is successfully queued
-      recordEventDeduped(visitorId, eventType, productId, placement);
-
-      // 3. Flush immediately if threshold reached
+      // Flush immediately if threshold reached
       if (this.queue.length >= this.config.flushThreshold) {
         this.flush().catch(() => {
           // Failure handled internally
@@ -233,16 +261,165 @@ export class BehaviorEmitter {
 // Global singleton instance
 export const behaviorClient = new BehaviorEmitter();
 
+/**
+ * Parses safe attribution metadata from query parameters and referrer.
+ * Whitelists only known UTM parameters; strips query, fragment, and userinfo credentials from referrer.
+ * Same-origin referrers are excluded from non-direct attribution.
+ */
+export const parseAttributionMetadata = (
+  customSearch?: string,
+  customReferrer?: string
+): AttributionMetadata => {
+  const metadata: AttributionMetadata = {};
+
+  try {
+    const search =
+      customSearch ??
+      (typeof window !== 'undefined' && window.location ? window.location.search : '');
+
+    if (search) {
+      const params = new URLSearchParams(search);
+      const utms: (keyof AttributionMetadata)[] = [
+        'utm_source',
+        'utm_medium',
+        'utm_campaign',
+        'utm_term',
+        'utm_content',
+      ];
+      for (const utm of utms) {
+        const val = params.get(utm);
+        if (val) {
+          metadata[utm] = val.substring(0, 255);
+        }
+      }
+      const rawToken = params.get('zamk_token');
+      if (rawToken && rawToken.length >= 8 && rawToken.length <= 128 && /^[A-Za-z0-9_-]+$/.test(rawToken)) {
+        metadata.zamk_token = rawToken;
+      }
+    }
+
+    const rawReferrer =
+      customReferrer ?? (typeof document !== 'undefined' ? document.referrer : '');
+
+    if (rawReferrer) {
+      try {
+        const refUrl = new URL(rawReferrer);
+        const currentHostname =
+          typeof window !== 'undefined' && window.location
+            ? window.location.hostname.toLowerCase()
+            : '';
+
+        // Same-origin check: do not attribute if same hostname / origin
+        const isSameOrigin =
+          currentHostname !== '' &&
+          (refUrl.hostname.toLowerCase() === currentHostname ||
+            (window.location.origin && refUrl.origin === window.location.origin));
+
+        if (!isSameOrigin) {
+          // Normalize: protocol + host + pathname (strips search, hash, and user credentials)
+          const cleanRef = `${refUrl.protocol}//${refUrl.host}${refUrl.pathname}`;
+          metadata.referrer = cleanRef.substring(0, 1024);
+
+          // External referral classification if not already specified by UTMs
+          if (!metadata.utm_source && !metadata.utm_medium) {
+            metadata.source = refUrl.hostname.toLowerCase().substring(0, 255);
+            metadata.medium = 'referral';
+          }
+        }
+      } catch {
+        // Ignore malformed referrer URLs
+      }
+    }
+
+    if (typeof window !== 'undefined' && window.location && window.location.pathname) {
+      metadata.landing_path = window.location.pathname.substring(0, 1024);
+    }
+  } catch {
+    // Best effort parsing
+  }
+
+  return metadata;
+};
+
+/**
+ * Checks if a navigation URL contains new non-direct UTM parameters or tracking token.
+ * Used during an active session to pass new attribution metadata on page_view.
+ */
+export const getNavigationAttributionMetadata = (
+  searchStr?: string
+): AttributionMetadata | undefined => {
+  try {
+    const search =
+      searchStr ??
+      (typeof window !== 'undefined' && window.location ? window.location.search : '');
+
+    if (!search) return undefined;
+
+    const params = new URLSearchParams(search);
+    const utmSource = params.get('utm_source');
+    const rawToken = params.get('zamk_token');
+    if (!utmSource && !rawToken) return undefined;
+
+    const metadata: AttributionMetadata = {};
+    const utms: (keyof AttributionMetadata)[] = [
+      'utm_source',
+      'utm_medium',
+      'utm_campaign',
+      'utm_term',
+      'utm_content',
+    ];
+    for (const utm of utms) {
+      const val = params.get(utm);
+      if (val) {
+        metadata[utm] = val.substring(0, 255);
+      }
+    }
+    if (rawToken && rawToken.length >= 8 && rawToken.length <= 128 && /^[A-Za-z0-9_-]+$/.test(rawToken)) {
+      metadata.zamk_token = rawToken;
+    }
+
+    if (typeof window !== 'undefined' && window.location && window.location.pathname) {
+      metadata.landing_path = window.location.pathname.substring(0, 1024);
+    }
+
+    return metadata;
+  } catch {
+    return undefined;
+  }
+};
+
+export const trackSessionStarted = (metadata?: AttributionMetadata): void => {
+  try {
+    behaviorClient.emit('session_started', { metadata });
+  } catch {
+    // Failure isolation
+  }
+};
+
+export const trackPageView = (
+  route?: string,
+  options?: { metadata?: AttributionMetadata }
+): void => {
+  try {
+    behaviorClient.emit('page_view', { route, metadata: options?.metadata });
+  } catch {
+    // Failure isolation
+  }
+};
+
 // Convenience tracking functions
 export const trackProductView = (
   productId: string,
   placementOrOptions?: string | { placement?: string; route?: string }
 ): void => {
   try {
-    const opts = typeof placementOrOptions === 'string' ? { placement: placementOrOptions } : placementOrOptions;
+    const opts =
+      typeof placementOrOptions === 'string'
+        ? { placement: placementOrOptions }
+        : placementOrOptions;
     behaviorClient.emit('product_view', { productId, ...opts });
   } catch {
-    // Failure isolation: telemetry must never throw to caller
+    // Failure isolation
   }
 };
 
@@ -251,7 +428,10 @@ export const trackCatalogImpression = (
   placementOrOptions?: string | { placement?: string; route?: string }
 ): void => {
   try {
-    const opts = typeof placementOrOptions === 'string' ? { placement: placementOrOptions } : placementOrOptions;
+    const opts =
+      typeof placementOrOptions === 'string'
+        ? { placement: placementOrOptions }
+        : placementOrOptions;
     behaviorClient.emit('catalog_impression', { productId, ...opts });
   } catch {
     // Failure isolation
@@ -264,7 +444,10 @@ export const trackVariantSelected = (
   placementOrOptions?: string | { placement?: string; route?: string }
 ): void => {
   try {
-    const opts = typeof placementOrOptions === 'string' ? { placement: placementOrOptions } : placementOrOptions;
+    const opts =
+      typeof placementOrOptions === 'string'
+        ? { placement: placementOrOptions }
+        : placementOrOptions;
     behaviorClient.emit('product_variant_selected', { productId, variantId, ...opts });
   } catch {
     // Failure isolation
@@ -276,7 +459,10 @@ export const trackFavoriteAdded = (
   placementOrOptions?: string | { placement?: string; route?: string }
 ): void => {
   try {
-    const opts = typeof placementOrOptions === 'string' ? { placement: placementOrOptions } : placementOrOptions;
+    const opts =
+      typeof placementOrOptions === 'string'
+        ? { placement: placementOrOptions }
+        : placementOrOptions;
     behaviorClient.emit('favorite_added', { productId, ...opts });
   } catch {
     // Failure isolation
@@ -288,7 +474,10 @@ export const trackFavoriteRemoved = (
   placementOrOptions?: string | { placement?: string; route?: string }
 ): void => {
   try {
-    const opts = typeof placementOrOptions === 'string' ? { placement: placementOrOptions } : placementOrOptions;
+    const opts =
+      typeof placementOrOptions === 'string'
+        ? { placement: placementOrOptions }
+        : placementOrOptions;
     behaviorClient.emit('favorite_removed', { productId, ...opts });
   } catch {
     // Failure isolation
@@ -320,7 +509,12 @@ export function trackAddToCart(
     if (typeof productIdOrOpts === 'object') {
       behaviorClient.emit('add_to_cart', productIdOrOpts);
     } else if (variantId && typeof quantity === 'number') {
-      behaviorClient.emit('add_to_cart', { productId: productIdOrOpts, variantId, quantity, ...options });
+      behaviorClient.emit('add_to_cart', {
+        productId: productIdOrOpts,
+        variantId,
+        quantity,
+        ...options,
+      });
     }
   } catch {
     // Failure isolation
@@ -344,14 +538,22 @@ export function trackRemoveFromCart(
     if (typeof productIdOrOpts === 'object') {
       behaviorClient.emit('remove_from_cart', productIdOrOpts);
     } else if (variantId && typeof quantity === 'number') {
-      behaviorClient.emit('remove_from_cart', { productId: productIdOrOpts, variantId, quantity, ...options });
+      behaviorClient.emit('remove_from_cart', {
+        productId: productIdOrOpts,
+        variantId,
+        quantity,
+        ...options,
+      });
     }
   } catch {
     // Failure isolation
   }
 }
 
-export const trackCheckoutStarted = (options?: { placement?: string; route?: string }): void => {
+export const trackCheckoutStarted = (options?: {
+  placement?: string;
+  route?: string;
+}): void => {
   try {
     behaviorClient.emit('checkout_started', options);
   } catch {

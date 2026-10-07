@@ -17,6 +17,7 @@ type IngestionEvent struct {
 	EventID    uuid.UUID              `json:"eventId"`
 	EventType  string                 `json:"eventType"`
 	VisitorID  uuid.UUID              `json:"visitorId"`
+	SessionID  *uuid.UUID             `json:"sessionId,omitempty"`
 	OccurredAt time.Time              `json:"occurredAt"`
 	ProductID  *uuid.UUID             `json:"productId,omitempty"`
 	VariantID  *uuid.UUID             `json:"variantId,omitempty"`

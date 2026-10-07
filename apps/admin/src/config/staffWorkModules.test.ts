@@ -17,9 +17,9 @@ import {
 import { getAllCapabilityKeys } from './staffCapabilities';
 
 describe('STAFF_WORK_MODULES Presentation Config', () => {
-  // A. exactly 12 modules
-  it('A: defines exactly 12 canonical work modules in stable order', () => {
-    expect(STAFF_WORK_MODULES).toHaveLength(12);
+  // A. exactly 13 modules
+  it('A: defines exactly 13 canonical work modules in stable order', () => {
+    expect(STAFF_WORK_MODULES).toHaveLength(13);
     const moduleKeys = STAFF_WORK_MODULES.map((m) => m.key);
     expect(moduleKeys).toEqual([
       'staff_access',
@@ -34,16 +34,17 @@ describe('STAFF_WORK_MODULES Presentation Config', () => {
       'support',
       'auctions',
       'analytics',
+      'marketing',
     ]);
   });
 
-  // B. all 86 canonical capabilities mapped
-  it('B: maps all 86 canonical capabilities across modules', () => {
+  // B. all 89 canonical capabilities mapped
+  it('B: maps all 89 canonical capabilities across modules', () => {
     const allActions = getAllWorkModuleActions();
-    expect(allActions).toHaveLength(86);
+    expect(allActions).toHaveLength(89);
 
     const canonicalKeys = getAllCapabilityKeys();
-    expect(canonicalKeys).toHaveLength(86);
+    expect(canonicalKeys).toHaveLength(89);
 
     const mappedKeys = allActions.map((a) => a.capability).sort();
     const sortedCanonical = [...canonicalKeys].sort();
@@ -225,35 +226,35 @@ describe('STAFF_WORK_MODULES Presentation Config', () => {
     expect(exactDiff.matches).toBe(true);
   });
 
-  // Q. screen visibility config has 26 unique keys and valid routes
-  it('Q: screen visibility config has exactly 26 unique keys and unique valid routes', () => {
-    expect(STAFF_SCREEN_ACCESS_RULES).toHaveLength(26);
+  // Q. screen visibility config has 27 unique keys and valid routes
+  it('Q: screen visibility config has exactly 27 unique keys and unique valid routes', () => {
+    expect(STAFF_SCREEN_ACCESS_RULES).toHaveLength(27);
 
     const keys = STAFF_SCREEN_ACCESS_RULES.map((r) => r.key);
     const uniqueKeys = new Set(keys);
-    expect(uniqueKeys.size).toBe(26);
+    expect(uniqueKeys.size).toBe(27);
 
     const routes = STAFF_SCREEN_ACCESS_RULES.map((r) => r.route);
     const uniqueRoutes = new Set(routes);
-    expect(uniqueRoutes.size).toBe(26);
+    expect(uniqueRoutes.size).toBe(27);
   });
 
   // R. warehouse visibility rules: picking, packing, dispatch, orders receiving, supplies receiving, returns receiving, free-scan
   it('R: warehouse screen visibility rules use exact accepted anchors', () => {
-    // picking -> warehouse.picking
+    // picking -> ['warehouse.picking', 'orders.read']
     const pickingRule = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/fulfillment/picking');
     expect(pickingRule).toBeDefined();
-    expect(pickingRule?.visibility).toBe('warehouse.picking');
+    expect(pickingRule?.visibility).toEqual(['warehouse.picking', 'fulfillment.read']);
 
-    // packing -> warehouse.packing
+    // packing -> ['warehouse.packing', 'orders.read']
     const packingRule = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/fulfillment/packing');
     expect(packingRule).toBeDefined();
-    expect(packingRule?.visibility).toBe('warehouse.packing');
+    expect(packingRule?.visibility).toEqual(['warehouse.packing', 'fulfillment.read']);
 
-    // dispatch -> warehouse.dispatch
+    // dispatch -> ['warehouse.dispatch', 'orders.read']
     const dispatchRule = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/fulfillment/dispatch');
     expect(dispatchRule).toBeDefined();
-    expect(dispatchRule?.visibility).toBe('warehouse.dispatch');
+    expect(dispatchRule?.visibility).toEqual(['warehouse.dispatch', 'fulfillment.read']);
 
     // orders receiving scanner -> warehouse.receiving
     const ordersReceivingRule = STAFF_SCREEN_ACCESS_RULES.find((r) => r.route === '/orders/receiving');
@@ -315,7 +316,7 @@ describe('STAFF_WORK_MODULES Presentation Config', () => {
 
     expect(summary.moduleKey).toBe('warehouse');
     expect(summary.assignedCount).toBe(2);
-    expect(summary.totalCount).toBe(9);
+    expect(summary.totalCount).toBe(10);
     expect(summary.state).toBe('LIMITED');
     expect(summary.criticalAssignedCount).toBe(0);
     expect(summary.topAssignedActions).toHaveLength(2);
@@ -334,8 +335,8 @@ describe('STAFF_WORK_MODULES Presentation Config', () => {
       expect(getStaffScreenAccessRule('dashboard')?.route).toBe('/dashboard');
       expect(getStaffScreenVisibility('/dashboard')).toEqual(['dashboard.read', 'analytics.read']);
 
-      expect(getStaffScreenAccessRule('/fulfillment/picking')?.visibility).toBe('warehouse.picking');
-      expect(getStaffScreenVisibility('/fulfillment/picking')).toBe('warehouse.picking');
+      expect(getStaffScreenAccessRule('/fulfillment/picking')?.visibility).toEqual(['warehouse.picking', 'fulfillment.read']);
+      expect(getStaffScreenVisibility('/fulfillment/picking')).toEqual(['warehouse.picking', 'fulfillment.read']);
 
       expect(getStaffScreenAccessRule('/orders/receiving')?.visibility).toBe('warehouse.receiving');
       expect(getStaffScreenVisibility('/orders/receiving')).toBe('warehouse.receiving');

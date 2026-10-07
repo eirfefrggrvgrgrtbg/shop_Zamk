@@ -132,7 +132,7 @@ func TestAdminDispatchRouter(t *testing.T) {
 	adminWithUpdateToken := makeToken(adminWithUpdatePerm, "admin")
 
 	adminWithReadOnly := insertUser("admin")
-	insertAdminWithPerms(adminWithReadOnly, []string{"orders.read"})
+	insertAdminWithPerms(adminWithReadOnly, []string{"orders.read", "fulfillment.read"})
 	adminReadOnlyToken := makeToken(adminWithReadOnly, "admin")
 
 	sellerUser := insertUser("seller")

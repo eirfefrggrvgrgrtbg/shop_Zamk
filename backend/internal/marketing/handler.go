@@ -15,14 +15,20 @@ import (
 )
 
 type Handler struct {
+	publicBaseURL string
 	service *Service
 	logger  *slog.Logger
 }
 
-func NewHandler(service *Service, logger *slog.Logger) *Handler {
+func NewHandler(service *Service, logger *slog.Logger, publicBaseURL ...string) *Handler {
+	baseURL := ""
+	if len(publicBaseURL) > 0 {
+		baseURL = publicBaseURL[0]
+	}
 	return &Handler{
-		service: service,
-		logger:  logger,
+		service:       service,
+		logger:        logger,
+		publicBaseURL: baseURL,
 	}
 }
 

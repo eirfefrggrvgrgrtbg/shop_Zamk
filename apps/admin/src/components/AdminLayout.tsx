@@ -24,6 +24,8 @@ import {
   Search,
   Menu,
   MessageSquare,
+  Megaphone,
+  BarChart3,
 } from 'lucide-react';
 
 import { useAdminAuth } from '../contexts/AdminAuthContext';
@@ -162,6 +164,11 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     { name: 'Выплаты продавцам', path: '/payouts', icon: Wallet },
   ].filter(isNavItemVisible);
 
+  const marketingNavItems: NavItem[] = [
+    { name: 'Сводка', path: '/marketing', icon: BarChart3, permission: 'marketing.campaigns.read' },
+    { name: 'Кампании', path: '/marketing/campaigns', icon: Megaphone, permission: 'marketing.campaigns.read' },
+  ].filter(isNavItemVisible);
+
   const warehouseNavItems: NavItem[] = [
     { name: 'Сборка', path: '/fulfillment/picking', icon: PackageCheck, count: pickingCount },
     { name: 'Упаковка', path: '/fulfillment/packing', icon: Package, count: packingCount },
@@ -185,6 +192,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
 
   const navGroups: NavGroup[] = [
     { title: 'Коммерция и сервисы', items: baseCommerceItems },
+    { title: 'Маркетинг', items: marketingNavItems },
     { title: 'Поддержка', items: supportNavItems },
     { title: 'СКЛАД', items: warehouseNavItems },
     { title: 'Администрирование', items: staffNavItems },
@@ -195,6 +203,12 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
   const isRouteActive = (itemPath: string) => {
     if (itemPath === '/moderation') {
       return isModerationActive;
+    }
+    if (itemPath === '/marketing') {
+      return location.pathname === '/marketing' || location.pathname === '/marketing/overview';
+    }
+    if (itemPath === '/marketing/campaigns') {
+      return location.pathname === '/marketing/campaigns' || (location.pathname.startsWith('/marketing/') && location.pathname !== '/marketing/overview');
     }
     if (itemPath === '/support') {
       return location.pathname === '/support' || location.pathname.startsWith('/support/');

@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { CartProvider } from './contexts/CartContext';
@@ -37,13 +37,65 @@ import { Privacy } from './pages/Privacy';
 import { AuctionPage } from './pages/Auction';
 import { AuctionLotDetail } from './pages/AuctionLotDetail';
 import { AuctionWins } from './pages/AuctionWins';
-import { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
-import { startBehaviorTracking, stopBehaviorTracking } from './lib/behavior';
+import { useEffect, useRef } from 'react';
+import {
+  startBehaviorTracking,
+  stopBehaviorTracking,
+  trackPageView,
+  trackSessionStarted,
+  parseAttributionMetadata,
+  getNavigationAttributionMetadata,
+  getOrRenewSession,
+  getOrCreateVisitorId,
+  isSessionStartedEmitted,
+  markSessionStartedEmitted,
+} from './lib/behavior';
+import type { AttributionMetadata } from '@zamk/api-client/src/behavior';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
+
+function BehaviorRouterTracker() {
+  const location = useLocation();
+  const lastTrackedKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // 1. StrictMode duplicate protection:
+    // If navigation location key hasn't changed since last tracked navigation in this mount lifecycle, skip
+    const currentKey = `${location.pathname}?${location.search}#${location.key}`;
+    if (lastTrackedKeyRef.current === currentKey) {
+      return;
+    }
+    lastTrackedKeyRef.current = currentKey;
+
+    const visitorId = getOrCreateVisitorId();
+    const { sessionId, isNew } = getOrRenewSession(visitorId);
+
+    // 2. Initial / new session start:
+    // Guarantees session_started is emitted exactly once per session
+    if (isNew || !isSessionStartedEmitted(sessionId)) {
+      markSessionStartedEmitted(sessionId);
+      const meta = parseAttributionMetadata();
+      trackSessionStarted(meta);
+    }
+
+    // 3. Check for new non-direct UTM touch on an existing active session
+    // If not a brand new session, check if this navigation has new UTM parameters
+    let pageViewMeta: AttributionMetadata | undefined;
+    if (!isNew) {
+      const navMeta = getNavigationAttributionMetadata(location.search);
+      if (navMeta && (navMeta.utm_source || navMeta.source)) {
+        pageViewMeta = navMeta;
+      }
+    }
+
+    // 4. Track page view with normalized route (query-free)
+    trackPageView(location.pathname, pageViewMeta ? { metadata: pageViewMeta } : undefined);
+  }, [location.pathname, location.search, location.key]);
+
   return null;
 }
 
@@ -64,6 +116,7 @@ function App() {
             <FavoritesProvider>
               <Router>
                 <ScrollToTop />
+                <BehaviorRouterTracker />
                 <Layout>
                   <Routes>
                     <Route path="/" element={<Home />} />

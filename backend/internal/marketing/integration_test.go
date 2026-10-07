@@ -139,7 +139,7 @@ func TestPromoCodeUsage_OneOrderMaxOnePromo(t *testing.T) {
 	// Create campaign & two different promo codes
 	c := &marketing.MarketingCampaign{
 		ID:                uuid.New(),
-		SellerID:          sellerID,
+		SellerID: &sellerID,
 		Title:             "Promo Usage Constraint Test",
 		FundingMode:       marketing.FundingModeSeller,
 		Status:            marketing.CampaignStatusActive,
@@ -172,6 +172,7 @@ func TestPromoCodeUsage_OneOrderMaxOnePromo(t *testing.T) {
 		IsActive:              true,
 	}
 	require.NoError(t, repo.CreatePromoCode(ctx, promoB))
+
 
 	// Create order X and order Y
 	orderX := createTestOrder(t, client, userID)
@@ -211,7 +212,7 @@ func TestMarketingCampaign_PlatformFundingSemantics(t *testing.T) {
 	// Invariant: COFUNDED requires seller_discount_bps > 0
 	cofundedZeroSeller := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Invalid Cofunded Zero Seller",
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusDraft,
@@ -228,7 +229,7 @@ func TestMarketingCampaign_PlatformFundingSemantics(t *testing.T) {
 	// Invariant: Pure ZAMK requires seller discount == 0
 	zamkNonZeroSeller := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Invalid Pure ZAMK with Seller Discount",
 		FundingMode:                 marketing.FundingModeZamk,
 		Status:                      marketing.CampaignStatusDraft,
@@ -245,7 +246,7 @@ func TestMarketingCampaign_PlatformFundingSemantics(t *testing.T) {
 	// Invariant: SELLER requires discount > 0 and 0 ZAMK fields
 	sellerZeroDiscount := &marketing.MarketingCampaign{
 		ID:                uuid.New(),
-		SellerID:          sellerID,
+		SellerID: &sellerID,
 		Title:             "Invalid Seller Zero Discount",
 		FundingMode:       marketing.FundingModeSeller,
 		Status:            marketing.CampaignStatusDraft,
@@ -259,7 +260,7 @@ func TestMarketingCampaign_PlatformFundingSemantics(t *testing.T) {
 
 	sellerWithZamk := &marketing.MarketingCampaign{
 		ID:                    uuid.New(),
-		SellerID:              sellerID,
+		SellerID: &sellerID,
 		Title:                 "Invalid Seller with ZAMK",
 		FundingMode:           marketing.FundingModeSeller,
 		Status:                marketing.CampaignStatusDraft,
@@ -275,7 +276,7 @@ func TestMarketingCampaign_PlatformFundingSemantics(t *testing.T) {
 	// Invariant: SUBMITTED platform-funded requires requested > 0
 	submittedZeroReq := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Invalid Submitted Zero Request",
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusSubmitted,
@@ -292,7 +293,7 @@ func TestMarketingCampaign_PlatformFundingSemantics(t *testing.T) {
 	// Invariant: DRAFT or SUBMITTED cannot have approved values
 	draftWithApproved := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Invalid Draft with Approved",
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusDraft,
@@ -326,7 +327,7 @@ func TestMarketingCampaign_RequestedVsApprovedAuthority(t *testing.T) {
 	// Invariant: Approved terms cannot exceed requested terms in DB
 	cIllegalApp := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Illegal Approved Exceeds Requested",
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusApproved,
@@ -406,7 +407,7 @@ func TestOrderItemPromotion_ImmutabilityAndFKProtection(t *testing.T) {
 
 	c := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Snapshot Immutability Campaign",
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusApproved,
@@ -468,7 +469,7 @@ func TestOrderItemPromotion_ImmutabilityAndFKProtection(t *testing.T) {
 		ID:                          uuid.New(),
 		OrderItemID:                 orderItemID,
 		OrderID:                     orderID,
-		SellerID:                    sellerID,
+		SellerID: sellerID,
 		CampaignID:                  c.ID,
 		PromoCodeID:                 promo.ID,
 		BaseUnitPriceCents:          500000, // 5000 RUB
@@ -537,7 +538,7 @@ func TestMarketingCampaign_SingleOpenPlatformFundingConstraint(t *testing.T) {
 	// 1. Create first cofunded campaign in SUBMITTED status -> Succeeds
 	c1 := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Spring Promo 1",
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusSubmitted,
@@ -552,7 +553,7 @@ func TestMarketingCampaign_SingleOpenPlatformFundingConstraint(t *testing.T) {
 	// 2. Attempt to create a SECOND cofunded campaign in SUBMITTED status for same seller -> Rejected
 	c2 := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Spring Promo 2",
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusSubmitted,
@@ -577,7 +578,7 @@ func TestMarketingCampaign_DraftDoesNotReservePlatformSlot(t *testing.T) {
 	// Draft 1
 	d1 := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Draft 1",
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusDraft,
@@ -592,7 +593,7 @@ func TestMarketingCampaign_DraftDoesNotReservePlatformSlot(t *testing.T) {
 	// Draft 2 -> Must succeed because drafts do NOT reserve the slot
 	d2 := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Draft 2",
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusDraft,
@@ -617,7 +618,7 @@ func TestMarketingCampaign_SellerFundedNotBlockedBySingleSlot(t *testing.T) {
 	// 1. One active cofunded campaign
 	c1 := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Active Cofunded",
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusActive,
@@ -635,7 +636,7 @@ func TestMarketingCampaign_SellerFundedNotBlockedBySingleSlot(t *testing.T) {
 	for i := 1; i <= 3; i++ {
 		sCamp := &marketing.MarketingCampaign{
 			ID:                uuid.New(),
-			SellerID:          sellerID,
+			SellerID: &sellerID,
 			Title:             fmt.Sprintf("Seller Parallel %d", i),
 			FundingMode:       marketing.FundingModeSeller,
 			Status:            marketing.CampaignStatusActive,
@@ -658,7 +659,7 @@ func TestPromoCode_CaseInsensitiveUniqueness(t *testing.T) {
 
 	c := &marketing.MarketingCampaign{
 		ID:                uuid.New(),
-		SellerID:          sellerID,
+		SellerID: &sellerID,
 		Title:             "Promo Test",
 		FundingMode:       marketing.FundingModeSeller,
 		Status:            marketing.CampaignStatusActive,
@@ -692,6 +693,7 @@ func TestPromoCode_CaseInsensitiveUniqueness(t *testing.T) {
 		PerCustomerUsageLimit: 1,
 		IsActive:              true,
 	}
+
 	err := repo.CreatePromoCode(ctx, p2)
 	assert.ErrorIs(t, err, marketing.ErrPromoCodeDuplicate)
 
@@ -816,7 +818,7 @@ func TestMarketingCampaign_BudgetCapConstraint(t *testing.T) {
 	// Approved campaign with 50,000 RUB budget cap
 	c := &marketing.MarketingCampaign{
 		ID:                          uuid.New(),
-		SellerID:                    sellerID,
+		SellerID: &sellerID,
 		Title:                       "Budget Test Campaign",
 		FundingMode:                 marketing.FundingModeCofunded,
 		Status:                      marketing.CampaignStatusApproved,

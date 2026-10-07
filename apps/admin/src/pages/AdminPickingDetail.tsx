@@ -120,7 +120,7 @@ export function AdminPickingDetail() {
   const handleScanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const code = normalizeScannerCode(scanInput);
-    if (!code || isScanning || !id) return;
+    if (!code || isScanning || !id || !canPick) return;
 
     setIsScanning(true);
     setFeedback(null);
@@ -407,7 +407,9 @@ export function AdminPickingDetail() {
               onChange={(e) => setScanInput(e.target.value)}
               disabled={!canPick || isScanning || (activeItem.allocationMode === 'legacy' && !legacyTarget)}
               placeholder={
-                activeItem.allocationMode === 'serialized'
+                !canPick
+                  ? 'Сканирование недоступно: требуется право warehouse.picking'
+                  : activeItem.allocationMode === 'serialized'
                   ? 'Отсканируйте ZMU подходящей единицы...'
                   : legacyTarget
                   ? legacyTarget.type === 'barcode'

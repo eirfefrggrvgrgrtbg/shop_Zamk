@@ -11,7 +11,7 @@ import { getDeliveryMethods } from '@zamk/api-client/src/public';
 import type { PublicDeliveryMethod } from '@zamk/api-client/src/types';
 import { useAuth } from '../contexts/AuthContext';
 import { formatVariantDetails } from '../lib/variantSelection';
-import { trackCheckoutStarted } from '../lib/behavior';
+import { trackCheckoutStarted, getOrRenewSession, getOrCreateVisitorId } from '../lib/behavior';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -149,12 +149,20 @@ export function Checkout() {
 
       let orderId = pendingOrderId;
       if (!orderId) {
+        const visitorId = getOrCreateVisitorId();
+        const sessionInfo = visitorId ? getOrRenewSession(visitorId) : null;
+        const analyticsContext = sessionInfo && visitorId ? {
+          visitorId: visitorId,
+          sessionId: sessionInfo.sessionId
+        } : undefined;
+
         const order = await createOrder({
           customerName: finalName,
           customerEmail: trimmedEmail,
           customerPhone: finalPhone,
           deliveryAddress: deliveryAddressText,
-          deliveryMethodId: selectedMethodId
+          deliveryMethodId: selectedMethodId,
+          analyticsContext
         }, idempotencyKey);
         orderId = order.id;
         setPendingOrderId(order.id);

@@ -131,14 +131,17 @@ describe('AdminNavigationShell — Canonical On-Demand Search & Support Contract
     expect(screen.getByTestId('admin-nav-catalog')).toBeDefined();
   });
 
-  it('3. Support is in its own dedicated group and distinct from Orders, Returns, Payments, Refunds', () => {
+  it('3. Both Marketing and Support visible: renders stacked center column with Marketing on top and Support on bottom', () => {
     mockAuth([
       'dashboard.read',
       'support.read',
+      'marketing.campaigns.read',
       'orders.read',
       'returns.read',
       'payments.read',
       'refunds.read',
+      'warehouse.picking',
+      'staff.read',
     ]);
     render(
       <MemoryRouter initialEntries={['/dashboard']}>
@@ -149,19 +152,111 @@ describe('AdminNavigationShell — Canonical On-Demand Search & Support Contract
     fireEvent.click(screen.getByTestId('admin-nav-trigger'));
     const palette = screen.getByTestId('admin-search-palette');
 
-    // Dedicated Support group exists
-    const supportGroup = within(palette).getByTestId('admin-nav-group-Поддержка');
+    // Dedicated Center Stack container exists
+    const centerStack = within(palette).getByTestId('admin-nav-center-stack');
+    expect(centerStack).toBeDefined();
+
+    // Marketing card is inside center stack (top half)
+    const marketingGroup = within(centerStack).getByTestId('admin-nav-group-Маркетинг');
+    expect(marketingGroup).toBeDefined();
+    expect(within(marketingGroup).getByText('Сводка')).toBeDefined();
+    expect(within(marketingGroup).getByText('Кампании')).toBeDefined();
+    expect(within(marketingGroup).getByTestId('admin-nav-item--marketing')).toBeDefined();
+    expect(within(marketingGroup).getByTestId('admin-nav-item--marketing-campaigns')).toBeDefined();
+
+    // Support card is inside center stack (bottom half)
+    const supportGroup = within(centerStack).getByTestId('admin-nav-group-Поддержка');
     expect(supportGroup).toBeDefined();
-    expect(within(supportGroup).getAllByText('Поддержка')).toHaveLength(2); // Group title + item name
+    expect(within(supportGroup).getAllByText('Поддержка')).toHaveLength(2);
     expect(within(supportGroup).getByTestId('admin-nav-item--support')).toBeDefined();
 
-    // Commerce group contains Orders, Returns, Payments, Refunds, but NOT Support
-    const commerceGroup = within(palette).getByTestId('admin-nav-group-Коммерция и сервисы');
-    expect(within(commerceGroup).getByText('Заказы')).toBeDefined();
-    expect(within(commerceGroup).getByText('Возвраты')).toBeDefined();
-    expect(within(commerceGroup).getByText('Платежи покупателей')).toBeDefined();
-    expect(within(commerceGroup).getByText('Возмещения')).toBeDefined();
-    expect(within(commerceGroup).queryByTestId('admin-nav-item--support')).toBeNull();
+    // Verify ordering of all groups across catalog
+    const groupElements = within(palette).getAllByTestId(/^admin-nav-group-/);
+    const groupTitles = groupElements.map((el) => el.getAttribute('data-testid'));
+    expect(groupTitles).toEqual([
+      'admin-nav-group-Коммерция и сервисы',
+      'admin-nav-group-Маркетинг',
+      'admin-nav-group-Поддержка',
+      'admin-nav-group-СКЛАД',
+      'admin-nav-group-Администрирование',
+    ]);
+  });
+
+  it('3b. Marketing-only state: center column contains only Marketing, without empty Support shell', () => {
+    mockAuth([
+      'dashboard.read',
+      'marketing.campaigns.read',
+      'orders.read',
+      'warehouse.picking',
+      'staff.read',
+    ], 'admin');
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId('admin-nav-trigger'));
+    const palette = screen.getByTestId('admin-search-palette');
+
+    const centerStack = within(palette).getByTestId('admin-nav-center-stack');
+    expect(within(centerStack).getByTestId('admin-nav-group-Маркетинг')).toBeDefined();
+    expect(within(centerStack).queryByTestId('admin-nav-group-Поддержка')).toBeNull();
+
+    // Support is completely absent from DOM
+    expect(within(palette).queryByTestId('admin-nav-group-Поддержка')).toBeNull();
+    expect(within(palette).queryByTestId('admin-nav-item--support')).toBeNull();
+  });
+
+  it('3c. Support-only state: center column contains only Support, without empty Marketing shell', () => {
+    mockAuth([
+      'dashboard.read',
+      'support.read',
+      'orders.read',
+      'warehouse.picking',
+      'staff.read',
+    ], 'support');
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId('admin-nav-trigger'));
+    const palette = screen.getByTestId('admin-search-palette');
+
+    const centerStack = within(palette).getByTestId('admin-nav-center-stack');
+    expect(within(centerStack).getByTestId('admin-nav-group-Поддержка')).toBeDefined();
+    expect(within(centerStack).queryByTestId('admin-nav-group-Маркетинг')).toBeNull();
+
+    // Marketing is completely absent from DOM
+    expect(within(palette).queryByTestId('admin-nav-group-Маркетинг')).toBeNull();
+    expect(within(palette).queryByTestId('admin-nav-item--marketing')).toBeNull();
+  });
+
+  it('3d. Neither Marketing nor Support state: center stack is completely omitted', () => {
+    mockAuth([
+      'warehouse.picking',
+      'warehouse.packing',
+      'warehouse.dispatch',
+      'inventory.read',
+    ], 'warehouse_operator');
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId('admin-nav-trigger'));
+    const palette = screen.getByTestId('admin-search-palette');
+
+    // Warehouse group exists
+    expect(within(palette).getByTestId('admin-nav-group-СКЛАД')).toBeDefined();
+
+    // Center stack, Marketing, Support are completely absent
+    expect(within(palette).queryByTestId('admin-nav-center-stack')).toBeNull();
+    expect(within(palette).queryByTestId('admin-nav-group-Маркетинг')).toBeNull();
+    expect(within(palette).queryByTestId('admin-nav-group-Поддержка')).toBeNull();
   });
 
   it('4. Searching "поддерж" filters destinations immediately to Support', () => {
@@ -213,7 +308,7 @@ describe('AdminNavigationShell — Canonical On-Demand Search & Support Contract
     fireEvent.click(screen.getByTestId('admin-nav-trigger'));
     expect(screen.getByTestId('admin-search-palette')).toBeDefined();
 
-    // Click Support link
+    // Click Support link from palette
     const supportLink = screen.getByTestId('admin-nav-item--support');
     fireEvent.click(supportLink);
 
@@ -241,22 +336,28 @@ describe('AdminNavigationShell — Canonical On-Demand Search & Support Contract
     expect(within(header).getByText('Поддержка')).toBeDefined();
   });
 
-  it('7. Read visibility vs mutation authority: user with support.read sees Support; user without does not', () => {
-    // 7a. User without support.read
+  it('7. Read visibility vs mutation authority: Support and Marketing follow RBAC strictly', () => {
+    // 7a. User without support.read or marketing.campaigns.read
     mockAuth(['orders.read']);
-    const { unmount } = render(
+    const { unmount: unmount1 } = render(
       <MemoryRouter initialEntries={['/orders']}>
         <AdminLayout />
       </MemoryRouter>
     );
 
     fireEvent.click(screen.getByTestId('admin-nav-trigger'));
+    expect(screen.queryByTestId('admin-nav-group-Маркетинг')).toBeNull();
     expect(screen.queryByTestId('admin-nav-group-Поддержка')).toBeNull();
     expect(screen.queryByTestId('admin-nav-item--support')).toBeNull();
-    unmount();
 
-    // 7b. User with support.read
-    mockAuth(['support.read']);
+    // Search for support without permission -> still null
+    const input1 = screen.getByTestId('admin-search-input');
+    fireEvent.change(input1, { target: { value: 'поддерж' } });
+    expect(screen.queryByTestId('admin-nav-item--support')).toBeNull();
+    unmount1();
+
+    // 7b. User with support.read & marketing.campaigns.read
+    mockAuth(['support.read', 'marketing.campaigns.read']);
     render(
       <MemoryRouter initialEntries={['/dashboard']}>
         <AdminLayout />
@@ -264,18 +365,34 @@ describe('AdminNavigationShell — Canonical On-Demand Search & Support Contract
     );
 
     fireEvent.click(screen.getByTestId('admin-nav-trigger'));
+    // Both visible in center stack
+    expect(screen.getByTestId('admin-nav-group-Маркетинг')).toBeDefined();
     expect(screen.getByTestId('admin-nav-group-Поддержка')).toBeDefined();
+
+    // Search "поддерж" discovers Support
+    const input2 = screen.getByTestId('admin-search-input');
+    fireEvent.change(input2, { target: { value: 'поддерж' } });
     expect(screen.getByTestId('admin-nav-item--support')).toBeDefined();
   });
 
-  it('8. Keyboard navigation: ArrowDown + Enter on filtered search opens /support and closes palette', () => {
-    mockAuth(['dashboard.read', 'support.read']);
+  it('8. Keyboard navigation: ArrowDown traverses across Commerce -> Marketing -> Support -> Warehouse -> Staff', () => {
+    mockAuth([
+      'dashboard.read',
+      'marketing.campaigns.read',
+      'support.read',
+      'warehouse.picking',
+      'staff.read',
+    ]);
     render(
       <MemoryRouter initialEntries={['/dashboard']}>
         <AdminLayout>
           <Routes>
             <Route path="/dashboard" element={<div>Dashboard Page</div>} />
+            <Route path="/marketing" element={<div>Marketing Overview</div>} />
+            <Route path="/marketing/campaigns" element={<div>Marketing Campaigns</div>} />
             <Route path="/support" element={<div>Support Page Workspace</div>} />
+            <Route path="/fulfillment/picking" element={<div>Picking Screen</div>} />
+            <Route path="/staff" element={<div>Staff Screen</div>} />
           </Routes>
           <LocationTracker />
         </AdminLayout>
@@ -285,15 +402,13 @@ describe('AdminNavigationShell — Canonical On-Demand Search & Support Contract
     fireEvent.click(screen.getByTestId('admin-nav-trigger'));
     const input = screen.getByTestId('admin-search-input');
 
-    // Type query matching Support
-    fireEvent.change(input, { target: { value: 'поддерж' } });
-
-    // Press Enter to navigate to first active match
+    // Initial state: index 0 (Главная /dashboard)
+    // Press ArrowDown 1 time -> Marketing: Сводка (/marketing)
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    // Palette closes and URL is /support
     expect(screen.queryByTestId('admin-search-palette')).toBeNull();
-    expect(screen.getByTestId('current-pathname').textContent).toBe('/support');
-    expect(screen.getByText('Support Page Workspace')).toBeDefined();
+    expect(screen.getByTestId('current-pathname').textContent).toBe('/marketing');
+    expect(screen.getByText('Marketing Overview')).toBeDefined();
   });
 });

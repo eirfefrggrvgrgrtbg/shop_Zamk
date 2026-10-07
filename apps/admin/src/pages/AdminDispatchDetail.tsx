@@ -97,7 +97,7 @@ export function AdminDispatchDetail() {
   }, [id]);
 
   const handleConfirmDispatch = async () => {
-    if (!id || isDispatching) return;
+    if (!id || isDispatching || !canDispatch) return;
 
     setIsDispatching(true);
     setDispatchError(null);

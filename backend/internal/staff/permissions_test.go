@@ -28,7 +28,7 @@ func TestPermissions_KnownCapabilities(t *testing.T) {
 
 	all := staff.AllPermissions()
 	require.NotEmpty(t, all)
-	require.Equal(t, 86, len(all))
+	require.Equal(t, 89, len(all))
 	require.Contains(t, all, staff.PermissionStaffPermissionsManage)
 }
 

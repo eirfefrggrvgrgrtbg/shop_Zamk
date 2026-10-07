@@ -81,10 +81,14 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 
 	marketingRepo := marketing.NewRepository(pgClient.Pool)
 	marketingService := marketing.NewService(marketingRepo, pgClient.Pool)
-	marketingHandler := marketing.NewHandler(marketingService, logger)
+	marketingHandler := marketing.NewHandler(marketingService, logger, cfg.App.PublicBaseURL)
+
+	behaviorRepo := behavior.NewRepository(pgClient)
+	behaviorService := behavior.NewService(behaviorRepo, marketingService.ResolveCampaignToken)
+	behaviorHandler := behavior.NewHandler(behaviorService)
 
 	ordersRepo := orders.NewRepository(pgClient.Pool)
-	ordersService := orders.NewService(ordersRepo, cartRepo, inventoryService, pgClient, cfg).WithMarketing(marketingService)
+	ordersService := orders.NewService(ordersRepo, cartRepo, inventoryService, pgClient, cfg).WithMarketing(marketingService).WithBehavior(behaviorService)
 	ordersService.SetLogger(logger)
 	ordersHandler := orders.NewHandler(ordersService)
 
@@ -108,11 +112,6 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 		cfg.TBank.PayType,
 		cfg.TBank.TPayMode,
 	)
-
-	behaviorRepo := behavior.NewRepository(pgClient)
-	behaviorService := behavior.NewService(behaviorRepo)
-	behaviorHandler := behavior.NewHandler(behaviorService)
-
 	paymentsRepo := payments.NewRepository(pgClient.Pool)
 	paymentsService := payments.NewService(paymentsRepo, ordersRepo, inventoryService, tbankProvider, pgClient, notificationsService, behaviorService, cfg).WithMarketing(marketingService)
 	paymentsHandler := payments.NewHandler(paymentsService, cfg.App.Env)
@@ -187,7 +186,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	}
 	auctionsRepo := auctions.NewRepository(pgClient.Pool)
 	auctionsHub := auctions.NewSSEHub()
-	auctionsService := auctions.NewService(auctionsRepo, notificationsService, auctionsLimiter, auctionsHub)
+	auctionsService := auctions.NewService(auctionsRepo, notificationsService, auctionsLimiter, auctionsHub).WithBehavior(behaviorService)
 	auctionsAdminHandler := auctions.NewAdminHandler(auctionsRepo, auctionsService, logger)
 	auctionsPublicHandler := auctions.NewPublicHandler(auctionsRepo, auctionsService, logger)
 	auctionsCustomerHandler := auctions.NewCustomerHandler(auctionsRepo, auctionsService, logger)

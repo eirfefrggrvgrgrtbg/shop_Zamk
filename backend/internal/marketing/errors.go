@@ -13,6 +13,7 @@ var (
 	ErrInvalidBudgetCap                     = errors.New("approved ZAMK budget cap must be greater than zero for approved platform funding")
 	ErrCustomerPriceNegative                = errors.New("customer price cannot become negative")
 	ErrCampaignNotFound                     = errors.New("marketing campaign not found")
+	ErrTrackingLinkNotFound                 = errors.New("tracking link not found")
 	ErrPromoCodeNotFound                    = errors.New("promo code not found")
 	ErrPromoCodeDuplicate                   = errors.New("promo code already exists")
 	ErrOpenPlatformFundingExists            = errors.New("seller already has an active or submitted platform-funded campaign")
@@ -64,4 +65,15 @@ var (
 	ErrInvalidMaxDiscount            = errors.New("max discount must be positive")
 	ErrInvalidMinQuantity            = errors.New("min eligible quantity must be positive")
 	ErrInvalidMinDistinctProducts    = errors.New("min distinct products must be positive")
+
+	// ADS.2A Tracking and Campaign Errors
+	ErrInvalidCampaignChannel = errors.New("invalid campaign channel")
+	ErrInvalidCampaignType    = errors.New("invalid campaign type")
+	ErrInvalidPlannedBudget   = errors.New("planned budget must be non-negative")
+	ErrInvalidLandingPath     = errors.New("invalid landing path: must be internal Shop absolute path")
+	ErrInvalidTargetConfig    = errors.New("invalid target configuration: exactly one target must be provided")
+	ErrTrackingLinkDisabled   = errors.New("tracking link is disabled")
+	ErrCampaignNotActive      = errors.New("campaign is not active")
+	ErrCampaignNotStarted     = errors.New("campaign has not started yet")
+	ErrCampaignExpired        = errors.New("campaign is expired")
 )
