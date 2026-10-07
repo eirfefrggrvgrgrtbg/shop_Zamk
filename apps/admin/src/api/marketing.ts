@@ -1,4 +1,6 @@
 export {
+  getAdminMarketingProducts,
+  getAdminMarketingProducts as getMarketingProducts,
   getAdminMarketingOverview,
   getAdminMarketingSources,
   getAdminMarketingCampaignMetrics,
@@ -10,6 +12,11 @@ export {
 } from '@zamk/api-client/src/admin';
 
 export type {
+  AdminProductAnalyticsResponse as ProductAnalyticsResponse,
+  AdminProductAnalyticsRow as ProductAnalyticsRow,
+  AdminProductAnalyticsCoverage as ProductAnalyticsCoverage,
+  MetricCoverage,
+  MetricCoverageStatus,
   AdminAnalyticsMetrics as AnalyticsMetrics,
   AdminMarketingTrendResponse as AnalyticsTrendResponse,
   AdminMarketingOverviewResponse as AnalyticsOverviewResponse,

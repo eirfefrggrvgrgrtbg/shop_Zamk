@@ -4,7 +4,9 @@ import "errors"
 
 var (
 	ErrInvalidFundingMode                  = errors.New("invalid funding mode")
-	ErrInvalidCampaignStatus                = errors.New("invalid campaign status")
+	ErrInvalidSort                         = errors.New("invalid sort")
+	ErrFavoritesCoverageIncomplete         = errors.New("favorites tracking coverage is incomplete for period")
+	ErrInvalidCampaignStatus               = errors.New("invalid campaign status")
 	ErrInvalidDiscountType                  = errors.New("invalid discount type")
 	ErrFixedDiscountNotAllowed              = errors.New("fixed discount is not supported for platform-funded campaigns in V1")
 	ErrZamkShareExceedsCeiling              = errors.New("requested ZAMK share exceeds maximum ceiling of 25% (2500 bps)")

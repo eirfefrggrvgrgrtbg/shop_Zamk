@@ -2,6 +2,8 @@ package marketing
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,11 +11,64 @@ import (
 )
 
 type AnalyticsRepository struct {
-	db *pgxpool.Pool
+	db                   *pgxpool.Pool
+	verifiedCompleteFrom map[string]time.Time
+	mu                   sync.RWMutex
 }
 
 func NewAnalyticsRepository(db *pgxpool.Pool) *AnalyticsRepository {
-	return &AnalyticsRepository{db: db}
+	return &AnalyticsRepository{
+		db:                   db,
+		verifiedCompleteFrom: make(map[string]time.Time),
+	}
+}
+
+func (r *AnalyticsRepository) SetVerifiedCompleteFrom(eventType string, t time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.verifiedCompleteFrom == nil {
+		r.verifiedCompleteFrom = make(map[string]time.Time)
+	}
+	r.verifiedCompleteFrom[eventType] = t
+}
+
+func (r *AnalyticsRepository) getVerifiedCompleteFrom(eventType string) *time.Time {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.verifiedCompleteFrom == nil {
+		return nil
+	}
+	if t, ok := r.verifiedCompleteFrom[eventType]; ok {
+		return &t
+	}
+	return nil
+}
+
+func (r *AnalyticsRepository) evaluateCoverage(from, to time.Time, minOccurred *time.Time, verifiedFrom *time.Time) MetricCoverage {
+	if minOccurred == nil || !to.After(*minOccurred) {
+		return MetricCoverage{
+			Status: CoverageUnavailable,
+		}
+	}
+
+	cov := MetricCoverage{
+		TrackedFrom: minOccurred,
+	}
+
+	// Historical completeness cannot be proven merely from MIN(occurred_at).
+	// If completeness is not verified, fail closed to Partial.
+	if verifiedFrom == nil {
+		cov.Status = CoveragePartial
+		return cov
+	}
+
+	if from.Before(*verifiedFrom) {
+		cov.Status = CoveragePartial
+		return cov
+	}
+
+	cov.Status = CoverageAvailable
+	return cov
 }
 
 func (r *AnalyticsRepository) GetOverviewMetrics(ctx context.Context, from, to time.Time) (MetricsSnapshot, error) {
@@ -416,4 +471,185 @@ func (r *AnalyticsRepository) GetTrendMetrics(ctx context.Context, from, to time
 	}
 
 	return trend, nil
+}
+
+func (r *AnalyticsRepository) GetProductAnalytics(ctx context.Context, req ProductAnalyticsRequest) (*ProductAnalyticsResponse, error) {
+	// 1. Determine tracking coverage truthfully
+	var viewsTrackingStarted, favTrackingStarted, cartTrackingStarted *time.Time
+	err := r.db.QueryRow(ctx, `
+		SELECT
+		  (SELECT MIN(occurred_at) FROM behavioral_events WHERE event_type = 'product_view'),
+		  (SELECT MIN(occurred_at) FROM behavioral_events WHERE event_type = 'favorite_added'),
+		  (SELECT MIN(occurred_at) FROM behavioral_events WHERE event_type = 'add_to_cart')
+	`).Scan(&viewsTrackingStarted, &favTrackingStarted, &cartTrackingStarted)
+	if err != nil {
+		return nil, err
+	}
+
+	coverage := ProductAnalyticsCoverage{
+		Views:     r.evaluateCoverage(req.From, req.To, viewsTrackingStarted, r.getVerifiedCompleteFrom("product_view")),
+		Favorites: r.evaluateCoverage(req.From, req.To, favTrackingStarted, r.getVerifiedCompleteFrom("favorite_added")),
+		AddToCart: r.evaluateCoverage(req.From, req.To, cartTrackingStarted, r.getVerifiedCompleteFrom("add_to_cart")),
+	}
+
+	// Canonical Sort normalization and validation
+	requestedSort := ProductSortRevenue
+	if req.Sort != nil && *req.Sort != "" {
+		requestedSort = *req.Sort
+	}
+
+	// BLOCKER 3, Check 9: favorites sort only when coverage permits
+	if requestedSort == ProductSortFavorites && coverage.Favorites.Status != CoverageAvailable {
+		return nil, ErrFavoritesCoverageIncomplete
+	}
+
+	var sortClause string
+	switch requestedSort {
+	case ProductSortRevenue:
+		sortClause = "revenue_cents DESC, sold_units DESC, p.id ASC"
+	case ProductSortSales:
+		sortClause = "sold_units DESC, revenue_cents DESC, p.id ASC"
+	case ProductSortViews:
+		sortClause = "views DESC, p.id ASC"
+	case ProductSortFavorites:
+		sortClause = "favorites DESC, p.id ASC"
+	case ProductSortConversion:
+		sortClause = "(CAST(COALESCE(o.purchases, 0) AS FLOAT) / NULLIF(COALESCE(b.views, 0), 0)) DESC NULLS LAST, revenue_cents DESC, p.id ASC"
+	case ProductSortHighViewsLowSales:
+		// Prioritize products with high views and few/zero purchases (opportunity gap)
+		sortClause = "(COALESCE(b.views, 0)::float / (COALESCE(o.purchases, 0) + 1.0)) DESC, b.views DESC, p.id ASC"
+	default:
+		return nil, ErrInvalidSort
+	}
+
+	// 2. Fetch products
+	// Canonical Revenue Truth:
+	// - Succeeded payments only for non-cancelled orders
+	// - Per-item revenue accounts for actual customer paid value via order_item_promotions snapshot
+	//   (or oi.price_cents * oi.quantity if not promoted), matching customer paid money without shipping.
+	// Canonical Return Semantics:
+	// - Returns completed in the selected period (ret.status = 'completed' AND completed_at in range),
+	//   consistent with Marketing Overview return metrics.
+	query := `
+		WITH behavioral AS (
+			SELECT product_id,
+				COUNT(*) FILTER (WHERE event_type = 'product_view') AS views,
+				COUNT(*) FILTER (WHERE event_type = 'favorite_added') AS favorites,
+				COUNT(*) FILTER (WHERE event_type = 'add_to_cart') AS add_to_cart
+			FROM behavioral_events
+			WHERE occurred_at >= $1 AND occurred_at < $2 AND product_id IS NOT NULL
+			GROUP BY product_id
+		),
+		distinct_paid_orders AS (
+			SELECT o.id AS order_id
+			FROM orders o
+			JOIN payments p ON p.order_id = o.id
+			WHERE p.status = 'succeeded'
+			  AND o.status != 'cancelled'
+			  AND p.paid_at >= $1 AND p.paid_at < $2
+			GROUP BY o.id
+		),
+		orders_data AS (
+			SELECT oi.product_id,
+				COUNT(DISTINCT oi.order_id) AS purchases,
+				SUM(oi.quantity) AS sold_units,
+				SUM(COALESCE(oip.total_customer_paid_cents, oi.price_cents * oi.quantity)) AS revenue_cents
+			FROM order_items oi
+			JOIN distinct_paid_orders dpo ON oi.order_id = dpo.order_id
+			LEFT JOIN order_item_promotions oip ON oip.order_item_id = oi.id
+			GROUP BY oi.product_id
+		),
+		returns_data AS (
+			SELECT oi.product_id,
+				COUNT(DISTINCT r.id) AS returns_count,
+				COALESCE(SUM(COALESCE(ri.accepted_quantity, ri.quantity)), 0) AS returned_units
+			FROM return_items ri
+			JOIN returns r ON ri.return_id = r.id
+			JOIN order_items oi ON ri.order_item_id = oi.id
+			WHERE r.status = 'completed'
+			  AND COALESCE(r.completed_at, r.updated_at) >= $1
+			  AND COALESCE(r.completed_at, r.updated_at) < $2
+			GROUP BY oi.product_id
+		),
+		active_products AS (
+			SELECT product_id FROM behavioral
+			UNION
+			SELECT product_id FROM orders_data
+			UNION
+			SELECT product_id FROM returns_data
+		)
+		SELECT
+			p.id, p.title, p.main_image_url, s.brand_name, c.name,
+			COALESCE(b.views, 0) AS views,
+			COALESCE(b.favorites, 0) AS favorites,
+			COALESCE(b.add_to_cart, 0) AS add_to_cart,
+			COALESCE(o.purchases, 0) AS purchases,
+			COALESCE(o.sold_units, 0) AS sold_units,
+			COALESCE(o.revenue_cents, 0) AS revenue_cents,
+			COALESCE(r.returns_count, 0) AS returns_count,
+			COALESCE(r.returned_units, 0) AS returned_units
+		FROM active_products ap
+		JOIN products p ON p.id = ap.product_id
+		JOIN sellers s ON p.seller_id = s.id
+		LEFT JOIN categories c ON p.category_id = c.id
+		LEFT JOIN behavioral b ON b.product_id = ap.product_id
+		LEFT JOIN orders_data o ON o.product_id = ap.product_id
+		LEFT JOIN returns_data r ON r.product_id = ap.product_id
+		WHERE 1=1
+	`
+
+	args := []interface{}{req.From, req.To}
+	argID := 3
+
+	if req.CategoryID != nil && *req.CategoryID != "" {
+		query += fmt.Sprintf(" AND p.category_id = $%d", argID)
+		args = append(args, *req.CategoryID)
+		argID++
+	}
+	if req.DesignerID != nil && *req.DesignerID != "" {
+		query += fmt.Sprintf(" AND p.seller_id = $%d", argID)
+		args = append(args, *req.DesignerID)
+		argID++
+	}
+	if req.Search != nil && *req.Search != "" {
+		query += fmt.Sprintf(" AND p.title ILIKE $%d", argID)
+		args = append(args, "%"+*req.Search+"%")
+		argID++
+	}
+
+	query += fmt.Sprintf(" ORDER BY %s LIMIT 100", sortClause)
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var products []ProductAnalyticsRow
+	for rows.Next() {
+		var row ProductAnalyticsRow
+		err := rows.Scan(
+			&row.ProductID, &row.ProductName, &row.PrimaryImage, &row.DesignerName, &row.CategoryName,
+			&row.Views, &row.Favorites, &row.AddToCart,
+			&row.Purchases, &row.SoldUnits, &row.RevenueCents,
+			&row.Returns, &row.ReturnedUnits,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if row.Views > 0 {
+			row.ConversionRate = float64(row.Purchases) / float64(row.Views)
+		}
+		products = append(products, row)
+	}
+
+	if products == nil {
+		products = []ProductAnalyticsRow{}
+	}
+
+	return &ProductAnalyticsResponse{
+		Coverage: coverage,
+		Products: products,
+	}, nil
 }

@@ -50,6 +50,7 @@ import { AdminStaff } from './pages/AdminStaff';
 import { AdminStaffDetail } from './pages/AdminStaffDetail';
 import { AdminSupportPage } from './pages/support/AdminSupportPage';
 import { AdminMarketingOverview } from './pages/AdminMarketingOverview';
+import { AdminMarketingProducts } from './pages/AdminMarketingProducts';
 import { AdminMarketingCampaigns } from './pages/AdminMarketingCampaigns';
 import { AdminMarketingCampaignCreate } from './pages/AdminMarketingCampaignCreate';
 import { AdminMarketingCampaignDetail } from './pages/AdminMarketingCampaignDetail';
@@ -83,6 +84,7 @@ export default function App() {
             <Route path="/products/:productId" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/products')}><AdminProductDetail /></AdminProtectedRoute>} />
             <Route path="/marketing" element={<Navigate to="/marketing/overview" replace />} />
             <Route path="/marketing/overview" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}><AdminMarketingOverview /></AdminProtectedRoute>} />
+            <Route path="/marketing/products" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}><AdminMarketingProducts /></AdminProtectedRoute>} />
             <Route path="/marketing/campaigns" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}><AdminMarketingCampaigns /></AdminProtectedRoute>} />
             <Route path="/marketing/campaigns/new" element={<AdminProtectedRoute permission="marketing.campaigns.write"><AdminMarketingCampaignCreate /></AdminProtectedRoute>} />
             <Route path="/marketing/campaigns/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}><AdminMarketingCampaignDetail /></AdminProtectedRoute>} />

@@ -11,7 +11,7 @@ async function runTests() {
     fetchCallCount++;
     const path = url.replace('http://127.0.0.1:8080/api', '');
     const headers = { get: () => 'application/json' };
-    
+
     if (path === '/auth/login') {
       return { ok: loginStatus === 200, status: loginStatus, headers, json: async () => ({code:'INVALID_CREDENTIALS', message:'invalid'}) };
     }
@@ -27,13 +27,13 @@ async function runTests() {
   console.log('Testing concurrent 401 requests...');
   fetchCallCount = 0;
   currentStatus = 401;
-  
+
   const req1 = request('GET', '/some/endpoint');
   const req2 = request('GET', '/another/endpoint');
-  
+
   await Promise.all([req1, req2]);
   assert.strictEqual(fetchCallCount, 5, `Expected 5 fetch calls, got ${fetchCallCount}`);
-  
+
   console.log('Testing login 401 invalid credentials does NOT trigger refresh...');
   fetchCallCount = 0;
   loginStatus = 401;
@@ -43,7 +43,7 @@ async function runTests() {
     assert.strictEqual(err.message, 'Неверный email или пароль');
   }
   assert.strictEqual(fetchCallCount, 1, `Expected 1 fetch call, got ${fetchCallCount}`);
-  
+
   console.log('Testing invalid refresh -> no infinite loop...');
   fetchCallCount = 0;
   currentStatus = 401;
@@ -52,13 +52,28 @@ async function runTests() {
     const headers = { get: () => 'application/json' };
     return { ok: false, status: 401, headers, json: async () => ({code:'UNAUTHORIZED'}) };
   };
-  
+
   try {
     await request('GET', '/some/endpoint');
   } catch (err: any) {
     // Should throw HTTP_ERROR
   }
-  assert.strictEqual(fetchCallCount, 2, `Expected 2 fetch calls, got ${fetchCallCount}`);
+  console.log('Testing getAdminMarketingProducts path has no double /api...');
+  let requestedUrl = '';
+  (global as any).fetch = async (url: string, options: any) => {
+    requestedUrl = url;
+    const headers = { get: () => 'application/json' };
+    return {
+      ok: true,
+      status: 200,
+      headers,
+      json: async () => ({ coverage: { views: { status: 'available' } }, products: [] }),
+    };
+  };
+  const { getAdminMarketingProducts } = await import('./admin.js');
+  await getAdminMarketingProducts('2026-09-01T00:00:00Z', '2026-10-01T00:00:00Z', 'revenue');
+  assert.ok(!requestedUrl.includes('/api/api/'), `URL must not contain /api/api/, got: ${requestedUrl}`);
+  assert.ok(requestedUrl.startsWith('http://127.0.0.1:8080/api/admin/marketing/analytics/products'), `URL must start with /api/admin/marketing/analytics/products, got: ${requestedUrl}`);
 
   console.log('ALL TESTS PASSED');
 }

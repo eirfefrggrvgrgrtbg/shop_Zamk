@@ -27,29 +27,29 @@ export const getAdminSellers = async (params?: {
 }): Promise<{ items: AdminSeller[]; totalCount: number; page: number; limit: number; totalPages: number; statusCounts: Record<string, number> }> => {
   const query = new URLSearchParams();
   if (params?.search) query.append('search', params.search);
-  
+
   if (params?.status && params.status.length > 0) {
     params.status.forEach(st => {
       if (st !== 'all') query.append('status', st);
     });
   }
-  
+
   if (params?.store && params.store !== 'all') query.append('store', params.store);
   if (params?.problems && params.problems !== 'all') query.append('problems', params.problems);
-  
+
   if (params?.ratingMin !== undefined) query.append('ratingMin', params.ratingMin.toString());
   if (params?.ratingMax !== undefined) query.append('ratingMax', params.ratingMax.toString());
   if (params?.hasReviews !== undefined) query.append('hasReviews', params.hasReviews.toString());
-  
+
   if (params?.performanceMin !== undefined) query.append('performanceMin', params.performanceMin.toString());
   if (params?.performanceMax !== undefined) query.append('performanceMax', params.performanceMax.toString());
   if (params?.performanceCategory && params.performanceCategory !== 'all') query.append('performanceCategory', params.performanceCategory);
-  
+
   if (params?.salesGrossMin !== undefined) query.append('salesGrossMin', params.salesGrossMin.toString());
   if (params?.salesGrossMax !== undefined) query.append('salesGrossMax', params.salesGrossMax.toString());
   if (params?.ordersCountMin !== undefined) query.append('ordersCountMin', params.ordersCountMin.toString());
   if (params?.ordersCountMax !== undefined) query.append('ordersCountMax', params.ordersCountMax.toString());
-  
+
   if (params?.hasWarnings !== undefined) query.append('hasWarnings', params.hasWarnings.toString());
   if (params?.hasViolations !== undefined) query.append('hasViolations', params.hasViolations.toString());
   if (params?.blocked !== undefined) query.append('blocked', params.blocked.toString());
@@ -61,12 +61,12 @@ export const getAdminSellers = async (params?: {
     const offset = (params.page - 1) * (params.limit || 25);
     query.append('offset', offset.toString());
   }
-  
+
   const qStr = query.toString() ? `?${query.toString()}` : '';
   const res = await request<any>('GET', `/admin/sellers${qStr}`);
-  return { 
-    ...res, 
-    items: res?.items || [], 
+  return {
+    ...res,
+    items: res?.items || [],
     totalCount: res?.total || 0,
     page: res?.page || 1,
     limit: res?.limit || 25,
@@ -82,7 +82,7 @@ export const getAdminUsers = async (params?: { q?: string; role?: string; status
   if (params?.status) query.append('status', params.status);
   if (params?.limit) query.append('limit', params.limit.toString());
   if (params?.offset) query.append('offset', params.offset.toString());
-  
+
   const qStr = query.toString() ? `?${query.toString()}` : '';
   return request<PaginatedAdminUsersResponse>('GET', `/admin/users${qStr}`);
 };
@@ -385,7 +385,7 @@ export const getAdminInventory = async (params?: {
   if (params?.lowStock) query.append('lowStock', 'true');
   if (params?.limit) query.append('limit', params.limit.toString());
   if (params?.offset) query.append('offset', params.offset.toString());
-  
+
   const qStr = query.toString() ? `?${query.toString()}` : '';
   return request<AdminInventoryListResponse>('GET', `/admin/inventory${qStr}`);
 };
@@ -425,7 +425,7 @@ export const getAdminOrders = async (params?: { q?: string; status?: string; pay
   if (params?.sellerId) query.append('sellerId', params.sellerId);
   if (params?.limit) query.append('limit', params.limit.toString());
   if (params?.offset) query.append('offset', params.offset.toString());
-  
+
   const qStr = query.toString() ? `?${query.toString()}` : '';
   return request<{ items: AdminOrder[]; totalCount: number }>('GET', `/admin/orders${qStr}`);
 };
@@ -451,7 +451,7 @@ export const getAdminFulfillments = async (params?: { limit?: number; offset?: n
   if (params?.limit) query.append('limit', params.limit.toString());
   if (params?.offset) query.append('offset', params.offset.toString());
   if (params?.status) query.append('status', params.status);
-  
+
   const qStr = query.toString() ? `?${query.toString()}` : '';
   return request<{ items: AdminFulfillment[]; totalCount: number }>('GET', `/admin/order-fulfillments${qStr}`);
 };
@@ -681,7 +681,7 @@ export const listAuditLogs = async (params?: { limit?: number; offset?: number; 
   if (params?.entityId) query.set('entityId', params.entityId);
   if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
   if (params?.dateTo) query.set('dateTo', params.dateTo);
-  
+
   const qStr = query.toString() ? `?${query.toString()}` : '';
   return request('GET', `/admin/audit-logs${qStr}`);
 };
@@ -1019,4 +1019,25 @@ export const getAdminMarketingCampaignMetrics = async (from: string, to: string)
 
 export const getAdminMarketingTrend = async (from: string, to: string): Promise<AdminMarketingTrendResponse> => {
   return request<AdminMarketingTrendResponse>('GET', `/admin/marketing/analytics/overview/trend?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+};
+
+
+export const getAdminMarketingProducts = async (
+  from: string,
+  to: string,
+  sort?: string,
+  direction?: string,
+  search?: string,
+  categoryId?: string,
+  designerId?: string
+): Promise<import('./types').AdminProductAnalyticsResponse> => {
+  const query = new URLSearchParams();
+  query.append('from', from);
+  query.append('to', to);
+  if (sort) query.append('sort', sort);
+  if (direction) query.append('direction', direction);
+  if (search) query.append('search', search);
+  if (categoryId) query.append('categoryId', categoryId);
+  if (designerId) query.append('designerId', designerId);
+  return request('GET', `/admin/marketing/analytics/products?${query.toString()}`);
 };

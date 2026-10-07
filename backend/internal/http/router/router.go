@@ -713,6 +713,7 @@ func New(
 					r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/overview/trend", marketingHandler.GetAnalyticsTrend)
 				r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/sources", marketingHandler.GetAnalyticsSources)
 				r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/campaigns", marketingHandler.GetAnalyticsCampaigns)
+				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/products", marketingHandler.GetProductAnalytics)
 			})
 		})
 	})

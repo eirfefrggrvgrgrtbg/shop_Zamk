@@ -62,3 +62,63 @@ type TrendDataPoint struct {
 type AnalyticsTrendResponse struct {
 	Trend []TrendDataPoint `json:"trend"`
 }
+
+type ProductAnalyticsRequest struct {
+	From       time.Time `json:"from" query:"from"`
+	To         time.Time `json:"to" query:"to"`
+	CategoryID *string   `json:"categoryId" query:"categoryId"`
+	DesignerID *string   `json:"designerId" query:"designerId"`
+	Search     *string   `json:"search" query:"search"`
+	Sort       *string   `json:"sort" query:"sort"`
+	Direction  *string   `json:"direction" query:"direction"`
+}
+
+type MetricCoverageStatus string
+
+const (
+	CoverageAvailable   MetricCoverageStatus = "available"
+	CoveragePartial     MetricCoverageStatus = "partial"
+	CoverageUnavailable MetricCoverageStatus = "unavailable"
+)
+
+type MetricCoverage struct {
+	Status      MetricCoverageStatus `json:"status"`
+	TrackedFrom *time.Time           `json:"trackedFrom,omitempty"`
+}
+
+type ProductAnalyticsCoverage struct {
+	Views     MetricCoverage `json:"views"`
+	Favorites MetricCoverage `json:"favorites"`
+	AddToCart MetricCoverage `json:"addToCart"`
+}
+
+const (
+	ProductSortRevenue           = "revenue"
+	ProductSortSales             = "sales"
+	ProductSortViews             = "views"
+	ProductSortFavorites         = "favorites"
+	ProductSortConversion        = "conversion"
+	ProductSortHighViewsLowSales = "high_views_low_sales"
+)
+
+type ProductAnalyticsRow struct {
+	ProductID      string  `json:"productId"`
+	ProductName    string  `json:"productName"`
+	PrimaryImage   *string `json:"primaryImage"`
+	DesignerName   *string `json:"designerName"`
+	CategoryName   *string `json:"categoryName"`
+	Views          int     `json:"views"`
+	Favorites      int     `json:"favorites"`
+	AddToCart      int     `json:"addToCart"`
+	Purchases      int     `json:"purchases"`
+	SoldUnits      int     `json:"soldUnits"`
+	RevenueCents   int64   `json:"revenueCents"`
+	ConversionRate float64 `json:"conversionRate"` // decimal (purchases / views), optional formatting on frontend
+	Returns        int     `json:"returns"`
+	ReturnedUnits  int     `json:"returnedUnits"`
+}
+
+type ProductAnalyticsResponse struct {
+	Coverage ProductAnalyticsCoverage `json:"coverage"`
+	Products []ProductAnalyticsRow    `json:"products"`
+}

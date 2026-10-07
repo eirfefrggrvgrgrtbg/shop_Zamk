@@ -208,7 +208,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
       return location.pathname === '/marketing' || location.pathname === '/marketing/overview';
     }
     if (itemPath === '/marketing/campaigns') {
-      return location.pathname === '/marketing/campaigns' || (location.pathname.startsWith('/marketing/') && location.pathname !== '/marketing/overview');
+      return location.pathname === '/marketing/campaigns' || location.pathname.startsWith('/marketing/campaigns/');
     }
     if (itemPath === '/support') {
       return location.pathname === '/support' || location.pathname.startsWith('/support/');
@@ -258,9 +258,15 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     return location.pathname === itemPath || (location.pathname.startsWith(itemPath + '/') && itemPath !== '/');
   };
 
-  const currentPageTitle = isModerationActive
-    ? 'Модерация'
-    : (allNavItems.find((item) => isRouteActive(item.path))?.name || 'Панель администратора');
+  const getPageTitle = () => {
+    if (isModerationActive) return 'Модерация';
+    if (location.pathname === '/marketing/products' || location.pathname.startsWith('/marketing/products/')) {
+      return 'Товары';
+    }
+    return allNavItems.find((item) => isRouteActive(item.path))?.name || 'Панель администратора';
+  };
+
+  const currentPageTitle = getPageTitle();
 
   return (
     <div data-testid="admin-layout" className="flex h-screen bg-gray-50 flex-col overflow-hidden">

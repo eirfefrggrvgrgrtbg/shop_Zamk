@@ -119,3 +119,7 @@ func (s *AnalyticsService) GetTrend(ctx context.Context, from, to time.Time) (*A
 	}
 	return &AnalyticsTrendResponse{Trend: trend}, nil
 }
+
+func (s *AnalyticsService) GetProductAnalytics(ctx context.Context, req ProductAnalyticsRequest) (*ProductAnalyticsResponse, error) {
+	return s.repo.GetProductAnalytics(ctx, req)
+}

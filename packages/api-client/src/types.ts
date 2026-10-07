@@ -2847,3 +2847,38 @@ export interface TrendDataPoint {
 export interface AdminMarketingTrendResponse {
   trend: TrendDataPoint[];
 }
+
+export type MetricCoverageStatus = 'available' | 'partial' | 'unavailable';
+
+export interface MetricCoverage {
+  status: MetricCoverageStatus;
+  trackedFrom?: string;
+}
+
+export interface AdminProductAnalyticsCoverage {
+  views: MetricCoverage;
+  favorites: MetricCoverage;
+  addToCart: MetricCoverage;
+}
+
+export interface AdminProductAnalyticsRow {
+  productId: string;
+  productName: string;
+  primaryImage: string | null;
+  designerName: string | null;
+  categoryName: string | null;
+  views: number;
+  favorites: number;
+  addToCart: number;
+  purchases: number;
+  soldUnits: number;
+  revenueCents: number;
+  conversionRate: number;
+  returns: number;
+  returnedUnits: number;
+}
+
+export interface AdminProductAnalyticsResponse {
+  coverage: AdminProductAnalyticsCoverage;
+  products: AdminProductAnalyticsRow[];
+}
