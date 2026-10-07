@@ -6,5 +6,6 @@ export function AdminMarketingTabs() {
     <NavLink to="/marketing/overview">Сводка</NavLink>
     <NavLink to="/marketing/campaigns">Кампании</NavLink>
     <NavLink to="/marketing/products">Товары</NavLink>
+    <NavLink to="/marketing/designers">Дизайнеры</NavLink>
   </nav>;
 }

@@ -122,3 +122,44 @@ type ProductAnalyticsResponse struct {
 	Coverage ProductAnalyticsCoverage `json:"coverage"`
 	Products []ProductAnalyticsRow    `json:"products"`
 }
+
+type DesignerAnalyticsRequest struct {
+	From       time.Time `json:"from" query:"from"`
+	To         time.Time `json:"to" query:"to"`
+	CategoryID *string   `json:"categoryId" query:"categoryId"`
+	Search     *string   `json:"search" query:"search"`
+	Sort       *string   `json:"sort" query:"sort"`
+}
+
+type DesignerAnalyticsRow struct {
+	DesignerID           string  `json:"designerId"`
+	DesignerName         string  `json:"designerName"`
+	ProductsCount        int     `json:"productsCount"`
+	PrimaryImage         *string `json:"primaryImage"`
+	Views                int     `json:"views"`
+	Favorites            int     `json:"favorites"`
+	AddToCart            int     `json:"addToCart"`
+	Purchases            int     `json:"purchases"`
+	SoldUnits            int     `json:"soldUnits"`
+	RevenueCents         int64   `json:"revenueCents"`
+	ConversionRate       float64 `json:"conversionRate"`
+	Returns              int     `json:"returns"`
+	PreviousRevenueCents int64   `json:"previousRevenueCents"`
+	RevenueChangePct     *float64 `json:"revenueChangePct"`
+}
+
+const (
+	DesignerSortRevenue         = "revenue"
+	DesignerSortSales           = "sales"
+	DesignerSortViews           = "views"
+	DesignerSortFavorites       = "favorites"
+	DesignerSortConversion      = "conversion"
+	DesignerSortRevenueGrowth   = "revenue_growth"
+	DesignerSortRevenueDrop     = "revenue_drop"
+	DesignerSortHighViewsLowSales = "high_views_low_sales"
+)
+
+type DesignerAnalyticsResponse struct {
+	Coverage ProductAnalyticsCoverage `json:"coverage"`
+	Designers []DesignerAnalyticsRow  `json:"designers"`
+}

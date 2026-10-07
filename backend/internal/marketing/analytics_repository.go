@@ -3,6 +3,7 @@ package marketing
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -651,5 +652,234 @@ func (r *AnalyticsRepository) GetProductAnalytics(ctx context.Context, req Produ
 	return &ProductAnalyticsResponse{
 		Coverage: coverage,
 		Products: products,
+	}, nil
+}
+
+func formatDesignerName(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return "Без дизайнера"
+	}
+	if _, err := uuid.Parse(trimmed); err == nil {
+		return "Без названия"
+	}
+	return trimmed
+}
+
+func (r *AnalyticsRepository) GetDesignerAnalytics(ctx context.Context, req DesignerAnalyticsRequest) (*DesignerAnalyticsResponse, error) {
+	var viewsTrackingStarted, favTrackingStarted, cartTrackingStarted *time.Time
+	err := r.db.QueryRow(ctx, `
+		SELECT
+		  (SELECT MIN(occurred_at) FROM behavioral_events WHERE event_type = 'product_view'),
+		  (SELECT MIN(occurred_at) FROM behavioral_events WHERE event_type = 'favorite_added'),
+		  (SELECT MIN(occurred_at) FROM behavioral_events WHERE event_type = 'add_to_cart')
+	`).Scan(&viewsTrackingStarted, &favTrackingStarted, &cartTrackingStarted)
+	if err != nil {
+		return nil, err
+	}
+
+	coverage := ProductAnalyticsCoverage{
+		Views:     r.evaluateCoverage(req.From, req.To, viewsTrackingStarted, r.getVerifiedCompleteFrom("product_view")),
+		Favorites: r.evaluateCoverage(req.From, req.To, favTrackingStarted, r.getVerifiedCompleteFrom("favorite_added")),
+		AddToCart: r.evaluateCoverage(req.From, req.To, cartTrackingStarted, r.getVerifiedCompleteFrom("add_to_cart")),
+	}
+
+	requestedSort := DesignerSortRevenue
+	if req.Sort != nil && *req.Sort != "" {
+		requestedSort = *req.Sort
+	}
+
+	if requestedSort == DesignerSortFavorites && coverage.Favorites.Status != CoverageAvailable {
+		return nil, ErrFavoritesCoverageIncomplete
+	}
+
+	var sortClause string
+	switch requestedSort {
+	case DesignerSortRevenue:
+		sortClause = "revenue_cents DESC, sold_units DESC, s.id ASC"
+	case DesignerSortSales:
+		sortClause = "sold_units DESC, revenue_cents DESC, s.id ASC"
+	case DesignerSortViews:
+		sortClause = "views DESC, s.id ASC"
+	case DesignerSortFavorites:
+		sortClause = "favorites DESC, s.id ASC"
+	case DesignerSortConversion:
+		sortClause = "(CAST(COALESCE(o.purchases, 0) AS FLOAT) / NULLIF(COALESCE(b.views, 0), 0)) DESC NULLS LAST, revenue_cents DESC, s.id ASC"
+	case DesignerSortHighViewsLowSales:
+		sortClause = "(COALESCE(b.views, 0)::float / (COALESCE(o.purchases, 0) + 1.0)) DESC, b.views DESC, s.id ASC"
+	case DesignerSortRevenueGrowth:
+		sortClause = "revenue_change_pct DESC NULLS LAST, revenue_cents DESC, s.id ASC"
+	case DesignerSortRevenueDrop:
+		sortClause = "revenue_change_pct ASC NULLS LAST, revenue_cents DESC, s.id ASC"
+	default:
+		return nil, ErrInvalidSort
+	}
+
+	duration := req.To.Sub(req.From)
+	prevFrom := req.From.Add(-duration)
+	prevTo := req.From
+
+	productFilters := "1=1"
+	var args []interface{}
+	args = append(args, req.From, req.To, prevFrom, prevTo)
+	argID := 5
+
+	if req.CategoryID != nil && *req.CategoryID != "" {
+		productFilters += fmt.Sprintf(" AND p.category_id = $%d", argID)
+		args = append(args, *req.CategoryID)
+		argID++
+	}
+	if req.Search != nil && *req.Search != "" {
+		productFilters += fmt.Sprintf(" AND s.brand_name ILIKE $%d", argID)
+		args = append(args, "%"+*req.Search+"%")
+		argID++
+	}
+
+	query := fmt.Sprintf(`
+		WITH filtered_products AS (
+			SELECT p.id, p.seller_id, p.status, p.main_image_url, p.created_at
+			FROM products p
+			JOIN sellers s ON p.seller_id = s.id
+			WHERE %s
+		),
+		behavioral AS (
+			SELECT fp.seller_id,
+				COUNT(*) FILTER (WHERE event_type = 'product_view') AS views,
+				COUNT(*) FILTER (WHERE event_type = 'favorite_added') AS favorites,
+				COUNT(*) FILTER (WHERE event_type = 'add_to_cart') AS add_to_cart
+			FROM behavioral_events be
+			JOIN filtered_products fp ON be.product_id = fp.id
+			WHERE occurred_at >= $1 AND occurred_at < $2
+			GROUP BY fp.seller_id
+		),
+		distinct_paid_orders AS (
+			SELECT o.id AS order_id
+			FROM orders o
+			JOIN payments p ON p.order_id = o.id
+			WHERE p.status = 'succeeded'
+			  AND o.status != 'cancelled'
+			  AND p.paid_at >= $1 AND p.paid_at < $2
+			GROUP BY o.id
+		),
+		orders_data AS (
+			SELECT fp.seller_id,
+				COUNT(DISTINCT oi.order_id) AS purchases,
+				SUM(oi.quantity) AS sold_units,
+				SUM(COALESCE(oip.total_customer_paid_cents, oi.price_cents * oi.quantity)) AS revenue_cents
+			FROM order_items oi
+			JOIN filtered_products fp ON oi.product_id = fp.id
+			JOIN distinct_paid_orders dpo ON oi.order_id = dpo.order_id
+			LEFT JOIN order_item_promotions oip ON oip.order_item_id = oi.id
+			GROUP BY fp.seller_id
+		),
+		returns_data AS (
+			SELECT fp.seller_id,
+				COUNT(DISTINCT r.id) AS returns_count
+			FROM return_items ri
+			JOIN returns r ON ri.return_id = r.id
+			JOIN order_items oi ON ri.order_item_id = oi.id
+			JOIN filtered_products fp ON oi.product_id = fp.id
+			WHERE r.status = 'completed'
+			  AND COALESCE(r.completed_at, r.updated_at) >= $1
+			  AND COALESCE(r.completed_at, r.updated_at) < $2
+			GROUP BY fp.seller_id
+		),
+		prev_distinct_paid_orders AS (
+			SELECT o.id AS order_id
+			FROM orders o
+			JOIN payments p ON p.order_id = o.id
+			WHERE p.status = 'succeeded'
+			  AND o.status != 'cancelled'
+			  AND p.paid_at >= $3 AND p.paid_at < $4
+			GROUP BY o.id
+		),
+		prev_orders_data AS (
+			SELECT fp.seller_id,
+				SUM(COALESCE(oip.total_customer_paid_cents, oi.price_cents * oi.quantity)) AS previous_revenue_cents
+			FROM order_items oi
+			JOIN filtered_products fp ON oi.product_id = fp.id
+			JOIN prev_distinct_paid_orders pdpo ON oi.order_id = pdpo.order_id
+			LEFT JOIN order_item_promotions oip ON oip.order_item_id = oi.id
+			GROUP BY fp.seller_id
+		),
+		active_sellers AS (
+			SELECT seller_id FROM behavioral
+			UNION
+			SELECT seller_id FROM orders_data
+			UNION
+			SELECT seller_id FROM returns_data
+		),
+		seller_stats AS (
+			SELECT
+				s.id,
+				s.brand_name,
+				(SELECT COUNT(*) FROM filtered_products fp2 WHERE fp2.seller_id = s.id AND fp2.status = 'published') AS products_count,
+				(SELECT fp3.main_image_url FROM filtered_products fp3 WHERE fp3.seller_id = s.id AND fp3.main_image_url IS NOT NULL ORDER BY fp3.created_at DESC LIMIT 1) AS primary_image
+			FROM active_sellers asi
+			JOIN sellers s ON asi.seller_id = s.id
+		)
+		SELECT
+			s.id,
+			s.brand_name,
+			s.products_count,
+			s.primary_image,
+			COALESCE(b.views, 0) AS views,
+			COALESCE(b.favorites, 0) AS favorites,
+			COALESCE(b.add_to_cart, 0) AS add_to_cart,
+			COALESCE(o.purchases, 0) AS purchases,
+			COALESCE(o.sold_units, 0) AS sold_units,
+			COALESCE(o.revenue_cents, 0) AS revenue_cents,
+			COALESCE(r.returns_count, 0) AS returns_count,
+			COALESCE(po.previous_revenue_cents, 0) AS previous_revenue_cents,
+			CASE
+				WHEN COALESCE(po.previous_revenue_cents, 0) > 0 THEN
+					((COALESCE(o.revenue_cents, 0) - COALESCE(po.previous_revenue_cents, 0))::float / COALESCE(po.previous_revenue_cents, 0)::float) * 100.0
+				ELSE NULL
+			END AS revenue_change_pct
+		FROM seller_stats s
+		LEFT JOIN behavioral b ON s.id = b.seller_id
+		LEFT JOIN orders_data o ON s.id = o.seller_id
+		LEFT JOIN returns_data r ON s.id = r.seller_id
+		LEFT JOIN prev_orders_data po ON s.id = po.seller_id
+		ORDER BY %s LIMIT 100
+	`, productFilters, sortClause)
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var designers []DesignerAnalyticsRow
+	for rows.Next() {
+		var rawID uuid.UUID
+		var rawName string
+		var row DesignerAnalyticsRow
+		err := rows.Scan(
+			&rawID, &rawName, &row.ProductsCount, &row.PrimaryImage,
+			&row.Views, &row.Favorites, &row.AddToCart,
+			&row.Purchases, &row.SoldUnits, &row.RevenueCents,
+			&row.Returns, &row.PreviousRevenueCents, &row.RevenueChangePct,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		row.DesignerID = fmt.Sprintf("dsgn_%x", rawID[:8])
+		row.DesignerName = formatDesignerName(rawName)
+
+		if row.Views > 0 {
+			row.ConversionRate = float64(row.Purchases) / float64(row.Views)
+		}
+		designers = append(designers, row)
+	}
+
+	if designers == nil {
+		designers = []DesignerAnalyticsRow{}
+	}
+
+	return &DesignerAnalyticsResponse{
+		Coverage:  coverage,
+		Designers: designers,
 	}, nil
 }

@@ -9,6 +9,7 @@ export {
   getAdminMarketingOverview as getMarketingOverview,
   getAdminMarketingSources as getMarketingSources,
   getAdminMarketingCampaignMetrics as getMarketingCampaigns,
+  getAdminDesignerAnalytics,
 } from '@zamk/api-client/src/admin';
 
 export type {

@@ -191,7 +191,7 @@ export function CustomSelect({
           role="listbox"
           aria-labelledby={triggerId}
           tabIndex={-1}
-          className="absolute z-50 top-full left-0 mt-2 w-max min-w-[200px] max-h-60 overflow-y-auto bg-white border border-gray-900 shadow-xl py-2 focus:outline-none"
+          className="absolute z-50 top-full left-0 mt-2 w-max min-w-[200px] max-h-96 overflow-y-auto bg-white border border-gray-900 shadow-xl py-2 focus:outline-none"
         >
           {options.map((opt, idx) => {
             const isSelected = value === opt.value;

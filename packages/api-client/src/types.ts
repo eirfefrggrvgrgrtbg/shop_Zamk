@@ -2882,3 +2882,35 @@ export interface AdminProductAnalyticsResponse {
   coverage: AdminProductAnalyticsCoverage;
   products: AdminProductAnalyticsRow[];
 }
+
+export type DesignerSort =
+  | 'revenue'
+  | 'sales'
+  | 'views'
+  | 'favorites'
+  | 'conversion'
+  | 'high_views_low_sales'
+  | 'revenue_growth'
+  | 'revenue_drop';
+
+export interface DesignerAnalyticsRow {
+  designerId: string;
+  designerName: string;
+  productsCount: number;
+  primaryImage?: string;
+  views: number;
+  favorites: number;
+  addToCart: number;
+  purchases: number;
+  soldUnits: number;
+  revenueCents: number;
+  conversionRate: number;
+  returns: number;
+  previousRevenueCents: number;
+  revenueChangePct?: number;
+}
+
+export interface DesignerAnalyticsResponse {
+  coverage: AdminProductAnalyticsCoverage;
+  designers: DesignerAnalyticsRow[];
+}

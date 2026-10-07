@@ -1041,3 +1041,17 @@ export const getAdminMarketingProducts = async (
   if (designerId) query.append('designerId', designerId);
   return request('GET', `/admin/marketing/analytics/products?${query.toString()}`);
 };
+
+export const getAdminDesignerAnalytics = async (
+  from: string,
+  to: string,
+  sort?: string,
+  search?: string,
+  categoryId?: string
+): Promise<import('./types').DesignerAnalyticsResponse> => {
+  const query = new URLSearchParams({ from, to });
+  if (sort) query.append('sort', sort);
+  if (search) query.append('search', search);
+  if (categoryId) query.append('categoryId', categoryId);
+  return request('GET', `/admin/marketing/analytics/designers?${query.toString()}`);
+};

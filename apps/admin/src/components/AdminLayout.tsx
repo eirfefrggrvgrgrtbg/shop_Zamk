@@ -263,6 +263,9 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
     if (location.pathname === '/marketing/products' || location.pathname.startsWith('/marketing/products/')) {
       return 'Товары';
     }
+    if (location.pathname === '/marketing/designers' || location.pathname.startsWith('/marketing/designers/')) {
+      return 'Дизайнеры';
+    }
     return allNavItems.find((item) => isRouteActive(item.path))?.name || 'Панель администратора';
   };
 
