@@ -30,3 +30,8 @@ export type {
   AdminCampaignMetrics as CampaignMetrics,
   AdminMarketingCampaignsAnalyticsResponse as AnalyticsCampaignsResponse,
 } from '@zamk/api-client/src/types';
+
+import { executeAdminMarketingQuery as _executeAdminMarketingQuery } from '@zamk/api-client/src/admin';
+import type { QueryRequest } from '@zamk/api-client/src/types';
+
+export const executeAdminMarketingQuery = (req: QueryRequest) => _executeAdminMarketingQuery(req);

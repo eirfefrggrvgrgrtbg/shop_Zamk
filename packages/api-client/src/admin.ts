@@ -1073,3 +1073,11 @@ export const getAdminDesignerAnalytics = async (
   if (categoryId) query.append('categoryId', categoryId);
   return request('GET', `/admin/marketing/analytics/designers?${query.toString()}`);
 };
+
+import type { QueryRequest, QueryResponse } from './types';
+
+export const executeAdminMarketingQuery = async (req: QueryRequest): Promise<QueryResponse> => {
+  return request<QueryResponse>('POST', '/admin/marketing/analytics/query', {
+    body: req,
+  });
+};

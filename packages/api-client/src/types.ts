@@ -2936,3 +2936,46 @@ export interface DesignerAnalyticsResponse {
   coverage: AdminProductAnalyticsCoverage;
   designers: DesignerAnalyticsRow[];
 }
+
+// Marketing Query Engine M5+ Types
+
+export interface QueryPeriod {
+  from: string; // ISO 8601
+  to: string; // ISO 8601
+}
+
+export interface QueryFilter {
+  dimension: string;
+  operator: string;
+  values: string[];
+}
+
+export interface QuerySort {
+  field: string;
+  direction: 'asc' | 'desc';
+}
+
+export interface QueryRequest {
+  version: number;
+  period: QueryPeriod;
+  dimensions: string[];
+  metrics: string[];
+  filters?: QueryFilter[];
+  sort?: QuerySort[];
+  limit?: number;
+}
+
+export interface QueryColumn {
+  key: string;
+  kind: string; // "dimension" | "metric"
+  type: string; // "string" | "date" | "number" | "money" | "percentage"
+}
+
+export interface QueryResponse {
+  version: number;
+  query: QueryRequest;
+  columns: QueryColumn[];
+  rows: Record<string, any>[];
+  coverage: Record<string, MetricCoverage>;
+  warnings: string[];
+}

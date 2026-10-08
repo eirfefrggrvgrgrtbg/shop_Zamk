@@ -8,5 +8,6 @@ export function AdminMarketingTabs() {
     <NavLink to="/marketing/sources">Источники</NavLink>
     <NavLink to="/marketing/products">Товары</NavLink>
     <NavLink to="/marketing/designers">Дизайнеры</NavLink>
+    <NavLink to="/marketing/query-builder">Конструктор отчетов</NavLink>
   </nav>;
 }
