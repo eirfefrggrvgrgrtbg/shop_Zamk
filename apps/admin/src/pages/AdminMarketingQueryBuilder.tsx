@@ -6,6 +6,16 @@ import { MarketingPeriodControl, useMarketingRange } from '../components/marketi
 import { number, money } from '../components/marketing/marketingPresentation';
 import { formatSource } from '../utils/sourceFormatter';
 
+
+import { Save, FolderOpen, AlertCircle } from 'lucide-react';
+import { AdminMarketingSavedQueriesSidebar } from '../components/marketing/AdminMarketingSavedQueriesSidebar';
+import { AdminMarketingSaveQueryModal } from '../components/marketing/AdminMarketingSaveQueryModal';
+import { updateAdminMarketingSavedQuery } from '@zamk/api-client/src/admin';
+import type { SavedQuery } from '@zamk/api-client/src/types';
+import { deepEqual } from '../utils/deepEqual';
+import { normalizeQueryRequest } from '../utils/normalizeQueryRequest';
+import { mapSavedQueryError } from '../utils/savedQueryError';
+
 export const DIMENSIONS = [
   { key: 'day', label: 'День' },
   { key: 'source', label: 'Источник' },
@@ -136,15 +146,15 @@ export function AdminMarketingQueryBuilder() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<QueryResponse | null>(null);
 
-  const handleRun = async () => {
-    if (!range.from || !range.to) return;
-    if (metrics.length === 0) {
-      setError('Выберите хотя бы один показатель.');
-      return;
-    }
-    setLoading(true);
-    setError(null);
+  // Saved Queries State
+  const [activeSavedQuery, setActiveSavedQuery] = useState<SavedQuery | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [saveModalMode, setSaveModalMode] = useState<'create' | 'rename' | null>(null);
+  const [queryToRename, setQueryToRename] = useState<SavedQuery | undefined>(undefined);
+  const [isSavingChanges, setIsSavingChanges] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
+  const buildCurrentQueryRequest = (): QueryRequest => {
     const queryFilters: QueryFilter[] = filters
       .map(f => {
         const trimmed = f.value.trim();
@@ -166,7 +176,7 @@ export function AdminMarketingQueryBuilder() {
         direction: s.direction,
       }));
 
-    const req: QueryRequest = {
+    return {
       version: 1,
       period: {
         from: typeof range.from === 'string' ? range.from : new Date(range.from).toISOString(),
@@ -178,9 +188,104 @@ export function AdminMarketingQueryBuilder() {
       ...(querySort.length > 0 ? { sort: querySort } : {}),
       limit,
     };
+  };
+
+  const currentQuerySpec = buildCurrentQueryRequest();
+  const isDirty = activeSavedQuery
+    ? !deepEqual(normalizeQueryRequest(activeSavedQuery.querySpec), normalizeQueryRequest(currentQuerySpec))
+    : false;
+
+  const handleLoadSavedQuery = (query: SavedQuery) => {
+    setActiveSavedQuery(query);
+    const spec = query.querySpec;
+    setDimensions(spec.dimensions ? [...spec.dimensions] : []);
+    setMetrics(spec.metrics ? [...spec.metrics] : []);
+    // Preserves M5 default limit of 100
+    setLimit(spec.limit ?? 100);
+
+    // Period: absolute [from, to)
+    if (spec.period) {
+      select('custom', { from: spec.period.from, to: spec.period.to });
+    }
+
+    // Filters
+    if (spec.filters && spec.filters.length > 0) {
+      setFilters(
+        spec.filters.map(f => ({
+          id: crypto.randomUUID(),
+          dimension: f.dimension,
+          operator: f.operator,
+          value: f.operator === 'in' ? f.values.join(', ') : f.values[0] || '',
+        }))
+      );
+    } else {
+      setFilters([]);
+    }
+
+    // Sort
+    if (spec.sort && spec.sort.length > 0) {
+      setSort(
+        spec.sort.map(s => ({
+          id: crypto.randomUUID(),
+          field: s.field,
+          direction: s.direction,
+        }))
+      );
+    } else {
+      setSort([]);
+    }
+
+    setIsSidebarOpen(false);
+  };
+
+  const handleSaveChanges = async () => {
+    if (!activeSavedQuery) return;
+    setIsSavingChanges(true);
+    setError(null);
+    try {
+      const updated = await updateAdminMarketingSavedQuery(activeSavedQuery.id, {
+        querySpec: currentQuerySpec,
+      });
+      setActiveSavedQuery(updated);
+      setRefreshKey(k => k + 1);
+    } catch (err: unknown) {
+      setError(mapSavedQueryError(err));
+    } finally {
+      setIsSavingChanges(false);
+    }
+  };
+
+  const handleSaveModalSuccess = (query: SavedQuery) => {
+    if (saveModalMode === 'create') {
+      setActiveSavedQuery(query);
+    } else if (saveModalMode === 'rename') {
+      if (activeSavedQuery?.id === query.id) {
+        setActiveSavedQuery(query);
+      }
+    }
+    setRefreshKey(k => k + 1);
+    setSaveModalMode(null);
+  };
+
+  const handleQueryDeleted = (deleted: SavedQuery) => {
+    if (activeSavedQuery?.id === deleted.id) {
+      setActiveSavedQuery(null);
+    }
+    setRefreshKey(k => k + 1);
+  };
+
+
+  const handleRun = async () => {
+    if (!range.from || !range.to) return;
+    if (metrics.length === 0) {
+      setError('Выберите хотя бы один показатель.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
 
     try {
-      const res = await executeAdminMarketingQuery(req);
+      const res = await executeAdminMarketingQuery(currentQuerySpec);
       setResult(res);
     } catch (err: any) {
       setError(mapErrorMessage(err));
@@ -325,10 +430,71 @@ export function AdminMarketingQueryBuilder() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex items-end justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">Аналитика</h1>
+          <div className="flex items-center space-x-3 mb-1">
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900">Аналитика</h1>
+          </div>
           <p className="text-sm text-gray-500 font-medium">Конструктор отчетов</p>
         </div>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <FolderOpen className="h-4 w-4 mr-2 text-gray-400" />
+            Сохранённые
+          </button>
+
+          {activeSavedQuery && !isDirty ? (
+            <button
+              disabled
+              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-indigo-400 bg-indigo-50 cursor-not-allowed"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Сохранено
+            </button>
+          ) : activeSavedQuery && isDirty ? (
+            <button
+              onClick={handleSaveChanges}
+              disabled={metrics.length === 0 || isSavingChanges}
+              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {isSavingChanges ? 'Сохранение...' : 'Сохранить изменения'}
+            </button>
+          ) : (
+            <button
+              onClick={() => setSaveModalMode('create')}
+              disabled={metrics.length === 0}
+              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Сохранить
+            </button>
+          )}
+        </div>
       </div>
+
+      {activeSavedQuery && (
+        <div className="mb-6 bg-indigo-50 border border-indigo-100 rounded-md p-4 flex items-center justify-between">
+          <div className="flex flex-col">
+             <span className="text-sm font-medium text-indigo-900">
+               Сохранённый запрос: {activeSavedQuery.name}
+             </span>
+             {isDirty && (
+               <span className="text-xs text-indigo-600 mt-1 flex items-center">
+                 <AlertCircle className="w-3 h-3 mr-1"/>
+                 Есть несохранённые изменения
+               </span>
+             )}
+          </div>
+          <button
+             onClick={() => setActiveSavedQuery(null)}
+             className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+          >
+             Сбросить
+          </button>
+        </div>
+      )}
 
       <AdminMarketingTabs />
 
@@ -662,6 +828,28 @@ export function AdminMarketingQueryBuilder() {
           )}
         </div>
       </div>
-    </div>
+
+      <AdminMarketingSavedQueriesSidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        onSelect={handleLoadSavedQuery}
+        onRename={(query) => {
+          setQueryToRename(query);
+          setSaveModalMode('rename');
+        }}
+        onDeleted={handleQueryDeleted}
+        activeQueryId={activeSavedQuery?.id || null}
+        refreshKey={refreshKey}
+      />
+
+      <AdminMarketingSaveQueryModal
+        isOpen={saveModalMode !== null}
+        onClose={() => setSaveModalMode(null)}
+        mode={saveModalMode || 'create'}
+        initialQuery={saveModalMode === 'rename' ? queryToRename : undefined}
+        querySpec={saveModalMode === 'create' ? currentQuerySpec : null}
+        onSuccess={handleSaveModalSuccess}
+      />
+</div>
   );
 }

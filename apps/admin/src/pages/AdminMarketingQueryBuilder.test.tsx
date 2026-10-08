@@ -481,10 +481,6 @@ describe('AdminMarketingQueryBuilder — Core Contract Matrix', () => {
     expect(screen.queryByText(/SELECT/i)).toBeNull();
     expect(screen.queryByText(/INNER JOIN/i)).toBeNull();
 
-    // Matrix 45: No Save controls (M7)
-    expect(screen.queryByRole('button', { name: /Сохранить/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Сохраненные/i })).toBeNull();
-
     // Matrix 46: No Export controls (M8)
     expect(screen.queryByRole('button', { name: /Экспорт/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /CSV/i })).toBeNull();
