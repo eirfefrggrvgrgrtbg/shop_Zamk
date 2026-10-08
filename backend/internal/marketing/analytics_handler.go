@@ -1,6 +1,7 @@
 package marketing
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -275,6 +276,27 @@ func (h *Handler) GetDesignerAnalytics(w http.ResponseWriter, r *http.Request) {
 		}
 		h.logger.Error("failed to get designer analytics", "error", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to fetch designer analytics")
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, res)
+}
+
+func (h *Handler) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
+	var req QueryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_body", "invalid request body")
+		return
+	}
+
+	if valErr := ValidateQueryRequest(req); valErr != nil {
+		h.writeError(w, http.StatusBadRequest, valErr.Code, valErr.Message)
+		return
+	}
+
+	res, err := h.service.Analytics.ExecuteQuery(r.Context(), req)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
 

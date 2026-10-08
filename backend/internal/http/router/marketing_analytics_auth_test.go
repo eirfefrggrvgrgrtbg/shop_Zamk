@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -307,5 +308,50 @@ func TestAdminMarketingAnalyticsRouter_SourcesRBACAndValidation(t *testing.T) {
 		wDetailInv := httptest.NewRecorder()
 		r.ServeHTTP(wDetailInv, reqDetailInv)
 		assert.Equal(t, http.StatusBadRequest, wDetailInv.Code, "Detail with inverted dates must be 400 Bad Request")
+	})
+
+	// Matrix 58 & 59: Query Engine POST RBAC
+	t.Run("Matrix58_59_QueryEngine_RBAC", func(t *testing.T) {
+		queryEndpoint := "/api/admin/marketing/analytics/query"
+		bodyJSON := `{"version": 1, "period": {"from": "` + fromStr + `", "to": "` + toStr + `"}, "dimensions": ["source"], "metrics": ["orders"]}`
+
+		// 1. Matrix 58: Allowed with marketing.campaigns.read
+		reqCampRead := httptest.NewRequest(http.MethodPost, queryEndpoint, strings.NewReader(bodyJSON))
+		reqCampRead.Header.Set("Authorization", "Bearer "+campaignReadToken)
+		reqCampRead.Header.Set("Content-Type", "application/json")
+		wCampRead := httptest.NewRecorder()
+		r.ServeHTTP(wCampRead, reqCampRead)
+		assert.Equal(t, http.StatusOK, wCampRead.Code, "Admin with marketing.campaigns.read allowed (Matrix 58)")
+
+		// 2. Matrix 58: Allowed with analytics.read
+		reqAnalyticsRead := httptest.NewRequest(http.MethodPost, queryEndpoint, strings.NewReader(bodyJSON))
+		reqAnalyticsRead.Header.Set("Authorization", "Bearer "+analyticsReadToken)
+		reqAnalyticsRead.Header.Set("Content-Type", "application/json")
+		wAnalyticsRead := httptest.NewRecorder()
+		r.ServeHTTP(wAnalyticsRead, reqAnalyticsRead)
+		assert.Equal(t, http.StatusOK, wAnalyticsRead.Code, "Admin with analytics.read allowed (Matrix 58)")
+
+		// 3. Matrix 59: Denied for unprivileged staff (403)
+		reqNoPerm := httptest.NewRequest(http.MethodPost, queryEndpoint, strings.NewReader(bodyJSON))
+		reqNoPerm.Header.Set("Authorization", "Bearer "+noPermToken)
+		reqNoPerm.Header.Set("Content-Type", "application/json")
+		wNoPerm := httptest.NewRecorder()
+		r.ServeHTTP(wNoPerm, reqNoPerm)
+		assert.Equal(t, http.StatusForbidden, wNoPerm.Code, "Unprivileged staff denied 403 (Matrix 59)")
+
+		// 4. Matrix 59: Denied for customer (403)
+		reqCust := httptest.NewRequest(http.MethodPost, queryEndpoint, strings.NewReader(bodyJSON))
+		reqCust.Header.Set("Authorization", "Bearer "+customerToken)
+		reqCust.Header.Set("Content-Type", "application/json")
+		wCust := httptest.NewRecorder()
+		r.ServeHTTP(wCust, reqCust)
+		assert.Equal(t, http.StatusForbidden, wCust.Code, "Customer denied 403 (Matrix 59)")
+
+		// 5. Matrix 59: Denied for unauthenticated (401)
+		reqUnauth := httptest.NewRequest(http.MethodPost, queryEndpoint, strings.NewReader(bodyJSON))
+		reqUnauth.Header.Set("Content-Type", "application/json")
+		wUnauth := httptest.NewRecorder()
+		r.ServeHTTP(wUnauth, reqUnauth)
+		assert.Equal(t, http.StatusUnauthorized, wUnauth.Code, "Unauthenticated denied 401 (Matrix 59)")
 	})
 }

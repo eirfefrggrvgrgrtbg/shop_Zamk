@@ -151,3 +151,9 @@ func (s *AnalyticsService) GetProductAnalytics(ctx context.Context, req ProductA
 func (s *AnalyticsService) GetDesignerAnalytics(ctx context.Context, req DesignerAnalyticsRequest) (*DesignerAnalyticsResponse, error) {
 	return s.repo.GetDesignerAnalytics(ctx, req)
 }
+
+func (s *AnalyticsService) ExecuteQuery(ctx context.Context, req QueryRequest) (*QueryResponse, error) {
+	// QueryRepository takes db
+	repo := NewQueryRepository(s.repo.db)
+	return repo.ExecuteQuery(ctx, req)
+}
