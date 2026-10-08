@@ -118,6 +118,37 @@ func TestAdminMarketingAnalyticsRouter_RBAC(t *testing.T) {
 		r.ServeHTTP(wUnauth, reqUnauth)
 		assert.Equal(t, http.StatusUnauthorized, wUnauth.Code, "Unauthenticated request must be 401 Unauthorized")
 	})
+
+	t.Run("SavedQueries_MatrixAC_Customer_Denied", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/admin/marketing/saved-queries", nil)
+		req.Header.Set("Authorization", "Bearer "+customerToken)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusForbidden, w.Code, "Customer should be forbidden")
+	})
+
+	t.Run("SavedQueries_MatrixAD_ReadPermission_Allowed", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/admin/marketing/saved-queries", nil)
+		req.Header.Set("Authorization", "Bearer "+adminWithReadToken)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusOK, w.Code, "Admin with marketing.campaigns.read should be allowed")
+	})
+
+	t.Run("SavedQueries_MatrixAE_NoPermission_Denied", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/admin/marketing/saved-queries", nil)
+		req.Header.Set("Authorization", "Bearer "+adminNoPermToken)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusForbidden, w.Code, "Admin without read perms should be forbidden")
+	})
+
+	t.Run("SavedQueries_MatrixAF_Unauthenticated_Denied", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/admin/marketing/saved-queries", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code, "Unauthenticated should be unauthorized")
+	})
 }
 
 func TestAdminMarketingAnalyticsRouter_SourcesRBACAndValidation(t *testing.T) {

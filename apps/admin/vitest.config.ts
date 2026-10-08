@@ -16,6 +16,7 @@ export default defineConfig({
       'src/pages/AdminProductDetail.test.tsx',
       'src/components/EntityTimeline.test.tsx',
       'src/api/adminTimeline.test.ts',
+      'src/api/adminMarketingSavedQueries.test.ts',
       'src/components/inventory/**/*.test.{ts,tsx}',
       'src/pages/AdminGuidedPicking.test.tsx',
       'src/pages/AdminFreeScanner.test.tsx',

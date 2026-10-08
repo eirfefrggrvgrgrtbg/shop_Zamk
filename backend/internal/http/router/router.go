@@ -710,13 +710,22 @@ func New(
 
 			r.Route("/analytics", func(r chi.Router) {
 				r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/overview", marketingHandler.GetAnalyticsOverview)
-					r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/overview/trend", marketingHandler.GetAnalyticsTrend)
+				r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/overview/trend", marketingHandler.GetAnalyticsTrend)
 				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/sources", marketingHandler.GetAnalyticsSources)
 				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/sources/{source}", marketingHandler.GetAnalyticsSourceDetail)
 				r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/campaigns", marketingHandler.GetAnalyticsCampaigns)
 				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/products", marketingHandler.GetProductAnalytics)
 				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/designers", marketingHandler.GetDesignerAnalytics)
 				r.With(permAny("marketing.campaigns.read", "analytics.read")).Post("/query", marketingHandler.ExecuteQuery)
+			})
+
+			// Saved Queries
+			r.Route("/saved-queries", func(r chi.Router) {
+				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/", marketingHandler.ListSavedQueries)
+				r.With(permAny("marketing.campaigns.read", "analytics.read")).Post("/", marketingHandler.CreateSavedQuery)
+				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/{id}", marketingHandler.GetSavedQuery)
+				r.With(permAny("marketing.campaigns.read", "analytics.read")).Patch("/{id}", marketingHandler.UpdateSavedQuery)
+				r.With(permAny("marketing.campaigns.read", "analytics.read")).Delete("/{id}", marketingHandler.DeleteSavedQuery)
 			})
 		})
 	})

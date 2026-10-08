@@ -1081,3 +1081,26 @@ export const executeAdminMarketingQuery = async (req: QueryRequest): Promise<Que
     body: req,
   });
 };
+
+// --- Admin Marketing Saved Queries (M7A) ---
+import type { SavedQuery, SavedQueryCreateRequest, SavedQueryUpdateRequest } from './types';
+
+export const listAdminMarketingSavedQueries = async (): Promise<SavedQuery[]> => {
+  return request<SavedQuery[]>('GET', '/admin/marketing/saved-queries');
+};
+
+export const getAdminMarketingSavedQuery = async (id: string): Promise<SavedQuery> => {
+  return request<SavedQuery>('GET', `/admin/marketing/saved-queries/${id}`);
+};
+
+export const createAdminMarketingSavedQuery = async (data: SavedQueryCreateRequest): Promise<SavedQuery> => {
+  return request<SavedQuery>('POST', '/admin/marketing/saved-queries', { body: data });
+};
+
+export const updateAdminMarketingSavedQuery = async (id: string, data: SavedQueryUpdateRequest): Promise<SavedQuery> => {
+  return request<SavedQuery>('PATCH', `/admin/marketing/saved-queries/${id}`, { body: data });
+};
+
+export const deleteAdminMarketingSavedQuery = async (id: string): Promise<void> => {
+  return request<void>('DELETE', `/admin/marketing/saved-queries/${id}`);
+};

@@ -2979,3 +2979,26 @@ export interface QueryResponse {
   coverage: Record<string, MetricCoverage>;
   warnings: string[];
 }
+
+// --- Admin Marketing Saved Queries (M7A) ---
+export interface SavedQuery {
+  id: string;
+  name: string;
+  description?: string;
+  queryVersion: number;
+  querySpec: QueryRequest;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavedQueryCreateRequest {
+  name: string;
+  description?: string;
+  querySpec: QueryRequest;
+}
+
+export interface SavedQueryUpdateRequest {
+  name?: string;
+  description?: string;
+  querySpec?: QueryRequest;
+}

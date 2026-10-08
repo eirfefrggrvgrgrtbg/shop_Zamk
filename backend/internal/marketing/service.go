@@ -18,16 +18,18 @@ import (
 const RequiredSalesEligibilityThreshold = 35
 
 type Service struct {
-	repo      *Repository
-	pool      *pgxpool.Pool
-	Analytics *AnalyticsService
+	repo             *Repository
+	pool             *pgxpool.Pool
+	Analytics        *AnalyticsService
+	SavedQueriesRepo *SavedQueryRepository
 }
 
 func NewService(repo *Repository, pool *pgxpool.Pool) *Service {
 	return &Service{
-		repo:      repo,
-		pool:      pool,
-		Analytics: NewAnalyticsService(NewAnalyticsRepository(pool)),
+		repo:             repo,
+		pool:             pool,
+		Analytics:        NewAnalyticsService(NewAnalyticsRepository(pool)),
+		SavedQueriesRepo: NewSavedQueryRepository(pool),
 	}
 }
 
