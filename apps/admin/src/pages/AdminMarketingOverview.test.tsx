@@ -67,24 +67,58 @@ const populatedOverviewResponse: api.AnalyticsOverviewResponse = {
 };
 
 const populatedSourcesResponse: api.AnalyticsSourcesResponse = {
+  coverage: { views: { status: 'available' }, favorites: { status: 'available' }, addToCart: { status: 'available' } },
   sources: [
     {
+      sourceKey: 'direct',
+      sourceKind: 'direct',
       source: 'Direct',
       visits: 300,
       paidOrders: 15,
+      soldUnits: 15,
       revenueCents: 7500000,
+      conversionRate: 15/300,
+      newCustomers: 10,
+      repeatCustomers: 5,
+      returnsCount: 0,
+      previousVisits: 300,
+      visitsChangePct: 0,
+      previousRevenueCents: 7500000,
+      revenueChangePct: 0,
     },
     {
+      sourceKey: null,
+      sourceKind: 'unattributed',
       source: 'Unattributed',
       visits: 100,
       paidOrders: 5,
+      soldUnits: 5,
       revenueCents: 2500000,
+      conversionRate: 5/100,
+      newCustomers: 5,
+      repeatCustomers: 0,
+      returnsCount: 0,
+      previousVisits: 100,
+      visitsChangePct: 0,
+      previousRevenueCents: 2500000,
+      revenueChangePct: 0,
     },
     {
+      sourceKey: 'telegram',
+      sourceKind: 'named',
       source: 'telegram',
       visits: 850,
       paidOrders: 30,
+      soldUnits: 30,
       revenueCents: 15000000,
+      conversionRate: 30/850,
+      newCustomers: 20,
+      repeatCustomers: 10,
+      returnsCount: 0,
+      previousVisits: 850,
+      visitsChangePct: 0,
+      previousRevenueCents: 15000000,
+      revenueChangePct: 0,
     },
   ],
 };
@@ -266,7 +300,7 @@ describe('Marketing overview range regression and hierarchy', () => {
 
   it('G/H/V: empty zero metrics and zero previous revenue have no NaN/Infinity or invented delta', async () => {
     vi.mocked(api.getMarketingOverview).mockResolvedValue(emptyOverviewResponse);
-    vi.mocked(api.getMarketingSources).mockResolvedValue({ sources: [] });
+    vi.mocked(api.getMarketingSources).mockResolvedValue({ sources: [], coverage: { views: { status: 'available' }, favorites: { status: 'available' }, addToCart: { status: 'available' } } });
     vi.mocked(api.getMarketingCampaigns).mockResolvedValue({ campaigns: [] });
     mount();
     await waitFor(() => expect(screen.getAllByText('Нет данных за этот период')).toHaveLength(2));

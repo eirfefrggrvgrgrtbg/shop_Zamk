@@ -711,7 +711,8 @@ func New(
 			r.Route("/analytics", func(r chi.Router) {
 				r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/overview", marketingHandler.GetAnalyticsOverview)
 					r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/overview/trend", marketingHandler.GetAnalyticsTrend)
-				r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/sources", marketingHandler.GetAnalyticsSources)
+				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/sources", marketingHandler.GetAnalyticsSources)
+				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/sources/{source}", marketingHandler.GetAnalyticsSourceDetail)
 				r.With(permAny("marketing.campaigns.read", "marketing.campaigns.write")).Get("/campaigns", marketingHandler.GetAnalyticsCampaigns)
 				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/products", marketingHandler.GetProductAnalytics)
 				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/designers", marketingHandler.GetDesignerAnalytics)

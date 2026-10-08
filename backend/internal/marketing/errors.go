@@ -6,6 +6,7 @@ var (
 	ErrInvalidFundingMode                  = errors.New("invalid funding mode")
 	ErrInvalidSort                         = errors.New("invalid sort")
 	ErrFavoritesCoverageIncomplete         = errors.New("favorites tracking coverage is incomplete for period")
+	ErrConversionCoverageIncomplete        = errors.New("conversion tracking coverage is incomplete for period")
 	ErrInvalidCampaignStatus               = errors.New("invalid campaign status")
 	ErrInvalidDiscountType                  = errors.New("invalid discount type")
 	ErrFixedDiscountNotAllowed              = errors.New("fixed discount is not supported for platform-funded campaigns in V1")

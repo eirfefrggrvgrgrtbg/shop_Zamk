@@ -2811,16 +2811,38 @@ export interface AdminMarketingOverviewResponse {
   previous: AdminAnalyticsMetrics;
 }
 
+export type SourceKind = 'direct' | 'unattributed' | 'named';
+
 export interface AdminSourceMetrics {
-  conversionRateBps?: number;
-  source: string;
+  sourceKey: string | null;
+  sourceKind: SourceKind;
+  source?: string;
   visits: number;
   paidOrders: number;
+  soldUnits: number;
   revenueCents: number;
+  conversionRate: number;
+  newCustomers: number;
+  repeatCustomers: number;
+  returnsCount: number;
+  previousVisits: number;
+  visitsChangePct: number | null;
+  previousRevenueCents: number;
+  revenueChangePct: number | null;
 }
 
 export interface AdminMarketingSourcesResponse {
+  coverage: AdminProductAnalyticsCoverage;
   sources: AdminSourceMetrics[];
+}
+
+export interface AdminMarketingSourceDetailResponse {
+  source: AdminSourceMetrics;
+  coverage: AdminProductAnalyticsCoverage;
+  trend: TrendDataPoint[];
+  topProducts: AdminProductAnalyticsRow[];
+  topDesigners: DesignerAnalyticsRow[];
+  campaigns: AdminCampaignMetrics[];
 }
 
 export interface AdminCampaignMetrics {

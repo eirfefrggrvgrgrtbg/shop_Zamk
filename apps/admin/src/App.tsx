@@ -55,6 +55,8 @@ import { AdminMarketingDesigners } from './pages/AdminMarketingDesigners';
 import { AdminMarketingCampaigns } from './pages/AdminMarketingCampaigns';
 import { AdminMarketingCampaignCreate } from './pages/AdminMarketingCampaignCreate';
 import { AdminMarketingCampaignDetail } from './pages/AdminMarketingCampaignDetail';
+import { AdminMarketingSources } from './pages/AdminMarketingSources';
+import { AdminMarketingSourceDetail } from './pages/AdminMarketingSourceDetail';
 import { AdminAuthProvider } from './contexts/AdminAuthContext';
 import { AdminProtectedRoute } from './components/AdminProtectedRoute';
 
@@ -87,6 +89,8 @@ export default function App() {
             <Route path="/marketing/overview" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}><AdminMarketingOverview /></AdminProtectedRoute>} />
             <Route path="/marketing/products" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}><AdminMarketingProducts /></AdminProtectedRoute>} />
             <Route path="/marketing/designers" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}><AdminMarketingDesigners /></AdminProtectedRoute>} />
+            <Route path="/marketing/sources" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}><AdminMarketingSources /></AdminProtectedRoute>} />
+            <Route path="/marketing/sources/:source" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}><AdminMarketingSourceDetail /></AdminProtectedRoute>} />
             <Route path="/marketing/campaigns" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}><AdminMarketingCampaigns /></AdminProtectedRoute>} />
             <Route path="/marketing/campaigns/new" element={<AdminProtectedRoute permission="marketing.campaigns.write"><AdminMarketingCampaignCreate /></AdminProtectedRoute>} />
             <Route path="/marketing/campaigns/:id" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}><AdminMarketingCampaignDetail /></AdminProtectedRoute>} />

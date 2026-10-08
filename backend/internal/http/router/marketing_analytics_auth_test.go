@@ -118,3 +118,194 @@ func TestAdminMarketingAnalyticsRouter_RBAC(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, wUnauth.Code, "Unauthenticated request must be 401 Unauthorized")
 	})
 }
+
+func TestAdminMarketingAnalyticsRouter_SourcesRBACAndValidation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+
+	ctx := context.Background()
+	cfg := &config.Config{
+		JWT: config.JWTConfig{
+			AccessTokenSecret:     "test-secret",
+			RefreshTokenSecret:    "test-secret-refresh",
+			AccessTokenTTLMinutes: 60,
+			RefreshTokenTTLDays:   7,
+		},
+		Auth: config.AuthConfig{},
+		App:  config.AppConfig{Env: "test"},
+	}
+	pgClient, err := postgres.NewClient(ctx, testDBURL)
+	require.NoError(t, err)
+	defer pgClient.Close()
+
+	redisClient, err := redis.NewClient(ctx, "localhost:6379", "", 0)
+	require.NoError(t, err)
+	defer redisClient.Close()
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	r, cancel := app.BuildRouter(ctx, cfg, pgClient, redisClient, logger)
+	defer cancel()
+
+	tokenService := auth.NewTokenService("test-secret", "test-secret-refresh", 60)
+
+	insertUser := func(role string) uuid.UUID {
+		id := uuid.New()
+		phone := "7999" + id.String()[:7]
+		_, err := pgClient.Pool.Exec(ctx, `
+			INSERT INTO users (id, email, phone, name, password_hash, role, status, created_at, updated_at)
+			VALUES ($1, $2, $3, 'Test User', 'hash', $4, 'active', NOW(), NOW())
+		`, id, id.String()+"@test.com", phone, role)
+		require.NoError(t, err)
+		return id
+	}
+
+	insertAdminWithPerms := func(userID uuid.UUID, perms []string) {
+		_, err := setupRouterStaffWithPermissions(ctx, pgClient.Pool, userID, "MarketingSourcesRole", perms)
+		require.NoError(t, err)
+	}
+
+	makeToken := func(userID uuid.UUID, role string) string {
+		tok, err := tokenService.GenerateAccessToken(userID, userID.String()+"@test.com", role)
+		require.NoError(t, err)
+		return tok
+	}
+
+	// 1. Admin with marketing.campaigns.read
+	adminWithCampaignRead := insertUser("admin")
+	insertAdminWithPerms(adminWithCampaignRead, []string{"marketing.campaigns.read"})
+	campaignReadToken := makeToken(adminWithCampaignRead, "admin")
+
+	// 2. Admin with analytics.read
+	adminWithAnalyticsRead := insertUser("admin")
+	insertAdminWithPerms(adminWithAnalyticsRead, []string{"analytics.read"})
+	analyticsReadToken := makeToken(adminWithAnalyticsRead, "admin")
+
+	// 3. Admin with only unprivileged permission (inventory.read)
+	adminNoPerm := insertUser("admin")
+	insertAdminWithPerms(adminNoPerm, []string{"inventory.read"})
+	noPermToken := makeToken(adminNoPerm, "admin")
+
+	// 4. Customer
+	customerUser := insertUser("customer")
+	customerToken := makeToken(customerUser, "customer")
+
+	fromStr := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
+	toStr := time.Now().UTC().Format(time.RFC3339)
+
+	sourcesEndpoint := "/api/admin/marketing/analytics/sources?from=" + fromStr + "&to=" + toStr
+	detailEndpoint := "/api/admin/marketing/analytics/sources/vk?from=" + fromStr + "&to=" + toStr
+	unattrDetailEndpoint := "/api/admin/marketing/analytics/sources/_unattributed?from=" + fromStr + "&to=" + toStr
+
+	// A. RBAC for /sources list
+	t.Run("Sources_RBAC", func(t *testing.T) {
+		// marketing.campaigns.read => 200
+		req1 := httptest.NewRequest(http.MethodGet, sourcesEndpoint, nil)
+		req1.Header.Set("Authorization", "Bearer "+campaignReadToken)
+		w1 := httptest.NewRecorder()
+		r.ServeHTTP(w1, req1)
+		assert.Equal(t, http.StatusOK, w1.Code, "Admin with marketing.campaigns.read allowed")
+
+		// analytics.read => 200
+		req2 := httptest.NewRequest(http.MethodGet, sourcesEndpoint, nil)
+		req2.Header.Set("Authorization", "Bearer "+analyticsReadToken)
+		w2 := httptest.NewRecorder()
+		r.ServeHTTP(w2, req2)
+		assert.Equal(t, http.StatusOK, w2.Code, "Admin with analytics.read allowed")
+
+		// Unprivileged staff => 403
+		req3 := httptest.NewRequest(http.MethodGet, sourcesEndpoint, nil)
+		req3.Header.Set("Authorization", "Bearer "+noPermToken)
+		w3 := httptest.NewRecorder()
+		r.ServeHTTP(w3, req3)
+		assert.Equal(t, http.StatusForbidden, w3.Code, "Unprivileged staff denied (403)")
+
+		// Customer => 403
+		reqCust := httptest.NewRequest(http.MethodGet, sourcesEndpoint, nil)
+		reqCust.Header.Set("Authorization", "Bearer "+customerToken)
+		wCust := httptest.NewRecorder()
+		r.ServeHTTP(wCust, reqCust)
+		assert.Equal(t, http.StatusForbidden, wCust.Code, "Customer denied (403)")
+
+		// Unauthenticated => 401
+		reqUnauth := httptest.NewRequest(http.MethodGet, sourcesEndpoint, nil)
+		wUnauth := httptest.NewRecorder()
+		r.ServeHTTP(wUnauth, reqUnauth)
+		assert.Equal(t, http.StatusUnauthorized, wUnauth.Code, "Unauthenticated denied (401)")
+	})
+
+	// B. RBAC for /sources/{source} detail
+	t.Run("SourceDetail_RBAC", func(t *testing.T) {
+		// marketing.campaigns.read => 200
+		req1 := httptest.NewRequest(http.MethodGet, detailEndpoint, nil)
+		req1.Header.Set("Authorization", "Bearer "+campaignReadToken)
+		w1 := httptest.NewRecorder()
+		r.ServeHTTP(w1, req1)
+		assert.Equal(t, http.StatusOK, w1.Code, "Admin with marketing.campaigns.read allowed for detail")
+
+		// Sentinel _unattributed => 200
+		reqUnattr := httptest.NewRequest(http.MethodGet, unattrDetailEndpoint, nil)
+		reqUnattr.Header.Set("Authorization", "Bearer "+analyticsReadToken)
+		wUnattr := httptest.NewRecorder()
+		r.ServeHTTP(wUnattr, reqUnattr)
+		assert.Equal(t, http.StatusOK, wUnattr.Code, "Admin with analytics.read allowed for _unattributed detail")
+
+		// Unprivileged staff => 403
+		req3 := httptest.NewRequest(http.MethodGet, detailEndpoint, nil)
+		req3.Header.Set("Authorization", "Bearer "+noPermToken)
+		w3 := httptest.NewRecorder()
+		r.ServeHTTP(w3, req3)
+		assert.Equal(t, http.StatusForbidden, w3.Code, "Unprivileged staff denied (403)")
+
+		// Customer => 403
+		reqCust := httptest.NewRequest(http.MethodGet, detailEndpoint, nil)
+		reqCust.Header.Set("Authorization", "Bearer "+customerToken)
+		wCust := httptest.NewRecorder()
+		r.ServeHTTP(wCust, reqCust)
+		assert.Equal(t, http.StatusForbidden, wCust.Code, "Customer denied (403)")
+
+		// Unauthenticated => 401
+		reqUnauth := httptest.NewRequest(http.MethodGet, detailEndpoint, nil)
+		wUnauth := httptest.NewRecorder()
+		r.ServeHTTP(wUnauth, reqUnauth)
+		assert.Equal(t, http.StatusUnauthorized, wUnauth.Code, "Unauthenticated denied (401)")
+	})
+
+	// C. Date validation & Invalid sort
+	t.Run("Validation_DatesAndSort", func(t *testing.T) {
+		// Invalid from date
+		reqInvFrom := httptest.NewRequest(http.MethodGet, "/api/admin/marketing/analytics/sources?from=bad-date&to="+toStr, nil)
+		reqInvFrom.Header.Set("Authorization", "Bearer "+campaignReadToken)
+		wInvFrom := httptest.NewRecorder()
+		r.ServeHTTP(wInvFrom, reqInvFrom)
+		assert.Equal(t, http.StatusBadRequest, wInvFrom.Code, "Invalid 'from' date must be 400 Bad Request")
+
+		// Invalid to date
+		reqInvTo := httptest.NewRequest(http.MethodGet, "/api/admin/marketing/analytics/sources?from="+fromStr+"&to=bad-date", nil)
+		reqInvTo.Header.Set("Authorization", "Bearer "+campaignReadToken)
+		wInvTo := httptest.NewRecorder()
+		r.ServeHTTP(wInvTo, reqInvTo)
+		assert.Equal(t, http.StatusBadRequest, wInvTo.Code, "Invalid 'to' date must be 400 Bad Request")
+
+		// from >= to
+		reqInverted := httptest.NewRequest(http.MethodGet, "/api/admin/marketing/analytics/sources?from="+toStr+"&to="+fromStr, nil)
+		reqInverted.Header.Set("Authorization", "Bearer "+campaignReadToken)
+		wInverted := httptest.NewRecorder()
+		r.ServeHTTP(wInverted, reqInverted)
+		assert.Equal(t, http.StatusBadRequest, wInverted.Code, "'to' date before 'from' date must be 400 Bad Request")
+
+		// Invalid sort
+		reqInvSort := httptest.NewRequest(http.MethodGet, sourcesEndpoint+"&sort=invalid_sort_param", nil)
+		reqInvSort.Header.Set("Authorization", "Bearer "+campaignReadToken)
+		wInvSort := httptest.NewRecorder()
+		r.ServeHTTP(wInvSort, reqInvSort)
+		assert.Equal(t, http.StatusBadRequest, wInvSort.Code, "Invalid sort parameter must be 400 Bad Request")
+
+		// Detail: inverted dates
+		reqDetailInv := httptest.NewRequest(http.MethodGet, "/api/admin/marketing/analytics/sources/vk?from="+toStr+"&to="+fromStr, nil)
+		reqDetailInv.Header.Set("Authorization", "Bearer "+campaignReadToken)
+		wDetailInv := httptest.NewRecorder()
+		r.ServeHTTP(wDetailInv, reqDetailInv)
+		assert.Equal(t, http.StatusBadRequest, wDetailInv.Code, "Detail with inverted dates must be 400 Bad Request")
+	})
+}

@@ -3,6 +3,7 @@ package marketing
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -47,7 +48,22 @@ func (s *AnalyticsService) GetSources(ctx context.Context, from, to time.Time) (
 		if r.Visits > 0 {
 			bps = int(float64(r.PaidOrders) / float64(r.Visits) * 10000)
 		}
+		var sKey *string
+		var sKind SourceKind
+		if r.Source == "" || r.Source == "Unattributed" {
+			sKind = SourceKindUnattributed
+		} else if strings.EqualFold(r.Source, "direct") {
+			k := "direct"
+			sKey = &k
+			sKind = SourceKindDirect
+		} else {
+			k := r.Source
+			sKey = &k
+			sKind = SourceKindNamed
+		}
 		sources = append(sources, SourcePerformanceRow{
+			SourceKey:         sKey,
+			SourceKind:        sKind,
 			Source:            r.Source,
 			Visits:            r.Visits,
 			PaidOrders:        r.PaidOrders,
@@ -65,6 +81,14 @@ func (s *AnalyticsService) GetSources(ctx context.Context, from, to time.Time) (
 	})
 
 	return &AnalyticsSourcesResponse{Sources: sources}, nil
+}
+
+func (s *AnalyticsService) GetSourcesAnalytics(ctx context.Context, req SourceAnalyticsRequest) (*SourceAnalyticsResponse, error) {
+	return s.repo.GetSourcesAnalytics(ctx, req)
+}
+
+func (s *AnalyticsService) GetSourceDetail(ctx context.Context, source string, req SourceDetailRequest) (*SourceDetailResponse, error) {
+	return s.repo.GetSourceDetail(ctx, source, req)
 }
 
 func (s *AnalyticsService) GetCampaigns(ctx context.Context, from, to time.Time) (*AnalyticsCampaignsResponse, error) {

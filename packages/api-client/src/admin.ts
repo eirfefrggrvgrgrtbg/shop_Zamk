@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, ReturnShipment, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, AdminInventoryUnitTraceability, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, StaffMemberPermissionsResponse, UpdateStaffMemberPermissionsRequest, StaffMemberDetailResponse, UpdateStaffMemberProfileRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDispatchContext, AdminDispatchQueueItem, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, SupplyReceivingQueueItem, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse, AdminReturnReceivingState, AdminReturnReceivingQueueItem, ScanReturnUnitResponse, UpdateSerializedUnitInspectionInput, UpdateLegacyItemInspectionInput, AdminCampaign, AdminCampaignTrackingLink, CreateAdminCampaignRequest, UpdateAdminCampaignRequest, CreateAdminTrackingLinkRequest, AdminMarketingOverviewResponse, AdminMarketingSourcesResponse, AdminMarketingCampaignsAnalyticsResponse, AdminMarketingTrendResponse } from './types';
+import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, ReturnShipment, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, AdminInventoryUnitTraceability, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, StaffMemberPermissionsResponse, UpdateStaffMemberPermissionsRequest, StaffMemberDetailResponse, UpdateStaffMemberProfileRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDispatchContext, AdminDispatchQueueItem, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, SupplyReceivingQueueItem, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse, AdminReturnReceivingState, AdminReturnReceivingQueueItem, ScanReturnUnitResponse, UpdateSerializedUnitInspectionInput, UpdateLegacyItemInspectionInput, AdminCampaign, AdminCampaignTrackingLink, CreateAdminCampaignRequest, UpdateAdminCampaignRequest, CreateAdminTrackingLinkRequest, AdminMarketingOverviewResponse, AdminMarketingSourcesResponse, AdminMarketingSourceDetailResponse, AdminMarketingCampaignsAnalyticsResponse, AdminMarketingTrendResponse } from './types';
 
 
 export const getAdminSellers = async (params?: {
@@ -1009,8 +1009,26 @@ export const getAdminMarketingOverview = async (from: string, to: string): Promi
   return request<AdminMarketingOverviewResponse>('GET', `/admin/marketing/analytics/overview?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 };
 
-export const getAdminMarketingSources = async (from: string, to: string): Promise<AdminMarketingSourcesResponse> => {
-  return request<AdminMarketingSourcesResponse>('GET', `/admin/marketing/analytics/sources?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+export const getAdminMarketingSources = async (
+  from: string,
+  to: string,
+  search?: string,
+  sort?: string
+): Promise<AdminMarketingSourcesResponse> => {
+  const query = new URLSearchParams();
+  query.append('from', from);
+  query.append('to', to);
+  if (search) query.append('search', search);
+  if (sort) query.append('sort', sort);
+  return request<AdminMarketingSourcesResponse>('GET', `/admin/marketing/analytics/sources?${query.toString()}`);
+};
+
+export const getAdminMarketingSourceDetail = async (
+  source: string,
+  from: string,
+  to: string
+): Promise<AdminMarketingSourceDetailResponse> => {
+  return request<AdminMarketingSourceDetailResponse>('GET', `/admin/marketing/analytics/sources/${encodeURIComponent(source)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 };
 
 export const getAdminMarketingCampaignMetrics = async (from: string, to: string): Promise<AdminMarketingCampaignsAnalyticsResponse> => {

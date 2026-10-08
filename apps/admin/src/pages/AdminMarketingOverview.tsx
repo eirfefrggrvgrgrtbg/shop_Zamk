@@ -6,6 +6,7 @@ import type { TrendDataPoint } from '@zamk/api-client/src/types';
 import { AdminMarketingTabs } from '../components/marketing/AdminMarketingTabs';
 import { MarketingPeriodControl, useMarketingRange, type MarketingRange } from '../components/marketing/MarketingPeriodControl';
 import { finite, number, money, percent, conversion } from '../components/marketing/marketingPresentation';
+import { formatSource } from '../utils/sourceFormatter';
 
 type Snapshot = { overview: AnalyticsOverviewResponse; sources: SourceMetrics[]; campaigns: CampaignMetrics[]; range: MarketingRange };
 
@@ -544,12 +545,14 @@ export function AdminMarketingOverview() {
             {[...sources].sort((a, b) => b.visits - a.visits).slice(0, 8).map((source, index) => {
               const rawShare = totalVisits > 0 && finite(source.visits) ? source.visits / totalVisits * 100 : 0;
               const share = finite(rawShare) ? Math.max(0, Math.min(100, rawShare)) : 0;
-              const name = source.source === 'Direct' ? 'Прямые переходы' : source.source === 'Unattributed' ? 'Без атрибуции' : source.source;
+              const name = formatSource(source.sourceKind ?? '', source.sourceKey ?? source.source ?? null);
+              const routeParam = source.sourceKind === 'unattributed' ? '_unattributed' : (source.sourceKey ?? source.source ?? '_unattributed');
+              const linkPath = `/marketing/sources/${encodeURIComponent(routeParam)}`;
 
               return (
-                <div key={`${source.source}-${index}`} role="row" className="group">
+                <div key={`${source.sourceKey ?? 'unattributed'}-${index}`} role="row" className="group">
                   <div className="flex justify-between items-baseline text-sm mb-2">
-                    <span className="text-gray-900 font-medium">{name}</span>
+                    <Link to={linkPath} className="text-gray-900 font-medium hover:text-gray-600 transition-colors">{name}</Link>
                     <span className="text-gray-900 tabular-nums">
                        {number(source.visits)} <span className="text-gray-400 text-[10px] font-medium ml-2 w-8 inline-block text-right">{Math.round(share)}%</span>
                     </span>
@@ -561,6 +564,13 @@ export function AdminMarketingOverview() {
               );
             })}
             {!sources.length && <p className="text-[11px] uppercase tracking-widest font-medium text-gray-400 text-center py-8">Нет данных за этот период</p>}
+            {sources.length > 0 && (
+              <div className="pt-2">
+                <Link to="/marketing/sources" className="text-[10px] font-bold uppercase tracking-widest text-gray-900 hover:text-gray-500 transition-colors">
+                  Все источники →
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 

@@ -26,17 +26,71 @@ type AnalyticsOverviewResponse struct {
 	Previous MetricsSnapshot `json:"previous"`
 }
 
+type SourceAnalyticsRequest struct {
+	From   time.Time `json:"from" query:"from"`
+	To     time.Time `json:"to" query:"to"`
+	Search *string   `json:"search" query:"search"`
+	Sort   *string   `json:"sort" query:"sort"`
+}
+
+type SourceKind string
+
+const (
+	SourceKindDirect       SourceKind = "direct"
+	SourceKindUnattributed SourceKind = "unattributed"
+	SourceKindNamed        SourceKind = "named"
+)
+
 type SourcePerformanceRow struct {
-	Source            string `json:"source"`
-	Visits            int    `json:"visits"`
-	PaidOrders        int    `json:"paidOrders"`
-	RevenueCents      int64  `json:"revenueCents"`
-	ConversionRateBps int    `json:"conversionRateBps"`
+	SourceKey            *string    `json:"sourceKey"`
+	SourceKind           SourceKind `json:"sourceKind"`
+	Source               string     `json:"source,omitempty"`
+	Visits               int        `json:"visits"`
+	PaidOrders           int        `json:"paidOrders"`
+	SoldUnits            int        `json:"soldUnits"`
+	RevenueCents         int64      `json:"revenueCents"`
+	ConversionRate       float64    `json:"conversionRate"`
+	ConversionRateBps    int        `json:"conversionRateBps,omitempty"`
+	NewCustomers         int        `json:"newCustomers"`
+	RepeatCustomers      int        `json:"repeatCustomers"`
+	ReturnsCount         int        `json:"returnsCount"`
+	PreviousVisits       int        `json:"previousVisits"`
+	VisitsChangePct      *float64   `json:"visitsChangePct"`
+	PreviousRevenueCents int64      `json:"previousRevenueCents"`
+	RevenueChangePct     *float64   `json:"revenueChangePct"`
 }
 
 type AnalyticsSourcesResponse struct {
 	Sources []SourcePerformanceRow `json:"sources"`
 }
+
+type SourceAnalyticsResponse struct {
+	Coverage ProductAnalyticsCoverage `json:"coverage"`
+	Sources  []SourcePerformanceRow   `json:"sources"`
+}
+
+type SourceDetailRequest struct {
+	From time.Time `json:"from" query:"from"`
+	To   time.Time `json:"to" query:"to"`
+}
+
+type SourceDetailResponse struct {
+	Source       SourcePerformanceRow     `json:"source"`
+	Coverage     ProductAnalyticsCoverage `json:"coverage"`
+	Trend        []TrendDataPoint         `json:"trend"`
+	TopProducts  []ProductAnalyticsRow    `json:"topProducts"`
+	TopDesigners []DesignerAnalyticsRow   `json:"topDesigners"`
+	Campaigns    []CampaignPerformanceRow `json:"campaigns"`
+}
+
+const (
+	SourceSortVisits        = "visits"
+	SourceSortRevenue       = "revenue"
+	SourceSortOrders        = "orders"
+	SourceSortConversion    = "conversion"
+	SourceSortRevenueGrowth = "revenue_growth"
+	SourceSortRevenueDrop   = "revenue_drop"
+)
 
 type CampaignPerformanceRow struct {
 	Status             CampaignStatus `json:"status,omitempty"`
