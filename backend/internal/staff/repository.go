@@ -277,7 +277,7 @@ func (r *Repository) HasRolePermission(ctx context.Context, roleID uuid.UUID, pe
 
 // EnsureOwnerForSeed upserts the given user as owner — used only by dev-seed.
 func (r *Repository) EnsureOwnerForSeed(ctx context.Context, userID uuid.UUID) error {
-	query := `
+	query1 := `
 		INSERT INTO staff_members (user_id, staff_role_id, status, created_at, updated_at)
 		SELECT $1, id, 'active', now(), now()
 		FROM staff_roles
@@ -287,10 +287,24 @@ func (r *Repository) EnsureOwnerForSeed(ctx context.Context, userID uuid.UUID) e
 			status        = 'active',
 			updated_at    = now()
 	`
-	_, err := r.db.Exec(ctx, query, userID)
+	_, err := r.db.Exec(ctx, query1, userID)
 	if err != nil {
 		return fmt.Errorf("ensure owner for seed: %w", err)
 	}
+
+	query2 := `
+		INSERT INTO staff_member_permissions (user_id, permission, created_at)
+		SELECT $1, srp.permission, now()
+		FROM staff_roles sr
+		JOIN staff_role_permissions srp ON sr.id = srp.role_id
+		WHERE sr.code = 'owner'
+		ON CONFLICT (user_id, permission) DO NOTHING
+	`
+	_, err = r.db.Exec(ctx, query2, userID)
+	if err != nil {
+		return fmt.Errorf("ensure owner permissions for seed: %w", err)
+	}
+
 	return nil
 }
 

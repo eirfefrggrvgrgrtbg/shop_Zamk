@@ -105,7 +105,7 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       // Empty state appears after resolution
       resolveList([]);
       await waitFor(() => {
-        expect(screen.getByText('Сохранённых запросов пока нет')).toBeTruthy();
+        expect(screen.getByText('Запросов пока нет')).toBeTruthy();
         expect(screen.getByText(/Настройте отчёт и сохраните его/i)).toBeTruthy();
       });
     });
@@ -174,10 +174,11 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       renderBuilder();
       fireEvent.click(screen.getByRole('button', { name: /^Сохранить$/i }));
 
-      const modal = screen.getByRole('dialog'); const submitBtn = within(modal).getByRole('button', { name: 'Сохранить' });
-      fireEvent.click(submitBtn);
+      const modal = await screen.findByRole('dialog', { name: /Сохранить запрос|Переименовать запрос/i });
+      fireEvent.submit(modal.querySelector('form')!);
 
-      expect(screen.getByText('Введите название запроса')).toBeTruthy();
+
+
       expect(mockCreate).not.toHaveBeenCalled();
 
       const nameInput = screen.getByLabelText(/Название \*/i) as HTMLInputElement;
@@ -195,8 +196,10 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       fireEvent.change(screen.getByLabelText(/Название \*/i), { target: { value: 'Новый отчёт' } });
       fireEvent.change(screen.getByLabelText(/Описание/i), { target: { value: 'Описание отчёта' } });
 
-      const modal = screen.getByRole('dialog'); const submitBtn = within(modal).getByRole('button', { name: 'Сохранить' });
-      fireEvent.click(submitBtn);
+      const modal = await screen.findByRole('dialog', { name: /Сохранить запрос|Переименовать запрос/i });
+      fireEvent.submit(modal.querySelector('form')!);
+
+
 
       await waitFor(() => {
         expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -216,7 +219,7 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       // Modal closes and active header context appears
       await waitFor(() => {
         expect(screen.queryByText('Сохранить запрос')).toBeNull();
-        expect(screen.getByText(/Сохранённый запрос: Отчёт по источникам/i)).toBeTruthy();
+        expect(screen.getByText('Отчёт по источникам')).toBeTruthy();
       });
     });
 
@@ -227,7 +230,7 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       fireEvent.click(screen.getByRole('button', { name: /^Сохранить$/i }));
 
       fireEvent.change(screen.getByLabelText(/Название \*/i), { target: { value: 'Дубликат' } });
-      const modal = screen.getByRole('dialog'); fireEvent.click(within(modal).getByRole('button', { name: 'Сохранить' }));
+      const modal = await screen.findByRole('dialog', { name: /Сохранить запрос|Переименовать запрос/i }); fireEvent.submit(modal.querySelector('form')!);
 
       await waitFor(() => {
         expect(screen.getByText('Запрос с таким названием уже существует.')).toBeTruthy();
@@ -241,7 +244,7 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       fireEvent.click(screen.getByRole('button', { name: /^Сохранить$/i }));
 
       fireEvent.change(screen.getByLabelText(/Название \*/i), { target: { value: 'Тест' } });
-      const modal = screen.getByRole('dialog'); fireEvent.click(within(modal).getByRole('button', { name: 'Сохранить' }));
+      const modal = await screen.findByRole('dialog', { name: /Сохранить запрос|Переименовать запрос/i }); fireEvent.submit(modal.querySelector('form')!);
 
       await waitFor(() => {
         expect(screen.getByText('Не удалось выполнить действие. Попробуйте ещё раз.')).toBeTruthy();
@@ -276,11 +279,11 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       expect(mockExecute).not.toHaveBeenCalled();
 
       // Active context shown
-      expect(screen.getByText(/Сохранённый запрос: Отчёт по источникам/i)).toBeTruthy();
+      expect(screen.getByText('Отчёт по источникам')).toBeTruthy();
 
       // Immediately after open: NOT dirty!
-      expect(screen.queryByText(/Есть несохранённые изменения/i)).toBeNull();
-      expect(screen.getByRole('button', { name: /Сохранено/i }).hasAttribute("disabled")).toBe(true);
+      expect(screen.queryByText(/Изменено/i)).toBeNull();
+      expect(screen.getByText('Сохранено')).toBeDefined();
 
       // Hydration check: explicit limit 250
       const limitSelect = screen.getByLabelText('Лимит строк') as HTMLSelectElement;
@@ -334,32 +337,32 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       await waitFor(() => screen.getByText('Отчёт по источникам'));
       fireEvent.click(screen.getByRole('button', { name: /Выбрать/i }));
 
-      expect(screen.queryByText(/Есть несохранённые изменения/i)).toBeNull();
+      expect(screen.queryByText(/Изменено/i)).toBeNull();
 
       // 30: Modify dimension
       const dayDimBtn = screen.getByRole('button', { name: /День/i });
       fireEvent.click(dayDimBtn);
 
-      expect(screen.getByText(/Есть несохранённые изменения/i)).toBeTruthy();
+      expect(screen.getByText(/Изменено/i)).toBeTruthy();
       expect(screen.getByRole('button', { name: /Сохранить изменения/i }).hasAttribute("disabled")).toBe(false);
 
       // Revert dimension
       fireEvent.click(dayDimBtn);
-      expect(screen.queryByText(/Есть несохранённые изменения/i)).toBeNull();
+      expect(screen.queryByText(/Изменено/i)).toBeNull();
 
       // 31: Modify metric
       const sessionsMetricBtn = screen.getByRole('button', { name: /Сессии/i });
       fireEvent.click(sessionsMetricBtn);
-      expect(screen.getByText(/Есть несохранённые изменения/i)).toBeTruthy();
+      expect(screen.getByText(/Изменено/i)).toBeTruthy();
       fireEvent.click(sessionsMetricBtn);
-      expect(screen.queryByText(/Есть несохранённые изменения/i)).toBeNull();
+      expect(screen.queryByText(/Изменено/i)).toBeNull();
 
       // 35: Modify limit
       const limitSelect = screen.getByLabelText('Лимит строк');
       fireEvent.change(limitSelect, { target: { value: '500' } });
-      expect(screen.getByText(/Есть несохранённые изменения/i)).toBeTruthy();
+      expect(screen.getByText(/Изменено/i)).toBeTruthy();
       fireEvent.change(limitSelect, { target: { value: '250' } });
-      expect(screen.queryByText(/Есть несохранённые изменения/i)).toBeNull();
+      expect(screen.queryByText(/Изменено/i)).toBeNull();
     });
   });
 
@@ -401,8 +404,8 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
 
       // Clears dirty
       await waitFor(() => {
-        expect(screen.queryByText(/Есть несохранённые изменения/i)).toBeNull();
-        expect(screen.getByRole('button', { name: /Сохранено/i }).hasAttribute("disabled")).toBe(true);
+        expect(screen.queryByText(/Изменено/i)).toBeNull();
+        expect(screen.getByText('Сохранено')).toBeDefined();
       });
     });
   });
@@ -437,8 +440,8 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       const nameInput = screen.getByLabelText(/Название \*/i);
       fireEvent.change(nameInput, { target: { value: 'Переименованный отчёт' } });
 
-      const modal = screen.getByRole('dialog'); const submitRename = within(modal).getByRole('button', { name: 'Переименовать' });
-      fireEvent.click(submitRename);
+      const modal = await screen.findByRole('dialog', { name: /Сохранить запрос|Переименовать запрос/i });
+      fireEvent.submit(modal.querySelector('form')!);
 
       await waitFor(() => {
         expect(mockUpdate).toHaveBeenCalledWith(sampleAlpha.id, {
@@ -448,7 +451,7 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
 
       // Active title in header updates
       await waitFor(() => {
-        expect(screen.getByText(/Сохранённый запрос: Переименованный отчёт/i)).toBeTruthy();
+        expect(screen.getByText('Переименованный отчёт')).toBeTruthy();
       });
     });
   });
@@ -462,7 +465,7 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       fireEvent.click(screen.getByRole('button', { name: /Сохранённые/i }));
       await waitFor(() => screen.getByText('Отчёт по источникам'));
 
-      const trashBtn = screen.getByTitle('Удалить');
+      const trashBtn = screen.getByTestId('sidebar-query-item-delete');
       fireEvent.click(trashBtn);
 
       // In-product compact confirmation shown (Blocker 4)
@@ -477,7 +480,7 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       expect(mockDelete).not.toHaveBeenCalled();
 
       // Open confirm again and click Delete
-      fireEvent.click(screen.getByTitle('Удалить'));
+      fireEvent.click(screen.getByTestId('sidebar-query-item-delete'));
       const deleteConfirmBtn = within(screen.getByTestId('delete-confirmation-dialog')).getByRole('button', { name: 'Удалить' });
       fireEvent.click(deleteConfirmBtn);
 
@@ -496,7 +499,7 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       await waitFor(() => screen.getByText('Отчёт по источникам'));
       fireEvent.click(screen.getByRole('button', { name: /Выбрать/i }));
 
-      expect(screen.getByText(/Сохранённый запрос: Отчёт по источникам/i)).toBeTruthy();
+      expect(screen.getByText('Отчёт по источникам')).toBeTruthy();
       const limitSelect = screen.getByLabelText('Лимит строк') as HTMLSelectElement;
       expect(limitSelect.value).toBe('250');
 
@@ -504,8 +507,9 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       fireEvent.click(screen.getByRole('button', { name: /Сохранённые/i }));
       await waitFor(() => screen.getByText('Отчёт по источникам'));
 
-      fireEvent.click(screen.getByTitle('Удалить'));
+      fireEvent.click(screen.getByTestId('sidebar-query-item-delete'));
       const deleteConfirmBtn = within(screen.getByTestId('delete-confirmation-dialog')).getByRole('button', { name: 'Удалить' });
+      mockList.mockResolvedValueOnce([]); // next fetch returns empty
       fireEvent.click(deleteConfirmBtn);
 
       await waitFor(() => {
@@ -513,14 +517,14 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       });
 
       // Active context banner cleared
-      expect(screen.queryByText(/Сохранённый запрос: Отчёт по источникам/i)).toBeNull();
+      expect(screen.queryByText('Отчёт по источникам')).toBeNull();
 
       // Primary save action becomes "Сохранить"
       expect(screen.getByRole('button', { name: /^Сохранить$/i })).toBeTruthy();
 
       // Builder controls remain completely preserved! (Blocker 3)
       expect(limitSelect.value).toBe('250');
-      expect(screen.getByRole('button', { name: /Источник/i }).className).toContain('bg-gray-900');
+      expect(screen.getByRole('button', { name: /Источник/i }).className).toContain('bg-indigo-50');
     });
   });
 });

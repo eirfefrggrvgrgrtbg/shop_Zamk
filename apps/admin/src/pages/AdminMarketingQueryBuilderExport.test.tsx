@@ -218,7 +218,7 @@ describe('AdminMarketingQueryBuilderExport — M8B Behavioral Acceptance Suite',
 
     // Verify loaded context (Clean state)
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Сохранено/i })).toBeTruthy();
+      expect(screen.getByText('Сохранено')).toBeTruthy();
     });
 
     // 15: Export clean state
