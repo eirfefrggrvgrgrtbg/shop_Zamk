@@ -245,9 +245,12 @@ export function AdminMarketingCampaignDetail() {
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`} data-testid="campaign-status-badge">
                   {statusInfo.label}
                 </span>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200" data-testid="campaign-purpose-badge">
+                  {campaign.purpose === 'promotion' ? 'Промо-кампания' : 'Рекламная кампания'}
+                </span>
               </div>
-              <p className="text-sm text-gray-500 mt-0.5">
-                ID: <span className="font-mono text-xs">{campaign.id}</span>
+              <p className="text-xs text-gray-400 mt-0.5">
+                ID: <span className="font-mono">{campaign.id}</span>
               </p>
             </div>
           </div>

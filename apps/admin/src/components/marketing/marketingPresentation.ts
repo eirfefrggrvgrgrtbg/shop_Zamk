@@ -21,3 +21,7 @@ export const typeLabels: Record<string, string> = {
   influencer: 'Инфлюенсер', drop: 'Дроп / Запуск', seasonal_sale: 'Сезонная распродажа',
   brand_awareness: 'Узнаваемость бренда', retargeting: 'Ретаргетинг', special_promo: 'Специальная акция',
 };
+export const purposeLabels: Record<string, string> = {
+  advertising: 'Рекламная кампания',
+  promotion: 'Промо-кампания',
+};

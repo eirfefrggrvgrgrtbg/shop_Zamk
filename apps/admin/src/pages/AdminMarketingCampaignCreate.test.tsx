@@ -42,6 +42,7 @@ describe('AdminMarketingCampaignCreate', () => {
       <MemoryRouter initialEntries={['/marketing/campaigns/new']}>
         <Routes>
           <Route path="/marketing/campaigns/new" element={<AdminMarketingCampaignCreate />} />
+          <Route path="/marketing/campaigns" element={<div>Список кампаний</div>} />
           <Route path="/marketing/campaigns/:id" element={<div>Детали кампании созданы</div>} />
         </Routes>
       </MemoryRouter>
@@ -67,6 +68,7 @@ describe('AdminMarketingCampaignCreate', () => {
     await waitFor(() => {
       expect(adminApi.createAdminCampaign).toHaveBeenCalledWith(
         expect.objectContaining({
+          purpose: 'advertising',
           title: 'Spring Promo',
           fundingMode: 'zamk',
           sellerId: null,
@@ -118,6 +120,7 @@ describe('AdminMarketingCampaignCreate', () => {
     await waitFor(() => {
       expect(adminApi.createAdminCampaign).toHaveBeenCalledWith(
         expect.objectContaining({
+          purpose: 'advertising',
           title: 'YUNIS Drop',
           fundingMode: 'seller',
           sellerId: '33333333-3333-4333-8333-333333333333',
@@ -127,11 +130,39 @@ describe('AdminMarketingCampaignCreate', () => {
     });
   });
 
-  it('T: no purpose selector exists in visible UI', () => {
+  it('validates empty title and date ranges before submit', async () => {
+    mount();
+    // Submit with empty title
+    fireEvent.click(screen.getByTestId('submit-create-campaign'));
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(screen.getByText('Укажите название кампании')).toBeTruthy();
+    expect(adminApi.createAdminCampaign).not.toHaveBeenCalled();
+
+    // Set title and invalid dates (ends before starts)
+    fireEvent.change(screen.getByTestId('campaign-title-input'), {
+      target: { value: 'Invalid Dates Campaign' },
+    });
+    fireEvent.change(screen.getByLabelText('Дата начала'), {
+      target: { value: '2026-06-30' },
+    });
+    fireEvent.change(screen.getByLabelText('Дата окончания'), {
+      target: { value: '2026-06-01' },
+    });
+
+    fireEvent.click(screen.getByTestId('submit-create-campaign'));
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(screen.getByText('Дата окончания не может быть раньше даты начала')).toBeTruthy();
+    expect(adminApi.createAdminCampaign).not.toHaveBeenCalled();
+  });
+
+  it('T: no purpose selector exists in visible UI and human advertising context is shown', () => {
     mount();
     expect(screen.queryByLabelText(/цель кампании|назначение|purpose/i)).toBeNull();
-    expect(screen.queryByText('advertising')).toBeNull();
     expect(screen.queryByText('promotion')).toBeNull();
+    // Context label "Рекламная кампания" is shown
+    expect(screen.getAllByText('Рекламная кампания').length).toBeGreaterThan(0);
+    // No option to choose promo-campaign
+    expect(screen.queryByRole('option', { name: /промо-кампания/i })).toBeNull();
   });
 
   it('U: no ROAS or actual spend fields in live summary', () => {
@@ -145,6 +176,12 @@ describe('AdminMarketingCampaignCreate', () => {
     const budgetInput = screen.getByTestId('campaign-budget-input');
     expect(budgetInput.getAttribute('type')).not.toBe('number');
     expect(budgetInput.getAttribute('inputmode')).toBe('numeric');
+  });
+
+  it('has breadcrumb and cancel back links to /marketing/campaigns', () => {
+    mount();
+    const backLinks = screen.getAllByRole('link', { name: /кампании|отмена/i });
+    expect(backLinks.some(l => l.getAttribute('href') === '/marketing/campaigns')).toBe(true);
   });
 
   it('W: create payload matches canonical API contract with date ranges and description', async () => {
@@ -182,6 +219,7 @@ describe('AdminMarketingCampaignCreate', () => {
     await waitFor(() => {
       expect(adminApi.createAdminCampaign).toHaveBeenCalledWith(
         expect.objectContaining({
+          purpose: 'advertising',
           title: 'Influencer Launch',
           fundingMode: 'zamk',
           sellerId: null,

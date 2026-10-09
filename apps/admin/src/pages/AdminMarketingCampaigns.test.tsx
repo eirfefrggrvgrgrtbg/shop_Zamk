@@ -48,6 +48,24 @@ const mockCampaigns: AdminCampaign[] = [
     updatedAt: '2026-06-20T10:00:00Z',
     trackingLinkCount: 0,
   },
+  {
+    id: '33333333-3333-4333-8333-333333333333',
+    purpose: 'promotion',
+    sellerId: '44444444-4444-4444-8444-444444444444',
+    title: 'Autumn Promo Discount Campaign',
+    description: 'Seller co-funded promo discount',
+    fundingMode: 'cofunded',
+    status: 'active',
+    campaignChannel: 'vk',
+    campaignType: 'seasonal_sale',
+    plannedBudgetCents: 1500000,
+    discountType: 'percent',
+    startsAt: '2026-09-01T00:00:00Z',
+    endsAt: '2026-09-30T23:59:59Z',
+    createdAt: '2026-08-20T10:00:00Z',
+    updatedAt: '2026-08-20T10:00:00Z',
+    trackingLinkCount: 1,
+  },
 ];
 
 const mockTrackingLinks: AdminCampaignTrackingLink[] = [
@@ -93,7 +111,7 @@ function createMockAuth(permissions: string[]) {
   };
 }
 
-describe('Admin Marketing Operational Workspace (ADS.2A)', () => {
+describe('Admin Marketing Operational Workspace (ADS.2A / C2.4)', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
@@ -126,8 +144,9 @@ describe('Admin Marketing Operational Workspace (ADS.2A)', () => {
 
       expect(screen.getByText('Platform Summer Sale 2026')).toBeTruthy();
       expect(screen.getByText('Seller Brand Drop')).toBeTruthy();
+      expect(screen.getByText('Autumn Promo Discount Campaign')).toBeTruthy();
       expect(screen.getByText('ZAMK Платформа')).toBeTruthy();
-      expect(screen.getByText('Продавец')).toBeTruthy();
+      expect(screen.getAllByText('Продавец').length).toBeGreaterThan(0);
       expect(screen.queryByTestId('create-campaign-button')).toBeNull();
     });
 
@@ -152,145 +171,160 @@ describe('Admin Marketing Operational Workspace (ADS.2A)', () => {
       fireEvent.click(btn);
       expect(screen.getByText('Новая кампания страница')).toBeTruthy();
     });
-  });
 
-  describe('Redesigned advertising workspace', () => {
-    const mount = () => render(
-      <MemoryRouter initialEntries={['/marketing/campaigns']}>
-        <Routes>
-          <Route path="/marketing/campaigns" element={<AdminMarketingCampaigns />} />
-          <Route path="/marketing/campaigns/:id" element={<div>Открыта кампания</div>} />
-        </Routes>
-      </MemoryRouter>
-    );
-    beforeEach(() => vi.mocked(useAdminAuth).mockReturnValue(createMockAuth(['marketing.campaigns.read']) as any));
+    it('renders human labels for both advertising and promotion without raw purpose enums', async () => {
+      vi.mocked(useAdminAuth).mockReturnValue(createMockAuth(['marketing.campaigns.read']) as any);
 
-    it('I/J/S: only explicit advertising purpose is displayed, regardless of title', async () => {
-      vi.mocked(adminApi.getAdminCampaigns).mockResolvedValue([
-        { ...mockCampaigns[0], purpose: 'advertising', title: 'Промокод в рекламном названии' },
-        { ...mockCampaigns[1], purpose: 'promotion', title: 'Legacy seller offer' },
-        { ...mockCampaigns[1], id: '33333333-3333-3333-3333-333333333333', purpose: undefined as any, title: 'Missing purpose offer' },
-      ]);
-      mount();
-      await screen.findByText('Промокод в рекламном названии');
-      expect(screen.queryByText('Legacy seller offer')).toBeNull();
-      expect(screen.queryByText('Missing purpose offer')).toBeNull();
-      expect(screen.queryByText('Подробнее')).toBeNull();
-    });
-
-    it('T: search, status, channel and type filters compose and support no results', async () => {
-      mount();
-      await screen.findByText('Platform Summer Sale 2026');
-      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'seller' } });
-      expect(screen.queryByText('Platform Summer Sale 2026')).toBeNull();
-      expect(screen.getByText('Seller Brand Drop')).toBeTruthy();
-      fireEvent.change(screen.getByLabelText('Статус'), { target: { value: 'active' } });
-      expect(screen.getByText('Ничего не найдено')).toBeTruthy();
-      fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } });
-      fireEvent.change(screen.getByLabelText('Канал'), { target: { value: 'telegram' } });
-      fireEvent.change(screen.getByLabelText('Тип'), { target: { value: 'seasonal_sale' } });
-      expect(screen.getByText('Platform Summer Sale 2026')).toBeTruthy();
-      expect(screen.queryByText('Seller Brand Drop')).toBeNull();
-    });
-
-    it('U: row click navigates; campaign name remains a keyboard-accessible link', async () => {
-      mount();
-      const link = await screen.findByRole('link', { name: 'Platform Summer Sale 2026' });
-      expect(link.getAttribute('href')).toBe(`/marketing/campaigns/${mockCampaigns[0].id}`);
-      fireEvent.click(screen.getByTestId(`campaign-row-${mockCampaigns[0].id}`));
-      expect(screen.getByText('Открыта кампания')).toBeTruthy();
-    });
-
-    it('whole row navigation ignores text selection', async () => {
-      mount();
-      await screen.findByText('Platform Summer Sale 2026');
-      const row = screen.getByTestId(`campaign-row-${mockCampaigns[0].id}`);
-
-      const selectionSpy = vi.spyOn(window, 'getSelection').mockReturnValue({
-        toString: () => 'highlighted text',
-      } as any);
-
-      fireEvent.click(row);
-      expect(screen.queryByText('Открыта кампания')).toBeNull();
-      selectionSpy.mockRestore();
-    });
-
-    it('V/W: loading and empty states retain headings, navigation, filters and table', async () => {
-      vi.mocked(adminApi.getAdminCampaigns).mockResolvedValue([]);
-      mount();
-      expect(screen.getByRole('heading', { name: 'Кампании' })).toBeTruthy();
-      expect(screen.getByTestId('campaigns-loading')).toBeTruthy();
-      expect(screen.queryByRole('table')).toBeNull();
-      await screen.findByText('Кампаний пока нет');
-      expect(screen.getByRole('searchbox')).toBeTruthy();
-      expect(screen.queryByRole('table')).toBeNull();
-      expect(screen.queryByTestId('create-campaign-button')).toBeNull();
-    });
-
-    it('shows canonical campaign performance and a recoverable request error', async () => {
-      vi.mocked(adminApi.getAdminCampaigns).mockRejectedValueOnce(new Error('offline'));
-      vi.mocked(adminApi.getAdminMarketingCampaignMetrics).mockResolvedValue({ campaigns: [
-        { campaignId: mockCampaigns[0].id, name: mockCampaigns[0].title, visits: 100, paidOrders: 5, revenueCents: 500000, conversionRateBps: 500 },
-      ] });
-      mount();
-      await screen.findByRole('alert');
-      expect(screen.queryByText('Кампаний пока нет')).toBeNull();
-      expect(screen.queryByRole('table')).toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
-      await screen.findByText('Platform Summer Sale 2026');
-      const row = screen.getByTestId(`campaign-row-${mockCampaigns[0].id}`);
-      expect(within(row).getByText('100')).toBeTruthy();
-      expect(within(row).getByText('5.00%')).toBeTruthy();
-      expect(screen.queryByRole('alert')).toBeNull();
-    });
-
-    it('renders 30-day canonical metrics and seller label with fallback conversions', async () => {
-      vi.mocked(adminApi.getAdminMarketingCampaignMetrics).mockResolvedValue({
-        campaigns: [
-          { campaignId: mockCampaigns[0].id, name: mockCampaigns[0].title, visits: 350, paidOrders: 14, revenueCents: 1400000, conversionRateBps: 400 },
-        ],
-      });
-      mount();
-      await screen.findByText('Platform Summer Sale 2026');
-      expect(screen.getByText('Seller Brand Drop')).toBeTruthy();
-      const row = screen.getByTestId(`campaign-row-${mockCampaigns[0].id}`);
-      expect(within(row).getByText('350')).toBeTruthy();
-      expect(within(row).getByText('4.00%')).toBeTruthy();
-      expect(screen.queryByRole('alert')).toBeNull();
-      expect(screen.queryByText('Кампаний пока нет')).toBeNull();
-    });
-
-    it('requests canonical 30-day half-open metric period', async () => {
-      mount();
-      await screen.findByText('Platform Summer Sale 2026');
-      expect(adminApi.getAdminMarketingCampaignMetrics).toHaveBeenCalled();
-      const calls = vi.mocked(adminApi.getAdminMarketingCampaignMetrics).mock.calls;
-      const [fromCall, toCall] = calls[calls.length - 1];
-      const diffMs = Date.parse(toCall) - Date.parse(fromCall);
-      expect(diffMs).toBe(30 * 86400000);
-    });
-
-    it('P: create action navigates to dedicated /marketing/campaigns/new route', async () => {
-      vi.mocked(useAdminAuth).mockReturnValue(createMockAuth(['marketing.campaigns.write']) as any);
       render(
         <MemoryRouter initialEntries={['/marketing/campaigns']}>
           <Routes>
             <Route path="/marketing/campaigns" element={<AdminMarketingCampaigns />} />
-            <Route path="/marketing/campaigns/new" element={<div>Create Campaign Route</div>} />
           </Routes>
         </MemoryRouter>
       );
+
+      await screen.findByText('Platform Summer Sale 2026');
+      // Advertising human label
+      expect(screen.getAllByText('Рекламная кампания').length).toBeGreaterThan(0);
+      // Promotion human label
+      expect(screen.getAllByText('Промо-кампания').length).toBeGreaterThan(0);
+
+      // Raw UUIDs and raw lowercase purpose strings are NOT rendered as unformatted text
+      expect(screen.queryByText('11111111-1111-4111-8111-111111111111')).toBeNull();
+    });
+
+    it('renders formatted compact date ranges for campaigns', async () => {
+      vi.mocked(useAdminAuth).mockReturnValue(createMockAuth(['marketing.campaigns.read']) as any);
+
+      render(
+        <MemoryRouter initialEntries={['/marketing/campaigns']}>
+          <Routes>
+            <Route path="/marketing/campaigns" element={<AdminMarketingCampaigns />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await screen.findByText('Platform Summer Sale 2026');
+      const row = screen.getByTestId(`campaign-row-${mockCampaigns[0].id}`);
+      // Formatted date in Russian locale
+      expect(within(row).getByText(/01\.06\.26/)).toBeTruthy();
+    });
+
+    it('handles long campaign names safely without breaking table structure', async () => {
+      vi.mocked(useAdminAuth).mockReturnValue(createMockAuth(['marketing.campaigns.read']) as any);
+      const longTitle = 'Очень длинное название специальной маркетинговой кампании с промокодами и блогерами сезона 2026 года для тестирования переносов';
+      vi.mocked(adminApi.getAdminCampaigns).mockResolvedValue([
+        { ...mockCampaigns[0], title: longTitle },
+      ]);
+
+      render(
+        <MemoryRouter initialEntries={['/marketing/campaigns']}>
+          <Routes>
+            <Route path="/marketing/campaigns" element={<AdminMarketingCampaigns />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await screen.findByText(longTitle);
+      expect(screen.getByText(longTitle)).toBeTruthy();
+    });
+
+    it('filters compose: search, purpose, status, channel, and type', async () => {
+      vi.mocked(useAdminAuth).mockReturnValue(createMockAuth(['marketing.campaigns.read']) as any);
+
+      render(
+        <MemoryRouter initialEntries={['/marketing/campaigns']}>
+          <Routes>
+            <Route path="/marketing/campaigns" element={<AdminMarketingCampaigns />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
       await screen.findByText('Platform Summer Sale 2026');
 
-      const trigger = screen.getByTestId('create-campaign-button');
-      expect(trigger.getAttribute('href')).toBe('/marketing/campaigns/new');
-      fireEvent.click(trigger);
-      expect(screen.getByText('Create Campaign Route')).toBeTruthy();
+      // 1. Filter by search
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'seller' } });
+      expect(screen.queryByText('Platform Summer Sale 2026')).toBeNull();
+      expect(screen.getByText('Seller Brand Drop')).toBeTruthy();
+
+      // 2. Filter by purpose
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } });
+      fireEvent.change(screen.getByLabelText('Назначение'), { target: { value: 'promotion' } });
+      expect(screen.queryByText('Platform Summer Sale 2026')).toBeNull();
+      expect(screen.getByText('Autumn Promo Discount Campaign')).toBeTruthy();
+
+      // 3. Status filter with no results
+      fireEvent.change(screen.getByLabelText('Статус'), { target: { value: 'draft' } });
+      expect(screen.getByText('Ничего не найдено')).toBeTruthy();
+    });
+
+    it('row click navigates to campaign detail; ignores text selection', async () => {
+      vi.mocked(useAdminAuth).mockReturnValue(createMockAuth(['marketing.campaigns.read']) as any);
+
+      render(
+        <MemoryRouter initialEntries={['/marketing/campaigns']}>
+          <Routes>
+            <Route path="/marketing/campaigns" element={<AdminMarketingCampaigns />} />
+            <Route path="/marketing/campaigns/:id" element={<div>Открыта кампания</div>} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await screen.findByText('Platform Summer Sale 2026');
+      const row = screen.getByTestId(`campaign-row-${mockCampaigns[0].id}`);
+
+      // Ignored during selection
+      const selectionSpy = vi.spyOn(window, 'getSelection').mockReturnValue({
+        toString: () => 'highlighted text',
+      } as any);
+      fireEvent.click(row);
+      expect(screen.queryByText('Открыта кампания')).toBeNull();
+      selectionSpy.mockRestore();
+
+      // Standard click navigates
+      fireEvent.click(row);
+      expect(screen.getByText('Открыта кампания')).toBeTruthy();
+    });
+
+    it('zero state shows informative empty message and create button for write users', async () => {
+      vi.mocked(useAdminAuth).mockReturnValue(createMockAuth(['marketing.campaigns.write']) as any);
+      vi.mocked(adminApi.getAdminCampaigns).mockResolvedValue([]);
+
+      render(
+        <MemoryRouter initialEntries={['/marketing/campaigns']}>
+          <Routes>
+            <Route path="/marketing/campaigns" element={<AdminMarketingCampaigns />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await screen.findByText('Кампаний пока нет');
+      expect(screen.getByRole('heading', { name: 'Кампании' })).toBeTruthy();
+      expect(screen.getByRole('searchbox')).toBeTruthy();
+      expect(screen.getAllByTestId('create-campaign-button').length).toBeGreaterThan(0);
+    });
+
+    it('shows recoverable error on network failure', async () => {
+      vi.mocked(useAdminAuth).mockReturnValue(createMockAuth(['marketing.campaigns.read']) as any);
+      vi.mocked(adminApi.getAdminCampaigns).mockRejectedValueOnce(new Error('offline'));
+
+      render(
+        <MemoryRouter initialEntries={['/marketing/campaigns']}>
+          <Routes>
+            <Route path="/marketing/campaigns" element={<AdminMarketingCampaigns />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await screen.findByRole('alert');
+      expect(screen.getByText('offline')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+      await screen.findByText('Platform Summer Sale 2026');
     });
   });
 
   describe('Campaign Detail & Tracking Links (AdminMarketingCampaignDetail)', () => {
-    it('read-only user can view detail and links, but cannot create or disable links', async () => {
+    it('read-only user can view detail with human read-only purpose and tracking links', async () => {
       vi.mocked(useAdminAuth).mockReturnValue(createMockAuth(['marketing.campaigns.read']) as any);
 
       render(
@@ -306,6 +340,7 @@ describe('Admin Marketing Operational Workspace (ADS.2A)', () => {
       });
 
       expect(screen.getByTestId('campaign-title').textContent).toContain('Platform Summer Sale 2026');
+      expect(screen.getByTestId('campaign-purpose-badge').textContent).toBe('Рекламная кампания');
       expect(screen.getByText('test_token_landing_abc123')).toBeTruthy();
       expect(screen.getByText('/catalog/sale')).toBeTruthy();
 

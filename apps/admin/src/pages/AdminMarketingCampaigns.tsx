@@ -4,7 +4,7 @@ import { getAdminCampaigns, getAdminMarketingCampaignMetrics } from '@zamk/api-c
 import type { AdminCampaign, AdminCampaignMetrics, CampaignChannel, CampaignType } from '@zamk/api-client/src/types';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 import { AdminMarketingTabs } from '../components/marketing/AdminMarketingTabs';
-import { money, number, percent, date, channelLabels, typeLabels } from '../components/marketing/marketingPresentation';
+import { money, number, percent, date, statusLabels, channelLabels, typeLabels, purposeLabels } from '../components/marketing/marketingPresentation';
 
 export function AdminMarketingCampaigns() {
   const navigate = useNavigate();
@@ -18,6 +18,7 @@ export function AdminMarketingCampaigns() {
   const [error, setError] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
+  const [purposeFilter, setPurposeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [channelFilter, setChannelFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -41,7 +42,7 @@ export function AdminMarketingCampaigns() {
           getAdminMarketingCampaignMetrics(fromStr, toStr)
         ]);
         if (active) {
-          setCampaigns(camps.filter(c => c.purpose === 'advertising'));
+          setCampaigns(camps);
           setMetrics(met.campaigns);
         }
       } catch (err: any) {
@@ -64,32 +65,37 @@ export function AdminMarketingCampaigns() {
 
   const filteredCampaigns = useMemo(() => {
     return campaigns.filter(c => {
-      if (c.purpose !== 'advertising') return false;
+      if (purposeFilter && purposeFilter !== 'all' && c.purpose !== purposeFilter) return false;
       if (query && !c.title.toLowerCase().includes(query.toLowerCase())) return false;
       if (statusFilter && statusFilter !== 'all' && c.status !== statusFilter) return false;
       if (channelFilter && channelFilter !== 'all' && c.campaignChannel !== channelFilter) return false;
       if (typeFilter && typeFilter !== 'all' && c.campaignType !== typeFilter) return false;
       return true;
     });
-  }, [campaigns, query, statusFilter, channelFilter, typeFilter]);
+  }, [campaigns, query, purposeFilter, statusFilter, channelFilter, typeFilter]);
+
+  const formatPeriod = (startsAt?: string | null, endsAt?: string | null) => {
+    if (startsAt && endsAt) return `${date(startsAt)} — ${date(endsAt)}`;
+    if (startsAt) return `с ${date(startsAt)}`;
+    if (endsAt) return `до ${date(endsAt)}`;
+    return 'Бессрочно';
+  };
 
   return (
-    <div className="max-w-[1200px] mx-auto px-8 py-8 min-h-screen" data-testid="admin-marketing-campaigns-page">
-      <div className="mb-8">
-        <AdminMarketingTabs />
-      </div>
+    <div className="marketing-workspace space-y-6 pb-12" data-testid="admin-marketing-campaigns-page">
+      <AdminMarketingTabs />
 
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-10">
+      <div className="m-header">
         <div>
-          <h1 className="text-xl font-medium tracking-tight text-gray-900">Кампании</h1>
-          <p className="text-[11px] uppercase tracking-widest font-medium text-gray-400 mt-1">Управление рекламными активностями</p>
+          <h1>Кампании</h1>
+          <p>Управление рекламными и промо-активностями платформы</p>
         </div>
-        <div className="flex items-center justify-between md:justify-end flex-wrap gap-4">
+        <div className="flex items-center gap-3">
           {canWrite && (
             <Link
               to="/marketing/campaigns/new"
               data-testid="create-campaign-button"
-              className="bg-gray-900 text-white px-4 py-2 text-[11px] font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors"
+              className="m-button m-primary"
             >
               Создать кампанию
             </Link>
@@ -97,157 +103,182 @@ export function AdminMarketingCampaigns() {
         </div>
       </div>
 
-      <div className="mb-12">
-        <div className="flex flex-wrap lg:flex-nowrap items-end gap-6 mb-8">
-          <div className="flex-1 max-w-sm">
-            <div className="relative">
-              <input
-                type="search"
-                role="searchbox"
-                placeholder="ПОИСК КАМПАНИЙ..."
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                className="w-full bg-transparent border-b border-gray-900 pb-1.5 text-[11px] font-bold uppercase tracking-widest text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-gray-900"
-              />
-              <svg className="w-3 h-3 absolute right-0 top-1 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-baseline gap-6">
-            <select
-              aria-label="Статус"
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="w-48 bg-transparent border-b border-gray-200 pb-1.5 text-[11px] font-bold uppercase tracking-widest text-gray-900 outline-none focus:border-gray-900 cursor-pointer"
-            >
-              <option value="">ВСЕ СТАТУСЫ</option>
-              <option value="active">АКТИВНЫЕ</option>
-              <option value="draft">ЧЕРНОВИК</option>
-              <option value="ended">ЗАВЕРШЕННЫЕ</option>
-            </select>
-            <select
-              aria-label="Канал"
-              value={channelFilter}
-              onChange={e => setChannelFilter(e.target.value)}
-              className="w-48 bg-transparent border-b border-gray-200 pb-1.5 text-[11px] font-bold uppercase tracking-widest text-gray-900 outline-none focus:border-gray-900 cursor-pointer"
-            >
-              <option value="">ВСЕ КАНАЛЫ</option>
-              <option value="telegram">TELEGRAM</option>
-              <option value="vk">VK</option>
-              <option value="instagram">INSTAGRAM</option>
-              <option value="influencer">БЛОГЕР</option>
-            </select>
-            <select
-              aria-label="Тип"
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
-              className="w-48 bg-transparent border-b border-gray-200 pb-1.5 text-[11px] font-bold uppercase tracking-widest text-gray-900 outline-none focus:border-gray-900 cursor-pointer"
-            >
-              <option value="">ВСЕ ТИПЫ</option>
-              <option value="influencer">ИНФЛЮЕНСЕР</option>
-              <option value="drop">ДРОП / ЗАПУСК</option>
-              <option value="seasonal_sale">РАСПРОДАЖА</option>
-              <option value="brand_awareness">УЗНАВАЕМОСТЬ</option>
-            </select>
-          </div>
-        </div>
+      <div className="m-filters">
+        <input
+          type="search"
+          role="searchbox"
+          placeholder="Поиск кампаний..."
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
+        <select
+          aria-label="Назначение"
+          value={purposeFilter}
+          onChange={e => setPurposeFilter(e.target.value)}
+        >
+          <option value="">Все назначения</option>
+          <option value="advertising">Рекламные кампании</option>
+          <option value="promotion">Промо-кампании</option>
+        </select>
+        <select
+          aria-label="Статус"
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+        >
+          <option value="">Все статусы</option>
+          <option value="active">Активные</option>
+          <option value="draft">Черновики</option>
+          <option value="ended">Завершенные</option>
+        </select>
+        <select
+          aria-label="Канал"
+          value={channelFilter}
+          onChange={e => setChannelFilter(e.target.value)}
+        >
+          <option value="">Все каналы</option>
+          <option value="telegram">Telegram</option>
+          <option value="vk">VK</option>
+          <option value="instagram">Instagram</option>
+          <option value="influencer">Блогер</option>
+          <option value="search_ads">Поисковая реклама</option>
+          <option value="direct">Прямой трафик</option>
+          <option value="email">Email</option>
+        </select>
+        <select
+          aria-label="Тип"
+          value={typeFilter}
+          onChange={e => setTypeFilter(e.target.value)}
+        >
+          <option value="">Все типы</option>
+          <option value="influencer">Инфлюенсер</option>
+          <option value="drop">Дроп / Запуск</option>
+          <option value="seasonal_sale">Распродажа</option>
+          <option value="brand_awareness">Узнаваемость</option>
+          <option value="retargeting">Ретаргетинг</option>
+          <option value="special_promo">Специальная акция</option>
+        </select>
       </div>
 
       {error && !isLoading && (
-        <div className="p-4 bg-red-50 text-red-800 border-b border-red-100 flex justify-between items-center" role="alert">
+        <div className="m-error" role="alert">
           <span>{error}</span>
-          <button onClick={() => setRevision(r => r + 1)} className="font-medium hover:underline">Повторить</button>
+          <button onClick={() => setRevision(r => r + 1)}>Повторить</button>
         </div>
       )}
 
       {isLoading ? (
-        <div data-testid="campaigns-loading" className="p-8 text-center text-sm text-gray-500">Загрузка кампаний...</div>
+        <div data-testid="campaigns-loading" className="p-12 text-center text-sm text-gray-500">Загрузка кампаний...</div>
       ) : error ? null : campaigns.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white">
-          <div className="w-full max-w-md text-center">
-            <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>
-            </div>
-            <h2 className="text-xl font-serif text-gray-900 mb-3">Кампаний пока нет</h2>
-            <p className="text-gray-500 mb-8 text-sm leading-relaxed">
-              Создайте первую рекламную кампанию, получите трекинговую ссылку и начните измерять результат. Кампания → Трекинговая ссылка → Трафик → Заказы
+        <div className="m-panel">
+          <div className="m-empty">
+            <strong className="text-base text-gray-900 font-medium">Кампаний пока нет</strong>
+            <p className="text-gray-500 text-sm max-w-md mx-auto mt-2 mb-6">
+              Создайте первую рекламную кампанию, сгенерируйте трекинговую ссылку и отслеживайте отдачу в реальном времени.
             </p>
             {canWrite && (
-              <Link to="/marketing/campaigns/new" data-testid="create-campaign-button" className="inline-flex items-center justify-center bg-[#5B21B6] text-white px-6 py-2.5 rounded font-medium hover:bg-purple-800 transition-colors shadow-sm w-full">
+              <Link to="/marketing/campaigns/new" data-testid="create-campaign-button" className="m-button m-primary">
                 Создать кампанию
               </Link>
             )}
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto bg-white relative">
-          <table className="w-full text-left border-collapse min-w-[1000px]" role="table">
-            <thead className="bg-gray-50/80 sticky top-0 border-b border-gray-200 z-10 text-xs uppercase tracking-wider text-gray-500 font-medium">
-              <tr>
-                <th className="px-6 py-3 font-medium">Кампания</th>
-                <th className="px-6 py-3 font-medium">Статус</th>
-                <th className="px-6 py-3 font-medium">Период</th>
-                <th className="px-6 py-3 font-medium text-right">Бюджет</th>
-                <th className="px-6 py-3 font-medium text-right">Сессии</th>
-                <th className="px-6 py-3 font-medium text-right">Заказы</th>
-                <th className="px-6 py-3 font-medium text-right">Выручка</th>
-                <th className="px-6 py-3 font-medium text-right">Конверсия</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 text-sm">
-              {filteredCampaigns.map(c => {
-                const met = metrics?.find(m => m.campaignId === c.id);
-                const isActive = c.status === 'active';
-                const isDraft = c.status === 'draft';
-                const isCompleted = c.status === 'ended';
+        <div className="m-panel">
+          <div className="m-table-scroll">
+            <table className="m-table" role="table">
+              <thead>
+                <tr>
+                  <th>Кампания</th>
+                  <th>Статус</th>
+                  <th>Период</th>
+                  <th className="numeric">Плановый бюджет</th>
+                  <th className="numeric">Сессии</th>
+                  <th className="numeric">Заказы</th>
+                  <th className="numeric">Выручка</th>
+                  <th className="numeric">Конверсия</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCampaigns.map(c => {
+                  const met = metrics?.find(m => m.campaignId === c.id);
+                  const humanPurpose = purposeLabels[c.purpose] ?? (c.purpose === 'promotion' ? 'Промо-кампания' : 'Рекламная кампания');
 
-                return (
-                  <tr
-                    key={c.id}
-                    data-testid={`campaign-row-${c.id}`}
-                    onClick={(e) => handleRowClick(e, c.id)}
-                    className="hover:bg-gray-50 cursor-pointer group"
-                  >
-                    <td className="px-6 py-4">
-                      <Link to={`/marketing/campaigns/${c.id}`} className="font-medium text-gray-900 group-hover:text-purple-700 transition-colors focus:outline-none">{c.title}</Link>
-                      <div className="text-xs text-gray-500 mt-0.5">
-                        <span>{c.sellerId ? 'Продавец' : 'ZAMK Платформа'}</span> <span className="text-gray-300">•</span> <span>{channelLabels[c.campaignChannel as CampaignChannel] ?? c.campaignChannel}</span> <span className="text-gray-300">•</span> <span>{typeLabels[c.campaignType as CampaignType] ?? c.campaignType}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${isActive ? 'bg-green-50 text-green-700 border-green-200' : isCompleted ? 'bg-gray-100 text-gray-600 border-gray-200' : isDraft ? 'bg-gray-50 text-gray-500 border-gray-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                        {isActive ? 'Активна' : isCompleted ? 'Завершена' : isDraft ? 'Черновик' : 'Неизвестно'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 tabular-nums text-gray-600">
-                      {c.startsAt ? date(c.startsAt) : 'с —'} — {c.endsAt ? date(c.endsAt) : '∞'}
-                    </td>
-                    <td className="px-6 py-4 text-right tabular-nums">
-                      {c.plannedBudgetCents ? money(c.plannedBudgetCents) : '—'}
-                    </td>
-                    <td className="px-6 py-4 text-right tabular-nums">
-                      {number(met?.visits)}
-                    </td>
-                    <td className="px-6 py-4 text-right tabular-nums">
-                      {number(met?.paidOrders)}
-                    </td>
-                    <td className="px-6 py-4 text-right tabular-nums">
-                      {money(met?.revenueCents)}
-                    </td>
-                    <td className="px-6 py-4 text-right tabular-nums">
-                      {percent(met?.conversionRateBps)}
+                  return (
+                    <tr
+                      key={c.id}
+                      data-testid={`campaign-row-${c.id}`}
+                      onClick={(e) => handleRowClick(e, c.id)}
+                      className="m-clickable"
+                    >
+                      <td className="max-w-md">
+                        <Link
+                          to={`/marketing/campaigns/${c.id}`}
+                          className="m-name block truncate"
+                          title={c.title}
+                        >
+                          {c.title}
+                        </Link>
+                        <div className="m-meta flex items-center gap-1.5 flex-wrap">
+                          <span className="text-gray-700 font-medium">{humanPurpose}</span>
+                          <span className="text-gray-300">•</span>
+                          <span>{c.sellerId ? 'Продавец' : 'ZAMK Платформа'}</span>
+                          {c.campaignChannel && (
+                            <>
+                              <span className="text-gray-300">•</span>
+                              <span>{channelLabels[c.campaignChannel as CampaignChannel] ?? c.campaignChannel}</span>
+                            </>
+                          )}
+                          {c.campaignType && (
+                            <>
+                              <span className="text-gray-300">•</span>
+                              <span>{typeLabels[c.campaignType as CampaignType] ?? c.campaignType}</span>
+                            </>
+                          )}
+                          {c.trackingLinkCount !== undefined && c.trackingLinkCount > 0 && (
+                            <>
+                              <span className="text-gray-300">•</span>
+                              <span>{c.trackingLinkCount} {c.trackingLinkCount === 1 ? 'ссылка' : c.trackingLinkCount < 5 ? 'ссылки' : 'ссылок'}</span>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <span className="m-chip" data-status={c.status}>
+                          {statusLabels[c.status] ?? c.status}
+                        </span>
+                      </td>
+                      <td className="tabular-nums text-gray-600">
+                        {formatPeriod(c.startsAt, c.endsAt)}
+                      </td>
+                      <td className="numeric">
+                        {c.plannedBudgetCents ? money(c.plannedBudgetCents) : '—'}
+                      </td>
+                      <td className="numeric">
+                        {number(met?.visits)}
+                      </td>
+                      <td className="numeric">
+                        {number(met?.paidOrders)}
+                      </td>
+                      <td className="numeric">
+                        {money(met?.revenueCents)}
+                      </td>
+                      <td className="numeric">
+                        {met?.visits && met.visits > 0 && met.conversionRateBps !== undefined ? percent(met.conversionRateBps) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredCampaigns.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="m-empty">
+                      <strong>Ничего не найдено</strong>
+                      <p className="text-gray-500 text-xs mt-1">Попробуйте изменить параметры поиска или сбросить фильтры</p>
                     </td>
                   </tr>
-                );
-              })}
-              {filteredCampaigns.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500 text-sm">
-                    Ничего не найдено
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
