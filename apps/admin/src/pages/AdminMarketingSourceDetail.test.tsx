@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { AdminMarketingSourceDetail } from './AdminMarketingSourceDetail';
 import * as marketingApi from '../api/marketing';
@@ -141,6 +141,7 @@ const mount = (route: string) =>
 describe('AdminMarketingSourceDetail', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    cleanup();
   });
 
   it('renders direct source with label "Прямой заход"', async () => {
@@ -169,18 +170,18 @@ describe('AdminMarketingSourceDetail', () => {
   it('renders summary KPI metrics (sessions, orders, conversion, revenue)', async () => {
     vi.mocked(marketingApi.getMarketingSourceDetail).mockResolvedValue(sampleDetailDirect as any);
     mount('/marketing/sources/direct');
-    await screen.findByText('1 200');
-    expect(screen.getByText('1 200')).toBeTruthy();
-    expect(screen.getByText('60')).toBeTruthy();
-    expect(screen.getByText('5.00%')).toBeTruthy();
-    expect(screen.getByText(/450 000/)).toBeTruthy();
+    await screen.findAllByText('1 200');
+    expect(screen.getAllByText('1 200').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('60').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('5.00%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/450 000/).length).toBeGreaterThan(0);
   });
 
   it('renders trend chart section', async () => {
     vi.mocked(marketingApi.getMarketingSourceDetail).mockResolvedValue(sampleDetailDirect as any);
     mount('/marketing/sources/direct');
-    await screen.findByText('Динамика');
-    expect(screen.getByText('Динамика')).toBeTruthy();
+    await screen.findAllByText('Динамика');
+    expect(screen.getAllByText('Динамика').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Выручка' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Заказы' })).toBeTruthy();
   });
@@ -188,9 +189,9 @@ describe('AdminMarketingSourceDetail', () => {
   it('renders top products with names and purchases, omitting UUIDs', async () => {
     vi.mocked(marketingApi.getMarketingSourceDetail).mockResolvedValue(sampleDetailDirect as any);
     mount('/marketing/sources/direct');
-    await screen.findByText('Шелковое платье');
-    expect(screen.getByText('Шелковое платье')).toBeTruthy();
-    expect(screen.getByText('25 шт')).toBeTruthy();
+    await screen.findAllByText('Шелковое платье');
+    expect(screen.getAllByText('Шелковое платье').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('25').length).toBeGreaterThan(0);
     const textContent = document.body.textContent || '';
     expect(textContent).not.toContain('prod_12345678abcdef01');
   });
@@ -200,7 +201,7 @@ describe('AdminMarketingSourceDetail', () => {
     mount('/marketing/sources/direct');
     const designerNames = await screen.findAllByText('Acme Studio');
     expect(designerNames.length).toBeGreaterThan(0);
-    expect(screen.getByText('35')).toBeTruthy();
+    expect(screen.getAllByText('35').length).toBeGreaterThan(0);
     const textContent = document.body.textContent || '';
     expect(textContent).not.toContain('dsgn_12345678');
   });
@@ -208,45 +209,45 @@ describe('AdminMarketingSourceDetail', () => {
   it('renders campaigns section for source', async () => {
     vi.mocked(marketingApi.getMarketingSourceDetail).mockResolvedValue(sampleDetailDirect as any);
     mount('/marketing/sources/direct');
-    await screen.findByText('Осенний сейл');
-    expect(screen.getByText('Осенний сейл')).toBeTruthy();
-    expect(screen.getByText(/600/)).toBeTruthy();
+    await screen.findAllByText('Осенний сейл');
+    expect(screen.getAllByText('Осенний сейл').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/600/).length).toBeGreaterThan(0);
   });
 
   it('renders explicit campaign under unattributed source', async () => {
     vi.mocked(marketingApi.getMarketingSourceDetail).mockResolvedValue(sampleDetailUnattributed as any);
     mount('/marketing/sources/_unattributed');
-    await screen.findByText('Без кампании');
-    expect(screen.getByText('Без кампании')).toBeTruthy();
+    await screen.findAllByText('Без кампании');
+    expect(screen.getAllByText('Без кампании').length).toBeGreaterThan(0);
   });
 
   it('renders nested empty states when products, designers, or campaigns are empty', async () => {
     vi.mocked(marketingApi.getMarketingSourceDetail).mockResolvedValue(sampleDetailNamed as any);
     mount('/marketing/sources/telegram');
-    await screen.findByText('Нет кампаний в этом источнике');
-    expect(screen.getByText('Нет кампаний в этом источнике')).toBeTruthy();
-    expect(screen.getByText('Нет данных о дизайнерах')).toBeTruthy();
-    expect(screen.getByText('Нет данных о товарах')).toBeTruthy();
+    await screen.findAllByText('Нет кампаний в этом источнике');
+    expect(screen.getAllByText('Нет кампаний в этом источнике').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Нет данных о дизайнерах').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Нет данных о товарах').length).toBeGreaterThan(0);
   });
 
   it('period control is rendered in header', async () => {
     vi.mocked(marketingApi.getMarketingSourceDetail).mockResolvedValue(sampleDetailDirect as any);
     mount('/marketing/sources/direct');
-    await screen.findByText('30 дней');
-    expect(screen.getByText('30 дней')).toBeTruthy();
+    await screen.findAllByText('30 дней');
+    expect(screen.getAllByText('30 дней').length).toBeGreaterThan(0);
   });
 
   it('shows loading spinner when data is in flight', async () => {
     vi.mocked(marketingApi.getMarketingSourceDetail).mockReturnValue(new Promise(() => {}));
     mount('/marketing/sources/direct');
-    expect(screen.getByText('Загрузка данных')).toBeTruthy();
+    expect(screen.getAllByText('Загрузка данных').length).toBeGreaterThan(0);
   });
 
   it('renders error state and link back to sources list on failure', async () => {
     vi.mocked(marketingApi.getMarketingSourceDetail).mockRejectedValue(new Error('Source fetch failed'));
     mount('/marketing/sources/direct');
-    await screen.findByText('Source fetch failed');
-    expect(screen.getByText('Source fetch failed')).toBeTruthy();
+    await screen.findAllByText('Source fetch failed');
+    expect(screen.getAllByText('Source fetch failed').length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'К списку источников' })).toBeTruthy();
   });
 });

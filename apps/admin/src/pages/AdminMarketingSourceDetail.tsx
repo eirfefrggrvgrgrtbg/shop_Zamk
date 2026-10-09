@@ -221,6 +221,21 @@ export function AdminMarketingSourceDetail() {
 
   const hasPartial = Object.values(coverage).some((c: any) => c.status === 'partial');
 
+  function renderGrowth(s: any) {
+    if (s.previousRevenueCents <= 0 || s.revenueChangePct === undefined || s.revenueChangePct === null) {
+      return <UnavailableMetric tooltip="Нет данных за предыдущий период" />;
+    }
+    const val = s.revenueChangePct;
+    if (val === 0) return <span className="text-gray-400 font-medium">—</span>;
+    const isPositive = val > 0;
+    return (
+      <span className={`inline-flex items-center gap-0.5 font-medium ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+        {isPositive ? '↑' : '↓'}
+        <span>{Math.abs(Math.round(val))}%</span>
+      </span>
+    );
+  }
+
   function renderConversion(s: { visits: number, paidOrders: number, conversionRate?: number }) {
     if (coverage?.views?.status !== 'available') return <UnavailableMetric />;
     if (s.visits === 0 || s.paidOrders > s.visits) return <UnavailableMetric />;
@@ -240,13 +255,12 @@ export function AdminMarketingSourceDetail() {
 
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-serif text-gray-900 tracking-tight flex items-center gap-3">
-            <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center flex-shrink-0 text-xs font-bold text-gray-400">
-              {name.substring(0, 1).toUpperCase()}
-            </div>
+          <h1 className="text-xl font-medium tracking-tight text-gray-900 flex items-center gap-3">
             {name}
           </h1>
-          <p className="text-[11px] uppercase tracking-widest font-medium text-gray-400 mt-2">Аналитика по источнику</p>
+          <p className="text-[11px] uppercase tracking-widest font-medium text-gray-400 mt-2">
+            {stats.sourceKind === 'direct' ? 'Прямой трафик' : stats.sourceKind === 'unattributed' ? 'Трафик без меток и реферера' : 'Переходы из внешней системы'}
+          </p>
         </div>
         <div className="flex items-center justify-between md:justify-end flex-wrap gap-6">
           <MarketingPeriodControl period={period} range={range} onSelect={select} />
@@ -260,23 +274,33 @@ export function AdminMarketingSourceDetail() {
         </div>
       )}
 
-      {/* Main KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-gray-200 border border-gray-200 mb-8">
-        <div className="bg-white p-6">
-          <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-900 mb-2">Сессии</div>
-          <div className="text-2xl font-light text-gray-900">{number(stats.visits)}</div>
-        </div>
-        <div className="bg-white p-6">
-          <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-900 mb-2">Заказы</div>
-          <div className="text-2xl font-light text-gray-900">{number(stats.paidOrders)}</div>
-        </div>
-        <div className="bg-white p-6">
-          <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-900 mb-2">Конверсия</div>
-          <div className="text-2xl font-light text-gray-900">{renderConversion(stats)}</div>
-        </div>
-        <div className="bg-white p-6">
-          <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-900 mb-2">Выручка</div>
-          <div className="text-2xl font-light text-gray-900">{money(stats.revenueCents)}</div>
+      {/* Composed KPI Region */}
+      <div className="border border-gray-200 rounded-sm bg-white mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-gray-100">
+          <div className="px-6 py-4">
+            <div className="text-[10px] uppercase tracking-widest font-medium text-gray-500 mb-1">Выручка</div>
+            <div className="text-xl font-medium text-gray-900 tabular-nums mb-1">{money(stats.revenueCents)}</div>
+            <div className="text-[11px]">{renderGrowth(stats)}</div>
+          </div>
+          <div className="px-6 py-4">
+            <div className="text-[10px] uppercase tracking-widest font-medium text-gray-500 mb-1">Заказы</div>
+            <div className="text-xl font-medium text-gray-900 tabular-nums mb-1">{number(stats.paidOrders)}</div>
+            <div className="text-[11px] text-gray-400 tabular-nums">Единиц: {number(stats.soldUnits)}</div>
+          </div>
+          <div className="px-6 py-4">
+            <div className="text-[10px] uppercase tracking-widest font-medium text-gray-500 mb-1">Сессии</div>
+            <div className="text-xl font-medium text-gray-900 tabular-nums mb-1">{number(stats.visits)}</div>
+            <div className="text-[11px] text-gray-400 tabular-nums">
+              Новые: {stats.newCustomers ? number(stats.newCustomers) : '—'} / Повт: {stats.repeatCustomers ? number(stats.repeatCustomers) : '—'}
+            </div>
+          </div>
+          <div className="px-6 py-4">
+            <div className="text-[10px] uppercase tracking-widest font-medium text-gray-500 mb-1">Конверсия</div>
+            <div className="text-xl font-medium text-gray-900 tabular-nums mb-1">{renderConversion(stats)}</div>
+            <div className="text-[11px] text-gray-400 tabular-nums">
+              {stats.returnsCount > 0 ? `Возвраты: ${number(stats.returnsCount)}` : 'Без возвратов'}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -288,24 +312,29 @@ export function AdminMarketingSourceDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         {/* Top Campaigns in this source */}
         <div>
-          <div className="flex justify-between items-end border-b border-gray-900 pb-3 mb-5">
-            <h2 className="text-[10px] font-bold uppercase tracking-widest text-gray-900">Кампании ({name})</h2>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-900 text-right">Выручка</span>
+          <div className="flex justify-between items-end border-b border-gray-200 pb-3 mb-4">
+            <h2 className="text-[10px] font-medium uppercase tracking-widest text-gray-500">Кампании ({name})</h2>
+            <span className="text-[10px] font-medium uppercase tracking-widest text-gray-500 text-right">Выручка</span>
           </div>
           {campaigns.length > 0 ? (
-            <div className="space-y-4">
+            <div className="flex flex-col">
               {campaigns.map((c: any, i: number) => (
-                <div key={c.campaignId ?? `no-camp-${i}`} className="flex justify-between items-baseline text-sm border-b border-gray-100 pb-4 last:border-0">
-                  <div className="flex-1 truncate pr-4">
-                     <div className="font-medium">
-                       {c.campaignId ? <Link to={`/marketing/campaigns/${c.campaignId}`} className="text-gray-900 hover:text-gray-600 transition-colors">{c.name}</Link> : <span className="text-gray-900">{c.name}</span>}
-                     </div>
-                     <div className="text-[11px] text-gray-500 mt-1">
-                       <span>{number(c.visits)}</span> сессий · <span>{number(c.paidOrders)}</span> заказов
-                     </div>
+                <div key={c.campaignId ?? `no-camp-${i}`} className="flex justify-between items-center py-3 border-b border-gray-100 last:border-0 group">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="text-[10px] font-medium text-gray-300 w-4 text-right tabular-nums select-none">
+                      {String(i + 1).padStart(2, '0')}
+                    </div>
+                    <div className="flex flex-col min-w-0 pr-4">
+                      <div className="font-medium text-gray-900 text-sm truncate">
+                        {c.campaignId ? <Link to={`/marketing/campaigns/${c.campaignId}`} className="hover:text-gray-500 transition-colors">{c.name}</Link> : <span>{c.name}</span>}
+                      </div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">
+                        {number(c.visits)} сессий · {number(c.paidOrders)} заказов
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex gap-6 items-baseline text-right">
-                     <div className="text-gray-900 font-medium tabular-nums">{money(c.revenueCents)}</div>
+                  <div className="text-gray-900 text-sm tabular-nums font-medium text-right flex-shrink-0">
+                    {money(c.revenueCents)}
                   </div>
                 </div>
               ))}
@@ -319,25 +348,30 @@ export function AdminMarketingSourceDetail() {
 
         {/* Top Designers in this source */}
         <div>
-          <div className="flex justify-between items-end border-b border-gray-900 pb-3 mb-5">
-            <h2 className="text-[10px] font-bold uppercase tracking-widest text-gray-900">Популярные дизайнеры</h2>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-900 text-right">Покупки</span>
+          <div className="flex justify-between items-end border-b border-gray-200 pb-3 mb-4">
+            <h2 className="text-[10px] font-medium uppercase tracking-widest text-gray-500">Популярные дизайнеры</h2>
+            <span className="text-[10px] font-medium uppercase tracking-widest text-gray-500 text-right">Покупки</span>
           </div>
           {topDesigners.length > 0 ? (
-            <div className="space-y-4">
+            <div className="flex flex-col">
               {topDesigners.map((d: any, i: number) => (
-                <div key={d.designerId ?? i} className="flex justify-between items-center text-sm border-b border-gray-100 pb-4 last:border-0 group">
-                  <div className="flex items-center gap-3">
+                <div key={d.designerId ?? i} className="flex justify-between items-center py-3 border-b border-gray-100 last:border-0 group">
+                  <div className="flex items-center gap-4">
+                    <div className="text-[10px] font-medium text-gray-300 w-4 text-right tabular-nums select-none">
+                      {String(i + 1).padStart(2, '0')}
+                    </div>
                     {d.primaryImage ? (
-                      <div className="w-8 h-10 bg-gray-100 flex-shrink-0 overflow-hidden">
+                      <div className="w-10 h-10 flex-shrink-0 bg-gray-50 rounded-full overflow-hidden border border-transparent">
                         <img src={d.primaryImage} alt="" className="w-full h-full object-cover grayscale mix-blend-multiply group-hover:grayscale-0 group-hover:mix-blend-normal transition-all duration-500" />
                       </div>
                     ) : (
-                      <div className="w-8 h-10 bg-gray-50 border border-gray-100 flex-shrink-0"></div>
+                      <div className="w-10 h-10 flex-shrink-0 bg-gray-100 rounded-full flex items-center justify-center border border-transparent">
+                        <span className="text-[11px] font-bold text-gray-500 uppercase">{d.designerName?.substring(0, 1) || '?'}</span>
+                      </div>
                     )}
-                    <div className="font-medium text-gray-900">{d.designerName}</div>
+                    <div className="font-medium text-gray-900 text-sm">{d.designerName}</div>
                   </div>
-                  <div className="text-gray-900 tabular-nums font-medium">
+                  <div className="text-gray-900 text-sm tabular-nums font-medium text-right flex-shrink-0">
                     {number(d.purchases)}
                   </div>
                 </div>
@@ -353,25 +387,32 @@ export function AdminMarketingSourceDetail() {
 
       {/* Top Products */}
       <div className="mt-12 pt-12 border-t border-gray-200">
-        <div className="flex justify-between items-end border-b border-gray-900 pb-3 mb-5">
-          <h2 className="text-[10px] font-bold uppercase tracking-widest text-gray-900">Популярные товары</h2>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-900 text-right">Покупки</span>
+        <div className="flex justify-between items-end border-b border-gray-200 pb-3 mb-4">
+          <h2 className="text-[10px] font-medium uppercase tracking-widest text-gray-500">Популярные товары</h2>
+          <span className="text-[10px] font-medium uppercase tracking-widest text-gray-500 text-right">Покупки</span>
         </div>
         {topProducts.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-0">
             {topProducts.map((p: any, i: number) => (
-              <div key={p.productId ?? i} className="flex gap-4 group">
-                <div className="w-16 h-20 bg-gray-100 flex-shrink-0 overflow-hidden relative">
-                  {p.primaryImage ? (
-                    <img src={p.primaryImage} alt="" className="w-full h-full object-cover mix-blend-multiply grayscale group-hover:grayscale-0 group-hover:mix-blend-normal transition-all duration-500" />
-                  ) : null}
-                </div>
-                <div className="flex flex-col justify-center">
-                  <div className="font-medium text-gray-900 text-sm leading-snug line-clamp-2 mb-1">{p.name}</div>
-                  <div className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">{p.designerName}</div>
-                  <div className="text-gray-900 text-sm mt-2 tabular-nums font-medium">
-                    {number(p.purchases)} шт
+              <div key={p.productId ?? i} className="flex justify-between items-center py-3 border-b border-gray-100 last:border-0 group">
+                <div className="flex items-center gap-4">
+                  <div className="text-[10px] font-medium text-gray-300 w-4 text-right tabular-nums select-none">
+                    {String(i + 1).padStart(2, '0')}
                   </div>
+                  {p.primaryImage ? (
+                    <div className="w-10 h-14 flex-shrink-0 bg-gray-50 overflow-hidden rounded-sm">
+                      <img src={p.primaryImage} alt="" className="w-full h-full object-cover mix-blend-multiply grayscale group-hover:grayscale-0 group-hover:mix-blend-normal transition-all duration-500" />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-14 flex-shrink-0 bg-gray-50 border border-gray-100 rounded-sm"></div>
+                  )}
+                  <div className="flex flex-col">
+                    <span className="font-medium text-gray-900 text-sm">{p.name}</span>
+                    <span className="text-[11px] text-gray-500">{p.designerName}</span>
+                  </div>
+                </div>
+                <div className="text-gray-900 text-sm tabular-nums font-medium text-right flex-shrink-0">
+                  {number(p.purchases)}
                 </div>
               </div>
             ))}

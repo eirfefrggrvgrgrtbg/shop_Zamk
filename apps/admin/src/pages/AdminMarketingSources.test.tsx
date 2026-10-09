@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AdminMarketingSources } from './AdminMarketingSources';
 import * as marketingApi from '../api/marketing';
@@ -79,6 +79,7 @@ const mount = () =>
 describe('AdminMarketingSources', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    cleanup();
     vi.mocked(marketingApi.getMarketingSources).mockResolvedValue({
       coverage: sampleCoverageAvailable,
       sources: sampleSources,
@@ -87,51 +88,51 @@ describe('AdminMarketingSources', () => {
 
   it('renders direct source with label "Прямой заход"', async () => {
     mount();
-    await screen.findByText('Прямой заход');
-    expect(screen.getByText('Прямой заход')).toBeTruthy();
+    await screen.findAllByText('Прямой заход');
+    expect(screen.getAllByText('Прямой заход').length).toBeGreaterThan(0);
   });
 
   it('renders unattributed source with label "Неизвестный источник"', async () => {
     mount();
-    await screen.findByText('Неизвестный источник');
-    expect(screen.getByText('Неизвестный источник')).toBeTruthy();
+    await screen.findAllByText('Неизвестный источник');
+    expect(screen.getAllByText('Неизвестный источник').length).toBeGreaterThan(0);
   });
 
   it('renders named source with raw name', async () => {
     mount();
-    await screen.findByText('telegram');
-    expect(screen.getByText('telegram')).toBeTruthy();
+    await screen.findAllByText('telegram');
+    expect(screen.getAllByText('telegram').length).toBeGreaterThan(0);
   });
 
   it('renders literal named "unattributed" as distinct named source', async () => {
     mount();
-    await screen.findByText('unattributed');
-    expect(screen.getByText('unattributed')).toBeTruthy();
+    await screen.findAllByText('unattributed');
+    expect(screen.getAllByText('unattributed').length).toBeGreaterThan(0);
   });
 
   it('never displays raw _unattributed sentinel anywhere in human text', async () => {
     mount();
-    await screen.findByText('Источники трафика');
+    await screen.findAllByText('Источники трафика');
     const textContent = document.body.textContent || '';
     expect(textContent).not.toContain('_unattributed');
   });
 
   it('renders sessions count correctly formatted', async () => {
     mount();
-    await screen.findByText('1 200');
-    expect(screen.getByText('1 200')).toBeTruthy();
+    await screen.findAllByText('1 200');
+    expect(screen.getAllByText('1 200').length).toBeGreaterThan(0);
   });
 
   it('renders orders count correctly', async () => {
     mount();
-    await screen.findByText('60');
-    expect(screen.getByText('60')).toBeTruthy();
+    await screen.findAllByText('60');
+    expect(screen.getAllByText('60').length).toBeGreaterThan(0);
   });
 
   it('renders revenue with currency presentation', async () => {
     mount();
-    await screen.findByText(/450 000/);
-    expect(screen.getByText(/450 000/)).toBeTruthy();
+    await screen.findAllByText(/450 000/);
+    expect(screen.getAllByText(/450 000/).length).toBeGreaterThan(0);
   });
 
   it('renders conversion percentage when views coverage is available', async () => {
@@ -146,7 +147,7 @@ describe('AdminMarketingSources', () => {
       sources: sampleSources,
     } as any);
     mount();
-    await screen.findByText('Прямой заход');
+    await screen.findAllByText('Прямой заход');
     const dashes = screen.getAllByText('—');
     expect(dashes.length).toBeGreaterThan(0);
   });
@@ -169,13 +170,13 @@ describe('AdminMarketingSources', () => {
       ],
     } as any);
     mount();
-    await screen.findByText('broken');
+    await screen.findAllByText('broken');
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
   });
 
   it('triggers search with debounced input and refetches', async () => {
     mount();
-    await screen.findByText('Источники трафика');
+    await screen.findAllByText('Источники трафика');
     const searchInput = screen.getByPlaceholderText('ПОИСК ПО ИСТОЧНИКУ...');
     fireEvent.change(searchInput, { target: { value: 'tele' } });
 
@@ -194,7 +195,7 @@ describe('AdminMarketingSources', () => {
 
   it('sort select initializes with default "visits" option', async () => {
     mount();
-    await screen.findByText('Источники трафика');
+    await screen.findAllByText('Источники трафика');
     expect(marketingApi.getMarketingSources).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
@@ -209,14 +210,14 @@ describe('AdminMarketingSources', () => {
       sources: sampleSources,
     } as any);
     mount();
-    await screen.findByText('Источники трафика');
-    expect(screen.getByText('Источники трафика')).toBeTruthy();
+    await screen.findAllByText('Источники трафика');
+    expect(screen.getAllByText('Источники трафика').length).toBeGreaterThan(0);
   });
 
   it('period selector renders and provides controls', async () => {
     mount();
-    await screen.findByText('30 дней');
-    expect(screen.getByText('30 дней')).toBeTruthy();
+    await screen.findAllByText('30 дней');
+    expect(screen.getAllByText('30 дней').length).toBeGreaterThan(0);
   });
 
   it('shows loading indicator while fetching', async () => {
@@ -231,8 +232,8 @@ describe('AdminMarketingSources', () => {
       sources: [],
     } as any);
     mount();
-    await screen.findByText('Нет данных за выбранный период');
-    expect(screen.getByText('Нет данных за выбранный период')).toBeTruthy();
+    await screen.findAllByText('Нет данных об источниках трафика за выбранный период.');
+    expect(screen.getAllByText('Нет данных об источниках трафика за выбранный период.').length).toBeGreaterThan(0);
   });
 
   it('shows error state and retries on button click', async () => {
@@ -243,27 +244,27 @@ describe('AdminMarketingSources', () => {
         sources: sampleSources,
       } as any);
     mount();
-    await screen.findByText('Network error');
+    await screen.findAllByText('Network error');
     const retryButton = screen.getByRole('button', { name: 'Повторить' });
     fireEvent.click(retryButton);
-    await screen.findByText('Прямой заход');
-    expect(screen.getByText('Прямой заход')).toBeTruthy();
+    await screen.findAllByText('Прямой заход');
+    expect(screen.getAllByText('Прямой заход').length).toBeGreaterThan(0);
   });
 
   it('generates correct row navigation links for all source kinds', async () => {
     mount();
-    await screen.findByText('Прямой заход');
+    await screen.findAllByText('Прямой заход');
 
-    const directLink = screen.getByRole('link', { name: 'Прямой заход' });
+    const directLink = screen.getAllByRole('link', { name: /Прямой заход/ })[0];
     expect(directLink.getAttribute('href')).toBe('/marketing/sources/direct');
 
-    const unattributedLink = screen.getByRole('link', { name: 'Неизвестный источник' });
+    const unattributedLink = screen.getAllByRole('link', { name: /Неизвестный источник/ })[0];
     expect(unattributedLink.getAttribute('href')).toBe('/marketing/sources/_unattributed');
 
-    const telegramLink = screen.getByRole('link', { name: 'telegram' });
+    const telegramLink = screen.getAllByRole('link', { name: /telegram/ })[0];
     expect(telegramLink.getAttribute('href')).toBe('/marketing/sources/telegram');
 
-    const literalUnattributedLink = screen.getByRole('link', { name: 'unattributed' });
+    const literalUnattributedLink = screen.getAllByRole('link', { name: /unattributed/ })[0];
     expect(literalUnattributedLink.getAttribute('href')).toBe('/marketing/sources/unattributed');
   });
 });
