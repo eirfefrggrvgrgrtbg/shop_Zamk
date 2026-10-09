@@ -129,15 +129,13 @@ export function AdminMarketingDesigners() {
       return <UnavailableMetric tooltip="Нет данных за предыдущий период" />;
     }
     const val = p.revenueChangePct;
+    if (val === 0) return <span className="text-gray-400 font-medium">—</span>;
     const isPositive = val > 0;
-    const isNegative = val < 0;
-    let colorClass = "text-gray-500";
-    if (isPositive) colorClass = "text-green-700";
-    if (isNegative) colorClass = "text-amber-700";
 
     return (
-      <span className={`font-medium ${colorClass}`}>
-        {isPositive ? '+' : ''}{number(Math.round(val))}%
+      <span className={`inline-flex items-center gap-0.5 font-medium ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+        {isPositive ? '↑' : '↓'}
+        <span>{Math.abs(Math.round(val))}%</span>
       </span>
     );
   };
@@ -217,17 +215,17 @@ export function AdminMarketingDesigners() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="text-[10px] uppercase tracking-widest text-gray-900 border-b border-gray-900">
+            <thead className="text-[10px] uppercase tracking-widest text-gray-500 border-b border-gray-200">
               <tr>
-                <th className="py-3 font-bold">Дизайнер</th>
-                <th className="px-4 py-3 font-bold text-right">Товары</th>
-                <th className="px-4 py-3 font-bold text-right">Выручка</th>
-                <th className="px-4 py-3 font-bold text-right">Δ Выручки</th>
-                <th className="px-4 py-3 font-bold text-right">Покупки</th>
-                <th className="px-4 py-3 font-bold text-right text-gray-400">Просмотры</th>
-                <th className="px-4 py-3 font-bold text-right text-gray-400">Избранное</th>
-                <th className="px-4 py-3 font-bold text-right text-gray-400">Конверсия</th>
-                <th className="px-4 py-3 font-bold text-right text-gray-400">Возвраты</th>
+                <th className="py-3 pr-4 font-medium">Дизайнер</th>
+                <th className="px-4 py-3 font-medium text-right border-l border-transparent">Товары</th>
+                <th className="px-4 py-3 font-medium text-right text-gray-900 border-l border-transparent">Выручка</th>
+                <th className="px-4 py-3 font-medium text-right">Δ Выручки</th>
+                <th className="px-4 py-3 font-medium text-right">Покупки</th>
+                <th className="px-4 py-3 font-medium text-right border-l border-transparent">Просмотры</th>
+                <th className="px-4 py-3 font-medium text-right">Избранное</th>
+                <th className="px-4 py-3 font-medium text-right">Конверсия</th>
+                <th className="pl-4 py-3 font-medium text-right border-l border-transparent">Возвраты</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -258,57 +256,60 @@ export function AdminMarketingDesigners() {
                   </td>
                 </tr>
               ) : (
-                designers.map((d) => (
+                designers.map((d, index) => (
                   <tr key={d.designerId} className="group hover:bg-gray-50/50 transition-colors">
-                    <td className="py-4 align-top">
-                      <div className="flex gap-4">
+                    <td className="py-3 pr-4">
+                      <div className="flex items-center gap-4">
+                        <div className="text-[10px] font-medium text-gray-300 w-4 text-right tabular-nums select-none">
+                          {String(index + 1).padStart(2, '0')}
+                        </div>
                         {d.primaryImage ? (
-                          <div className="w-12 h-16 bg-gray-100 flex-shrink-0 overflow-hidden">
+                          <div className="w-10 h-10 bg-gray-50 flex-shrink-0 overflow-hidden rounded-full">
                             <img src={d.primaryImage} alt="" className="w-full h-full object-cover grayscale mix-blend-multiply group-hover:grayscale-0 group-hover:mix-blend-normal transition-all duration-500" />
                           </div>
                         ) : (
-                          <div className="w-12 h-16 bg-gray-50 border border-gray-100 flex-shrink-0"></div>
+                          <div className="w-10 h-10 bg-gray-50 border border-gray-100 flex-shrink-0 rounded-full flex items-center justify-center text-gray-300">
+                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                          </div>
                         )}
-                        <div>
-                          <div className="font-medium text-gray-900 leading-snug">{d.designerName}</div>
+                        <div className="min-w-0 py-1 flex flex-col justify-center">
+                          <div className="text-sm font-medium text-gray-900 leading-snug truncate">{d.designerName}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4 align-top text-right text-gray-600">
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-500 border-l border-transparent">
                       {number(d.productsCount)}
                     </td>
-                    <td className="px-4 py-4 align-top text-right">
-                      {d.revenueCents > 0 ? (
-                        <span className="font-serif tracking-tight">{money(d.revenueCents)}</span>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-900 font-medium border-l border-transparent">
+                      {d.revenueCents > 0 ? money(d.revenueCents) : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-4 py-4 align-top text-right">
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-900">
                       {renderGrowth(d)}
                     </td>
-                    <td className="px-4 py-4 align-top text-right">
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-900">
                       {d.purchases > 0 ? (
-                        <span className="text-gray-900">{number(d.purchases)}</span>
+                        <div>{number(d.purchases)}</div>
                       ) : (
                         <span className="text-gray-300">—</span>
                       )}
                       {d.soldUnits > d.purchases && (
-                        <div className="text-[10px] text-gray-400 mt-0.5" title="Продано единиц">{number(d.soldUnits)} шт</div>
+                        <div className="text-[10px] text-gray-400 mt-0.5" title="Продано единиц">{number(d.soldUnits)} шт.</div>
                       )}
                     </td>
-                    <td className="px-4 py-4 align-top text-right text-gray-600">
-                      {renderBehavioralMetric(d.views, coverage?.views, 'Просмотры')}
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-500 border-l border-transparent">
+                      {renderBehavioralMetric(d.views, coverage?.views, 'просмотров')}
                     </td>
-                    <td className="px-4 py-4 align-top text-right text-gray-600">
-                      {renderBehavioralMetric(d.favorites, coverage?.favorites, 'Избранное')}
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-500">
+                      {renderBehavioralMetric(d.favorites, coverage?.favorites, 'избранного')}
                     </td>
-                    <td className="px-4 py-4 align-top text-right">
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-500">
                       {renderConversion(d)}
                     </td>
-                    <td className="px-4 py-4 align-top text-right text-gray-600">
+                    <td className="pl-4 py-3 text-right tabular-nums text-gray-900 border-l border-transparent">
                       {d.returns > 0 ? (
                         <span>{number(d.returns)}</span>
+                      ) : d.returns === 0 ? (
+                        <span className="text-gray-400 font-medium">0</span>
                       ) : (
                         <span className="text-gray-300">—</span>
                       )}

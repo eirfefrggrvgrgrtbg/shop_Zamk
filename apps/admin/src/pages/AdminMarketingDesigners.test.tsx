@@ -134,9 +134,10 @@ describe('AdminMarketingDesigners Component Tests', () => {
 
     expect(within(acmeRow).getByText('5')).toBeTruthy(); // productsCount
     expect(within(acmeRow).getByText(/80\s*000/)).toBeTruthy(); // revenue formatting (80,000 ₽)
-    expect(within(acmeRow).getByText('+100%')).toBeTruthy(); // growth presentation
+    expect(within(acmeRow).getByText('↑')).toBeTruthy();
+    expect(within(acmeRow).getByText('100%')).toBeTruthy();
     expect(within(acmeRow).getByText('6')).toBeTruthy(); // purchases
-    expect(within(acmeRow).getByText('8 шт')).toBeTruthy(); // soldUnits
+    expect(within(acmeRow).getByText('8 шт.')).toBeTruthy(); // soldUnits
     expect(within(acmeRow).getByText('120')).toBeTruthy(); // views
     expect(within(acmeRow).getByText('15')).toBeTruthy(); // favorites
     expect(within(acmeRow).getByText('5.00%')).toBeTruthy(); // conversion
@@ -148,15 +149,15 @@ describe('AdminMarketingDesigners Component Tests', () => {
     await screen.findByText('Acme Studio');
 
     const table = screen.getByRole('table');
-    // Acme Studio: +100%
-    const growthElem = within(table).getByText('+100%');
+    // Acme Studio: ↑ 100%
+    const growthElem = within(table).getByText('100%').parentElement;
     expect(growthElem).toBeTruthy();
-    expect(growthElem.className).toContain('text-green-700');
+    expect(growthElem!.className).toContain('text-emerald-600');
 
-    // Declining Brand: -50%
-    const declineElem = within(table).getByText('-50%');
+    // Declining Brand: ↓ 50%
+    const declineElem = within(table).getByText('50%').parentElement;
     expect(declineElem).toBeTruthy();
-    expect(declineElem.className).toContain('text-amber-700');
+    expect(declineElem!.className).toContain('text-rose-600');
 
     // New Designer (previousRevenueCents = 0): "—"
     const dashElements = within(table).getAllByText('—');

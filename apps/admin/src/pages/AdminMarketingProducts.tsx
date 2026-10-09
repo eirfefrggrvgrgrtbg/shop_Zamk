@@ -232,16 +232,16 @@ export function AdminMarketingProducts() {
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="text-[10px] uppercase tracking-widest text-gray-900 border-b border-gray-900">
+            <thead className="text-[10px] uppercase tracking-widest text-gray-500 border-b border-gray-200">
               <tr>
-                <th className="py-3 font-bold">Товар</th>
-                <th className="px-4 py-3 font-bold text-right">Выручка</th>
-                <th className="px-4 py-3 font-bold text-right">Покупки</th>
-                <th className="px-4 py-3 font-bold text-right text-gray-400">Просмотры</th>
-                <th className="px-4 py-3 font-bold text-right text-gray-400">Избранное</th>
-                <th className="px-4 py-3 font-bold text-right text-gray-400">В корзину</th>
-                <th className="px-4 py-3 font-bold text-right text-gray-400">Конверсия</th>
-                <th className="px-4 py-3 font-bold text-right text-gray-400">Возвраты</th>
+                <th className="py-3 pr-4 font-medium">Товар</th>
+                <th className="px-4 py-3 font-medium text-right text-gray-900 border-l border-transparent">Выручка</th>
+                <th className="px-4 py-3 font-medium text-right">Покупки</th>
+                <th className="px-4 py-3 font-medium text-right border-l border-transparent">Просмотры</th>
+                <th className="px-4 py-3 font-medium text-right">Избранное</th>
+                <th className="px-4 py-3 font-medium text-right">В корзину</th>
+                <th className="px-4 py-3 font-medium text-right">Конверсия</th>
+                <th className="pl-4 py-3 font-medium text-right border-l border-transparent">Возвраты</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -282,61 +282,68 @@ export function AdminMarketingProducts() {
                   </td>
                 </tr>
               ) : (
-                products.map(p => (
-                  <tr key={p.productId} className="group">
-                    <td className="py-4">
-                      <div className="flex items-start gap-5">
-                        <div className="h-[96px] w-[72px] flex-shrink-0 bg-gray-50 overflow-hidden">
+                products.map((p, index) => (
+                  <tr key={p.productId} className="group hover:bg-gray-50/50 transition-colors">
+                    <td className="py-3 pr-4">
+                      <div className="flex items-center gap-4">
+                        <div className="text-[10px] font-medium text-gray-300 w-4 text-right tabular-nums select-none">
+                          {String(index + 1).padStart(2, '0')}
+                        </div>
+                        <div className="w-10 h-14 flex-shrink-0 bg-gray-50 overflow-hidden rounded-sm">
                           {p.primaryImage ? (
-                            <img src={p.primaryImage} alt={p.productName} className="h-full w-full object-cover mix-blend-multiply" />
+                            <img src={p.primaryImage} alt="" className="h-full w-full object-cover mix-blend-multiply" />
                           ) : (
                             <div className="h-full w-full flex items-center justify-center text-gray-200">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                             </div>
                           )}
                         </div>
-                        <div className="min-w-0 pt-0.5 flex flex-col h-[96px] justify-between">
-                          <div>
-                            <div className="font-serif text-lg text-gray-900 truncate leading-tight mb-1 group-hover:text-gray-500 transition-colors" title={p.productName}>
-                              {p.productName}
-                            </div>
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-900 truncate">
-                              {formatDesignerName(p.designerName)}
-                            </div>
+                        <div className="min-w-0 py-1 flex flex-col justify-center">
+                          <div className="text-sm font-medium text-gray-900 truncate" title={p.productName}>
+                            {p.productName}
                           </div>
-                          {p.categoryName && (
-                            <div className="text-[10px] text-gray-400 uppercase tracking-widest truncate">
-                              {p.categoryName}
-                            </div>
-                          )}
+                          <div className="text-[11px] text-gray-500 truncate mt-0.5">
+                            <span>{formatDesignerName(p.designerName)}</span>
+                            {p.categoryName ? (
+                              <>
+                                <span className="text-gray-300 mx-1.5">•</span>
+                                <span>{p.categoryName}</span>
+                              </>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                     </td>
 
-                    <td className="px-4 py-4 text-right tabular-nums text-gray-900 font-medium">
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-900 font-medium border-l border-transparent">
                       {money(p.revenueCents)}
                     </td>
-                    <td className="px-4 py-4 text-right tabular-nums text-gray-900">
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-900">
                       <div>{number(p.purchases)}</div>
                       {p.soldUnits > p.purchases && <div className="text-[10px] text-gray-400 mt-0.5">{number(p.soldUnits)} шт.</div>}
                     </td>
 
-                    <td className="px-4 py-4 text-right tabular-nums text-gray-500">
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-500 border-l border-transparent">
                       {renderBehavioralMetric(p.views, coverage?.views, 'просмотров')}
                     </td>
-                    <td className="px-4 py-4 text-right tabular-nums text-gray-500">
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-500">
                       {renderBehavioralMetric(p.favorites, coverage?.favorites, 'избранного')}
                     </td>
-                    <td className="px-4 py-4 text-right tabular-nums text-gray-500">
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-500">
                       {renderBehavioralMetric(p.addToCart, coverage?.addToCart, 'корзины')}
                     </td>
 
-                    <td className="px-4 py-4 text-right tabular-nums text-gray-500">
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-500">
                       {renderConversion(p)}
                     </td>
-                    <td className="px-4 py-4 text-right tabular-nums text-gray-500">
+                    <td className="pl-4 py-3 text-right tabular-nums text-gray-900 border-l border-transparent">
                       {p.returns > 0 ? (
-                        <span className="text-gray-900">{number(p.returns)}</span>
+                        <div>
+                          <span>{number(p.returns)}</span>
+                          {p.returnedUnits > p.returns && <div className="text-[10px] text-gray-400 mt-0.5">{number(p.returnedUnits)} шт.</div>}
+                        </div>
+                      ) : p.returns === 0 ? (
+                        <span className="text-gray-400 font-medium">0</span>
                       ) : (
                         <span className="text-gray-300">—</span>
                       )}
