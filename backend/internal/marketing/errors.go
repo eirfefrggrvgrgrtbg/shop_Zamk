@@ -79,4 +79,5 @@ var (
 	ErrCampaignNotActive      = errors.New("campaign is not active")
 	ErrCampaignNotStarted     = errors.New("campaign has not started yet")
 	ErrCampaignExpired        = errors.New("campaign is expired")
+	ErrInvalidCampaignPurpose = errors.New("invalid campaign purpose")
 )

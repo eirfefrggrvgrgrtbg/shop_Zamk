@@ -104,6 +104,10 @@ const (
 	CampaignPurposePromotion   CampaignPurpose = "promotion"
 )
 
+func IsValidCampaignPurpose(p CampaignPurpose) bool {
+	return p == CampaignPurposeAdvertising || p == CampaignPurposePromotion
+}
+
 // MarketingCampaign carries advertising or seller promotion data.
 type MarketingCampaign struct {
 	Purpose                     CampaignPurpose  `json:"purpose" db:"purpose"`

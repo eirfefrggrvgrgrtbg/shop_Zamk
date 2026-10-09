@@ -1,8 +1,11 @@
 package marketing_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,17 +42,29 @@ func TestCampaignPurpose_DomainIsolation(t *testing.T) {
 	require.Equal(t, marketing.CampaignPurposeAdvertising, saved.Purpose)
 	views, err := svc.ListAdminCampaigns(ctx)
 	require.NoError(t, err)
-	found := false
+	foundAdv := false
+	foundPromo := false
 	for _, view := range views {
-		require.Equal(t, marketing.CampaignPurposeAdvertising, view.Purpose)
-		require.NotEqual(t, promotion.ID, view.ID)
 		if view.ID == advertising.ID {
-			found = true
+			foundAdv = true
+			require.Equal(t, marketing.CampaignPurposeAdvertising, view.Purpose)
+		}
+		if view.ID == promotion.ID {
+			foundPromo = true
+			require.Equal(t, marketing.CampaignPurposePromotion, view.Purpose)
 		}
 	}
-	require.True(t, found)
-	_, err = svc.GetAdminCampaign(ctx, promotion.ID)
-	require.ErrorIs(t, err, marketing.ErrCampaignNotFound)
+	require.True(t, foundAdv, "advertising campaign must be listed with advertising purpose")
+	require.True(t, foundPromo, "promotion campaign must be listed with promotion purpose")
+
+	advDetail, err := svc.GetAdminCampaign(ctx, advertising.ID)
+	require.NoError(t, err)
+	require.Equal(t, marketing.CampaignPurposeAdvertising, advDetail.Purpose)
+
+	promoDetail, err := svc.GetAdminCampaign(ctx, promotion.ID)
+	require.NoError(t, err)
+	require.Equal(t, marketing.CampaignPurposePromotion, promoDetail.Purpose)
+
 	title := "Attempted domain escape"
 	_, err = svc.UpdateAdminCampaign(ctx, promotion.ID, marketing.AdminUpdateCampaignRequest{Title: &title})
 	require.ErrorIs(t, err, marketing.ErrCampaignNotFound)
@@ -352,4 +367,118 @@ func TestCampaignPurpose_SellerAdvertising_ZeroEconomicDiscount(t *testing.T) {
 	require.NotNil(t, calc)
 	assert.Equal(t, int64(15000), calc.TotalSellerDiscountCents, "Promotion must apply exactly 10% discount (15000 cents)")
 	assert.Equal(t, int64(135000), calc.TotalCustomerPaidCents, "Customer must pay 135000 cents with promotion")
+}
+
+func TestCampaignPurpose_ContractAndValidation(t *testing.T) {
+	client, _, svc := setupTestMarketingDB(t)
+	ctx := context.Background()
+	handler := marketing.NewHandler(svc, nil)
+
+	// 1. Validation invariants: reject invalid purpose values
+	invalidCamp := &marketing.MarketingCampaign{
+		Title:        "Invalid Purpose Campaign",
+		FundingMode:  marketing.FundingModeZamk,
+		Status:       marketing.CampaignStatusDraft,
+		DiscountType: marketing.DiscountTypePercent,
+		Purpose:      marketing.CampaignPurpose("ads"), // illegal alias
+	}
+	assert.ErrorIs(t, marketing.ValidateCampaign(invalidCamp), marketing.ErrInvalidCampaignPurpose)
+
+	invalidCamp.Purpose = marketing.CampaignPurpose("promo")
+	assert.ErrorIs(t, marketing.ValidateCampaign(invalidCamp), marketing.ErrInvalidCampaignPurpose)
+
+	invalidCamp.Purpose = marketing.CampaignPurpose("marketing")
+	assert.ErrorIs(t, marketing.ValidateCampaign(invalidCamp), marketing.ErrInvalidCampaignPurpose)
+
+	invalidCamp.Purpose = marketing.CampaignPurposeAdvertising
+	assert.NoError(t, marketing.ValidateCampaign(invalidCamp))
+
+	invalidCamp.Purpose = marketing.CampaignPurposePromotion
+	assert.NoError(t, marketing.ValidateCampaign(invalidCamp))
+
+	// 2. HTTP Handler: invalid purpose in create request rejected with 400
+	t.Run("create_invalid_purpose_rejected", func(t *testing.T) {
+		body := map[string]interface{}{
+			"title":        "Bad Purpose",
+			"fundingMode":  "zamk",
+			"discountType": "percent",
+			"purpose":      "invalid_alias",
+		}
+		raw, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/admin/marketing/campaigns", bytes.NewReader(raw))
+		rec := httptest.NewRecorder()
+		handler.CreateAdminCampaign(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "invalid_parameter")
+	})
+
+	// 3. HTTP Handler: explicit advertising purpose accepted
+	t.Run("create_explicit_advertising_accepted", func(t *testing.T) {
+		body := map[string]interface{}{
+			"title":        "Explicit Ads Campaign",
+			"fundingMode":  "zamk",
+			"discountType": "percent",
+			"purpose":      "advertising",
+		}
+		raw, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/admin/marketing/campaigns", bytes.NewReader(raw))
+		rec := httptest.NewRecorder()
+		handler.CreateAdminCampaign(rec, req)
+		require.Equal(t, http.StatusCreated, rec.Code)
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "advertising", resp["purpose"])
+	})
+
+	// 4. HTTP Handler: omitted purpose defaults to advertising
+	t.Run("create_omitted_purpose_defaults_advertising", func(t *testing.T) {
+		body := map[string]interface{}{
+			"title":        "Omitted Purpose Campaign",
+			"fundingMode":  "zamk",
+			"discountType": "percent",
+		}
+		raw, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/admin/marketing/campaigns", bytes.NewReader(raw))
+		rec := httptest.NewRecorder()
+		handler.CreateAdminCampaign(rec, req)
+		require.Equal(t, http.StatusCreated, rec.Code)
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "advertising", resp["purpose"])
+	})
+
+	// 5. HTTP Handler: List response serializes exact purpose for both types
+	t.Run("list_response_serializes_both_purposes", func(t *testing.T) {
+		sellerID := createTestSeller(t, client)
+		promoCamp, err := svc.CreateSellerCampaign(ctx, sellerID, marketing.CreateSellerCampaignRequest{
+			Title: "Test List Promo Campaign", DiscountType: marketing.DiscountTypePercent, SellerDiscountBps: 1000,
+		})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodGet, "/admin/marketing/campaigns", nil)
+		rec := httptest.NewRecorder()
+		handler.ListAdminCampaigns(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		var items []map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &items))
+		require.NotEmpty(t, items)
+
+		foundAdv := false
+		foundPromo := false
+		for _, item := range items {
+			p, ok := item["purpose"].(string)
+			require.True(t, ok, "each item must possess string purpose")
+			require.Contains(t, []string{"advertising", "promotion"}, p)
+			if p == "advertising" {
+				foundAdv = true
+			}
+			if item["id"] == promoCamp.ID.String() {
+				foundPromo = true
+				assert.Equal(t, "promotion", p)
+			}
+		}
+		assert.True(t, foundAdv, "list response must include advertising campaigns")
+		assert.True(t, foundPromo, "list response must include promotion campaigns")
+	})
 }

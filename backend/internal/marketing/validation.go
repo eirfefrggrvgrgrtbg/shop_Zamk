@@ -11,6 +11,10 @@ func ValidateCampaign(c *MarketingCampaign) error {
 		return fmt.Errorf("campaign title cannot be empty")
 	}
 
+	if c.Purpose != "" && !IsValidCampaignPurpose(c.Purpose) {
+		return ErrInvalidCampaignPurpose
+	}
+
 	if c.CampaignChannel != nil && !IsValidCampaignChannel(*c.CampaignChannel) {
 		return ErrInvalidCampaignChannel
 	}

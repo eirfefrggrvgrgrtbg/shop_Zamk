@@ -1532,7 +1532,6 @@ func (r *Repository) ListAdminCampaigns(ctx context.Context) ([]CampaignDetailVi
 			COALESCE(COUNT(l.id), 0) AS tracking_link_count
 		FROM marketing_campaigns c
 		LEFT JOIN campaign_tracking_links l ON l.campaign_id = c.id
-		WHERE c.purpose = 'advertising'
 		GROUP BY c.id
 		ORDER BY c.created_at DESC
 	`
@@ -1592,7 +1591,7 @@ func (r *Repository) GetAdminCampaign(ctx context.Context, id uuid.UUID) (*Campa
 			COALESCE(COUNT(l.id), 0) AS tracking_link_count
 		FROM marketing_campaigns c
 		LEFT JOIN campaign_tracking_links l ON l.campaign_id = c.id
-		WHERE c.id = $1 AND c.purpose = 'advertising'
+		WHERE c.id = $1
 		GROUP BY c.id
 	`
 	var v CampaignDetailView

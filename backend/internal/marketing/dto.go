@@ -156,6 +156,7 @@ func DerivePromoStatus(p *PromoCode, reservedCount, consumedCount int, now time.
 }
 
 type AdminCreateCampaignRequest struct {
+	Purpose                  *CampaignPurpose   `json:"purpose,omitempty"`
 	SellerID                 *uuid.UUID         `json:"sellerId,omitempty"`
 	Title                    string             `json:"title" validate:"required"`
 	Description              *string            `json:"description,omitempty"`

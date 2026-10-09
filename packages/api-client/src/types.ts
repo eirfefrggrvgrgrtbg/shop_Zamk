@@ -2755,6 +2755,7 @@ export interface AdminCampaignTrackingLink {
 }
 
 export interface CreateAdminCampaignRequest {
+  purpose?: CampaignPurpose;
   sellerId?: string | null;
   title: string;
   description?: string;

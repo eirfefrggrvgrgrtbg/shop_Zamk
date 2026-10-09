@@ -56,7 +56,21 @@ func (h *Handler) CreateAdminCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	purpose := CampaignPurposeAdvertising
+	if req.Purpose != nil {
+		if !IsValidCampaignPurpose(*req.Purpose) {
+			h.writeError(w, http.StatusBadRequest, "invalid_parameter", "invalid campaign purpose")
+			return
+		}
+		if *req.Purpose != CampaignPurposeAdvertising {
+			h.writeError(w, http.StatusBadRequest, "invalid_parameter", "admin campaign creation only supports advertising purpose")
+			return
+		}
+		purpose = *req.Purpose
+	}
+
 	campaign := &MarketingCampaign{
+		Purpose:                  purpose,
 		SellerID:                 req.SellerID,
 		Title:                    req.Title,
 		Description:              req.Description,
@@ -75,7 +89,8 @@ func (h *Handler) CreateAdminCampaign(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.CreateAdminCampaign(r.Context(), campaign); err != nil {
 		if errors.Is(err, ErrInvalidFundingMode) || errors.Is(err, ErrInvalidCampaignStatus) ||
 			errors.Is(err, ErrInvalidDiscountType) || errors.Is(err, ErrInvalidCampaignChannel) ||
-			errors.Is(err, ErrInvalidCampaignType) || errors.Is(err, ErrInvalidPlannedBudget) {
+			errors.Is(err, ErrInvalidCampaignType) || errors.Is(err, ErrInvalidPlannedBudget) ||
+			errors.Is(err, ErrInvalidCampaignPurpose) {
 			h.writeError(w, http.StatusBadRequest, "invalid_parameter", err.Error())
 			return
 		}
@@ -84,7 +99,9 @@ func (h *Handler) CreateAdminCampaign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The repository insert has committed before emitting semantic success.
-	h.logger.InfoContext(r.Context(), "marketing.advertising_campaign.created", "campaign_id", campaign.ID, "purpose", campaign.Purpose)
+	if h.logger != nil {
+		h.logger.InfoContext(r.Context(), "marketing.advertising_campaign.created", "campaign_id", campaign.ID, "purpose", campaign.Purpose)
+	}
 	h.writeJSON(w, http.StatusCreated, campaign)
 }
 
@@ -118,7 +135,9 @@ func (h *Handler) UpdateAdminCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.InfoContext(r.Context(), "marketing.advertising_campaign.updated", "campaign_id", updated.ID, "purpose", updated.Purpose)
+	if h.logger != nil {
+		h.logger.InfoContext(r.Context(), "marketing.advertising_campaign.updated", "campaign_id", updated.ID, "purpose", updated.Purpose)
+	}
 	h.writeJSON(w, http.StatusOK, updated)
 }
 
