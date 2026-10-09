@@ -7,10 +7,10 @@ import { number, money } from '../components/marketing/marketingPresentation';
 import { formatSource } from '../utils/sourceFormatter';
 
 
-import { Save, FolderOpen, AlertCircle } from 'lucide-react';
+import { Save, FolderOpen, AlertCircle, Download } from 'lucide-react';
 import { AdminMarketingSavedQueriesSidebar } from '../components/marketing/AdminMarketingSavedQueriesSidebar';
 import { AdminMarketingSaveQueryModal } from '../components/marketing/AdminMarketingSaveQueryModal';
-import { updateAdminMarketingSavedQuery } from '@zamk/api-client/src/admin';
+import { updateAdminMarketingSavedQuery, exportAdminMarketingQuery } from '@zamk/api-client/src/admin';
 import type { SavedQuery } from '@zamk/api-client/src/types';
 import { deepEqual } from '../utils/deepEqual';
 import { normalizeQueryRequest } from '../utils/normalizeQueryRequest';
@@ -129,6 +129,20 @@ export function mapErrorMessage(err: any): string {
   }
 }
 
+export function mapExportErrorMessage(err: any): string {
+  const status = err?.status || err?.statusCode;
+  if (status === 400) {
+    return 'Не удалось экспортировать отчёт. Проверьте параметры запроса.';
+  }
+  if (status === 403) {
+    return 'Недостаточно прав для экспорта отчёта.';
+  }
+  if (status === 404) {
+    return 'Не удалось экспортировать отчёт.';
+  }
+  return 'Не удалось экспортировать отчёт. Попробуйте ещё раз.';
+}
+
 export function AdminMarketingQueryBuilder() {
   const { period, range, select } = useMarketingRange();
 
@@ -153,6 +167,11 @@ export function AdminMarketingQueryBuilder() {
   const [queryToRename, setQueryToRename] = useState<SavedQuery | undefined>(undefined);
   const [isSavingChanges, setIsSavingChanges] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Export State
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const buildCurrentQueryRequest = (): QueryRequest => {
     const queryFilters: QueryFilter[] = filters
@@ -274,6 +293,34 @@ export function AdminMarketingQueryBuilder() {
     setRefreshKey(k => k + 1);
   };
 
+  const handleExport = async (format: 'csv' | 'xlsx') => {
+    if (isExporting) return;
+    if (metrics.length === 0) return;
+    setIsExporting(true);
+    setIsExportMenuOpen(false);
+    setError(null);
+    setExportError(null);
+
+    try {
+      const res = await exportAdminMarketingQuery(format, buildCurrentQueryRequest());
+      if (res && res.blob) {
+        const url = window.URL.createObjectURL(res.blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = res.filename || `zamk-marketing-report.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (err: any) {
+      const msg = mapExportErrorMessage(err);
+      setExportError(msg);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleRun = async () => {
     if (!range.from || !range.to) return;
@@ -471,8 +518,60 @@ export function AdminMarketingQueryBuilder() {
               Сохранить
             </button>
           )}
+
+          {/* Export action */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsExportMenuOpen(prev => !prev)}
+              disabled={metrics.length === 0 || isExporting}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+            >
+              <Download className="h-4 w-4 mr-2 text-gray-400" />
+              {isExporting ? 'Экспорт...' : 'Экспорт'}
+            </button>
+
+            {isExportMenuOpen && !isExporting && (
+              <div
+                className="absolute right-0 mt-2 w-44 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 border border-gray-100 z-20 py-1"
+                role="menu"
+              >
+                <button
+                  type="button"
+                  onClick={() => handleExport('csv')}
+                  disabled={isExporting}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center justify-between"
+                  role="menuitem"
+                >
+                  CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExport('xlsx')}
+                  disabled={isExporting}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center justify-between"
+                  role="menuitem"
+                >
+                  Excel (.xlsx)
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {exportError && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 text-xs font-medium rounded-lg border border-red-100 flex items-center justify-between" role="alert">
+          <p>{exportError}</p>
+          <button
+            type="button"
+            onClick={() => setExportError(null)}
+            className="text-xs text-red-600 hover:text-red-800 font-semibold ml-4"
+          >
+            Закрыть
+          </button>
+        </div>
+      )}
 
       {activeSavedQuery && (
         <div className="mb-6 bg-indigo-50 border border-indigo-100 rounded-md p-4 flex items-center justify-between">

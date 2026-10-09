@@ -481,8 +481,8 @@ describe('AdminMarketingQueryBuilder — Core Contract Matrix', () => {
     expect(screen.queryByText(/SELECT/i)).toBeNull();
     expect(screen.queryByText(/INNER JOIN/i)).toBeNull();
 
-    // Matrix 46: No Export controls (M8)
-    expect(screen.queryByRole('button', { name: /Экспорт/i })).toBeNull();
+    // M8B: Export control exists and menu is initially closed
+    expect(screen.getByRole('button', { name: /Экспорт/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /CSV/i })).toBeNull();
   });
 });

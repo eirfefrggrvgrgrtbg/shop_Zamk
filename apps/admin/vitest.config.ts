@@ -42,6 +42,7 @@ export default defineConfig({
       'src/pages/AdminMarketingSourceDetail.test.tsx',
       'src/pages/AdminMarketingQueryBuilder.test.tsx',
       'src/pages/AdminMarketingQueryBuilderSavedQueries.test.tsx',
+      'src/pages/AdminMarketingQueryBuilderExport.test.tsx',
       'src/components/marketing/**/*.test.{ts,tsx}',
       'src/pages/support/**/*.test.{ts,tsx}',
       'src/config/**/*.test.{ts,tsx}',

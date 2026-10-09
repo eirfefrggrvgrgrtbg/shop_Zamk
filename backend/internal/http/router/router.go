@@ -156,6 +156,7 @@ func New(
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key, X-Zamk-App")
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Expose-Headers", "Content-Disposition")
 			}
 
 			if req.Method == "OPTIONS" {

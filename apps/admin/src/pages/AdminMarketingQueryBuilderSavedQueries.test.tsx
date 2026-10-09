@@ -248,11 +248,10 @@ describe('AdminMarketingQueryBuilderSavedQueries — Behavioral Acceptance Suite
       });
     });
 
-    it('Matrix 56-58: no Save As, no Export buttons', () => {
+    it('Matrix 56-57: no Save As buttons', () => {
       renderBuilder();
       expect(screen.queryByRole('button', { name: /Save As/i })).toBeNull();
       expect(screen.queryByRole('button', { name: /Сохранить как/i })).toBeNull();
-      expect(screen.queryByRole('button', { name: /Экспорт/i })).toBeNull();
     });
   });
 
