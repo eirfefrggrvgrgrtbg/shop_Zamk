@@ -22,6 +22,7 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: any;
   params?: Record<string, string | number | boolean | undefined>;
   skipAuthRefresh?: boolean;
+  responseType?: 'json' | 'blob';
 }
 
 let refreshPromise: Promise<string | null> | null = null;
@@ -101,16 +102,22 @@ export const request = async <T>(
     }
 
     let data: any = null;
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      data = await response.json().catch(() => null);
+    let blob: Blob | null = null;
+
+    if (response.ok && options.responseType === 'blob') {
+      blob = await response.blob().catch(() => null);
     } else {
-      const text = await response.text().catch(() => '');
-      if (text) {
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = text;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json().catch(() => null);
+      } else {
+        const text = await response.text().catch(() => '');
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = text;
+          }
         }
       }
     }
@@ -181,10 +188,34 @@ export const request = async <T>(
       throw new ApiError(data?.message || getSafeErrorMessage(data?.code, `HTTP Error ${response.status}`), data?.code || 'HTTP_ERROR', response.status, data);
     }
 
+    if (options.responseType === 'blob') {
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = 'download';
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename=(?:"([^"]+)"|([^;\s]+))/i);
+        if (match) {
+          filename = match[1] || match[2] || 'download';
+        }
+      }
+      return {
+        blob,
+        filename,
+        contentType: response.headers.get('content-type')
+      } as any;
+    }
+
     return data;
   };
 
   return execute();
+};
+
+export const requestBlob = async (
+  method: string,
+  path: string,
+  options: Omit<RequestOptions, 'responseType'> = {}
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> => {
+  return request<{ blob: Blob; filename: string; contentType: string | null }>(method, path, { ...options, responseType: 'blob' });
 };
 
 export const getSafeErrorMessage = (code?: string, fallback?: string): string => {

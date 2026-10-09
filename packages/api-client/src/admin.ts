@@ -1,4 +1,4 @@
-import { request } from './client';
+import { request, requestBlob } from './client';
 import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, ReturnShipment, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, AdminInventoryUnitTraceability, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, StaffMemberPermissionsResponse, UpdateStaffMemberPermissionsRequest, StaffMemberDetailResponse, UpdateStaffMemberProfileRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDispatchContext, AdminDispatchQueueItem, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, SupplyReceivingQueueItem, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse, AdminReturnReceivingState, AdminReturnReceivingQueueItem, ScanReturnUnitResponse, UpdateSerializedUnitInspectionInput, UpdateLegacyItemInspectionInput, AdminCampaign, AdminCampaignTrackingLink, CreateAdminCampaignRequest, UpdateAdminCampaignRequest, CreateAdminTrackingLinkRequest, AdminMarketingOverviewResponse, AdminMarketingSourcesResponse, AdminMarketingSourceDetailResponse, AdminMarketingCampaignsAnalyticsResponse, AdminMarketingTrendResponse } from './types';
 
 
@@ -1079,6 +1079,18 @@ import type { QueryRequest, QueryResponse } from './types';
 export const executeAdminMarketingQuery = async (req: QueryRequest): Promise<QueryResponse> => {
   return request<QueryResponse>('POST', '/admin/marketing/analytics/query', {
     body: req,
+  });
+};
+
+export const exportAdminMarketingQuery = async (
+  format: 'csv' | 'xlsx',
+  req: QueryRequest
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> => {
+  return requestBlob('POST', '/admin/marketing/analytics/export', {
+    body: {
+      format,
+      query: req,
+    },
   });
 };
 

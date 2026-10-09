@@ -385,4 +385,50 @@ func TestAdminMarketingAnalyticsRouter_SourcesRBACAndValidation(t *testing.T) {
 		r.ServeHTTP(wUnauth, reqUnauth)
 		assert.Equal(t, http.StatusUnauthorized, wUnauth.Code, "Unauthenticated denied 401 (Matrix 59)")
 	})
+
+	// Matrix 60: Export POST RBAC
+	t.Run("Matrix60_Export_RBAC", func(t *testing.T) {
+		exportEndpoint := "/api/admin/marketing/analytics/export"
+		bodyJSON := `{"format": "csv", "query": {"version": 1, "period": {"from": "` + fromStr + `", "to": "` + toStr + `"}, "dimensions": ["source"], "metrics": ["orders"]}}`
+
+		// 1. Allowed with marketing.campaigns.read
+		reqCampRead := httptest.NewRequest(http.MethodPost, exportEndpoint, strings.NewReader(bodyJSON))
+		reqCampRead.Header.Set("Authorization", "Bearer "+campaignReadToken)
+		reqCampRead.Header.Set("Content-Type", "application/json")
+		wCampRead := httptest.NewRecorder()
+		r.ServeHTTP(wCampRead, reqCampRead)
+		assert.Equal(t, http.StatusOK, wCampRead.Code, "Admin with marketing.campaigns.read allowed")
+		assert.Equal(t, "text/csv; charset=utf-8", wCampRead.Header().Get("Content-Type"))
+
+		// 2. Allowed with analytics.read
+		reqAnalyticsRead := httptest.NewRequest(http.MethodPost, exportEndpoint, strings.NewReader(bodyJSON))
+		reqAnalyticsRead.Header.Set("Authorization", "Bearer "+analyticsReadToken)
+		reqAnalyticsRead.Header.Set("Content-Type", "application/json")
+		wAnalyticsRead := httptest.NewRecorder()
+		r.ServeHTTP(wAnalyticsRead, reqAnalyticsRead)
+		assert.Equal(t, http.StatusOK, wAnalyticsRead.Code, "Admin with analytics.read allowed")
+
+		// 3. Denied for unprivileged staff (403)
+		reqNoPerm := httptest.NewRequest(http.MethodPost, exportEndpoint, strings.NewReader(bodyJSON))
+		reqNoPerm.Header.Set("Authorization", "Bearer "+noPermToken)
+		reqNoPerm.Header.Set("Content-Type", "application/json")
+		wNoPerm := httptest.NewRecorder()
+		r.ServeHTTP(wNoPerm, reqNoPerm)
+		assert.Equal(t, http.StatusForbidden, wNoPerm.Code, "Unprivileged staff denied 403")
+
+		// 4. Denied for customer (403)
+		reqCust := httptest.NewRequest(http.MethodPost, exportEndpoint, strings.NewReader(bodyJSON))
+		reqCust.Header.Set("Authorization", "Bearer "+customerToken)
+		reqCust.Header.Set("Content-Type", "application/json")
+		wCust := httptest.NewRecorder()
+		r.ServeHTTP(wCust, reqCust)
+		assert.Equal(t, http.StatusForbidden, wCust.Code, "Customer denied 403")
+
+		// 5. Denied for unauthenticated (401)
+		reqUnauth := httptest.NewRequest(http.MethodPost, exportEndpoint, strings.NewReader(bodyJSON))
+		reqUnauth.Header.Set("Content-Type", "application/json")
+		wUnauth := httptest.NewRecorder()
+		r.ServeHTTP(wUnauth, reqUnauth)
+		assert.Equal(t, http.StatusUnauthorized, wUnauth.Code, "Unauthenticated denied 401")
+	})
 }

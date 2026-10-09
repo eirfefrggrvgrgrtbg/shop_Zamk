@@ -717,6 +717,7 @@ func New(
 				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/products", marketingHandler.GetProductAnalytics)
 				r.With(permAny("marketing.campaigns.read", "analytics.read")).Get("/designers", marketingHandler.GetDesignerAnalytics)
 				r.With(permAny("marketing.campaigns.read", "analytics.read")).Post("/query", marketingHandler.ExecuteQuery)
+				r.With(permAny("marketing.campaigns.read", "analytics.read")).Post("/export", marketingHandler.ExportQuery)
 			})
 
 			// Saved Queries
