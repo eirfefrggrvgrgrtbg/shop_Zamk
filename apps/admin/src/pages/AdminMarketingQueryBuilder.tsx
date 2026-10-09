@@ -474,18 +474,22 @@ export function AdminMarketingQueryBuilder() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex items-end justify-between mb-8">
+    <div className="max-w-[1200px] mx-auto px-8 py-8 min-h-screen">
+      <div className="mb-8">
+        <AdminMarketingTabs />
+      </div>
+
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-10">
         <div>
-          <div className="flex items-center space-x-3 mb-1">
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900">Аналитика</h1>
-          </div>
-          <p className="text-sm text-gray-500 font-medium">Конструктор отчетов</p>
+          <h1 className="text-xl font-medium tracking-tight text-gray-900">Аналитика</h1>
+          <p className="text-[11px] uppercase tracking-widest font-medium text-gray-400 mt-1">Конструктор отчетов</p>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center justify-between md:justify-end flex-wrap gap-4">
+          <MarketingPeriodControl period={period} range={range} onSelect={select} />
+
           <button
             onClick={() => setIsSidebarOpen(true)}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-[11px] font-bold uppercase tracking-widest rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           >
             <FolderOpen className="h-4 w-4 mr-2 text-gray-400" />
             Сохранённые
@@ -494,7 +498,7 @@ export function AdminMarketingQueryBuilder() {
           {activeSavedQuery && !isDirty ? (
             <button
               disabled
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-indigo-400 bg-indigo-50 cursor-not-allowed"
+              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-[11px] font-bold uppercase tracking-widest rounded-md text-indigo-400 bg-indigo-50 cursor-not-allowed"
             >
               <Save className="h-4 w-4 mr-2" />
               Сохранено
@@ -503,7 +507,7 @@ export function AdminMarketingQueryBuilder() {
             <button
               onClick={handleSaveChanges}
               disabled={metrics.length === 0 || isSavingChanges}
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-[11px] font-bold uppercase tracking-widest rounded-md text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
             >
               <Save className="h-4 w-4 mr-2" />
               {isSavingChanges ? 'Сохранение...' : 'Сохранить изменения'}
@@ -512,7 +516,7 @@ export function AdminMarketingQueryBuilder() {
             <button
               onClick={() => setSaveModalMode('create')}
               disabled={metrics.length === 0}
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-[11px] font-bold uppercase tracking-widest rounded-md text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
             >
               <Save className="h-4 w-4 mr-2" />
               Сохранить
@@ -525,7 +529,7 @@ export function AdminMarketingQueryBuilder() {
               type="button"
               onClick={() => setIsExportMenuOpen(prev => !prev)}
               disabled={metrics.length === 0 || isExporting}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-[11px] font-bold uppercase tracking-widest rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
             >
               <Download className="h-4 w-4 mr-2 text-gray-400" />
               {isExporting ? 'Экспорт...' : 'Экспорт'}
@@ -574,13 +578,13 @@ export function AdminMarketingQueryBuilder() {
       )}
 
       {activeSavedQuery && (
-        <div className="mb-6 bg-indigo-50 border border-indigo-100 rounded-md p-4 flex items-center justify-between">
+        <div className="mb-6 bg-gray-50 border border-gray-200 rounded-md p-4 flex items-center justify-between">
           <div className="flex flex-col">
-             <span className="text-sm font-medium text-indigo-900">
+             <span className="text-sm font-medium text-gray-900">
                Сохранённый запрос: {activeSavedQuery.name}
              </span>
              {isDirty && (
-               <span className="text-xs text-indigo-600 mt-1 flex items-center">
+               <span className="text-xs text-amber-600 mt-1 flex items-center">
                  <AlertCircle className="w-3 h-3 mr-1"/>
                  Есть несохранённые изменения
                </span>
@@ -588,18 +592,12 @@ export function AdminMarketingQueryBuilder() {
           </div>
           <button
              onClick={() => setActiveSavedQuery(null)}
-             className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+             className="text-gray-500 hover:text-gray-900 text-xs font-bold tracking-widest uppercase"
           >
              Сбросить
           </button>
         </div>
       )}
-
-      <AdminMarketingTabs />
-
-      <div className="mt-6 mb-6">
-        <MarketingPeriodControl period={period} range={range} onSelect={select} />
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         <div className="space-y-6 lg:col-span-1">

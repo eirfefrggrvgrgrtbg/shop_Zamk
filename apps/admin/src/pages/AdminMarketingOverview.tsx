@@ -389,7 +389,7 @@ export function AdminMarketingOverview() {
 
   if (!snapshot && loading) {
     return (
-      <div className="p-8 max-w-6xl mx-auto flex items-center justify-center min-h-[60vh]" data-testid="marketing-hero">
+      <div className="max-w-[1200px] mx-auto px-8 py-8 min-h-[60vh] flex items-center justify-center" data-testid="marketing-hero">
         <div data-testid="overview-loading" className="flex flex-col items-center">
            <div className="w-5 h-5 border-2 border-gray-900 border-t-transparent rounded-full animate-spin mb-3"></div>
            <span className="text-[10px] uppercase tracking-widest font-semibold text-gray-500">Загрузка данных</span>
@@ -400,7 +400,7 @@ export function AdminMarketingOverview() {
 
   if (!snapshot && error) {
     return (
-      <div className="p-8 max-w-6xl mx-auto flex flex-col items-center justify-center min-h-[60vh] gap-4" data-testid="marketing-hero">
+      <div className="max-w-[1200px] mx-auto px-8 py-8 flex flex-col items-center justify-center min-h-[60vh] gap-4" data-testid="marketing-hero">
         <div role="alert" className="text-gray-900 font-medium">Не удалось обновить данные</div>
         <button onClick={() => setRetry(v => v + 1)} className="px-4 py-2 border border-gray-200 rounded text-[11px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-colors">
           Повторить
@@ -418,7 +418,11 @@ export function AdminMarketingOverview() {
   const unattributedStats = campaigns.find(c => !c.campaignId || c.name === 'Без кампании');
 
   return (
-    <div className="p-8 max-w-6xl mx-auto min-h-screen" data-testid="marketing-hero">
+    <div className="max-w-[1200px] mx-auto px-8 py-8 min-h-screen" data-testid="marketing-hero">
+      <div className="mb-8">
+        <AdminMarketingTabs />
+      </div>
+
       {error && (
         <div role="alert" className="mb-6 p-4 bg-red-50 text-red-700 rounded text-sm flex justify-between items-center">
           <span>Не удалось обновить данные</span>
@@ -426,10 +430,10 @@ export function AdminMarketingOverview() {
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-10">
         <div>
-          <h1 className="text-2xl font-serif text-gray-900 tracking-tight">Маркетинг</h1>
-          <p className="text-[11px] uppercase tracking-widest font-medium text-gray-400 mt-2">Трафик, продажи и эффективность</p>
+          <h1 className="text-xl font-medium tracking-tight text-gray-900">Сводка</h1>
+          <p className="text-[11px] uppercase tracking-widest font-medium text-gray-400 mt-1">Трафик, продажи и эффективность</p>
         </div>
         <div className="flex items-center justify-between md:justify-end flex-wrap gap-6">
           {loading && <div data-testid="overview-loading" className="text-[10px] uppercase tracking-widest font-semibold text-gray-400 animate-pulse">Обновляем...</div>}
@@ -437,58 +441,52 @@ export function AdminMarketingOverview() {
         </div>
       </div>
 
-      <div className="mb-10">
-        <AdminMarketingTabs />
-      </div>
-
-      <div className="bg-white border-y border-gray-200 mb-12">
-        <div className="grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-gray-200">
-
+      {/* Composed Analytical Region */}
+      <div className="mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-8">
           {/* Revenue */}
-          <div className="p-8 md:col-span-2 flex flex-col justify-center">
-            <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-900 mb-3">Выручка</div>
-            <div className="text-4xl font-light tracking-tight text-gray-900" data-testid="marketing-revenue">{money(current.revenueCents)}</div>
+          <div className="md:col-span-2 flex flex-col justify-center">
+            <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-400 mb-2">Выручка</div>
+            <div className="text-4xl font-light tracking-tight text-gray-900 tabular-nums" data-testid="marketing-revenue">{money(current.revenueCents)}</div>
             {renderComparison(current.revenueCents, previous.revenueCents)}
           </div>
 
           {/* Orders & AOV */}
-          <div className="p-8 flex flex-col justify-between">
+          <div className="flex flex-col gap-6 border-l border-gray-100 pl-8">
             <div>
-              <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-900 mb-2">Заказы</div>
-              <div className="text-2xl font-light text-gray-900">{number(current.paidOrders)}</div>
+              <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-400 mb-1">Заказы</div>
+              <div className="text-2xl font-light text-gray-900 tabular-nums">{number(current.paidOrders)}</div>
               {renderComparison(current.paidOrders, previous.paidOrders)}
             </div>
-            <div className="mt-8 pt-6 border-t border-gray-100">
-              <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-900 mb-2">Средний чек</div>
-              <div className="text-lg font-medium text-gray-900">{money(current.aovCents)}</div>
+            <div>
+              <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-400 mb-1">Средний чек</div>
+              <div className="text-lg font-medium text-gray-900 tabular-nums">{money(current.aovCents)}</div>
               {renderComparison(current.aovCents, previous.aovCents)}
             </div>
           </div>
 
           {/* Sessions & Conversion */}
-          <div className="p-8 flex flex-col justify-between">
+          <div className="flex flex-col gap-6 border-l border-gray-100 pl-8">
             <div>
-              <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-900 mb-2">Сессии</div>
-              <div className="text-2xl font-light text-gray-900">{number(current.visits)}</div>
+              <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-400 mb-1">Сессии</div>
+              <div className="text-2xl font-light text-gray-900 tabular-nums">{number(current.visits)}</div>
               {renderComparison(current.visits, previous.visits)}
             </div>
-            <div className="mt-8 pt-6 border-t border-gray-100">
-              <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-900 mb-2">Конверсия</div>
+            <div>
+              <div className="text-[10px] uppercase tracking-widest font-semibold text-gray-400 mb-1">Конверсия</div>
               {isAnomalousConversion ? (
                 <div data-testid="anomalous-conversion-notice" role="status" aria-label="Предупреждение о недостаточности данных конверсии">
-                  <div className="text-2xl font-light text-gray-300">—</div>
-                  <div className="text-[10px] font-semibold tracking-wider text-amber-800 bg-amber-50 px-2 py-1 inline-block mt-2">
-                    Недостаточно данных
-                  </div>
-                  <div className="text-[10px] text-gray-500 mt-2 leading-tight">
-                    <span className="sr-only">Покрытие аналитики низкое</span>
-                    {number(current.visits)} {pluralize(current.visits, ['сессия', 'сессии', 'сессий'])} на {number(current.paidOrders)} {pluralize(current.paidOrders, ['оплаченный заказ', 'оплаченных заказа', 'оплаченных заказов'])}
-                    <div className="text-gray-400 mt-0.5">Недостаточно данных для достоверной конверсии</div>
+                  <div className="text-lg font-light text-gray-300">—</div>
+                  <div className="text-[10px] text-amber-600 mt-1 leading-tight space-y-0.5">
+                    <span className="font-semibold block">Недостаточно данных</span>
+                    <span className="block">Покрытие аналитики низкое</span>
+                    <span className="block">{current.visits} {pluralize(current.visits, ['сессия', 'сессии', 'сессий'])} на {current.paidOrders} {pluralize(current.paidOrders, ['оплаченный заказ', 'оплаченных заказа', 'оплаченных заказов'])}.</span>
+                    <span className="block text-amber-700/70">Недостаточно данных для достоверной конверсии.</span>
                   </div>
                 </div>
               ) : (
                 <>
-                  <div className="text-lg font-medium text-gray-900">{percent(current.conversionRateBps)}</div>
+                  <div className="text-lg font-medium text-gray-900 tabular-nums">{percent(current.conversionRateBps)}</div>
                   {renderComparison(current.conversionRateBps, previous.conversionRateBps)}
                 </>
               )}
@@ -496,32 +494,31 @@ export function AdminMarketingOverview() {
           </div>
 
           {/* Audience & Quality */}
-          <div className="p-8 flex flex-col justify-center bg-gray-50/50 relative">
+          <div className="flex flex-col justify-center border-l border-gray-100 pl-8">
             <h2 className="sr-only">Качество продаж</h2>
-            <div className="space-y-4 w-full">
-              <div className="flex justify-between items-baseline border-b border-gray-200 pb-2">
-                <span className="text-[10px] uppercase tracking-widest font-semibold text-gray-900">Возвраты</span>
-                <span className="text-sm font-medium text-gray-900">{money(current.returnedAmountCents)}</span>
-              </div>
-              <div className="flex justify-between items-baseline border-b border-gray-200 pb-2">
-                <span className="text-[10px] uppercase tracking-widest font-semibold text-gray-900">Единиц</span>
-                <span className="text-sm font-medium text-gray-900">{number(current.soldUnits)}</span>
-              </div>
-              <div className="flex justify-between items-baseline border-b border-gray-200 pb-2">
-                <span className="text-[10px] uppercase tracking-widest font-semibold text-gray-900">Новые</span>
-                <span className="text-sm font-medium text-gray-900">{number(current.newCustomers)}</span>
+            <div className="space-y-3 w-full">
+              <div className="flex justify-between items-baseline">
+                <span className="text-[10px] uppercase tracking-widest font-semibold text-gray-400">Возвраты</span>
+                <span className="text-sm font-medium text-gray-900 tabular-nums">{money(current.returnedAmountCents)}</span>
               </div>
               <div className="flex justify-between items-baseline">
-                <span className="text-[10px] uppercase tracking-widest font-semibold text-gray-900">Повторные</span>
-                <span className="text-sm font-medium text-gray-900">{number(current.repeatCustomers)}</span>
+                <span className="text-[10px] uppercase tracking-widest font-semibold text-gray-400">Единиц</span>
+                <span className="text-sm font-medium text-gray-900 tabular-nums">{number(current.soldUnits)}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-[10px] uppercase tracking-widest font-semibold text-gray-400">Новые</span>
+                <span className="text-sm font-medium text-gray-900 tabular-nums">{number(current.newCustomers)}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-[10px] uppercase tracking-widest font-semibold text-gray-400">Повторные</span>
+                <span className="text-sm font-medium text-gray-900 tabular-nums">{number(current.repeatCustomers)}</span>
               </div>
             </div>
           </div>
-
         </div>
 
         {/* Chart Section */}
-        <div className="p-8 border-t border-gray-200 bg-white relative">
+        <div className="pt-6 relative">
           {trendError ? (
             <div className="w-full h-56 flex flex-col items-center justify-center gap-2" data-testid="trend-error-area">
               <span className="text-[10px] uppercase tracking-widest font-semibold text-gray-500">Не удалось загрузить динамику</span>
@@ -533,13 +530,13 @@ export function AdminMarketingOverview() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 lg:gap-20">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 lg:gap-20 pt-8 border-t border-gray-100">
 
         {/* Traffic Sources */}
         <div role="region" aria-label="Показатели источников">
-          <div className="flex justify-between items-end border-b border-gray-900 pb-3 mb-5">
+          <div className="flex justify-between items-end border-b border-gray-100 pb-3 mb-5">
             <h2 className="text-[10px] font-bold uppercase tracking-widest text-gray-900">Источники трафика</h2>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-900 text-right">Сессии</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-right">Сессии</span>
           </div>
           <div className="space-y-4">
             {[...sources].sort((a, b) => b.visits - a.visits).slice(0, 8).map((source, index) => {
@@ -557,7 +554,7 @@ export function AdminMarketingOverview() {
                        {number(source.visits)} <span className="text-gray-400 text-[10px] font-medium ml-2 w-8 inline-block text-right">{Math.round(share)}%</span>
                     </span>
                   </div>
-                  <div className="w-full bg-gray-100 h-[2px] overflow-hidden">
+                  <div className="w-full bg-gray-50 h-[2px] overflow-hidden">
                     <div className="bg-gray-900 h-full transition-all" style={{ width: `${share}%` }}></div>
                   </div>
                 </div>
@@ -576,13 +573,13 @@ export function AdminMarketingOverview() {
 
         {/* Top Campaigns */}
         <div role="region" aria-label="Показатели кампаний">
-          <div className="flex justify-between items-end border-b border-gray-900 pb-3 mb-5">
+          <div className="flex justify-between items-end border-b border-gray-100 pb-3 mb-5">
             <h2 className="text-[10px] font-bold uppercase tracking-widest text-gray-900">Лучшие кампании</h2>
             <div className="flex gap-6 items-baseline">
               <span className="sr-only">Сессии</span>
               <span className="sr-only">Заказы</span>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-900 text-right">Выручка</span>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-900 text-right w-12 hidden sm:inline-block">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-right">Выручка</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-right w-12 hidden sm:inline-block">
                 Конв.<span className="sr-only">Конверсия</span>
               </span>
             </div>
@@ -590,13 +587,13 @@ export function AdminMarketingOverview() {
           {attributedCampaigns.length > 0 ? (
             <div className="space-y-4">
               {attributedCampaigns.sort((a, b) => b.revenueCents - a.revenueCents).slice(0, 6).map((campaign, i) => (
-                <div key={campaign.campaignId ?? `none-${i}`} className="flex justify-between items-baseline text-sm border-b border-gray-100 pb-4 last:border-0">
+                <div key={campaign.campaignId ?? `none-${i}`} className="flex justify-between items-baseline text-sm border-b border-gray-50 pb-4 last:border-0">
                   <div className="flex-1 truncate pr-4">
                      <div className="font-medium">
                        {campaign.campaignId ? <Link to={`/marketing/campaigns/${campaign.campaignId}`} className="text-gray-900 hover:text-gray-600 transition-colors">{campaign.name}</Link> : <span className="text-gray-900">{campaign.name}</span>}
                      </div>
                      <div className="text-[11px] text-gray-500 mt-1">
-                       <span>{number(campaign.visits)}</span> сессий · <span>{number(campaign.paidOrders)}</span> заказов
+                       <span className="tabular-nums">{number(campaign.visits)}</span> сессий · <span className="tabular-nums">{number(campaign.paidOrders)}</span> заказов
                      </div>
                   </div>
                   <div className="flex gap-6 items-baseline text-right">
@@ -618,7 +615,7 @@ export function AdminMarketingOverview() {
               <div className="text-[11px] uppercase tracking-widest font-medium text-gray-900 mb-2">Нет данных за этот период</div>
               {unattributedStats && (
                 <div className="text-[11px] text-gray-500 leading-relaxed">
-                  {number(unattributedStats.visits)} сессий и {number(unattributedStats.paidOrders)} заказов атрибутированы как органика.
+                  <span className="tabular-nums">{number(unattributedStats.visits)}</span> сессий и <span className="tabular-nums">{number(unattributedStats.paidOrders)}</span> заказов атрибутированы как органика.
                 </div>
               )}
             </div>

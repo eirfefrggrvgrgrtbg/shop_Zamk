@@ -80,19 +80,19 @@ export function AdminMarketingSources() {
   }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto min-h-screen">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+    <div className="max-w-[1200px] mx-auto px-8 py-8 min-h-screen">
+      <div className="mb-8">
+        <AdminMarketingTabs />
+      </div>
+
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-10">
         <div>
-          <h1 className="text-2xl font-serif text-gray-900 tracking-tight">Источники трафика</h1>
-          <p className="text-[11px] uppercase tracking-widest font-medium text-gray-400 mt-2">Эффективность каналов привлечения</p>
+          <h1 className="text-xl font-medium tracking-tight text-gray-900">Источники трафика</h1>
+          <p className="text-[11px] uppercase tracking-widest font-medium text-gray-400 mt-1">Эффективность каналов привлечения</p>
         </div>
         <div className="flex items-center justify-between md:justify-end flex-wrap gap-6">
           <MarketingPeriodControl period={period} range={range} onSelect={select} />
         </div>
-      </div>
-
-      <div className="mb-10">
-        <AdminMarketingTabs />
       </div>
 
       <div className="bg-white border-y border-gray-200 py-6 mb-8">

@@ -74,75 +74,83 @@ export function AdminMarketingCampaigns() {
   }, [campaigns, query, statusFilter, channelFilter, typeFilter]);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#FAFAFA]" data-testid="admin-marketing-campaigns-page">
-      <header className="px-8 py-6 border-b border-gray-200 bg-white shrink-0">
-        <div className="flex justify-between items-end mb-6">
-          <div>
-            <div className="text-xs text-gray-500 mb-1 uppercase tracking-wider font-medium">Маркетинг</div>
-            <h1 className="text-3xl font-serif text-gray-900">Кампании</h1>
-          </div>
+    <div className="max-w-[1200px] mx-auto px-8 py-8 min-h-screen" data-testid="admin-marketing-campaigns-page">
+      <div className="mb-8">
+        <AdminMarketingTabs />
+      </div>
+
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-10">
+        <div>
+          <h1 className="text-xl font-medium tracking-tight text-gray-900">Кампании</h1>
+          <p className="text-[11px] uppercase tracking-widest font-medium text-gray-400 mt-1">Управление рекламными активностями</p>
         </div>
-        <div className="flex justify-between items-center">
-          <AdminMarketingTabs />
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between md:justify-end flex-wrap gap-4">
+          {canWrite && (
+            <Link
+              to="/marketing/campaigns/new"
+              data-testid="create-campaign-button"
+              className="bg-gray-900 text-white px-4 py-2 text-[11px] font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors"
+            >
+              Создать кампанию
+            </Link>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-12">
+        <div className="flex flex-wrap lg:flex-nowrap items-end gap-6 mb-8">
+          <div className="flex-1 max-w-sm">
             <div className="relative">
               <input
                 type="search"
                 role="searchbox"
-                placeholder="Поиск кампаний..."
+                placeholder="ПОИСК КАМПАНИЙ..."
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                className="border border-gray-300 rounded text-sm pl-8 pr-3 py-1.5 w-56 focus:outline-none focus:border-gray-400"
+                className="w-full bg-transparent border-b border-gray-900 pb-1.5 text-[11px] font-bold uppercase tracking-widest text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-gray-900"
               />
-              <svg className="w-4 h-4 text-gray-400 absolute left-2.5 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              <svg className="w-3 h-3 absolute right-0 top-1 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </div>
+          </div>
+          <div className="flex flex-wrap items-baseline gap-6">
             <select
               aria-label="Статус"
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="border border-gray-300 rounded text-sm px-2.5 py-1.5 bg-white text-gray-700 outline-none focus:border-gray-400"
+              className="w-48 bg-transparent border-b border-gray-200 pb-1.5 text-[11px] font-bold uppercase tracking-widest text-gray-900 outline-none focus:border-gray-900 cursor-pointer"
             >
-              <option value="">Статус</option>
-              <option value="active">Активные</option>
-              <option value="draft">Черновик</option>
-              <option value="ended">Завершенные</option>
+              <option value="">ВСЕ СТАТУСЫ</option>
+              <option value="active">АКТИВНЫЕ</option>
+              <option value="draft">ЧЕРНОВИК</option>
+              <option value="ended">ЗАВЕРШЕННЫЕ</option>
             </select>
             <select
               aria-label="Канал"
               value={channelFilter}
               onChange={e => setChannelFilter(e.target.value)}
-              className="border border-gray-300 rounded text-sm px-2.5 py-1.5 bg-white text-gray-700 outline-none focus:border-gray-400"
+              className="w-48 bg-transparent border-b border-gray-200 pb-1.5 text-[11px] font-bold uppercase tracking-widest text-gray-900 outline-none focus:border-gray-900 cursor-pointer"
             >
-              <option value="">Канал</option>
-              <option value="telegram">Telegram</option>
+              <option value="">ВСЕ КАНАЛЫ</option>
+              <option value="telegram">TELEGRAM</option>
               <option value="vk">VK</option>
-              <option value="instagram">Instagram</option>
-              <option value="influencer">Блогер</option>
+              <option value="instagram">INSTAGRAM</option>
+              <option value="influencer">БЛОГЕР</option>
             </select>
             <select
               aria-label="Тип"
               value={typeFilter}
               onChange={e => setTypeFilter(e.target.value)}
-              className="border border-gray-300 rounded text-sm px-2.5 py-1.5 bg-white text-gray-700 outline-none focus:border-gray-400"
+              className="w-48 bg-transparent border-b border-gray-200 pb-1.5 text-[11px] font-bold uppercase tracking-widest text-gray-900 outline-none focus:border-gray-900 cursor-pointer"
             >
-              <option value="">Тип</option>
-              <option value="influencer">Инфлюенсер</option>
-              <option value="drop">Дроп / Запуск</option>
-              <option value="seasonal_sale">Распродажа</option>
-              <option value="brand_awareness">Узнаваемость</option>
+              <option value="">ВСЕ ТИПЫ</option>
+              <option value="influencer">ИНФЛЮЕНСЕР</option>
+              <option value="drop">ДРОП / ЗАПУСК</option>
+              <option value="seasonal_sale">РАСПРОДАЖА</option>
+              <option value="brand_awareness">УЗНАВАЕМОСТЬ</option>
             </select>
-            {canWrite && (
-              <Link
-                to="/marketing/campaigns/new"
-                data-testid="create-campaign-button"
-                className="bg-[#5B21B6] text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-purple-800 transition-colors shadow-sm"
-              >
-                Создать кампанию
-              </Link>
-            )}
           </div>
         </div>
-      </header>
+      </div>
 
       {error && !isLoading && (
         <div className="p-4 bg-red-50 text-red-800 border-b border-red-100 flex justify-between items-center" role="alert">
