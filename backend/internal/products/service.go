@@ -814,8 +814,22 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		}
 
 		if revision == nil {
+			hasVisualChanges := req.Title != nil ||
+				req.Description != nil ||
+				req.CategoryID != nil ||
+				req.BrandID != nil ||
+				req.Gender != nil ||
+				req.Color != nil ||
+				req.Material != nil ||
+				req.CareInstructions != nil ||
+				req.Images != nil ||
+				req.Variants != nil ||
+				req.Attributes != nil ||
+				req.MaterialComposition != nil ||
+				req.SizeChartRows != nil
+
 			// Step 2: Update product row
-			if err := txRepo.UpdateProduct(ctx, p); err != nil {
+			if err := txRepo.UpdateProduct(ctx, p, hasVisualChanges); err != nil {
 				return err
 			}
 
@@ -1398,14 +1412,26 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 	}
 
 	validFrom := false
-	for _, s := range allowedFromStatuses {
-		if p.Status == s {
+	for _, st := range allowedFromStatuses {
+		if p.Status == st {
 			validFrom = true
 			break
 		}
 	}
 	if !validFrom {
 		return fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidStatusTransition, p.Status, toStatus)
+	}
+
+	// For a product currently in published status:
+	// Re-approving or rejecting is only valid if a pending revision exists.
+	if p.Status == StatusPublished && (toStatus == StatusPublished || toStatus == StatusRejected) {
+		pendingRev, err := s.repo.GetPendingRevision(ctx, productID)
+		if err != nil {
+			return err
+		}
+		if pendingRev == nil {
+			return fmt.Errorf("%w: cannot transition from %s to %s without pending revision", ErrInvalidStatusTransition, p.Status, toStatus)
+		}
 	}
 
 	fromStatus := p.Status
@@ -1416,18 +1442,40 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 		timeFieldSetter(p, now)
 	}
 
+	// For a published product where revision is rejected, keep the live product status as StatusPublished
+	if fromStatus == StatusPublished && toStatus == StatusRejected {
+		p.Status = StatusPublished
+	}
+
 	log := &ProductModerationLog{
 		ID:          uuid.New(),
 		ProductID:   p.ID,
 		AdminUserID: &adminUserID,
 		FromStatus:  &fromStatus,
-		ToStatus:    toStatus,
+		ToStatus:    p.Status,
 		Comment:     comment,
 		CreatedAt:   now,
 	}
 
 	return s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
+
+		if toStatus == StatusPublished {
+			txPendingRev, err := txRepo.GetPendingRevisionForUpdate(ctx, p.ID)
+			if err != nil {
+				return err
+			}
+			if txPendingRev != nil {
+				if err := txRepo.PromoteProductRevision(ctx, p.ID, txPendingRev.ID); err != nil {
+					return fmt.Errorf("failed to promote product revision: %w", err)
+				}
+			}
+		} else if toStatus == StatusRejected {
+			if err := txRepo.RejectPendingRevision(ctx, p.ID); err != nil {
+				return fmt.Errorf("failed to reject pending revision: %w", err)
+			}
+		}
+
 		if err := txRepo.UpdateProductStatus(ctx, p); err != nil {
 			return err
 		}
@@ -1470,7 +1518,7 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 }
 
 func (s *Service) ApproveProduct(ctx context.Context, adminUserID, productID uuid.UUID, comment *string) error {
-	return s.applyModerationTransition(ctx, adminUserID, productID, StatusPublished, comment, []string{StatusPendingModeration, StatusInReview}, func(p *Product, t time.Time) {
+	return s.applyModerationTransition(ctx, adminUserID, productID, StatusPublished, comment, []string{StatusPendingModeration, StatusInReview, StatusPublished}, func(p *Product, t time.Time) {
 		p.ApprovedAt = &t
 		p.PublishedAt = &t
 	})
@@ -1480,7 +1528,7 @@ func (s *Service) RejectProduct(ctx context.Context, adminUserID, productID uuid
 	if comment == "" {
 		return ErrRejectionReasonRequired
 	}
-	return s.applyModerationTransition(ctx, adminUserID, productID, StatusRejected, &comment, []string{StatusPendingModeration, StatusInReview}, func(p *Product, t time.Time) {
+	return s.applyModerationTransition(ctx, adminUserID, productID, StatusRejected, &comment, []string{StatusPendingModeration, StatusInReview, StatusPublished}, func(p *Product, t time.Time) {
 		p.RejectedAt = &t
 	})
 }

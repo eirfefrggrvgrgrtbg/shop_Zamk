@@ -57,6 +57,7 @@ type Product struct {
 	RejectedAt          *time.Time `json:"rejectedAt,omitempty"`
 	ModerationComment   *string    `json:"moderationComment,omitempty"`
 	LiveRevisionID    *uuid.UUID `json:"liveRevisionId,omitempty"`
+	VisionContentVersion int64   `json:"visionContentVersion"`
 	InStock             *bool      `json:"inStock,omitempty"`
 
 	// Aggregated DTO fields for Admin & Visibility Rules Engine

@@ -81,37 +81,87 @@ func NewVocabularyRegistry() *VocabularyRegistry {
 	return reg
 }
 
-// Hashes the allowed categories, dictionaries, and vocabulary to create
-// a deterministic taxonomy context identity.
-func ComputeTaxonomyContextHash(allowedCategoryIDs []uuid.UUID, allowedDictionaryIDs []uuid.UUID, vocab *VocabularyRegistry) string {
-	// 1. Sort canonical IDs to guarantee determinism
-	catStrs := make([]string, len(allowedCategoryIDs))
-	for i, id := range allowedCategoryIDs {
-		catStrs[i] = id.String()
-	}
-	sort.Strings(catStrs)
+// TaxonomyItem represents a taxonomy entity with its canonical ID and human label as exposed to prompts.
+type TaxonomyItem struct {
+	ID    uuid.UUID `json:"id"`
+	Label string    `json:"label"`
+}
 
-	dictStrs := make([]string, len(allowedDictionaryIDs))
-	for i, id := range allowedDictionaryIDs {
-		dictStrs[i] = id.String()
-	}
-	sort.Strings(dictStrs)
+// TaxonomyContext encapsulates the runtime context used during inference.
+type TaxonomyContext struct {
+	PromptVersion      string
+	SchemaVersion      string
+	VocabularyVersion  string
+	Categories         []TaxonomyItem
+	Dictionaries       []TaxonomyItem
+	OtherTaxonomyIDs   []uuid.UUID
+	VocabularyRegistry *VocabularyRegistry
+}
 
-	// 2. Sort vision vocabulary
+// ComputeTaxonomyContextHash deterministically hashes the prompt version, schema version,
+// vocabulary version, runtime allowlists (with prompt-visible labels), and vision vocabulary.
+func ComputeTaxonomyContextHash(tc TaxonomyContext) string {
+	pv := tc.PromptVersion
+	if pv == "" {
+		pv = PromptVersion
+	}
+	sv := tc.SchemaVersion
+	if sv == "" {
+		sv = SchemaVersion
+	}
+	vv := tc.VocabularyVersion
+	if vv == "" {
+		vv = VocabularyVersion
+	}
+
+	// 1. Sort canonical Categories by ID (deterministic order)
+	catItems := make([]TaxonomyItem, len(tc.Categories))
+	copy(catItems, tc.Categories)
+	sort.Slice(catItems, func(i, j int) bool {
+		return catItems[i].ID.String() < catItems[j].ID.String()
+	})
+	catStrs := make([]string, len(catItems))
+	for i, c := range catItems {
+		catStrs[i] = c.ID.String() + ":" + c.Label
+	}
+
+	// 2. Sort canonical Dictionaries by ID
+	dictItems := make([]TaxonomyItem, len(tc.Dictionaries))
+	copy(dictItems, tc.Dictionaries)
+	sort.Slice(dictItems, func(i, j int) bool {
+		return dictItems[i].ID.String() < dictItems[j].ID.String()
+	})
+	dictStrs := make([]string, len(dictItems))
+	for i, d := range dictItems {
+		dictStrs[i] = d.ID.String() + ":" + d.Label
+	}
+
+	// 3. Sort Other Taxonomy IDs
+	otherStrs := make([]string, len(tc.OtherTaxonomyIDs))
+	for i, id := range tc.OtherTaxonomyIDs {
+		otherStrs[i] = id.String()
+	}
+	sort.Strings(otherStrs)
+
+	// 4. Sort Vision-owned vocabulary IDs
+	vocab := tc.VocabularyRegistry
+	if vocab == nil {
+		vocab = NewVocabularyRegistry()
+	}
 	vocabStrs := make([]string, 0, len(vocab.ValidIDs))
 	for id := range vocab.ValidIDs {
 		vocabStrs = append(vocabStrs, id)
 	}
 	sort.Strings(vocabStrs)
 
-	// 3. Hash them all
+	// 5. Build SHA-256 hash
 	h := sha256.New()
-	h.Write([]byte(PromptVersion + "\n"))
-	h.Write([]byte(SchemaVersion + "\n"))
-	h.Write([]byte(VocabularyVersion + "\n"))
-
+	h.Write([]byte(pv + "\n"))
+	h.Write([]byte(sv + "\n"))
+	h.Write([]byte(vv + "\n"))
 	h.Write([]byte(strings.Join(catStrs, ",") + "\n"))
 	h.Write([]byte(strings.Join(dictStrs, ",") + "\n"))
+	h.Write([]byte(strings.Join(otherStrs, ",") + "\n"))
 	h.Write([]byte(strings.Join(vocabStrs, ",") + "\n"))
 
 	return hex.EncodeToString(h.Sum(nil))

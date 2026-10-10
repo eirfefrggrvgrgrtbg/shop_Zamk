@@ -2,6 +2,7 @@ package products
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -111,19 +112,21 @@ func (r *Repository) CreateProduct(ctx context.Context, p *Product) error {
 	return nil
 }
 
-func (r *Repository) UpdateProduct(ctx context.Context, p *Product) error {
+func (r *Repository) UpdateProduct(ctx context.Context, p *Product, bumpVisionVersion bool) error {
 	query := `
 		UPDATE products
 		SET category_id = $1, brand_id = $2, title = $3, slug = $4, description = $5,
 			gender = $6, color = $7, material = $8, care_instructions = $9,
 			price_cents = $10, old_price_cents = $11, main_image_url = $12, main_image_object_key = $13,
+			vision_content_version = CASE WHEN $14 THEN vision_content_version + 1 ELSE vision_content_version END,
 			updated_at = now()
-		WHERE id = $14
+		WHERE id = $15
 	`
 	res, err := r.db.Exec(ctx, query,
 		p.CategoryID, p.BrandID, p.Title, p.Slug, p.Description,
 		p.Gender, p.Color, p.Material, p.CareInstructions,
 		p.PriceCents, p.OldPriceCents, p.MainImageURL, p.MainImageObjectKey,
+		bumpVisionVersion,
 		p.ID,
 	)
 	if err != nil {
@@ -154,7 +157,9 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 			COALESCE(p.average_rating, 0) AS average_rating, COALESCE(p.reviews_count, 0) AS reviews_count,
 			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment,
 			p.assigned_admin_user_id, admin_user.name, p.review_started_at,
-			s.brand_name, s.slug, u.name, u.email, c.name, b.name, s.status
+			s.brand_name, s.slug, u.name, u.email, c.name, b.name, s.status,
+			COALESCE(p.vision_content_version, 0),
+			p.live_revision_id
 		FROM products p
 		LEFT JOIN sellers s ON p.seller_id = s.id
 		LEFT JOIN seller_users su ON su.seller_id = s.id AND su.role = 'owner'
@@ -173,6 +178,8 @@ func (r *Repository) getProductByCondition(ctx context.Context, condition string
 		&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
 		&p.AssignedAdminUserID, &p.AssignedAdminName, &p.ReviewStartedAt,
 		&p.SellerName, &p.SellerSlug, &p.SellerOwnerName, &p.SellerOwnerEmail, &p.CategoryName, &p.BrandName, &p.SellerStatus,
+		&p.VisionContentVersion,
+		&p.LiveRevisionID,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -625,7 +632,8 @@ func (r *Repository) ReplaceProductImages(ctx context.Context, productID uuid.UU
 			return fmt.Errorf("failed to insert image: %w", err)
 		}
 	}
-	return nil
+	_, err = r.db.Exec(ctx, "UPDATE products SET vision_content_version = vision_content_version + 1, updated_at = now() WHERE id = $1", productID)
+	return err
 }
 
 func (r *Repository) GetProductImages(ctx context.Context, productID uuid.UUID) ([]ProductImage, error) {
@@ -674,13 +682,14 @@ func (r *Repository) AddProductImage(ctx context.Context, img *ProductImage) err
 	if err != nil {
 		return fmt.Errorf("failed to add product image: %w", err)
 	}
-	return nil
+	_, err = r.db.Exec(ctx, "UPDATE products SET vision_content_version = vision_content_version + 1, updated_at = now() WHERE id = $1", img.ProductID)
+	return err
 }
 
 func (r *Repository) SetMainImage(ctx context.Context, productID uuid.UUID, imageURL string, objectKey string) error {
 	query := `
 		UPDATE products
-		SET main_image_url = $1, main_image_object_key = $2, updated_at = now()
+		SET main_image_url = $1, main_image_object_key = $2, vision_content_version = vision_content_version + 1, updated_at = now()
 		WHERE id = $3
 	`
 	res, err := r.db.Exec(ctx, query, imageURL, objectKey, productID)
@@ -1429,15 +1438,17 @@ func (r *Repository) GetProductImageByID(ctx context.Context, imageID uuid.UUID)
 }
 
 func (r *Repository) DeleteProductImage(ctx context.Context, imageID uuid.UUID) error {
-	query := `DELETE FROM product_images WHERE id = $1`
-	res, err := r.db.Exec(ctx, query, imageID)
+	var prodID uuid.UUID
+	query := `DELETE FROM product_images WHERE id = $1 RETURNING product_id`
+	err := r.db.QueryRow(ctx, query, imageID).Scan(&prodID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrProductNotFound
+		}
 		return fmt.Errorf("failed to delete product image: %w", err)
 	}
-	if res.RowsAffected() == 0 {
-		return ErrProductNotFound
-	}
-	return nil
+	_, err = r.db.Exec(ctx, "UPDATE products SET vision_content_version = vision_content_version + 1, updated_at = now() WHERE id = $1", prodID)
+	return err
 }
 
 func (r *Repository) ReorderProductImages(ctx context.Context, productID uuid.UUID, imageIDs []uuid.UUID) error {
@@ -1448,7 +1459,8 @@ func (r *Repository) ReorderProductImages(ctx context.Context, productID uuid.UU
 			return fmt.Errorf("failed to reorder product image: %w", err)
 		}
 	}
-	return nil
+	_, err := r.db.Exec(ctx, "UPDATE products SET vision_content_version = vision_content_version + 1, updated_at = now() WHERE id = $1", productID)
+	return err
 }
 
 func (r *Repository) GetPrimaryBrandForSeller(ctx context.Context, sellerID uuid.UUID) (*uuid.UUID, error) {
@@ -1762,8 +1774,14 @@ func (r *Repository) UpdateProductImageCrop(ctx context.Context, imageID uuid.UU
 		UPDATE product_images
 		SET crop_x = $1, crop_y = $2, crop_width = $3, crop_height = $4, rendition_url = $5, rendition_object_key = $6
 		WHERE id = $7
+		RETURNING product_id
 	`
-	_, err := r.db.Exec(ctx, query, cropX, cropY, cropWidth, cropHeight, renditionURL, renditionObjectKey, imageID)
+	var prodID uuid.UUID
+	err := r.db.QueryRow(ctx, query, cropX, cropY, cropWidth, cropHeight, renditionURL, renditionObjectKey, imageID).Scan(&prodID)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Exec(ctx, "UPDATE products SET vision_content_version = vision_content_version + 1, updated_at = now() WHERE id = $1", prodID)
 	return err
 }
 
@@ -1774,6 +1792,204 @@ func (r *Repository) ClearOtherMainImages(ctx context.Context, productID uuid.UU
 		WHERE product_id = $1 AND id != $2
 	`
 	_, err := r.db.Exec(ctx, query, productID, excludeImageID)
+	return err
+}
+
+func (r *Repository) PromoteProductRevision(ctx context.Context, productID, revisionID uuid.UUID) error {
+	var snapBytes []byte
+	queryRev := `
+		UPDATE product_revisions
+		SET status = 'approved', updated_at = now()
+		WHERE id = $1 AND product_id = $2
+		RETURNING content_snapshot
+	`
+	err := r.db.QueryRow(ctx, queryRev, revisionID, productID).Scan(&snapBytes)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.New("revision not found")
+		}
+		return fmt.Errorf("failed to approve revision: %w", err)
+	}
+
+	var pSnap Product
+	var rawMap map[string]interface{}
+	if len(snapBytes) > 0 {
+		_ = json.Unmarshal(snapBytes, &pSnap)
+		_ = json.Unmarshal(snapBytes, &rawMap)
+	}
+
+	var title *string
+	if pSnap.Title != "" {
+		title = &pSnap.Title
+	} else if t, ok := rawMap["title"].(string); ok && t != "" {
+		title = &t
+	}
+
+	var desc *string
+	if pSnap.Description != nil {
+		desc = pSnap.Description
+	} else if d, ok := rawMap["description"].(string); ok {
+		desc = &d
+	}
+
+	var categoryID *uuid.UUID
+	if pSnap.CategoryID != nil {
+		categoryID = pSnap.CategoryID
+	}
+
+	var brandID *uuid.UUID
+	if pSnap.BrandID != nil {
+		brandID = pSnap.BrandID
+	}
+
+	var gender *string
+	if pSnap.Gender != nil {
+		gender = pSnap.Gender
+	} else if g, ok := rawMap["gender"].(string); ok {
+		gender = &g
+	}
+
+	var color *string
+	if pSnap.Color != nil {
+		color = pSnap.Color
+	} else if c, ok := rawMap["color"].(string); ok {
+		color = &c
+	}
+
+	var material *string
+	if pSnap.Material != nil {
+		material = pSnap.Material
+	} else if m, ok := rawMap["material"].(string); ok {
+		material = &m
+	}
+
+	var careInstructions *string
+	if pSnap.CareInstructions != nil {
+		careInstructions = pSnap.CareInstructions
+	} else if ci, ok := rawMap["careInstructions"].(string); ok {
+		careInstructions = &ci
+	}
+
+	var priceCents *int64
+	if pSnap.PriceCents > 0 {
+		priceCents = &pSnap.PriceCents
+	} else if pc, ok := rawMap["priceCents"].(float64); ok && pc > 0 {
+		i := int64(pc)
+		priceCents = &i
+	}
+
+	var oldPriceCents *int64
+	if pSnap.OldPriceCents != nil {
+		oldPriceCents = pSnap.OldPriceCents
+	} else if opc, ok := rawMap["oldPriceCents"].(float64); ok {
+		i := int64(opc)
+		oldPriceCents = &i
+	}
+
+	var mainImageURL *string
+	if pSnap.MainImageURL != nil {
+		mainImageURL = pSnap.MainImageURL
+	} else if miu, ok := rawMap["mainImageUrl"].(string); ok {
+		mainImageURL = &miu
+	}
+
+	var mainImageObjectKey *string
+	if pSnap.MainImageObjectKey != nil {
+		mainImageObjectKey = pSnap.MainImageObjectKey
+	} else if miok, ok := rawMap["mainImageObjectKey"].(string); ok {
+		mainImageObjectKey = &miok
+	}
+
+	updateQuery := `
+		UPDATE products
+		SET live_revision_id = $1,
+		    title = COALESCE($2, title),
+		    description = COALESCE($3, description),
+		    category_id = COALESCE($4, category_id),
+		    brand_id = COALESCE($5, brand_id),
+		    gender = COALESCE($6, gender),
+		    color = COALESCE($7, color),
+		    material = COALESCE($8, material),
+		    care_instructions = COALESCE($9, care_instructions),
+		    price_cents = COALESCE($10, price_cents),
+		    old_price_cents = COALESCE($11, old_price_cents),
+		    main_image_url = COALESCE($12, main_image_url),
+		    main_image_object_key = COALESCE($13, main_image_object_key),
+		    vision_content_version = vision_content_version + 1,
+		    updated_at = now()
+		WHERE id = $14
+	`
+	res, err := r.db.Exec(ctx, updateQuery,
+		revisionID, title, desc, categoryID, brandID, gender, color, material, careInstructions,
+		priceCents, oldPriceCents, mainImageURL, mainImageObjectKey, productID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to promote product revision: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrProductNotFound
+	}
+	return nil
+}
+
+func (r *Repository) GetPendingRevision(ctx context.Context, productID uuid.UUID) (*ProductRevision, error) {
+	query := `
+		SELECT id, product_id, status, content_snapshot, created_at, updated_at
+		FROM product_revisions
+		WHERE product_id = $1 AND status = 'pending'
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	var rev ProductRevision
+	var snapBytes []byte
+	err := r.db.QueryRow(ctx, query, productID).Scan(
+		&rev.ID, &rev.ProductID, &rev.Status, &snapBytes, &rev.CreatedAt, &rev.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get pending revision: %w", err)
+	}
+	if len(snapBytes) > 0 {
+		_ = json.Unmarshal(snapBytes, &rev.ContentSnapshot)
+	}
+	return &rev, nil
+}
+
+func (r *Repository) GetPendingRevisionForUpdate(ctx context.Context, productID uuid.UUID) (*ProductRevision, error) {
+	query := `
+		SELECT id, product_id, status, content_snapshot, created_at, updated_at
+		FROM product_revisions
+		WHERE product_id = $1 AND status = 'pending'
+		ORDER BY created_at DESC
+		LIMIT 1
+		FOR UPDATE
+	`
+	var rev ProductRevision
+	var snapBytes []byte
+	err := r.db.QueryRow(ctx, query, productID).Scan(
+		&rev.ID, &rev.ProductID, &rev.Status, &snapBytes, &rev.CreatedAt, &rev.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get pending revision for update: %w", err)
+	}
+	if len(snapBytes) > 0 {
+		_ = json.Unmarshal(snapBytes, &rev.ContentSnapshot)
+	}
+	return &rev, nil
+}
+
+func (r *Repository) RejectPendingRevision(ctx context.Context, productID uuid.UUID) error {
+	query := `
+		UPDATE product_revisions
+		SET status = 'rejected', updated_at = now()
+		WHERE product_id = $1 AND status = 'pending'
+	`
+	_, err := r.db.Exec(ctx, query, productID)
 	return err
 }
 

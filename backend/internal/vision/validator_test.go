@@ -11,27 +11,94 @@ func TestTaxonomyContextHash(t *testing.T) {
 	cat1 := uuid.New()
 	cat2 := uuid.New()
 	dict1 := uuid.New()
-
 	vocab := vision.NewVocabularyRegistry()
 
-	// T. Hash determinism independent of array ordering
-	hash1 := vision.ComputeTaxonomyContextHash([]uuid.UUID{cat1, cat2}, []uuid.UUID{dict1}, vocab)
-	hash2 := vision.ComputeTaxonomyContextHash([]uuid.UUID{cat2, cat1}, []uuid.UUID{dict1}, vocab)
-
-	if hash1 != hash2 {
-		t.Fatalf("expected deterministic hash independent of slice order, got %s != %s", hash1, hash2)
+	ctx1 := vision.TaxonomyContext{
+		Categories: []vision.TaxonomyItem{
+			{ID: cat1, Label: "Dresses"},
+			{ID: cat2, Label: "Pants"},
+		},
+		Dictionaries: []vision.TaxonomyItem{
+			{ID: dict1, Label: "Fabric"},
+		},
+		VocabularyRegistry: vocab,
 	}
 
-	// U. Hash changes when vocabulary changes
-	hash3 := vision.ComputeTaxonomyContextHash([]uuid.UUID{cat1}, []uuid.UUID{dict1}, vocab)
-	if hash1 == hash3 {
-		t.Fatalf("expected hash to change when allowed categories change")
+	// 1. Same values different order → same hash
+	ctxReversed := vision.TaxonomyContext{
+		Categories: []vision.TaxonomyItem{
+			{ID: cat2, Label: "Pants"},
+			{ID: cat1, Label: "Dresses"},
+		},
+		Dictionaries: []vision.TaxonomyItem{
+			{ID: dict1, Label: "Fabric"},
+		},
+		VocabularyRegistry: vocab,
+	}
+	hash1 := vision.ComputeTaxonomyContextHash(ctx1)
+	hashReversed := vision.ComputeTaxonomyContextHash(ctxReversed)
+	if hash1 != hashReversed {
+		t.Fatalf("expected deterministic hash independent of order, got %s != %s", hash1, hashReversed)
+	}
+
+	// 2. New allowed ID → different hash
+	cat3 := uuid.New()
+	ctxAdded := vision.TaxonomyContext{
+		Categories: []vision.TaxonomyItem{
+			{ID: cat1, Label: "Dresses"},
+			{ID: cat2, Label: "Pants"},
+			{ID: cat3, Label: "Shirts"},
+		},
+		Dictionaries: []vision.TaxonomyItem{
+			{ID: dict1, Label: "Fabric"},
+		},
+		VocabularyRegistry: vocab,
+	}
+	if vision.ComputeTaxonomyContextHash(ctxAdded) == hash1 {
+		t.Fatalf("expected hash to change when new allowed ID added")
+	}
+
+	// 3. Removed ID → different hash
+	ctxRemoved := vision.TaxonomyContext{
+		Categories: []vision.TaxonomyItem{
+			{ID: cat1, Label: "Dresses"},
+		},
+		Dictionaries: []vision.TaxonomyItem{
+			{ID: dict1, Label: "Fabric"},
+		},
+		VocabularyRegistry: vocab,
+	}
+	if vision.ComputeTaxonomyContextHash(ctxRemoved) == hash1 {
+		t.Fatalf("expected hash to change when allowed ID removed")
+	}
+
+	// 4. Changed prompt-visible label → different hash
+	ctxChangedLabel := vision.TaxonomyContext{
+		Categories: []vision.TaxonomyItem{
+			{ID: cat1, Label: "Evening Gowns"}, // Changed label
+			{ID: cat2, Label: "Pants"},
+		},
+		Dictionaries: []vision.TaxonomyItem{
+			{ID: dict1, Label: "Fabric"},
+		},
+		VocabularyRegistry: vocab,
+	}
+	if vision.ComputeTaxonomyContextHash(ctxChangedLabel) == hash1 {
+		t.Fatalf("expected hash to change when prompt-visible label changed")
+	}
+
+	// 5. Vision vocabulary version / content change → different hash
+	ctxChangedVocabVersion := ctx1
+	ctxChangedVocabVersion.VocabularyVersion = "2"
+	if vision.ComputeTaxonomyContextHash(ctxChangedVocabVersion) == hash1 {
+		t.Fatalf("expected hash to change when vocabulary version changed")
 	}
 
 	vocab2 := &vision.VocabularyRegistry{ValidIDs: map[string]bool{"vision.new.id": true}}
-	hash4 := vision.ComputeTaxonomyContextHash([]uuid.UUID{cat1, cat2}, []uuid.UUID{dict1}, vocab2)
-	if hash1 == hash4 {
-		t.Fatalf("expected hash to change when internal vision vocabulary changes")
+	ctxChangedVocabContent := ctx1
+	ctxChangedVocabContent.VocabularyRegistry = vocab2
+	if vision.ComputeTaxonomyContextHash(ctxChangedVocabContent) == hash1 {
+		t.Fatalf("expected hash to change when vocabulary content changed")
 	}
 }
 
