@@ -8,9 +8,9 @@ import type { SellerCategorySchema } from '@zamk/api-client/src/seller';
 import { createCanonicalProductStudioImage } from './productStudioMediaHelper';
 
 const mockImages: ProductStudioImage[] = [
-  createCanonicalProductStudioImage({ imageId: 'img-1', url: 'https://images.unsplash.com/1.jpg', isMain: true }),
-  createCanonicalProductStudioImage({ imageId: 'img-2', url: 'https://images.unsplash.com/2.jpg' }),
-  createCanonicalProductStudioImage({ imageId: 'img-3', url: 'https://images.unsplash.com/3.jpg' }),
+  createCanonicalProductStudioImage({ imageId: 'img-1', url: 'https://images.unsplash.com/1.jpg', isMain: true, cropWidth: 1, cropHeight: 1 }),
+  createCanonicalProductStudioImage({ imageId: 'img-2', url: 'https://images.unsplash.com/2.jpg', cropWidth: 1, cropHeight: 1 }),
+  createCanonicalProductStudioImage({ imageId: 'img-3', url: 'https://images.unsplash.com/3.jpg', cropWidth: 1, cropHeight: 1 }),
 ];
 
 describe('productStudioReadinessHelper', () => {
@@ -474,7 +474,7 @@ describe('productStudioReadinessHelper', () => {
     const r2 = getProductStudioReadiness({
       ...draft,
       colors: [{ id: 'col-black', name: 'Черный' }],
-      variants: [{ id: 'v1', sizeValueId: 'sz-m', priceCents: 1000000 }],
+      variants: [{ id: 'v1', sizeValueId: 'sz-m', priceCents: 1000000, sellerSku: 'SKU-M' }],
       sizeChart: { rows: [{ size: 'M', measurements: {} }] },
     }, schema);
     expect(r2.blockingFields).not.toContain('color');
@@ -535,7 +535,7 @@ describe('productStudioReadinessHelper', () => {
       materialComposition: [{ materialName: 'Хлопок', percentage: 100 }],
       images: mockImages,
       colors: [{ id: 'col-black', name: 'Черный', hex: '#000000' }],
-      variants: [{ id: 'var-1', sizeValueId: 'sz-m', priceCents: 150000 }],
+      variants: [{ id: 'var-1', sizeValueId: 'sz-m', priceCents: 150000, sellerSku: 'SKU-M' }],
     };
 
     const readiness = getProductStudioReadiness(draft);
@@ -549,7 +549,7 @@ describe('productStudioReadinessHelper', () => {
     expect(readiness.fieldStatus.description.isSatisfied).toBe(true);
     expect(readiness.fieldStatus.composition.isSatisfied).toBe(true);
     expect(readiness.isReadyForSave).toBe(false);
-    expect(readiness.isReadyForModeration).toBe(false);
+    expect(readiness.isReadyForModeration).toBe(true);
   });
 
   it('dynamic schema COLOR_ONLY does not require size as blocker', () => {
@@ -603,7 +603,7 @@ describe('productStudioReadinessHelper', () => {
       materialComposition: [{ materialName: 'Серебро', percentage: 100 }],
       images: mockImages,
       colors: [],
-      variants: [{ id: 'var-1', sizeValueId: 'sz-17', priceCents: 500000 }],
+      variants: [{ id: 'var-1', sizeValueId: 'sz-17', priceCents: 500000, sellerSku: 'SKU-RING' }],
       sizeChart: { rows: [{ size: '17', measurements: {} }] },
     };
 
@@ -643,5 +643,117 @@ describe('productStudioReadinessHelper', () => {
     expect(readiness.fieldStatus.color.required).toBe(false);
     expect(readiness.fieldStatus.size.required).toBe(false);
     expect(readiness.blockingFields).toHaveLength(0);
+  });
+
+  describe('4:5 Media Crop Readiness and Warnings', () => {
+    it('legacy remote image without crop is a readiness blocker and outputs warning', () => {
+      const legacyImages: ProductStudioImage[] = [
+        createCanonicalProductStudioImage({ imageId: 'img-1', url: 'https://images.unsplash.com/1.jpg', isMain: true, cropWidth: 1, cropHeight: 1 }),
+        createCanonicalProductStudioImage({ imageId: 'img-2', url: 'https://images.unsplash.com/2.jpg', cropWidth: 1, cropHeight: 1 }),
+        // img-3 has NO crop (legacy remote image)
+        createCanonicalProductStudioImage({ imageId: 'img-3', url: 'https://images.unsplash.com/3.jpg' }),
+      ];
+
+      const draft: ProductStudioDraft = {
+        title: 'Футболка',
+        description: 'Описание',
+        categoryId: 'cat-1',
+        priceCents: 1000,
+        material: 'Хлопок',
+        materialComposition: [{ materialName: 'Хлопок', percentage: 100 }],
+        images: legacyImages,
+      };
+
+      const readiness = getProductStudioReadiness(draft);
+      expect(readiness.blockingFields).toContain('media');
+      expect(readiness.fieldStatus.media.isSatisfied).toBe(false);
+      expect(readiness.warnings).toContain('Для 1 фото нужно настроить кадрирование 4:5');
+      expect(readiness.isReadyForModeration).toBe(false);
+    });
+
+    it('new local image with auto-calculated crop satisfies media readiness', () => {
+      const draft: ProductStudioDraft = {
+        title: 'Футболка',
+        description: 'Описание',
+        categoryId: 'cat-1',
+        priceCents: 1000,
+        material: 'Хлопок',
+        materialComposition: [{ materialName: 'Хлопок', percentage: 100 }],
+        images: mockImages,
+      };
+
+      const readiness = getProductStudioReadiness(draft);
+      expect(readiness.blockingFields).not.toContain('media');
+      expect(readiness.fieldStatus.media.isSatisfied).toBe(true);
+      expect(readiness.warnings.some((w) => w.includes('кадрирование 4:5'))).toBe(false);
+    });
+  });
+
+  describe('Variant Seller SKU Readiness and Inactive Variant Semantics', () => {
+    it('A: active variant without sellerSku blocks price readiness and outputs warning', () => {
+      const draft: ProductStudioDraft = {
+        title: 'Футболка',
+        description: 'Описание',
+        categoryId: 'cat-1',
+        priceCents: 100000,
+        material: 'Хлопок',
+        materialComposition: [{ materialName: 'Хлопок', percentage: 100 }],
+        images: mockImages,
+        variants: [
+          { id: 'v1', colorId: 'c1', sizeValueId: 's1', sellerSku: 'SKU-BLK-M', isActive: true },
+          { id: 'v2', colorId: 'c1', sizeValueId: 's2', sellerSku: '', isActive: true }, // missing SKU
+        ],
+      };
+
+      const readiness = getProductStudioReadiness(draft);
+      expect(readiness.blockingFields).toContain('price');
+      expect(readiness.fieldStatus.price.isSatisfied).toBe(false);
+      expect(readiness.warnings).toContain('Заполните артикул продавца (SKU) для всех вариантов товара в разделе «Цена»');
+      expect(readiness.isReadyForModeration).toBe(false);
+    });
+
+    it('B: active variant with sellerSku satisfies price readiness', () => {
+      const draft: ProductStudioDraft = {
+        title: 'Футболка',
+        description: 'Описание',
+        categoryId: 'cat-1',
+        priceCents: 100000,
+        material: 'Хлопок',
+        materialComposition: [{ materialName: 'Хлопок', percentage: 100 }],
+        images: mockImages,
+        variants: [
+          { id: 'v1', colorId: 'c1', sizeValueId: 's1', sellerSku: 'SKU-BLK-M', isActive: true },
+          { id: 'v2', colorId: 'c1', sizeValueId: 's2', sellerSku: 'SKU-BLK-L', isActive: true },
+        ],
+      };
+
+      const readiness = getProductStudioReadiness(draft);
+      expect(readiness.blockingFields).not.toContain('price');
+      expect(readiness.fieldStatus.price.isSatisfied).toBe(true);
+      expect(readiness.warnings.some((w) => w.includes('SKU'))).toBe(false);
+      expect(readiness.isReadyForModeration).toBe(true);
+    });
+
+    it('C: inactive historical variant without sellerSku does NOT block readiness', () => {
+      const draft: ProductStudioDraft = {
+        title: 'Футболка',
+        description: 'Описание',
+        categoryId: 'cat-1',
+        priceCents: 100000,
+        material: 'Хлопок',
+        materialComposition: [{ materialName: 'Хлопок', percentage: 100 }],
+        images: mockImages,
+        variants: [
+          { id: 'v1', colorId: 'c1', sizeValueId: 's1', sellerSku: 'SKU-BLK-M', isActive: true },
+          { id: 'v-inactive', colorId: 'c2', sizeValueId: 's1', sellerSku: undefined, isActive: false }, // inactive
+        ],
+      };
+
+      const readiness = getProductStudioReadiness(draft);
+      expect(readiness.blockingFields).not.toContain('price');
+      expect(readiness.fieldStatus.price.isSatisfied).toBe(true);
+      expect(readiness.warnings.some((w) => w.includes('SKU'))).toBe(false);
+      expect(readiness.isReadyForModeration).toBe(true);
+    });
   });
 });

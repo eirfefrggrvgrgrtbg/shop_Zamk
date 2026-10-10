@@ -24,6 +24,11 @@ export function ProductStudioHeader() {
     isSaveInFlight,
     isDirty,
     markTouched,
+    isSubmittingModeration,
+    moderationError,
+    canSubmitModeration,
+    submitModeration,
+    clearModerationError,
   } = useProductStudio();
   const isCategoryAttention = isFieldAttention('category');
   const hasCategory = Boolean(draft.categoryId);
@@ -91,6 +96,32 @@ export function ProductStudioHeader() {
     saveButtonTitle = mediaBlockReason || 'Заполните обязательные поля для сохранения';
   } else {
     saveButtonTitle = isCreate ? 'Сохранить товар' : 'Сохранить изменения';
+  }
+
+  const isStatusEligibleForModeration =
+    Boolean(draft.id) &&
+    (!draft.status || draft.status === 'draft' || draft.status === 'rejected');
+
+  let submitButtonTitle = 'Отправить на модерацию';
+  if (!draft.id) {
+    submitButtonTitle = 'Сохраните товар перед отправкой на модерацию';
+  } else if (!isStatusEligibleForModeration) {
+    submitButtonTitle =
+      draft.status === 'pending_moderation'
+        ? 'Товар уже находится на модерации'
+        : 'Отправка на модерацию недоступна для этого статуса товара';
+  } else if (readiness.blockingFields.length > 0) {
+    if (readiness.warnings && readiness.warnings.length > 0) {
+      submitButtonTitle = readiness.warnings.join('\n');
+    } else {
+      submitButtonTitle = 'Заполните все обязательные поля для отправки на модерацию';
+    }
+  } else if (isDirty) {
+    submitButtonTitle = 'Сохраните изменения перед отправкой на модерацию';
+  } else if (isSaveInFlight) {
+    submitButtonTitle = 'Выполняется сохранение товара…';
+  } else if (isSubmittingModeration) {
+    submitButtonTitle = 'Выполняется отправка на модерацию…';
   }
 
   return (
@@ -235,12 +266,22 @@ export function ProductStudioHeader() {
         <div className="flex items-center justify-end gap-3 flex-1">
           <button
             type="button"
-            disabled
-            title="Модерация временно недоступна"
-            className="hidden sm:inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-[#1a1a1c] border border-gray-200 dark:border-white/5 rounded-lg cursor-not-allowed focus-visible:outline-none"
+            disabled={!canSubmitModeration}
+            onClick={canSubmitModeration ? submitModeration : undefined}
+            data-testid="studio-header-submit-moderation-btn"
+            title={submitButtonTitle}
+            className={`hidden sm:inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg focus-visible:outline-none transition-colors ${
+              canSubmitModeration
+                ? 'text-gray-900 dark:text-white bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/15 border border-gray-300 dark:border-white/20 cursor-pointer shadow-sm active:bg-gray-200'
+                : 'text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-[#1a1a1c] border border-gray-200 dark:border-white/5 cursor-not-allowed'
+            }`}
           >
-            <Eye className="w-4 h-4" />
-            Отправить на модерацию
+            {isSubmittingModeration ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Eye className="w-4 h-4" />
+            )}
+            <span>{isSubmittingModeration ? 'Отправка…' : 'Отправить на модерацию'}</span>
           </button>
           <button
             type="button"
@@ -300,6 +341,25 @@ export function ProductStudioHeader() {
               ✕
             </button>
           )}
+        </div>
+      )}
+
+      {moderationError && (
+        <div
+          data-testid="studio-moderation-error-toast"
+          role="alert"
+          className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white shadow-xl animate-in fade-in slide-in-from-bottom-2"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{moderationError}</span>
+          <button
+            type="button"
+            onClick={clearModerationError}
+            aria-label="Закрыть уведомление"
+            className="ml-2 text-white/80 hover:text-white cursor-pointer"
+          >
+            ✕
+          </button>
         </div>
       )}
     </header>

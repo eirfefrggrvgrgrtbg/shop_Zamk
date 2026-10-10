@@ -793,8 +793,10 @@ func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUI
 			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
 			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
 			p.average_rating, p.reviews_count,
-			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment
+			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment,
+			c.name
 		FROM products p
+		LEFT JOIN categories c ON p.category_id = c.id
 		WHERE %s
 		ORDER BY p.created_at DESC
 		LIMIT $%d OFFSET $%d
@@ -1019,14 +1021,16 @@ func (r *Repository) ListAdminProducts(ctx context.Context, filter AdminProductF
 
 func (r *Repository) ListProductsForModeration(ctx context.Context, limit, offset int) ([]Product, error) {
 	query := `
-		SELECT id, seller_id, category_id, brand_id, title, slug, description,
-			status, source, gender, color, material, care_instructions,
-			price_cents, old_price_cents, currency, main_image_url,
-			average_rating, reviews_count,
-			created_at, updated_at, submitted_at, approved_at, published_at, rejected_at, moderation_comment
-		FROM products
-		WHERE status = 'pending_moderation'
-		ORDER BY submitted_at ASC
+		SELECT p.id, p.seller_id, p.category_id, p.brand_id, p.title, p.slug, p.description,
+			p.status, p.source, p.gender, p.color, p.material, p.care_instructions,
+			p.price_cents, p.old_price_cents, p.currency, p.main_image_url,
+			p.average_rating, p.reviews_count,
+			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment,
+			c.name
+		FROM products p
+		LEFT JOIN categories c ON p.category_id = c.id
+		WHERE p.status = 'pending_moderation'
+		ORDER BY p.submitted_at ASC
 		LIMIT $1 OFFSET $2
 	`
 	return r.listProductsQuery(ctx, query, limit, offset)
@@ -1341,6 +1345,7 @@ func (r *Repository) listProductsQuery(ctx context.Context, query string, args .
 			&p.PriceCents, &p.OldPriceCents, &p.Currency, &p.MainImageURL,
 			&p.AverageRating, &p.ReviewsCount,
 			&p.CreatedAt, &p.UpdatedAt, &p.SubmittedAt, &p.ApprovedAt, &p.PublishedAt, &p.RejectedAt, &p.ModerationComment,
+			&p.CategoryName,
 		); err != nil {
 			return nil, err
 		}

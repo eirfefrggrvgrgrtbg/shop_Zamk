@@ -468,6 +468,8 @@ export function ProductStudioVisualWorkspace() {
         sortOrder: existingImages.length,
         colorId: newImageColorId,
         isUnassigned: newImageIsUnassigned,
+        width: validation.width,
+        height: validation.height,
       });
 
       const nextImages = normalizeProductStudioCovers(

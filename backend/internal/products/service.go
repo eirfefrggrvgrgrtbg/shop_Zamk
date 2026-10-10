@@ -1204,6 +1204,13 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 		return ErrProductMainImageMissing
 	}
 
+	var activeVariants []ProductVariant
+	for _, v := range p.Variants {
+		if v.IsActive {
+			activeVariants = append(activeVariants, v)
+		}
+	}
+
 	desiredImages := make([]DesiredProductImage, len(p.Images))
 	for i, img := range p.Images {
 		desiredImages[i] = DesiredProductImage{
@@ -1214,7 +1221,7 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 			SortOrder: img.SortOrder,
 		}
 	}
-	if err := validateFinalProductMediaState(p.Variants, desiredImages); err != nil {
+	if err := validateFinalProductMediaState(activeVariants, desiredImages); err != nil {
 		return err
 	}
 
@@ -1232,8 +1239,8 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 
 	if isColorway {
 		activeColors := make(map[uuid.UUID]bool)
-		for _, v := range p.Variants {
-			if v.IsActive && v.ColorID != nil && *v.ColorID != uuid.Nil {
+		for _, v := range activeVariants {
+			if v.ColorID != nil && *v.ColorID != uuid.Nil {
 				activeColors[*v.ColorID] = true
 			}
 		}
@@ -1263,7 +1270,7 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 		})
 	}
 	var vReqs []ProductVariantRequest
-	for _, v := range p.Variants {
+	for _, v := range activeVariants {
 		var vAttrs []VariantAttributeValueRequest
 		for _, a := range v.Attributes {
 			vAttrs = append(vAttrs, VariantAttributeValueRequest{
@@ -1304,11 +1311,11 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 		return fmt.Errorf("moderation validation failed: %w", err)
 	}
 
-	// Check variant prices and SKUs explicitly for moderation
-	if len(p.Variants) == 0 {
+	// Check variant prices and SKUs explicitly for moderation (active variants only)
+	if len(activeVariants) == 0 {
 		return ErrProductVariantsRequired
 	}
-	for _, v := range p.Variants {
+	for _, v := range activeVariants {
 		if v.PriceCents == nil || *v.PriceCents <= 0 {
 			return ErrProductPriceInvalid
 		}

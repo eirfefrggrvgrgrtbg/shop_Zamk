@@ -29,6 +29,7 @@ import {
 import {
   getSellerProducts,
   getSellerMe,
+  getSellerCategories,
   submitSellerProductModeration,
   deleteSellerProduct,
   archiveSellerProduct,
@@ -374,9 +375,21 @@ export function SellerProducts() {
         setIsLoading(true);
         setError('');
       }
-      const [me, rawProducts] = await Promise.all([getSellerMe(), getSellerProducts()]);
+      const [me, rawProducts, rawCategories] = await Promise.all([
+        getSellerMe(),
+        getSellerProducts(),
+        typeof getSellerCategories === 'function' ? getSellerCategories().catch(() => []) : Promise.resolve([])
+      ]);
       setSellerStatus(me.seller.status);
-      const adapted = adaptProductList(rawProducts);
+      const categoryMap: Record<string, string> = {};
+      if (Array.isArray(rawCategories)) {
+        for (const cat of rawCategories) {
+          if (cat?.id && cat?.name) {
+            categoryMap[cat.id] = cat.name;
+          }
+        }
+      }
+      const adapted = adaptProductList(rawProducts, categoryMap);
       setProducts(adapted);
       setSelectedId((prev) => {
         if (prev && adapted.some((p) => p.id === prev)) return prev;

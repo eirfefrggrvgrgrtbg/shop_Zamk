@@ -316,14 +316,22 @@ export function getProductStudioReadiness(
     blockingFields.push('category');
   }
 
-  // 3. Price
+  // 3. Price & Variant SKUs
   const priceVal = draft.priceCents ?? 0;
   const variants = draft.variants || [];
+  const activeVariants = variants.filter((v) => v.isActive !== false);
   const allVariantsHavePrice =
-    variants.length > 0
-      ? variants.every((v) => (v.priceCents ?? priceVal) > 0)
+    activeVariants.length > 0
+      ? activeVariants.every((v) => (v.priceCents ?? priceVal) > 0)
       : priceVal > 0;
-  const priceSatisfied = priceVal > 0 || (variants.length > 0 && allVariantsHavePrice);
+  const missingSkuVariants = activeVariants.filter((v) => !v.sellerSku || !v.sellerSku.trim());
+  const allVariantsHaveSku = missingSkuVariants.length === 0;
+
+  if (activeVariants.length > 0 && !allVariantsHaveSku) {
+    warnings.push('Заполните артикул продавца (SKU) для всех вариантов товара в разделе «Цена»');
+  }
+
+  const priceSatisfied = (priceVal > 0 || (activeVariants.length > 0 && allVariantsHavePrice)) && allVariantsHaveSku;
   if (!priceSatisfied) {
     blockingFields.push('price');
   }
@@ -376,6 +384,12 @@ export function getProductStudioReadiness(
   } else {
     // GENERAL
     mediaSatisfied = mediaCount >= MIN_PRODUCT_IMAGES && mediaCount <= MAX_PRODUCT_IMAGES;
+  }
+
+  const missingCropsCount = (draft.images || []).filter((img) => img.cropWidth == null).length;
+  if (missingCropsCount > 0) {
+    warnings.push(`Для ${missingCropsCount} фото нужно настроить кадрирование 4:5`);
+    mediaSatisfied = false;
   }
 
   if (mediaCount > MAX_PRODUCT_IMAGES) {
@@ -460,9 +474,8 @@ export function getProductStudioReadiness(
   return {
     blockingFields,
     warnings,
-    // In PS.R4A persistence and submission are strictly not enabled:
     isReadyForSave: false,
-    isReadyForModeration: false,
+    isReadyForModeration: blockingFields.length === 0,
     fieldStatus,
   };
 }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   validateImageFile,
   getMediaProgressText,
+  calculateDefault4x5Crop,
   MIN_PRODUCT_IMAGES,
   MAX_PRODUCT_IMAGES,
   MAX_FILE_SIZE_BYTES,
@@ -100,5 +101,65 @@ describe('productStudioMediaHelper', () => {
     expect(getMediaProgressText(MAX_PRODUCT_IMAGES)).toBe(`Фото ${MAX_PRODUCT_IMAGES} из ${MAX_PRODUCT_IMAGES} · максимум`);
     expect(getMediaProgressText(12)).toBe(`Фото 12 из ${MAX_PRODUCT_IMAGES}`);
     expect(getMediaProgressText(20)).toBe(`Фото 20 из ${MAX_PRODUCT_IMAGES}`);
+  });
+
+  describe('calculateDefault4x5Crop', () => {
+    it('A. Landscape image (e.g. 2000×1000): produces exact centered 4:5 crop with height=1.0 and no negative coords', () => {
+      const crop = calculateDefault4x5Crop(2000, 1000);
+      expect(crop.cropHeight).toBe(1.0);
+      expect(crop.cropWidth).toBeCloseTo(0.4, 5); // 800px width out of 2000px
+      expect(crop.cropX).toBeCloseTo(0.3, 5); // Centered: (1.0 - 0.4)/2
+      expect(crop.cropY).toBe(0.0);
+      expect(crop.cropX).toBeGreaterThanOrEqual(0);
+      expect(crop.cropY).toBeGreaterThanOrEqual(0);
+      // Verify resulting pixel aspect ratio is 4:5
+      const pixelW = 2000 * crop.cropWidth;
+      const pixelH = 1000 * crop.cropHeight;
+      expect(pixelW / pixelH).toBeCloseTo(4 / 5, 5);
+    });
+
+    it('B. Portrait image taller than 4:5 (e.g. 1000×2000): produces exact centered 4:5 crop with width=1.0', () => {
+      const crop = calculateDefault4x5Crop(1000, 2000);
+      expect(crop.cropWidth).toBe(1.0);
+      expect(crop.cropHeight).toBeCloseTo(0.625, 5); // 1250px height out of 2000px
+      expect(crop.cropX).toBe(0.0);
+      expect(crop.cropY).toBeCloseTo(0.1875, 5); // Centered: (1.0 - 0.625)/2
+      expect(crop.cropX).toBeGreaterThanOrEqual(0);
+      expect(crop.cropY).toBeGreaterThanOrEqual(0);
+      // Verify resulting pixel aspect ratio is 4:5
+      const pixelW = 1000 * crop.cropWidth;
+      const pixelH = 2000 * crop.cropHeight;
+      expect(pixelW / pixelH).toBeCloseTo(4 / 5, 5);
+    });
+
+    it('C. Exact 4:5 image (e.g. 1000×1250): no unnecessary crop loss, x=0/y=0, dimensions remain full', () => {
+      const crop = calculateDefault4x5Crop(1000, 1250);
+      expect(crop.cropWidth).toBe(1.0);
+      expect(crop.cropHeight).toBe(1.0);
+      expect(crop.cropX).toBe(0.0);
+      expect(crop.cropY).toBe(0.0);
+      const pixelW = 1000 * crop.cropWidth;
+      const pixelH = 1250 * crop.cropHeight;
+      expect(pixelW).toBe(1000);
+      expect(pixelH).toBe(1250);
+      expect(pixelW / pixelH).toBe(4 / 5);
+    });
+
+    it('D. Square image (e.g. 1200×1200): produces deterministic centered 4:5 crop (960×1200 px)', () => {
+      const crop = calculateDefault4x5Crop(1200, 1200);
+      expect(crop.cropHeight).toBe(1.0);
+      expect(crop.cropWidth).toBeCloseTo(0.8, 5); // 960px out of 1200px
+      expect(crop.cropX).toBeCloseTo(0.1, 5); // (1.0 - 0.8)/2
+      expect(crop.cropY).toBe(0.0);
+      const pixelW = 1200 * crop.cropWidth;
+      const pixelH = 1200 * crop.cropHeight;
+      expect(pixelW / pixelH).toBeCloseTo(4 / 5, 5);
+    });
+
+    it('E. Deterministic output across multiple calls with same inputs', () => {
+      const crop1 = calculateDefault4x5Crop(900, 1200);
+      const crop2 = calculateDefault4x5Crop(900, 1200);
+      expect(crop1).toEqual(crop2);
+    });
   });
 });

@@ -4,11 +4,12 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { SellerProducts } from './SellerProducts';
 import { adaptProductList } from '../api/adapter';
-import { getSellerProducts, getSellerMe, submitSellerProductModeration } from '@zamk/api-client/src/seller';
+import { getSellerProducts, getSellerMe, getSellerCategories, submitSellerProductModeration } from '@zamk/api-client/src/seller';
 
 vi.mock('@zamk/api-client/src/seller', () => ({
   getSellerProducts: vi.fn(),
   getSellerMe: vi.fn(),
+  getSellerCategories: vi.fn(),
   submitSellerProductModeration: vi.fn(),
 }));
 
@@ -18,6 +19,7 @@ describe('SellerProducts - Quick View Truth + Safe Existing Actions', () => {
     vi.mocked(getSellerMe).mockResolvedValue({
       seller: { id: 'seller-1', status: 'active', brandName: 'Test Brand' },
     } as any);
+    vi.mocked(getSellerCategories).mockResolvedValue([]);
   });
 
   const baseProductRaw: any = {
@@ -640,5 +642,129 @@ describe('SellerProducts - Quick View Truth + Safe Existing Actions', () => {
 
     expect(statusCell.textContent).toContain('Черновик');
     expect(statusCell.textContent).not.toContain('Требуется поставка');
+  });
+
+  describe('Category Display Purity (No UUID Leaks & Canonical Taxonomy Resolution)', () => {
+    it('E: renders human-readable categoryName ("Худи") from product response', async () => {
+      const hoodieProduct = {
+        ...baseProductRaw,
+        id: 'prod-hoodie-long',
+        title: 'Лонг',
+        categoryId: 'c741aa40-4f5f-4b58-8581-5cfae5e77c16',
+        categoryName: 'Худи',
+      };
+      vi.mocked(getSellerProducts).mockResolvedValueOnce([hoodieProduct]);
+
+      render(
+        <MemoryRouter initialEntries={['/products']}>
+          <SellerProducts />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Лонг')).toBeTruthy();
+      });
+
+      expect(screen.getByText('Худи')).toBeTruthy();
+      expect(screen.queryByText('c741aa40-4f5f-4b58-8581-5cfae5e77c16')).toBeNull();
+    });
+
+    it('F: resolves categoryId to "Худи" via canonical taxonomy when categoryName is omitted in product', async () => {
+      const hoodieProduct = {
+        ...baseProductRaw,
+        id: 'prod-hoodie-long',
+        title: 'Лонг',
+        categoryId: 'c741aa40-4f5f-4b58-8581-5cfae5e77c16',
+        categoryName: undefined,
+      };
+      vi.mocked(getSellerProducts).mockResolvedValueOnce([hoodieProduct]);
+      vi.mocked(getSellerCategories).mockResolvedValueOnce([
+        { id: 'c741aa40-4f5f-4b58-8581-5cfae5e77c16', name: 'Худи' } as any,
+        { id: 'cat-shoes-id', name: 'Обувь' } as any,
+      ]);
+
+      render(
+        <MemoryRouter initialEntries={['/products']}>
+          <SellerProducts />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Лонг')).toBeTruthy();
+      });
+
+      expect(screen.getByText('Худи')).toBeTruthy();
+      expect(screen.queryByText('c741aa40-4f5f-4b58-8581-5cfae5e77c16')).toBeNull();
+      expect(screen.queryByText('Категория не определена')).toBeNull();
+    });
+
+    it('G: resolves multiple products sharing the same categoryId to the same label ("Худи") and other categories to their respective labels', async () => {
+      const prod1 = {
+        ...baseProductRaw,
+        id: 'prod-1',
+        title: 'Лонг Черный',
+        categoryId: 'c741aa40-4f5f-4b58-8581-5cfae5e77c16',
+      };
+      const prod2 = {
+        ...baseProductRaw,
+        id: 'prod-2',
+        title: 'Лонг Белый',
+        categoryId: 'c741aa40-4f5f-4b58-8581-5cfae5e77c16',
+      };
+      const prod3 = {
+        ...baseProductRaw,
+        id: 'prod-3',
+        title: 'Кеды Canvas',
+        categoryId: 'cat-shoes-id',
+      };
+      vi.mocked(getSellerProducts).mockResolvedValueOnce([prod1, prod2, prod3]);
+      vi.mocked(getSellerCategories).mockResolvedValueOnce([
+        { id: 'c741aa40-4f5f-4b58-8581-5cfae5e77c16', name: 'Худи' } as any,
+        { id: 'cat-shoes-id', name: 'Обувь' } as any,
+      ]);
+
+      render(
+        <MemoryRouter initialEntries={['/products']}>
+          <SellerProducts />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Лонг Черный')).toBeTruthy();
+        expect(screen.getByText('Лонг Белый')).toBeTruthy();
+        expect(screen.getByText('Кеды Canvas')).toBeTruthy();
+      });
+
+      const hoodieLabels = screen.getAllByText('Худи');
+      expect(hoodieLabels.length).toBe(2);
+      expect(screen.getByText('Обувь')).toBeTruthy();
+      expect(screen.queryByText('c741aa40-4f5f-4b58-8581-5cfae5e77c16')).toBeNull();
+      expect(screen.queryByText('cat-shoes-id')).toBeNull();
+    });
+
+    it('H: renders safe fallback "Категория не определена" only when category is genuinely unresolved / deleted', async () => {
+      const unresolvedProduct = {
+        ...baseProductRaw,
+        id: 'prod-unresolved',
+        title: 'Неизвестный товар',
+        categoryId: 'c741aa40-4f5f-4b58-8581-5cfae5e77c16',
+        categoryName: undefined,
+      };
+      vi.mocked(getSellerProducts).mockResolvedValueOnce([unresolvedProduct]);
+      vi.mocked(getSellerCategories).mockResolvedValueOnce([]); // empty taxonomy
+
+      render(
+        <MemoryRouter initialEntries={['/products']}>
+          <SellerProducts />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Неизвестный товар')).toBeTruthy();
+      });
+
+      expect(screen.getByText('Категория не определена')).toBeTruthy();
+      expect(screen.queryByText('c741aa40-4f5f-4b58-8581-5cfae5e77c16')).toBeNull();
+    });
   });
 });

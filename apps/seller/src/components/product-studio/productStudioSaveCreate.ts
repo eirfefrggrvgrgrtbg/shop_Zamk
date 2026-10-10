@@ -30,6 +30,7 @@ import {
   stageSellerProductImage,
   updateSellerProduct,
   getSellerProduct,
+  cropSellerProductImage,
 } from '@zamk/api-client/src/seller';
 
 export type { ProductStudioCreateRequestPayload };
@@ -199,6 +200,7 @@ export interface OrchestrateCreateSaveParams {
   stageImageFn?: (productId: string, clientMediaId: string, file: File) => Promise<StageSellerProductImageResponse>;
   updateProductFn?: (productId: string, input: any) => Promise<SellerProduct>;
   getProductFn?: (productId: string) => Promise<SellerProduct>;
+  cropImageFn?: (productId: string, imageId: string, crop: { cropX: number; cropY: number; cropWidth: number; cropHeight: number }) => Promise<any>;
   onSavingStart: () => void;
   onStagingStart: () => void;
   onStagedImagesPersisted: (images: ProductStudioImage[]) => void;
@@ -223,6 +225,7 @@ export async function orchestrateProductStudioCreateSave({
   stageImageFn = stageSellerProductImage,
   updateProductFn = updateSellerProduct,
   getProductFn = getSellerProduct,
+  cropImageFn = cropSellerProductImage,
   onSavingStart,
   onStagingStart,
   onStagedImagesPersisted,
@@ -431,6 +434,25 @@ export async function orchestrateProductStudioCreateSave({
   } catch (_err: any) {
     onError('Не удалось сохранить товар. Попробуйте ещё раз.');
     return;
+  }
+
+  // 6.5. Auto-crop newly staged images
+  if (draftAfterStaging.images && cropImageFn) {
+    const cropPromises = draftAfterStaging.images.map(async (img) => {
+      if (img.source.kind === 'staged' && typeof img.cropWidth === 'number' && typeof img.cropHeight === 'number') {
+        try {
+          await cropImageFn(productId, img.source.stagedId, {
+            cropX: img.cropX || 0,
+            cropY: img.cropY || 0,
+            cropWidth: img.cropWidth,
+            cropHeight: img.cropHeight,
+          });
+        } catch (e) {
+          console.warn('Auto-crop failed for image', img.source.stagedId, e);
+        }
+      }
+    });
+    await Promise.all(cropPromises);
   }
 
   // 7. Final canonical GET

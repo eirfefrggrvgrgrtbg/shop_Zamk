@@ -14,6 +14,7 @@ import {
 vi.mock('@zamk/api-client/src/seller', () => ({
   getSellerProducts: vi.fn(),
   getSellerMe: vi.fn(),
+  getSellerCategories: vi.fn().mockResolvedValue([]),
   submitSellerProductModeration: vi.fn(),
   deleteSellerProduct: vi.fn(),
   archiveSellerProduct: vi.fn(),

@@ -433,9 +433,9 @@ describe('SELLER MEDIA.2B — Product Studio Media Mode State Machine (Matrix A-
       mediaMode: 'GENERAL',
       colors: sampleColors,
       images: [
-        createCanonicalProductStudioImage({ imageId: '1', url: 'https://img/1', colorId: null, isMain: true }),
-        createCanonicalProductStudioImage({ imageId: '2', url: 'https://img/2', colorId: null }),
-        createCanonicalProductStudioImage({ imageId: '3', url: 'https://img/3', colorId: null }),
+        createCanonicalProductStudioImage({ imageId: '1', url: 'https://img/1', colorId: null, isMain: true, cropWidth: 1, cropHeight: 1 }),
+        createCanonicalProductStudioImage({ imageId: '2', url: 'https://img/2', colorId: null, cropWidth: 1, cropHeight: 1 }),
+        createCanonicalProductStudioImage({ imageId: '3', url: 'https://img/3', colorId: null, cropWidth: 1, cropHeight: 1 }),
       ],
       variants: [
         { id: 'v1', colorId: 'col-black', sizeValueId: 's1', sellerSku: 'SKU1' },
@@ -458,9 +458,9 @@ describe('SELLER MEDIA.2B — Product Studio Media Mode State Machine (Matrix A-
       mediaMode: 'COLORWAY',
       colors: sampleColors,
       images: [
-        createCanonicalProductStudioImage({ imageId: '1', url: 'https://img/1', colorId: 'col-black', isMain: true }),
-        createCanonicalProductStudioImage({ imageId: '2', url: 'https://img/2', colorId: 'col-black' }),
-        createCanonicalProductStudioImage({ imageId: '3', url: 'https://img/3', colorId: 'col-black' }),
+        createCanonicalProductStudioImage({ imageId: '1', url: 'https://img/1', colorId: 'col-black', isMain: true, cropWidth: 1, cropHeight: 1 }),
+        createCanonicalProductStudioImage({ imageId: '2', url: 'https://img/2', colorId: 'col-black', cropWidth: 1, cropHeight: 1 }),
+        createCanonicalProductStudioImage({ imageId: '3', url: 'https://img/3', colorId: 'col-black', cropWidth: 1, cropHeight: 1 }),
       ],
       variants: [
         { id: 'v1', colorId: 'col-black', sizeValueId: 's1', sellerSku: 'SKU1' },
@@ -476,9 +476,9 @@ describe('SELLER MEDIA.2B — Product Studio Media Mode State Machine (Matrix A-
     const fixedDraft: ProductStudioDraft = {
       ...draft,
       images: [
-        createCanonicalProductStudioImage({ imageId: '1', url: 'https://img/1', colorId: 'col-black', isMain: true }),
-        createCanonicalProductStudioImage({ imageId: '2', url: 'https://img/2', colorId: 'col-black' }),
-        createCanonicalProductStudioImage({ imageId: '3', url: 'https://img/3', colorId: 'col-white' }),
+        createCanonicalProductStudioImage({ imageId: '1', url: 'https://img/1', colorId: 'col-black', isMain: true, cropWidth: 1, cropHeight: 1 }),
+        createCanonicalProductStudioImage({ imageId: '2', url: 'https://img/2', colorId: 'col-black', cropWidth: 1, cropHeight: 1 }),
+        createCanonicalProductStudioImage({ imageId: '3', url: 'https://img/3', colorId: 'col-white', cropWidth: 1, cropHeight: 1 }),
       ],
     };
 

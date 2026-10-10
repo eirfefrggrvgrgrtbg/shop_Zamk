@@ -29,6 +29,7 @@ vi.mock('@zamk/api-client/src/seller', () => ({
     },
   }),
   getSellerProducts: vi.fn().mockResolvedValue([]),
+  getSellerCategories: vi.fn().mockResolvedValue([]),
   getSellerOrders: vi.fn().mockResolvedValue([]),
   getSellerOrderSummary: vi.fn().mockResolvedValue({
     totalOrders: 0,

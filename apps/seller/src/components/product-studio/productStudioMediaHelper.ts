@@ -189,6 +189,36 @@ export function getProductStudioImagePreviewUrl(image?: ProductStudioImage | nul
 }
 
 /**
+ * Calculates a deterministic, centered 4:5 crop based on source dimensions.
+ * The crop is represented as normalized percentages (0.0 to 1.0).
+ */
+export function calculateDefault4x5Crop(width: number, height: number) {
+  const targetAspect = 4 / 5;
+  const currentAspect = width / height;
+
+  let cropWidth = 1.0;
+  let cropHeight = 1.0;
+  let cropX = 0.0;
+  let cropY = 0.0;
+
+  if (currentAspect > targetAspect) {
+    // Image is wider than 4:5. Height is limiting.
+    cropHeight = 1.0;
+    cropWidth = (height * targetAspect) / width;
+    cropX = (1.0 - cropWidth) / 2;
+    cropY = 0.0;
+  } else if (currentAspect < targetAspect) {
+    // Image is taller than 4:5. Width is limiting.
+    cropWidth = 1.0;
+    cropHeight = (width / targetAspect) / height;
+    cropY = (1.0 - cropHeight) / 2;
+    cropX = 0.0;
+  }
+
+  return { cropX, cropY, cropWidth, cropHeight };
+}
+
+/**
  * Creates a new local ProductStudioImage retaining the original File.
  */
 export function createLocalProductStudioImage(params: {
@@ -199,8 +229,15 @@ export function createLocalProductStudioImage(params: {
   sortOrder?: number;
   altText?: string | null;
   isUnassigned?: boolean;
+  width?: number;
+  height?: number;
 }): ProductStudioImage {
   const clientMediaId = generateMediaUUID();
+  let cropFields = {};
+  if (params.width && params.height) {
+    cropFields = calculateDefault4x5Crop(params.width, params.height);
+  }
+
   return {
     uiKey: clientMediaId,
     colorId: params.colorId ?? null,
@@ -208,6 +245,7 @@ export function createLocalProductStudioImage(params: {
     isMain: Boolean(params.isMain),
     sortOrder: params.sortOrder,
     isUnassigned: Boolean(params.isUnassigned),
+    ...cropFields,
     source: {
       kind: 'local',
       clientMediaId,
@@ -229,6 +267,10 @@ export function createCanonicalProductStudioImage(params: {
   altText?: string | null;
   uiKey?: string;
   isUnassigned?: boolean;
+  cropX?: number;
+  cropY?: number;
+  cropWidth?: number;
+  cropHeight?: number;
 }): ProductStudioImage {
   return {
     uiKey: params.uiKey || params.imageId,
@@ -237,6 +279,10 @@ export function createCanonicalProductStudioImage(params: {
     isMain: Boolean(params.isMain),
     sortOrder: params.sortOrder,
     isUnassigned: Boolean(params.isUnassigned),
+    cropX: params.cropX,
+    cropY: params.cropY,
+    cropWidth: params.cropWidth,
+    cropHeight: params.cropHeight,
     source: {
       kind: 'canonical',
       imageId: params.imageId,

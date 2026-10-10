@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import {
   getSellerCategorySchema,
+  submitSellerProductModeration,
   type SellerCategory,
   type SellerCategorySchema,
   type SellerColor,
@@ -77,6 +78,10 @@ export interface ProductStudioImage {
   isMain: boolean;
   sortOrder?: number;
   isUnassigned?: boolean;
+  cropX?: number;
+  cropY?: number;
+  cropWidth?: number;
+  cropHeight?: number;
   source: ProductStudioImageSource;
 }
 
@@ -412,6 +417,11 @@ export interface ProductStudioContextValue extends ProductStudioState {
   canSave: boolean;
   saveDraft?: () => Promise<void>;
   clearSaveError: () => void;
+  isSubmittingModeration: boolean;
+  moderationError: string | null;
+  canSubmitModeration: boolean;
+  submitModeration?: () => Promise<void>;
+  clearModerationError: () => void;
   selectedPreviewColorId: string | null;
   selectedPreviewSizeValueId: string | null;
   selectedMediaColorId?: string | 'UNASSIGNED' | null;
@@ -433,6 +443,7 @@ export interface ProductStudioProviderProps {
   createProductFn?: (input: any, options?: { idempotencyKey?: string }) => Promise<SellerProduct>;
   getProductFn?: (productId: string) => Promise<SellerProduct>;
   stageImageFn?: (productId: string, clientMediaId: string, file: File) => Promise<StageSellerProductImageResponse>;
+  submitModerationFn?: (productId: string, comment?: string) => Promise<void>;
   onNavigate?: (to: string, options?: { replace?: boolean }) => void;
   children: React.ReactNode;
 }
@@ -454,6 +465,7 @@ export function ProductStudioProvider({
   createProductFn,
   getProductFn,
   stageImageFn,
+  submitModerationFn,
   onNavigate,
   children,
 }: ProductStudioProviderProps) {
@@ -785,6 +797,60 @@ export function ProductStudioProvider({
     mediaRegistry,
   ]);
 
+  const [isSubmittingModeration, setIsSubmittingModeration] = useState(false);
+  const [moderationError, setModerationError] = useState<string | null>(null);
+
+  const clearModerationError = useCallback(() => {
+    setModerationError(null);
+  }, []);
+
+  const isStatusEligibleForModeration = useMemo(() => {
+    return (
+      Boolean(state.draft.id) &&
+      (!state.draft.status || state.draft.status === 'draft' || state.draft.status === 'rejected')
+    );
+  }, [state.draft.id, state.draft.status]);
+
+  const canSubmitModeration = useMemo(() => {
+    if (isSaveInFlight) return false;
+    if (isSubmittingModeration) return false;
+    if (!state.draft.id) return false;
+    if (!isStatusEligibleForModeration) return false;
+    if (state.isDirty) return false;
+    return readiness.blockingFields.length === 0;
+  }, [
+    isSaveInFlight,
+    isSubmittingModeration,
+    state.draft.id,
+    isStatusEligibleForModeration,
+    state.isDirty,
+    readiness.blockingFields.length,
+  ]);
+
+  const submitModeration = useCallback(async () => {
+    if (!canSubmitModeration) return;
+    if (!state.draft.id) return;
+    if (isSubmittingModeration) return;
+
+    setIsSubmittingModeration(true);
+    setModerationError(null);
+    try {
+      const fn = submitModerationFn || submitSellerProductModeration;
+      await fn(state.draft.id);
+      dispatch({
+        type: 'COMMIT_SAVED_DRAFT',
+        payload: {
+          ...state.draft,
+          status: 'pending_moderation',
+        },
+      });
+    } catch (err: any) {
+      setModerationError(err?.message || 'Не удалось отправить товар на модерацию');
+    } finally {
+      setIsSubmittingModeration(false);
+    }
+  }, [canSubmitModeration, state.draft, isSubmittingModeration, submitModerationFn]);
+
   const contextValue = useMemo<ProductStudioContextValue>(() => {
     return {
       ...state,
@@ -793,6 +859,11 @@ export function ProductStudioProvider({
       canSave,
       saveDraft: (entryMode === 'edit' || entryMode === 'create') ? saveDraft : undefined,
       clearSaveError,
+      isSubmittingModeration,
+      moderationError,
+      canSubmitModeration,
+      submitModeration,
+      clearModerationError,
       setViewMode,
       setActiveSection,
       updateDraft,
@@ -831,6 +902,11 @@ export function ProductStudioProvider({
     canSave,
     saveDraft,
     clearSaveError,
+    isSubmittingModeration,
+    moderationError,
+    canSubmitModeration,
+    submitModeration,
+    clearModerationError,
     entryMode,
     updateDraft,
     markTouched,

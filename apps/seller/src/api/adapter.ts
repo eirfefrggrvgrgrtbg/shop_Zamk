@@ -9,8 +9,32 @@ function mapStatus(apiStatus: string): SellerProductStatus {
   return 'draft';
 }
 
-export function adaptProductList(apiProducts: any[]): SellerProduct[] {
-  return apiProducts.map(p => {
+function isUuid(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+}
+
+export function resolveCategoryDisplayName(p: any, categoryMap?: Record<string, string>): string {
+  if (typeof p?.categoryName === 'string' && p.categoryName.trim() && !isUuid(p.categoryName)) {
+    return p.categoryName.trim();
+  }
+  if (p?.category && typeof p.category.name === 'string' && p.category.name.trim() && !isUuid(p.category.name)) {
+    return p.category.name.trim();
+  }
+  if (typeof p?.category === 'string' && p.category.trim() && !isUuid(p.category)) {
+    return p.category.trim();
+  }
+  const catId = (typeof p?.categoryId === 'string' ? p.categoryId : (typeof p?.category_id === 'string' ? p.category_id : '')).trim();
+  if (catId && categoryMap && typeof categoryMap[catId] === 'string' && categoryMap[catId].trim() && !isUuid(categoryMap[catId])) {
+    return categoryMap[catId].trim();
+  }
+  if (catId && !isUuid(catId)) {
+    return catId;
+  }
+  return 'Категория не определена';
+}
+
+export function adaptProductList(apiProducts: any[], categoryMap?: Record<string, string>): SellerProduct[] {
+  return (apiProducts || []).map(p => {
     let sizes: SellerProductSize[] = [];
     if (p.variants && Array.isArray(p.variants)) {
       sizes = p.variants.map((v: any) => ({
@@ -37,8 +61,8 @@ export function adaptProductList(apiProducts: any[]): SellerProduct[] {
       id: p.id,
       title: p.title,
       sku: p.slug || p.id.substring(0, 8),
-      category: p.categoryId || 'Одежда',
-      brand: p.brandId || 'ZAMK',
+      category: resolveCategoryDisplayName(p, categoryMap),
+      brand: p.brandName || p.brand || (typeof p.brandId === 'string' && !isUuid(p.brandId) ? p.brandId : 'ZAMK'),
       price: price,
       oldPrice: oldPrice,
       cost: price * 0.5, // Mock value since backend doesn't have cost yet

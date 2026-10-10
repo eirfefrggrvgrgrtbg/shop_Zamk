@@ -15,7 +15,7 @@ import {
   buildProductPatchMediaPayload,
 } from './productStudioSaveMedia';
 import { hydrateProductStudioDraft } from './productStudioHydration';
-import { updateSellerProduct, stageSellerProductImage, getSellerProduct } from '@zamk/api-client/src/seller';
+import { updateSellerProduct, stageSellerProductImage, getSellerProduct, cropSellerProductImage } from '@zamk/api-client/src/seller';
 
 export interface ProductStudioUpdateRequestPayload {
   title?: string;
@@ -277,6 +277,7 @@ export interface OrchestrateEditSaveParams {
   stageImageFn?: (productId: string, clientMediaId: string, file: File) => Promise<StageSellerProductImageResponse>;
   updateProductFn?: (productId: string, input: any) => Promise<SellerProduct>;
   getProductFn?: (productId: string) => Promise<SellerProduct>;
+  cropImageFn?: (productId: string, imageId: string, crop: { cropX: number; cropY: number; cropWidth: number; cropHeight: number }) => Promise<any>;
   onStagingStart: () => void;
   onStagedImagesPersisted: (images: ProductStudioImage[]) => void;
   onSavingStart: () => void;
@@ -298,6 +299,7 @@ export async function orchestrateProductStudioEditSave({
   stageImageFn = stageSellerProductImage,
   updateProductFn = updateSellerProduct,
   getProductFn = getSellerProduct,
+  cropImageFn = cropSellerProductImage,
   onStagingStart,
   onStagedImagesPersisted,
   onSavingStart,
@@ -352,6 +354,25 @@ export async function orchestrateProductStudioEditSave({
   } catch (_err: any) {
     onError('Не удалось сохранить товар. Попробуйте ещё раз.');
     return;
+  }
+
+  // 5.5. Auto-crop newly staged images
+  if (workingDraft.images && cropImageFn) {
+    const cropPromises = workingDraft.images.map(async (img) => {
+      if (img.source.kind === 'staged' && typeof img.cropWidth === 'number' && typeof img.cropHeight === 'number') {
+        try {
+          await cropImageFn(productId, img.source.stagedId, {
+            cropX: img.cropX || 0,
+            cropY: img.cropY || 0,
+            cropWidth: img.cropWidth,
+            cropHeight: img.cropHeight,
+          });
+        } catch (e) {
+          console.warn('Auto-crop failed for image', img.source.stagedId, e);
+        }
+      }
+    });
+    await Promise.all(cropPromises);
   }
 
   // 6. Fetch canonical product state via single canonical GET (joins size_values, colors, materials)

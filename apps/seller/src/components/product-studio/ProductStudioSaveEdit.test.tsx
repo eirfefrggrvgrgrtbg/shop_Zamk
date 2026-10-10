@@ -936,6 +936,8 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
           sortOrder: 0,
           colorId: 'col-black',
           isMain: true,
+          cropWidth: 1,
+          cropHeight: 1,
         },
         {
           id: 'img-canon-2',
@@ -943,6 +945,8 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
           sortOrder: 1,
           colorId: 'col-black',
           isMain: false,
+          cropWidth: 1,
+          cropHeight: 1,
         },
         {
           id: 'img-canon-3',
@@ -950,6 +954,8 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
           sortOrder: 2,
           colorId: 'col-black',
           isMain: false,
+          cropWidth: 1,
+          cropHeight: 1,
         },
       ],
     };
@@ -965,6 +971,8 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
           sortOrder: 0,
           colorId: 'col-black',
           isMain: true,
+          cropWidth: 1,
+          cropHeight: 1,
           source: {
             kind: 'canonical',
             imageId: 'img-canon-1',
@@ -976,6 +984,8 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
           sortOrder: 1,
           colorId: 'col-black',
           isMain: false,
+          cropWidth: 1,
+          cropHeight: 1,
           source: {
             kind: 'canonical',
             imageId: 'img-canon-2',
@@ -987,6 +997,8 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
           sortOrder: 2,
           colorId: 'col-black',
           isMain: false,
+          cropWidth: 1,
+          cropHeight: 1,
           source: {
             kind: 'canonical',
             imageId: 'img-canon-3',

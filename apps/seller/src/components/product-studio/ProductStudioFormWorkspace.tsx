@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useProductStudio } from '../../contexts/ProductStudioContext';
 import { ProductStudioSectionNav } from './ProductStudioSectionNav';
 import { SellerSurface } from '../SellerSurface';
-import { FileText, Image, Sliders, Layers, DollarSign, ShieldCheck, Folder, Link2, Pencil, Trash2, Plus, GripVertical, CheckCircle, AlertCircle, AlertTriangle, X } from 'lucide-react';
+import { FileText, Image, Sliders, Layers, DollarSign, ShieldCheck, Folder, Link2, Pencil, Trash2, Plus, GripVertical, CheckCircle, AlertCircle, AlertTriangle, X, Loader2, Sparkles } from 'lucide-react';
 import {
   isColorRequired,
   isSizeRequired,
@@ -42,7 +42,7 @@ import {
   toggleProductStudioVariantTuple,
   BLOCKED_LAST_CELL_TOOLTIP,
 } from './productStudioMatrixHelper';
-import { getSellerColors, getSellerSizeValues, type SellerColor, type SellerSizeValue } from '@zamk/api-client';
+import { getSellerColors, getSellerSizeValues, generateSellerSKUs, type SellerColor, type SellerSizeValue } from '@zamk/api-client';
 
 const isUuid = (str?: string | null) =>
   Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim()));
@@ -224,6 +224,8 @@ export function ProductStudioFormWorkspace() {
         sortOrder: existingImages.length,
         colorId: targetColorId,
         isUnassigned: targetIsUnassigned,
+        width: validation.width,
+        height: validation.height,
       });
 
       const nextImages = normalizeProductStudioCovers(
@@ -275,6 +277,8 @@ export function ProductStudioFormWorkspace() {
         colorId: targetOld.colorId ?? null,
         altText: targetOld.altText,
         isUnassigned: targetOld.isUnassigned,
+        width: validation.width,
+        height: validation.height,
       });
 
       existingImages[targetIndex] = replacedImage;
@@ -536,6 +540,32 @@ export function ProductStudioFormWorkspace() {
     updateDraft({ variants: updatedVariants });
     markTouched('variants');
     setIsFormSizePopoverOpen(false);
+  };
+
+  const [isGeneratingSkus, setIsGeneratingSkus] = useState(false);
+
+  const handleGenerateSkus = async () => {
+    try {
+      setIsGeneratingSkus(true);
+      const neededCount = activeVariants.filter((v) => !v.sellerSku || !v.sellerSku.trim()).length;
+      if (neededCount === 0) return;
+
+      const res = await generateSellerSKUs(neededCount);
+      let skuIdx = 0;
+      const nextVariants = (draft.variants || []).map((v) => {
+        if (v.isActive === false || (v.sellerSku && v.sellerSku.trim())) {
+          return v;
+        }
+        const assignedSku = res.skus[skuIdx++];
+        return { ...v, sellerSku: assignedSku };
+      });
+      updateDraft({ variants: nextVariants });
+      markTouched('price');
+    } catch (err: any) {
+      console.error('Failed to generate SKUs:', err);
+    } finally {
+      setIsGeneratingSkus(false);
+    }
   };
 
   const handleRemoveColor = (colorId: string) => {
@@ -811,6 +841,10 @@ export function ProductStudioFormWorkspace() {
     } else {
       mediaDetails.push(`Загружено ${mediaCount} фото`);
     }
+    const missingCropsCount = (draft.images || []).filter((img) => img.cropWidth == null).length;
+    if (missingCropsCount > 0) {
+      mediaDetails.push(`Нужно настроить ${missingCropsCount} фото`);
+    }
 
     // 3. Characteristics and composition
     const compCompleteness = getCompositionCompleteness(draft);
@@ -867,13 +901,19 @@ export function ProductStudioFormWorkspace() {
       }
     }
 
-    // 5. Pricing
+    // 5. Pricing & SKU
     const priceSatisfied = (draft.priceCents || 0) > 0 && !blockers.has('price');
     const priceDetails: string[] = [];
-    if (!priceSatisfied) {
+    if ((draft.priceCents || 0) <= 0) {
       priceDetails.push('Цена не указана');
     } else {
       priceDetails.push(`Базовая цена: ${((draft.priceCents || 0) / 100).toLocaleString('ru-RU')} ₽`);
+    }
+    const missingSkuVariants = activeVariants.filter((v) => !v.sellerSku || !v.sellerSku.trim());
+    if (missingSkuVariants.length > 0) {
+      priceDetails.push(`Заполните артикул продавца (SKU) для ${missingSkuVariants.length} из ${activeVariants.length} вариантов`);
+    } else if (activeVariants.length > 0) {
+      priceDetails.push(`Артикулы (SKU) указаны для всех вариантов (${activeVariants.length})`);
     }
 
     return [
@@ -2094,12 +2134,12 @@ export function ProductStudioFormWorkspace() {
                 <label
                   htmlFor="form-product-price-input"
                   className={`block text-xs font-medium mb-1 ${
-                    isPriceAttention
+                    isPriceAttention && (draft.priceCents === undefined || draft.priceCents <= 0)
                       ? 'text-amber-800 dark:text-amber-300'
                       : 'text-gray-700 dark:text-gray-300'
                   }`}
                 >
-                  Базовая цена (рубли) <span className={isPriceAttention ? "text-amber-600 dark:text-amber-400" : "text-gray-400 dark:text-gray-500"}>*</span>
+                  Базовая цена (рубли) <span className={isPriceAttention && (draft.priceCents === undefined || draft.priceCents <= 0) ? "text-amber-600 dark:text-amber-400" : "text-gray-400 dark:text-gray-500"}>*</span>
                 </label>
                 <input
                   id="form-product-price-input"
@@ -2114,16 +2154,104 @@ export function ProductStudioFormWorkspace() {
                   onBlur={() => markTouched('price')}
                   placeholder="0 ₽"
                   className={`w-full px-3 py-2 text-sm rounded-lg bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${
-                    isPriceAttention
+                    isPriceAttention && (draft.priceCents === undefined || draft.priceCents <= 0)
                       ? 'border border-amber-400 dark:border-amber-600 focus:ring-amber-500'
                       : 'border border-gray-200 dark:border-white/10 focus:ring-indigo-500'
                   }`}
                 />
-                {isPriceAttention && (
+                {isPriceAttention && (draft.priceCents === undefined || draft.priceCents <= 0) && (
                   <p data-testid="form-price-required-helper" className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">Укажите цену</p>
                 )}
               </div>
             </div>
+
+            {activeVariants.length > 0 && (
+              <div className="pt-4 border-t border-gray-200 dark:border-white/10 space-y-3" data-testid="form-variant-sku-section">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                      Артикулы продавца (SKU) <span className={activeVariants.some((v) => !v.sellerSku || !v.sellerSku.trim()) && isPriceAttention ? "text-amber-600 dark:text-amber-400" : "text-gray-400 dark:text-gray-500"}>*</span>
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Укажите артикул продавца для каждого варианта товара или сгенерируйте их автоматически
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="form-generate-skus-btn"
+                    disabled={isGeneratingSkus}
+                    onClick={handleGenerateSkus}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/15 text-gray-800 dark:text-white border border-gray-200 dark:border-white/10 transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                  >
+                    {isGeneratingSkus ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                    )}
+                    <span>Сгенерировать артикулы</span>
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto border border-gray-200 dark:border-white/10 rounded-xl">
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead className="bg-gray-50/80 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/10 text-gray-500 font-medium">
+                      <tr>
+                        <th className="px-3.5 py-2.5">Вариант</th>
+                        <th className="px-3.5 py-2.5">Артикул продавца (SKU) *</th>
+                        <th className="px-3.5 py-2.5">Штрихкод</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                      {activeVariants.map((v, i) => {
+                        const isMissingSku = !v.sellerSku || !v.sellerSku.trim();
+                        const varLabel = [v.colorName, v.size].filter(Boolean).join(' / ') || 'Базовый';
+                        return (
+                          <tr key={v.id || i} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02]">
+                            <td className="px-3.5 py-2.5 font-medium text-gray-900 dark:text-white">
+                              <div className="flex items-center gap-2">
+                                {v.colorHex && (
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/10 dark:border-white/20"
+                                    style={{ backgroundColor: v.colorHex }}
+                                  />
+                                )}
+                                <span>{varLabel}</span>
+                              </div>
+                            </td>
+                            <td className="px-3.5 py-2.5">
+                              <input
+                                type="text"
+                                data-testid={`form-variant-sku-input-${v.id || i}`}
+                                value={v.sellerSku || ''}
+                                placeholder="Например: HOODIE-BLK-M"
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const nextVariants = (draft.variants || []).map((item) =>
+                                    item === v || (item.id && item.id === v.id)
+                                      ? { ...item, sellerSku: val }
+                                      : item
+                                  );
+                                  updateDraft({ variants: nextVariants });
+                                }}
+                                onBlur={() => markTouched('price')}
+                                className={`w-52 px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-white/5 text-gray-900 dark:text-white font-mono focus:outline-none focus:ring-2 ${
+                                  isMissingSku && isPriceAttention
+                                    ? 'border border-amber-400 dark:border-amber-600 focus:ring-amber-500'
+                                    : 'border border-gray-200 dark:border-white/10 focus:ring-indigo-500'
+                                }`}
+                              />
+                            </td>
+                            <td className="px-3.5 py-2.5 text-gray-400 font-mono text-[11px]">
+                              {v.barcode || 'Создается автоматически'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

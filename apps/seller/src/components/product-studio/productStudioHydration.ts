@@ -132,6 +132,10 @@ export function hydrateProductStudioDraft({
         ...(isOrphaned ? { isUnassigned: true } : {}),
         isMain: Boolean(img.isMain),
         altText: img.altText ?? null,
+        cropX: img.cropX,
+        cropY: img.cropY,
+        cropWidth: img.cropWidth,
+        cropHeight: img.cropHeight,
         source: {
           kind: 'canonical' as const,
           imageId,
