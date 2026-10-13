@@ -84,6 +84,10 @@ func TestAdminProductOwnershipBoundary(t *testing.T) {
 	pendingBarcode := fmt.Sprintf("98%011d", (time.Now().UnixNano()%100000000000)+30000000000)
 	pubImageURL := "https://cdn.zamk.local/products/legit_seller_photo.jpg"
 
+	customerUserID := uuid.New()
+	staffNoPermUserID := uuid.New()
+	staffNoPermRoleID := uuid.New()
+
 	cleanup := func() {
 		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM product_images WHERE product_id = ANY($1) OR id = $2", []uuid.UUID{draftProdID, pubProdID, pendingProdID}, pubImageID)
 		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM product_moderation_logs WHERE product_id = ANY($1)", []uuid.UUID{draftProdID, pubProdID, pendingProdID})
@@ -92,10 +96,10 @@ func TestAdminProductOwnershipBoundary(t *testing.T) {
 		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM categories WHERE id = ANY($1)", []uuid.UUID{catID, otherCatID})
 		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM seller_users WHERE seller_id = $1", sellerID)
 		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM sellers WHERE id = $1", sellerID)
-		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM staff_members WHERE user_id = $1", adminUserID)
-		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM staff_role_permissions WHERE role_id = $1", staffRoleID)
-		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM staff_roles WHERE id = $1", staffRoleID)
-		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM users WHERE id = ANY($1)", []uuid.UUID{sellerUserID, adminUserID})
+		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM staff_members WHERE user_id = ANY($1)", []uuid.UUID{adminUserID, staffNoPermUserID})
+		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM staff_role_permissions WHERE role_id = ANY($1)", []uuid.UUID{staffRoleID, staffNoPermRoleID})
+		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM staff_roles WHERE id = ANY($1)", []uuid.UUID{staffRoleID, staffNoPermRoleID})
+		_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM users WHERE id = ANY($1)", []uuid.UUID{sellerUserID, adminUserID, customerUserID, staffNoPermUserID})
 	}
 
 	cleanup()
@@ -114,13 +118,21 @@ func TestAdminProductOwnershipBoundary(t *testing.T) {
 
 	sellerEmail := fmt.Sprintf("seller_bnd_%s@zamk.local", sellerUserID.String()[:8])
 	adminEmail := fmt.Sprintf("admin_bnd_%s@zamk.local", adminUserID.String()[:8])
+	customerEmail := fmt.Sprintf("cust_bnd_%s@zamk.local", customerUserID.String()[:8])
+	staffNoPermEmail := fmt.Sprintf("staff_noperm_%s@zamk.local", staffNoPermUserID.String()[:8])
 
 	insertUser(sellerUserID, sellerEmail, "seller")
 	insertUser(adminUserID, adminEmail, "admin")
+	insertUser(customerUserID, customerEmail, "customer")
+	insertUser(staffNoPermUserID, staffNoPermEmail, "admin")
 
 	// 2. Insert Staff Role with full permissions for Admin
 	adminPerms := []string{"*", "products.read", "products.moderate", "products.hide", "products.approve", "products.reject", "products.publish", "products.block"}
 	err = setupRouterStaffMember(ctx, pgClient.Pool, adminUserID, staffRoleID, "super_admin_"+staffRoleID.String()[:8], "SuperAdmin", adminPerms)
+	require.NoError(t, err)
+
+	// Insert Staff Role WITHOUT products.read for restricted staff testing
+	err = setupRouterStaffMember(ctx, pgClient.Pool, staffNoPermUserID, staffNoPermRoleID, "noperm_"+staffNoPermRoleID.String()[:8], "NoProdRole", []string{"orders.read"})
 	require.NoError(t, err)
 
 	// 3. Insert Seller and link to seller user
@@ -200,6 +212,10 @@ func TestAdminProductOwnershipBoundary(t *testing.T) {
 	sellerToken, err := tokenService.GenerateAccessToken(sellerUserID, sellerEmail, "seller")
 	require.NoError(t, err)
 	adminToken, err := tokenService.GenerateAccessToken(adminUserID, adminEmail, "admin")
+	require.NoError(t, err)
+	customerToken, err := tokenService.GenerateAccessToken(customerUserID, customerEmail, "customer")
+	require.NoError(t, err)
+	staffNoPermToken, err := tokenService.GenerateAccessToken(staffNoPermUserID, staffNoPermEmail, "admin")
 	require.NoError(t, err)
 
 	execReq := func(method, url, token string, body []byte) *httptest.ResponseRecorder {
@@ -327,6 +343,7 @@ func TestAdminProductOwnershipBoundary(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, res.Code, "Admin must be able to inspect product")
 		assert.Contains(t, res.Body.String(), "Legitimate Seller Updated Title")
+		assert.Contains(t, res.Body.String(), `"vision":{"status":"not_scheduled"}`)
 	})
 
 	// =========================================================================
@@ -457,5 +474,33 @@ func TestAdminProductOwnershipBoundary(t *testing.T) {
 		err = pgClient.Pool.QueryRow(ctx, "SELECT comment FROM product_moderation_logs WHERE product_id = $1 ORDER BY created_at DESC LIMIT 1", pendingProdID).Scan(&logComment)
 		require.NoError(t, err)
 		assert.Equal(t, "Фотографии низкого качества или содержат водяные знаки сторонних ресурсов", logComment)
+	})
+
+	// =========================================================================
+	// Test 11: Admin Product Detail RBAC Route Protection (GET /api/admin/products/{id})
+	// A. Seller-authenticated user -> 403 Forbidden
+	// B. Customer-authenticated user -> 403 Forbidden
+	// C. Staff/admin user lacking products.read -> 403 Forbidden
+	// D. Staff/admin user with products.read -> 200 OK with vision present
+	// =========================================================================
+	t.Run("AdminProductDetail_RBAC_RouteProtection", func(t *testing.T) {
+		adminURL := fmt.Sprintf("/api/admin/products/%s", draftProdID.String())
+
+		// A. Seller-authenticated user denied
+		resSeller := execReq(http.MethodGet, adminURL, sellerToken, nil)
+		assert.Equal(t, http.StatusForbidden, resSeller.Code, "Seller must be forbidden from accessing admin product endpoint")
+
+		// B. Customer-authenticated user denied
+		resCustomer := execReq(http.MethodGet, adminURL, customerToken, nil)
+		assert.Equal(t, http.StatusForbidden, resCustomer.Code, "Customer must be forbidden from accessing admin product endpoint")
+
+		// C. Staff/admin user lacking products.read denied
+		resStaffNoPerm := execReq(http.MethodGet, adminURL, staffNoPermToken, nil)
+		assert.Equal(t, http.StatusForbidden, resStaffNoPerm.Code, "Staff member without products.read must be forbidden")
+
+		// D. Staff/admin user with products.read succeeds
+		resAdmin := execReq(http.MethodGet, adminURL, adminToken, nil)
+		assert.Equal(t, http.StatusOK, resAdmin.Code, "Admin with products.read must be allowed")
+		assert.Contains(t, resAdmin.Body.String(), `"vision":`, "Vision DTO must be present in response")
 	})
 }

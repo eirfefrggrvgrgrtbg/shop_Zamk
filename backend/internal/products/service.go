@@ -1400,6 +1400,16 @@ func (s *Service) GetAdminProductDetail(ctx context.Context, productID uuid.UUID
 	if err != nil {
 		return Product{}, err
 	}
+
+	visionDTO, err := s.GetAdminProductVision(ctx, productID, p.VisionContentVersion)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("failed to get admin product vision", "product_id", productID, "error", err)
+		}
+	} else {
+		p.Vision = visionDTO
+	}
+
 	return *p, nil
 }
 

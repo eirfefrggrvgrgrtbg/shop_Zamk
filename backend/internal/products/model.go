@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/vision"
 )
 
 const (
@@ -84,6 +85,7 @@ type Product struct {
 	Attributes []ProductAttributeValue `json:"attributes,omitempty"`
 	MaterialComposition []ProductMaterialComposition `json:"materialComposition,omitempty"`
 	SizeChart *ProductSizeChart `json:"sizeChart,omitempty"`
+	Vision    *AdminProductVisionDTO `json:"vision,omitempty"`
 }
 
 type RatingSummary struct {
@@ -259,4 +261,54 @@ type CategorySizeSystem struct {
 	SizeSystemID uuid.UUID `json:"sizeSystemId"`
 	IsDefault    bool      `json:"isDefault"`
 	SortOrder    int       `json:"sortOrder"`
+}
+
+// Admin Vision Read Model
+
+type AdminVisionColorDTO struct {
+	ID   uuid.UUID `json:"id"`
+	Code string    `json:"code"`
+	Name string    `json:"name"`
+	Hex  *string   `json:"hex,omitempty"`
+}
+
+type AdminVisionModerationDTO struct {
+	Contradictions       []vision.ModerationContradiction `json:"contradictions,omitempty"`
+	QualityIssues        []string                         `json:"qualityIssues,omitempty"`
+	OCRFindings          []string                         `json:"ocrFindings,omitempty"`
+	Recommendation       string                           `json:"recommendation"` // "clear", "review_recommended", "uncertain"
+	RecommendationReason string                           `json:"recommendationReason,omitempty"`
+}
+
+type AdminProductVisionDTO struct {
+	Status               string                            `json:"status"` // "not_scheduled", "pending", "processing", "succeeded", "failed", "stale"
+	AnalyzedAt           *time.Time                        `json:"analyzedAt,omitempty"`
+	FailureCode          *string                           `json:"failureCode,omitempty"`
+
+	CategoryConsistency  *string                           `json:"categoryConsistency,omitempty"`
+	ObservedCategoryText *string                           `json:"observedCategoryText,omitempty"`
+
+	DominantColors       []AdminVisionColorDTO             `json:"dominantColors,omitempty"`
+	SecondaryColors      []AdminVisionColorDTO             `json:"secondaryColors,omitempty"`
+
+	Silhouette           *string                           `json:"silhouette,omitempty"`
+	FitAppearance        *string                           `json:"fitAppearance,omitempty"`
+	Length               *string                           `json:"length,omitempty"`
+	Sleeves              []string                          `json:"sleeves,omitempty"`
+	Neckline             *string                           `json:"neckline,omitempty"`
+	Closure              *string                           `json:"closure,omitempty"`
+	Pattern              *string                           `json:"pattern,omitempty"`
+	VisibleTexture       *string                           `json:"visibleTexture,omitempty"`
+	DecorativeDetails    []string                          `json:"decorativeDetails,omitempty"`
+	StyleDescriptors     []string                          `json:"styleDescriptors,omitempty"`
+	Formality            *string                           `json:"formality,omitempty"`
+	SeasonalCues         []string                          `json:"seasonalCues,omitempty"`
+
+	ImageSetConsistency  *bool                             `json:"imageSetConsistency,omitempty"`
+	OCRText              []string                          `json:"ocrText,omitempty"`
+
+	Confidence           map[string]vision.ConfidenceScore `json:"confidence,omitempty"`
+	Evidence             []vision.Evidence                 `json:"evidence,omitempty"`
+
+	Moderation           *AdminVisionModerationDTO         `json:"moderation,omitempty"`
 }
