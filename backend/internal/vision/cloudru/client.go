@@ -10,22 +10,25 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/vision"
 )
 
 var (
-	ErrMissingAPIKey       = errors.New("cloudru: missing API key")
-	ErrProviderTimeout     = errors.New("cloudru: provider timeout")
-	ErrProviderRateLimit   = errors.New("cloudru: rate limit exceeded (429)")
-	ErrProviderServer      = errors.New("cloudru: server error (5xx)")
-	ErrMalformedResponse   = errors.New("cloudru: malformed JSON response")
+	ErrMissingAPIKey       = vision.ErrProviderAuth
+	ErrProviderTimeout     = vision.ErrProviderTimeout
+	ErrProviderRateLimit   = vision.ErrProviderRateLimit
+	ErrProviderServer      = vision.ErrProviderServer
+	ErrProviderNetwork     = vision.ErrProviderNetwork
+	ErrProviderClient      = vision.ErrProviderClient
+	ErrMalformedResponse   = vision.ErrMalformedResponse
 	ErrUnsupportedMIMEType = errors.New("cloudru: unsupported image MIME type")
 )
 
 const (
-	DefaultBaseURL = "https://api.cloud.ru/v1"
+	DefaultBaseURL = "https://foundation-models.api.cloud.ru/v1"
 	DefaultModel   = "qwen/qwen3-vl-235b-a22b-instruct"
 )
 
@@ -85,10 +88,13 @@ func (c *Client) AnalyzeProduct(ctx context.Context, req vision.VisionAnalysisRe
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil, context.Canceled
+		}
 		if errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err) {
 			return nil, ErrProviderTimeout
 		}
-		return nil, fmt.Errorf("transport error: %w", err)
+		return nil, fmt.Errorf("%w: transport error: %v", ErrProviderNetwork, err)
 	}
 	defer resp.Body.Close()
 
@@ -100,7 +106,7 @@ func (c *Client) AnalyzeProduct(ctx context.Context, req vision.VisionAnalysisRe
 		if resp.StatusCode >= 500 {
 			return nil, fmt.Errorf("%w: HTTP %d: %s", ErrProviderServer, resp.StatusCode, string(body))
 		}
-		return nil, fmt.Errorf("provider error HTTP %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%w: %s", ErrProviderClient, string(body))
 	}
 
 	var providerResp struct {
@@ -178,7 +184,7 @@ func (c *Client) buildPayload(req vision.VisionAnalysisRequest) (map[string]inte
 			"json_schema": map[string]interface{}{
 				"name":   vision.CanonicalSchemaName,
 				"strict": true,
-				"schema": vision.CanonicalJSONSchema(),
+				"schema": vision.BuildCanonicalJSONSchema(req),
 			},
 		},
 		"temperature": 0.0,
@@ -188,17 +194,50 @@ func (c *Client) buildPayload(req vision.VisionAnalysisRequest) (map[string]inte
 }
 
 func (c *Client) buildPromptText(req vision.VisionAnalysisRequest) string {
-	// In a real implementation this would be a robust template
-	return fmt.Sprintf(`Observe the provided product images and output JSON.
-Product Title: %s
-Description: %s
+	var sb strings.Builder
+	sb.WriteString("Observe the provided product images and output JSON matching the strict schema.\n\n")
 
+	sb.WriteString("Product Information:\n")
+	sb.WriteString(fmt.Sprintf("- Title: %s\n", req.Snapshot.Title))
+	if req.Snapshot.Description != "" {
+		sb.WriteString(fmt.Sprintf("- Description: %s\n", req.Snapshot.Description))
+	}
+	if req.Snapshot.DeclaredCategory != "" {
+		sb.WriteString(fmt.Sprintf("- Declared Category: %s (ID: %s)\n", req.Snapshot.DeclaredCategory, req.Snapshot.DeclaredCategoryID))
+	}
+
+	sb.WriteString("\nAvailable Images for Evidence:\n")
+	if len(req.Images) > 0 {
+		for i, img := range req.Images {
+			sb.WriteString(fmt.Sprintf("- Image %d: %s\n", i+1, img.ImageID.String()))
+		}
+	} else {
+		for i, img := range req.Snapshot.Images {
+			sb.WriteString(fmt.Sprintf("- Image %d: %s\n", i+1, img.ImageID.String()))
+		}
+	}
+
+	if req.TaxonomyContext != nil && len(req.TaxonomyContext.Colors) > 0 {
+		sb.WriteString("\nAvailable Canonical Colors:\n")
+		for _, col := range req.TaxonomyContext.Colors {
+			if col.Hex != nil && *col.Hex != "" {
+				sb.WriteString(fmt.Sprintf("- %s: %s (%s)\n", col.ID.String(), col.Label, *col.Hex))
+			} else {
+				sb.WriteString(fmt.Sprintf("- %s: %s\n", col.ID.String(), col.Label))
+			}
+		}
+	}
+
+	sb.WriteString(`
 CRITICAL INSTRUCTIONS:
-- Observe only visible facts.
-- Abstain when uncertain.
-- Never invent IDs. Use only supplied taxonomy/vocabulary IDs.
-- Never infer exact material composition. Distinguish appearance from fact.
-- Evidence must reference exactly the supplied image IDs.
-- Output ONLY valid JSON matching the requested structure.
-`, req.Snapshot.Title, req.Snapshot.Description)
+- Observe only visible facts from the provided images.
+- Verify whether the visible product is consistent with the Declared Category. Set categoryConsistency to "consistent", "contradictory", or "uncertain".
+- In observedCategoryText, describe in plain words the garment/item type visible in the images (e.g. "hoodie", "coat", "dress"), or set to null if uncertain. NEVER invent or output a replacement category UUID.
+- In evidence, imageIds must strictly reference the exact Available Image UUIDs listed above. Never use placeholders like "img1" or arbitrary IDs.
+- In dominantColorIds and secondaryColorIds, reference only the Available Canonical Colors listed above. If a color cannot be confidently identified, return an empty array [].
+- In nullable fields, use true JSON null when abstaining or when the feature is absent/uncertain. Never output string literals "null", "none", or "unknown".
+- Abstain when visual evidence is insufficient.
+`)
+
+	return sb.String()
 }

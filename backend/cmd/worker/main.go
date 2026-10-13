@@ -25,6 +25,9 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/vision"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/vision/cloudru"
+	"sync"
 )
 
 func main() {
@@ -222,10 +225,75 @@ func main() {
 		}
 	}
 
+	var visionWorkerWg sync.WaitGroup
+	if cfg.Vision.Enabled {
+		visionStore := vision.NewStore(pgClient.Pool)
+		productsService.WithVisionScheduler(visionStore)
+
+		storageProvider, err := storage.NewS3Client(&cfg.S3)
+		if err != nil {
+			logger.Error("failed to initialize storage provider for vision worker", "error", err)
+			os.Exit(1)
+		}
+		imageLoader := vision.NewImageLoader(storageProvider)
+
+		cloudruCfg := cloudru.Config{
+			APIKey:  cfg.Vision.CloudRuAPIKey,
+			BaseURL: cfg.Vision.CloudRuBaseURL,
+		}
+		analyzer, err := cloudru.NewClient(cloudruCfg)
+		if err != nil {
+			logger.Error("failed to initialize cloud.ru analyzer", "error", err)
+			os.Exit(1)
+		}
+
+		visionProcessor := vision.NewProcessor(visionStore, imageLoader, analyzer, logger, cfg.Vision.MaxAttempts)
+
+		pollInterval := time.Duration(cfg.Vision.PollInterval) * time.Second
+		claimTimeout := time.Duration(cfg.Vision.ClaimTimeout) * time.Second
+
+		visionWorker := vision.NewWorker(visionProcessor, visionStore, logger, pollInterval, claimTimeout, cfg.Vision.MaxAttempts, cfg.Vision.BatchSize)
+		visionWorker.Start(ctx, &visionWorkerWg)
+		logger.Info("vision worker started")
+
+		// Start reconciliation worker for missing vision runs
+		go func() {
+			visionWorkerWg.Add(1)
+			defer visionWorkerWg.Done()
+
+			reconInterval := time.Duration(cfg.Vision.ReconcileInterval) * time.Second
+			if reconInterval <= 0 {
+				reconInterval = 60 * time.Second
+			}
+			reconTicker := time.NewTicker(reconInterval)
+			defer reconTicker.Stop()
+
+			batchLimit := cfg.Vision.ReconcileBatchLimit
+			if batchLimit <= 0 {
+				batchLimit = 50
+			}
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-reconTicker.C:
+					reconciled, err := productsService.ReconcileMissingVisionRuns(ctx, batchLimit)
+					if err != nil {
+						logger.Error("failed to reconcile missing vision runs", "error", err)
+					} else if reconciled > 0 {
+						logger.Info("vision reconciliation completed", "reconciled", reconciled)
+					}
+				}
+			}
+		}()
+	}
+
 	sig := <-shutdown
 	cancel()
 	logger.Info("shutting down worker", "signal", sig)
 	if cleanupWorker != nil {
 		cleanupWorker.Wait()
 	}
+	visionWorkerWg.Wait()
 }

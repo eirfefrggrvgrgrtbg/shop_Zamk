@@ -3,10 +3,15 @@ package vision_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/vision"
 )
 
 func TestCanonicalJSONSchemaStructure(t *testing.T) {
+	if vision.CanonicalSchemaName != "vision_product_analysis_v2" {
+		t.Fatalf("expected CanonicalSchemaName 'vision_product_analysis_v2', got %q", vision.CanonicalSchemaName)
+	}
+
 	schema := vision.CanonicalJSONSchema()
 
 	// 1. Root structure
@@ -50,6 +55,34 @@ func TestCanonicalJSONSchemaStructure(t *testing.T) {
 	obsProps, ok := obsSchema["properties"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("expected visualObservation properties map")
+	}
+
+	// Verify observedCategoryId is REMOVED
+	if _, exists := obsProps["observedCategoryId"]; exists {
+		t.Fatalf("observedCategoryId must NOT exist in V2 schema")
+	}
+
+	// Verify categoryConsistency
+	consistencySchema, ok := obsProps["categoryConsistency"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("missing categoryConsistency property")
+	}
+	if consistencySchema["type"] != "string" {
+		t.Fatalf("expected categoryConsistency type string, got %v", consistencySchema["type"])
+	}
+	consistencyEnums, ok := consistencySchema["enum"].([]string)
+	if !ok || len(consistencyEnums) != 3 {
+		t.Fatalf("expected 3 enum values for categoryConsistency, got %v", consistencyEnums)
+	}
+
+	// Verify observedCategoryText nullable
+	obsCatTextSchema, ok := obsProps["observedCategoryText"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("missing observedCategoryText property")
+	}
+	anyOfCatText, ok := obsCatTextSchema["anyOf"].([]interface{})
+	if !ok || len(anyOfCatText) < 2 {
+		t.Fatalf("expected observedCategoryText anyOf with string and null")
 	}
 
 	// Verify closed enum in silhouetteId
@@ -137,5 +170,74 @@ func TestCanonicalJSONSchemaStructure(t *testing.T) {
 	contraRequired := contraItem["required"].([]string)
 	if len(contraRequired) != 4 {
 		t.Fatalf("expected contradiction item required: field, declared, observed, reason")
+	}
+}
+
+func TestCanonicalJSONSchemaDynamicBinding(t *testing.T) {
+	img1 := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	img2 := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	colorID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	seasonDictID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	finishDictID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	arbitraryID := uuid.MustParse("66666666-6666-6666-6666-666666666666")
+
+	req := vision.VisionAnalysisRequest{
+		Images: []vision.VisionInputImage{
+			{ImageID: img2},
+			{ImageID: img1},
+		},
+		AllowedDictionaryIDs: []uuid.UUID{seasonDictID, finishDictID},
+		AllowedColorIDs:      []uuid.UUID{colorID},
+		TaxonomyContext: &vision.TaxonomyContext{
+			Dictionaries: []vision.TaxonomyItem{
+				{ID: seasonDictID, Label: "Весна"},
+				{ID: finishDictID, Label: "Матовая"},
+			},
+			Colors: []vision.ColorTaxonomyItem{
+				{ID: colorID, Code: "BLK", Label: "Черный"},
+			},
+		},
+	}
+
+	schema := vision.BuildCanonicalJSONSchema(req)
+	props := schema["properties"].(map[string]interface{})
+	obsProps := props["visualObservation"].(map[string]interface{})["properties"].(map[string]interface{})
+
+	// 1. Check evidence imageIds enum is bound to sorted img1, img2
+	evSchema := obsProps["evidence"].(map[string]interface{})
+	evItemProps := evSchema["items"].(map[string]interface{})["properties"].(map[string]interface{})
+	imgIdsSchema := evItemProps["imageIds"].(map[string]interface{})
+	imgIdItem := imgIdsSchema["items"].(map[string]interface{})
+	imgEnums, ok := imgIdItem["enum"].([]string)
+	if !ok || len(imgEnums) != 2 {
+		t.Fatalf("expected 2 image UUIDs in enum, got %v", imgEnums)
+	}
+	if imgEnums[0] != img1.String() || imgEnums[1] != img2.String() {
+		t.Fatalf("expected sorted image UUIDs in enum, got %v", imgEnums)
+	}
+
+	// 2. Check dominantColorIds and secondaryColorIds enum contains colorID and excludes season/finish/arbitrary IDs
+	for _, field := range []string{"dominantColorIds", "secondaryColorIds"} {
+		fieldSchema := obsProps[field].(map[string]interface{})
+		fieldItems := fieldSchema["items"].(map[string]interface{})
+		colorEnums, ok := fieldItems["enum"].([]string)
+		if !ok {
+			t.Fatalf("expected color enum list in %s", field)
+		}
+		if len(colorEnums) != 1 || colorEnums[0] != colorID.String() {
+			t.Fatalf("expected only colorID in %s enum, got: %v", field, colorEnums)
+		}
+
+		for _, c := range colorEnums {
+			if c == seasonDictID.String() {
+				t.Fatalf("season dictionary UUID %s must NOT be in %s enum", seasonDictID, field)
+			}
+			if c == finishDictID.String() {
+				t.Fatalf("finish dictionary UUID %s must NOT be in %s enum", finishDictID, field)
+			}
+			if c == arbitraryID.String() {
+				t.Fatalf("arbitrary UUID %s must NOT be in %s enum", arbitraryID, field)
+			}
+		}
 	}
 }

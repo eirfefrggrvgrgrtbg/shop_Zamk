@@ -37,6 +37,10 @@ func (m *mockStorageProvider) DownloadObject(ctx context.Context, objectKey stri
 	return []byte("data"), nil
 }
 
+func (m *mockStorageProvider) DownloadObjectBounded(ctx context.Context, objectKey string, maxBytes int64) ([]byte, error) {
+	return m.DownloadObject(ctx, objectKey)
+}
+
 func (m *mockStorageProvider) DeleteObject(ctx context.Context, objectKey string) error {
 	m.mu.Lock()
 	m.deleteCalls = append(m.deleteCalls, objectKey)

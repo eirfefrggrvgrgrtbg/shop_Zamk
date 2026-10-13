@@ -11,8 +11,14 @@ import (
 
 // Constants for Vision context identity
 const (
-	PromptVersion     = "vision-product-v1"
-	SchemaVersion     = "1"
+	PromptVersionV1 = "vision-product-v1"
+	SchemaVersionV1 = "1"
+
+	PromptVersionV2 = "vision-product-v2"
+	SchemaVersionV2 = "2"
+
+	PromptVersion     = PromptVersionV2
+	SchemaVersion     = SchemaVersionV2
 	VocabularyVersion = "1"
 )
 
@@ -87,6 +93,14 @@ type TaxonomyItem struct {
 	Label string    `json:"label"`
 }
 
+// ColorTaxonomyItem represents a canonical color entity from the colors table.
+type ColorTaxonomyItem struct {
+	ID    uuid.UUID `json:"id"`
+	Code  string    `json:"code"`
+	Label string    `json:"label"`
+	Hex   *string   `json:"hex,omitempty"`
+}
+
 // TaxonomyContext encapsulates the runtime context used during inference.
 type TaxonomyContext struct {
 	PromptVersion      string              `json:"promptVersion"`
@@ -94,12 +108,13 @@ type TaxonomyContext struct {
 	VocabularyVersion  string              `json:"vocabularyVersion"`
 	Categories         []TaxonomyItem      `json:"categories"`
 	Dictionaries       []TaxonomyItem      `json:"dictionaries"`
-	OtherTaxonomyIDs   []uuid.UUID         `json:"otherTaxonomyIds"`
+	Colors             []ColorTaxonomyItem `json:"colors,omitempty"`
+	OtherTaxonomyIDs   []uuid.UUID         `json:"otherTaxonomyIds,omitempty"`
 	VocabularyRegistry *VocabularyRegistry `json:"-"`
 }
 
 // ComputeTaxonomyContextHash deterministically hashes the prompt version, schema version,
-// vocabulary version, runtime allowlists (with prompt-visible labels), and vision vocabulary.
+// vocabulary version, runtime allowlists (with prompt-visible labels), canonical colors, and vision vocabulary.
 func ComputeTaxonomyContextHash(tc TaxonomyContext) string {
 	pv := tc.PromptVersion
 	if pv == "" {
@@ -136,14 +151,29 @@ func ComputeTaxonomyContextHash(tc TaxonomyContext) string {
 		dictStrs[i] = d.ID.String() + ":" + d.Label
 	}
 
-	// 3. Sort Other Taxonomy IDs
+	// 3. Sort canonical Colors by ID
+	colorItems := make([]ColorTaxonomyItem, len(tc.Colors))
+	copy(colorItems, tc.Colors)
+	sort.Slice(colorItems, func(i, j int) bool {
+		return colorItems[i].ID.String() < colorItems[j].ID.String()
+	})
+	colorStrs := make([]string, len(colorItems))
+	for i, c := range colorItems {
+		hexStr := ""
+		if c.Hex != nil {
+			hexStr = *c.Hex
+		}
+		colorStrs[i] = c.ID.String() + ":" + c.Code + ":" + c.Label + ":" + hexStr
+	}
+
+	// 4. Sort Other Taxonomy IDs
 	otherStrs := make([]string, len(tc.OtherTaxonomyIDs))
 	for i, id := range tc.OtherTaxonomyIDs {
 		otherStrs[i] = id.String()
 	}
 	sort.Strings(otherStrs)
 
-	// 4. Sort Vision-owned vocabulary IDs
+	// 5. Sort Vision-owned vocabulary IDs
 	vocab := tc.VocabularyRegistry
 	if vocab == nil {
 		vocab = NewVocabularyRegistry()
@@ -154,13 +184,14 @@ func ComputeTaxonomyContextHash(tc TaxonomyContext) string {
 	}
 	sort.Strings(vocabStrs)
 
-	// 5. Build SHA-256 hash
+	// 6. Build SHA-256 hash
 	h := sha256.New()
 	h.Write([]byte(pv + "\n"))
 	h.Write([]byte(sv + "\n"))
 	h.Write([]byte(vv + "\n"))
 	h.Write([]byte(strings.Join(catStrs, ",") + "\n"))
 	h.Write([]byte(strings.Join(dictStrs, ",") + "\n"))
+	h.Write([]byte(strings.Join(colorStrs, ",") + "\n"))
 	h.Write([]byte(strings.Join(otherStrs, ",") + "\n"))
 	h.Write([]byte(strings.Join(vocabStrs, ",") + "\n"))
 

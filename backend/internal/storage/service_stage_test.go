@@ -88,6 +88,10 @@ func (f *fakeStorageProvider) DownloadObject(ctx context.Context, objectKey stri
 	return []byte("fake content"), nil
 }
 
+func (f *fakeStorageProvider) DownloadObjectBounded(ctx context.Context, objectKey string, maxBytes int64) ([]byte, error) {
+	return f.DownloadObject(ctx, objectKey)
+}
+
 func (f *fakeStorageProvider) DeleteObject(ctx context.Context, objectKey string) error {
 	return nil
 }

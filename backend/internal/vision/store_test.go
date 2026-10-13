@@ -2,6 +2,7 @@ package vision_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
@@ -298,6 +299,23 @@ func TestStore_IdentityIntegrity(t *testing.T) {
 	runMod := vision.BuildCanonicalVisionRun(paramsMod)
 	require.NotEqual(t, run1.SnapshotHash, runMod.SnapshotHash)
 	require.NotEqual(t, run1.IdempotencyKey, runMod.IdempotencyKey)
+
+	// 8. V1 vs V2 idempotency difference: V1 run in DB does NOT suppress V2 run creation
+	paramsV1 := params1
+	paramsV1.PromptVersion = vision.PromptVersionV1
+	paramsV1.SchemaVersion = vision.SchemaVersionV1
+	runV1, createdV1, err := store.EnsureVisionRun(ctx, paramsV1)
+	require.NoError(t, err)
+	require.True(t, createdV1)
+
+	paramsV2 := params1
+	paramsV2.PromptVersion = vision.PromptVersionV2
+	paramsV2.SchemaVersion = vision.SchemaVersionV2
+	runV2, createdV2, err := store.EnsureVisionRun(ctx, paramsV2)
+	require.NoError(t, err)
+	require.True(t, createdV2, "V2 run must be created and not suppressed by existing V1 run")
+	require.NotEqual(t, runV1.ID, runV2.ID)
+	require.NotEqual(t, runV1.IdempotencyKey, runV2.IdempotencyKey)
 }
 
 func TestStore_Claiming_ConcurrencyAndExclusion(t *testing.T) {
@@ -379,7 +397,7 @@ func TestStore_Claiming_ConcurrencyAndExclusion(t *testing.T) {
 	require.NoError(t, err)
 	transitionRunToProcessing(t, pool, runE.ID)
 
-	obs := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.regular")}
+	obs := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.regular")}
 	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, runE.ID, obs, eval, nil, nil, nil)
 	require.NoError(t, err)
@@ -419,7 +437,7 @@ func TestStore_TerminalStateImmutability_AndTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Run is in 'pending', not 'processing'. SaveSuccess must fail closed!
-	obs := vision.ProductVisualObservationV1{}
+	obs := vision.ProductVisualObservationV2{}
 	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, run.ID, obs, eval, nil, nil, nil)
 	require.ErrorIs(t, err, vision.ErrInvalidRunTransition)
@@ -552,10 +570,10 @@ func TestStore_CurrentProfile_AtomicPrecedenceAndRegressionPrevention(t *testing
 	_, err = pool.Exec(ctx, "UPDATE product_vision_runs SET status = 'processing' WHERE id IN ($1, $2)", runA.ID, runB.ID)
 	require.NoError(t, err)
 
-	obsB := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.boxy")}
+	obsB := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.boxy")}
 	evalB := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 
-	obsA := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.regular")}
+	obsA := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.regular")}
 	evalA := vision.ModerationEvaluationV1{ModerationRecommendation: "review_recommended"}
 
 	// Step 1: B succeeds FIRST → B becomes current profile
@@ -599,7 +617,7 @@ func TestStore_DBAuthoritative_StaleSnapshotRejection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Worker completes and calls SaveSuccess
-	obs := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.fitted")}
+	obs := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.fitted")}
 	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, run.ID, obs, eval, nil, nil, nil)
 	require.NoError(t, err)
@@ -636,7 +654,7 @@ func TestStore_MediaMutation_RaceSafety(t *testing.T) {
 	wg.Add(2)
 
 	var saveErr, cropErr error
-	obs := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.regular")}
+	obs := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.regular")}
 	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 
 	go func() {
@@ -680,7 +698,7 @@ func TestStore_CorruptStoredJSON_FailsClosed(t *testing.T) {
 		INSERT INTO product_current_visual_profiles (
 			product_id, run_id, run_created_at, vision_content_version, model_id, snapshot_hash, taxonomy_context_hash, observation, updated_at
 		) VALUES (
-			$1, $2, now(), 0, 'qwen', $3, 'tax1', '{"observedCategoryId": "invalid-uuid-string"}'::jsonb, now()
+			$1, $2, now(), 0, 'qwen', $3, 'tax1', '{"dominantColorIds": "not-an-array"}'::jsonb, now()
 		)
 	`, fix.productID, run.ID, fix.snapHash)
 	require.NoError(t, err)
@@ -707,7 +725,7 @@ func TestStore_ScenarioA_B_C_D(t *testing.T) {
 
 	transitionRunToProcessing(t, pool, runA.ID)
 
-	obsA := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.regular")}
+	obsA := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.regular")}
 	evalA := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, runA.ID, obsA, evalA, nil, nil, nil)
 	require.NoError(t, err)
@@ -763,7 +781,7 @@ func TestStore_ScenarioA_B_C_D(t *testing.T) {
 
 	transitionRunToProcessing(t, pool, runB.ID)
 
-	obsB := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.fitted")}
+	obsB := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.fitted")}
 	evalB := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, runB.ID, obsB, evalB, nil, nil, nil)
 	require.NoError(t, err)
@@ -783,7 +801,7 @@ func TestStore_ScenarioA_B_C_D(t *testing.T) {
 
 	transitionRunToProcessing(t, pool, runStaleA.ID)
 
-	obsStale := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.stale")}
+	obsStale := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.stale")}
 	evalStale := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, runStaleA.ID, obsStale, evalStale, nil, nil, nil)
 	require.NoError(t, err)
@@ -835,7 +853,7 @@ func TestStore_ScenarioE_PendingRevision_And_ScenarioF_RevisionPromotion(t *test
 	run1, _, err := store.EnsureVisionRun(ctx, params1)
 	require.NoError(t, err)
 	transitionRunToProcessing(t, pool, run1.ID)
-	obs1 := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.straight")}
+	obs1 := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.straight")}
 	eval1 := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, run1.ID, obs1, eval1, nil, nil, nil)
 	require.NoError(t, err)
@@ -901,7 +919,7 @@ func TestStore_ScenarioG_UnrelatedMutation(t *testing.T) {
 	run, _, err := store.EnsureVisionRun(ctx, params)
 	require.NoError(t, err)
 	transitionRunToProcessing(t, pool, run.ID)
-	obs := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.a_line")}
+	obs := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.a_line")}
 	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, run.ID, obs, eval, nil, nil, nil)
 	require.NoError(t, err)
@@ -960,7 +978,7 @@ func TestVision_RealServicePath_RevisionPromotion(t *testing.T) {
 	runA, _, err := store.EnsureVisionRun(ctx, makeTestParams(fix, "qwen-run-a"))
 	require.NoError(t, err)
 	transitionRunToProcessing(t, pool, runA.ID)
-	obsA := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.a_line")}
+	obsA := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.a_line")}
 	evalA := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, runA.ID, obsA, evalA, nil, nil, nil)
 	require.NoError(t, err)
@@ -1046,7 +1064,7 @@ func TestVision_RealServicePath_RevisionPromotion(t *testing.T) {
 	runB, _, err := store.EnsureVisionRun(ctx, paramsB)
 	require.NoError(t, err)
 	transitionRunToProcessing(t, pool, runB.ID)
-	obsB := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.fit_and_flare")}
+	obsB := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.fit_and_flare")}
 	evalB := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, runB.ID, obsB, evalB, nil, nil, nil)
 	require.NoError(t, err)
@@ -1077,7 +1095,7 @@ func TestVision_RealServicePath_NegativeModeration(t *testing.T) {
 	run, _, err := store.EnsureVisionRun(ctx, makeTestParams(fix, "qwen-neg-test"))
 	require.NoError(t, err)
 	transitionRunToProcessing(t, pool, run.ID)
-	obs := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.a_line")}
+	obs := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.a_line")}
 	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, run.ID, obs, eval, nil, nil, nil)
 	require.NoError(t, err)
@@ -1182,7 +1200,7 @@ func TestVision_RealServicePath_InitialProductApproval(t *testing.T) {
 	require.NoError(t, err)
 	transitionRunToProcessing(t, pool, run.ID)
 	require.NoError(t, err)
-	obs := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.a_line")}
+	obs := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.a_line")}
 	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, run.ID, obs, eval, nil, nil, nil)
 	require.NoError(t, err)
@@ -1215,7 +1233,7 @@ func TestStore_IsolationWithUnrelatedPendingRuns(t *testing.T) {
 
 	transitionRunToProcessing(t, pool, run.ID)
 
-	obs := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.fit_and_flare")}
+	obs := vision.ProductVisualObservationV2{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.fit_and_flare")}
 	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, run.ID, obs, eval, nil, nil, nil)
 	require.NoError(t, err)
@@ -1225,4 +1243,111 @@ func TestStore_IsolationWithUnrelatedPendingRuns(t *testing.T) {
 	require.NotNil(t, prof, "Owned profile must be returned even when unrelated pending runs exist")
 	require.Equal(t, run.ID, prof.RunID)
 	require.Equal(t, int64(0), prof.VisionContentVersion)
+}
+
+func TestStore_ObservedCategoryText_PersistenceAndCategoryImmutability(t *testing.T) {
+	pool := getIsolatedTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+	store := vision.NewStore(pool)
+	fix := setupTestFixture(t, pool)
+
+	// Record initial category_id of the product
+	var initialCatID uuid.UUID
+	err := pool.QueryRow(ctx, "SELECT category_id FROM products WHERE id = $1", fix.productID).Scan(&initialCatID)
+	require.NoError(t, err)
+	require.Equal(t, fix.categoryID, initialCatID)
+
+	params := makeTestParams(fix, "qwen-obs-cat-test")
+	run, _, err := store.EnsureVisionRun(ctx, params)
+	require.NoError(t, err)
+
+	transitionRunToProcessing(t, pool, run.ID)
+
+	// Model returns contradictory with explanatory plain-text garment type
+	obsCategory := "running shoe"
+	obs := vision.ProductVisualObservationV2{
+		CategoryConsistency:  vision.CategoryConsistencyContradictory,
+		ObservedCategoryText: &obsCategory,
+		SilhouetteID:         func(s string) *string { return &s }("vision.silhouette.regular"),
+	}
+	eval := vision.ModerationEvaluationV1{
+		ModerationRecommendation: "review_recommended",
+		RecommendationReason:     "Observed item appears to be running shoe whereas declared category is dress",
+	}
+
+	err = store.SaveSuccess(ctx, run.ID, obs, eval, nil, nil, nil)
+	require.NoError(t, err)
+
+	// 1. Verify persisted in product_vision_runs.result_observation JSON
+	var storedObsConsistency, storedObsCategory string
+	err = pool.QueryRow(ctx, `
+		SELECT result_observation->>'categoryConsistency', result_observation->>'observedCategoryText'
+		FROM product_vision_runs
+		WHERE id = $1
+	`, run.ID).Scan(&storedObsConsistency, &storedObsCategory)
+	require.NoError(t, err)
+	require.Equal(t, "contradictory", storedObsConsistency)
+	require.Equal(t, "running shoe", storedObsCategory, "ObservedCategoryText must be persisted in product_vision_runs")
+
+	// 2. Verify persisted in product_current_visual_profiles.observation JSON
+	prof, err := store.GetCurrentVisualProfile(ctx, fix.productID)
+	require.NoError(t, err)
+	require.NotNil(t, prof)
+	require.Equal(t, vision.CategoryConsistencyContradictory, prof.Observation.CategoryConsistency)
+	require.NotNil(t, prof.Observation.ObservedCategoryText)
+	require.Equal(t, "running shoe", *prof.Observation.ObservedCategoryText, "ObservedCategoryText must be persisted in current visual profile")
+
+	// 3. HARD INVARIANT: products.category_id MUST REMAIN STRICTLY UNCHANGED
+	var currentCatID uuid.UUID
+	err = pool.QueryRow(ctx, "SELECT category_id FROM products WHERE id = $1", fix.productID).Scan(&currentCatID)
+	require.NoError(t, err)
+	require.Equal(t, initialCatID, currentCatID, "products.category_id must NEVER be changed by vision results")
+}
+
+func TestStore_ScheduleCurrentProductVision_CanonicalColors(t *testing.T) {
+	pool := getIsolatedTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+	store := vision.NewStore(pool)
+	fix := setupTestFixture(t, pool)
+
+	// 1. Schedule run using ScheduleCurrentProductVision
+	run, err := store.ScheduleCurrentProductVision(ctx, fix.productID)
+	require.NoError(t, err)
+	require.NotNil(t, run)
+	require.NotNil(t, run.TaxonomyContext)
+
+	// A. Verify canonical colors are stored in TaxonomyContext
+	require.NotEmpty(t, run.TaxonomyContext.Colors, "TaxonomyContext must carry canonical colors")
+
+	// C. Verify ordering is deterministic (ordered by ID ASC)
+	for i := 1; i < len(run.TaxonomyContext.Colors); i++ {
+		require.True(t, run.TaxonomyContext.Colors[i-1].ID.String() < run.TaxonomyContext.Colors[i].ID.String(),
+			"Colors must be strictly ordered by ID ASC")
+	}
+
+	// B. Verify serialization / hydration roundtrip from database
+	var taxBytes []byte
+	err = pool.QueryRow(ctx, "SELECT taxonomy_context_json FROM product_vision_runs WHERE id = $1", run.ID).Scan(&taxBytes)
+	require.NoError(t, err)
+
+	var hydratedTC vision.TaxonomyContext
+	err = json.Unmarshal(taxBytes, &hydratedTC)
+	require.NoError(t, err)
+	require.Equal(t, len(run.TaxonomyContext.Colors), len(hydratedTC.Colors))
+	require.Equal(t, run.TaxonomyContext.Colors[0].ID, hydratedTC.Colors[0].ID)
+	require.Equal(t, run.TaxonomyContext.Colors[0].Label, hydratedTC.Colors[0].Label)
+	require.Equal(t, run.TaxonomyContext.Colors[0].Code, hydratedTC.Colors[0].Code)
+
+	// D/E/F. Verify taxonomy_context_hash includes Colors and is deterministic
+	computedHash := vision.ComputeTaxonomyContextHash(*run.TaxonomyContext)
+	require.Equal(t, run.TaxonomyContextHash, computedHash, "Stored hash must match deterministic ComputeTaxonomyContextHash")
+
+	// Same database state and re-schedule produces identical run (idempotency)
+	run2, err := store.ScheduleCurrentProductVision(ctx, fix.productID)
+	require.NoError(t, err)
+	require.Equal(t, run.ID, run2.ID, "Re-scheduling identical state must return same run")
+	require.Equal(t, run.TaxonomyContextHash, run2.TaxonomyContextHash)
+	require.Equal(t, run.IdempotencyKey, run2.IdempotencyKey)
 }

@@ -38,7 +38,7 @@ func (s *Store) ScheduleCurrentProductVision(ctx context.Context, productID uuid
 		tc.Categories = append(tc.Categories, item)
 	}
 
-	// Dictionaries (e.g., Colors) (deterministic ORDER BY)
+	// Dictionaries (e.g., Seasons, Finishes) (deterministic ORDER BY)
 	dictRows, err := tx.Query(ctx, `SELECT id, name_ru FROM attribute_dictionary_values WHERE is_active = true ORDER BY id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("read dictionaries: %w", err)
@@ -50,6 +50,20 @@ func (s *Store) ScheduleCurrentProductVision(ctx context.Context, productID uuid
 			return nil, fmt.Errorf("scan dictionary: %w", err)
 		}
 		tc.Dictionaries = append(tc.Dictionaries, item)
+	}
+
+	// Canonical Colors (deterministic ORDER BY)
+	colorRows, err := tx.Query(ctx, `SELECT id, code, name_ru, hex FROM colors WHERE is_active = true ORDER BY id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("read colors: %w", err)
+	}
+	defer colorRows.Close()
+	for colorRows.Next() {
+		var item ColorTaxonomyItem
+		if err := colorRows.Scan(&item.ID, &item.Code, &item.Label, &item.Hex); err != nil {
+			return nil, fmt.Errorf("scan color: %w", err)
+		}
+		tc.Colors = append(tc.Colors, item)
 	}
 
 	tc.VocabularyRegistry = NewVocabularyRegistry()

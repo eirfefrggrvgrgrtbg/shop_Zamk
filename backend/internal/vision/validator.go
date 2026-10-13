@@ -3,6 +3,7 @@ package vision
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -20,39 +21,54 @@ var (
 func ValidateAnalysisResult(req VisionAnalysisRequest, result *VisionAnalysisResult, vocab *VocabularyRegistry) error {
 	obs := result.VisualObservation
 
-	// Build lookup sets for fast validation
-	allowedCats := make(map[uuid.UUID]bool)
-	for _, id := range req.AllowedCategoryIDs {
-		allowedCats[id] = true
+	allowedColors := make(map[uuid.UUID]bool)
+	if req.TaxonomyContext != nil {
+		for _, col := range req.TaxonomyContext.Colors {
+			allowedColors[col.ID] = true
+		}
 	}
-
-	allowedDicts := make(map[string]bool)
-	for _, id := range req.AllowedDictionaryIDs {
-		allowedDicts[id.String()] = true
+	if len(allowedColors) == 0 {
+		for _, id := range req.AllowedColorIDs {
+			allowedColors[id] = true
+		}
 	}
 
 	allowedImages := make(map[uuid.UUID]bool)
 	for _, img := range req.Images {
 		allowedImages[img.ImageID] = true
 	}
-
-	// 1. Validate Category
-	if obs.ObservedCategoryID != nil {
-		if !allowedCats[*obs.ObservedCategoryID] {
-			return fmt.Errorf("%w: observed category %s not in allowed list", ErrUnknownTaxonomyID, obs.ObservedCategoryID)
+	if len(allowedImages) == 0 {
+		for _, img := range req.Snapshot.Images {
+			allowedImages[img.ImageID] = true
 		}
 	}
 
-	// 2. Validate Colors (can be either taxonomy UUIDs or vision IDs)
-	if err := validateColorIDs(obs.DominantColorIDs, allowedDicts, vocab); err != nil {
+	// 1. Validate Category Consistency
+	switch obs.CategoryConsistency {
+	case CategoryConsistencyConsistent, CategoryConsistencyContradictory, CategoryConsistencyUncertain:
+		// valid
+	default:
+		return fmt.Errorf("%w: invalid categoryConsistency %q", ErrInvalidEnum, obs.CategoryConsistency)
+	}
+
+	// 2. Validate Observed Category Text (reject pseudo-null strings)
+	if obs.ObservedCategoryText != nil {
+		txt := strings.TrimSpace(strings.ToLower(*obs.ObservedCategoryText))
+		if txt == "null" || txt == "none" || txt == "unknown" || txt == "n/a" || txt == "" {
+			return fmt.Errorf("%w: observedCategoryText cannot be pseudo-null string %q, must be true JSON null or descriptive text", ErrInvalidEnum, *obs.ObservedCategoryText)
+		}
+	}
+
+	// 2. Validate Colors (canonical colors.id only)
+	if err := validateColorIDs(obs.DominantColorIDs, allowedColors); err != nil {
 		return fmt.Errorf("dominant colors: %w", err)
 	}
-	if err := validateColorIDs(obs.SecondaryColorIDs, allowedDicts, vocab); err != nil {
+	if err := validateColorIDs(obs.SecondaryColorIDs, allowedColors); err != nil {
 		return fmt.Errorf("secondary colors: %w", err)
 	}
 
 	// Check for conflicting colors
-	domColors := make(map[string]bool)
+	domColors := make(map[uuid.UUID]bool)
 	for _, c := range obs.DominantColorIDs {
 		domColors[c] = true
 	}
@@ -100,16 +116,10 @@ func ValidateAnalysisResult(req VisionAnalysisRequest, result *VisionAnalysisRes
 	return nil
 }
 
-func validateColorIDs(ids []string, allowedDicts map[string]bool, vocab *VocabularyRegistry) error {
+func validateColorIDs(ids []uuid.UUID, allowedColors map[uuid.UUID]bool) error {
 	for _, id := range ids {
-		if _, err := uuid.Parse(id); err == nil {
-			if !allowedDicts[id] {
-				return fmt.Errorf("%w: dict ID %s", ErrUnknownTaxonomyID, id)
-			}
-		} else {
-			if !vocab.ValidIDs[id] {
-				return fmt.Errorf("%w: string ID %s", ErrUnknownVisionID, id)
-			}
+		if !allowedColors[id] {
+			return fmt.Errorf("%w: color ID %s is not a canonical color", ErrUnknownTaxonomyID, id)
 		}
 	}
 	return nil

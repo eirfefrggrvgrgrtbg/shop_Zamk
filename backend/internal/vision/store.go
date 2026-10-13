@@ -149,7 +149,7 @@ func (s *Store) EnsureRawVisionRun(ctx context.Context, run VisionRun) (*VisionR
 		}
 	}
 	if len(obsBytes) > 0 {
-		var obs ProductVisualObservationV1
+		var obs ProductVisualObservationV2
 		if err := json.Unmarshal(obsBytes, &obs); err == nil {
 			r.ResultObservation = &obs
 		}
@@ -227,7 +227,7 @@ func (s *Store) ClaimPendingRuns(ctx context.Context, limit int) ([]VisionRun, e
 // current product snapshot within the same transaction.
 // If and only if the run's snapshot matches the DB's current snapshot, the current visual profile is updated.
 // An older run completing later cannot regress a newer profile due to deterministic run_created_at precedence.
-func (s *Store) SaveSuccess(ctx context.Context, runID uuid.UUID, obs ProductVisualObservationV1, eval ModerationEvaluationV1, usage *UsageMetadata, latencyMs *int, costCents *int) error {
+func (s *Store) SaveSuccess(ctx context.Context, runID uuid.UUID, obs ProductVisualObservationV2, eval ModerationEvaluationV1, usage *UsageMetadata, latencyMs *int, costCents *int) error {
 	obsBytes, err := json.Marshal(obs)
 	if err != nil {
 		return fmt.Errorf("marshal observation: %w", err)

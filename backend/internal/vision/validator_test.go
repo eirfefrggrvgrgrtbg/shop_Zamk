@@ -1,6 +1,7 @@
 package vision_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/vision"
@@ -11,6 +12,10 @@ func TestTaxonomyContextHash(t *testing.T) {
 	cat1 := uuid.New()
 	cat2 := uuid.New()
 	dict1 := uuid.New()
+	col1 := uuid.New()
+	col2 := uuid.New()
+	hexBlack := "#000000"
+	hexWhite := "#FFFFFF"
 	vocab := vision.NewVocabularyRegistry()
 
 	ctx1 := vision.TaxonomyContext{
@@ -20,6 +25,10 @@ func TestTaxonomyContextHash(t *testing.T) {
 		},
 		Dictionaries: []vision.TaxonomyItem{
 			{ID: dict1, Label: "Fabric"},
+		},
+		Colors: []vision.ColorTaxonomyItem{
+			{ID: col1, Code: "BLK", Label: "Черный", Hex: &hexBlack},
+			{ID: col2, Code: "WHT", Label: "Белый", Hex: &hexWhite},
 		},
 		VocabularyRegistry: vocab,
 	}
@@ -32,6 +41,10 @@ func TestTaxonomyContextHash(t *testing.T) {
 		},
 		Dictionaries: []vision.TaxonomyItem{
 			{ID: dict1, Label: "Fabric"},
+		},
+		Colors: []vision.ColorTaxonomyItem{
+			{ID: col2, Code: "WHT", Label: "Белый", Hex: &hexWhite},
+			{ID: col1, Code: "BLK", Label: "Черный", Hex: &hexBlack},
 		},
 		VocabularyRegistry: vocab,
 	}
@@ -52,6 +65,10 @@ func TestTaxonomyContextHash(t *testing.T) {
 		Dictionaries: []vision.TaxonomyItem{
 			{ID: dict1, Label: "Fabric"},
 		},
+		Colors: []vision.ColorTaxonomyItem{
+			{ID: col1, Code: "BLK", Label: "Черный", Hex: &hexBlack},
+			{ID: col2, Code: "WHT", Label: "Белый", Hex: &hexWhite},
+		},
 		VocabularyRegistry: vocab,
 	}
 	if vision.ComputeTaxonomyContextHash(ctxAdded) == hash1 {
@@ -65,6 +82,10 @@ func TestTaxonomyContextHash(t *testing.T) {
 		},
 		Dictionaries: []vision.TaxonomyItem{
 			{ID: dict1, Label: "Fabric"},
+		},
+		Colors: []vision.ColorTaxonomyItem{
+			{ID: col1, Code: "BLK", Label: "Черный", Hex: &hexBlack},
+			{ID: col2, Code: "WHT", Label: "Белый", Hex: &hexWhite},
 		},
 		VocabularyRegistry: vocab,
 	}
@@ -80,6 +101,10 @@ func TestTaxonomyContextHash(t *testing.T) {
 		},
 		Dictionaries: []vision.TaxonomyItem{
 			{ID: dict1, Label: "Fabric"},
+		},
+		Colors: []vision.ColorTaxonomyItem{
+			{ID: col1, Code: "BLK", Label: "Черный", Hex: &hexBlack},
+			{ID: col2, Code: "WHT", Label: "Белый", Hex: &hexWhite},
 		},
 		VocabularyRegistry: vocab,
 	}
@@ -100,17 +125,51 @@ func TestTaxonomyContextHash(t *testing.T) {
 	if vision.ComputeTaxonomyContextHash(ctxChangedVocabContent) == hash1 {
 		t.Fatalf("expected hash to change when vocabulary content changed")
 	}
+
+	// 6. Changed Color in TaxonomyContext → different hash
+	col3 := uuid.New()
+	ctxAddedColor := ctx1
+	ctxAddedColor.Colors = append(ctxAddedColor.Colors, vision.ColorTaxonomyItem{ID: col3, Code: "RED", Label: "Красный"})
+	if vision.ComputeTaxonomyContextHash(ctxAddedColor) == hash1 {
+		t.Fatalf("expected hash to change when color is added")
+	}
+
+	ctxChangedColorLabel := ctx1
+	ctxChangedColorLabel.Colors = []vision.ColorTaxonomyItem{
+		{ID: col1, Code: "BLK", Label: "Антрацит", Hex: &hexBlack},
+		{ID: col2, Code: "WHT", Label: "Белый", Hex: &hexWhite},
+	}
+	if vision.ComputeTaxonomyContextHash(ctxChangedColorLabel) == hash1 {
+		t.Fatalf("expected hash to change when color label is changed")
+	}
 }
 
 func TestValidateAnalysisResult(t *testing.T) {
 	catID := uuid.New()
-	dictID := uuid.New()
+	seasonDictID := uuid.New()
+	finishDictID := uuid.New()
+	color1ID := uuid.New()
+	color2ID := uuid.New()
 	imgID := uuid.New()
+	hexBlack := "#000000"
+	hexRed := "#FF0000"
 	vocab := vision.NewVocabularyRegistry()
 
 	req := vision.VisionAnalysisRequest{
 		AllowedCategoryIDs:   []uuid.UUID{catID},
-		AllowedDictionaryIDs: []uuid.UUID{dictID},
+		AllowedDictionaryIDs: []uuid.UUID{seasonDictID, finishDictID},
+		AllowedColorIDs:      []uuid.UUID{color1ID, color2ID},
+		TaxonomyContext: &vision.TaxonomyContext{
+			Categories: []vision.TaxonomyItem{{ID: catID, Label: "Платья"}},
+			Dictionaries: []vision.TaxonomyItem{
+				{ID: seasonDictID, Label: "Весна"},
+				{ID: finishDictID, Label: "Матовая"},
+			},
+			Colors: []vision.ColorTaxonomyItem{
+				{ID: color1ID, Code: "BLK", Label: "Черный", Hex: &hexBlack},
+				{ID: color2ID, Code: "RED", Label: "Красный", Hex: &hexRed},
+			},
+		},
 		Images: []vision.VisionInputImage{
 			{ImageID: imgID},
 		},
@@ -120,10 +179,12 @@ func TestValidateAnalysisResult(t *testing.T) {
 
 	t.Run("Valid Response", func(t *testing.T) {
 		res := &vision.VisionAnalysisResult{
-			VisualObservation: vision.ProductVisualObservationV1{
-				ObservedCategoryID: &catID,
-				DominantColorIDs:   []string{dictID.String(), "vision.silhouette.regular"}, // Just reusing known strings for testing valid resolution
-				PatternID:          ptr("vision.pattern.striped"),
+			VisualObservation: vision.ProductVisualObservationV2{
+				CategoryConsistency:  vision.CategoryConsistencyConsistent,
+				ObservedCategoryText: ptr("striped dress"),
+				DominantColorIDs:      []uuid.UUID{color1ID},
+				SecondaryColorIDs:     []uuid.UUID{color2ID},
+				PatternID:             ptr("vision.pattern.striped"),
 				Evidence: []vision.Evidence{
 					{
 						Field:    "pattern",
@@ -143,52 +204,143 @@ func TestValidateAnalysisResult(t *testing.T) {
 		}
 	})
 
-	t.Run("Unknown Taxonomy ID", func(t *testing.T) {
-		wrongCat := uuid.New()
+	t.Run("Valid Consistency Enums (contradictory, uncertain)", func(t *testing.T) {
+		for _, consistency := range []vision.CategoryConsistency{vision.CategoryConsistencyContradictory, vision.CategoryConsistencyUncertain} {
+			res := &vision.VisionAnalysisResult{
+				VisualObservation: vision.ProductVisualObservationV2{
+					CategoryConsistency:  consistency,
+					ObservedCategoryText: ptr("hoodie"),
+				},
+				ModerationEvaluation: vision.ModerationEvaluationV1{
+					ModerationRecommendation: "clear",
+				},
+			}
+			if err := vision.ValidateAnalysisResult(req, res, vocab); err != nil {
+				t.Fatalf("expected %s to be valid, got %v", consistency, err)
+			}
+		}
+	})
+
+	t.Run("Pseudo-Null ObservedCategoryText Rejected", func(t *testing.T) {
+		pseudoNulls := []string{"null", "NULL", "none", "unknown", "n/a", "N/A", "", "   "}
+		for _, pn := range pseudoNulls {
+			res := &vision.VisionAnalysisResult{
+				VisualObservation: vision.ProductVisualObservationV2{
+					CategoryConsistency:  vision.CategoryConsistencyConsistent,
+					ObservedCategoryText: ptr(pn),
+				},
+				ModerationEvaluation: vision.ModerationEvaluationV1{
+					ModerationRecommendation: "clear",
+				},
+			}
+			err := vision.ValidateAnalysisResult(req, res, vocab)
+			if err == nil || !errorsIsInvalidEnum(err) {
+				t.Fatalf("expected ErrInvalidEnum for pseudo-null %q, got %v", pn, err)
+			}
+		}
+	})
+
+	t.Run("Canonical Color UUID Accepted", func(t *testing.T) {
 		res := &vision.VisionAnalysisResult{
-			VisualObservation: vision.ProductVisualObservationV1{
-				ObservedCategoryID: &wrongCat,
+			VisualObservation: vision.ProductVisualObservationV2{
+				CategoryConsistency: vision.CategoryConsistencyConsistent,
+				DominantColorIDs:    []uuid.UUID{color1ID},
+				SecondaryColorIDs:   []uuid.UUID{color2ID},
+			},
+			ModerationEvaluation: vision.ModerationEvaluationV1{
+				ModerationRecommendation: "clear",
+			},
+		}
+		err := vision.ValidateAnalysisResult(req, res, vocab)
+		if err != nil {
+			t.Fatalf("expected canonical color UUIDs to be accepted, got %v", err)
+		}
+	})
+
+	t.Run("Season Dictionary UUID Rejected as Color", func(t *testing.T) {
+		res := &vision.VisionAnalysisResult{
+			VisualObservation: vision.ProductVisualObservationV2{
+				CategoryConsistency: vision.CategoryConsistencyConsistent,
+				DominantColorIDs:    []uuid.UUID{seasonDictID},
+			},
+			ModerationEvaluation: vision.ModerationEvaluationV1{
+				ModerationRecommendation: "clear",
 			},
 		}
 		err := vision.ValidateAnalysisResult(req, res, vocab)
 		if err == nil || !errorsIsUnknownTaxonomy(err) {
-			t.Fatalf("expected ErrUnknownTaxonomyID, got %v", err)
+			t.Fatalf("expected ErrUnknownTaxonomyID when season dictionary UUID is passed as color, got %v", err)
 		}
 	})
 
-	t.Run("Unknown Vision ID", func(t *testing.T) {
+	t.Run("Finish Dictionary UUID Rejected as Color", func(t *testing.T) {
 		res := &vision.VisionAnalysisResult{
-			VisualObservation: vision.ProductVisualObservationV1{
-				PatternID: ptr("vision.pattern.fake"),
+			VisualObservation: vision.ProductVisualObservationV2{
+				CategoryConsistency: vision.CategoryConsistencyConsistent,
+				DominantColorIDs:    []uuid.UUID{finishDictID},
+			},
+			ModerationEvaluation: vision.ModerationEvaluationV1{
+				ModerationRecommendation: "clear",
 			},
 		}
 		err := vision.ValidateAnalysisResult(req, res, vocab)
-		if err == nil || !errorsIsUnknownVision(err) {
-			t.Fatalf("expected ErrUnknownVisionID, got %v", err)
+		if err == nil || !errorsIsUnknownTaxonomy(err) {
+			t.Fatalf("expected ErrUnknownTaxonomyID when finish dictionary UUID is passed as color, got %v", err)
 		}
 	})
 
-	t.Run("Unknown Image ID in Evidence", func(t *testing.T) {
-		wrongImg := uuid.New()
+	t.Run("Random UUID Rejected as Color", func(t *testing.T) {
+		randomID := uuid.New()
 		res := &vision.VisionAnalysisResult{
-			VisualObservation: vision.ProductVisualObservationV1{
-				PatternID: ptr("vision.pattern.striped"),
-				Evidence: []vision.Evidence{
-					{ImageIDs: []uuid.UUID{wrongImg}},
-				},
+			VisualObservation: vision.ProductVisualObservationV2{
+				CategoryConsistency: vision.CategoryConsistencyConsistent,
+				DominantColorIDs:    []uuid.UUID{randomID},
+			},
+			ModerationEvaluation: vision.ModerationEvaluationV1{
+				ModerationRecommendation: "clear",
 			},
 		}
 		err := vision.ValidateAnalysisResult(req, res, vocab)
-		if err == nil || !errorsIsUnknownImage(err) {
-			t.Fatalf("expected ErrUnknownImageID, got %v", err)
+		if err == nil || !errorsIsUnknownTaxonomy(err) {
+			t.Fatalf("expected ErrUnknownTaxonomyID for random UUID, got %v", err)
+		}
+	})
+
+	t.Run("Empty Color Arrays Accepted as Abstention", func(t *testing.T) {
+		res := &vision.VisionAnalysisResult{
+			VisualObservation: vision.ProductVisualObservationV2{
+				CategoryConsistency: vision.CategoryConsistencyConsistent,
+				DominantColorIDs:    []uuid.UUID{},
+				SecondaryColorIDs:   []uuid.UUID{},
+			},
+			ModerationEvaluation: vision.ModerationEvaluationV1{
+				ModerationRecommendation: "clear",
+			},
+		}
+		err := vision.ValidateAnalysisResult(req, res, vocab)
+		if err != nil {
+			t.Fatalf("expected empty color arrays to be accepted as abstention, got %v", err)
+		}
+	})
+
+	t.Run("Vision String Color Token Rejected on Deserialization", func(t *testing.T) {
+		rawJSON := `{"visualObservation":{"categoryConsistency":"consistent","dominantColorIds":["vision.color.black"]}}`
+		var res vision.VisionAnalysisResult
+		err := json.Unmarshal([]byte(rawJSON), &res)
+		if err == nil {
+			t.Fatalf("expected unmarshal error when string token is passed to uuid.UUID color field, got nil")
 		}
 	})
 
 	t.Run("Conflicting Observation (Dominant and Secondary Color overlap)", func(t *testing.T) {
 		res := &vision.VisionAnalysisResult{
-			VisualObservation: vision.ProductVisualObservationV1{
-				DominantColorIDs:  []string{dictID.String()},
-				SecondaryColorIDs: []string{dictID.String()},
+			VisualObservation: vision.ProductVisualObservationV2{
+				CategoryConsistency: vision.CategoryConsistencyConsistent,
+				DominantColorIDs:     []uuid.UUID{color1ID},
+				SecondaryColorIDs:    []uuid.UUID{color1ID},
+			},
+			ModerationEvaluation: vision.ModerationEvaluationV1{
+				ModerationRecommendation: "clear",
 			},
 		}
 		err := vision.ValidateAnalysisResult(req, res, vocab)
@@ -197,10 +349,28 @@ func TestValidateAnalysisResult(t *testing.T) {
 		}
 	})
 
-	t.Run("Invalid Enum", func(t *testing.T) {
+	t.Run("Invalid Moderation Enum", func(t *testing.T) {
 		res := &vision.VisionAnalysisResult{
+			VisualObservation: vision.ProductVisualObservationV2{
+				CategoryConsistency: vision.CategoryConsistencyConsistent,
+			},
 			ModerationEvaluation: vision.ModerationEvaluationV1{
 				ModerationRecommendation: "approve", // not allowed
+			},
+		}
+		err := vision.ValidateAnalysisResult(req, res, vocab)
+		if err == nil || !errorsIsInvalidEnum(err) {
+			t.Fatalf("expected ErrInvalidEnum, got %v", err)
+		}
+	})
+
+	t.Run("Invalid Category Consistency Enum", func(t *testing.T) {
+		res := &vision.VisionAnalysisResult{
+			VisualObservation: vision.ProductVisualObservationV2{
+				CategoryConsistency: vision.CategoryConsistency("invalid_consistency"),
+			},
+			ModerationEvaluation: vision.ModerationEvaluationV1{
+				ModerationRecommendation: "clear",
 			},
 		}
 		err := vision.ValidateAnalysisResult(req, res, vocab)
@@ -212,7 +382,9 @@ func TestValidateAnalysisResult(t *testing.T) {
 	t.Run("Abstention Valid", func(t *testing.T) {
 		// Just omitted fields -> valid
 		res := &vision.VisionAnalysisResult{
-			VisualObservation: vision.ProductVisualObservationV1{
+			VisualObservation: vision.ProductVisualObservationV2{
+				CategoryConsistency:  vision.CategoryConsistencyUncertain,
+				ObservedCategoryText: nil,
 				Confidence: map[string]vision.ConfidenceScore{
 					"pattern": {Level: "abstained", Score: 0},
 				},
@@ -228,13 +400,13 @@ func TestValidateAnalysisResult(t *testing.T) {
 	})
 
 	t.Run("Observation Independent of Moderation", func(t *testing.T) {
-		// Proves X
 		res := &vision.VisionAnalysisResult{
-			VisualObservation: vision.ProductVisualObservationV1{
-				PatternID: ptr("vision.pattern.striped"),
+			VisualObservation: vision.ProductVisualObservationV2{
+				CategoryConsistency: vision.CategoryConsistencyConsistent,
+				PatternID:           ptr("vision.pattern.striped"),
 			},
 			ModerationEvaluation: vision.ModerationEvaluationV1{
-				ModerationRecommendation: "clear", // required field technically for mod struct, but obs is intact
+				ModerationRecommendation: "clear",
 			},
 		}
 

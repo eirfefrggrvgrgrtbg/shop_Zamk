@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -77,15 +78,62 @@ func (s *S3Client) BuildPublicURL(objectKey string) string {
 }
 
 func (s *S3Client) DownloadObject(ctx context.Context, objectKey string) ([]byte, error) {
+	return s.DownloadObjectBounded(ctx, objectKey, 0)
+}
+
+func (s *S3Client) DownloadObjectBounded(ctx context.Context, objectKey string, maxBytes int64) ([]byte, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	obj, err := s.client.GetObject(ctx, s.cfg.Bucket, objectKey, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, err
+		return nil, wrapMinioError(err)
 	}
 	defer obj.Close()
 
-	buf := new(bytes.Buffer)
-	if _, err := buf.ReadFrom(obj); err != nil {
-		return nil, err
+	stat, err := obj.Stat()
+	if err != nil {
+		return nil, wrapMinioError(err)
 	}
+
+	if maxBytes > 0 && stat.Size > maxBytes {
+		return nil, ErrFileTooLarge
+	}
+
+	var reader io.Reader = obj
+	if maxBytes > 0 {
+		reader = io.LimitReader(obj, maxBytes+1)
+	}
+
+	buf := new(bytes.Buffer)
+	n, err := buf.ReadFrom(reader)
+	if err != nil {
+		return nil, wrapMinioError(err)
+	}
+
+	if maxBytes > 0 && n > maxBytes {
+		return nil, ErrFileTooLarge
+	}
+
 	return buf.Bytes(), nil
+}
+
+func wrapMinioError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) {
+		return context.Canceled
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return context.DeadlineExceeded
+	}
+	var errResp minio.ErrorResponse
+	if errors.As(err, &errResp) {
+		if errResp.Code == "NoSuchKey" || errResp.StatusCode == 404 {
+			return ErrObjectNotFound
+		}
+	}
+	return err
 }

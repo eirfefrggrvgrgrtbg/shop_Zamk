@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -115,7 +116,7 @@ func TestCloudRuClient(t *testing.T) {
 			w.Write([]byte(`{
 				"choices": [{
 					"message": {
-						"content": "{\"visualObservation\":{\"patternId\":\"vision.pattern.striped\"},\"moderationEvaluation\":{\"moderationRecommendation\":\"clear\"}}"
+						"content": "{\"visualObservation\":{\"categoryConsistency\":\"consistent\",\"observedCategoryText\":\"t-shirt\",\"patternId\":\"vision.pattern.striped\"},\"moderationEvaluation\":{\"moderationRecommendation\":\"clear\"}}"
 					}
 				}],
 				"usage": {
@@ -131,6 +132,12 @@ func TestCloudRuClient(t *testing.T) {
 		res, err := client.AnalyzeProduct(context.Background(), reqData)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.VisualObservation.CategoryConsistency != vision.CategoryConsistencyConsistent {
+			t.Fatalf("expected categoryConsistency 'consistent', got %v", res.VisualObservation.CategoryConsistency)
+		}
+		if res.VisualObservation.ObservedCategoryText == nil || *res.VisualObservation.ObservedCategoryText != "t-shirt" {
+			t.Fatalf("expected observedCategoryText 't-shirt', got %v", res.VisualObservation.ObservedCategoryText)
 		}
 		if res.VisualObservation.PatternID == nil || *res.VisualObservation.PatternID != "vision.pattern.striped" {
 			t.Fatalf("missing parsed visual observation data")
@@ -240,4 +247,117 @@ func TestCloudRuClient(t *testing.T) {
 			t.Fatalf("expected provider timeout error, got %v", err)
 		}
 	})
+}
+
+func TestMeasureV2ContractSize(t *testing.T) {
+	img1ID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	img2ID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	catID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+
+	seasonID := uuid.New()
+	finishID := uuid.New()
+	dicts := []vision.TaxonomyItem{
+		{ID: seasonID, Label: "Весна"},
+		{ID: finishID, Label: "Матовая"},
+	}
+
+	hexBlack := "#000000"
+	var colors []vision.ColorTaxonomyItem
+	var colorIDs []uuid.UUID
+	for i := 0; i < 122; i++ {
+		id := uuid.New()
+		colorIDs = append(colorIDs, id)
+		colors = append(colors, vision.ColorTaxonomyItem{
+			ID:    id,
+			Code:  fmt.Sprintf("CLR-%03d", i),
+			Label: "Черный",
+			Hex:   &hexBlack,
+		})
+	}
+
+	req := vision.VisionAnalysisRequest{
+		Snapshot: vision.ProductVisionSnapshot{
+			Title:              "Вечернее шелковое платье",
+			Description:        "Элегантное шелковое платье макси",
+			DeclaredCategoryID: catID,
+			DeclaredCategory:   "Одежда → Женская одежда → Платья",
+		},
+		Images: []vision.VisionInputImage{
+			{ImageID: img1ID, MIMEType: "image/jpeg", Bytes: []byte("img1")},
+			{ImageID: img2ID, MIMEType: "image/jpeg", Bytes: []byte("img2")},
+		},
+		AllowedDictionaryIDs: []uuid.UUID{seasonID, finishID},
+		AllowedColorIDs:      colorIDs,
+		TaxonomyContext: &vision.TaxonomyContext{
+			Dictionaries: dicts,
+			Colors:       colors,
+		},
+	}
+
+	schema := vision.BuildCanonicalJSONSchema(req)
+	schemaBytes, err := json.Marshal(schema)
+	if err != nil {
+		t.Fatalf("marshal schema: %v", err)
+	}
+
+	var interceptedBody []byte
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		interceptedBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"choices": [{
+				"message": {
+					"content": "{\"visualObservation\":{\"categoryConsistency\":\"consistent\",\"observedCategoryText\":\"dress\"},\"moderationEvaluation\":{\"moderationRecommendation\":\"clear\"}}"
+				}
+			}]
+		}`))
+	}))
+	defer ts.Close()
+
+	client, err := cloudru.NewClient(cloudru.Config{BaseURL: ts.URL, APIKey: "fake"})
+	if err != nil {
+		t.Fatalf("client err: %v", err)
+	}
+
+	// Make call with empty image bytes to measure request size excluding image base64
+	reqEmptyImages := req
+	reqEmptyImages.Images = []vision.VisionInputImage{
+		{ImageID: img1ID, MIMEType: "image/jpeg", Bytes: []byte{}},
+		{ImageID: img2ID, MIMEType: "image/jpeg", Bytes: []byte{}},
+	}
+	_, err = client.AnalyzeProduct(context.Background(), reqEmptyImages)
+	if err != nil {
+		t.Fatalf("analyze err: %v", err)
+	}
+
+	// Extract prompt text from intercepted request
+	var bodyMap map[string]interface{}
+	_ = json.Unmarshal(interceptedBody, &bodyMap)
+	messages := bodyMap["messages"].([]interface{})
+	firstMsg := messages[0].(map[string]interface{})
+	contents := firstMsg["content"].([]interface{})
+	promptText := contents[0].(map[string]interface{})["text"].(string)
+
+	// Verify prompt contains canonical color mapping
+	if !strings.Contains(promptText, "Available Canonical Colors:") {
+		t.Fatalf("expected prompt to contain Available Canonical Colors section")
+	}
+	sampleColorLine := fmt.Sprintf("- %s: Черный (#000000)", colors[0].ID.String())
+	if !strings.Contains(promptText, sampleColorLine) {
+		t.Fatalf("expected prompt to contain canonical color line %q", sampleColorLine)
+	}
+
+	// Verify prompt excludes season/finish dictionary IDs as colors
+	if strings.Contains(promptText, seasonID.String()) {
+		t.Fatalf("season dictionary ID %s must NOT appear in prompt", seasonID)
+	}
+	if strings.Contains(promptText, finishID.String()) {
+		t.Fatalf("finish dictionary ID %s must NOT appear in prompt", finishID)
+	}
+
+	t.Logf("V2_COLOR_COUNT=%d", len(colors))
+	t.Logf("V2_SCHEMA_SIZE_BYTES=%d", len(schemaBytes))
+	t.Logf("V2_PROMPT_SIZE_BYTES=%d", len([]byte(promptText)))
+	t.Logf("V2_REQUEST_SIZE_EXCLUDING_BASE64=%d", len(interceptedBody))
+	t.Logf("V2_IMAGE_ENUM_COUNT=%d", len(req.Images))
 }

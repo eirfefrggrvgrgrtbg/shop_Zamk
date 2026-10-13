@@ -1,12 +1,82 @@
 package vision
 
-const (
-	CanonicalSchemaName = "vision_product_analysis_v1"
+import (
+	"sort"
+
+	"github.com/google/uuid"
 )
 
-// CanonicalJSONSchema produces the provider-native strict JSON schema
-// describing the compound Vision output (ProductVisualObservationV1 + ModerationEvaluationV1).
+const (
+	CanonicalSchemaNameV1 = "vision_product_analysis_v1"
+	CanonicalSchemaNameV2 = "vision_product_analysis_v2"
+
+	CanonicalSchemaName = CanonicalSchemaNameV2
+)
+
+// CanonicalJSONSchema produces the baseline strict JSON schema V2 for static callers.
 func CanonicalJSONSchema() map[string]interface{} {
+	return BuildCanonicalJSONSchema(VisionAnalysisRequest{})
+}
+
+// BuildCanonicalJSONSchema produces the provider-native strict JSON schema V2
+// describing the compound Vision output (ProductVisualObservationV2 + ModerationEvaluationV1),
+// dynamically bound to the immutable runtime inputs (snapshot images, dictionary colors).
+func BuildCanonicalJSONSchema(req VisionAnalysisRequest) map[string]interface{} {
+	// Extract and sort snapshot image IDs for evidence binding
+	imageIDs := make([]string, 0, len(req.Images))
+	for _, img := range req.Images {
+		imageIDs = append(imageIDs, img.ImageID.String())
+	}
+	if len(imageIDs) == 0 {
+		for _, img := range req.Snapshot.Images {
+			imageIDs = append(imageIDs, img.ImageID.String())
+		}
+	}
+	sort.Strings(imageIDs)
+
+	var evidenceImageItemSchema map[string]interface{}
+	if len(imageIDs) > 0 {
+		evidenceImageItemSchema = map[string]interface{}{
+			"type": "string",
+			"enum": imageIDs,
+		}
+	} else {
+		evidenceImageItemSchema = map[string]interface{}{
+			"type":      "string",
+			"maxLength": 36,
+		}
+	}
+
+	// Extract and sort canonical color UUIDs for color binding
+	var colorUUIDs []uuid.UUID
+	if req.TaxonomyContext != nil && len(req.TaxonomyContext.Colors) > 0 {
+		colorUUIDs = make([]uuid.UUID, len(req.TaxonomyContext.Colors))
+		for i, c := range req.TaxonomyContext.Colors {
+			colorUUIDs[i] = c.ID
+		}
+	} else if len(req.AllowedColorIDs) > 0 {
+		colorUUIDs = req.AllowedColorIDs
+	}
+
+	colorIDs := make([]string, 0, len(colorUUIDs))
+	for _, id := range colorUUIDs {
+		colorIDs = append(colorIDs, id.String())
+	}
+	sort.Strings(colorIDs)
+
+	var colorItemSchema map[string]interface{}
+	if len(colorIDs) > 0 {
+		colorItemSchema = map[string]interface{}{
+			"type": "string",
+			"enum": colorIDs,
+		}
+	} else {
+		colorItemSchema = map[string]interface{}{
+			"type":      "string",
+			"maxLength": 36,
+		}
+	}
+
 	confidenceScoreSchema := map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -45,11 +115,8 @@ func CanonicalJSONSchema() map[string]interface{} {
 				"maxLength": 64,
 			},
 			"imageIds": map[string]interface{}{
-				"type": "array",
-				"items": map[string]interface{}{
-					"type":      "string",
-					"maxLength": 36,
-				},
+				"type":     "array",
+				"items":    evidenceImageItemSchema,
 				"maxItems": 10,
 			},
 		},
@@ -84,26 +151,27 @@ func CanonicalJSONSchema() map[string]interface{} {
 	visualObservationSchema := map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"observedCategoryId": map[string]interface{}{
+			"categoryConsistency": map[string]interface{}{
+				"type": "string",
+				"enum": []string{"consistent", "contradictory", "uncertain"},
+			},
+			"observedCategoryText": map[string]interface{}{
 				"anyOf": []interface{}{
-					map[string]interface{}{"type": "string", "maxLength": 36},
+					map[string]interface{}{
+						"type":      "string",
+						"maxLength": 100,
+					},
 					map[string]interface{}{"type": "null"},
 				},
 			},
 			"dominantColorIds": map[string]interface{}{
-				"type": "array",
-				"items": map[string]interface{}{
-					"type":      "string",
-					"maxLength": 64,
-				},
+				"type":     "array",
+				"items":    colorItemSchema,
 				"maxItems": 10,
 			},
 			"secondaryColorIds": map[string]interface{}{
-				"type": "array",
-				"items": map[string]interface{}{
-					"type":      "string",
-					"maxLength": 64,
-				},
+				"type":     "array",
+				"items":    colorItemSchema,
 				"maxItems": 10,
 			},
 			"silhouetteId": map[string]interface{}{
@@ -227,7 +295,8 @@ func CanonicalJSONSchema() map[string]interface{} {
 			},
 		},
 		"required": []string{
-			"observedCategoryId",
+			"categoryConsistency",
+			"observedCategoryText",
 			"dominantColorIds",
 			"secondaryColorIds",
 			"silhouetteId",

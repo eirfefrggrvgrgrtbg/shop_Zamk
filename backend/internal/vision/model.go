@@ -47,9 +47,20 @@ type VisionAnalysisRequest struct {
 	Snapshot              ProductVisionSnapshot
 	Images                []VisionInputImage
 	AllowedCategoryIDs    []uuid.UUID
-	AllowedDictionaryIDs  []uuid.UUID
-	VocabularyContextHash string // Deterministic hash of taxonomy + vocabulary context
+	AllowedDictionaryIDs  []uuid.UUID // Deprecated: non-color attribute dictionaries
+	AllowedColorIDs       []uuid.UUID // Canonical color IDs (colors.id)
+	VocabularyContextHash string      // Deterministic hash of taxonomy + vocabulary context
+	TaxonomyContext       *TaxonomyContext
 }
+
+// CategoryConsistency represents semantic verification of the declared category.
+type CategoryConsistency string
+
+const (
+	CategoryConsistencyConsistent    CategoryConsistency = "consistent"
+	CategoryConsistencyContradictory CategoryConsistency = "contradictory"
+	CategoryConsistencyUncertain     CategoryConsistency = "uncertain"
+)
 
 // ConfidenceScore distinguishes between known, uncertain, and abstained states.
 type ConfidenceScore struct {
@@ -64,7 +75,7 @@ type Evidence struct {
 	ImageIDs []uuid.UUID `json:"imageIds"`
 }
 
-// ProductVisualObservationV1 captures pure visual facts.
+// ProductVisualObservationV1 captures pure visual facts under historical Contract V1.
 type ProductVisualObservationV1 struct {
 	ObservedCategoryID   *uuid.UUID `json:"observedCategoryId,omitempty"`
 	DominantColorIDs     []string   `json:"dominantColorIds,omitempty"` // Mixed UUID or Vision string ID
@@ -83,6 +94,31 @@ type ProductVisualObservationV1 struct {
 	SeasonalCueIDs       []string   `json:"seasonalCueIds,omitempty"`
 	ImageSetConsistency  *bool      `json:"imageSetConsistency,omitempty"`
 	OCRText              []string   `json:"ocrText,omitempty"`
+
+	Confidence map[string]ConfidenceScore `json:"confidence,omitempty"`
+	Evidence   []Evidence                 `json:"evidence,omitempty"`
+}
+
+// ProductVisualObservationV2 captures pure visual facts under Contract V2.
+type ProductVisualObservationV2 struct {
+	CategoryConsistency  CategoryConsistency        `json:"categoryConsistency"`
+	ObservedCategoryText *string                    `json:"observedCategoryText"`
+	DominantColorIDs     []uuid.UUID                `json:"dominantColorIds,omitempty"` // Canonical colors.id only
+	SecondaryColorIDs    []uuid.UUID                `json:"secondaryColorIds,omitempty"`
+	SilhouetteID         *string                    `json:"silhouetteId,omitempty"`
+	FitAppearanceID      *string                    `json:"fitAppearanceId,omitempty"`
+	LengthID             *string                    `json:"lengthId,omitempty"`
+	SleeveIDs            []string                   `json:"sleeveIds,omitempty"`
+	NecklineID           *string                    `json:"necklineId,omitempty"`
+	ClosureID            *string                    `json:"closureId,omitempty"`
+	PatternID            *string                    `json:"patternId,omitempty"`
+	VisibleTextureID     *string                    `json:"visibleTextureId,omitempty"`
+	DecorativeDetailIDs  []string                   `json:"decorativeDetailIds,omitempty"`
+	StyleDescriptorIDs   []string                   `json:"styleDescriptorIds,omitempty"`
+	FormalityID          *string                    `json:"formalityId,omitempty"`
+	SeasonalCueIDs       []string                   `json:"seasonalCueIds,omitempty"`
+	ImageSetConsistency  *bool                      `json:"imageSetConsistency,omitempty"`
+	OCRText              []string                   `json:"ocrText,omitempty"`
 
 	Confidence map[string]ConfidenceScore `json:"confidence,omitempty"`
 	Evidence   []Evidence                 `json:"evidence,omitempty"`
@@ -114,7 +150,7 @@ type UsageMetadata struct {
 
 // VisionAnalysisResult is the final compound payload returned by the Analyzer.
 type VisionAnalysisResult struct {
-	VisualObservation    ProductVisualObservationV1 `json:"visualObservation"`
+	VisualObservation    ProductVisualObservationV2 `json:"visualObservation"`
 	ModerationEvaluation ModerationEvaluationV1     `json:"moderationEvaluation"`
 	Usage                *UsageMetadata             `json:"usage,omitempty"`
 }
@@ -233,7 +269,7 @@ type VisionRun struct {
 	ClaimedAt            *time.Time
 	NextAttemptAt        *time.Time
 	CompletedAt          *time.Time
-	ResultObservation    *ProductVisualObservationV1
+	ResultObservation    *ProductVisualObservationV2
 	ResultEvaluation     *ModerationEvaluationV1
 	UsageMetadata        *UsageMetadata
 	LatencyMs            *int
@@ -255,6 +291,6 @@ type CurrentVisualProfile struct {
 	ModelID              string                     `json:"modelId"`
 	SnapshotHash         string                     `json:"snapshotHash"`
 	TaxonomyContextHash  string                     `json:"taxonomyContextHash"`
-	Observation          ProductVisualObservationV1 `json:"observation"`
+	Observation          ProductVisualObservationV2 `json:"observation"`
 	UpdatedAt            time.Time                  `json:"updatedAt"`
 }
