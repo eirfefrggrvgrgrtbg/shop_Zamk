@@ -120,12 +120,24 @@ type VisionAnalysisResult struct {
 }
 
 const (
+	CanonicalProvider = "cloud.ru"
+	CanonicalModelID  = "qwen/qwen3-vl-235b-a22b-instruct"
+
 	RunStatusPending          = "pending"
 	RunStatusProcessing       = "processing"
 	RunStatusSucceeded        = "succeeded"
 	RunStatusProviderFailed   = "provider_failed"
 	RunStatusInvalidOutput    = "invalid_output"
 	RunStatusProcessingFailed = "processing_failed" // Worker crash / max attempts exceeded
+
+	FailureCodeProviderTransient  = "provider_transient"
+	FailureCodeProviderPermanent  = "provider_permanent"
+	FailureCodeStorageTransient   = "storage_transient"
+	FailureCodeMediaMissing       = "media_missing"
+	FailureCodeMediaInvalid       = "media_invalid"
+	FailureCodeContractMismatch   = "contract_mismatch"
+	FailureCodeInvalidModelOutput = "invalid_model_output"
+	FailureCodeInternalError      = "internal_error"
 )
 
 var (
@@ -193,6 +205,7 @@ func BuildCanonicalVisionRun(params ScheduleVisionRunParams) VisionRun {
 		SchemaVersion:        schemaVer,
 		VocabularyVersion:    vocabVer,
 		TaxonomyContextHash:  taxHash,
+		TaxonomyContext:      &tc,
 		SnapshotHash:         snapHash,
 		SnapshotJSON:         params.Snapshot,
 		IdempotencyKey:       idemKey,

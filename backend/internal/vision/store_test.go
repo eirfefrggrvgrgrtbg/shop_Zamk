@@ -153,6 +153,17 @@ func makeTestParams(fix testFixture, modelID string) vision.ScheduleVisionRunPar
 	}
 }
 
+func transitionRunToProcessing(t *testing.T, pool *pgxpool.Pool, runID uuid.UUID) {
+	t.Helper()
+	tag, err := pool.Exec(context.Background(), `
+		UPDATE product_vision_runs
+		SET status = 'processing', claimed_at = now(), attempts = attempts + 1, updated_at = now()
+		WHERE id = $1
+	`, runID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), tag.RowsAffected(), "Test run must transition to processing")
+}
+
 func TestStore_EnsureVisionRun_SequentialAndConcurrent(t *testing.T) {
 	pool := getIsolatedTestPool(t)
 	defer pool.Close()
@@ -296,12 +307,11 @@ func TestStore_Claiming_ConcurrencyAndExclusion(t *testing.T) {
 	store := vision.NewStore(pool)
 	fix := setupTestFixture(t, pool)
 
-	// Drain any existing pending runs from previous tests so claimer queue is clean
-	_, _ = store.ClaimPendingRuns(ctx, 1000)
-
 	// Test C: Two concurrent claimers with ONE pending run → exactly one receives it
 	p1 := makeTestParams(fix, "qwen-claim-c")
 	run1, _, err := store.EnsureVisionRun(ctx, p1)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, "UPDATE product_vision_runs SET created_at = $1 WHERE id = $2", time.Now().Add(-1000*time.Hour), run1.ID)
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
@@ -332,9 +342,13 @@ func TestStore_Claiming_ConcurrencyAndExclusion(t *testing.T) {
 	p2A := makeTestParams(fix, "qwen-claim-d-a")
 	run2A, _, err := store.EnsureVisionRun(ctx, p2A)
 	require.NoError(t, err)
+	_, err = pool.Exec(ctx, "UPDATE product_vision_runs SET created_at = $1 WHERE id = $2", time.Now().Add(-900*time.Hour), run2A.ID)
+	require.NoError(t, err)
 
 	p2B := makeTestParams(fix, "qwen-claim-d-b")
 	run2B, _, err := store.EnsureVisionRun(ctx, p2B)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, "UPDATE product_vision_runs SET created_at = $1 WHERE id = $2", time.Now().Add(-899*time.Hour), run2B.ID)
 	require.NoError(t, err)
 
 	claimResultsD := make([][]vision.VisionRun, 2)
@@ -363,17 +377,7 @@ func TestStore_Claiming_ConcurrencyAndExclusion(t *testing.T) {
 	pE := makeTestParams(fix, "qwen-claim-e")
 	runE, _, err := store.EnsureVisionRun(ctx, pE)
 	require.NoError(t, err)
-
-	// claim it to processing then complete
-	claimed, err := store.ClaimPendingRuns(ctx, 10)
-	require.NoError(t, err)
-	foundClaimed := false
-	for _, r := range claimed {
-		if r.ID == runE.ID {
-			foundClaimed = true
-		}
-	}
-	require.True(t, foundClaimed)
+	transitionRunToProcessing(t, pool, runE.ID)
 
 	obs := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.regular")}
 	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
@@ -391,9 +395,8 @@ func TestStore_Claiming_ConcurrencyAndExclusion(t *testing.T) {
 	pF := makeTestParams(fix, "qwen-claim-f")
 	runF, _, err := store.EnsureVisionRun(ctx, pF)
 	require.NoError(t, err)
+	transitionRunToProcessing(t, pool, runF.ID)
 
-	claimed, err = store.ClaimPendingRuns(ctx, 100)
-	require.NoError(t, err)
 	err = store.SaveInvalidOutput(ctx, runF.ID, "BAD_JSON", "unparseable response")
 	require.NoError(t, err)
 
@@ -421,10 +424,8 @@ func TestStore_TerminalStateImmutability_AndTransitions(t *testing.T) {
 	err = store.SaveSuccess(ctx, run.ID, obs, eval, nil, nil, nil)
 	require.ErrorIs(t, err, vision.ErrInvalidRunTransition)
 
-	// Claim to processing
-	claimed, err := store.ClaimPendingRuns(ctx, 10)
-	require.NoError(t, err)
-	require.NotEmpty(t, claimed)
+	// Transition to processing
+	transitionRunToProcessing(t, pool, run.ID)
 
 	// SaveSuccess: processing -> succeeded
 	err = store.SaveSuccess(ctx, run.ID, obs, eval, nil, nil, nil)
@@ -448,20 +449,20 @@ func TestStore_DeadWorkerRecovery_AndRetryStorage(t *testing.T) {
 	store := vision.NewStore(pool)
 	fix := setupTestFixture(t, pool)
 
-	// Clean up any stale processing runs from earlier test runs
-	_, _ = pool.Exec(ctx, "UPDATE product_vision_runs SET status = 'succeeded' WHERE status = 'processing'")
-
 	// Test G: Non-stale processing not recovered
 	pG := makeTestParams(fix, "qwen-recov-g")
 	run1, _, err := store.EnsureVisionRun(ctx, pG)
 	require.NoError(t, err)
 
-	_, err = store.ClaimPendingRuns(ctx, 10)
-	require.NoError(t, err)
+	transitionRunToProcessing(t, pool, run1.ID)
 
 	recovered, err := store.ResetStaleRuns(ctx, 10*time.Minute, 3)
 	require.NoError(t, err)
-	require.Equal(t, 0, recovered, "Non-stale run must not be recovered")
+
+	var stG string
+	err = pool.QueryRow(ctx, "SELECT status FROM product_vision_runs WHERE id = $1", run1.ID).Scan(&stG)
+	require.NoError(t, err)
+	require.Equal(t, vision.RunStatusProcessing, stG, "Non-stale run must remain in processing")
 
 	// Test H: Stale processing recovered back to pending
 	_, err = pool.Exec(ctx, "UPDATE product_vision_runs SET claimed_at = $1 WHERE id = $2", time.Now().Add(-1*time.Hour), run1.ID)
@@ -469,7 +470,7 @@ func TestStore_DeadWorkerRecovery_AndRetryStorage(t *testing.T) {
 
 	recovered, err = store.ResetStaleRuns(ctx, 10*time.Minute, 3)
 	require.NoError(t, err)
-	require.Equal(t, 1, recovered, "Stale run must be recovered back to pending")
+	require.GreaterOrEqual(t, recovered, 1, "At least run1 must be recovered")
 
 	var st string
 	pool.QueryRow(ctx, "SELECT status FROM product_vision_runs WHERE id = $1", run1.ID).Scan(&st)
@@ -489,8 +490,7 @@ func TestStore_DeadWorkerRecovery_AndRetryStorage(t *testing.T) {
 	pRetry := makeTestParams(fix, "qwen-retry")
 	runRetry, _, err := store.EnsureVisionRun(ctx, pRetry)
 	require.NoError(t, err)
-	_, err = store.ClaimPendingRuns(ctx, 10)
-	require.NoError(t, err)
+	transitionRunToProcessing(t, pool, runRetry.ID)
 
 	// Requeue with future nextAttemptAt
 	futureTime := time.Now().Add(1 * time.Hour)
@@ -504,9 +504,9 @@ func TestStore_DeadWorkerRecovery_AndRetryStorage(t *testing.T) {
 		require.NotEqual(t, runRetry.ID, r.ID, "Future retry time should not be claimed yet")
 	}
 
-	// Update nextAttemptAt to past
+	// Update nextAttemptAt to past, and set created_at in distant past to ensure claim order
 	pastTime := time.Now().Add(-1 * time.Minute)
-	_, err = pool.Exec(ctx, "UPDATE product_vision_runs SET next_attempt_at = $1 WHERE id = $2", pastTime, runRetry.ID)
+	_, err = pool.Exec(ctx, "UPDATE product_vision_runs SET next_attempt_at = $1, created_at = $2 WHERE id = $3", pastTime, time.Now().Add(-1000*time.Hour), runRetry.ID)
 	require.NoError(t, err)
 
 	// Now eligible for claim
@@ -705,8 +705,7 @@ func TestStore_ScenarioA_B_C_D(t *testing.T) {
 	runA, _, err := store.EnsureVisionRun(ctx, paramsA)
 	require.NoError(t, err)
 
-	_, err = store.ClaimPendingRuns(ctx, 10)
-	require.NoError(t, err)
+	transitionRunToProcessing(t, pool, runA.ID)
 
 	obsA := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.regular")}
 	evalA := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
@@ -762,8 +761,7 @@ func TestStore_ScenarioA_B_C_D(t *testing.T) {
 	runB, _, err := store.EnsureVisionRun(ctx, paramsB)
 	require.NoError(t, err)
 
-	_, err = store.ClaimPendingRuns(ctx, 10)
-	require.NoError(t, err)
+	transitionRunToProcessing(t, pool, runB.ID)
 
 	obsB := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.fitted")}
 	evalB := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
@@ -783,8 +781,7 @@ func TestStore_ScenarioA_B_C_D(t *testing.T) {
 	runStaleA, _, err := store.EnsureVisionRun(ctx, paramsStaleA)
 	require.NoError(t, err)
 
-	_, err = store.ClaimPendingRuns(ctx, 10)
-	require.NoError(t, err)
+	transitionRunToProcessing(t, pool, runStaleA.ID)
 
 	obsStale := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.stale")}
 	evalStale := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
@@ -837,8 +834,7 @@ func TestStore_ScenarioE_PendingRevision_And_ScenarioF_RevisionPromotion(t *test
 	}
 	run1, _, err := store.EnsureVisionRun(ctx, params1)
 	require.NoError(t, err)
-	_, err = store.ClaimPendingRuns(ctx, 10)
-	require.NoError(t, err)
+	transitionRunToProcessing(t, pool, run1.ID)
 	obs1 := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.straight")}
 	eval1 := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, run1.ID, obs1, eval1, nil, nil, nil)
@@ -904,8 +900,7 @@ func TestStore_ScenarioG_UnrelatedMutation(t *testing.T) {
 	params := makeTestParams(fix, "qwen-unrelated")
 	run, _, err := store.EnsureVisionRun(ctx, params)
 	require.NoError(t, err)
-	_, err = store.ClaimPendingRuns(ctx, 10)
-	require.NoError(t, err)
+	transitionRunToProcessing(t, pool, run.ID)
 	obs := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.a_line")}
 	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, run.ID, obs, eval, nil, nil, nil)
@@ -964,8 +959,7 @@ func TestVision_RealServicePath_RevisionPromotion(t *testing.T) {
 	// B. Have current visual profile for version 0
 	runA, _, err := store.EnsureVisionRun(ctx, makeTestParams(fix, "qwen-run-a"))
 	require.NoError(t, err)
-	_, err = store.ClaimPendingRuns(ctx, 10)
-	require.NoError(t, err)
+	transitionRunToProcessing(t, pool, runA.ID)
 	obsA := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.a_line")}
 	evalA := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, runA.ID, obsA, evalA, nil, nil, nil)
@@ -1051,8 +1045,7 @@ func TestVision_RealServicePath_RevisionPromotion(t *testing.T) {
 	}
 	runB, _, err := store.EnsureVisionRun(ctx, paramsB)
 	require.NoError(t, err)
-	_, err = store.ClaimPendingRuns(ctx, 10)
-	require.NoError(t, err)
+	transitionRunToProcessing(t, pool, runB.ID)
 	obsB := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.fit_and_flare")}
 	evalB := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, runB.ID, obsB, evalB, nil, nil, nil)
@@ -1083,8 +1076,7 @@ func TestVision_RealServicePath_NegativeModeration(t *testing.T) {
 
 	run, _, err := store.EnsureVisionRun(ctx, makeTestParams(fix, "qwen-neg-test"))
 	require.NoError(t, err)
-	_, err = store.ClaimPendingRuns(ctx, 10)
-	require.NoError(t, err)
+	transitionRunToProcessing(t, pool, run.ID)
 	obs := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.a_line")}
 	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
 	err = store.SaveSuccess(ctx, run.ID, obs, eval, nil, nil, nil)
@@ -1188,7 +1180,7 @@ func TestVision_RealServicePath_InitialProductApproval(t *testing.T) {
 	// 4. Save visual profile for version 0 and verify it can be retrieved
 	run, _, err := store.EnsureVisionRun(ctx, makeTestParams(fix, "qwen-initial-approve"))
 	require.NoError(t, err)
-	_, err = store.ClaimPendingRuns(ctx, 10)
+	transitionRunToProcessing(t, pool, run.ID)
 	require.NoError(t, err)
 	obs := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.a_line")}
 	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
@@ -1198,5 +1190,39 @@ func TestVision_RealServicePath_InitialProductApproval(t *testing.T) {
 	prof, err := store.GetCurrentVisualProfile(ctx, fix.productID)
 	require.NoError(t, err)
 	require.NotNil(t, prof, "Visual profile for initial approved product must be readable as current")
+	require.Equal(t, int64(0), prof.VisionContentVersion)
+}
+
+func TestStore_IsolationWithUnrelatedPendingRuns(t *testing.T) {
+	pool := getIsolatedTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+	store := vision.NewStore(pool)
+
+	// Inject 3 unrelated pending runs using separate fixtures to simulate dirty/shared test DB
+	for i := 0; i < 3; i++ {
+		unrelatedFix := setupTestFixture(t, pool)
+		p := makeTestParams(unrelatedFix, fmt.Sprintf("qwen-unrelated-%d", i))
+		_, _, err := store.EnsureVisionRun(ctx, p)
+		require.NoError(t, err)
+	}
+
+	// Now run test with its own fixture
+	fix := setupTestFixture(t, pool)
+	params := makeTestParams(fix, "qwen-isolated-check")
+	run, _, err := store.EnsureVisionRun(ctx, params)
+	require.NoError(t, err)
+
+	transitionRunToProcessing(t, pool, run.ID)
+
+	obs := vision.ProductVisualObservationV1{SilhouetteID: func(s string) *string { return &s }("vision.silhouette.fit_and_flare")}
+	eval := vision.ModerationEvaluationV1{ModerationRecommendation: "clear"}
+	err = store.SaveSuccess(ctx, run.ID, obs, eval, nil, nil, nil)
+	require.NoError(t, err)
+
+	prof, err := store.GetCurrentVisualProfile(ctx, fix.productID)
+	require.NoError(t, err)
+	require.NotNil(t, prof, "Owned profile must be returned even when unrelated pending runs exist")
+	require.Equal(t, run.ID, prof.RunID)
 	require.Equal(t, int64(0), prof.VisionContentVersion)
 }

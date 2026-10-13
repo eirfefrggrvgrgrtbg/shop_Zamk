@@ -20,12 +20,22 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+import (
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/vision"
+)
+
+type VisionScheduler interface {
+	EnsureVisionRun(ctx context.Context, params vision.ScheduleVisionRunParams) (*vision.VisionRun, bool, error)
+	ScheduleCurrentProductVision(ctx context.Context, productID uuid.UUID) (*vision.VisionRun, error)
+}
+
 type Service struct {
 	repo       *Repository
 	sellerRepo *sellers.Repository
 	dbPool     *postgres.Client
 	reviews    *reviews.Service
 	notifs     *notifications.Service
+	vision     VisionScheduler
 	rdb        *redis.Client
 	logger     *slog.Logger
 }
@@ -1339,7 +1349,7 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 		CreatedAt:  now,
 	}
 
-	return s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
+	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
 		if err := txRepo.UpdateProductStatus(ctx, p); err != nil {
 			return err
@@ -1358,6 +1368,16 @@ func (s *Service) SubmitProductToModeration(ctx context.Context, currentUserID, 
 		}
 		return nil
 	})
+
+	if err == nil {
+		// Best-effort Vision scheduling (VISION.3B)
+		// Scheduling failure MUST NOT undo moderation submission
+		if scheduleErr := s.ScheduleCurrentProductVision(context.Background(), p.ID); scheduleErr != nil {
+			s.logger.Error("failed to schedule vision on submit", "product_id", p.ID, "error", scheduleErr)
+		}
+	}
+
+	return err
 }
 
 // ---------------------------------------------------------
@@ -1464,7 +1484,7 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 		CreatedAt:   now,
 	}
 
-	return s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
+	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
 
 		if toStatus == StatusPublished {
@@ -1522,6 +1542,15 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 
 		return nil
 	})
+
+	if err == nil && toStatus == StatusPublished {
+		// Schedule Vision for the newly published (or revised) state
+		if scheduleErr := s.ScheduleCurrentProductVision(context.Background(), p.ID); scheduleErr != nil {
+			s.logger.Error("failed to schedule vision on product publish", "product_id", p.ID, "error", scheduleErr)
+		}
+	}
+
+	return err
 }
 
 func (s *Service) ApproveProduct(ctx context.Context, adminUserID, productID uuid.UUID, comment *string) error {
@@ -2410,4 +2439,9 @@ func (s *Service) UpdateProductPrices(ctx context.Context, currentUserID, produc
 
 		return nil
 	})
+}
+
+func (s *Service) WithVisionScheduler(vs VisionScheduler) *Service {
+	s.vision = vs
+	return s
 }

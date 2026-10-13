@@ -43,6 +43,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/supplies"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testlab"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/vision"
 )
 
 func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Client, redisClient *redis.Client, logger *slog.Logger, obs ...*observability.Provider) (*chi.Mux, func()) {
@@ -97,7 +98,10 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	reviewsHandler := reviews.NewHandler(reviewsService)
 
 	productsRepo := products.NewRepository(pgClient.Pool)
-	productsService := products.NewService(productsRepo, sellersRepo, pgClient, reviewsService, notificationsService).WithRedis(redisClient)
+	productsService := products.NewService(productsRepo, sellersRepo, pgClient, reviewsService, notificationsService).WithRedis(redisClient).SetLogger(logger)
+	if cfg.Vision.Enabled {
+		productsService.WithVisionScheduler(vision.NewStore(pgClient.Pool))
+	}
 	productsHandler := products.NewHandler(productsService, sellersService)
 	inventoryService.SetStockAlertReconciler(productsService)
 	sellersService.SetStockAlertReconciler(productsService)

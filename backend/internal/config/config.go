@@ -9,15 +9,16 @@ import (
 )
 
 type Config struct {
-	App       AppConfig
-	Postgres  PostgresConfig
-	Redis     RedisConfig
-	JWT       JWTConfig
-	Auth      AuthConfig
-	S3        S3Config
-	CORS      CORSConfig
-	TBank     TBankConfig
-	Worker    WorkerConfig
+	App           AppConfig
+	Vision        VisionConfig
+	Postgres      PostgresConfig
+	Redis         RedisConfig
+	JWT           JWTConfig
+	Auth          AuthConfig
+	S3            S3Config
+	CORS          CORSConfig
+	TBank         TBankConfig
+	Worker        WorkerConfig
 	RateLimit     RateLimitConfig
 	CDEK          CDEKConfig
 	Observability ObservabilityConfig
@@ -137,6 +138,18 @@ type OpenAIConfig struct {
 
 type ObservabilityConfig = observability.Config
 
+type VisionConfig struct {
+	Enabled             bool
+	CloudRuAPIKey       string
+	CloudRuBaseURL      string
+	PollInterval        int // seconds
+	ClaimTimeout        int // seconds
+	MaxAttempts         int
+	BatchSize           int
+	ReconcileInterval   int // seconds
+	ReconcileBatchLimit int
+}
+
 func Load() (*Config, error) {
 	cfg := &Config{
 		App: AppConfig{
@@ -147,6 +160,17 @@ func Load() (*Config, error) {
 			ShopPublicURL: getEnv("SHOP_PUBLIC_URL", "http://127.0.0.1:3000"),
 			AdminFulfillmentBatchSize:  getEnvAsInt("ADMIN_FULFILLMENT_BATCH_SIZE", 50),
 			PaymentStuckPendingMinutes: getEnvAsInt("PAYMENT_STUCK_PENDING_MINUTES", 30),
+		},
+		Vision: VisionConfig{
+			Enabled:             getEnvAsBool("VISION_ENABLED", false),
+			CloudRuAPIKey:       getEnv("CLOUD_RU_API_KEY", ""),
+			CloudRuBaseURL:      getEnv("CLOUD_RU_BASE_URL", "https://foundation-models.api.cloud.ru/v1"),
+			PollInterval:        getEnvAsInt("VISION_POLL_INTERVAL_SECONDS", 10),
+			ClaimTimeout:        getEnvAsInt("VISION_CLAIM_TIMEOUT_SECONDS", 300),
+			MaxAttempts:         getEnvAsInt("VISION_MAX_ATTEMPTS", 3),
+			BatchSize:           getEnvAsInt("VISION_BATCH_SIZE", 10),
+			ReconcileInterval:   getEnvAsInt("VISION_RECONCILE_INTERVAL_SECONDS", 60),
+			ReconcileBatchLimit: getEnvAsInt("VISION_RECONCILE_BATCH_LIMIT", 50),
 		},
 		Postgres: PostgresConfig{
 			Host:     getEnv("POSTGRES_HOST", "localhost"),

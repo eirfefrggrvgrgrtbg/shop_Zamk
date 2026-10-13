@@ -89,13 +89,13 @@ type TaxonomyItem struct {
 
 // TaxonomyContext encapsulates the runtime context used during inference.
 type TaxonomyContext struct {
-	PromptVersion      string
-	SchemaVersion      string
-	VocabularyVersion  string
-	Categories         []TaxonomyItem
-	Dictionaries       []TaxonomyItem
-	OtherTaxonomyIDs   []uuid.UUID
-	VocabularyRegistry *VocabularyRegistry
+	PromptVersion      string              `json:"promptVersion"`
+	SchemaVersion      string              `json:"schemaVersion"`
+	VocabularyVersion  string              `json:"vocabularyVersion"`
+	Categories         []TaxonomyItem      `json:"categories"`
+	Dictionaries       []TaxonomyItem      `json:"dictionaries"`
+	OtherTaxonomyIDs   []uuid.UUID         `json:"otherTaxonomyIds"`
+	VocabularyRegistry *VocabularyRegistry `json:"-"`
 }
 
 // ComputeTaxonomyContextHash deterministically hashes the prompt version, schema version,

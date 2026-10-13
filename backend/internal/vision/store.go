@@ -59,18 +59,26 @@ func (s *Store) EnsureRawVisionRun(ctx context.Context, run VisionRun) (*VisionR
 		return nil, false, fmt.Errorf("marshal snapshot_json: %w", err)
 	}
 
+	if run.TaxonomyContext == nil {
+		return nil, false, errors.New("taxonomy context is required and cannot be nil")
+	}
+	taxBytes, err := json.Marshal(run.TaxonomyContext)
+	if err != nil {
+		return nil, false, fmt.Errorf("marshal taxonomy_context_json: %w", err)
+	}
+
 	now := time.Now()
 	query := `
 		INSERT INTO product_vision_runs (
 			id, product_id, product_revision_id, vision_content_version, provider, model_id, prompt_version, schema_version,
-			vocabulary_version, taxonomy_context_hash, snapshot_hash, snapshot_json,
+			vocabulary_version, taxonomy_context_hash, taxonomy_context_json, snapshot_hash, snapshot_json,
 			idempotency_key, status, attempts, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 0, $15, $15
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 0, $16, $16
 		)
 		ON CONFLICT (idempotency_key) DO NOTHING
 		RETURNING id, product_id, product_revision_id, vision_content_version, provider, model_id, prompt_version, schema_version,
-		          vocabulary_version, taxonomy_context_hash, snapshot_hash, snapshot_json,
+		          vocabulary_version, taxonomy_context_hash, taxonomy_context_json, snapshot_hash, snapshot_json,
 		          idempotency_key, status, attempts, claimed_at, next_attempt_at, completed_at,
 		          result_observation, result_evaluation, usage_metadata, latency_ms, cost_cents,
 		          failure_code, error_message, created_at, updated_at
@@ -78,15 +86,16 @@ func (s *Store) EnsureRawVisionRun(ctx context.Context, run VisionRun) (*VisionR
 
 	var r VisionRun
 	var returnedSnapBytes []byte
+	var returnedTaxBytes []byte
 	var obsBytes, evalBytes, usageBytes []byte
 
 	err = s.pool.QueryRow(ctx, query,
 		run.ID, run.ProductID, run.ProductRevisionID, run.VisionContentVersion, run.Provider, run.ModelID, run.PromptVersion, run.SchemaVersion,
-		run.VocabularyVersion, run.TaxonomyContextHash, run.SnapshotHash, snapBytes,
+		run.VocabularyVersion, run.TaxonomyContextHash, taxBytes, run.SnapshotHash, snapBytes,
 		run.IdempotencyKey, RunStatusPending, now,
 	).Scan(
 		&r.ID, &r.ProductID, &r.ProductRevisionID, &r.VisionContentVersion, &r.Provider, &r.ModelID, &r.PromptVersion, &r.SchemaVersion,
-		&r.VocabularyVersion, &r.TaxonomyContextHash, &r.SnapshotHash, &returnedSnapBytes,
+		&r.VocabularyVersion, &r.TaxonomyContextHash, &returnedTaxBytes, &r.SnapshotHash, &returnedSnapBytes,
 		&r.IdempotencyKey, &r.Status, &r.Attempts, &r.ClaimedAt, &r.NextAttemptAt, &r.CompletedAt,
 		&obsBytes, &evalBytes, &usageBytes, &r.LatencyMs, &r.CostCents,
 		&r.FailureCode, &r.ErrorMessage, &r.CreatedAt, &r.UpdatedAt,
@@ -95,6 +104,12 @@ func (s *Store) EnsureRawVisionRun(ctx context.Context, run VisionRun) (*VisionR
 	if err == nil {
 		if len(returnedSnapBytes) > 0 {
 			_ = json.Unmarshal(returnedSnapBytes, &r.SnapshotJSON)
+		}
+		if len(returnedTaxBytes) > 0 {
+			var tc TaxonomyContext
+			if err := json.Unmarshal(returnedTaxBytes, &tc); err == nil {
+				r.TaxonomyContext = &tc
+			}
 		}
 		return &r, true, nil
 	}
@@ -106,7 +121,7 @@ func (s *Store) EnsureRawVisionRun(ctx context.Context, run VisionRun) (*VisionR
 	// Conflict occurred: load existing row
 	existingQuery := `
 		SELECT id, product_id, product_revision_id, vision_content_version, provider, model_id, prompt_version, schema_version,
-		       vocabulary_version, taxonomy_context_hash, snapshot_hash, snapshot_json,
+		       vocabulary_version, taxonomy_context_hash, taxonomy_context_json, snapshot_hash, snapshot_json,
 		       idempotency_key, status, attempts, claimed_at, next_attempt_at, completed_at,
 		       result_observation, result_evaluation, usage_metadata, latency_ms, cost_cents,
 		       failure_code, error_message, created_at, updated_at
@@ -115,7 +130,7 @@ func (s *Store) EnsureRawVisionRun(ctx context.Context, run VisionRun) (*VisionR
 	`
 	err = s.pool.QueryRow(ctx, existingQuery, run.IdempotencyKey).Scan(
 		&r.ID, &r.ProductID, &r.ProductRevisionID, &r.VisionContentVersion, &r.Provider, &r.ModelID, &r.PromptVersion, &r.SchemaVersion,
-		&r.VocabularyVersion, &r.TaxonomyContextHash, &r.SnapshotHash, &returnedSnapBytes,
+		&r.VocabularyVersion, &r.TaxonomyContextHash, &returnedTaxBytes, &r.SnapshotHash, &returnedSnapBytes,
 		&r.IdempotencyKey, &r.Status, &r.Attempts, &r.ClaimedAt, &r.NextAttemptAt, &r.CompletedAt,
 		&obsBytes, &evalBytes, &usageBytes, &r.LatencyMs, &r.CostCents,
 		&r.FailureCode, &r.ErrorMessage, &r.CreatedAt, &r.UpdatedAt,
@@ -126,6 +141,12 @@ func (s *Store) EnsureRawVisionRun(ctx context.Context, run VisionRun) (*VisionR
 
 	if len(returnedSnapBytes) > 0 {
 		_ = json.Unmarshal(returnedSnapBytes, &r.SnapshotJSON)
+	}
+	if len(returnedTaxBytes) > 0 {
+		var tc TaxonomyContext
+		if err := json.Unmarshal(returnedTaxBytes, &tc); err == nil {
+			r.TaxonomyContext = &tc
+		}
 	}
 	if len(obsBytes) > 0 {
 		var obs ProductVisualObservationV1
@@ -165,7 +186,7 @@ func (s *Store) ClaimPendingRuns(ctx context.Context, limit int) ([]VisionRun, e
 			LIMIT $4
 		)
 		RETURNING id, product_id, product_revision_id, vision_content_version, provider, model_id, prompt_version, schema_version,
-		          vocabulary_version, taxonomy_context_hash, snapshot_hash, snapshot_json,
+		          vocabulary_version, taxonomy_context_hash, taxonomy_context_json, snapshot_hash, snapshot_json,
 		          idempotency_key, status, attempts, claimed_at, next_attempt_at, completed_at,
 		          created_at, updated_at
 	`
@@ -179,9 +200,10 @@ func (s *Store) ClaimPendingRuns(ctx context.Context, limit int) ([]VisionRun, e
 	for rows.Next() {
 		var r VisionRun
 		var snapBytes []byte
+		var taxBytes []byte
 		if err := rows.Scan(
 			&r.ID, &r.ProductID, &r.ProductRevisionID, &r.VisionContentVersion, &r.Provider, &r.ModelID, &r.PromptVersion, &r.SchemaVersion,
-			&r.VocabularyVersion, &r.TaxonomyContextHash, &r.SnapshotHash, &snapBytes,
+			&r.VocabularyVersion, &r.TaxonomyContextHash, &taxBytes, &r.SnapshotHash, &snapBytes,
 			&r.IdempotencyKey, &r.Status, &r.Attempts, &r.ClaimedAt, &r.NextAttemptAt, &r.CompletedAt,
 			&r.CreatedAt, &r.UpdatedAt,
 		); err != nil {
@@ -189,6 +211,12 @@ func (s *Store) ClaimPendingRuns(ctx context.Context, limit int) ([]VisionRun, e
 		}
 		if len(snapBytes) > 0 {
 			_ = json.Unmarshal(snapBytes, &r.SnapshotJSON)
+		}
+		if len(taxBytes) > 0 {
+			var tc TaxonomyContext
+			if err := json.Unmarshal(taxBytes, &tc); err == nil {
+				r.TaxonomyContext = &tc
+			}
 		}
 		runs = append(runs, r)
 	}
@@ -368,10 +396,10 @@ func (s *Store) SaveProviderFailure(ctx context.Context, runID uuid.UUID, failur
 	return nil
 }
 
-// RequeueProviderFailure resets a provider-failed or currently-processing run back to 'pending'
-// with a specified next_attempt_at timestamp, enforcing the max attempts policy.
-// If attempts >= maxAttempts, transitions to 'processing_failed'.
-func (s *Store) RequeueProviderFailure(ctx context.Context, runID uuid.UUID, nextAttemptAt time.Time, maxAttempts int, failureCode, errorMsg string) error {
+// RequeueTransientFailure resets an in-flight run back to 'pending' with a specified next_attempt_at timestamp,
+// or transitions to 'processing_failed' if attempts >= maxAttempts.
+// Supports both storage_transient and provider_transient failures without conflation.
+func (s *Store) RequeueTransientFailure(ctx context.Context, runID uuid.UUID, nextAttemptAt time.Time, maxAttempts int, failureCode, errorMsg string) error {
 	now := time.Now()
 	query := `
 		UPDATE product_vision_runs
@@ -389,7 +417,7 @@ func (s *Store) RequeueProviderFailure(ctx context.Context, runID uuid.UUID, nex
 		RunStatusProcessing, RunStatusProviderFailed,
 	)
 	if err != nil {
-		return fmt.Errorf("requeue provider failure: %w", err)
+		return fmt.Errorf("requeue transient failure: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		var currentStatus string
@@ -402,6 +430,11 @@ func (s *Store) RequeueProviderFailure(ctx context.Context, runID uuid.UUID, nex
 		return fmt.Errorf("%w: cannot requeue run %s from status %s", ErrInvalidRunTransition, runID, currentStatus)
 	}
 	return nil
+}
+
+// RequeueProviderFailure is a backwards-compatible wrapper for RequeueTransientFailure.
+func (s *Store) RequeueProviderFailure(ctx context.Context, runID uuid.UUID, nextAttemptAt time.Time, maxAttempts int, failureCode, errorMsg string) error {
+	return s.RequeueTransientFailure(ctx, runID, nextAttemptAt, maxAttempts, failureCode, errorMsg)
 }
 
 // ResetStaleRuns performs dead-worker recovery. Moves stale 'processing' runs back to 'pending'
