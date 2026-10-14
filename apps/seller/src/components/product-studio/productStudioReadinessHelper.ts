@@ -386,7 +386,13 @@ export function getProductStudioReadiness(
     mediaSatisfied = mediaCount >= MIN_PRODUCT_IMAGES && mediaCount <= MAX_PRODUCT_IMAGES;
   }
 
-  const missingCropsCount = (draft.images || []).filter((img) => img.cropWidth == null).length;
+  const missingCropsCount = (draft.images || []).filter((img) => {
+    if (img.cropWidth == null) return true;
+    if (img.renditionStatus === 'NEEDS_CROP' || img.renditionStatus === 'FAILED') return true;
+    if (img.source?.kind === 'canonical' && !img.renditionUrl) return true;
+    if (!img.source && !img.renditionUrl) return true;
+    return false;
+  }).length;
   if (missingCropsCount > 0) {
     warnings.push(`Для ${missingCropsCount} фото нужно настроить кадрирование 4:5`);
     mediaSatisfied = false;

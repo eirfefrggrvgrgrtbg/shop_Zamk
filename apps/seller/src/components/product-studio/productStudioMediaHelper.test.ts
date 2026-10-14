@@ -44,23 +44,39 @@ describe('productStudioMediaHelper', () => {
     expect(res.error).toBe('Файл слишком большой — максимум 10 МБ');
   });
 
-  it('enforces canonical backend portrait orientation rule (w < h)', async () => {
-    const landscapeFile = new File(['dummy'], 'landscape.jpg', { type: 'image/jpeg' });
-    (landscapeFile as any).__dimensions = { width: 1200, height: 800 };
+  it('validates landscape and square images based on 4:5 crop resolution', async () => {
+    // Landscape with insufficient height (800 < 1000)
+    const smallLandscape = new File(['dummy'], 'landscape_small.jpg', { type: 'image/jpeg' });
+    (smallLandscape as any).__dimensions = { width: 1200, height: 800 };
 
-    const resLandscape = await validateImageFile(landscapeFile);
-    expect(resLandscape.valid).toBe(false);
-    expect(resLandscape.error).toBe(
-      'Для товара нужны вертикальные фотографии. Загрузите изображение в вертикальном формате.'
+    const resSmallLandscape = await validateImageFile(smallLandscape);
+    expect(resSmallLandscape.valid).toBe(false);
+    expect(resSmallLandscape.error).toBe(
+      'Изображение слишком маленькое. Минимальный размер — 800×1000 пикселей.'
     );
 
-    const squareFile = new File(['dummy'], 'square.jpg', { type: 'image/jpeg' });
-    (squareFile as any).__dimensions = { width: 1000, height: 1000 };
+    // Landscape with sufficient resolution (2000×1000 -> 800×1000 4:5 crop)
+    const validLandscape = new File(['dummy'], 'landscape_valid.jpg', { type: 'image/jpeg' });
+    (validLandscape as any).__dimensions = { width: 2000, height: 1000 };
 
-    const resSquare = await validateImageFile(squareFile);
-    expect(resSquare.valid).toBe(false);
-    expect(resSquare.error).toBe(
-      'Для товара нужны вертикальные фотографии. Загрузите изображение в вертикальном формате.'
+    const resValidLandscape = await validateImageFile(validLandscape);
+    expect(resValidLandscape.valid).toBe(true);
+
+    // Square with sufficient resolution (1200×1200 -> 960×1200 4:5 crop >= 800×1000)
+    const validSquare = new File(['dummy'], 'square_valid.jpg', { type: 'image/jpeg' });
+    (validSquare as any).__dimensions = { width: 1200, height: 1200 };
+
+    const resValidSquare = await validateImageFile(validSquare);
+    expect(resValidSquare.valid).toBe(true);
+
+    // Square with insufficient 4:5 resolution (900×900 -> 720×900 < 800×1000)
+    const smallSquare = new File(['dummy'], 'square_small.jpg', { type: 'image/jpeg' });
+    (smallSquare as any).__dimensions = { width: 900, height: 900 };
+
+    const resSmallSquare = await validateImageFile(smallSquare);
+    expect(resSmallSquare.valid).toBe(false);
+    expect(resSmallSquare.error).toBe(
+      'Изображение слишком маленькое. Минимальный размер — 800×1000 пикселей.'
     );
   });
 

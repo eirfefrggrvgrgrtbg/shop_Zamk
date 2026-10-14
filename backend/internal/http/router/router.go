@@ -405,6 +405,7 @@ func New(
 		r.Delete("/{id}/images/{imageId}", storageHandler.DeleteSellerProductImage)
 		r.Put("/{id}/images/reorder", storageHandler.ReorderSellerProductImages)
 		r.Post("/{id}/images/{imageId}/crop", storageHandler.CropSellerProductImage)
+		r.Post("/{id}/images/{imageId}/auto-crop", storageHandler.AutoCropSellerProductImage)
 		r.Post("/{id}/images/{imageId}/main", storageHandler.SetMainProductImage)
 	})
 
@@ -563,6 +564,7 @@ func New(
 		// Products
 		r.With(perm("products.read")).Get("/products", productsHandler.ListAdminProducts)
 		r.With(perm("products.read")).Get("/products/{id}", productsHandler.GetAdminProduct)
+		r.With(perm("products.read")).Get("/products/{id}/vision-runs", productsHandler.GetAdminProductVisionRuns)
 		r.With(perm("products.read")).Post("/products/{id}/preview-link", productsHandler.AdminCreateProductPreviewLink)
 		r.With(perm("products.read")).Get("/products/{id}/moderation-logs", productsHandler.GetAdminModerationHistory)
 		r.With(perm("products.moderate")).Get("/moderation/products", productsHandler.ListModerationProducts)

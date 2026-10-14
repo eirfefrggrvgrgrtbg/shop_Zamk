@@ -127,13 +127,21 @@ func (s *Service) UploadSellerProductImage(ctx context.Context, userID, productI
 	w := cfg.Width
 	h := cfg.Height
 
-	if w >= h {
-		return nil, ErrProductMediaPortraitRequired
-	}
-
 	const minWidth = 800
 	const minHeight = 1000
-	if w < minWidth || h < minHeight {
+
+	targetAspect := 4.0 / 5.0
+	currentAspect := float64(w) / float64(h)
+	var cropPixelW, cropPixelH float64
+	if currentAspect > targetAspect {
+		cropPixelH = float64(h)
+		cropPixelW = float64(h) * targetAspect
+	} else {
+		cropPixelW = float64(w)
+		cropPixelH = float64(w) / targetAspect
+	}
+
+	if cropPixelW < float64(minWidth) || cropPixelH < float64(minHeight) || w < minWidth || h < minHeight {
 		return nil, ErrProductMediaTooSmall
 	}
 
@@ -181,13 +189,20 @@ func (s *Service) UploadSellerProductImage(ctx context.Context, userID, productI
 		}
 	}
 
+	renditionURL := ""
+	cropResp, cropErr := s.AutoCropSellerProductImage(ctx, userID, productID, img.ID)
+	if cropErr == nil && cropResp != nil {
+		renditionURL = cropResp.RenditionURL
+	}
+
 	return &UploadImageResponse{
-		ID:        &img.ID,
-		ImageURL:  stored.ObjectURL,
-		ObjectKey: stored.ObjectKey,
-		AltText:   opts.AltText,
-		SortOrder: opts.SortOrder,
-		IsMain:    opts.IsMain || prod.MainImageURL == nil,
+		ID:           &img.ID,
+		ImageURL:     stored.ObjectURL,
+		ObjectKey:    stored.ObjectKey,
+		RenditionURL: renditionURL,
+		AltText:      opts.AltText,
+		SortOrder:    opts.SortOrder,
+		IsMain:       opts.IsMain || prod.MainImageURL == nil,
 	}, nil
 }
 
@@ -244,13 +259,21 @@ func validateAndExtractImage(reader io.Reader, filename string, size int64, cont
 	w := cfg.Width
 	h := cfg.Height
 
-	if w >= h {
-		return nil, ErrProductMediaPortraitRequired
-	}
-
 	const minWidth = 800
 	const minHeight = 1000
-	if w < minWidth || h < minHeight {
+
+	targetAspect := 4.0 / 5.0
+	currentAspect := float64(w) / float64(h)
+	var cropPixelW, cropPixelH float64
+	if currentAspect > targetAspect {
+		cropPixelH = float64(h)
+		cropPixelW = float64(h) * targetAspect
+	} else {
+		cropPixelW = float64(w)
+		cropPixelH = float64(w) / targetAspect
+	}
+
+	if cropPixelW < float64(minWidth) || cropPixelH < float64(minHeight) || w < minWidth || h < minHeight {
 		return nil, ErrProductMediaTooSmall
 	}
 

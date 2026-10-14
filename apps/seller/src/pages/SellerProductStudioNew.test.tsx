@@ -41,10 +41,12 @@ vi.mock('@zamk/api-client/src/auth', async (importOriginal) => {
 
 afterEach(() => {
   cleanup();
+  sessionStorage.clear();
   vi.clearAllMocks();
 });
 
 beforeEach(() => {
+  sessionStorage.clear();
   vi.clearAllMocks();
 });
 

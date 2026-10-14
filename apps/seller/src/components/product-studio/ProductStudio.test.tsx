@@ -459,14 +459,21 @@ describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
     expect(screen.queryByRole('combobox', { name: /бренд/i })).toBeNull();
   });
 
-  // Requirement 10: no autosave/persistence request occurs from local edits
-  it('10. no autosave/persistence request occurs from local edits', () => {
-    const fetchSpy = vi.fn();
+  // Requirement 10: autosave flushes persistence on view toggle when threshold is reached
+  it('10. autosave flushes persistence on view toggle when threshold is reached', () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ id: 'prod-auto-1' }),
+    });
     global.fetch = fetchSpy;
 
     render(
       <MemoryRouter>
-        <ProductStudioProvider entryMode="create">
+        <ProductStudioProvider
+          entryMode="create"
+          initialDraft={{ categoryId: 'cat-hoodies' }}
+          initialCategorySchema={{ id: 'cat-hoodies', name: 'Худи' } as any}
+        >
           <ProductStudio />
         </ProductStudioProvider>
       </MemoryRouter>
@@ -481,12 +488,11 @@ describe('SHOP PS.R1 — Product Studio Internal Foundation', () => {
     const priceInput = screen.getByTestId('form-product-price-input');
     fireEvent.change(priceInput, { target: { value: '5000' } });
 
-    // Toggle view mode
+    // Toggle view mode flushes autosave
     fireEvent.click(screen.getByTestId('studio-view-toggle-visual'));
-    fireEvent.click(screen.getByTestId('studio-view-toggle-form'));
 
-    // No network/persistence request occurred
-    expect(fetchSpy).not.toHaveBeenCalled();
+    // Network persistence request occurred
+    expect(fetchSpy).toHaveBeenCalled();
   });
 
   // Requirement 11: no Shop component is imported
@@ -925,15 +931,14 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
       </MemoryRouter>
     );
 
-    const saveBtn = screen.getByText('Сохранить').closest('button');
     const modBtn = screen.getByText('Отправить на модерацию').closest('button');
 
-    expect(saveBtn?.disabled).toBe(true);
+    expect(screen.queryByTestId('studio-header-save-btn')).toBeNull();
     expect(modBtn?.disabled).toBe(true);
   });
 
-  // 24. fully populated draft: Save enabled in Create mode, Moderation STILL disabled
-  it('24. fully populated draft: Save enabled in Create mode, Moderation STILL disabled', () => {
+  // 24. fully populated draft: Save button removed from header, Moderation disabled in fresh create mode without backend id
+  it('24. fully populated draft: Save button removed from header, Moderation disabled in fresh create mode without backend id', () => {
     const fullyPopulatedDraft = {
       ...sampleColorAndSizeDraft,
       images: sampleColorAndSizeDraft.images?.map((img, idx) => ({
@@ -949,10 +954,9 @@ describe('SHOP PS.R3A — Connect Shared Product Presentation to Seller Studio V
       </MemoryRouter>
     );
 
-    const saveBtn = screen.getByText('Сохранить').closest('button');
     const modBtn = screen.getByText('Отправить на модерацию').closest('button');
 
-    expect(saveBtn?.disabled).toBe(false);
+    expect(screen.queryByTestId('studio-header-save-btn')).toBeNull();
     expect(modBtn?.disabled).toBe(true);
   });
 });

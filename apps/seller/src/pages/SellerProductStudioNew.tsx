@@ -213,7 +213,11 @@ export function SellerProductStudioNew() {
       entryMode="create"
       initialDraft={INITIAL_EMPTY_STUDIO_DRAFT}
       canonicalColors={canonicalColors}
-      onNavigate={navigate}
+      onNavigate={(to) => {
+        if (typeof window !== 'undefined' && window.history?.replaceState) {
+          window.history.replaceState(null, '', to);
+        }
+      }}
     >
       <ProductStudio />
     </ProductStudioProvider>

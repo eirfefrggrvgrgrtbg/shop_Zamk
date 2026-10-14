@@ -401,20 +401,25 @@ func (h *Handler) CropSellerProductImage(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req CropImageRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeError(w, http.StatusBadRequest, "product_media_invalid_crop", "invalid request body")
-		return
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
 	}
 
-	if err := req.Validate(); err != nil {
-		h.writeError(w, http.StatusBadRequest, "product_media_invalid_crop", "Не удалось сохранить кадр 4:5. Попробуйте выбрать область фотографии ещё раз.")
-		return
+	if req.CropWidth > 0 || req.CropHeight > 0 {
+		if err := req.Validate(); err != nil {
+			h.writeError(w, http.StatusBadRequest, "product_media_invalid_crop", "Не удалось сохранить кадр 4:5. Попробуйте выбрать область фотографии ещё раз.")
+			return
+		}
 	}
 
 	resp, err := h.service.CropSellerProductImage(r.Context(), userID, productID, imageID, req)
 	if err != nil {
 		if err == ErrInvalidCropParameters || err == ErrInvalidCropAspect {
 			h.writeError(w, http.StatusBadRequest, "product_media_invalid_crop", "Не удалось сохранить кадр 4:5. Попробуйте выбрать область фотографии ещё раз.")
+			return
+		}
+		if err == ErrProductMediaTooSmall {
+			h.writeError(w, http.StatusBadRequest, "product_media_too_small", err.Error())
 			return
 		}
 		if err == ErrProductNotOwned || err == products.ErrProductNotEditable {
@@ -426,6 +431,49 @@ func (h *Handler) CropSellerProductImage(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "failed to crop image: "+err.Error())
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) AutoCropSellerProductImage(w http.ResponseWriter, r *http.Request) {
+	productIDStr := chi.URLParam(r, "id")
+	productID, err := uuid.Parse(productIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_product_id", "invalid product id")
+		return
+	}
+
+	imageIDStr := chi.URLParam(r, "imageId")
+	imageID, err := uuid.Parse(imageIDStr)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_image_id", "invalid image id")
+		return
+	}
+
+	sellerIDRaw := r.Context().Value("userID")
+	userID, ok := sellerIDRaw.(uuid.UUID)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "user id not found in context")
+		return
+	}
+
+	resp, err := h.service.AutoCropSellerProductImage(r.Context(), userID, productID, imageID)
+	if err != nil {
+		if err == ErrProductNotOwned || err == products.ErrProductNotEditable {
+			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
+			return
+		}
+		if err == ErrProductMediaTooSmall {
+			h.writeError(w, http.StatusBadRequest, "product_media_too_small", err.Error())
+			return
+		}
+		if err.Error() == "image does not belong to product" {
+			h.writeError(w, http.StatusNotFound, "not_found", "image not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "failed to auto-crop image: "+err.Error())
 		return
 	}
 

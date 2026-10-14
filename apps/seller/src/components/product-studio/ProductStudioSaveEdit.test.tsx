@@ -295,6 +295,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
         </button>
         <button
           data-testid="test-call-save"
+          disabled={!canSave}
           onClick={() => saveDraft && saveDraft()}
         >
           Call Save
@@ -344,7 +345,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
 
       renderTestStudio({ saveProductFn: mockSaveProduct });
 
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
+      const saveBtn = screen.getByTestId('test-call-save');
       // Initially clean: button disabled
       expect(screen.getByTestId('test-is-dirty').textContent).toBe('CLEAN');
       expect(screen.getByTestId('test-can-save').textContent).toBe('CANNOT_SAVE');
@@ -369,7 +370,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
         saveProductFn: mockSaveProduct,
       });
 
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
+      const saveBtn = screen.getByTestId('test-call-save');
       // Create mode has Create Save enabled, but it never executes Edit Save (PATCH)
       expect(screen.getByTestId('test-can-save').textContent).toBe('CAN_SAVE');
       expect(saveBtn.hasAttribute('disabled')).toBe(false);
@@ -391,7 +392,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       // Make dirty
       fireEvent.click(screen.getByTestId('test-mutate-title'));
 
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
+      const saveBtn = screen.getByTestId('test-call-save');
       // Rapid double click
       fireEvent.click(saveBtn);
       fireEvent.click(saveBtn);
@@ -434,7 +435,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       // Add a local image to trigger staging
       fireEvent.click(screen.getByTestId('test-add-local-image'));
 
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
+      const saveBtn = screen.getByTestId('test-call-save');
       fireEvent.click(saveBtn);
 
       // STAGE PHASE
@@ -445,12 +446,13 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
 
       expect(screen.queryByTestId('studio-editor-fieldset')).toBeNull();
       const workspaceStaging = screen.getByTestId('studio-workspace-container');
-      expect(workspaceStaging.getAttribute('aria-disabled')).toBe('true');
-      expect(workspaceStaging.className).toContain('pointer-events-none opacity-60 select-none cursor-wait');
+      // Per Section 6: Do NOT aggressively freeze the form during autosave; seller can continue typing
+      expect(workspaceStaging.getAttribute('aria-disabled')).toBe('false');
+      expect(workspaceStaging.className).toBe('w-full');
 
-      // External mutation attempt ignored while locked
+      // External mutation attempt is preserved (not discarded) per Autosave design
       fireEvent.click(screen.getByTestId('test-mutate-title'));
-      expect(screen.getByTestId('studio-product-title').textContent).toBe('Худи Базовое');
+      expect(screen.getByTestId('studio-product-title').textContent).toBe('Худи Новое Название');
 
       // Resolve staging
       await act(async () => {
@@ -466,8 +468,8 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('saving');
       });
       const workspaceSaving = screen.getByTestId('studio-workspace-container');
-      expect(workspaceSaving.getAttribute('aria-disabled')).toBe('true');
-      expect(workspaceSaving.className).toContain('pointer-events-none opacity-60 select-none cursor-wait');
+      expect(workspaceSaving.getAttribute('aria-disabled')).toBe('false');
+      expect(workspaceSaving.className).toBe('w-full');
 
       // Resolve PATCH
       await act(async () => {
@@ -518,7 +520,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       });
 
       fireEvent.click(screen.getByTestId('test-add-local-image'));
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockStageImage).toHaveBeenCalledTimes(1);
@@ -569,7 +571,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
 
       // Mutate to be dirty
       fireEvent.click(screen.getByTestId('test-mutate-title'));
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockStageImage).toHaveBeenCalledTimes(2);
@@ -624,7 +626,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       });
 
       fireEvent.click(screen.getByTestId('test-mutate-title'));
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('error');
@@ -692,7 +694,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       });
 
       fireEvent.click(screen.getByTestId('test-mutate-title'));
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       // First attempt fails on c-fail
       await waitFor(() => {
@@ -705,7 +707,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       stagedCalls.length = 0;
 
       // Click save again (retry)
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
@@ -749,7 +751,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
 
       // Add local image
       fireEvent.click(screen.getByTestId('test-add-local-image'));
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       // Staging succeeds, then PATCH fails
       await waitFor(() => {
@@ -761,7 +763,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
 
       // Now retry with PATCH passing
       patchShouldFail = false;
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
@@ -903,7 +905,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       expect(screen.getByTestId('test-is-dirty').textContent).toBe('DIRTY');
 
       // Click Save
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
@@ -915,7 +917,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       expect(screen.getByTestId('studio-entry-badge').textContent).toBe('Опубликован');
       // 26. isDirty reset to false!
       expect(screen.getByTestId('test-is-dirty').textContent).toBe('CLEAN');
-      expect(screen.getByTestId('studio-header-save-btn').hasAttribute('disabled')).toBe(true);
+      expect(screen.getByTestId('test-call-save').hasAttribute('disabled')).toBe(true);
 
       // 27. Preview URL was revoked!
       expect(revokeSpy).toHaveBeenCalled();
@@ -933,6 +935,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
         {
           id: 'img-canon-1',
           imageUrl: 'https://cdn.example.com/img1.jpg',
+          renditionUrl: 'https://cdn.example.com/img1-4x5.jpg',
           sortOrder: 0,
           colorId: 'col-black',
           isMain: true,
@@ -942,6 +945,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
         {
           id: 'img-canon-2',
           imageUrl: 'https://cdn.example.com/img2.jpg',
+          renditionUrl: 'https://cdn.example.com/img2-4x5.jpg',
           sortOrder: 1,
           colorId: 'col-black',
           isMain: false,
@@ -951,6 +955,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
         {
           id: 'img-canon-3',
           imageUrl: 'https://cdn.example.com/img3.jpg',
+          renditionUrl: 'https://cdn.example.com/img3-4x5.jpg',
           sortOrder: 2,
           colorId: 'col-black',
           isMain: false,
@@ -973,6 +978,8 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
           isMain: true,
           cropWidth: 1,
           cropHeight: 1,
+          renditionUrl: 'https://cdn.example.com/img1-4x5.jpg',
+          renditionStatus: 'READY',
           source: {
             kind: 'canonical',
             imageId: 'img-canon-1',
@@ -986,6 +993,8 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
           isMain: false,
           cropWidth: 1,
           cropHeight: 1,
+          renditionUrl: 'https://cdn.example.com/img2-4x5.jpg',
+          renditionStatus: 'READY',
           source: {
             kind: 'canonical',
             imageId: 'img-canon-2',
@@ -999,6 +1008,8 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
           isMain: false,
           cropWidth: 1,
           cropHeight: 1,
+          renditionUrl: 'https://cdn.example.com/img3-4x5.jpg',
+          renditionStatus: 'READY',
           source: {
             kind: 'canonical',
             imageId: 'img-canon-3',
@@ -1015,13 +1026,10 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       expect(screen.getByTestId('test-can-save').textContent).toBe('CANNOT_SAVE');
     });
 
-    it('Failure A.2: Disabled Save button uses neutral gray styling (never purple bg-indigo-400)', () => {
+    it('Failure A.2: Manual Save button is removed from header and status shows Сохранено', () => {
       renderTestStudio({ initialDraft: sampleReadyDraft });
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
-      expect(saveBtn.hasAttribute('disabled')).toBe(true);
-      expect(saveBtn.className).not.toContain('bg-indigo-400');
-      expect(saveBtn.className).toContain('text-gray-400');
-      expect(saveBtn.className).toContain('cursor-not-allowed');
+      expect(screen.queryByTestId('studio-header-save-btn')).toBeNull();
+      expect(screen.getByTestId('studio-save-status').textContent).toContain('Сохранено');
     });
 
     it('Failure A.3: Readiness summary badge displays "Все поля заполнены" when unchanged with 0 blocking fields', () => {
@@ -1030,23 +1038,22 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       expect(summaryBtn.textContent).toBe('Все поля заполнены');
     });
 
-    it('Failure A.4: Making a change transitions badge to "Готов к сохранению" and Save button to active purple bg-indigo-600', () => {
+    it('Failure A.4: Making a change keeps badge as "Все поля заполнены" (never "Готов к сохранению") and status indicates changes', () => {
       renderTestStudio({ initialDraft: sampleReadyDraft });
       fireEvent.click(screen.getByTestId('test-mutate-title'));
       expect(screen.getByTestId('test-is-dirty').textContent).toBe('DIRTY');
       expect(screen.getByTestId('test-can-save').textContent).toBe('CAN_SAVE');
 
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
-      expect(saveBtn.hasAttribute('disabled')).toBe(false);
-      expect(saveBtn.className).toContain('bg-indigo-600');
-      expect(saveBtn.className).toContain('cursor-pointer');
+      expect(screen.queryByTestId('studio-header-save-btn')).toBeNull();
+      expect(screen.getByTestId('studio-save-status').textContent).toContain('Есть изменения');
 
       const summaryBtn = screen.getByTestId('studio-readiness-summary');
-      expect(summaryBtn.textContent).toBe('Готов к сохранению');
+      expect(summaryBtn.textContent).toBe('Все поля заполнены');
+      expect(summaryBtn.textContent).not.toBe('Готов к сохранению');
     });
 
     // Failure B
-    it('Failure B: After successful Save, editor reliably returns to clean disabled state and "Все поля заполнены"', async () => {
+    it('Failure B: After successful Save, editor reliably returns to clean state and "Все поля заполнены"', async () => {
       const mockSave = vi.fn().mockResolvedValue(sampleReadyProduct);
       const mockGet = vi.fn().mockResolvedValue(sampleReadyProduct);
       renderTestStudio({ initialDraft: sampleReadyDraft, saveProductFn: mockSave, getProductFn: mockGet });
@@ -1056,7 +1063,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       expect(screen.getByTestId('test-is-dirty').textContent).toBe('DIRTY');
 
       // Click Save
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
@@ -1065,11 +1072,8 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       // Returns to clean
       expect(screen.getByTestId('test-is-dirty').textContent).toBe('CLEAN');
       expect(screen.getByTestId('test-can-save').textContent).toBe('CANNOT_SAVE');
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
-      expect(saveBtn.hasAttribute('disabled')).toBe(true);
-      expect(saveBtn.className).toContain('text-gray-400');
-      expect(saveBtn.className).not.toContain('bg-indigo-400');
-      expect(saveBtn.className).not.toContain('bg-indigo-600');
+      expect(screen.getByTestId('studio-save-status').textContent).toContain('Сохранено');
+      expect(screen.queryByTestId('studio-header-save-btn')).toBeNull();
 
       const summaryBtn = screen.getByTestId('studio-readiness-summary');
       expect(summaryBtn.textContent).toBe('Все поля заполнены');
@@ -1117,7 +1121,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       renderTestStudio({ saveProductFn: mockPatch, getProductFn: mockGet });
 
       fireEvent.click(screen.getByTestId('test-mutate-title'));
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
@@ -1149,7 +1153,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       renderTestStudio({ saveProductFn: mockPatch, getProductFn: mockGet });
 
       fireEvent.click(screen.getByTestId('test-mutate-title'));
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
@@ -1166,7 +1170,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       renderTestStudio({ saveProductFn: mockPatch, getProductFn: mockGet });
 
       fireEvent.click(screen.getByTestId('test-mutate-title'));
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('refresh_error');
@@ -1179,10 +1183,10 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
 
       // In refresh_error state, canSave remains FALSE to prevent re-PATCHing
       expect(screen.getByTestId('test-can-save').textContent).toBe('CANNOT_SAVE');
-      expect(screen.getByTestId('studio-header-save-btn').hasAttribute('disabled')).toBe(true);
+      expect(screen.getByTestId('test-call-save').hasAttribute('disabled')).toBe(true);
 
       // Attempt click does NOT trigger additional PATCH
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
       expect(mockPatch).toHaveBeenCalledTimes(1);
     });
 
@@ -1200,7 +1204,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
 
       // User modifies product and saves
       fireEvent.click(screen.getByTestId('test-mutate-title'));
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
@@ -1261,7 +1265,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
 
       // Save happens and black was removed, 2 colors remain
       fireEvent.click(screen.getByTestId('test-mutate-title'));
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
@@ -1310,7 +1314,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
 
       // Save happens and black was removed, exactly 1 color remains
       fireEvent.click(screen.getByTestId('test-mutate-title'));
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
@@ -1579,7 +1583,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       expect(screen.getByTestId('test-is-dirty').textContent).toBe('DIRTY');
 
       // 2. Click Save
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('idle');
@@ -1680,7 +1684,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       expect(screen.getByTestId('test-can-save').textContent).toBe('CAN_SAVE');
 
       // 2. Click Save - verify no "choose color" blocks it
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
+      const saveBtn = screen.getByTestId('test-call-save');
       expect(saveBtn.hasAttribute('disabled')).toBe(false);
       fireEvent.click(saveBtn);
 
@@ -1764,7 +1768,7 @@ describe('PS.R4B3.1C4C2B2 — Edit Product Studio Save End-to-End', () => {
       expect(screen.getByTestId('test-is-dirty').textContent).toBe('DIRTY');
 
       // 2. Save
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('idle');

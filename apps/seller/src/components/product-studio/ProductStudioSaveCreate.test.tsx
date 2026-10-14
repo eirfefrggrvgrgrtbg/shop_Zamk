@@ -152,6 +152,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
         <button
           type="button"
           data-testid="test-call-save"
+          disabled={!canSave}
           onClick={() => saveDraft && saveDraft()}
         >
           Call Save
@@ -213,7 +214,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
         initialDraft: { ...sampleInitialCreateDraft, title: '' },
       });
 
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
+      const saveBtn = screen.getByTestId('test-call-save');
       expect(saveBtn.hasAttribute('disabled')).toBe(true);
       expect(screen.getByTestId('test-can-save').textContent).toBe('CANNOT_SAVE');
     });
@@ -221,7 +222,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
     it('3. valid Create Save enabled', () => {
       renderTestCreateStudio();
 
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
+      const saveBtn = screen.getByTestId('test-call-save');
       expect(saveBtn.hasAttribute('disabled')).toBe(false);
       expect(screen.getByTestId('test-can-save').textContent).toBe('CAN_SAVE');
     });
@@ -234,7 +235,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
 
       renderTestCreateStudio({ createProductFn: mockCreate });
 
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
+      const saveBtn = screen.getByTestId('test-call-save');
       expect(screen.getByTestId('test-can-save').textContent).toBe('CAN_SAVE');
       fireEvent.click(saveBtn);
 
@@ -262,7 +263,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
 
       renderTestCreateStudio({ initialDraft: minimalDraft });
 
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
+      const saveBtn = screen.getByTestId('test-call-save');
       const modBtn = screen.getByText('Отправить на модерацию').closest('button');
 
       // Save is enabled because minimum identity / persistence rules are met
@@ -277,7 +278,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
       const mockCreate = vi.fn().mockResolvedValue(sampleCanonicalCreatedProduct);
       renderTestCreateStudio({ createProductFn: mockCreate });
 
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
+      const saveBtn = screen.getByTestId('test-call-save');
       fireEvent.click(saveBtn);
 
       await waitFor(() => {
@@ -319,7 +320,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
         createProductFn: mockCreate,
       });
 
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -356,7 +357,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
       };
 
       renderTestCreateStudio({ initialDraft: sparseDraft, createProductFn: mockCreate });
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -381,7 +382,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
 
       renderTestCreateStudio({ createProductFn: mockCreate });
 
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -410,7 +411,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
         getProductFn: mockGet,
       });
 
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockGet).toHaveBeenCalledWith('prod-canonical-created-123');
@@ -437,7 +438,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
         getProductFn: mockGet,
       });
 
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(callOrder).toEqual(['CREATE_POST', 'CANONICAL_GET']);
@@ -478,7 +479,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
         saveProductFn: mockUpdate,
       });
 
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockUpdate).toHaveBeenCalledTimes(1);
@@ -577,7 +578,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
         onNavigate: mockNavigate,
       });
 
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith(
@@ -630,7 +631,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
         onNavigate: mockNavigate,
       });
 
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith(
@@ -693,7 +694,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
       });
 
       // 1st attempt
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('studio-save-error-toast')).toBeTruthy();
@@ -708,7 +709,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
 
       // 2nd attempt (Retry)
       attempt = 2;
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockUpdate).toHaveBeenCalledTimes(1);
@@ -769,7 +770,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
       expect(screen.getByTestId('test-images-summary').textContent).toBe('local-1:local');
 
       // Attempt 1 -> click Save
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('studio-save-error-toast')).toBeTruthy();
@@ -791,7 +792,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
 
       // Attempt 2: Retry Save
       patchAttempt = 2;
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith(
@@ -831,7 +832,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
         saveProductFn: mockUpdate,
       });
 
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('studio-save-error-toast')).toBeTruthy();
@@ -927,7 +928,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
       renderTestCreateStudio({ createProductFn: mockCreate });
 
       // 1st attempt: fails network transport
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('studio-save-error-toast')).toBeTruthy();
@@ -938,7 +939,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
       const originalKey = session1?.clientCreateId;
 
       // 2nd attempt: retry
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockCreate).toHaveBeenCalledTimes(2);
@@ -973,7 +974,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
         onNavigate: mockNavigate,
       });
 
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalled();
@@ -1004,7 +1005,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
         onNavigate: mockNavigate,
       });
 
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalled();
@@ -1256,7 +1257,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
 
       renderTestCreateStudio({ createProductFn: mockCreate });
 
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
+      const saveBtn = screen.getByTestId('test-call-save');
       // Rapid double click
       fireEvent.click(saveBtn);
       fireEvent.click(saveBtn);
@@ -1268,7 +1269,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
       });
     });
 
-    it('27. Create workspace cannot mutate payload during uncertain identity state', async () => {
+    it('27. Create workspace does not freeze during background autosave', async () => {
       let resolveCreate: (val: any) => void;
       const delayedCreate = new Promise((resolve) => {
         resolveCreate = resolve;
@@ -1277,12 +1278,12 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
 
       renderTestCreateStudio({ createProductFn: mockCreate });
 
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
-      // While create is in flight, workspace has aria-disabled and pointer-events-none
+      // While create is in flight, workspace remains interactive (non-freezing per Autosave design)
       const workspace = screen.getByTestId('studio-workspace-container');
-      expect(workspace.getAttribute('aria-disabled')).toBe('true');
-      expect(workspace.className).toContain('pointer-events-none');
+      expect(workspace.getAttribute('aria-disabled')).toBe('false');
+      expect(workspace.className).toBe('w-full');
       expect(screen.getByTestId('studio-header-category-btn').hasAttribute('disabled')).toBe(true);
 
       act(() => {
@@ -1294,7 +1295,7 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
       const mockCreate = vi.fn().mockRejectedValue(new Error('Network transport error'));
       renderTestCreateStudio({ createProductFn: mockCreate });
 
-      fireEvent.click(screen.getByTestId('studio-header-save-btn'));
+      fireEvent.click(screen.getByTestId('test-call-save'));
 
       await waitFor(() => {
         expect(screen.getByTestId('test-save-status').textContent).toBe('identity_recovery_required');
@@ -1309,9 +1310,9 @@ describe('PS.R4B3.1C4C3B2 — Product Studio Create Save + Durable Recovery', ()
       // Must remain frozen!
       expect(screen.getByTestId('test-draft-title').textContent).toBe('Худи Новое Оверсайз');
 
-      // Save button shows retry action
-      const saveBtn = screen.getByTestId('studio-header-save-btn');
-      expect(saveBtn.textContent).toContain('Повторить попытку');
+      // Retry action is available
+      const retryBtn = screen.getByTestId('studio-identity-retry-btn');
+      expect(retryBtn.textContent).toContain('Повторить попытку');
     });
   });
 });

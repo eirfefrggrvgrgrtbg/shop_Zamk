@@ -1,10 +1,9 @@
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Save, Eye, Folder, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Check, Eye, Folder, Loader2, AlertCircle } from 'lucide-react';
 import { useProductStudio } from '../../contexts/ProductStudioContext';
 import { ProductStudioViewToggle } from './ProductStudioViewToggle';
 import { statusLabels } from '../../lib/seller-products';
 import { isUuid } from './productStudioPresentationAdapter';
-import { getProductStudioMediaSaveBlockReason } from './productStudioSaveProduct';
 
 export function ProductStudioHeader() {
   const {
@@ -18,8 +17,7 @@ export function ProductStudioHeader() {
     setShowReadinessAttention,
     saveStatus,
     saveError,
-    canSave,
-    saveDraft,
+    flushSave,
     clearSaveError,
     isSaveInFlight,
     isDirty,
@@ -29,6 +27,7 @@ export function ProductStudioHeader() {
     canSubmitModeration,
     submitModeration,
     clearModerationError,
+    setActiveSection,
   } = useProductStudio();
   const isCategoryAttention = isFieldAttention('category');
   const hasCategory = Boolean(draft.categoryId);
@@ -65,47 +64,14 @@ export function ProductStudioHeader() {
     ? `Бренд: ${draft.brandName}`
     : null;
 
-  const isSaveAvailable = Boolean(saveDraft);
-
-  let saveButtonText = 'Сохранить';
-  if (saveStatus === 'staging') {
-    saveButtonText = 'Загрузка фото…';
-  } else if (saveStatus === 'saving') {
-    saveButtonText = 'Сохранение…';
-  } else if (saveStatus === 'identity_recovery_required') {
-    saveButtonText = 'Повторить попытку';
-  }
-
-  let saveButtonTitle = 'Сохранить';
-  if (!isSaveAvailable) {
-    saveButtonTitle = 'Сохранение временно недоступно';
-  } else if (saveStatus === 'staging') {
-    saveButtonTitle = 'Выполняется загрузка фотографий…';
-  } else if (saveStatus === 'saving') {
-    saveButtonTitle = 'Выполняется сохранение товара…';
-  } else if (saveStatus === 'identity_recovery_required') {
-    saveButtonTitle = saveError || 'Результат создания товара не подтвержден. Нажмите, чтобы повторить попытку';
-  } else if (saveStatus === 'refresh_error') {
-    saveButtonTitle = 'Товар сохранен. Обновите страницу';
-  } else if (saveStatus === 'error') {
-    saveButtonTitle = saveError || 'Ошибка сохранения. Нажмите, чтобы повторить';
-  } else if (entryMode === 'edit' && !isDirty) {
-    saveButtonTitle = 'Нет несохраненных изменений';
-  } else if (!canSave) {
-    const mediaBlockReason = getProductStudioMediaSaveBlockReason(draft);
-    saveButtonTitle = mediaBlockReason || 'Заполните обязательные поля для сохранения';
-  } else {
-    saveButtonTitle = isCreate ? 'Сохранить товар' : 'Сохранить изменения';
-  }
-
   const isStatusEligibleForModeration =
     Boolean(draft.id) &&
     (!draft.status || draft.status === 'draft' || draft.status === 'rejected');
 
   let submitButtonTitle = 'Отправить на модерацию';
-  if (!draft.id) {
+  if (!draft.id && !isCreate) {
     submitButtonTitle = 'Сохраните товар перед отправкой на модерацию';
-  } else if (!isStatusEligibleForModeration) {
+  } else if (!isStatusEligibleForModeration && !isCreate) {
     submitButtonTitle =
       draft.status === 'pending_moderation'
         ? 'Товар уже находится на модерации'
@@ -116,10 +82,6 @@ export function ProductStudioHeader() {
     } else {
       submitButtonTitle = 'Заполните все обязательные поля для отправки на модерацию';
     }
-  } else if (isDirty) {
-    submitButtonTitle = 'Сохраните изменения перед отправкой на модерацию';
-  } else if (isSaveInFlight) {
-    submitButtonTitle = 'Выполняется сохранение товара…';
   } else if (isSubmittingModeration) {
     submitButtonTitle = 'Выполняется отправка на модерацию…';
   }
@@ -170,16 +132,12 @@ export function ProductStudioHeader() {
                   title={
                     readiness.blockingFields.length > 0
                       ? 'Нажмите, чтобы подсветить незаполненные обязательные поля'
-                      : isDirty
-                      ? 'Все обязательные поля заполнены, изменения готовы к сохранению'
                       : 'Все обязательные поля заполнены'
                   }
                   className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/15 transition-colors cursor-pointer shrink-0"
                 >
                   {readiness.blockingFields.length > 0
                     ? `Нужно заполнить: ${readiness.blockingFields.length}`
-                    : isDirty
-                    ? 'Готов к сохранению'
                     : 'Все поля заполнены'}
                 </button>
               </div>
@@ -264,16 +222,48 @@ export function ProductStudioHeader() {
 
         {/* RIGHT: Actions */}
         <div className="flex items-center justify-end gap-3 flex-1">
+          {/* Autosave status indicator */}
+          <div data-testid="studio-save-status" className="flex items-center gap-1.5 text-xs shrink-0">
+            {saveStatus === 'staging' || saveStatus === 'saving' ? (
+              <span className="inline-flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" />
+                <span>Сохраняем…</span>
+              </span>
+            ) : saveStatus === 'error' || saveStatus === 'refresh_error' || saveStatus === 'identity_recovery_required' ? (
+              <span className="inline-flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>Ошибка сохранения</span>
+                <button
+                  type="button"
+                  data-testid="studio-retry-save-btn"
+                  onClick={() => flushSave()}
+                  className="underline hover:no-underline ml-0.5 cursor-pointer font-medium"
+                >
+                  Повторить
+                </button>
+              </span>
+            ) : isDirty ? (
+              <span className="inline-flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                <span>Есть изменения</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                <Check className="w-3.5 h-3.5" />
+                <span>Сохранено</span>
+              </span>
+            )}
+          </div>
+
           <button
             type="button"
             disabled={!canSubmitModeration}
             onClick={canSubmitModeration ? submitModeration : undefined}
             data-testid="studio-header-submit-moderation-btn"
             title={submitButtonTitle}
-            className={`hidden sm:inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg focus-visible:outline-none transition-colors ${
+            className={`inline-flex items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium rounded-lg focus-visible:outline-none transition-colors ${
               canSubmitModeration
-                ? 'text-gray-900 dark:text-white bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/15 border border-gray-300 dark:border-white/20 cursor-pointer shadow-sm active:bg-gray-200'
-                : 'text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-[#1a1a1c] border border-gray-200 dark:border-white/5 cursor-not-allowed'
+                ? 'text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer shadow-sm active:bg-indigo-800'
+                : 'text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 cursor-not-allowed'
             }`}
           >
             {isSubmittingModeration ? (
@@ -282,25 +272,6 @@ export function ProductStudioHeader() {
               <Eye className="w-4 h-4" />
             )}
             <span>{isSubmittingModeration ? 'Отправка…' : 'Отправить на модерацию'}</span>
-          </button>
-          <button
-            type="button"
-            disabled={!canSave}
-            onClick={canSave ? saveDraft : undefined}
-            data-testid="studio-header-save-btn"
-            title={saveButtonTitle}
-            className={`inline-flex items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium rounded-lg focus-visible:outline-none transition-colors ${
-              canSave
-                ? 'text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer shadow-sm active:bg-indigo-800'
-                : 'text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 cursor-not-allowed'
-            }`}
-          >
-            {isSaveInFlight ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
-            <span className="hidden sm:inline">{saveButtonText}</span>
           </button>
         </div>
       </div>
@@ -326,7 +297,7 @@ export function ProductStudioHeader() {
             <button
               type="button"
               data-testid="studio-identity-retry-btn"
-              onClick={() => saveDraft && saveDraft()}
+              onClick={() => flushSave()}
               className="ml-2 underline font-semibold text-white hover:text-white/80 cursor-pointer text-xs"
             >
               Повторить попытку
@@ -352,6 +323,19 @@ export function ProductStudioHeader() {
         >
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{moderationError}</span>
+          {moderationError.includes('кадрирование') && (
+            <button
+              type="button"
+              data-testid="studio-moderation-error-to-media-btn"
+              onClick={() => {
+                setActiveSection('media');
+                clearModerationError();
+              }}
+              className="ml-2 px-2.5 py-1 text-xs font-semibold rounded bg-white text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+            >
+              Перейти в Фото
+            </button>
+          )}
           <button
             type="button"
             onClick={clearModerationError}

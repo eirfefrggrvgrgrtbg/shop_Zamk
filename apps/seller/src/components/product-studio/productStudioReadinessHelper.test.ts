@@ -8,9 +8,28 @@ import type { SellerCategorySchema } from '@zamk/api-client/src/seller';
 import { createCanonicalProductStudioImage } from './productStudioMediaHelper';
 
 const mockImages: ProductStudioImage[] = [
-  createCanonicalProductStudioImage({ imageId: 'img-1', url: 'https://images.unsplash.com/1.jpg', isMain: true, cropWidth: 1, cropHeight: 1 }),
-  createCanonicalProductStudioImage({ imageId: 'img-2', url: 'https://images.unsplash.com/2.jpg', cropWidth: 1, cropHeight: 1 }),
-  createCanonicalProductStudioImage({ imageId: 'img-3', url: 'https://images.unsplash.com/3.jpg', cropWidth: 1, cropHeight: 1 }),
+  createCanonicalProductStudioImage({
+    imageId: 'img-1',
+    url: 'https://images.unsplash.com/1.jpg',
+    renditionUrl: 'https://images.unsplash.com/1-4x5.jpg',
+    isMain: true,
+    cropWidth: 1,
+    cropHeight: 1,
+  }),
+  createCanonicalProductStudioImage({
+    imageId: 'img-2',
+    url: 'https://images.unsplash.com/2.jpg',
+    renditionUrl: 'https://images.unsplash.com/2-4x5.jpg',
+    cropWidth: 1,
+    cropHeight: 1,
+  }),
+  createCanonicalProductStudioImage({
+    imageId: 'img-3',
+    url: 'https://images.unsplash.com/3.jpg',
+    renditionUrl: 'https://images.unsplash.com/3-4x5.jpg',
+    cropWidth: 1,
+    cropHeight: 1,
+  }),
 ];
 
 describe('productStudioReadinessHelper', () => {
@@ -648,10 +667,26 @@ describe('productStudioReadinessHelper', () => {
   describe('4:5 Media Crop Readiness and Warnings', () => {
     it('legacy remote image without crop is a readiness blocker and outputs warning', () => {
       const legacyImages: ProductStudioImage[] = [
-        createCanonicalProductStudioImage({ imageId: 'img-1', url: 'https://images.unsplash.com/1.jpg', isMain: true, cropWidth: 1, cropHeight: 1 }),
-        createCanonicalProductStudioImage({ imageId: 'img-2', url: 'https://images.unsplash.com/2.jpg', cropWidth: 1, cropHeight: 1 }),
-        // img-3 has NO crop (legacy remote image)
-        createCanonicalProductStudioImage({ imageId: 'img-3', url: 'https://images.unsplash.com/3.jpg' }),
+        createCanonicalProductStudioImage({
+          imageId: 'img-1',
+          url: 'https://images.unsplash.com/1.jpg',
+          renditionUrl: 'https://images.unsplash.com/1-4x5.jpg',
+          isMain: true,
+          cropWidth: 1,
+          cropHeight: 1,
+        }),
+        createCanonicalProductStudioImage({
+          imageId: 'img-2',
+          url: 'https://images.unsplash.com/2.jpg',
+          renditionUrl: 'https://images.unsplash.com/2-4x5.jpg',
+          cropWidth: 1,
+          cropHeight: 1,
+        }),
+        // img-3 has NO crop and NO renditionUrl (legacy remote image)
+        createCanonicalProductStudioImage({
+          imageId: 'img-3',
+          url: 'https://images.unsplash.com/3.jpg',
+        }),
       ];
 
       const draft: ProductStudioDraft = {
@@ -671,7 +706,7 @@ describe('productStudioReadinessHelper', () => {
       expect(readiness.isReadyForModeration).toBe(false);
     });
 
-    it('new local image with auto-calculated crop satisfies media readiness', () => {
+    it('3 uploaded images with ready renditions: Media READY, isReadyForModeration true', () => {
       const draft: ProductStudioDraft = {
         title: 'Футболка',
         description: 'Описание',
@@ -686,6 +721,63 @@ describe('productStudioReadinessHelper', () => {
       expect(readiness.blockingFields).not.toContain('media');
       expect(readiness.fieldStatus.media.isSatisfied).toBe(true);
       expect(readiness.warnings.some((w) => w.includes('кадрирование 4:5'))).toBe(false);
+      expect(readiness.isReadyForModeration).toBe(true);
+    });
+
+    it('3 uploaded images where 1 is missing rendition: Media NOT READY, isReadyForModeration false', () => {
+      const mixedImages: ProductStudioImage[] = [
+        mockImages[0],
+        mockImages[1],
+        {
+          ...mockImages[2],
+          renditionUrl: null,
+          renditionStatus: 'NEEDS_CROP',
+        },
+      ];
+
+      const draft: ProductStudioDraft = {
+        title: 'Футболка',
+        description: 'Описание',
+        categoryId: 'cat-1',
+        priceCents: 1000,
+        material: 'Хлопок',
+        materialComposition: [{ materialName: 'Хлопок', percentage: 100 }],
+        images: mixedImages,
+      };
+
+      const readiness = getProductStudioReadiness(draft);
+      expect(readiness.blockingFields).toContain('media');
+      expect(readiness.fieldStatus.media.isSatisfied).toBe(false);
+      expect(readiness.warnings).toContain('Для 1 фото нужно настроить кадрирование 4:5');
+      expect(readiness.isReadyForModeration).toBe(false);
+    });
+
+    it('image with FAILED renditionStatus blocks readiness with warning', () => {
+      const failedImages: ProductStudioImage[] = [
+        mockImages[0],
+        mockImages[1],
+        {
+          ...mockImages[2],
+          renditionUrl: null,
+          renditionStatus: 'FAILED',
+          renditionError: 'Не удалось кадрировать',
+        },
+      ];
+
+      const draft: ProductStudioDraft = {
+        title: 'Футболка',
+        description: 'Описание',
+        categoryId: 'cat-1',
+        priceCents: 1000,
+        material: 'Хлопок',
+        materialComposition: [{ materialName: 'Хлопок', percentage: 100 }],
+        images: failedImages,
+      };
+
+      const readiness = getProductStudioReadiness(draft);
+      expect(readiness.blockingFields).toContain('media');
+      expect(readiness.fieldStatus.media.isSatisfied).toBe(false);
+      expect(readiness.isReadyForModeration).toBe(false);
     });
   });
 

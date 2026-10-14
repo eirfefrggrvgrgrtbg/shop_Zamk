@@ -21,6 +21,7 @@ import {
 } from '../components/product-studio/productStudioMediaHelper';
 import {
   isProductStudioSaveEligible,
+  isProductStudioCreateAutosaveEligible,
   orchestrateProductStudioEditSave,
 } from '../components/product-studio/productStudioSaveProduct';
 import { orchestrateProductStudioCreateSave } from '../components/product-studio/productStudioSaveCreate';
@@ -56,6 +57,7 @@ export type ProductStudioImageSource =
       kind: 'canonical';
       imageId: string;
       url: string;
+      renditionUrl?: string | null;
     }
   | {
       kind: 'local';
@@ -82,6 +84,9 @@ export interface ProductStudioImage {
   cropY?: number;
   cropWidth?: number;
   cropHeight?: number;
+  renditionUrl?: string | null;
+  renditionStatus?: 'READY' | 'NEEDS_CROP' | 'PROCESSING' | 'FAILED';
+  renditionError?: string | null;
   source: ProductStudioImageSource;
 }
 
@@ -155,6 +160,7 @@ type ProductStudioAction =
   | { type: 'SET_SAVE_STATUS'; payload: { status: 'idle' | 'staging' | 'saving' | 'error' | 'refresh_error' | 'identity_recovery_required'; error?: string | null } }
   | { type: 'PERSIST_STAGED_IMAGES'; payload: ProductStudioImage[] }
   | { type: 'COMMIT_SAVED_DRAFT'; payload: ProductStudioDraft }
+  | { type: 'COMMIT_INTERMEDIATE_SAVE'; payload: ProductStudioDraft }
   | { type: 'CLEAR_SAVE_ERROR' }
   | { type: 'SET_PREVIEW_COLOR'; payload: string | null }
   | { type: 'SET_PREVIEW_SIZE'; payload: string | null }
@@ -283,6 +289,7 @@ function productStudioReducer(
 
       return {
         ...state,
+        entryMode: 'edit',
         draft: nextDraft,
         initialDraft: nextInitial,
         selectedPreviewColorId: nextColorId,
@@ -292,6 +299,23 @@ function productStudioReducer(
         saveError: null,
         touchedFields: {},
         showReadinessAttention: false,
+      };
+    }
+
+    case 'COMMIT_INTERMEDIATE_SAVE': {
+      const nextInitial = JSON.parse(JSON.stringify(action.payload));
+      const nextDraft = {
+        ...state.draft,
+        id: state.draft.id || action.payload.id,
+      };
+      return {
+        ...state,
+        entryMode: 'edit',
+        draft: nextDraft,
+        initialDraft: nextInitial,
+        isDirty: computeIsDirty(nextDraft, nextInitial),
+        saveStatus: 'idle',
+        saveError: null,
       };
     }
 
@@ -409,13 +433,15 @@ export interface ProductStudioContextValue extends ProductStudioState {
   isFieldAttention: (field: string) => boolean;
   readiness: ProductStudioReadiness;
   categorySchema: SellerCategorySchema | null;
+  selectCategory?: (category: SellerCategory, categoryPath?: string) => Promise<void>;
   activeSizeSystemId: string | null;
   setActiveSizeSystemId: (id: string | null) => void;
   createMediaUrl: (file: File) => string;
   revokeMediaUrl: (url: string) => void;
   isSaveInFlight: boolean;
   canSave: boolean;
-  saveDraft?: () => Promise<void>;
+  saveDraft?: () => Promise<boolean | void>;
+  flushSave: () => Promise<boolean>;
   clearSaveError: () => void;
   isSubmittingModeration: boolean;
   moderationError: string | null;
@@ -508,7 +534,23 @@ export function ProductStudioProvider({
   const isSaveInFlightRef = useRef(isSaveInFlight);
   isSaveInFlightRef.current = isSaveInFlight;
 
+  const effectiveEntryMode: ProductStudioEntryMode = state.entryMode;
+  const effectiveEntryModeRef = useRef(effectiveEntryMode);
+  effectiveEntryModeRef.current = effectiveEntryMode;
+
   const isSavingRef = useRef(false);
+  const inFlightSavePromiseRef = useRef<Promise<boolean> | null>(null);
+  const queuedSaveRef = useRef(false);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const generationRef = useRef(0);
+  const latestSaveGenerationRef = useRef(0);
+
+  const latestDraftRef = useRef(state.draft);
+  latestDraftRef.current = state.draft;
+  const latestInitialDraftRef = useRef(state.initialDraft);
+  latestInitialDraftRef.current = state.initialDraft;
+  const isDirtyRef = useRef(state.isDirty);
+  isDirtyRef.current = state.isDirty;
 
   const mediaRegistryRef = useRef<StudioMediaRegistry | null>(null);
   if (!mediaRegistryRef.current) {
@@ -611,8 +653,8 @@ export function ProductStudioProvider({
   );
 
   const updateDraft = useCallback((patch: Partial<ProductStudioDraft>) => {
-    if (isSaveInFlightRef.current) return;
     if (state.saveStatus === 'identity_recovery_required') return;
+    generationRef.current += 1;
     // If draft images are being updated and any registered URL was removed, revoke it
     if (patch.images && state.draft.images) {
       const nextUrls = new Set<string>();
@@ -644,158 +686,313 @@ export function ProductStudioProvider({
     dispatch({ type: 'CLEAR_SAVE_ERROR' });
   }, []);
 
-  const setViewMode = useCallback((mode: ProductStudioViewMode) => {
-    dispatch({ type: 'SET_VIEW_MODE', payload: mode });
-  }, []);
-
-  const setActiveSection = useCallback((section: ProductStudioSection) => {
-    dispatch({ type: 'SET_ACTIVE_SECTION', payload: section });
-  }, []);
-
   const canSave = useMemo(() => {
     if (isSaveInFlight) return false;
     if (state.saveStatus === 'refresh_error') return false;
     if (state.saveStatus === 'identity_recovery_required') return true;
-    if (entryMode === 'edit') {
+    if (effectiveEntryMode === 'edit') {
       if (!state.isDirty) return false;
       return isProductStudioSaveEligible(state.draft);
     }
-    if (entryMode === 'create') {
-      return isProductStudioSaveEligible(state.draft);
+    if (effectiveEntryMode === 'create') {
+      return isProductStudioCreateAutosaveEligible(state.draft, { categorySchema });
     }
     return false;
-  }, [entryMode, isSaveInFlight, state.saveStatus, state.isDirty, state.draft]);
+  }, [effectiveEntryMode, isSaveInFlight, state.saveStatus, state.isDirty, state.draft, categorySchema]);
 
-  const saveDraft = useCallback(async () => {
-    if (isSavingRef.current) return;
-    if (state.saveStatus === 'refresh_error') return;
-    if (state.saveStatus !== 'identity_recovery_required' && !isProductStudioSaveEligible(state.draft)) return;
+  const executeSave = useCallback(async (reason?: string): Promise<boolean> => {
+    if (isSavingRef.current) {
+      queuedSaveRef.current = true;
+      if (inFlightSavePromiseRef.current) {
+        try {
+          await inFlightSavePromiseRef.current;
+        } catch {
+          // ignore rejection, inFlightSavePromise handles errors internally
+        }
+      }
+      if (queuedSaveRef.current) {
+        queuedSaveRef.current = false;
+        return executeSave(reason || 'queued');
+      }
+      return state.saveStatus !== 'error';
+    }
 
-    if (entryMode === 'edit') {
-      if (!state.isDirty) return;
-      if (!state.draft.id) return;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
 
-      isSavingRef.current = true;
+    const currentDraft = latestDraftRef.current;
+    const currentInitialDraft = latestInitialDraftRef.current;
+
+    if (state.saveStatus === 'refresh_error') return false;
+
+    const currentEntryMode = effectiveEntryModeRef.current;
+
+    if (currentEntryMode === 'edit') {
+      if (state.saveStatus !== 'identity_recovery_required' && !isProductStudioSaveEligible(currentDraft)) {
+        return false;
+      }
+      const dirty = computeIsDirty(currentDraft, currentInitialDraft);
+      if (!dirty && state.saveStatus !== 'identity_recovery_required') {
+        return true;
+      }
+    } else {
+      if (
+        state.saveStatus !== 'identity_recovery_required' &&
+        !isProductStudioCreateAutosaveEligible(currentDraft, { categorySchema })
+      ) {
+        return false;
+      }
+    }
+
+    const saveGen = generationRef.current;
+    latestSaveGenerationRef.current = saveGen;
+    isSavingRef.current = true;
+
+    const savePromise = (async () => {
       try {
-        await orchestrateProductStudioEditSave({
-          productId: state.draft.id,
-          draft: state.draft,
-          baselineDraft: state.initialDraft,
-          categorySchema,
-          canonicalColors: canonicalColors || [],
-          dictionaryValuesMap: dictionaryValuesMap || {},
-          stageImageFn,
-          updateProductFn: saveProductFn,
-          getProductFn,
-          onStagingStart: () => {
-            dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'staging', error: null } });
-          },
-          onStagedImagesPersisted: (images) => {
-            dispatch({ type: 'PERSIST_STAGED_IMAGES', payload: images });
-          },
-          onSavingStart: () => {
-            dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'saving', error: null } });
-          },
-          onSaveSuccess: (hydratedDraft, finalStagedImages) => {
-            const urlsToRevoke = new Set<string>();
-            for (const img of finalStagedImages || []) {
-              const previewUrl = getProductStudioImagePreviewUrl(img);
-              if (previewUrl) urlsToRevoke.add(previewUrl);
-            }
-            if (state.draft.images) {
-              for (const img of state.draft.images) {
+        if (currentEntryMode === 'edit') {
+          if (!currentDraft.id) return false;
+          let saveSuccess = false;
+
+          await orchestrateProductStudioEditSave({
+            productId: currentDraft.id,
+            draft: currentDraft,
+            baselineDraft: currentInitialDraft,
+            categorySchema,
+            canonicalColors: canonicalColors || [],
+            dictionaryValuesMap: dictionaryValuesMap || {},
+            stageImageFn,
+            updateProductFn: saveProductFn,
+            getProductFn,
+            onStagingStart: () => {
+              dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'staging', error: null } });
+            },
+            onStagedImagesPersisted: (images) => {
+              dispatch({ type: 'PERSIST_STAGED_IMAGES', payload: images });
+            },
+            onSavingStart: () => {
+              dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'saving', error: null } });
+            },
+            onSaveSuccess: (hydratedDraft, finalStagedImages) => {
+              saveSuccess = true;
+              const urlsToRevoke = new Set<string>();
+              for (const img of finalStagedImages || []) {
                 const previewUrl = getProductStudioImagePreviewUrl(img);
                 if (previewUrl) urlsToRevoke.add(previewUrl);
               }
-            }
-            for (const url of urlsToRevoke) {
-              mediaRegistry.revokeObjectUrl(url);
-            }
-            dispatch({ type: 'COMMIT_SAVED_DRAFT', payload: hydratedDraft });
-          },
-          onError: (errMsg) => {
-            dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'error', error: errMsg } });
-          },
-          onRefreshError: (errMsg) => {
-            dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'refresh_error', error: errMsg } });
-          },
-        });
-      } finally {
-        isSavingRef.current = false;
-      }
-      return;
-    }
+              if (currentDraft.images) {
+                for (const img of currentDraft.images) {
+                  const previewUrl = getProductStudioImagePreviewUrl(img);
+                  if (previewUrl) urlsToRevoke.add(previewUrl);
+                }
+              }
+              for (const url of urlsToRevoke) {
+                mediaRegistry.revokeObjectUrl(url);
+              }
 
-    if (entryMode === 'create') {
-      isSavingRef.current = true;
-      try {
-        await orchestrateProductStudioCreateSave({
-          draft: state.draft,
-          categorySchema,
-          canonicalColors: canonicalColors || [],
-          dictionaryValuesMap: dictionaryValuesMap || {},
-          createProductFn,
-          stageImageFn,
-          updateProductFn: saveProductFn,
-          getProductFn,
-          onSavingStart: () => {
-            dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'saving', error: null } });
-          },
-          onStagingStart: () => {
-            dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'staging', error: null } });
-          },
-          onStagedImagesPersisted: (images) => {
-            dispatch({ type: 'PERSIST_STAGED_IMAGES', payload: images });
-          },
-          onSaveSuccess: (_newProductId, hydratedDraft, finalStagedImages) => {
-            const urlsToRevoke = new Set<string>();
-            for (const img of finalStagedImages || []) {
-              const previewUrl = getProductStudioImagePreviewUrl(img);
-              if (previewUrl) urlsToRevoke.add(previewUrl);
-            }
-            if (state.draft.images) {
-              for (const img of state.draft.images) {
+              if (generationRef.current === saveGen) {
+                latestDraftRef.current = hydratedDraft;
+                latestInitialDraftRef.current = hydratedDraft;
+                isDirtyRef.current = false;
+                dispatch({ type: 'COMMIT_SAVED_DRAFT', payload: hydratedDraft });
+              } else {
+                latestInitialDraftRef.current = hydratedDraft;
+                isDirtyRef.current = computeIsDirty(latestDraftRef.current, hydratedDraft);
+                dispatch({ type: 'COMMIT_INTERMEDIATE_SAVE', payload: hydratedDraft });
+              }
+            },
+            onError: (errMsg) => {
+              dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'error', error: errMsg } });
+            },
+            onRefreshError: (errMsg) => {
+              dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'refresh_error', error: errMsg } });
+            },
+          });
+
+          if (generationRef.current !== saveGen) {
+            isSavingRef.current = false;
+            inFlightSavePromiseRef.current = null;
+            return executeSave('queued_after_intermediate');
+          }
+
+          return saveSuccess;
+        }
+
+        if (currentEntryMode === 'create') {
+          let saveSuccess = false;
+          await orchestrateProductStudioCreateSave({
+            draft: currentDraft,
+            categorySchema,
+            canonicalColors: canonicalColors || [],
+            dictionaryValuesMap: dictionaryValuesMap || {},
+            createProductFn,
+            stageImageFn,
+            updateProductFn: saveProductFn,
+            getProductFn,
+            onSavingStart: () => {
+              dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'saving', error: null } });
+            },
+            onStagingStart: () => {
+              dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'staging', error: null } });
+            },
+            onStagedImagesPersisted: (images) => {
+              dispatch({ type: 'PERSIST_STAGED_IMAGES', payload: images });
+            },
+            onSaveSuccess: (newProductId, hydratedDraft, finalStagedImages) => {
+              saveSuccess = true;
+              const urlsToRevoke = new Set<string>();
+              for (const img of finalStagedImages || []) {
                 const previewUrl = getProductStudioImagePreviewUrl(img);
                 if (previewUrl) urlsToRevoke.add(previewUrl);
               }
-            }
-            for (const url of urlsToRevoke) {
-              mediaRegistry.revokeObjectUrl(url);
-            }
-            dispatch({ type: 'COMMIT_SAVED_DRAFT', payload: hydratedDraft });
-          },
-          onError: (errMsg) => {
-            dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'error', error: errMsg } });
-          },
-          onIdentityRecoveryRequired: (errMsg) => {
-            dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'identity_recovery_required', error: errMsg } });
-          },
-          onRefreshError: (errMsg) => {
-            dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'refresh_error', error: errMsg } });
-          },
-          navigate: onNavigate || ((to) => { window.location.href = to; }),
-        });
+              if (currentDraft.images) {
+                for (const img of currentDraft.images) {
+                  const previewUrl = getProductStudioImagePreviewUrl(img);
+                  if (previewUrl) urlsToRevoke.add(previewUrl);
+                }
+              }
+              for (const url of urlsToRevoke) {
+                mediaRegistry.revokeObjectUrl(url);
+              }
+
+              const canonicalWithId = {
+                ...hydratedDraft,
+                id: newProductId || hydratedDraft.id,
+              };
+
+              if (generationRef.current !== saveGen) {
+                latestDraftRef.current = {
+                  ...latestDraftRef.current,
+                  id: canonicalWithId.id,
+                };
+                latestInitialDraftRef.current = canonicalWithId;
+                isDirtyRef.current = computeIsDirty(latestDraftRef.current, canonicalWithId);
+                effectiveEntryModeRef.current = 'edit';
+                dispatch({ type: 'COMMIT_INTERMEDIATE_SAVE', payload: canonicalWithId });
+              } else {
+                latestDraftRef.current = canonicalWithId;
+                latestInitialDraftRef.current = canonicalWithId;
+                isDirtyRef.current = false;
+                effectiveEntryModeRef.current = 'edit';
+                dispatch({ type: 'COMMIT_SAVED_DRAFT', payload: canonicalWithId });
+              }
+            },
+            onError: (errMsg) => {
+              dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'error', error: errMsg } });
+            },
+            onIdentityRecoveryRequired: (errMsg) => {
+              dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'identity_recovery_required', error: errMsg } });
+            },
+            onRefreshError: (errMsg) => {
+              dispatch({ type: 'SET_SAVE_STATUS', payload: { status: 'refresh_error', error: errMsg } });
+            },
+            navigate: onNavigate || ((to) => {
+              if (typeof window !== 'undefined' && window.history?.replaceState) {
+                window.history.replaceState(null, '', to);
+              }
+            }),
+          });
+
+          if (generationRef.current !== saveGen) {
+            isSavingRef.current = false;
+            inFlightSavePromiseRef.current = null;
+            return executeSave('queued_after_intermediate');
+          }
+
+          return saveSuccess;
+        }
+
+        return false;
       } finally {
         isSavingRef.current = false;
+        inFlightSavePromiseRef.current = null;
       }
-      return;
-    }
+    })();
+
+    inFlightSavePromiseRef.current = savePromise;
+    return savePromise;
   }, [
     entryMode,
     state.saveStatus,
-    state.isDirty,
-    state.draft,
-    state.initialDraft,
     categorySchema,
     canonicalColors,
     dictionaryValuesMap,
-    createProductFn,
-    stageImageFn,
     saveProductFn,
+    createProductFn,
     getProductFn,
-    onNavigate,
+    stageImageFn,
     mediaRegistry,
+    onNavigate,
   ]);
+
+  const flushSave = useCallback(async (): Promise<boolean> => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    return executeSave('flush');
+  }, [executeSave]);
+
+  const saveDraft = useCallback(async (): Promise<boolean> => {
+    return flushSave();
+  }, [flushSave]);
+
+  // Debounced autosave effect (800ms)
+  useEffect(() => {
+    if (!state.isDirty) return;
+    if (state.saveStatus === 'refresh_error' || state.saveStatus === 'identity_recovery_required') return;
+
+    const isEligible =
+      effectiveEntryMode === 'edit'
+        ? isProductStudioSaveEligible(state.draft)
+        : isProductStudioCreateAutosaveEligible(state.draft, { categorySchema });
+
+    if (!isEligible) return;
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      executeSave('debounce');
+    }, 800);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
+  }, [state.draft, state.isDirty, state.saveStatus, effectiveEntryMode, categorySchema, executeSave]);
+
+  const shouldFlushOnSwitch = useCallback((): boolean => {
+    if (!isDirtyRef.current) return false;
+    if (effectiveEntryModeRef.current === 'edit') return true;
+    if (
+      effectiveEntryModeRef.current === 'create' &&
+      isProductStudioCreateAutosaveEligible(latestDraftRef.current, { categorySchema })
+    ) {
+      return true;
+    }
+    return false;
+  }, [categorySchema]);
+
+  const setViewMode = useCallback((mode: ProductStudioViewMode) => {
+    if (shouldFlushOnSwitch()) {
+      flushSave();
+    }
+    dispatch({ type: 'SET_VIEW_MODE', payload: mode });
+  }, [shouldFlushOnSwitch, flushSave]);
+
+  const setActiveSection = useCallback((section: ProductStudioSection) => {
+    if (shouldFlushOnSwitch()) {
+      flushSave();
+    }
+    dispatch({ type: 'SET_ACTIVE_SECTION', payload: section });
+  }, [shouldFlushOnSwitch, flushSave]);
 
   const [isSubmittingModeration, setIsSubmittingModeration] = useState(false);
   const [moderationError, setModerationError] = useState<string | null>(null);
@@ -805,59 +1002,114 @@ export function ProductStudioProvider({
   }, []);
 
   const isStatusEligibleForModeration = useMemo(() => {
+    if (!state.draft.id && effectiveEntryMode === 'create') {
+      return true;
+    }
     return (
       Boolean(state.draft.id) &&
       (!state.draft.status || state.draft.status === 'draft' || state.draft.status === 'rejected')
     );
-  }, [state.draft.id, state.draft.status]);
+  }, [state.draft.id, effectiveEntryMode, state.draft.status]);
 
   const canSubmitModeration = useMemo(() => {
-    if (isSaveInFlight) return false;
     if (isSubmittingModeration) return false;
-    if (!state.draft.id) return false;
+    if (!state.draft.id && effectiveEntryMode !== 'create') return false;
     if (!isStatusEligibleForModeration) return false;
-    if (state.isDirty) return false;
     return readiness.blockingFields.length === 0;
   }, [
-    isSaveInFlight,
     isSubmittingModeration,
     state.draft.id,
+    effectiveEntryMode,
     isStatusEligibleForModeration,
-    state.isDirty,
     readiness.blockingFields.length,
   ]);
 
   const submitModeration = useCallback(async () => {
     if (!canSubmitModeration) return;
-    if (!state.draft.id) return;
     if (isSubmittingModeration) return;
 
     setIsSubmittingModeration(true);
     setModerationError(null);
     try {
+      if (!latestDraftRef.current.id || isDirtyRef.current || isSaveInFlightRef.current || debounceTimerRef.current) {
+        const saveOk = await flushSave();
+        if (!saveOk) {
+          setIsSubmittingModeration(false);
+          return;
+        }
+      }
+
+      const currentDraft = latestDraftRef.current;
+      if (!currentDraft.id) {
+        setModerationError('Товар не сохранен на сервере');
+        return;
+      }
+
       const fn = submitModerationFn || submitSellerProductModeration;
-      await fn(state.draft.id);
+      await fn(currentDraft.id);
       dispatch({
         type: 'COMMIT_SAVED_DRAFT',
         payload: {
-          ...state.draft,
+          ...currentDraft,
           status: 'pending_moderation',
         },
       });
     } catch (err: any) {
-      setModerationError(err?.message || 'Не удалось отправить товар на модерацию');
+      const errMsg = err?.message || '';
+      const errCode = err?.code || (err as any)?.response?.data?.code || '';
+      if (
+        errCode === 'product_media_not_ready' ||
+        errMsg.includes('4:5') ||
+        errMsg.includes('кадрирование') ||
+        errMsg.includes('формате 4:5')
+      ) {
+        const total = (latestDraftRef.current.images || []).length || 3;
+        const missing = (latestDraftRef.current.images || []).filter((img) => !img.renditionUrl).length || 1;
+        setModerationError(`Для ${missing} из ${total} фото нужно настроить кадрирование 4:5`);
+      } else {
+        setModerationError(errMsg || 'Не удалось отправить товар на модерацию');
+      }
     } finally {
       setIsSubmittingModeration(false);
     }
-  }, [canSubmitModeration, state.draft, isSubmittingModeration, submitModerationFn]);
+  }, [canSubmitModeration, isSubmittingModeration, flushSave, submitModerationFn]);
+
+  const handleSelectCategory = useCallback(async (cat: SellerCategory, categoryPath?: string) => {
+    const resolvedName = cat.name;
+    const resolvedPath = categoryPath || cat.name;
+    try {
+      const schema = await getSellerCategorySchema(cat.id);
+      setCategorySchema(schema);
+      dispatch({
+        type: 'UPDATE_DRAFT',
+        payload: {
+          categoryId: cat.id,
+          categoryName: resolvedName,
+          categoryPath: resolvedPath,
+          dimensionType: schema.dimensionType || state.draft.dimensionType || 'COLOR_AND_SIZE',
+        },
+      });
+    } catch {
+      dispatch({
+        type: 'UPDATE_DRAFT',
+        payload: {
+          categoryId: cat.id,
+          categoryName: resolvedName,
+          categoryPath: resolvedPath,
+        },
+      });
+    }
+  }, [state.draft.dimensionType]);
 
   const contextValue = useMemo<ProductStudioContextValue>(() => {
     return {
       ...state,
+      entryMode: effectiveEntryMode,
       mediaMode: state.draft.mediaMode || state.mediaMode || 'GENERAL',
       isSaveInFlight,
       canSave,
-      saveDraft: (entryMode === 'edit' || entryMode === 'create') ? saveDraft : undefined,
+      saveDraft: (effectiveEntryMode === 'edit' || effectiveEntryMode === 'create') ? saveDraft : undefined,
+      flushSave,
       clearSaveError,
       isSubmittingModeration,
       moderationError,
@@ -884,6 +1136,7 @@ export function ProductStudioProvider({
       isFieldAttention,
       readiness,
       categorySchema,
+      selectCategory: handleSelectCategory,
       activeSizeSystemId,
       setActiveSizeSystemId,
       createMediaUrl,
@@ -901,51 +1154,28 @@ export function ProductStudioProvider({
     isSaveInFlight,
     canSave,
     saveDraft,
+    flushSave,
     clearSaveError,
     isSubmittingModeration,
     moderationError,
     canSubmitModeration,
     submitModeration,
     clearModerationError,
-    entryMode,
+    effectiveEntryMode,
+    setViewMode,
+    setActiveSection,
     updateDraft,
     markTouched,
     setShowReadinessAttention,
     isFieldAttention,
     readiness,
     categorySchema,
+    handleSelectCategory,
     activeSizeSystemId,
     setActiveSizeSystemId,
     createMediaUrl,
     revokeMediaUrl,
   ]);
-
-  const handleSelectCategory = async (cat: SellerCategory, categoryPath?: string) => {
-    const resolvedName = cat.name;
-    const resolvedPath = categoryPath || cat.name;
-    try {
-      const schema = await getSellerCategorySchema(cat.id);
-      setCategorySchema(schema);
-      dispatch({
-        type: 'UPDATE_DRAFT',
-        payload: {
-          categoryId: cat.id,
-          categoryName: resolvedName,
-          categoryPath: resolvedPath,
-          dimensionType: schema.dimensionType || state.draft.dimensionType || 'COLOR_AND_SIZE',
-        },
-      });
-    } catch {
-      dispatch({
-        type: 'UPDATE_DRAFT',
-        payload: {
-          categoryId: cat.id,
-          categoryName: resolvedName,
-          categoryPath: resolvedPath,
-        },
-      });
-    }
-  };
 
   return (
     <ProductStudioContext.Provider value={contextValue}>

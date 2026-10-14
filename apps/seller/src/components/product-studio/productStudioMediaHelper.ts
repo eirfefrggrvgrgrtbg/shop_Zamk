@@ -50,29 +50,37 @@ export async function validateImageFile(file: File): Promise<ImageValidationResu
   }
 
   // 3. Dimension & Aspect check
-  const mockDimensions = (file as any).__dimensions;
-  if (mockDimensions) {
-    if (mockDimensions.width >= mockDimensions.height) {
-      return {
-        valid: false,
-        error: 'Для товара нужны вертикальные фотографии. Загрузите изображение в вертикальном формате.',
-        width: mockDimensions.width,
-        height: mockDimensions.height,
-      };
+  const checkDimensions = (width: number, height: number): ImageValidationResult => {
+    const targetAspect = 4 / 5;
+    const currentAspect = width / height;
+    let cropPixelW: number;
+    let cropPixelH: number;
+    if (currentAspect > targetAspect) {
+      cropPixelH = height;
+      cropPixelW = height * targetAspect;
+    } else {
+      cropPixelW = width;
+      cropPixelH = width / targetAspect;
     }
-    if (mockDimensions.width < MIN_IMAGE_WIDTH || mockDimensions.height < MIN_IMAGE_HEIGHT) {
+
+    if (cropPixelW < MIN_IMAGE_WIDTH || cropPixelH < MIN_IMAGE_HEIGHT || width < MIN_IMAGE_WIDTH || height < MIN_IMAGE_HEIGHT) {
       return {
         valid: false,
         error: 'Изображение слишком маленькое. Минимальный размер — 800×1000 пикселей.',
-        width: mockDimensions.width,
-        height: mockDimensions.height,
+        width,
+        height,
       };
     }
     return {
       valid: true,
-      width: mockDimensions.width,
-      height: mockDimensions.height,
+      width,
+      height,
     };
+  };
+
+  const mockDimensions = (file as any).__dimensions;
+  if (mockDimensions) {
+    return checkDimensions(mockDimensions.width, mockDimensions.height);
   }
 
   const isJsdom = typeof navigator !== 'undefined' && navigator.userAgent.includes('jsdom');
@@ -92,29 +100,7 @@ export async function validateImageFile(file: File): Promise<ImageValidationResu
         img.src = objectUrl;
       });
 
-      if (dimensions.width >= dimensions.height) {
-        return {
-          valid: false,
-          error: 'Для товара нужны вертикальные фотографии. Загрузите изображение в вертикальном формате.',
-          width: dimensions.width,
-          height: dimensions.height,
-        };
-      }
-
-      if (dimensions.width < MIN_IMAGE_WIDTH || dimensions.height < MIN_IMAGE_HEIGHT) {
-        return {
-          valid: false,
-          error: 'Изображение слишком маленькое. Минимальный размер — 800×1000 пикселей.',
-          width: dimensions.width,
-          height: dimensions.height,
-        };
-      }
-
-      return {
-        valid: true,
-        width: dimensions.width,
-        height: dimensions.height,
-      };
+      return checkDimensions(dimensions.width, dimensions.height);
     } catch {
       // If image loading fails in test environment without DOM layout, accept format if MIME/size valid
       return { valid: true };
@@ -234,7 +220,8 @@ export function createLocalProductStudioImage(params: {
 }): ProductStudioImage {
   const clientMediaId = generateMediaUUID();
   let cropFields = {};
-  if (params.width && params.height) {
+  const hasDimensions = Boolean(params.width && params.height);
+  if (hasDimensions && params.width && params.height) {
     cropFields = calculateDefault4x5Crop(params.width, params.height);
   }
 
@@ -245,6 +232,7 @@ export function createLocalProductStudioImage(params: {
     isMain: Boolean(params.isMain),
     sortOrder: params.sortOrder,
     isUnassigned: Boolean(params.isUnassigned),
+    renditionStatus: hasDimensions ? 'READY' : 'NEEDS_CROP',
     ...cropFields,
     source: {
       kind: 'local',
@@ -271,7 +259,15 @@ export function createCanonicalProductStudioImage(params: {
   cropY?: number;
   cropWidth?: number;
   cropHeight?: number;
+  renditionUrl?: string | null;
+  renditionStatus?: 'READY' | 'NEEDS_CROP' | 'PROCESSING' | 'FAILED';
 }): ProductStudioImage {
+  const hasCrop = params.cropWidth != null && params.cropHeight != null;
+  const renditionUrl = params.renditionUrl !== undefined
+    ? params.renditionUrl
+    : (hasCrop ? `${params.url}-4x5.jpg` : null);
+  const renditionStatus = params.renditionStatus ?? (renditionUrl ? 'READY' : 'NEEDS_CROP');
+
   return {
     uiKey: params.uiKey || params.imageId,
     colorId: params.colorId ?? null,
@@ -283,6 +279,8 @@ export function createCanonicalProductStudioImage(params: {
     cropY: params.cropY,
     cropWidth: params.cropWidth,
     cropHeight: params.cropHeight,
+    renditionUrl,
+    renditionStatus,
     source: {
       kind: 'canonical',
       imageId: params.imageId,

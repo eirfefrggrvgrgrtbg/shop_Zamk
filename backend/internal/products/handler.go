@@ -8,6 +8,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/common"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -498,7 +499,7 @@ func (h *Handler) SubmitForModeration(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, ErrProductMediaNotReady) {
-			h.writeError(w, http.StatusUnprocessableEntity, "product_media_not_ready", "Все фотографии товара должны быть настроены в формате 4:5 в разделе «Фото».")
+			h.writeError(w, http.StatusUnprocessableEntity, "product_media_not_ready", "Все фотографии товара должны иметь кадрирование 4:5 в разделе «Фото».")
 			return
 		}
 		if errors.Is(err, ErrProductMainImageMissing) {
@@ -658,6 +659,44 @@ func (h *Handler) GetAdminProduct(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(prod)
+}
+
+func (h *Handler) GetAdminProductVisionRuns(w http.ResponseWriter, r *http.Request) {
+	productID, ok := h.parseUUIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+
+	limit := 20
+	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+		if l, err := strconv.Atoi(lStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	offset := 0
+	if oStr := r.URL.Query().Get("offset"); oStr != "" {
+		if o, err := strconv.Atoi(oStr); err == nil && o >= 0 {
+			offset = o
+		}
+	} else if pStr := r.URL.Query().Get("page"); pStr != "" {
+		if p, err := strconv.Atoi(pStr); err == nil && p > 0 {
+			offset = (p - 1) * limit
+		}
+	}
+
+	runs, err := h.service.GetAdminProductVisionRuns(r.Context(), productID, limit, offset)
+	if err != nil {
+		if errors.Is(err, ErrProductNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Product not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get vision runs")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(runs)
 }
 
 func (h *Handler) GetAdminModerationHistory(w http.ResponseWriter, r *http.Request) {

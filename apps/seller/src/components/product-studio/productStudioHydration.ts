@@ -132,10 +132,16 @@ export function hydrateProductStudioDraft({
         ...(isOrphaned ? { isUnassigned: true } : {}),
         isMain: Boolean(img.isMain),
         altText: img.altText ?? null,
-        cropX: img.cropX,
-        cropY: img.cropY,
-        cropWidth: img.cropWidth,
-        cropHeight: img.cropHeight,
+        ...(img.cropX !== undefined && { cropX: img.cropX }),
+        ...(img.cropY !== undefined && { cropY: img.cropY }),
+        ...(img.cropWidth !== undefined && { cropWidth: img.cropWidth }),
+        ...(img.cropHeight !== undefined && { cropHeight: img.cropHeight }),
+        ...(img.renditionUrl || (img as any).rendition_url
+          ? {
+              renditionUrl: img.renditionUrl || (img as any).rendition_url,
+              renditionStatus: 'READY' as const,
+            }
+          : {}),
         source: {
           kind: 'canonical' as const,
           imageId,

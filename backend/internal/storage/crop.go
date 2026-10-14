@@ -35,6 +35,47 @@ func (req CropImageRequest) Validate() error {
 	return nil
 }
 
+// CalculateDefault4x5Crop calculates a deterministic, centered 4:5 crop based on source dimensions.
+// The crop is represented as normalized percentages (0.0 to 1.0).
+func CalculateDefault4x5Crop(origW, origH int) CropImageRequest {
+	if origW <= 0 || origH <= 0 {
+		return CropImageRequest{}
+	}
+	targetAspect := 4.0 / 5.0
+	currentAspect := float64(origW) / float64(origH)
+
+	var cropW, cropH, cropX, cropY float64
+	cropW = 1.0
+	cropH = 1.0
+	cropX = 0.0
+	cropY = 0.0
+
+	if currentAspect > targetAspect {
+		// Wider than 4:5. Height is limiting.
+		cropH = 1.0
+		cropW = (float64(origH) * targetAspect) / float64(origW)
+		cropX = (1.0 - cropW) / 2.0
+		cropY = 0.0
+	} else if currentAspect < targetAspect {
+		// Taller than 4:5. Width is limiting.
+		cropW = 1.0
+		cropH = (float64(origW) / targetAspect) / float64(origH)
+		cropY = (1.0 - cropH) / 2.0
+		cropX = 0.0
+	}
+
+	return CropImageRequest{
+		CropX:      cropX,
+		CropY:      cropY,
+		CropWidth:  cropW,
+		CropHeight: cropH,
+	}
+}
+
+func (s *Service) AutoCropSellerProductImage(ctx context.Context, userID, productID, imageID uuid.UUID) (*UploadImageResponse, error) {
+	return s.CropSellerProductImage(ctx, userID, productID, imageID, CropImageRequest{})
+}
+
 func (s *Service) CropSellerProductImage(ctx context.Context, userID, productID, imageID uuid.UUID, req CropImageRequest) (*UploadImageResponse, error) {
 	seller, _, err := s.sellersRepo.GetSellerByUserID(ctx, userID)
 	if err != nil {
@@ -80,6 +121,15 @@ func (s *Service) CropSellerProductImage(ctx context.Context, userID, productID,
 	bounds := origImg.Bounds()
 	origW := bounds.Dx()
 	origH := bounds.Dy()
+
+	// If crop parameters are not provided or empty, calculate deterministic default 4:5 crop
+	if req.CropWidth <= 0 || req.CropHeight <= 0 {
+		req = CalculateDefault4x5Crop(origW, origH)
+	} else {
+		if err := req.Validate(); err != nil {
+			return nil, err
+		}
+	}
 
 	cropPixelW := req.CropWidth * float64(origW)
 	cropPixelH := req.CropHeight * float64(origH)

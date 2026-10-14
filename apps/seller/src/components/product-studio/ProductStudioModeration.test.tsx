@@ -65,12 +65,11 @@ describe('ProductStudio Submit to Moderation Eligibility', () => {
       </MemoryRouter>
     );
 
-    const saveBtn = screen.getByTestId('studio-header-save-btn');
     const submitBtn = screen.getByTestId('studio-header-submit-moderation-btn');
 
-    // Save disabled because there are no dirty changes
-    expect(saveBtn.hasAttribute('disabled')).toBe(true);
-    expect(saveBtn.getAttribute('title')).toBe('Нет несохраненных изменений');
+    // Manual Save button removed from header; status shows Сохранено
+    expect(screen.queryByTestId('studio-header-save-btn')).toBeNull();
+    expect(screen.getByTestId('studio-save-status').textContent).toContain('Сохранено');
 
     // Submit to moderation ENABLED
     expect(submitBtn.hasAttribute('disabled')).toBe(false);
@@ -215,11 +214,10 @@ describe('ProductStudio Submit to Moderation Eligibility', () => {
       </MemoryRouter>
     );
 
-    const saveBtn = screen.getByTestId('studio-header-save-btn');
     const submitBtn = screen.getByTestId('studio-header-submit-moderation-btn');
 
-    // Initially clean: Save disabled, Submit enabled
-    expect(saveBtn.hasAttribute('disabled')).toBe(true);
+    // Initially clean: Save button removed, Submit enabled
+    expect(screen.queryByTestId('studio-header-save-btn')).toBeNull();
     expect(submitBtn.hasAttribute('disabled')).toBe(false);
 
     // Mutate draft locally
@@ -227,9 +225,9 @@ describe('ProductStudio Submit to Moderation Eligibility', () => {
       fireEvent.click(screen.getByTestId('test-mutate-btn'));
     });
 
-    // When dirty: Save enabled, Submit disabled
-    expect(saveBtn.hasAttribute('disabled')).toBe(false);
-    expect(submitBtn.hasAttribute('disabled')).toBe(true);
-    expect(submitBtn.getAttribute('title')).toBe('Сохраните изменения перед отправкой на модерацию');
+    // When dirty: autosave triggers automatically; Submit to Moderation remains usable (flushes save on submit)
+    expect(screen.queryByTestId('studio-header-save-btn')).toBeNull();
+    expect(screen.getByTestId('studio-save-status').textContent).toContain('Есть изменения');
+    expect(submitBtn.hasAttribute('disabled')).toBe(false);
   });
 });

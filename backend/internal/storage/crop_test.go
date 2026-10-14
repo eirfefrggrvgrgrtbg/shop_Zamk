@@ -118,3 +118,63 @@ func TestCropImageRequest_Validate(t *testing.T) {
 		})
 	}
 }
+
+func TestCalculateDefault4x5Crop(t *testing.T) {
+	t.Run("Exact 4:5 aspect portrait (e.g. 1000x1250)", func(t *testing.T) {
+		crop := storage.CalculateDefault4x5Crop(1000, 1250)
+		assert.Equal(t, 1.0, crop.CropWidth)
+		assert.Equal(t, 1.0, crop.CropHeight)
+		assert.Equal(t, 0.0, crop.CropX)
+		assert.Equal(t, 0.0, crop.CropY)
+		assert.NoError(t, crop.Validate())
+
+		pixelW := float64(1000) * crop.CropWidth
+		pixelH := float64(1250) * crop.CropHeight
+		assert.InDelta(t, 0.8, pixelW/pixelH, 0.0001)
+	})
+
+	t.Run("Tall portrait (e.g. 1000x2000)", func(t *testing.T) {
+		crop := storage.CalculateDefault4x5Crop(1000, 2000)
+		assert.Equal(t, 1.0, crop.CropWidth)
+		assert.InDelta(t, 0.625, crop.CropHeight, 0.0001) // (1000 / 0.8) / 2000 = 1250 / 2000 = 0.625
+		assert.Equal(t, 0.0, crop.CropX)
+		assert.InDelta(t, 0.1875, crop.CropY, 0.0001) // (1.0 - 0.625) / 2 = 0.1875
+		assert.NoError(t, crop.Validate())
+
+		pixelW := float64(1000) * crop.CropWidth
+		pixelH := float64(2000) * crop.CropHeight
+		assert.InDelta(t, 0.8, pixelW/pixelH, 0.0001)
+	})
+
+	t.Run("Square image (e.g. 1200x1200)", func(t *testing.T) {
+		crop := storage.CalculateDefault4x5Crop(1200, 1200)
+		assert.Equal(t, 1.0, crop.CropHeight)
+		assert.InDelta(t, 0.8, crop.CropWidth, 0.0001) // (1200 * 0.8) / 1200 = 0.8
+		assert.InDelta(t, 0.1, crop.CropX, 0.0001)     // (1.0 - 0.8) / 2 = 0.1
+		assert.Equal(t, 0.0, crop.CropY)
+		assert.NoError(t, crop.Validate())
+
+		pixelW := float64(1200) * crop.CropWidth
+		pixelH := float64(1200) * crop.CropHeight
+		assert.InDelta(t, 0.8, pixelW/pixelH, 0.0001)
+	})
+
+	t.Run("Landscape image (e.g. 1600x1000)", func(t *testing.T) {
+		crop := storage.CalculateDefault4x5Crop(1600, 1000)
+		assert.Equal(t, 1.0, crop.CropHeight)
+		assert.InDelta(t, 0.5, crop.CropWidth, 0.0001) // (1000 * 0.8) / 1600 = 800 / 1600 = 0.5
+		assert.InDelta(t, 0.25, crop.CropX, 0.0001)    // (1.0 - 0.5) / 2 = 0.25
+		assert.Equal(t, 0.0, crop.CropY)
+		assert.NoError(t, crop.Validate())
+
+		pixelW := float64(1600) * crop.CropWidth
+		pixelH := float64(1000) * crop.CropHeight
+		assert.InDelta(t, 0.8, pixelW/pixelH, 0.0001)
+	})
+
+	t.Run("Zero or invalid dimensions return empty crop", func(t *testing.T) {
+		crop := storage.CalculateDefault4x5Crop(0, 0)
+		assert.Equal(t, 0.0, crop.CropWidth)
+		assert.Equal(t, 0.0, crop.CropHeight)
+	})
+}

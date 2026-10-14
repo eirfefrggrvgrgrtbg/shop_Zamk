@@ -16,7 +16,9 @@ import { shouldIncludeImagesInPatch } from './productStudioMediaHelper';
 import { hydrateProductStudioDraft } from './productStudioHydration';
 import {
   buildProductStudioUpdateRequest,
+  isProductStudioCreateAutosaveEligible,
   type ProductStudioUpdateRequestPayload,
+  type ProductStudioCreateAutosaveContext,
 } from './productStudioSaveProduct';
 import {
   loadProductStudioCreateSession,
@@ -33,7 +35,8 @@ import {
   cropSellerProductImage,
 } from '@zamk/api-client/src/seller';
 
-export type { ProductStudioCreateRequestPayload };
+export type { ProductStudioCreateRequestPayload, ProductStudioCreateAutosaveContext };
+export { isProductStudioCreateAutosaveEligible };
 
 /**
  * Pure builder: constructs ONE non-media CreateProductRequest from ProductStudioDraft.
@@ -236,6 +239,19 @@ export async function orchestrateProductStudioCreateSave({
   onRefreshError,
   navigate,
 }: OrchestrateCreateSaveParams): Promise<void> {
+  // 0. Mandatory Category Schema Check:
+  // Product Studio create orchestration strictly requires category schema to hydrate
+  // and reconcile the created product baseline. Fails closed before any POST.
+  if (
+    !categorySchema ||
+    (draft.categoryId &&
+      categorySchema.id !== draft.categoryId &&
+      (categorySchema as any).categoryId !== draft.categoryId)
+  ) {
+    onError('Не удалось завершить сохранение: отсутствует схема категории.');
+    return;
+  }
+
   // 1. Session check & Identity establishment
   const existingSession = loadProductStudioCreateSession();
   let productId = existingSession?.productId;
@@ -302,7 +318,11 @@ export async function orchestrateProductStudioCreateSave({
       return;
     }
 
-    productId = createdProduct.id;
+    productId = createdProduct?.id;
+    if (!productId) {
+      onError('Не удалось получить идентификатор созданного товара.');
+      return;
+    }
     // CRITICAL: Immediately persist authoritative productId
     try {
       saveProductStudioCreateSession({
@@ -436,19 +456,28 @@ export async function orchestrateProductStudioCreateSave({
     return;
   }
 
-  // 6.5. Auto-crop newly staged images
+  // 6.5. Auto-crop newly staged images and canonical images missing renditions
   if (draftAfterStaging.images && cropImageFn) {
     const cropPromises = draftAfterStaging.images.map(async (img) => {
-      if (img.source.kind === 'staged' && typeof img.cropWidth === 'number' && typeof img.cropHeight === 'number') {
+      const imageId =
+        img.source.kind === 'staged'
+          ? img.source.stagedId
+          : img.source.kind === 'canonical' && !img.renditionUrl
+          ? img.source.imageId
+          : null;
+
+      if (imageId) {
         try {
-          await cropImageFn(productId, img.source.stagedId, {
+          await cropImageFn(productId, imageId, {
             cropX: img.cropX || 0,
             cropY: img.cropY || 0,
-            cropWidth: img.cropWidth,
-            cropHeight: img.cropHeight,
+            cropWidth: img.cropWidth || 0,
+            cropHeight: img.cropHeight || 0,
           });
-        } catch (e) {
-          console.warn('Auto-crop failed for image', img.source.stagedId, e);
+        } catch (e: any) {
+          console.warn('Auto-crop failed for image', imageId, e);
+          img.renditionStatus = 'FAILED';
+          img.renditionError = e?.message || 'Не удалось настроить кадрирование 4:5';
         }
       }
     });

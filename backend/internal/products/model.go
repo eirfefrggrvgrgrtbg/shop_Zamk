@@ -312,3 +312,62 @@ type AdminProductVisionDTO struct {
 
 	Moderation           *AdminVisionModerationDTO         `json:"moderation,omitempty"`
 }
+
+type AdminVisionUsageDTO struct {
+	PromptTokens     int `json:"promptTokens"`
+	CompletionTokens int `json:"completionTokens"`
+	TotalTokens      int `json:"totalTokens"`
+}
+
+type AdminVisionObservationSummaryDTO struct {
+	CategoryConsistency  *string                           `json:"categoryConsistency,omitempty"`
+	ObservedCategoryText *string                           `json:"observedCategoryText,omitempty"`
+	DominantColors       []AdminVisionColorDTO             `json:"dominantColors,omitempty"`
+	SecondaryColors      []AdminVisionColorDTO             `json:"secondaryColors,omitempty"`
+	Silhouette           *string                           `json:"silhouette,omitempty"`
+	FitAppearance        *string                           `json:"fitAppearance,omitempty"`
+	Length               *string                           `json:"length,omitempty"`
+	Sleeves              []string                          `json:"sleeves,omitempty"`
+	Neckline             *string                           `json:"neckline,omitempty"`
+	Closure              *string                           `json:"closure,omitempty"`
+	Pattern              *string                           `json:"pattern,omitempty"`
+	VisibleTexture       *string                           `json:"visibleTexture,omitempty"`
+	DecorativeDetails    []string                          `json:"decorativeDetails,omitempty"`
+	StyleDescriptors     []string                          `json:"styleDescriptors,omitempty"`
+	Formality            *string                           `json:"formality,omitempty"`
+	SeasonalCues         []string                          `json:"seasonalCues,omitempty"`
+	ImageSetConsistency  *bool                             `json:"imageSetConsistency,omitempty"`
+	OCRText              []string                          `json:"ocrText,omitempty"`
+	Confidence           map[string]vision.ConfidenceScore `json:"confidence,omitempty"`
+	Evidence             []vision.Evidence                 `json:"evidence,omitempty"`
+}
+
+type AdminProductVisionRunDTO struct {
+	ID                   uuid.UUID                         `json:"id"`
+	ProductID            uuid.UUID                         `json:"productId"`
+	VisionContentVersion int64                             `json:"visionContentVersion"`
+	Status               string                            `json:"status"`
+	IsCurrent            bool                              `json:"isCurrent"`
+	Provider             string                            `json:"provider"`
+	ModelID              string                            `json:"modelId"`
+	PromptVersion        string                            `json:"promptVersion"`
+	SchemaVersion        string                            `json:"schemaVersion"`
+	VocabularyVersion    string                            `json:"vocabularyVersion"`
+	Attempts             int                               `json:"attempts"`
+	CreatedAt            time.Time                         `json:"createdAt"`
+	ClaimedAt            *time.Time                        `json:"claimedAt,omitempty"`
+	CompletedAt          *time.Time                        `json:"completedAt,omitempty"`
+	LatencyMs            *int                              `json:"latencyMs,omitempty"`
+	Usage                *AdminVisionUsageDTO              `json:"usage,omitempty"`
+	CostCents            *int                              `json:"costCents,omitempty"`
+	FailureCode          *string                           `json:"failureCode,omitempty"`
+	Observation          *AdminVisionObservationSummaryDTO `json:"observation,omitempty"`
+	Moderation           *AdminVisionModerationDTO         `json:"moderation,omitempty"`
+}
+
+type AdminProductVisionRunsResponse struct {
+	Items  []AdminProductVisionRunDTO `json:"items"`
+	Total  int                        `json:"total"`
+	Limit  int                        `json:"limit"`
+	Offset int                        `json:"offset"`
+}

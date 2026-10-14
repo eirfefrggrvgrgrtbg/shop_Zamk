@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useProductStudio } from '../../contexts/ProductStudioContext';
 import { ProductStudioSectionNav } from './ProductStudioSectionNav';
 import { SellerSurface } from '../SellerSurface';
-import { FileText, Image, Sliders, Layers, DollarSign, ShieldCheck, Folder, Link2, Pencil, Trash2, Plus, GripVertical, CheckCircle, AlertCircle, AlertTriangle, X, Loader2, Sparkles } from 'lucide-react';
+import { FileText, Image, Sliders, Layers, DollarSign, ShieldCheck, Folder, Link2, Pencil, Trash2, Plus, GripVertical, CheckCircle, AlertCircle, AlertTriangle, X, Loader2, Sparkles, Crop, Check } from 'lucide-react';
 import {
   isColorRequired,
   isSizeRequired,
@@ -28,13 +28,14 @@ import {
   getMediaReadinessWarning,
   resolveLegacyMixedMedia,
 } from './productStudioMediaHelper';
-import { getSellerCategorySchema, type SellerCategorySchema } from '@zamk/api-client';
+import { getSellerCategorySchema, cropSellerProductImage, type SellerCategorySchema } from '@zamk/api-client';
 import { cn } from '../../lib/utils';
 import { ProductStudioPhotoColorModal } from './ProductStudioPhotoColorModal';
 import { ProductStudioCompositionModal } from './ProductStudioCompositionModal';
 import { ProductStudioCareModal } from './ProductStudioCareModal';
 import { ProductStudioCharacteristicsModal } from './ProductStudioCharacteristicsModal';
 import { ProductStudioSizeChartModal } from './ProductStudioSizeChartModal';
+import { ProductStudioCropModal } from './ProductStudioCropModal';
 import {
   reconcileProductStudioVariantMatrix,
   resolveProductStudioDimensionType,
@@ -95,6 +96,55 @@ export function ProductStudioFormWorkspace() {
   const [isValidatingPhoto, setIsValidatingPhoto] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [cropModalTarget, setCropModalTarget] = useState<{
+    image: any;
+    index: number;
+  } | null>(null);
+
+  const handleOpenCropModal = (image: any, index: number) => {
+    setCropModalTarget({ image, index });
+  };
+
+  const handleApplyCropModal = async (cropParams: {
+    cropX: number;
+    cropY: number;
+    cropWidth: number;
+    cropHeight: number;
+  }) => {
+    if (!cropModalTarget) return;
+    const { image, index } = cropModalTarget;
+    let newRenditionUrl: string | null = image.renditionUrl || null;
+
+    if (draft.id && image.source?.kind === 'canonical' && image.source?.imageId) {
+      try {
+        const res = await cropSellerProductImage(draft.id, image.source.imageId, cropParams);
+        if (res && res.renditionUrl) {
+          newRenditionUrl = res.renditionUrl;
+        }
+      } catch (err: any) {
+        console.warn('Manual crop failed on server:', err);
+      }
+    }
+
+    const updatedImages = (draft.images || []).map((img, i) => {
+      if (i === index) {
+        return {
+          ...img,
+          cropX: cropParams.cropX,
+          cropY: cropParams.cropY,
+          cropWidth: cropParams.cropWidth,
+          cropHeight: cropParams.cropHeight,
+          renditionUrl: newRenditionUrl,
+          renditionStatus: 'READY' as const,
+          renditionError: null,
+        };
+      }
+      return img;
+    });
+
+    updateDraft({ images: updatedImages });
+    markTouched('media');
+  };
 
   const [colorsList, setColorsList] = useState<SellerColor[]>([]);
 
@@ -834,14 +884,19 @@ export function ProductStudioFormWorkspace() {
 
     // 2. Media: minimum 3 photos
     const mediaCount = (draft.images || []).length;
-    const mediaSatisfied = mediaCount >= MIN_PRODUCT_IMAGES && !blockers.has('media');
+    const missingCropsCount = (draft.images || []).filter(
+      (img) => img.cropWidth == null || (!img.renditionUrl && !(img as any).isReady)
+    ).length;
+    const mediaSatisfied =
+      mediaCount >= MIN_PRODUCT_IMAGES &&
+      !blockers.has('media') &&
+      missingCropsCount === 0;
     const mediaDetails: string[] = [];
     if (mediaCount < MIN_PRODUCT_IMAGES) {
       mediaDetails.push(`Загружено ${mediaCount} из ${MIN_PRODUCT_IMAGES} фото (нужно минимум 3)`);
     } else {
       mediaDetails.push(`Загружено ${mediaCount} фото`);
     }
-    const missingCropsCount = (draft.images || []).filter((img) => img.cropWidth == null).length;
     if (missingCropsCount > 0) {
       mediaDetails.push(`Нужно настроить ${missingCropsCount} фото`);
     }
@@ -1352,6 +1407,16 @@ export function ProductStudioFormWorkspace() {
                 const isDragging = draggedIndex === index;
                 const isDragOver = dragOverIndex === index && draggedIndex !== index;
 
+                const isReady = Boolean(img.renditionUrl || (img as any).isReady);
+                const renditionStatus =
+                  img.renditionStatus === 'PROCESSING'
+                    ? 'PROCESSING'
+                    : img.renditionStatus === 'FAILED'
+                    ? 'FAILED'
+                    : isReady
+                    ? 'READY'
+                    : 'NEEDS_CROP';
+
                 return (
                   <div
                     key={img.uiKey || index}
@@ -1409,6 +1474,76 @@ export function ProductStudioFormWorkspace() {
                           Обложка
                         </span>
                       )}
+                      {/* Status: Ready badge */}
+                      {renditionStatus === 'READY' && (
+                        <span
+                          data-testid={`form-media-status-${index}`}
+                          className={cn(
+                            "absolute px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-600/90 text-white shadow-sm flex items-center gap-1 backdrop-blur-xs",
+                            isCover ? "top-7 left-2" : "top-2 left-2"
+                          )}
+                        >
+                          <Check className="w-2.5 h-2.5" /> 4:5
+                        </span>
+                      )}
+
+                      {/* Status: Needs Crop overlay */}
+                      {renditionStatus === 'NEEDS_CROP' && (
+                        <div
+                          data-testid={`form-media-status-${index}`}
+                          className="absolute inset-x-2 bottom-2 z-10 p-2 rounded-lg bg-black/85 backdrop-blur-xs flex flex-col items-center gap-1.5 text-center shadow-lg"
+                        >
+                          <span className="text-[11px] font-semibold text-amber-300 leading-tight">
+                            Настройте кадрирование 4:5
+                          </span>
+                          <button
+                            type="button"
+                            data-testid={`form-media-crop-btn-${index}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenCropModal(img, index);
+                            }}
+                            className="px-2.5 py-1 text-xs font-semibold rounded bg-amber-500 hover:bg-amber-400 text-black transition-colors cursor-pointer"
+                          >
+                            Настроить
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Status: Failed overlay */}
+                      {renditionStatus === 'FAILED' && (
+                        <div
+                          data-testid={`form-media-status-${index}`}
+                          className="absolute inset-x-2 bottom-2 z-10 p-2 rounded-lg bg-black/85 backdrop-blur-xs flex flex-col items-center gap-1 text-center shadow-lg"
+                        >
+                          <span className="text-[11px] font-semibold text-red-400 leading-tight">
+                            {img.renditionError || 'Ошибка кадрирования 4:5'}
+                          </span>
+                          <button
+                            type="button"
+                            data-testid={`form-media-crop-btn-${index}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenCropModal(img, index);
+                            }}
+                            className="px-2 py-0.5 text-xs font-medium rounded bg-red-600 hover:bg-red-500 text-white transition-colors cursor-pointer"
+                          >
+                            Настроить
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Status: Processing overlay */}
+                      {renditionStatus === 'PROCESSING' && (
+                        <div
+                          data-testid={`form-media-status-${index}`}
+                          className="absolute inset-0 z-10 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center gap-1.5 text-white"
+                        >
+                          <Loader2 className="w-5 h-5 animate-spin text-white" />
+                          <span className="text-xs font-medium">Кадрирование...</span>
+                        </div>
+                      )}
+
                       {/* Drag handle affordance indicator */}
                       <span
                         data-testid={`form-media-drag-handle-${index}`}
@@ -1438,20 +1573,32 @@ export function ProductStudioFormWorkspace() {
                       className="p-1.5 flex items-center justify-between border-t border-gray-200/80 dark:border-white/10 bg-white dark:bg-[#1a1a1c]"
                       onMouseDown={(e) => e.stopPropagation()}
                     >
-                      <label
-                        data-testid={`form-media-replace-btn-${index}`}
-                        title="Заменить фото"
-                        aria-label="Заменить фото"
-                        className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer flex items-center justify-center"
-                      >
-                        <input
-                          type="file"
-                          accept={ALLOWED_IMAGE_MIME_TYPES.join(',')}
-                          className="hidden"
-                          onChange={(e) => handleReplaceMedia(e, index)}
-                        />
-                        <Pencil className="w-3.5 h-3.5" />
-                      </label>
+                      <div className="flex items-center gap-1">
+                        <label
+                          data-testid={`form-media-replace-btn-${index}`}
+                          title="Заменить фото"
+                          aria-label="Заменить фото"
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer flex items-center justify-center"
+                        >
+                          <input
+                            type="file"
+                            accept={ALLOWED_IMAGE_MIME_TYPES.join(',')}
+                            className="hidden"
+                            onChange={(e) => handleReplaceMedia(e, index)}
+                          />
+                          <Pencil className="w-3.5 h-3.5" />
+                        </label>
+                        <button
+                          type="button"
+                          data-testid={`form-media-crop-action-btn-${index}`}
+                          onClick={() => handleOpenCropModal(img, index)}
+                          title="Настроить кадрирование 4:5"
+                          aria-label="Настроить кадрирование 4:5"
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer flex items-center justify-center"
+                        >
+                          <Crop className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                       <button
                         type="button"
                         data-testid={`form-media-delete-btn-${index}`}
@@ -2432,6 +2579,22 @@ export function ProductStudioFormWorkspace() {
           markTouched('sizeChart');
         }}
       />
+
+      {cropModalTarget && (
+        <ProductStudioCropModal
+          isOpen={Boolean(cropModalTarget)}
+          onClose={() => setCropModalTarget(null)}
+          imageUrl={getProductStudioImageDisplayUrl(cropModalTarget.image)}
+          imageIndex={cropModalTarget.index}
+          initialCrop={{
+            cropX: cropModalTarget.image.cropX,
+            cropY: cropModalTarget.image.cropY,
+            cropWidth: cropModalTarget.image.cropWidth,
+            cropHeight: cropModalTarget.image.cropHeight,
+          }}
+          onApplyCrop={handleApplyCropModal}
+        />
+      )}
     </div>
   );
 }

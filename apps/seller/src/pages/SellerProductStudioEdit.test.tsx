@@ -284,9 +284,8 @@ describe('SellerProductStudioEdit Page', () => {
     expect(screen.getByTestId('studio-product-title').textContent).toBe('худи');
     expect(screen.getByTestId('studio-entry-badge').textContent).toBe('На модерации');
 
-    // Save and Moderation remain disabled
-    const saveBtn = screen.getByText('Сохранить').closest('button');
-    expect((saveBtn as HTMLButtonElement).disabled).toBe(true);
+    // Save button removed and Moderation remains disabled
+    expect(screen.queryByTestId('studio-header-save-btn')).toBeNull();
     const modBtn = screen.getByText('Отправить на модерацию').closest('button');
     expect((modBtn as HTMLButtonElement).disabled).toBe(true);
 

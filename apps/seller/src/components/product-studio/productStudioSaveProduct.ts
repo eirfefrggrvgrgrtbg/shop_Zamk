@@ -267,6 +267,51 @@ export function isProductStudioSaveEligible(draft: ProductStudioDraft): boolean 
   return true;
 }
 
+export interface ProductStudioCreateAutosaveContext {
+  categorySchema?: SellerCategorySchema | null;
+}
+
+/**
+ * Checks whether a draft in CREATE mode is eligible for automatic initial draft creation.
+ * Unlike raw backend CreateProductForSeller (which only validates title/price), Product Studio
+ * create orchestration requires selected category and its matching category schema to hydrate
+ * and reconcile the newly created draft.
+ *
+ * Rules:
+ * - Non-empty title (draft.title.trim().length > 0)
+ * - Selected canonical category (draft.categoryId.trim().length > 0)
+ * - Category schema is loaded and matches the selected categoryId
+ * - Valid price (non-negative)
+ * - Media has no save blocking reasons (e.g. invalid local crop dimensions)
+ */
+export function isProductStudioCreateAutosaveEligible(
+  draft: ProductStudioDraft,
+  context?: ProductStudioCreateAutosaveContext | null
+): boolean {
+  // 1. Must satisfy basic structural save eligibility (title, non-negative price, clean media)
+  if (!isProductStudioSaveEligible(draft)) {
+    return false;
+  }
+
+  // 2. Canonical category must be selected
+  if (!draft.categoryId || !draft.categoryId.trim()) {
+    return false;
+  }
+
+  // 3. Category schema must be available and match selected category
+  const schema = context?.categorySchema;
+  if (!schema) {
+    return false;
+  }
+
+  const schemaCategoryId = schema.id || (schema as any).categoryId;
+  if (schemaCategoryId !== draft.categoryId) {
+    return false;
+  }
+
+  return true;
+}
+
 export interface OrchestrateEditSaveParams {
   productId: string;
   draft: ProductStudioDraft;
@@ -356,19 +401,28 @@ export async function orchestrateProductStudioEditSave({
     return;
   }
 
-  // 5.5. Auto-crop newly staged images
+  // 5.5. Auto-crop newly staged images and canonical images missing renditions
   if (workingDraft.images && cropImageFn) {
     const cropPromises = workingDraft.images.map(async (img) => {
-      if (img.source.kind === 'staged' && typeof img.cropWidth === 'number' && typeof img.cropHeight === 'number') {
+      const imageId =
+        img.source.kind === 'staged'
+          ? img.source.stagedId
+          : img.source.kind === 'canonical' && !img.renditionUrl
+          ? img.source.imageId
+          : null;
+
+      if (imageId) {
         try {
-          await cropImageFn(productId, img.source.stagedId, {
+          await cropImageFn(productId, imageId, {
             cropX: img.cropX || 0,
             cropY: img.cropY || 0,
-            cropWidth: img.cropWidth,
-            cropHeight: img.cropHeight,
+            cropWidth: img.cropWidth || 0,
+            cropHeight: img.cropHeight || 0,
           });
-        } catch (e) {
-          console.warn('Auto-crop failed for image', img.source.stagedId, e);
+        } catch (e: any) {
+          console.warn('Auto-crop failed for image', imageId, e);
+          img.renditionStatus = 'FAILED';
+          img.renditionError = e?.message || 'Не удалось настроить кадрирование 4:5';
         }
       }
     });
