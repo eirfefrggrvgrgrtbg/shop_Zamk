@@ -17,6 +17,7 @@ import type {
   AdminProduct,
   AdminProductImage,
   ModerationProduct,
+  AdminProductVision,
 } from '@zamk/api-client/src/types';
 
 export { createProductPreviewLink };
@@ -130,6 +131,7 @@ export interface AdminProductView {
   updatedAt?: string;
   submittedAt?: string;
   moderationComment?: string;
+  vision?: AdminProductVision;
 }
 
 const statusLabels: Record<AdminProductStatus, string> = {
@@ -272,6 +274,7 @@ export const mapAdminProduct = (product: AdminProduct | ModerationProduct): Admi
     updatedAt: product.updatedAt,
     submittedAt: product.submittedAt,
     moderationComment: product.moderationComment,
+    vision: (product as any).vision,
   };
 };
 

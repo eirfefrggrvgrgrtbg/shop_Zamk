@@ -31,6 +31,7 @@ import {
   getAdminProductErrorMessage,
   type AdminProductView,
 } from '../api/adminProducts';
+import { AdminProductVisionPanel } from '../components/moderation/AdminProductVisionPanel';
 
 const statusLocalizationMap: Record<string, string> = {
   draft: 'Черновик',
@@ -486,6 +487,14 @@ export function AdminModerationProductDetail() {
               ))}
             </div>
           </div>
+
+          {/* AI Vision Analysis Panel */}
+          <AdminProductVisionPanel
+            vision={product.vision}
+            gallery={product.gallery}
+            declaredCategory={product.category}
+            declaredTitle={product.title}
+          />
 
           {/* Product Overview Card */}
           <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">

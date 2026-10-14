@@ -996,6 +996,80 @@ export interface AdminProductSizeChart {
   rows: AdminProductSizeChartRow[];
 }
 
+export type AdminVisionStatus =
+  | 'not_scheduled'
+  | 'pending'
+  | 'processing'
+  | 'succeeded'
+  | 'failed'
+  | 'stale';
+
+export interface AdminVisionColor {
+  id: string;
+  code: string;
+  name: string;
+  hex?: string;
+}
+
+export interface AdminVisionConfidenceScore {
+  level: string;
+  score: number;
+}
+
+export interface AdminVisionEvidence {
+  field: string;
+  valueId: string;
+  imageIds: string[];
+}
+
+export interface AdminVisionContradiction {
+  field: string;
+  declared: string;
+  observed: string;
+  reason: string;
+}
+
+export interface AdminVisionModeration {
+  contradictions?: AdminVisionContradiction[];
+  qualityIssues?: string[];
+  ocrFindings?: string[];
+  recommendation: 'clear' | 'review_recommended' | 'uncertain' | string;
+  recommendationReason?: string;
+}
+
+export interface AdminProductVision {
+  status: AdminVisionStatus | string;
+  analyzedAt?: string;
+  failureCode?: string;
+
+  categoryConsistency?: 'consistent' | 'contradictory' | 'uncertain' | string;
+  observedCategoryText?: string;
+
+  dominantColors?: AdminVisionColor[];
+  secondaryColors?: AdminVisionColor[];
+
+  silhouette?: string;
+  fitAppearance?: string;
+  length?: string;
+  sleeves?: string[];
+  neckline?: string;
+  closure?: string;
+  pattern?: string;
+  visibleTexture?: string;
+  decorativeDetails?: string[];
+  styleDescriptors?: string[];
+  formality?: string;
+  seasonalCues?: string[];
+
+  imageSetConsistency?: boolean | null;
+  ocrText?: string[];
+
+  confidence?: Record<string, AdminVisionConfidenceScore>;
+  evidence?: AdminVisionEvidence[];
+
+  moderation?: AdminVisionModeration;
+}
+
 export interface AdminProduct {
   id: string;
   sellerId: string;
@@ -1028,6 +1102,7 @@ export interface AdminProduct {
   materialComposition?: AdminProductMaterialComposition[];
   sizeChart?: AdminProductSizeChart;
   attributes?: any[];
+  vision?: AdminProductVision;
 }
 
 export interface ModerationProduct {
