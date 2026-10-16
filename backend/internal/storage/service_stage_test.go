@@ -603,7 +603,7 @@ func TestStagedProductImageUploadEndpoint(t *testing.T) {
 	})
 
 	// 13. INVALID DIMENSIONS
-	t.Run("13a. landscape image is rejected with portrait required error", func(t *testing.T) {
+	t.Run("13a. landscape image too small for minimum 4:5 crop is rejected", func(t *testing.T) {
 		landscapeBytes := createTestJPEG(1000, 800, color.RGBA{R: 100, G: 100, B: 100, A: 255})
 		clientMediaID := uuid.New()
 		url := fmt.Sprintf("/api/seller/products/%s/images/stage", prodID1)
@@ -616,7 +616,7 @@ func TestStagedProductImageUploadEndpoint(t *testing.T) {
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.Contains(t, w.Body.String(), "product_media_portrait_required")
+		assert.Contains(t, w.Body.String(), "product_media_too_small")
 		assert.Equal(t, uploadCountBefore, fakeStorage.getUploadCount())
 	})
 
@@ -635,6 +635,26 @@ func TestStagedProductImageUploadEndpoint(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "product_media_too_small")
 		assert.Equal(t, uploadCountBefore, fakeStorage.getUploadCount())
+	})
+
+	t.Run("13c. sufficiently large landscape image is accepted for staging", func(t *testing.T) {
+		largeLandscapeBytes := createTestJPEG(2000, 1600, color.RGBA{R: 120, G: 140, B: 160, A: 255})
+		clientMediaID := uuid.New()
+		url := fmt.Sprintf("/api/seller/products/%s/images/stage", prodID1)
+		req, err := buildStageMultipartRequest(url, clientMediaID.String(), "large_landscape.jpg", "image/jpeg", largeLandscapeBytes)
+		require.NoError(t, err)
+		req = req.WithContext(context.WithValue(req.Context(), "userID", userID))
+
+		uploadCountBefore := fakeStorage.getUploadCount()
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+		var resp storage.StageProductImageResponse
+		err = json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "ready", resp.Status)
+		assert.Equal(t, uploadCountBefore+1, fakeStorage.getUploadCount())
 	})
 
 	// 14. CANONICAL NON-MUTATION PROOF
