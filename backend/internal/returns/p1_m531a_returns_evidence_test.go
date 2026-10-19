@@ -51,6 +51,10 @@ func (d *dummyStorageProvider) DownloadObject(ctx context.Context, objectKey str
 	return []byte("dummy image content"), nil
 }
 
+func (d *dummyStorageProvider) DownloadObjectBounded(ctx context.Context, objectKey string, maxBytes int64) ([]byte, error) {
+	return d.DownloadObject(ctx, objectKey)
+}
+
 func (d *dummyStorageProvider) DeleteObject(ctx context.Context, objectKey string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
