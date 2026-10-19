@@ -30,7 +30,7 @@ var (
 
 const (
 	DefaultBaseURL = "https://foundation-models.api.cloud.ru/v1"
-	DefaultModel   = "Qwen/Qwen3.5-397B-A17B"
+	DefaultModel   = "Qwen/Qwen3.6-35B-A3B"
 )
 
 type Config struct {
