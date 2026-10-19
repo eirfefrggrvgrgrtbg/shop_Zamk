@@ -79,7 +79,7 @@ export function FinanceTab({ from, to }: FinanceTabProps) {
               <div className="flex items-center gap-2">
                 <span className="font-medium text-gray-900">Продажи</span>
               </div>
-              <span className="font-semibold text-gray-900">
+              <span className="font-semibold text-gray-900" data-testid="gross-sales">
                 {formatCents(data.grossSales.currentCents)}
               </span>
             </div>
@@ -89,13 +89,13 @@ export function FinanceTab({ from, to }: FinanceTabProps) {
               <div className="flex items-center gap-2">
                 <span>Комиссия ZAMK</span>
               </div>
-              <span>− {formatCents(Math.abs(data.commission.currentCents))}</span>
+              <span data-testid="commission">− {formatCents(Math.abs(data.commission.currentCents))}</span>
             </div>
 
             {/* Subtotal */}
             <div className="flex justify-between items-center py-3 border-t border-gray-100 bg-gray-50 -mx-6 px-6">
               <span className="font-medium text-gray-900">Доход до возвратов</span>
-              <span className="font-semibold text-gray-900">
+              <span className="font-semibold text-gray-900" data-testid="seller-earning">
                 {formatCents(data.sellerEarningBeforeReturns.currentCents)}
               </span>
             </div>
@@ -108,23 +108,18 @@ export function FinanceTab({ from, to }: FinanceTabProps) {
                   {data.returnedUnits.current} шт.
                 </span>
               </div>
-              <span>− {formatCents(Math.abs(data.returnDeductions.currentCents))}</span>
+              <span data-testid="return-deductions">− {formatCents(Math.abs(data.returnDeductions.currentCents))}</span>
             </div>
 
-            {/* Other Adjustments */}
-            {data.otherAdjustments.currentCents !== 0 && (
-              <div className="flex justify-between items-center py-2 text-gray-600">
-                <span>Прочие корректировки</span>
-                <span>
-                  {data.otherAdjustments.currentCents > 0 ? '+' : '−'} {formatCents(Math.abs(data.otherAdjustments.currentCents))}
+            {/* Total Commercial Result */}
+            <div className="flex justify-between items-center py-4 border-t border-gray-200 mt-2">
+              <div className="flex flex-col">
+                <span className="text-lg font-bold text-gray-900">Коммерческий результат</span>
+                <span className="text-xs text-gray-500 mt-0.5">
+                  Доход до возвратов за вычетом удержаний по возвратам
                 </span>
               </div>
-            )}
-
-            {/* Total */}
-            <div className="flex justify-between items-center py-4 border-t border-gray-200 mt-2">
-              <span className="text-lg font-bold text-gray-900">Коммерческий результат</span>
-              <span className="text-xl font-bold text-gray-900">
+              <span className="text-xl font-bold text-gray-900" data-testid="net-commercial-earning">
                 {formatCents(data.netCommercialEarning.currentCents)}
               </span>
             </div>
@@ -132,6 +127,47 @@ export function FinanceTab({ from, to }: FinanceTabProps) {
           </div>
         </div>
       </div>
+
+      {/* Other Adjustments & Compensations (Explicitly separated from core sales result) */}
+      {data.otherAdjustments.currentCents !== 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden" data-testid="other-adjustments-card">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-lg font-bold text-gray-900">Корректировки и компенсации</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Внереализационные операции по балансу за выбранный период.
+            </p>
+          </div>
+          <div className="p-6">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center py-2">
+                <div className="flex flex-col pr-4">
+                  <span className="font-medium text-gray-900">Прочие корректировки</span>
+                  <span className="text-xs text-gray-500 mt-0.5">
+                    Компенсации за повреждённый товар, сервисные бонусы и административные корректировки
+                  </span>
+                </div>
+                <span
+                  className={`font-semibold text-base whitespace-nowrap ${data.otherAdjustments.currentCents > 0 ? 'text-emerald-600' : 'text-red-600'}`}
+                  data-testid="other-adjustments"
+                >
+                  {data.otherAdjustments.currentCents > 0 ? '+' : '−'} {formatCents(Math.abs(data.otherAdjustments.currentCents))}
+                </span>
+              </div>
+
+              <div className="p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
+                Прочие корректировки не входят в коммерческий результат от продаж товаров, но учитываются при финальных взаиморасчётах и выплатах на баланс продавца.
+              </div>
+
+              <div className="flex justify-between items-center py-3 border-t border-gray-200 mt-2">
+                <span className="font-semibold text-gray-900">Итого к начислению с учётом корректировок</span>
+                <span className="text-lg font-bold text-gray-900" data-testid="total-with-adjustments">
+                  {formatCents(data.netCommercialEarning.currentCents + data.otherAdjustments.currentCents)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Return Rate Insight */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex items-start gap-4">

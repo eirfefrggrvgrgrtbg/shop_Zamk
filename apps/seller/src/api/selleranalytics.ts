@@ -73,6 +73,7 @@ export interface OverviewResponse {
   hasHistoricalSales: boolean;
   grossSales: MetricCentsDTO;
   orders: MetricCountDTO;
+  deliveredOrders?: MetricCountSimpleDTO;
   unitsSold: MetricCountDTO;
   averageOrderValue: MetricCentsDTO;
   commission: MetricCentsSimpleDTO;
@@ -86,6 +87,11 @@ export interface OverviewResponse {
   insights?: InsightDTO[];
 }
 
+export interface MetricPercentNullableDTO {
+  currentPercent: number | null;
+  previousPercent: number | null;
+}
+
 export interface ProductRow {
   productId: string;
   title: string;
@@ -93,14 +99,14 @@ export interface ProductRow {
   ordersCount: number;
   unitsSold: number;
   returnedUnits: number;
-  returnRatePercent: number;
+  returnRatePercent: number | null;
   availableStock: number;
   previousGrossSalesCents: number;
   grossSalesChangePercent: number | null;
   comparisonState: string;
+  cohortDeliveredUnits?: number;
+  cohortReturnedUnits?: number;
 }
-
-
 
 export interface VariantRow {
   variantId: string;
@@ -109,11 +115,13 @@ export interface VariantRow {
   unitsSold: number;
   grossSalesCents: number;
   returnedUnits: number;
-  returnRatePercent: number;
+  returnRatePercent: number | null;
   availableStock: number;
   salesVelocity: number;
   daysOfStock: number | null;
   stockCoverageState: string;
+  cohortDeliveredUnits?: number;
+  cohortReturnedUnits?: number;
 }
 
 export interface ProductDetailResponse {
@@ -123,17 +131,21 @@ export interface ProductDetailResponse {
   unitsSold: MetricCountDTO;
   orders: MetricCountDTO;
   returnedUnits: MetricCountSimpleDTO;
-  returnRate: MetricPercentDTO;
+  returnRate: MetricPercentNullableDTO;
   currentAvailableStock: number;
   timeseries: TimeseriesBucketDTO[];
   variants: VariantRow[];
   insights: InsightDTO[];
+  cohortDeliveredUnits?: number;
+  cohortReturnedUnits?: number;
 }
 
 export interface InventoryRow {
   productId: string;
   variantId: string;
+  productTitle: string;
   sku: string;
+  displayName: string;
   available: number;
   onHand: number;
   reserved: number;
@@ -142,6 +154,9 @@ export interface InventoryRow {
   salesVelocity: number;
   daysOfStock: number | null;
   stockCoverageState: string;
+  isPhysicalLowStock: boolean;
+  hasNoSalesInPeriod: boolean;
+  isForecastLowCoverage: boolean;
 }
 
 export interface InventoryResponse {
@@ -158,6 +173,14 @@ export interface ProductsResponse {
   totalCount: number;
 }
 
+const PRODUCT_SORT_MAP: Record<string, string> = {
+  grossSalesCents: 'gross_sales',
+  ordersCount: 'orders',
+  unitsSold: 'units',
+  returnRatePercent: 'returns',
+  availableStock: 'stock',
+};
+
 export async function getAnalyticsProducts(
   from: string, 
   to: string, 
@@ -166,8 +189,14 @@ export async function getAnalyticsProducts(
   limit: number = 50, 
   offset: number = 0
 ): Promise<ProductsResponse> {
-  const query = new URLSearchParams({ 
-    from, to, sort, order, limit: limit.toString(), offset: offset.toString() 
+  const normalizedSort = PRODUCT_SORT_MAP[sort] || sort;
+  const query = new URLSearchParams({
+    from,
+    to,
+    sort: normalizedSort,
+    order,
+    limit: limit.toString(),
+    offset: offset.toString(),
   });
   return request<ProductsResponse>('GET', `/seller/analytics/products?${query.toString()}`);
 }

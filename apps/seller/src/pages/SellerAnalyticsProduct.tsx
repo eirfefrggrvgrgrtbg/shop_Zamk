@@ -11,6 +11,28 @@ import { formatCents } from '../lib/utils';
 type PeriodOption = 'today' | '7d' | '30d' | '90d' | 'custom';
 const TIMEZONE = 'Europe/Moscow';
 
+export function formatVelocity(vel: number): string {
+  if (!vel || isNaN(vel) || !isFinite(vel) || vel <= 0) return '—';
+  if (vel < 0.01) return '< 0,01 шт/дн';
+  if (vel < 1) {
+    return `${vel.toFixed(2).replace('.', ',')} шт/дн`;
+  }
+  return `${vel.toFixed(1).replace('.', ',')} шт/дн`;
+}
+
+export function formatDaysOfStock(variant: VariantRow): string {
+  if (variant.availableStock === 0 || variant.stockCoverageState === 'out_of_stock') {
+    return 'Нет в наличии';
+  }
+  if (variant.stockCoverageState === 'no_sales' || !variant.salesVelocity || variant.salesVelocity <= 0) {
+    return 'Нет продаж за период';
+  }
+  if (variant.daysOfStock !== null && variant.daysOfStock !== undefined && !isNaN(variant.daysOfStock) && isFinite(variant.daysOfStock)) {
+    return `≈ ${Math.round(variant.daysOfStock)} дн.`;
+  }
+  return '—';
+}
+
 export function SellerAnalyticsProduct() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -127,26 +149,31 @@ export function SellerAnalyticsProduct() {
       {/* KPI Strip */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <MetricCard
-          title="Продажи"
+          title="Выручка"
           value={formatCents(data.grossSales.currentCents)}
           comparisonState={data.grossSales.comparisonState as any}
           changePercent={data.grossSales.changePercent}
+          explanation="Сумма доставленных продаж по данному товару за выбранный период."
         />
         <MetricCard
           title="Продано"
           value={`${data.unitsSold.current} шт.`}
           comparisonState={data.unitsSold.comparisonState as any}
           changePercent={data.unitsSold.changePercent}
+          explanation="Количество единиц товара, доставленных покупателям за выбранный период."
         />
         <MetricCard
-          title="Заказы"
+          title="Заказы с доставкой"
           value={`${data.orders.current} шт.`}
           comparisonState={data.orders.comparisonState as any}
           changePercent={data.orders.changePercent}
+          explanation="Количество заказов, в которых товары были доставлены покупателям за выбранный период."
         />
         <MetricCard
-          title="Возвраты"
+          title="Возвращено за период"
           value={`${data.returnedUnits.current} шт.`}
+          supportingText={`Доля возвратов: ${data.returnRate.currentPercent !== null && data.returnRate.currentPercent !== undefined ? `${data.returnRate.currentPercent.toFixed(1)}%` : '—'}`}
+          explanation="Возвращено за период: единицы, принятые складом в выбранные календарные даты. Доля возвратов: процент возвращенных товаров от доставленных за выбранный период (может обновляться по мере возврата недавних покупок)."
         />
         <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
           <h3 className="text-sm font-medium text-gray-500 mb-1">Доступно</h3>
@@ -158,7 +185,7 @@ export function SellerAnalyticsProduct() {
 
       {/* Timeseries */}
       {data.timeseries && data.timeseries.length > 0 && (
-        <TimeseriesChart data={data.timeseries} />
+        <TimeseriesChart data={data.timeseries} mode="product" />
       )}
 
       {/* Variants Table */}
@@ -174,7 +201,7 @@ export function SellerAnalyticsProduct() {
                 <th className="px-4 py-3">SKU</th>
                 <th className="px-4 py-3 text-right">Продажи</th>
                 <th className="px-4 py-3 text-right">Продано</th>
-                <th className="px-4 py-3 text-right">Возвраты</th>
+                <th className="px-4 py-3 text-right" title="Доля возвратов когорты и физически возвращено за период">Доля возвратов</th>
                 <th className="px-4 py-3 text-right">Доступно</th>
                 <th className="px-4 py-3 text-right">Скорость продаж</th>
                 <th className="px-4 py-3 text-right">Запаса на</th>
@@ -194,18 +221,27 @@ export function SellerAnalyticsProduct() {
                     {v.unitsSold} шт.
                   </td>
                   <td className="px-4 py-3 text-right text-gray-600">
-                    {v.returnRatePercent.toFixed(1)}%
+                    <div>
+                      {v.returnRatePercent !== null && v.returnRatePercent !== undefined ? (
+                        `${v.returnRatePercent.toFixed(1)}%`
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </div>
+                    {v.returnedUnits > 0 && (
+                      <div className="text-xs text-gray-400" title="Возвращено за период">
+                        {v.returnedUnits} шт. за период
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-600">
                     {v.availableStock} шт.
                   </td>
                   <td className="px-4 py-3 text-right text-gray-600">
-                    {v.salesVelocity > 0 ? `${v.salesVelocity.toFixed(1)} шт/дн` : '—'}
+                    {formatVelocity(v.salesVelocity)}
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-gray-900">
-                    {v.stockCoverageState === 'out_of_stock' ? 'Нет в наличии' :
-                     v.stockCoverageState === 'no_sales' ? 'Нет продаж за период' :
-                     `≈ ${v.daysOfStock?.toFixed(0)} дн.`}
+                    {formatDaysOfStock(v)}
                   </td>
                 </tr>
               ))}

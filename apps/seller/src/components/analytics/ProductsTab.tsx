@@ -9,7 +9,7 @@ interface ProductsTabProps {
   to: string;
 }
 
-type SortField = 'grossSalesCents' | 'unitsSold' | 'ordersCount' | 'grossSalesChangePercent' | 'returnRatePercent' | 'availableStock';
+type SortField = 'gross_sales' | 'orders' | 'units' | 'returns' | 'stock';
 type SortOrder = 'asc' | 'desc';
 
 export function ProductsTab({ from, to }: ProductsTabProps) {
@@ -18,7 +18,7 @@ export function ProductsTab({ from, to }: ProductsTabProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const [sortField, setSortField] = useState<SortField>('grossSalesCents');
+  const [sortField, setSortField] = useState<SortField>('gross_sales');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [page, setPage] = useState(0);
   const limit = 50;
@@ -54,13 +54,13 @@ export function ProductsTab({ from, to }: ProductsTabProps) {
   const sortedData = data;
 
   const toggleSort = (field: SortField) => {
-    if (field === 'grossSalesChangePercent') return; // Cannot sort by this yet via API
     if (sortField === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
       setSortOrder('desc'); // default new field to desc
     }
+    setPage(0);
   };
 
   if (loading) {
@@ -84,14 +84,15 @@ export function ProductsTab({ from, to }: ProductsTabProps) {
     );
   }
 
-  const SortHeader = ({ field, label, align = 'left' }: { field: SortField, label: string, align?: 'left'|'right'|'center' }) => (
+  const SortHeader = ({ field, label, title, align = 'left' }: { field: SortField, label: string, title?: string, align?: 'left'|'right'|'center' }) => (
     <th 
       className={cn("px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none", align === 'right' && 'text-right', align === 'center' && 'text-center')}
       onClick={() => toggleSort(field)}
+      title={title}
     >
       <div className={cn("flex items-center gap-1", align === 'right' && 'justify-end', align === 'center' && 'justify-center')}>
         {label}
-        {sortField === field && field !== 'grossSalesChangePercent' && (
+        {sortField === field && (
           sortOrder === 'asc' ? <ArrowUpIcon className="w-4 h-4" /> : <ArrowDownIcon className="w-4 h-4" />
         )}
       </div>
@@ -111,12 +112,17 @@ export function ProductsTab({ from, to }: ProductsTabProps) {
               <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-3">Товар</th>
-                  <SortHeader field="grossSalesCents" label="Продажи" align="right" />
-                  <SortHeader field="ordersCount" label="Заказы" align="right" />
-                  <SortHeader field="unitsSold" label="Штук" align="right" />
-                  <SortHeader field="grossSalesChangePercent" label="Динамика" align="right" />
-                  <SortHeader field="returnRatePercent" label="Возвраты" align="right" />
-                  <SortHeader field="availableStock" label="Остаток" align="right" />
+                  <SortHeader field="gross_sales" label="Выручка" title="Сумма доставленных продаж за выбранный период" align="right" />
+                  <SortHeader field="orders" label="Заказы с доставкой" title="Количество заказов, в которых товары были доставлены покупателям за выбранный период." align="right" />
+                  <SortHeader field="units" label="Штук" align="right" />
+                  <th className="px-4 py-3 text-right font-medium text-gray-600">Динамика</th>
+                  <SortHeader
+                    field="returns"
+                    label="Доля возвратов"
+                    title="Доля товаров, доставленных за выбранный период, которые впоследствии были возвращены и приняты складом. Рассчитывается по принятым возвратам на момент формирования отчета и может изменяться по мере возврата недавних покупок."
+                    align="right"
+                  />
+                  <SortHeader field="stock" label="Остаток" align="right" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -155,8 +161,15 @@ export function ProductsTab({ from, to }: ProductsTabProps) {
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-600">
-                      {row.returnRatePercent.toFixed(1)}%
+                    <td
+                      className="px-4 py-3 text-right text-gray-600"
+                      title={row.returnedUnits > 0 ? `Возвращено за период на складе: ${row.returnedUnits} шт.` : undefined}
+                    >
+                      {row.returnRatePercent !== null && row.returnRatePercent !== undefined ? (
+                        `${row.returnRatePercent.toFixed(1)}%`
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-600">
                       {row.availableStock} шт.

@@ -107,10 +107,19 @@ export function OverviewTab({ from, to }: OverviewTabProps) {
     );
   }
 
-  if (data.grossSales.currentCents === 0 && data.orders.current === 0) {
+  const isPeriodEmpty =
+    data.grossSales.currentCents === 0 &&
+    data.orders.current === 0 &&
+    data.unitsSold.current === 0 &&
+    data.returnedUnits.current === 0 &&
+    data.returnDeductions.currentCents === 0 &&
+    (data.otherAdjustments?.currentCents ?? 0) === 0 &&
+    data.netCommercialEarning.currentCents === 0;
+
+  if (isPeriodEmpty) {
     return (
       <div className="py-16 text-center text-gray-500 bg-white border border-gray-200 rounded-xl shadow-sm">
-        <p className="text-lg">За выбранный период продаж не было.</p>
+        <p className="text-lg">За выбранный период не было заказов, продаж и возвратов.</p>
       </div>
     );
   }
@@ -119,28 +128,33 @@ export function OverviewTab({ from, to }: OverviewTabProps) {
       {/* Primary KPI Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          title="Продажи"
+          title="Выручка"
           value={formatCents(data.grossSales.currentCents)}
           comparisonState={data.grossSales.comparisonState as any}
           changePercent={data.grossSales.changePercent}
+          explanation="Стоимость доставленных товаров до вычета комиссии и удержаний за возвраты."
         />
         <MetricCard
           title="Заказы"
           value={`${data.orders.current} шт.`}
           comparisonState={data.orders.comparisonState as any}
           changePercent={data.orders.changePercent}
+          explanation="Оплаченные покупателями заказы за выбранный период. Включая ещё не доставленные. Отменённые после оплаты сохраняются в истории."
         />
         <MetricCard
           title="Продано товаров"
           value={`${data.unitsSold.current} шт.`}
           comparisonState={data.unitsSold.comparisonState as any}
           changePercent={data.unitsSold.changePercent}
+          explanation="Количество фактически доставленных покупателям единиц товара."
         />
         <MetricCard
           title="Средний чек"
           value={formatCents(data.averageOrderValue.currentCents)}
           comparisonState={data.averageOrderValue.comparisonState as any}
           changePercent={data.averageOrderValue.changePercent}
+          explanation="Выручка по доставленным товарам, разделённая на количество заказов с доставкой."
+          supportingText={data.deliveredOrders != null ? `Доставлено заказов: ${data.deliveredOrders.current} шт.` : undefined}
         />
       </div>
 
@@ -155,10 +169,18 @@ export function OverviewTab({ from, to }: OverviewTabProps) {
           <p className="text-sm font-semibold text-gray-900">{formatCents(data.sellerEarningBeforeReturns.currentCents)}</p>
         </div>
         <div>
-          <h3 className="text-xs font-medium text-gray-500 mb-1">Возвраты / удержания</h3>
-          <div className="flex items-baseline gap-2">
-            <p className="text-sm font-semibold text-gray-900">{formatCents(data.returnDeductions.currentCents)}</p>
-            <span className="text-xs text-gray-500">({data.returnRate.currentPercent.toFixed(1)}%, {data.returnedUnits.current} шт.)</span>
+          <h3 className="text-xs font-medium text-gray-500 mb-1" title="Финансовые удержания за возвраты по операциям за выбранный период">
+            Удержания за возвраты
+          </h3>
+          <p className="text-sm font-semibold text-gray-900">{formatCents(data.returnDeductions.currentCents)}</p>
+        </div>
+        <div>
+          <h3 className="text-xs font-medium text-gray-500 mb-1" title="Количество единиц товара, фактически принятых складом в статусе возврата за выбранный период">
+            Возвраты товаров
+          </h3>
+          <div className="flex items-baseline gap-1.5">
+            <p className="text-sm font-semibold text-gray-900">{data.returnedUnits.current} шт.</p>
+            <span className="text-xs text-gray-500">({data.returnRate.currentPercent.toFixed(1)}%)</span>
           </div>
         </div>
         <div>
