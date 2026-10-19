@@ -54,6 +54,12 @@ func TestCloudRuClient(t *testing.T) {
 				t.Errorf("expected model %s, got %v", cloudru.DefaultModel, bodyMap["model"])
 			}
 
+			// Thinking must be disabled so Qwen3.x returns the JSON in message.content quickly
+			kwargs, ok := bodyMap["chat_template_kwargs"].(map[string]interface{})
+			if !ok || kwargs["enable_thinking"] != false {
+				t.Errorf("expected chat_template_kwargs.enable_thinking=false, got %v", bodyMap["chat_template_kwargs"])
+			}
+
 			// 2. response_format is schema-constrained, NOT generic legacy mode
 			respFormat, ok := bodyMap["response_format"].(map[string]interface{})
 			if !ok {

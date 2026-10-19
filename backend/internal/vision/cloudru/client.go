@@ -209,6 +209,11 @@ func (c *Client) buildPayload(req vision.VisionAnalysisRequest) (map[string]inte
 			},
 		},
 		"temperature": 0.0,
+		// Qwen3.x models reason by default, which fills the token budget and leaves
+		// message.content empty or very slow; structured extraction needs no reasoning.
+		"chat_template_kwargs": map[string]interface{}{
+			"enable_thinking": false,
+		},
 	}
 
 	return payload, nil
