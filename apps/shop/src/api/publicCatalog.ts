@@ -1,4 +1,4 @@
-import { getProducts, getDirectSaleProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller, getProductPreviewByToken, getSimilarProducts } from '@zamk/api-client/src/public';
+import { getProducts, getDirectSaleProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller, getProductPreviewByToken, getSimilarProducts, getPopularProducts } from '@zamk/api-client/src/public';
 import type { ProductSummary } from '@zamk/api-client/src/types';
 import type { Product as UIProduct, Brand as UIBrand, Category as UICategory, Review as UIReview } from '../types/catalog';
 
@@ -178,6 +178,17 @@ export async function fetchHomeRecommendations(): Promise<UIHomeRecommendationsR
     return { blocks };
   } catch (error) {
     return { blocks: [] };
+  }
+}
+
+/** Public (guest-safe) popular products: 30-day paid-order ranking, storefront-eligible only. */
+export async function fetchPopularProducts(limit = 12): Promise<{ items: UIProduct[], totalCount: number }> {
+  try {
+    const res = await getPopularProducts(limit);
+    const items = await mapFavoritesToCatalog(res.items);
+    return { items, totalCount: res.totalCount };
+  } catch {
+    return { items: [], totalCount: 0 };
   }
 }
 

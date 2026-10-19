@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { ProductCard } from '../product/ProductCard';
+import { ProductRail } from './ProductRail';
 import { SectionHeader } from '../editorial/StudioKit';
 import type { UIHomeRecommendationBlock } from '../../api/publicCatalog';
 
@@ -23,29 +23,20 @@ function getBlockLabel(type: string): string {
   }
 }
 
-export function RecommendationBlock({ block }: { block: UIHomeRecommendationBlock }) {
+interface RecommendationBlockProps {
+  block: UIHomeRecommendationBlock;
+  description?: string;
+}
+
+export function RecommendationBlock({ block, description }: RecommendationBlockProps) {
   if (!block.items || block.items.length === 0) {
     return null;
   }
 
-  const label = getBlockLabel(block.type);
-
   return (
-    <motion.section
-      {...reveal}
-      data-testid={`recommendation-block-${block.type}`}
-      className="glass-panel p-7 md:p-10 relative overflow-hidden"
-    >
-      <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent opacity-30" />
-      <SectionHeader label={label} title={block.title} />
-
-      <div className="flex gap-4 overflow-x-auto pb-4 hide-scrollbar">
-        {block.items.map((product) => (
-          <div key={product.id} className="w-[200px] md:w-[240px] flex-shrink-0">
-            <ProductCard product={product} placement="home_recommendations" />
-          </div>
-        ))}
-      </div>
+    <motion.section {...reveal} data-testid={`recommendation-block-${block.type}`}>
+      <SectionHeader label={getBlockLabel(block.type)} title={block.title} description={description} />
+      <ProductRail products={block.items} placement="home_recommendations" />
     </motion.section>
   );
 }
