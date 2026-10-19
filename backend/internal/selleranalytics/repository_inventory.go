@@ -40,15 +40,27 @@ func (r *Repository) GetInventoryPerformance(ctx context.Context, sellerID uuid.
 		SELECT 
 			i.product_id,
 			i.product_variant_id,
-			COALESCE((SELECT sku FROM product_variants WHERE id = i.product_variant_id), '') as sku,
+			COALESCE(p.title, '') as product_title,
+			COALESCE(NULLIF(pv.seller_sku, ''), NULLIF(pv.sku, ''), '') as sku,
+			COALESCE(
+				NULLIF(TRIM(CONCAT_WS(' ', COALESCE(sv.value, pv.size), COALESCE(c.name_ru, pv.color))), ''),
+				NULLIF(pv.seller_sku, ''),
+				NULLIF(pv.sku, ''),
+				''
+			) as display_name,
 			i.available,
 			i.on_hand,
 			i.reserved,
 			COALESCE(ib.inbound_qty, 0) as inbound,
 			COALESCE(s.units_sold, 0) as units_sold
 		FROM inventory i
+		LEFT JOIN products p ON i.product_id = p.id AND p.seller_id = $1
+		LEFT JOIN product_variants pv ON i.product_variant_id = pv.id AND pv.product_id = p.id
+		LEFT JOIN size_values sv ON pv.size_value_id = sv.id
+		LEFT JOIN colors c ON pv.color_id = c.id
 		LEFT JOIN inbound ib ON i.product_variant_id = ib.variant_id
 		LEFT JOIN sales s ON i.product_variant_id = s.product_variant_id
+		ORDER BY p.title ASC, pv.created_at ASC, pv.id ASC, i.product_variant_id ASC
 	`
 	rows, err := r.db.Query(ctx, query, sellerID, from, to)
 	if err != nil {
@@ -62,7 +74,9 @@ func (r *Repository) GetInventoryPerformance(ctx context.Context, sellerID uuid.
 		if err := rows.Scan(
 			&i.ProductID,
 			&i.VariantID,
+			&i.ProductTitle,
 			&i.SKU,
+			&i.DisplayName,
 			&i.Available,
 			&i.OnHand,
 			&i.Reserved,

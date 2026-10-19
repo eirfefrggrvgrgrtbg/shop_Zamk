@@ -19,79 +19,78 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 func (r *Repository) GetLedgerSummary(ctx context.Context, sellerID uuid.UUID, from, to time.Time) (LedgerSummary, error) {
 	query := `
 		SELECT 
-			type,
-			amount_cents,
-			metadata
+			COALESCE(SUM(CASE WHEN type = 'sale_gross' THEN amount_cents ELSE 0 END), 0) AS gross_sales_cents,
+			COALESCE(SUM(CASE WHEN type = 'zamk_commission' THEN ABS(amount_cents) ELSE 0 END), 0) AS commission_cents,
+			COALESCE(SUM(CASE WHEN type = 'seller_earning' THEN amount_cents ELSE 0 END), 0) AS seller_earning_cents,
+			COALESCE(SUM(CASE WHEN type = 'adjustment' AND metadata->>'reason' IN ('return_deduction', 'return_post_payout') THEN amount_cents ELSE 0 END), 0) AS return_deductions_cents,
+			COALESCE(SUM(CASE WHEN type = 'adjustment' AND (metadata->>'reason' IS NULL OR metadata->>'reason' NOT IN ('return_deduction', 'return_post_payout')) THEN amount_cents ELSE 0 END), 0) AS other_adjustments_cents
 		FROM seller_ledger_entries
 		WHERE seller_id = $1 AND created_at >= $2 AND created_at < $3
 	`
-	rows, err := r.db.Query(ctx, query, sellerID, from, to)
-	if err != nil {
-		return LedgerSummary{}, err
-	}
-	defer rows.Close()
-
 	var summary LedgerSummary
-	for rows.Next() {
-		var lType string
-		var amount int64
-		var meta []byte
-		if err := rows.Scan(&lType, &amount, &meta); err != nil {
-			return summary, err
-		}
-
-		switch lType {
-		case "sale_gross":
-			summary.GrossSalesCents += amount
-		case "zamk_commission":
-			if amount < 0 {
-				summary.CommissionCents += -amount // ABS as per requirements
-			} else {
-				summary.CommissionCents += amount
-			}
-		case "seller_earning":
-			summary.SellerEarningCents += amount
-		case "adjustment":
-			isReturn := false
-			if len(meta) > 0 {
-				// quick and dirty metadata check
-				metaStr := string(meta)
-				if containsString(metaStr, `"reason":"return_deduction"`) || containsString(metaStr, `"reason":"return_post_payout"`) || containsString(metaStr, `"reason": "return_deduction"`) || containsString(metaStr, `"reason": "return_post_payout"`) {
-					isReturn = true
-				}
-			}
-			if isReturn {
-				summary.ReturnDeductionsCents += amount
-			} else {
-				summary.OtherAdjustmentsCents += amount
-			}
-		}
-	}
-	return summary, nil
+	err := r.db.QueryRow(ctx, query, sellerID, from, to).Scan(
+		&summary.GrossSalesCents,
+		&summary.CommissionCents,
+		&summary.SellerEarningCents,
+		&summary.ReturnDeductionsCents,
+		&summary.OtherAdjustmentsCents,
+	)
+	return summary, err
 }
 
-func containsString(s, substr string) bool {
-	// Simple sub string check for metadata (in reality json parsing in SQL is better, but this works given exact writes)
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-func (r *Repository) GetSellerOrders(ctx context.Context, sellerID uuid.UUID, from, to time.Time) (int, error) {
+func (r *Repository) GetSellerPaidOrders(ctx context.Context, sellerID uuid.UUID, from, to time.Time) (int, error) {
 	query := `
-		SELECT COUNT(DISTINCT order_id)
-		FROM seller_ledger_entries
-		WHERE seller_id = $1 
-		AND type = 'sale_gross'
-		AND created_at >= $2 
-		AND created_at < $3
+		WITH canonical_payments AS (
+			SELECT
+				order_id,
+				MIN(paid_at) AS paid_at
+			FROM payments
+			WHERE status = 'succeeded' AND paid_at IS NOT NULL
+			GROUP BY order_id
+		)
+		SELECT COUNT(DISTINCT f.order_id)
+		FROM order_fulfillments f
+		JOIN canonical_payments cp ON cp.order_id = f.order_id
+		JOIN orders o ON o.id = f.order_id
+		WHERE f.seller_id = $1
+		  AND (
+			  f.status != 'cancelled'
+			  OR (o.cancelled_at IS NOT NULL AND o.cancelled_at >= cp.paid_at)
+			  OR (
+				  o.cancelled_at IS NULL
+				  AND EXISTS (
+					  SELECT 1 FROM order_status_history osh
+					  WHERE osh.order_id = f.order_id
+					    AND osh.to_status = 'cancelled'
+					    AND osh.created_at >= cp.paid_at
+				  )
+			  )
+		  )
+		  AND cp.paid_at >= $2
+		  AND cp.paid_at < $3
 	`
 	var count int
 	err := r.db.QueryRow(ctx, query, sellerID, from, to).Scan(&count)
 	return count, err
+}
+
+func (r *Repository) GetSellerDeliveredOrders(ctx context.Context, sellerID uuid.UUID, from, to time.Time) (int, error) {
+	query := `
+		SELECT COUNT(DISTINCT order_id)
+		FROM seller_ledger_entries
+		WHERE seller_id = $1
+		  AND type = 'sale_gross'
+		  AND created_at >= $2
+		  AND created_at < $3
+	`
+	var count int
+	err := r.db.QueryRow(ctx, query, sellerID, from, to).Scan(&count)
+	return count, err
+}
+
+// GetSellerOrders delegates to GetSellerPaidOrders under the confirmed Option A contract.
+func (r *Repository) GetSellerOrders(ctx context.Context, sellerID uuid.UUID, from, to time.Time) (int, error) {
+	return r.GetSellerPaidOrders(ctx, sellerID, from, to)
 }
 
 func (r *Repository) GetUnitsSold(ctx context.Context, sellerID uuid.UUID, from, to time.Time) (int, error) {
@@ -131,7 +130,7 @@ func (r *Repository) GetOverviewTimeseries(ctx context.Context, sellerID uuid.UU
 		WITH dates AS (
 			SELECT generate_series(
 				date_trunc('day', $2::timestamptz AT TIME ZONE $4),
-				date_trunc('day', $3::timestamptz AT TIME ZONE $4) - interval '1 day',
+				date_trunc('day', ($3::timestamptz - interval '1 microsecond') AT TIME ZONE $4),
 				'1 day'::interval
 			)::date AS d
 		),
@@ -139,12 +138,43 @@ func (r *Repository) GetOverviewTimeseries(ctx context.Context, sellerID uuid.UU
 			SELECT 
 				date_trunc('day', created_at AT TIME ZONE $4)::date as d,
 				SUM(CASE WHEN type = 'sale_gross' THEN amount_cents ELSE 0 END) as gross,
-				COUNT(DISTINCT CASE WHEN type = 'sale_gross' THEN order_id END) as orders_count,
 				SUM(CASE WHEN type = 'zamk_commission' THEN ABS(amount_cents) ELSE 0 END) as commission,
 				SUM(CASE WHEN type = 'seller_earning' THEN amount_cents ELSE 0 END) as earning,
 				SUM(CASE WHEN type = 'adjustment' AND (metadata->>'reason' = 'return_deduction' OR metadata->>'reason' = 'return_post_payout') THEN amount_cents ELSE 0 END) as return_deductions
 			FROM seller_ledger_entries
 			WHERE seller_id = $1 AND created_at >= $2 AND created_at < $3
+			GROUP BY 1
+		),
+		canonical_payments AS (
+			SELECT
+				order_id,
+				MIN(paid_at) AS paid_at
+			FROM payments
+			WHERE status = 'succeeded' AND paid_at IS NOT NULL
+			GROUP BY order_id
+		),
+		paid_orders_stats AS (
+			SELECT
+				date_trunc('day', cp.paid_at AT TIME ZONE $4)::date as d,
+				COUNT(DISTINCT f.order_id) as orders_count
+			FROM order_fulfillments f
+			JOIN canonical_payments cp ON cp.order_id = f.order_id
+			JOIN orders o ON o.id = f.order_id
+			WHERE f.seller_id = $1
+			  AND (
+				  f.status != 'cancelled'
+				  OR (o.cancelled_at IS NOT NULL AND o.cancelled_at >= cp.paid_at)
+				  OR (
+					  o.cancelled_at IS NULL
+					  AND EXISTS (
+						  SELECT 1 FROM order_status_history osh
+						  WHERE osh.order_id = f.order_id
+						    AND osh.to_status = 'cancelled'
+						    AND osh.created_at >= cp.paid_at
+					  )
+				  )
+			  )
+			  AND cp.paid_at >= $2 AND cp.paid_at < $3
 			GROUP BY 1
 		),
 		units_stats AS (
@@ -169,7 +199,7 @@ func (r *Repository) GetOverviewTimeseries(ctx context.Context, sellerID uuid.UU
 		SELECT 
 			dates.d,
 			COALESCE(l.gross, 0),
-			COALESCE(l.orders_count, 0),
+			COALESCE(po.orders_count, 0),
 			COALESCE(u.units_sold, 0),
 			COALESCE(l.commission, 0),
 			COALESCE(l.earning, 0),
@@ -177,6 +207,7 @@ func (r *Repository) GetOverviewTimeseries(ctx context.Context, sellerID uuid.UU
 			COALESCE(r.returned_units, 0)
 		FROM dates
 		LEFT JOIN ledger_stats l ON dates.d = l.d
+		LEFT JOIN paid_orders_stats po ON dates.d = po.d
 		LEFT JOIN units_stats u ON dates.d = u.d
 		LEFT JOIN returns_stats r ON dates.d = r.d
 		ORDER BY dates.d ASC

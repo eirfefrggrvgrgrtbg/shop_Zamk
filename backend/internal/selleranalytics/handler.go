@@ -2,8 +2,10 @@ package selleranalytics
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -31,15 +33,74 @@ func parseTimeParams(r *http.Request) (time.Time, time.Time, string, error) {
 	toStr := r.URL.Query().Get("to")
 	tz := "Europe/Moscow"
 
+	if fromStr == "" || toStr == "" {
+		return time.Time{}, time.Time{}, "", fmt.Errorf("both 'from' and 'to' parameters are required")
+	}
+
 	from, err := time.Parse(time.RFC3339, fromStr)
 	if err != nil {
-		return time.Time{}, time.Time{}, "", err
+		return time.Time{}, time.Time{}, "", fmt.Errorf("invalid 'from' timestamp: %w", err)
 	}
 	to, err := time.Parse(time.RFC3339, toStr)
 	if err != nil {
-		return time.Time{}, time.Time{}, "", err
+		return time.Time{}, time.Time{}, "", fmt.Errorf("invalid 'to' timestamp: %w", err)
 	}
 	return from, to, tz, nil
+}
+
+func validateTimePeriod(r *http.Request) (time.Time, time.Time, string, error) {
+	from, to, tz, err := parseTimeParams(r)
+	if err != nil {
+		return time.Time{}, time.Time{}, "", err
+	}
+	if to.Before(from) {
+		return time.Time{}, time.Time{}, "", fmt.Errorf("invalid period: 'to' cannot be before 'from'")
+	}
+	if to.Sub(from) > 366*24*time.Hour {
+		return time.Time{}, time.Time{}, "", fmt.Errorf("date range exceeds maximum allowed limit of 366 days")
+	}
+	return from, to, tz, nil
+}
+
+// defaultProductsLimit is the page size used when 'limit' is not provided.
+const defaultProductsLimit = 50
+
+// parsePagination strictly parses the optional 'limit' and 'offset' query values.
+// Empty values fall back to the defaults (50 and 0); non-integer, out-of-range or
+// negative values are rejected.
+func parsePagination(limitStr, offsetStr string) (int, int, error) {
+	limit := defaultProductsLimit
+	if limitStr != "" {
+		v, err := strconv.Atoi(limitStr)
+		if err != nil || v < 0 {
+			return 0, 0, fmt.Errorf("invalid 'limit': must be a non-negative integer")
+		}
+		limit = v
+	}
+	offset := 0
+	if offsetStr != "" {
+		v, err := strconv.Atoi(offsetStr)
+		if err != nil || v < 0 {
+			return 0, 0, fmt.Errorf("invalid 'offset': must be a non-negative integer")
+		}
+		offset = v
+	}
+	return limit, offset, nil
+}
+
+func parseAsOfParam(r *http.Request) (time.Time, error) {
+	asOfStr := r.URL.Query().Get("asOf")
+	if asOfStr == "" {
+		return time.Now().UTC(), nil
+	}
+	t, err := time.Parse(time.RFC3339, asOfStr)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid 'asOf' timestamp: %w", err)
+	}
+	if t.After(time.Now().UTC().Add(time.Minute)) {
+		return time.Time{}, fmt.Errorf("'asOf' timestamp cannot be in the future")
+	}
+	return t, nil
 }
 
 func (h *Handler) resolveSellerID(r *http.Request) (uuid.UUID, bool) {
@@ -65,14 +126,9 @@ func (h *Handler) handleOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	from, to, tz, err := parseTimeParams(r)
+	from, to, tz, err := validateTimePeriod(r)
 	if err != nil {
-		http.Error(w, "Invalid from/to parameters", http.StatusBadRequest)
-		return
-	}
-
-	if to.Before(from) {
-		http.Error(w, "Invalid period", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -93,9 +149,9 @@ func (h *Handler) handleProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	from, to, _, err := parseTimeParams(r)
+	from, to, _, err := validateTimePeriod(r)
 	if err != nil {
-		http.Error(w, "Invalid from/to parameters", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -106,13 +162,24 @@ func (h *Handler) handleProducts(w http.ResponseWriter, r *http.Request) {
 	order := r.URL.Query().Get("order")
 	if order == "" { order = "desc" }
 
-	limit := 50
-	if limitStr != "" { fmt.Sscanf(limitStr, "%d", &limit) }
-	offset := 0
-	if offsetStr != "" { fmt.Sscanf(offsetStr, "%d", &offset) }
-
-	resp, err := h.svc.GetProducts(r.Context(), sellerID, from, to, limit, offset, sort, order)
+	limit, offset, err := parsePagination(limitStr, offsetStr)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	asOf, err := parseAsOfParam(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	resp, err := h.svc.GetProducts(r.Context(), sellerID, from, to, limit, offset, sort, order, asOf)
+	if err != nil {
+		if errors.Is(err, ErrCohortDataAnomaly) {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return
 	}
@@ -135,14 +202,28 @@ func (h *Handler) handleProductDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	from, to, tz, err := parseTimeParams(r)
+	from, to, tz, err := validateTimePeriod(r)
 	if err != nil {
-		http.Error(w, "Invalid from/to parameters", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	resp, err := h.svc.GetProductDetail(r.Context(), sellerID, productID, from, to, tz)
+	asOf, err := parseAsOfParam(r)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	resp, err := h.svc.GetProductDetail(r.Context(), sellerID, productID, from, to, tz, asOf)
+	if err != nil {
+		if errors.Is(err, ErrProductNotFound) {
+			http.Error(w, "Product not found", http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, ErrCohortDataAnomaly) {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return
 	}
@@ -158,9 +239,9 @@ func (h *Handler) handleInventory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	from, to, _, err := parseTimeParams(r)
+	from, to, _, err := validateTimePeriod(r)
 	if err != nil {
-		http.Error(w, "Invalid from/to parameters", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

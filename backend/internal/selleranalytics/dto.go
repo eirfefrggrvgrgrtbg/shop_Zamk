@@ -35,6 +35,11 @@ type MetricPercentDTO struct {
 	PreviousPercent float64 `json:"previousPercent"`
 }
 
+type MetricPercentNullableDTO struct {
+	CurrentPercent  *float64 `json:"currentPercent"`
+	PreviousPercent *float64 `json:"previousPercent"`
+}
+
 type TimeseriesBucketDTO struct {
 	Date                      string `json:"date"`
 	GrossSalesCents           int64  `json:"grossSalesCents"`
@@ -51,8 +56,9 @@ type OverviewResponse struct {
 	Period                     PeriodDTO            `json:"period"`
 	HasHistoricalSales         bool                 `json:"hasHistoricalSales"`
 	GrossSales                 MetricCentsDTO       `json:"grossSales"`
-	Orders                     MetricCountDTO       `json:"orders"`
-	UnitsSold                  MetricCountDTO       `json:"unitsSold"`
+	Orders                     MetricCountDTO        `json:"orders"`
+	DeliveredOrders            *MetricCountSimpleDTO `json:"deliveredOrders,omitempty"`
+	UnitsSold                  MetricCountDTO        `json:"unitsSold"`
 	AverageOrderValue          MetricCentsDTO       `json:"averageOrderValue"`
 	Commission                 MetricCentsSimpleDTO `json:"commission"`
 	SellerEarningBeforeReturns MetricCentsSimpleDTO `json:"sellerEarningBeforeReturns"`
@@ -66,17 +72,19 @@ type OverviewResponse struct {
 }
 
 type ProductRow struct {
-	ProductID               string  `json:"productId"`
-	Title                   string  `json:"title"`
-	GrossSalesCents         int64   `json:"grossSalesCents"`
-	OrdersCount             int     `json:"ordersCount"`
-	UnitsSold               int     `json:"unitsSold"`
-	ReturnedUnits           int     `json:"returnedUnits"`
-	ReturnRatePercent       float64 `json:"returnRatePercent"`
-	AvailableStock          int     `json:"availableStock"`
-	PreviousGrossSalesCents int64   `json:"previousGrossSalesCents"`
+	ProductID               string   `json:"productId"`
+	Title                   string   `json:"title"`
+	GrossSalesCents         int64    `json:"grossSalesCents"`
+	OrdersCount             int      `json:"ordersCount"`
+	UnitsSold               int      `json:"unitsSold"`
+	ReturnedUnits           int      `json:"returnedUnits"`
+	ReturnRatePercent       *float64 `json:"returnRatePercent"`
+	AvailableStock          int      `json:"availableStock"`
+	PreviousGrossSalesCents int64    `json:"previousGrossSalesCents"`
 	GrossSalesChangePercent *float64 `json:"grossSalesChangePercent"`
-	ComparisonState         string  `json:"comparisonState"`
+	ComparisonState         string   `json:"comparisonState"`
+	CohortDeliveredUnits    int      `json:"cohortDeliveredUnits"`
+	CohortReturnedUnits     int      `json:"cohortReturnedUnits"`
 }
 
 type ProductsResponse struct {
@@ -85,45 +93,54 @@ type ProductsResponse struct {
 }
 
 type VariantRow struct {
-	VariantID          string   `json:"variantId"`
-	SKU                string   `json:"sku"`
-	DisplayName        string   `json:"displayName"`
-	UnitsSold          int      `json:"unitsSold"`
-	GrossSalesCents    int64    `json:"grossSalesCents"`
-	ReturnedUnits      int      `json:"returnedUnits"`
-	ReturnRatePercent  float64  `json:"returnRatePercent"`
-	AvailableStock     int      `json:"availableStock"`
-	SalesVelocity      float64  `json:"salesVelocity"`
-	DaysOfStock        *float64 `json:"daysOfStock"`
-	StockCoverageState string   `json:"stockCoverageState"`
+	VariantID            string   `json:"variantId"`
+	SKU                  string   `json:"sku"`
+	DisplayName          string   `json:"displayName"`
+	UnitsSold            int      `json:"unitsSold"`
+	GrossSalesCents      int64    `json:"grossSalesCents"`
+	ReturnedUnits        int      `json:"returnedUnits"`
+	ReturnRatePercent    *float64 `json:"returnRatePercent"`
+	AvailableStock       int      `json:"availableStock"`
+	SalesVelocity        float64  `json:"salesVelocity"`
+	DaysOfStock          *float64 `json:"daysOfStock"`
+	StockCoverageState   string   `json:"stockCoverageState"`
+	CohortDeliveredUnits int      `json:"cohortDeliveredUnits"`
+	CohortReturnedUnits  int      `json:"cohortReturnedUnits"`
 }
 
 type ProductDetailResponse struct {
-	ProductID                  string                `json:"productId"`
-	Title                      string                `json:"title"`
-	GrossSales                 MetricCentsDTO        `json:"grossSales"`
-	UnitsSold                  MetricCountDTO        `json:"unitsSold"`
-	Orders                     MetricCountDTO        `json:"orders"`
-	ReturnedUnits              MetricCountSimpleDTO  `json:"returnedUnits"`
-	ReturnRate                 MetricPercentDTO      `json:"returnRate"`
-	CurrentAvailableStock      int                   `json:"currentAvailableStock"`
-	Timeseries                 []TimeseriesBucketDTO `json:"timeseries"`
-	Variants                   []VariantRow          `json:"variants"`
-	Insights                   []InsightDTO          `json:"insights"`
+	ProductID             string                   `json:"productId"`
+	Title                 string                   `json:"title"`
+	GrossSales            MetricCentsDTO           `json:"grossSales"`
+	UnitsSold             MetricCountDTO           `json:"unitsSold"`
+	Orders                MetricCountDTO           `json:"orders"`
+	ReturnedUnits         MetricCountSimpleDTO     `json:"returnedUnits"`
+	ReturnRate            MetricPercentNullableDTO `json:"returnRate"`
+	CurrentAvailableStock int                      `json:"currentAvailableStock"`
+	Timeseries            []TimeseriesBucketDTO    `json:"timeseries"`
+	Variants              []VariantRow             `json:"variants"`
+	Insights              []InsightDTO             `json:"insights"`
+	CohortDeliveredUnits  int                      `json:"cohortDeliveredUnits"`
+	CohortReturnedUnits   int                      `json:"cohortReturnedUnits"`
 }
 
 type InventoryRow struct {
 	ProductID          string   `json:"productId"`
 	VariantID          string   `json:"variantId"`
+	ProductTitle       string   `json:"productTitle"`
 	SKU                string   `json:"sku"`
+	DisplayName        string   `json:"displayName"`
 	Available          int      `json:"available"`
 	OnHand             int      `json:"onHand"`
 	Reserved           int      `json:"reserved"`
 	Inbound            int      `json:"inbound"`
 	UnitsSold          int      `json:"unitsSold"`
 	SalesVelocity      float64  `json:"salesVelocity"`
-	DaysOfStock        *float64 `json:"daysOfStock"`
-	StockCoverageState string   `json:"stockCoverageState"`
+	DaysOfStock           *float64 `json:"daysOfStock"`
+	StockCoverageState    string   `json:"stockCoverageState"`
+	IsPhysicalLowStock    bool     `json:"isPhysicalLowStock"`
+	HasNoSalesInPeriod    bool     `json:"hasNoSalesInPeriod"`
+	IsForecastLowCoverage bool     `json:"isForecastLowCoverage"`
 }
 
 type InventoryResponse struct {

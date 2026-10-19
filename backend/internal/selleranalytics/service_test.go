@@ -24,6 +24,15 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
 
+	// Strict safety gate: verify test database identity
+	var dbName string
+	err = pool.QueryRow(ctx, "SELECT current_database()").Scan(&dbName)
+	require.NoError(t, err)
+	if dbName != "zamk_test" {
+		pool.Close()
+		t.Fatalf("CRITICAL SAFETY VIOLATION: tests must run exclusively on 'zamk_test', but connected to '%s'", dbName)
+	}
+
 	return pool, func() {
 		pool.Close()
 	}
@@ -85,6 +94,14 @@ func insertOrderWithLedger(t *testing.T, db *pgxpool.Pool, sellerID, pID, vID uu
 	_, err = db.Exec(context.Background(), "INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents, order_fulfillment_id) VALUES ($1, $2, $3, $4, $5, 'Test Product', 'slug', $6, $7, $8, $9)", oiID, oID, pID, vID, sellerID, grossCents/int64(qty), qty, grossCents, fID)
 	require.NoError(t, err)
 
+	// Succeeded payment
+	_, err = db.Exec(context.Background(),
+		`INSERT INTO payments (id, order_id, provider, status, amount_cents, idempotency_key, created_at, updated_at, paid_at)
+		 VALUES ($1, $2, 'tbank', 'succeeded', $3, $4, $5, $5, $5)`,
+		uuid.New(), oID, grossCents, uuid.New().String(), created,
+	)
+	require.NoError(t, err)
+
 	if delivered {
 		// Insert ledger entries explicitly anchoring to `created`
 		_, err = db.Exec(context.Background(), "INSERT INTO seller_ledger_entries (id, seller_id, order_id, order_item_id, type, amount_cents, created_at) VALUES ($1, $2, $3, $4, 'sale_gross', $5, $6)", uuid.New(), sellerID, oID, oiID, grossCents, created)
@@ -99,7 +116,12 @@ func insertOrderWithLedger(t *testing.T, db *pgxpool.Pool, sellerID, pID, vID uu
 
 func insertReturn(t *testing.T, db *pgxpool.Pool, oID, oiID, cID uuid.UUID, status string, qty int, deduction int64, returnedAt time.Time) {
 	rID := uuid.New()
-	_, err := db.Exec(context.Background(), "INSERT INTO returns (id, order_id, user_id, status, reason, completed_at) VALUES ($1, $2, $3, $4, 'defective', $5)", rID, oID, cID, status, returnedAt)
+
+	var fID uuid.UUID
+	err := db.QueryRow(context.Background(), "SELECT order_fulfillment_id FROM order_items WHERE id = $1", oiID).Scan(&fID)
+	require.NoError(t, err)
+
+	_, err = db.Exec(context.Background(), "INSERT INTO returns (id, order_id, fulfillment_id, user_id, status, reason, completed_at) VALUES ($1, $2, $3, $4, $5, 'defective', $6)", rID, oID, fID, cID, status, returnedAt)
 	require.NoError(t, err)
 
 	_, err = db.Exec(context.Background(), "INSERT INTO return_items (id, return_id, order_item_id, quantity) VALUES ($1, $2, $3, $4)", uuid.New(), rID, oiID, qty)
@@ -143,6 +165,7 @@ func TestSellerAnalytics(t *testing.T) {
 		assert.Equal(t, int64(138000), resp.NetCommercialEarning.CurrentCents)
 		assert.Equal(t, 1, resp.Orders.Current)
 		assert.Equal(t, 1, resp.UnitsSold.Current)
+		assert.Equal(t, int64(150000), resp.AverageOrderValue.CurrentCents)
 		assert.Equal(t, 0, resp.ReturnedUnits.Current)
 	})
 
@@ -154,23 +177,82 @@ func TestSellerAnalytics(t *testing.T) {
 		resp, err := svc.GetOverview(ctx, sellerB, from, to, tz)
 		require.NoError(t, err)
 
+		// Option A: Paid orders = 1, gross = 0, units sold = 0, AOV = 0
 		assert.Equal(t, int64(0), resp.GrossSales.CurrentCents)
-		assert.Equal(t, 0, resp.Orders.Current)
+		assert.Equal(t, 1, resp.Orders.Current)
 		assert.Equal(t, 0, resp.UnitsSold.Current)
+		assert.Equal(t, int64(0), resp.AverageOrderValue.CurrentCents)
 		assert.Equal(t, int64(0), resp.SellerEarningBeforeReturns.CurrentCents)
 	})
 
-	t.Run("Scenario C - Cancelled Before Delivery", func(t *testing.T) {
-		sellerC := insertSeller(t, db)
-		pID, vID := insertProduct(t, db, sellerC)
-		insertOrderWithLedger(t, db, sellerC, pID, vID, 150000, 12000, 138000, 1, false, now)
+	t.Run("Scenario C1 - Created But Unpaid Order", func(t *testing.T) {
+		sellerC1 := insertSeller(t, db)
+		pID, vID := insertProduct(t, db, sellerC1)
 
-		resp, err := svc.GetOverview(ctx, sellerC, from, to, tz)
+		oID := uuid.New()
+		cID := insertCustomer(t, db)
+		db.Exec(ctx, "INSERT INTO orders (id, user_id, status, customer_name, customer_phone, customer_email, delivery_address) VALUES ($1, $2, 'awaiting_payment', 'Name', '123', 'email@e.c', 'addr')", oID, cID)
+		fID := uuid.New()
+		db.Exec(ctx, "INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents, updated_at) VALUES ($1, $2, $3, 'awaiting_payment', 150000, 800, 138000, $4)", fID, oID, sellerC1, now)
+		oiID := uuid.New()
+		db.Exec(ctx, "INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents, order_fulfillment_id) VALUES ($1, $2, $3, $4, $5, 'Test Product', 'slug', 150000, 1, 150000, $6)", oiID, oID, pID, vID, sellerC1, fID)
+		// Pending payment attempt
+		db.Exec(ctx, "INSERT INTO payments (id, order_id, provider, status, amount_cents, idempotency_key, created_at, updated_at) VALUES ($1, $2, 'tbank', 'pending', 150000, $3, $4, $4)", uuid.New(), oID, uuid.New().String(), now)
+
+		resp, err := svc.GetOverview(ctx, sellerC1, from, to, tz)
 		require.NoError(t, err)
 
+		assert.Equal(t, 0, resp.Orders.Current, "Unpaid order must not be counted in paid orders")
 		assert.Equal(t, int64(0), resp.GrossSales.CurrentCents)
-		assert.Equal(t, 0, resp.Orders.Current)
 		assert.Equal(t, 0, resp.UnitsSold.Current)
+	})
+
+	t.Run("Scenario C2 - Cancelled Before Payment", func(t *testing.T) {
+		sellerC2 := insertSeller(t, db)
+		pID, vID := insertProduct(t, db, sellerC2)
+
+		oID := uuid.New()
+		cID := insertCustomer(t, db)
+		tCancelled := now.Add(-1 * time.Hour)
+		db.Exec(ctx, "INSERT INTO orders (id, user_id, status, cancelled_at, customer_name, customer_phone, customer_email, delivery_address) VALUES ($1, $2, 'cancelled', $3, 'Name', '123', 'email@e.c', 'addr')", oID, cID, tCancelled)
+		fID := uuid.New()
+		// Cancelled 1 hour before payment attempt
+		db.Exec(ctx, "INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents, updated_at) VALUES ($1, $2, $3, 'cancelled', 150000, 800, 138000, $4)", fID, oID, sellerC2, tCancelled)
+		oiID := uuid.New()
+		db.Exec(ctx, "INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents, order_fulfillment_id) VALUES ($1, $2, $3, $4, $5, 'Test Product', 'slug', 150000, 1, 150000, $6)", oiID, oID, pID, vID, sellerC2, fID)
+
+		// Payment succeeded later (e.g. for other items or retry), but fulfillment was cancelled before payment
+		db.Exec(ctx, "INSERT INTO payments (id, order_id, provider, status, amount_cents, idempotency_key, created_at, updated_at, paid_at) VALUES ($1, $2, 'tbank', 'succeeded', 150000, $3, $4, $4, $4)", uuid.New(), oID, uuid.New().String(), now)
+
+		resp, err := svc.GetOverview(ctx, sellerC2, from, to, tz)
+		require.NoError(t, err)
+
+		assert.Equal(t, 0, resp.Orders.Current, "Fulfillment cancelled before payment must not count as seller's paid order")
+		assert.Equal(t, int64(0), resp.GrossSales.CurrentCents)
+	})
+
+	t.Run("Scenario C3 - Paid Order Subsequently Cancelled", func(t *testing.T) {
+		sellerC3 := insertSeller(t, db)
+		pID, vID := insertProduct(t, db, sellerC3)
+
+		oID := uuid.New()
+		cID := insertCustomer(t, db)
+		tPaid := now
+		tCancelled := now.Add(10 * time.Minute)
+		db.Exec(ctx, "INSERT INTO orders (id, user_id, status, cancelled_at, customer_name, customer_phone, customer_email, delivery_address) VALUES ($1, $2, 'cancelled', $3, 'Name', '123', 'email@e.c', 'addr')", oID, cID, tCancelled)
+		fID := uuid.New()
+		// Paid at now, then cancelled 10 minutes later (cancelled_at >= paid_at)
+		db.Exec(ctx, "INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents, updated_at) VALUES ($1, $2, $3, 'cancelled', 150000, 800, 138000, $4)", fID, oID, sellerC3, tCancelled)
+		oiID := uuid.New()
+		db.Exec(ctx, "INSERT INTO order_items (id, order_id, product_id, product_variant_id, seller_id, title, product_slug, price_cents, quantity, subtotal_price_cents, order_fulfillment_id) VALUES ($1, $2, $3, $4, $5, 'Test Product', 'slug', 150000, 1, 150000, $6)", oiID, oID, pID, vID, sellerC3, fID)
+		db.Exec(ctx, "INSERT INTO payments (id, order_id, provider, status, amount_cents, idempotency_key, created_at, updated_at, paid_at) VALUES ($1, $2, 'tbank', 'succeeded', 150000, $3, $4, $4, $5)", uuid.New(), oID, uuid.New().String(), tPaid, tPaid)
+
+		resp, err := svc.GetOverview(ctx, sellerC3, from, to, tz)
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, resp.Orders.Current, "Order paid and subsequently cancelled must remain in paid order acquisition metrics")
+		assert.Equal(t, int64(0), resp.GrossSales.CurrentCents, "Gross sales remains 0 because order was never delivered")
+		assert.Equal(t, int64(0), resp.AverageOrderValue.CurrentCents)
 	})
 
 	t.Run("Scenario D - Completed Return", func(t *testing.T) {
@@ -228,6 +310,9 @@ func TestSellerAnalytics(t *testing.T) {
 		cID := insertCustomer(t, db)
 		db.Exec(context.Background(), "INSERT INTO orders (id, user_id, status, customer_name, customer_phone, customer_email, delivery_address) VALUES ($1, $2, 'delivered', 'Name', '123', 'email@e.c', 'addr')", oID, cID)
 		
+		// Succeeded payment covering the order
+		db.Exec(context.Background(), "INSERT INTO payments (id, order_id, provider, status, amount_cents, idempotency_key, created_at, updated_at, paid_at) VALUES ($1, $2, 'tbank', 'succeeded', 450000, $3, $4, $4, $4)", uuid.New(), oID, uuid.New().String(), now)
+
 		fID1 := uuid.New()
 		db.Exec(context.Background(), "INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents, updated_at) VALUES ($1, $2, $3, 'delivered', 150000, 800, 138000, $4)", fID1, oID, sellerG1, now)
 		
