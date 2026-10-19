@@ -350,33 +350,45 @@ func TestShipmentReadModel_ListAndDetail(t *testing.T) {
 		f.handler.UpdateShipmentStatus(w, req.WithContext(ctxWithAdmin))
 	})
 
-	reqList := httptest.NewRequest(http.MethodGet, "/api/admin/shipments?limit=100", nil)
-	rrList := httptest.NewRecorder()
-	r.ServeHTTP(rrList, reqList)
-	require.Equal(t, http.StatusOK, rrList.Code)
-
-	rawListBytes := rrList.Body.Bytes()
-
-	// F. List does not expose unnecessary full recipient PII
-	rawListStr := string(rawListBytes)
-	assert.NotContains(t, rawListStr, "customerName")
-	assert.NotContains(t, rawListStr, "customerPhone")
-	assert.NotContains(t, rawListStr, "customerEmail")
-	assert.NotContains(t, rawListStr, "deliveryAddress")
-	assert.NotContains(t, rawListStr, customerName)
-	assert.NotContains(t, rawListStr, customerPhone)
-	assert.NotContains(t, rawListStr, deliveryAddress)
-
-	// N. Existing admin shipment API consumers remain compatible (unmarshal into []fulfillment.Shipment)
-	var legacyList []fulfillment.Shipment
-	require.NoError(t, json.Unmarshal(rawListBytes, &legacyList))
-
-	var listItems []fulfillment.AdminShipmentListItem
-	require.NoError(t, json.Unmarshal(rawListBytes, &listItems))
-
+	// The list is newest-first and the endpoint caps a page at 100 rows, while the shared test database
+	// may hold any number of foreign shipments created later than these fixtures. Walk the pages
+	// (still limit=100) until both fixtures are found, validating every page.
 	byID := make(map[uuid.UUID]fulfillment.AdminShipmentListItem)
-	for _, item := range listItems {
-		byID[item.ID] = item
+	const pageSize = 100
+	const maxPages = 200
+	for page := 0; page < maxPages; page++ {
+		reqList := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/admin/shipments?limit=%d&offset=%d", pageSize, page*pageSize), nil)
+		rrList := httptest.NewRecorder()
+		r.ServeHTTP(rrList, reqList)
+		require.Equal(t, http.StatusOK, rrList.Code)
+
+		rawListBytes := rrList.Body.Bytes()
+
+		// F. List does not expose unnecessary full recipient PII
+		rawListStr := string(rawListBytes)
+		assert.NotContains(t, rawListStr, "customerName")
+		assert.NotContains(t, rawListStr, "customerPhone")
+		assert.NotContains(t, rawListStr, "customerEmail")
+		assert.NotContains(t, rawListStr, "deliveryAddress")
+		assert.NotContains(t, rawListStr, customerName)
+		assert.NotContains(t, rawListStr, customerPhone)
+		assert.NotContains(t, rawListStr, deliveryAddress)
+
+		// N. Existing admin shipment API consumers remain compatible (unmarshal into []fulfillment.Shipment)
+		var legacyList []fulfillment.Shipment
+		require.NoError(t, json.Unmarshal(rawListBytes, &legacyList))
+
+		var listItems []fulfillment.AdminShipmentListItem
+		require.NoError(t, json.Unmarshal(rawListBytes, &listItems))
+		for _, item := range listItems {
+			byID[item.ID] = item
+		}
+
+		_, foundAlpha := byID[shipmentAlphaID]
+		_, foundBeta := byID[shipmentBetaID]
+		if (foundAlpha && foundBeta) || len(listItems) < pageSize {
+			break
+		}
 	}
 
 	require.Contains(t, byID, shipmentAlphaID)

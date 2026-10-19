@@ -390,6 +390,25 @@ func (r *Repository) LinkLedgerEntriesToPayoutTx(ctx context.Context, tx pgx.Tx,
 	return err
 }
 
+// UpdateAvailableAtByFulfillmentTx sets the hold deadline only on the seller_earning entries of order items
+// that belong to the given fulfillment. Entries that already have a deadline or are linked to a payout batch
+// are left untouched, so a repeated call never moves an existing deadline.
+func (r *Repository) UpdateAvailableAtByFulfillmentTx(ctx context.Context, tx pgx.Tx, fulfillmentID uuid.UUID, availableAt time.Time) error {
+	query := `
+		UPDATE seller_ledger_entries sle
+		SET available_at = $1
+		FROM order_items oi
+		WHERE oi.id = sle.order_item_id
+		  AND oi.order_fulfillment_id = $2
+		  AND sle.type = 'seller_earning'
+		  AND sle.available_at IS NULL
+		  AND sle.payout_batch_id IS NULL
+	`
+	_, err := tx.Exec(ctx, query, availableAt, fulfillmentID)
+	return err
+}
+
+// Deprecated: updates every seller_earning of the order regardless of fulfillment; use UpdateAvailableAtByFulfillmentTx.
 func (r *Repository) UpdateAvailableAtByOrderIdTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, availableAt time.Time) error {
 	query := `UPDATE seller_ledger_entries SET available_at = $1 WHERE order_id = $2 AND type = 'seller_earning'`
 	_, err := tx.Exec(ctx, query, availableAt, orderID)

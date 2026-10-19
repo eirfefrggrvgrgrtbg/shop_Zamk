@@ -357,11 +357,11 @@ func (m *failingPayoutsMock) CreatePendingSalesForFulfillmentTx(ctx context.Cont
 	return m.realPayouts.CreatePendingSalesForFulfillmentTx(ctx, tx, fulfillmentID)
 }
 
-func (m *failingPayoutsMock) MarkOrderDeliveredTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, deliveredAt time.Time) error {
+func (m *failingPayoutsMock) MarkFulfillmentDeliveredTx(ctx context.Context, tx pgx.Tx, fulfillmentID uuid.UUID, deliveredAt time.Time) error {
 	if m.failMarkOrderDelivered {
-		return errors.New("simulated failure in MarkOrderDeliveredTx")
+		return errors.New("simulated failure in MarkFulfillmentDeliveredTx")
 	}
-	return m.realPayouts.MarkOrderDeliveredTx(ctx, tx, orderID, deliveredAt)
+	return m.realPayouts.MarkFulfillmentDeliveredTx(ctx, tx, fulfillmentID, deliveredAt)
 }
 
 // Case D: Finance failure atomicity test
@@ -375,7 +375,7 @@ func TestDeliverShipment_FinanceFailureAtomicity(t *testing.T) {
 	f := setupDeliveryHoldFixture(t, ctx)
 	defer f.client.Close()
 
-	t.Run("fails when MarkOrderDeliveredTx fails -> full rollback", func(t *testing.T) {
+	t.Run("fails when MarkFulfillmentDeliveredTx fails -> full rollback", func(t *testing.T) {
 		mockPayouts := &failingPayoutsMock{
 			realPayouts:            f.payoutSvc,
 			failMarkOrderDelivered: true,
@@ -389,7 +389,7 @@ func TestDeliverShipment_FinanceFailureAtomicity(t *testing.T) {
 		res, err := serviceWithFailingPayouts.DeliverShipment(ctx, f.adminID, shipmentID, fulfillment.DeliverShipmentRequest{})
 		assert.Error(t, err)
 		assert.Nil(t, res)
-		assert.Contains(t, err.Error(), "simulated failure in MarkOrderDeliveredTx")
+		assert.Contains(t, err.Error(), "simulated failure in MarkFulfillmentDeliveredTx")
 
 		// 1. Shipment MUST remain 'shipped' and delivered_at MUST remain NULL
 		var shipStatus string

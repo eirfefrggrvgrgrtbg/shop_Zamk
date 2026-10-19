@@ -22,7 +22,7 @@ func (m *mockPayoutsService) CreatePendingSalesForFulfillmentTx(ctx context.Cont
 func (m *mockPayoutsService) CreatePendingSalesForOrder(ctx context.Context, orderID uuid.UUID) error {
 	return nil
 }
-func (m *mockPayoutsService) MarkOrderDeliveredTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, deliveredAt time.Time) error {
+func (m *mockPayoutsService) MarkFulfillmentDeliveredTx(ctx context.Context, tx pgx.Tx, fulfillmentID uuid.UUID, deliveredAt time.Time) error {
 	return nil
 }
 

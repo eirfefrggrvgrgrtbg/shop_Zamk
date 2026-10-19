@@ -347,7 +347,14 @@ func (s *Service) ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnI
 	return nil
 }
 
-// Called by a background job, or delivery webhook
+// MarkFulfillmentDeliveredTx starts the 14-day hold for the earnings of a single delivered fulfillment.
+// Other fulfillments of the same order (including other sellers) keep their own deadlines.
+func (s *Service) MarkFulfillmentDeliveredTx(ctx context.Context, tx pgx.Tx, fulfillmentID uuid.UUID, deliveredAt time.Time) error {
+	availableAt := deliveredAt.AddDate(0, 0, 14) // 14-day hold
+	return s.repo.UpdateAvailableAtByFulfillmentTx(ctx, tx, fulfillmentID, availableAt)
+}
+
+// Deprecated: affects all fulfillments of the order; delivery uses MarkFulfillmentDeliveredTx.
 func (s *Service) MarkOrderDeliveredTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, deliveredAt time.Time) error {
 	availableAt := deliveredAt.AddDate(0, 0, 14) // 14-day hold
 	return s.repo.UpdateAvailableAtByOrderIdTx(ctx, tx, orderID, availableAt)
