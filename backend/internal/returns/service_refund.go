@@ -35,9 +35,78 @@ type orderItemInfo struct {
 	Title      string
 	PriceCents int64
 	Quantity   int
+	// PaidTotalCents is what the customer actually paid for the whole line: the
+	// order_item_promotions snapshot when promoted, otherwise price_cents * quantity.
+	PaidTotalCents int64
 }
 
-func calculateRefundBreakdown(state *AdminReturnReceivingState, orderItemsMap map[uuid.UUID]orderItemInfo) (calculatedRefundBreakdown, error) {
+// refundQuerier is satisfied by both the pool and a transaction.
+type refundQuerier interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+// refundableQuantity returns how many units of a return item are refundable.
+//
+// Canonical Allocation Invariant:
+// Q = order_items.quantity
+// A = len(outbound_allocations)
+// A == Q => serialized
+// A == 0 => legacy
+// 0 < A < Q => INVALID / FAIL CLOSED
+// A > Q => INVALID / FAIL CLOSED
+func refundableQuantity(item AdminReturnReceivingItem, orderQty int) (string, int, error) {
+	allocCount := len(item.OutboundAllocations)
+	if allocCount == orderQty && orderQty > 0 {
+		// For serialized items: return_item_units.disposition is authoritative.
+		// disposition = restock => refundable
+		// disposition = damaged => refundable
+		// disposition = reject => NOT refundable
+		// unreceived / no bound ReturnItemUnit => NOT refundable
+		// NOTE: return_items aggregate accepted/damaged values are NOT used.
+		refundableQty := 0
+		for _, u := range item.ScannedUnits {
+			if u.Disposition != nil {
+				disp := *u.Disposition
+				if disp == "restock" || disp == "damaged" {
+					refundableQty++
+				}
+			}
+		}
+		return "serialized", refundableQty, nil
+	}
+	if allocCount == 0 {
+		// For legacy items (no outbound allocations):
+		// return_items.accepted_quantity + return_items.damaged_quantity is authoritative.
+		// rejected_quantity and notReceived are NOT refundable.
+		return "legacy", item.AcceptedQuantity + item.DamagedQuantity, nil
+	}
+	// Corrupted partial or excess allocation: fail-closed with typed error
+	return "", 0, ErrRefundAllocationInvariant
+}
+
+// cumulativeRefundCents returns the refund for n more units of a line whose customer paid
+// total is paidTotal over quantity q, after prior units were already refunded. Allocating
+// floor(paidTotal * units / q) cumulatively keeps the sum over all units exactly equal to
+// paidTotal, so repeated partial refunds never exceed what was paid for the line.
+func cumulativeRefundCents(paidTotal int64, q, prior, n int) int64 {
+	if q <= 0 || n <= 0 || paidTotal <= 0 {
+		return 0
+	}
+	if prior > q {
+		prior = q
+	}
+	end := prior + n
+	if end > q {
+		end = q
+	}
+	return paidTotal*int64(end)/int64(q) - paidTotal*int64(prior)/int64(q)
+}
+
+// calculateRefundBreakdown prices the refundable units of a return from what the customer
+// actually paid. priorRefundedQty holds units of each order item already covered by other
+// returns' active refunds; it may be nil when only quantities are needed.
+func calculateRefundBreakdown(state *AdminReturnReceivingState, orderItemsMap map[uuid.UUID]orderItemInfo, priorRefundedQty map[uuid.UUID]int) (calculatedRefundBreakdown, error) {
 	var breakdown calculatedRefundBreakdown
 	breakdown.Items = make([]calculatedRefundItem, 0, len(state.Items))
 
@@ -46,48 +115,17 @@ func calculateRefundBreakdown(state *AdminReturnReceivingState, orderItemsMap ma
 		if !ok {
 			return breakdown, fmt.Errorf("order item %s not found in order", item.ReturnItem.OrderItemID)
 		}
-		unitPrice := oi.PriceCents
-		orderQty := oi.Quantity
-		allocCount := len(item.OutboundAllocations)
 
-		var mode string
-		refundableQty := 0
-
-		// Canonical Allocation Invariant:
-		// Q = order_items.quantity
-		// A = len(outbound_allocations)
-		// A == Q => serialized
-		// A == 0 => legacy
-		// 0 < A < Q => INVALID / FAIL CLOSED
-		// A > Q => INVALID / FAIL CLOSED
-		if allocCount == orderQty && orderQty > 0 {
-			mode = "serialized"
-			// For serialized items: return_item_units.disposition is authoritative.
-			// disposition = restock => refundable
-			// disposition = damaged => refundable
-			// disposition = reject => NOT refundable
-			// unreceived / no bound ReturnItemUnit => NOT refundable
-			// NOTE: return_items aggregate accepted/damaged values are NOT used.
-			for _, u := range item.ScannedUnits {
-				if u.Disposition != nil {
-					disp := *u.Disposition
-					if disp == "restock" || disp == "damaged" {
-						refundableQty++
-					}
-				}
-			}
-		} else if allocCount == 0 {
-			mode = "legacy"
-			// For legacy items (no outbound allocations):
-			// return_items.accepted_quantity + return_items.damaged_quantity is authoritative.
-			// rejected_quantity and notReceived are NOT refundable.
-			refundableQty = item.AcceptedQuantity + item.DamagedQuantity
-		} else {
-			// Corrupted partial or excess allocation: fail-closed with typed error
-			return breakdown, ErrRefundAllocationInvariant
+		mode, refundableQty, err := refundableQuantity(item, oi.Quantity)
+		if err != nil {
+			return breakdown, err
 		}
 
-		itemRefundCents := int64(refundableQty) * unitPrice
+		itemRefundCents := cumulativeRefundCents(oi.PaidTotalCents, oi.Quantity, priorRefundedQty[item.ReturnItem.OrderItemID], refundableQty)
+		unitPrice := int64(0)
+		if oi.Quantity > 0 {
+			unitPrice = oi.PaidTotalCents / int64(oi.Quantity)
+		}
 
 		breakdown.Items = append(breakdown.Items, calculatedRefundItem{
 			OrderItemID:        item.ReturnItem.OrderItemID,
@@ -107,23 +145,43 @@ func calculateRefundBreakdown(state *AdminReturnReceivingState, orderItemsMap ma
 	return breakdown, nil
 }
 
+// priorRefundedQuantities returns, per order item, the units already covered by active
+// (pending, processing or succeeded) refunds of other returns of the same order.
+func (s *Service) priorRefundedQuantities(ctx context.Context, db refundQuerier, orderID, excludeReturnID uuid.UUID, orderItemsMap map[uuid.UUID]orderItemInfo) (map[uuid.UUID]int, error) {
+	returnIDs, err := s.repo.getActivelyRefundedReturnIDs(ctx, db, orderID, excludeReturnID)
+	if err != nil {
+		return nil, err
+	}
+	prior := make(map[uuid.UUID]int)
+	for _, rid := range returnIDs {
+		state, err := s.repo.getReturnReceivingState(ctx, db, rid)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range state.Items {
+			oi, ok := orderItemsMap[item.ReturnItem.OrderItemID]
+			if !ok {
+				return nil, fmt.Errorf("order item %s not found in order", item.ReturnItem.OrderItemID)
+			}
+			_, qty, err := refundableQuantity(item, oi.Quantity)
+			if err != nil {
+				return nil, err
+			}
+			prior[item.ReturnItem.OrderItemID] += qty
+		}
+	}
+	return prior, nil
+}
+
 func (s *Service) CalculateRefundQuote(ctx context.Context, returnID uuid.UUID) (*ReturnRefundQuote, error) {
 	state, err := s.repo.GetReturnReceivingState(ctx, returnID)
 	if err != nil {
 		return nil, err
 	}
 
-	orderItems, err := s.ordersRepo.GetOrderItems(ctx, state.Return.OrderID)
+	orderItemMap, err := s.repo.getRefundOrderItems(ctx, s.repo.db, state.Return.OrderID)
 	if err != nil {
 		return nil, err
-	}
-	orderItemMap := make(map[uuid.UUID]orderItemInfo)
-	for _, oi := range orderItems {
-		orderItemMap[oi.ID] = orderItemInfo{
-			Title:      oi.Title,
-			PriceCents: oi.PriceCents,
-			Quantity:   oi.Quantity,
-		}
 	}
 
 	succeededRefunded, pendingRefund, err := s.repo.GetRefundSumsForOrder(ctx, state.Return.OrderID)
@@ -131,7 +189,11 @@ func (s *Service) CalculateRefundQuote(ctx context.Context, returnID uuid.UUID) 
 		return nil, err
 	}
 
-	breakdown, breakdownErr := calculateRefundBreakdown(state, orderItemMap)
+	priorQty, breakdownErr := s.priorRefundedQuantities(ctx, s.repo.db, state.Return.OrderID, returnID, orderItemMap)
+	var breakdown calculatedRefundBreakdown
+	if breakdownErr == nil {
+		breakdown, breakdownErr = calculateRefundBreakdown(state, orderItemMap, priorQty)
+	}
 
 	var quoteItems []ReturnRefundQuoteItem
 	for _, it := range breakdown.Items {
@@ -294,20 +356,22 @@ func (s *Service) CreateRefund(ctx context.Context, adminID, returnID uuid.UUID,
 			return err
 		}
 
-		orderItems, err := s.ordersRepo.GetOrderItems(ctx, ret.OrderID)
+		// Serialize refunds of different returns of the same order on the funding payment
+		// row, so prior refunded units are read only after concurrent refunds commit.
+		if _, err := tx.Exec(ctx, `SELECT id FROM payments WHERE order_id = $1 AND status = 'succeeded' FOR UPDATE`, ret.OrderID); err != nil {
+			return err
+		}
+
+		orderItemMap, err := s.repo.getRefundOrderItems(ctx, tx, ret.OrderID)
 		if err != nil {
 			return err
 		}
-		orderItemMap := make(map[uuid.UUID]orderItemInfo)
-		for _, oi := range orderItems {
-			orderItemMap[oi.ID] = orderItemInfo{
-				Title:      oi.Title,
-				PriceCents: oi.PriceCents,
-				Quantity:   oi.Quantity,
-			}
+		priorQty, err := s.priorRefundedQuantities(ctx, tx, ret.OrderID, ret.ID, orderItemMap)
+		if err != nil {
+			return err
 		}
 
-		breakdown, err := calculateRefundBreakdown(state, orderItemMap)
+		breakdown, err := calculateRefundBreakdown(state, orderItemMap, priorQty)
 		if err != nil {
 			return err
 		}
@@ -428,20 +492,13 @@ func (s *Service) ProcessRefundSuccessTx(ctx context.Context, tx pgx.Tx, refundI
 		if err != nil {
 			return err
 		}
-		orderItems, err := s.ordersRepo.GetOrderItems(ctx, ret.OrderID)
+		orderItemMap, err := s.repo.getRefundOrderItems(ctx, tx, ret.OrderID)
 		if err != nil {
 			return err
 		}
-		orderItemMap := make(map[uuid.UUID]orderItemInfo)
-		for _, oi := range orderItems {
-			orderItemMap[oi.ID] = orderItemInfo{
-				Title:      oi.Title,
-				PriceCents: oi.PriceCents,
-				Quantity:   oi.Quantity,
-			}
-		}
 
-		breakdown, err := calculateRefundBreakdown(state, orderItemMap)
+		// Only refundable quantities are used here; the seller deduction is priced from the ledger.
+		breakdown, err := calculateRefundBreakdown(state, orderItemMap, nil)
 		if err != nil {
 			return err
 		}

@@ -45,10 +45,39 @@ All amounts are stored as kopecks (int64). Currency is `RUB`.
 
 ### What goes into commission?
 
-- Commission is computed on `subtotal_cents` per seller per order (sum of all items from that seller).
-- Delivery fee: **not implemented** — delivery is not a separate line item in current architecture.
-- Discounts/promo codes: **not implemented** — commission is applied to full item subtotal.
-- These are documented as future work (FIN-2).
+- Delivery fee: not part of the commission base.
+- The commission rate is **frozen at checkout** per seller in `order_fulfillments.commission_bps`
+  (the seller's latest `seller_commission_rules` row, otherwise `MARKETPLACE_COMMISSION_BPS`).
+  Later rule changes never affect an existing order.
+- Seller ledger accrual (`payouts/accrual.go`, run at delivery) is per order item and idempotent
+  (one `sale_gross` per order item). It reads only checkout snapshots, never current product or promo state.
+
+### Promotions (MARKETING.M0.1)
+
+Promoted lines are frozen in `order_item_promotions`. Per line, in kopecks:
+
+```
+commission_base = base_gross - seller_discount     -> ledger sale_gross
+customer_paid   = commission_base - zamk_subsidy
+commission      = commission_base * commission_bps / 10000
+seller_earning  = commission_base - commission
+```
+
+- A seller-funded discount reduces the seller's accrual base and the commission.
+- A ZAMK-funded subsidy does not reduce the seller's accrual: ZAMK pays it. It is recorded in
+  `order_item_promotions.total_zamk_subsidy_cents`, campaign `zamk_spent_cents`, and in the
+  `sale_gross` entry metadata (`seller_discount_cents`, `zamk_subsidy_cents`, `customer_paid_cents`, ...).
+- Example: 10 000 ₽, seller 30%, ZAMK 10%, 9% → customer pays 6 000 ₽, base 7 000 ₽,
+  commission 630 ₽, seller earning 6 370 ₽, ZAMK subsidy 1 000 ₽.
+
+### Customer refunds with promotions
+
+The refund for returned units is priced from what the customer paid for the line
+(`total_customer_paid_cents`, or `price_cents * quantity` without a promotion), allocated
+cumulatively: the first `n` units of a line of `q` units cost `floor(paid * n / q)`. Units already
+covered by other returns' active refunds are counted first, so sequential partial refunds add up to
+exactly the paid line total. Delivery is not refunded. The seller deduction is the matching share of
+`seller_earning`, written as a separate `adjustment`; original accrual entries are never changed.
 
 ---
 

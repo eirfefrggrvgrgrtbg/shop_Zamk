@@ -190,9 +190,17 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 			})
 		}
 
-		commissionBps := 900
-		if s.cfg != nil && s.cfg.Worker.MarketplaceCommissionBPS > 0 {
-			commissionBps = s.cfg.Worker.MarketplaceCommissionBPS
+		// Commission rates are frozen per seller at checkout; later rule changes never affect this order.
+		sellerCommissionBps := make(map[uuid.UUID]int)
+		for _, oi := range orderItems {
+			if _, ok := sellerCommissionBps[oi.SellerID]; ok {
+				continue
+			}
+			rate, err := s.resolveCommissionBpsTx(ctx, tx, oi.SellerID)
+			if err != nil {
+				return err
+			}
+			sellerCommissionBps[oi.SellerID] = rate
 		}
 
 		// Optional promotional discount validation & calculation
@@ -200,6 +208,10 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 		if req.PromoCode != nil && strings.TrimSpace(*req.PromoCode) != "" {
 			if s.marketingSvc == nil {
 				return errors.New("cannot apply promo code: marketing service unavailable")
+			}
+			commissionBps, err := s.promoCommissionBpsTx(ctx, tx, *req.PromoCode, sellerCommissionBps)
+			if err != nil {
+				return err
 			}
 			promotedInputs := make([]marketing.PromotedOrderItemInput, len(orderItems))
 			for i, oi := range orderItems {
@@ -270,6 +282,7 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 		// Group items by seller and create fulfillments
 		sellerFulfillments := make(map[uuid.UUID]*OrderFulfillment)
 		for sellerID, subtotal := range sellerTotals {
+			commissionBps := sellerCommissionBps[sellerID]
 			commissionAmount := (subtotal * int64(commissionBps)) / 10000
 			sellerAmount := subtotal - commissionAmount
 
@@ -844,6 +857,48 @@ type snapshotData struct {
 	PriceCents   int64
 }
 
+// defaultCommissionBps is the marketplace rate applied to sellers without an individual commission rule.
+func (s *Service) defaultCommissionBps() int {
+	if s.cfg != nil && s.cfg.Worker.MarketplaceCommissionBPS > 0 {
+		return s.cfg.Worker.MarketplaceCommissionBPS
+	}
+	return 900
+}
+
+// resolveCommissionBpsTx returns the commission rate in force for a seller at checkout time.
+func (s *Service) resolveCommissionBpsTx(ctx context.Context, tx pgx.Tx, sellerID uuid.UUID) (int, error) {
+	var rate int
+	err := tx.QueryRow(ctx, `
+		SELECT rate_bps FROM seller_commission_rules
+		WHERE seller_id = $1
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, sellerID).Scan(&rate)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return s.defaultCommissionBps(), nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("failed to resolve seller commission rate: %w", err)
+	}
+	return rate, nil
+}
+
+// promoCommissionBpsTx resolves the frozen commission rate of the seller owning the promo code.
+// An unknown code falls back to the default rate and is rejected later by promo validation.
+func (s *Service) promoCommissionBpsTx(ctx context.Context, tx pgx.Tx, code string, frozen map[uuid.UUID]int) (int, error) {
+	sellerID, err := s.marketingSvc.PromoSellerIDTx(ctx, tx, code)
+	if errors.Is(err, marketing.ErrPromoCodeNotFound) {
+		return s.defaultCommissionBps(), nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if rate, ok := frozen[sellerID]; ok {
+		return rate, nil
+	}
+	return s.resolveCommissionBpsTx(ctx, tx, sellerID)
+}
+
 func (s *Service) getSnapshot(ctx context.Context, tx pgx.Tx, productID, variantID uuid.UUID) (*snapshotData, error) {
 	query := `
 		SELECT
@@ -934,9 +989,9 @@ func (s *Service) ValidateCartPromo(ctx context.Context, userID uuid.UUID, code 
 			})
 		}
 
-		commissionBps := 900
-		if s.cfg != nil && s.cfg.Worker.MarketplaceCommissionBPS > 0 {
-			commissionBps = s.cfg.Worker.MarketplaceCommissionBPS
+		commissionBps, err := s.promoCommissionBpsTx(ctx, tx, code, nil)
+		if err != nil {
+			return err
 		}
 
 		res, err := s.marketingSvc.ValidateAndCalculateCheckoutPromoTx(ctx, tx, userID, code, promotedInputs, commissionBps, time.Now().UTC())

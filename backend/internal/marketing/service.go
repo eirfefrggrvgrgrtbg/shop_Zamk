@@ -333,6 +333,15 @@ type PromotedOrderItemInput struct {
 	Quantity           int
 }
 
+// PromoSellerIDTx resolves the seller owning a promo code so checkout can freeze that seller's commission rate.
+func (s *Service) PromoSellerIDTx(ctx context.Context, tx DBExecutor, code string) (uuid.UUID, error) {
+	promo, err := s.repo.GetPromoCodeByCodeTx(ctx, tx, strings.TrimSpace(code))
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return promo.SellerID, nil
+}
+
 // ValidateAndCalculateCheckoutPromoTx validates a promo code against order items and customer, computing the exact financial split.
 func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 	ctx context.Context,

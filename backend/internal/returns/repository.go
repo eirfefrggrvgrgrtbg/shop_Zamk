@@ -2498,3 +2498,57 @@ func (r *Repository) GetReturnReceivingQueue(ctx context.Context) ([]AdminReturn
 
 	return items, nil
 }
+
+// getRefundOrderItems loads the order's items with the amount the customer actually paid per line,
+// taken from the immutable order_item_promotions snapshot when the line was promoted.
+func (r *Repository) getRefundOrderItems(ctx context.Context, db refundQuerier, orderID uuid.UUID) (map[uuid.UUID]orderItemInfo, error) {
+	rows, err := db.Query(ctx, `
+		SELECT oi.id, oi.title, oi.price_cents, oi.quantity,
+		       COALESCE(oip.total_customer_paid_cents, oi.price_cents * oi.quantity) AS paid_total_cents
+		FROM order_items oi
+		LEFT JOIN order_item_promotions oip ON oip.order_item_id = oi.id
+		WHERE oi.order_id = $1
+	`, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load refund order items: %w", err)
+	}
+	defer rows.Close()
+
+	items := make(map[uuid.UUID]orderItemInfo)
+	for rows.Next() {
+		var id uuid.UUID
+		var info orderItemInfo
+		if err := rows.Scan(&id, &info.Title, &info.PriceCents, &info.Quantity, &info.PaidTotalCents); err != nil {
+			return nil, fmt.Errorf("failed to scan refund order item: %w", err)
+		}
+		items[id] = info
+	}
+	return items, rows.Err()
+}
+
+// getActivelyRefundedReturnIDs lists other returns of the order holding a pending, processing or succeeded refund.
+func (r *Repository) getActivelyRefundedReturnIDs(ctx context.Context, db refundQuerier, orderID, excludeReturnID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := db.Query(ctx, `
+		SELECT DISTINCT return_id
+		FROM refunds
+		WHERE order_id = $1
+		  AND return_id IS NOT NULL
+		  AND return_id <> $2
+		  AND status IN ('pending', 'processing', 'succeeded', 'completed')
+		ORDER BY return_id
+	`, orderID, excludeReturnID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list refunded returns: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}

@@ -81,7 +81,11 @@ func setupTestOrderWithItem(t *testing.T, client *postgres.Client, sellerID uuid
 	require.NoError(t, err)
 
 	fullID := uuid.New()
-	_, err = client.Pool.Exec(ctx, "INSERT INTO order_fulfillments (id, order_id, seller_id, status) VALUES ($1, $2, $3, 'paid')", fullID, orderID, sellerID)
+	// Like checkout, freeze the seller's commission rule in force at order creation.
+	_, err = client.Pool.Exec(ctx, `
+		INSERT INTO order_fulfillments (id, order_id, seller_id, status, commission_bps)
+		VALUES ($1, $2, $3, 'paid', COALESCE((SELECT rate_bps FROM seller_commission_rules WHERE seller_id = $3 ORDER BY created_at DESC LIMIT 1), 900))
+	`, fullID, orderID, sellerID)
 	require.NoError(t, err)
 
 	itemID := uuid.New()
