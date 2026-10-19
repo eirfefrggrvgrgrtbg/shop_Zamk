@@ -29,6 +29,7 @@ import {
   deduplicateGalleryImages,
   getVisibleGalleryImages,
 } from '../lib/mediaFocus';
+import { ShareProductButton } from '../components/product/ShareProductButton';
 import { SimilarProductsBlock } from '../components/product/SimilarProductsBlock';
 import { ProductPresentationCore, formatReviewsCount } from '@zamk/shared';
 import type { Product, Review } from '../types/catalog';
@@ -490,13 +491,16 @@ export function ProductDetail() {
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-[1324px]">
         {/* Breadcrumbs */}
-        <nav className="flex items-center gap-2 text-xs sm:text-sm text-ash mb-5 sm:mb-6 flex-wrap">
-          <Link to="/" className="hover:text-graphite dark:hover:text-white transition-colors">Главная</Link>
-          <ChevronRight className="w-3.5 h-3.5" />
-          <Link to="/catalog" className="hover:text-graphite dark:hover:text-white transition-colors">Каталог</Link>
-          <ChevronRight className="w-3.5 h-3.5" />
-          <span className="text-graphite dark:text-white line-clamp-1">{product.name}</span>
-        </nav>
+        <div className="flex items-start justify-between gap-3 mb-5 sm:mb-6">
+          <nav className="flex items-center gap-2 text-xs sm:text-sm text-ash flex-wrap">
+            <Link to="/" className="hover:text-graphite dark:hover:text-white transition-colors">Главная</Link>
+            <ChevronRight className="w-3.5 h-3.5" />
+            <Link to="/catalog" className="hover:text-graphite dark:hover:text-white transition-colors">Каталог</Link>
+            <ChevronRight className="w-3.5 h-3.5" />
+            <span className="text-graphite dark:text-white line-clamp-1">{product.name}</span>
+          </nav>
+          {!token && <ShareProductButton title={product.name} />}
+        </div>
 
         <div className="bg-white dark:bg-[#121214] border border-border-lighter/70 dark:border-white/5 rounded-2xl p-5 sm:p-7 min-[1200px]:p-8 shadow-xs">
           <ProductPresentationCore
