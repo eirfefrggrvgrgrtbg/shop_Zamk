@@ -157,7 +157,7 @@ type VisionAnalysisResult struct {
 
 const (
 	CanonicalProvider = "cloud.ru"
-	CanonicalModelID  = "qwen/qwen3-vl-235b-a22b-instruct"
+	CanonicalModelID  = "Qwen/Qwen3.5-397B-A17B"
 
 	RunStatusPending          = "pending"
 	RunStatusProcessing       = "processing"

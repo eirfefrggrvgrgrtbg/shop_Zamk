@@ -182,3 +182,8 @@ func isRetryableProviderError(err error) bool {
 	}
 	return false
 }
+
+// IsRetryableProviderError reports whether a provider error is eligible for transient retry.
+func IsRetryableProviderError(err error) bool {
+	return isRetryableProviderError(err)
+}

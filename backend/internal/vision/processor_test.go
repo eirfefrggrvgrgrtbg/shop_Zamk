@@ -3,6 +3,8 @@ package vision_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
 	"testing"
 
@@ -618,4 +620,60 @@ func TestProcessor_Matrix(t *testing.T) {
 			assert.NotEqual(t, run.ID, c.ID)
 		}
 	})
+}
+
+func TestProviderErrorClassification(t *testing.T) {
+	tests := []struct {
+		name      string
+		err       error
+		retryable bool
+	}{
+		{
+			name:      "HTTP 400 Client Error -> permanent",
+			err:       &vision.ProviderHTTPError{StatusCode: 400, Err: vision.ErrProviderClient},
+			retryable: false,
+		},
+		{
+			name:      "HTTP 401 Unauthorized -> permanent",
+			err:       &vision.ProviderHTTPError{StatusCode: 401, Err: vision.ErrProviderClient},
+			retryable: false,
+		},
+		{
+			name:      "HTTP 403 Forbidden -> permanent",
+			err:       &vision.ProviderHTTPError{StatusCode: 403, Err: vision.ErrProviderClient},
+			retryable: false,
+		},
+		{
+			name:      "HTTP 404 Not Found -> permanent",
+			err:       &vision.ProviderHTTPError{StatusCode: 404, Err: vision.ErrProviderClient},
+			retryable: false,
+		},
+		{
+			name:      "HTTP 429 Rate Limit -> transient retryable",
+			err:       &vision.ProviderHTTPError{StatusCode: 429, Err: vision.ErrProviderRateLimit},
+			retryable: true,
+		},
+		{
+			name:      "HTTP 500 Server Error -> transient retryable",
+			err:       &vision.ProviderHTTPError{StatusCode: 500, Err: vision.ErrProviderServer},
+			retryable: true,
+		},
+		{
+			name:      "Transport Unexpected EOF -> transient retryable",
+			err:       fmt.Errorf("%w: transport error: %w", vision.ErrProviderNetwork, io.ErrUnexpectedEOF),
+			retryable: true,
+		},
+		{
+			name:      "Provider Timeout -> transient retryable",
+			err:       vision.ErrProviderTimeout,
+			retryable: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := vision.IsRetryableProviderError(tt.err)
+			assert.Equal(t, tt.retryable, got)
+		})
+	}
 }

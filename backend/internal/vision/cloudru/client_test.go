@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,12 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/vision/cloudru"
 	"github.com/google/uuid"
 )
+
+type roundTripFunc func(req *http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestCloudRuClient(t *testing.T) {
 	img1ID := uuid.New()
@@ -206,16 +213,205 @@ func TestCloudRuClient(t *testing.T) {
 		}
 	})
 
-	t.Run("Non-2xx Generic", func(t *testing.T) {
+	t.Run("HTTP 400 Bad Request", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error": "invalid parameter in schema"}`))
 		}))
 		defer ts.Close()
 
 		client, _ := cloudru.NewClient(cloudru.Config{BaseURL: ts.URL, APIKey: "fake"})
 		_, err := client.AnalyzeProduct(context.Background(), reqData)
-		if err == nil || !strings.Contains(err.Error(), "provider error HTTP 400") {
-			t.Fatalf("expected 400 error, got %v", err)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !errors.Is(err, vision.ErrProviderClient) {
+			t.Fatalf("expected errors.Is ErrProviderClient, got %v", err)
+		}
+		var httpErr *vision.ProviderHTTPError
+		if !errors.As(err, &httpErr) {
+			t.Fatalf("expected errors.As ProviderHTTPError, got %v", err)
+		}
+		if httpErr.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected status 400, got %d", httpErr.StatusCode)
+		}
+		if !strings.Contains(err.Error(), "HTTP 400") || !strings.Contains(err.Error(), "invalid parameter in schema") {
+			t.Fatalf("unexpected error message: %v", err)
+		}
+		if strings.Contains(err.Error(), "HTTP 404") {
+			t.Fatalf("error message must not mention 404: %v", err)
+		}
+	})
+
+	t.Run("HTTP 401 Unauthorized", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error": "invalid api token"}`))
+		}))
+		defer ts.Close()
+
+		client, _ := cloudru.NewClient(cloudru.Config{BaseURL: ts.URL, APIKey: "fake"})
+		_, err := client.AnalyzeProduct(context.Background(), reqData)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !errors.Is(err, vision.ErrProviderClient) {
+			t.Fatalf("expected errors.Is ErrProviderClient, got %v", err)
+		}
+		var httpErr *vision.ProviderHTTPError
+		if !errors.As(err, &httpErr) {
+			t.Fatalf("expected errors.As ProviderHTTPError, got %v", err)
+		}
+		if httpErr.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("expected status 401, got %d", httpErr.StatusCode)
+		}
+		if !strings.Contains(err.Error(), "HTTP 401") {
+			t.Fatalf("expected HTTP 401 in message, got %v", err)
+		}
+		if strings.Contains(err.Error(), "HTTP 400") {
+			t.Fatalf("error message must not mention HTTP 400: %v", err)
+		}
+	})
+
+	t.Run("HTTP 403 Forbidden", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error": "access denied to model"}`))
+		}))
+		defer ts.Close()
+
+		client, _ := cloudru.NewClient(cloudru.Config{BaseURL: ts.URL, APIKey: "fake"})
+		_, err := client.AnalyzeProduct(context.Background(), reqData)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !errors.Is(err, vision.ErrProviderClient) {
+			t.Fatalf("expected errors.Is ErrProviderClient, got %v", err)
+		}
+		var httpErr *vision.ProviderHTTPError
+		if !errors.As(err, &httpErr) {
+			t.Fatalf("expected errors.As ProviderHTTPError, got %v", err)
+		}
+		if httpErr.StatusCode != http.StatusForbidden {
+			t.Fatalf("expected status 403, got %d", httpErr.StatusCode)
+		}
+		if !strings.Contains(err.Error(), "HTTP 403") {
+			t.Fatalf("expected HTTP 403 in message, got %v", err)
+		}
+		if strings.Contains(err.Error(), "HTTP 400") {
+			t.Fatalf("error message must not mention HTTP 400: %v", err)
+		}
+	})
+
+	t.Run("HTTP 404 Not Found (Empty Body)", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer ts.Close()
+
+		client, _ := cloudru.NewClient(cloudru.Config{BaseURL: ts.URL, APIKey: "fake"})
+		_, err := client.AnalyzeProduct(context.Background(), reqData)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !errors.Is(err, vision.ErrProviderClient) {
+			t.Fatalf("expected errors.Is ErrProviderClient, got %v", err)
+		}
+		var httpErr *vision.ProviderHTTPError
+		if !errors.As(err, &httpErr) {
+			t.Fatalf("expected errors.As ProviderHTTPError, got %v", err)
+		}
+		if httpErr.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected status 404, got %d", httpErr.StatusCode)
+		}
+		expectedMsg := "provider client error: HTTP 404"
+		if err.Error() != expectedMsg {
+			t.Fatalf("expected exact message %q, got %q", expectedMsg, err.Error())
+		}
+		if strings.Contains(err.Error(), "HTTP 400") {
+			t.Fatalf("CRITICAL: HTTP 404 was incorrectly reported as HTTP 400: %v", err)
+		}
+	})
+
+	t.Run("HTTP 500 Server Error", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`internal server error`))
+		}))
+		defer ts.Close()
+
+		client, _ := cloudru.NewClient(cloudru.Config{BaseURL: ts.URL, APIKey: "fake"})
+		_, err := client.AnalyzeProduct(context.Background(), reqData)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !errors.Is(err, vision.ErrProviderServer) {
+			t.Fatalf("expected errors.Is ErrProviderServer, got %v", err)
+		}
+		var httpErr *vision.ProviderHTTPError
+		if !errors.As(err, &httpErr) {
+			t.Fatalf("expected errors.As ProviderHTTPError, got %v", err)
+		}
+		if httpErr.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("expected status 500, got %d", httpErr.StatusCode)
+		}
+		if !strings.Contains(err.Error(), "server error (5xx)") || !strings.Contains(err.Error(), "HTTP 500") {
+			t.Fatalf("expected 5xx/500 in message, got %v", err)
+		}
+		if strings.Contains(err.Error(), "HTTP 400") {
+			t.Fatalf("error message must not mention HTTP 400: %v", err)
+		}
+	})
+
+	t.Run("Transport Unexpected EOF", func(t *testing.T) {
+		mockClient := &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return nil, fmt.Errorf("Post %q: %w", req.URL.String(), io.ErrUnexpectedEOF)
+			}),
+		}
+		client, _ := cloudru.NewClient(cloudru.Config{BaseURL: "http://example.com", APIKey: "fake", HTTPClient: mockClient})
+		_, err := client.AnalyzeProduct(context.Background(), reqData)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !errors.Is(err, vision.ErrProviderNetwork) {
+			t.Fatalf("expected errors.Is ErrProviderNetwork, got %v", err)
+		}
+		if !errors.Is(err, io.ErrUnexpectedEOF) {
+			t.Fatalf("expected errors.Is io.ErrUnexpectedEOF, got %v", err)
+		}
+		if !strings.Contains(err.Error(), "unexpected EOF") {
+			t.Fatalf("expected 'unexpected EOF' in message, got %v", err)
+		}
+		if !strings.Contains(err.Error(), "provider_network_error") {
+			t.Fatalf("expected provider_network_error in message, got %v", err)
+		}
+		if strings.Contains(err.Error(), "HTTP 400") {
+			t.Fatalf("error message must not mention HTTP 400: %v", err)
+		}
+	})
+
+	t.Run("Error Body Sanitization", func(t *testing.T) {
+		secretKey := "NzIyMDdhZTktOTk2OS00MjQ4LWJhMjUtNDM4YjdhYmZhMGJl.860fa56016a4a5ee"
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf(`{"echoed_auth": "Bearer %s", "api_key": "%s", "normal": "valid_reason"}`, secretKey, secretKey)))
+		}))
+		defer ts.Close()
+
+		client, _ := cloudru.NewClient(cloudru.Config{BaseURL: ts.URL, APIKey: secretKey})
+		_, err := client.AnalyzeProduct(context.Background(), reqData)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if strings.Contains(err.Error(), secretKey) {
+			t.Fatalf("CRITICAL SECURITY LEAK: secret key reflected in error: %v", err)
+		}
+		if !strings.Contains(err.Error(), "[REDACTED]") {
+			t.Fatalf("expected [REDACTED] in error message, got %v", err)
+		}
+		if !strings.Contains(err.Error(), "valid_reason") {
+			t.Fatalf("expected normal safe text to be preserved, got %v", err)
 		}
 	})
 

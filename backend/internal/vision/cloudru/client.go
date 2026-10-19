@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -29,7 +30,7 @@ var (
 
 const (
 	DefaultBaseURL = "https://foundation-models.api.cloud.ru/v1"
-	DefaultModel   = "qwen/qwen3-vl-235b-a22b-instruct"
+	DefaultModel   = "Qwen/Qwen3.5-397B-A17B"
 )
 
 type Config struct {
@@ -38,7 +39,10 @@ type Config struct {
 	Model      string
 	Timeout    time.Duration
 	MaxRetries int // Orchestrator handles this, client just makes one call
+	HTTPClient *http.Client
 }
+
+type ProviderHTTPError = vision.ProviderHTTPError
 
 type Client struct {
 	cfg        Config
@@ -59,11 +63,16 @@ func NewClient(cfg Config) (*Client, error) {
 		cfg.Timeout = 60 * time.Second
 	}
 
-	return &Client{
-		cfg: cfg,
-		httpClient: &http.Client{
+	hc := cfg.HTTPClient
+	if hc == nil {
+		hc = &http.Client{
 			Timeout: cfg.Timeout,
-		},
+		}
+	}
+
+	return &Client{
+		cfg:        cfg,
+		httpClient: hc,
 	}, nil
 }
 
@@ -94,19 +103,31 @@ func (c *Client) AnalyzeProduct(ctx context.Context, req vision.VisionAnalysisRe
 		if errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err) {
 			return nil, ErrProviderTimeout
 		}
-		return nil, fmt.Errorf("%w: transport error: %v", ErrProviderNetwork, err)
+		return nil, fmt.Errorf("%w: transport error: %w", ErrProviderNetwork, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		safeBody := c.sanitizeErrorBody(resp.Body)
 		if resp.StatusCode == http.StatusTooManyRequests {
-			return nil, fmt.Errorf("%w: %s", ErrProviderRateLimit, string(body))
+			return nil, &vision.ProviderHTTPError{
+				StatusCode: resp.StatusCode,
+				Body:       safeBody,
+				Err:        ErrProviderRateLimit,
+			}
 		}
 		if resp.StatusCode >= 500 {
-			return nil, fmt.Errorf("%w: HTTP %d: %s", ErrProviderServer, resp.StatusCode, string(body))
+			return nil, &vision.ProviderHTTPError{
+				StatusCode: resp.StatusCode,
+				Body:       safeBody,
+				Err:        ErrProviderServer,
+			}
 		}
-		return nil, fmt.Errorf("%w: %s", ErrProviderClient, string(body))
+		return nil, &vision.ProviderHTTPError{
+			StatusCode: resp.StatusCode,
+			Body:       safeBody,
+			Err:        ErrProviderClient,
+		}
 	}
 
 	var providerResp struct {
@@ -240,4 +261,53 @@ CRITICAL INSTRUCTIONS:
 `)
 
 	return sb.String()
+}
+
+var (
+	bearerPattern = regexp.MustCompile(`(?i)bearer\s+[a-zA-Z0-9._~+/-]+=*`)
+	secretPattern = regexp.MustCompile(`(?i)(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*["']?[a-zA-Z0-9._~+/-]+`)
+)
+
+func (c *Client) sanitizeErrorBody(r io.Reader) string {
+	if r == nil {
+		return ""
+	}
+	limited, _ := io.ReadAll(io.LimitReader(r, 1024))
+	bodyStr := strings.TrimSpace(string(limited))
+	if bodyStr == "" {
+		return ""
+	}
+
+	if c.cfg.APIKey != "" {
+		bodyStr = strings.ReplaceAll(bodyStr, c.cfg.APIKey, "[REDACTED]")
+	}
+
+	bodyStr = bearerPattern.ReplaceAllString(bodyStr, "Bearer [REDACTED]")
+	bodyStr = secretPattern.ReplaceAllStringFunc(bodyStr, func(match string) string {
+		parts := strings.SplitN(match, ":", 2)
+		if len(parts) == 2 {
+			return parts[0] + ": [REDACTED]"
+		}
+		parts = strings.SplitN(match, "=", 2)
+		if len(parts) == 2 {
+			return parts[0] + "=[REDACTED]"
+		}
+		return "[REDACTED]"
+	})
+
+	bodyStr = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == '\t' {
+			return ' '
+		}
+		if r < 32 || r == 127 {
+			return -1
+		}
+		return r
+	}, bodyStr)
+
+	for strings.Contains(bodyStr, "  ") {
+		bodyStr = strings.ReplaceAll(bodyStr, "  ", " ")
+	}
+
+	return strings.TrimSpace(bodyStr)
 }
