@@ -277,6 +277,7 @@ func New(
 	r.Route("/api/public", func(r chi.Router) {
 		r.Get("/categories", catalogHandler.ListCategories)
 		r.Get("/brands", catalogHandler.ListBrands)
+		r.Get("/brands/{idOrSlug}", productsHandler.GetPublicBrandStore)
 		r.Get("/products", productsHandler.ListPublicProducts)
 		r.Get("/product-previews/{token}", productsHandler.GetProductPreviewByToken)
 		r.Get("/direct-sale", productsHandler.GetDirectSaleProducts)

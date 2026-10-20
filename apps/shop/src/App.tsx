@@ -131,7 +131,7 @@ function App() {
                     <Route path="/auction" element={<AuctionPage />} />
                     <Route path="/auction/lots/:id" element={<AuctionLotDetail />} />
                     <Route path="/auction/wins" element={<AuctionWins />} />
-                    <Route path="/seller/:slugOrId" element={<SellerDetail />} />
+                    <Route path="/seller/:slugOrId" element={<BrandDetail />} />
                     <Route path="/brand/:id" element={<BrandDetail />} />
                     <Route path="/cart" element={<Cart />} />
                     <Route path="/checkout" element={<Checkout />} />

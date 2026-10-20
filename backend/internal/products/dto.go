@@ -135,6 +135,15 @@ type ProductListResponse struct {
 	TotalCount int       `json:"totalCount"`
 }
 
+type PublicBrand struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	BrandName   string    `json:"brandName"`
+	Slug        string    `json:"slug"`
+	Description *string   `json:"description,omitempty"`
+	LogoURL     *string   `json:"logoUrl,omitempty"`
+}
+
 type PublicProduct struct {
 	ID               uuid.UUID              `json:"id"`
 	SellerID         uuid.UUID              `json:"sellerId"`

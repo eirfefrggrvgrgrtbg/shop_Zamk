@@ -76,6 +76,15 @@ export const getPublicSeller = async (slugOrId: string, params?: any): Promise<i
   return res;
 };
 
+export const getPublicBrand = async (slugOrId: string, params?: any): Promise<import('./types').PublicBrandStorefrontResponse> => {
+  const res = await request<import('./types').PublicBrandStorefrontResponse>('GET', `/public/brands/${slugOrId}`, { params });
+  if (res && res.items) {
+    res.items = res.items || [];
+  }
+  return res;
+};
+
+
 // --- Auctions ---
 export const getActiveAuctions = async (): Promise<AuctionEvent[]> => {
   const res = await request<any>('GET', '/public/auctions/active');

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { fetchBrands } from '../api/publicCatalog';
 import type { Brand } from '../types/catalog';
 
@@ -64,23 +65,26 @@ export function Brands() {
         ) : (
           <div className='mt-10 grid grid-cols-1 md:grid-cols-2 gap-5'>
             {brands.map((brand) => (
-              <article
+              <Link
                 key={brand.id}
-                className="rounded-[2rem] border border-border-lighter bg-white/70 p-6 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-white/5"
+                to={`/brand/${brand.id}`}
+                className="group block rounded-[2rem] border border-border-lighter bg-white/70 p-6 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-white/5 transition-all hover:-translate-y-1 hover:shadow-cloud dark:hover:shadow-none"
               >
                 <div className="flex items-center gap-4">
                   <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-ice text-lg font-semibold text-graphite dark:bg-white/10 dark:text-white">
                     {brand.image ? <img src={brand.image} alt={brand.name} className="h-full w-full object-cover" /> : brand.name.slice(0, 1)}
                   </div>
                   <div>
-                    <h3 className="text-2xl font-serif font-medium text-graphite dark:text-white">{brand.name}</h3>
-                    <p className="mt-1 text-xs uppercase tracking-[0.14em] text-ash">{brand.id}</p>
+                    <h3 className="text-2xl font-serif font-medium text-graphite dark:text-white group-hover:underline">{brand.name}</h3>
+                    <p className="mt-1 text-xs uppercase tracking-[0.14em] text-ash">Смотреть витрину →</p>
                   </div>
                 </div>
-                <p className="mt-4 text-sm text-graphite-light dark:text-white/70">
-                  Данные бренда загружены из API.
-                </p>
-              </article>
+                {brand.description && (
+                  <p className="mt-4 text-sm text-graphite-light dark:text-white/70 line-clamp-2">
+                    {brand.description}
+                  </p>
+                )}
+              </Link>
             ))}
           </div>
         )}

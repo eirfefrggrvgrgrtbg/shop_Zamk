@@ -37,6 +37,13 @@ export function ProductCard({ product, previewUrl, placement = 'catalog_grid' }:
   const { addItem } = useCart();
   const favorited = isFavorite(product.id);
   const cardTargetUrl = previewUrl || `/product/${product.id}`;
+  const brandTargetUrl = !product.isPreview
+    ? (product.brandId
+        ? `/brand/${product.brandId}`
+        : (product.sellerSlug
+            ? `/seller/${product.sellerSlug}`
+            : (product.sellerId ? `/brand/${product.sellerId}` : null)))
+    : null;
 
   const [isQuickBuyOpen, setIsQuickBuyOpen] = useState(false);
   const [isLoadingVariants, setIsLoadingVariants] = useState(false);
@@ -170,8 +177,8 @@ export function ProductCard({ product, previewUrl, placement = 'catalog_grid' }:
           <div className="flex flex-col text-[11px] leading-relaxed text-black dark:text-gray-100 font-medium">
             <div className="uppercase tracking-widest text-[9px] mb-2 border-b border-dashed border-gray-400 dark:border-zinc-500 pb-2">
               <div className="flex gap-2 items-center text-black/60 dark:text-white/60">
-                {product.sellerSlug && !product.isPreview ? (
-                  <Link to={`/seller/${product.sellerSlug}`} className="hover:underline hover:text-black dark:hover:text-white transition-colors">
+                {brandTargetUrl ? (
+                  <Link to={brandTargetUrl} className="hover:underline hover:text-black dark:hover:text-white transition-colors">
                     {product.sellerName || product.brand}
                   </Link>
                 ) : (

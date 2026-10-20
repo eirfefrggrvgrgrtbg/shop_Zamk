@@ -20,7 +20,7 @@ export function mapProductSummaryToCatalog(
   return {
     id: p.id,
     name: p.title,
-    brand: brandName || (p.brandId ? (cachedBrands[p.brandId] || 'Бренд не указан') : 'Бренд не указан'),
+    brand: brandName || (p.brandId ? (cachedBrands[p.brandId] || p.sellerName || 'Бренд не указан') : (p.sellerName || 'Бренд не указан')),
     brandId: p.brandId || '',
     price,
     oldPrice,
@@ -49,8 +49,8 @@ export async function fetchBrands(): Promise<UIBrand[]> {
   const mapped = brands.map(b => ({
     id: b.id,
     name: b.name,
-    description: 'Описание бренда пока не указано.',
-    country: 'Страна не указана',
+    description: b.description || '',
+    country: '',
     image: b.logoUrl || ''
   }));
 
@@ -227,6 +227,65 @@ export async function fetchDirectSaleProducts(params?: any): Promise<{ items: UI
   };
 }
 
+export interface PublicBrandStorefront {
+  brand: {
+    id: string;
+    name: string;
+    slug: string;
+    description?: string;
+    logoUrl?: string;
+    coverUrl?: string;
+  };
+  items: UIProduct[];
+  totalCount: number;
+}
+
+export async function fetchPublicBrand(slugOrId: string, params?: any): Promise<PublicBrandStorefront> {
+  if (Object.keys(cachedBrands).length === 0) {
+    await fetchBrands().catch(() => {});
+  }
+
+  let res: any;
+  try {
+    const { getPublicBrand } = await import('@zamk/api-client/src/public');
+    res = await getPublicBrand(slugOrId, params);
+  } catch (err: any) {
+    // If brand endpoint gave 404 or failed, fallback to getPublicSeller
+    res = await getPublicSeller(slugOrId, params);
+  }
+
+  const brandData = res.brand || res.seller || {};
+  return {
+    brand: {
+      id: brandData.id,
+      name: brandData.name || brandData.brandName || 'Бренд',
+      slug: brandData.slug || slugOrId,
+      description: brandData.description || undefined,
+      logoUrl: brandData.logoUrl || undefined,
+      coverUrl: brandData.coverUrl || undefined,
+    },
+    items: (res.items || []).map((p: any) => ({
+      id: p.id,
+      name: p.title,
+      brand: (p.brandId && cachedBrands[p.brandId]) || p.brand || brandData.name || brandData.brandName || 'Бренд не указан',
+      brandId: p.brandId || brandData.id || '',
+      price: p.priceCents / 100,
+      oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
+      discountPrice: p.oldPriceCents && p.oldPriceCents > p.priceCents ? p.priceCents / 100 : undefined,
+      image: p.mainImageUrl || PRODUCT_PLACEHOLDER_IMAGE,
+      images: p.mainImageUrl ? [{ url: p.mainImageUrl }] : [],
+      category: p.categoryId || 'Категория не указана',
+      sellerId: p.sellerId,
+      sellerSlug: p.sellerSlug,
+      sellerName: p.sellerName,
+      rating: p.rating?.average,
+      reviewsCount: p.rating?.count,
+      isNew: false,
+    })),
+    totalCount: res.totalCount ?? (res.items ? res.items.length : 0),
+  };
+}
+
 export async function fetchPublicSeller(slugOrId: string, params?: any): Promise<{ seller: any, items: UIProduct[], totalCount: number }> {
   if (Object.keys(cachedBrands).length === 0) {
     await fetchBrands().catch(() => {});
@@ -239,7 +298,7 @@ export async function fetchPublicSeller(slugOrId: string, params?: any): Promise
     items: res.items.map((p: any) => ({
       id: p.id,
       name: p.title,
-      brand: p.brandId ? (cachedBrands[p.brandId] || 'Бренд не указан') : 'Бренд не указан',
+      brand: p.brandId ? (cachedBrands[p.brandId] || p.sellerName || 'Бренд не указан') : (p.sellerName || 'Бренд не указан'),
       brandId: p.brandId || '',
       price: p.priceCents / 100,
       oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,
@@ -266,7 +325,7 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
   return {
     id: p.id,
     name: p.title,
-    brand: p.brandId ? (cachedBrands[p.brandId] || 'Бренд не указан') : 'Бренд не указан',
+    brand: p.brandId ? (cachedBrands[p.brandId] || p.sellerName || 'Бренд не указан') : (p.sellerName || 'Бренд не указан'),
     brandId: p.brandId || '',
     price: p.priceCents / 100,
     oldPrice: p.oldPriceCents ? p.oldPriceCents / 100 : undefined,

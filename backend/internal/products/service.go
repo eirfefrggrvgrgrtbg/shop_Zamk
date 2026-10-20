@@ -1762,6 +1762,69 @@ func (s *Service) GetPublicProduct(ctx context.Context, idOrSlug string) (Public
 	return MapToPublicProduct(*p), nil
 }
 
+func (s *Service) GetPublicBrand(ctx context.Context, idOrSlug string) (*PublicBrand, *uuid.UUID, error) {
+	parsedID, parseErr := uuid.Parse(idOrSlug)
+	if parseErr == nil {
+		b, err := s.repo.GetBrandByID(ctx, parsedID)
+		if err == nil && b.IsActive {
+			brand := &PublicBrand{
+				ID:          b.ID,
+				Name:        b.Name,
+				BrandName:   b.Name,
+				Slug:        b.Slug,
+				Description: b.Description,
+				LogoURL:     b.LogoURL,
+			}
+			return brand, &b.ID, nil
+		}
+	}
+
+	b, err := s.repo.GetBrandBySlug(ctx, idOrSlug)
+	if err == nil && b.IsActive {
+		brand := &PublicBrand{
+			ID:          b.ID,
+			Name:        b.Name,
+			BrandName:   b.Name,
+			Slug:        b.Slug,
+			Description: b.Description,
+			LogoURL:     b.LogoURL,
+		}
+		return brand, &b.ID, nil
+	}
+
+	if s.sellerRepo != nil {
+		var seller *sellers.Seller
+		var sellerErr error
+		if parseErr == nil {
+			seller, sellerErr = s.sellerRepo.GetSellerByID(ctx, parsedID)
+		} else {
+			seller, sellerErr = s.sellerRepo.GetSellerBySlug(ctx, idOrSlug)
+		}
+		if sellerErr == nil && seller != nil && seller.Status == sellers.StatusActive {
+			brandName := ""
+			if seller.BrandName != nil {
+				brandName = *seller.BrandName
+			}
+			slug := ""
+			if seller.Slug != nil {
+				slug = *seller.Slug
+			}
+			brand := &PublicBrand{
+				ID:          seller.ID,
+				Name:        brandName,
+				BrandName:   brandName,
+				Slug:        slug,
+				Description: seller.Description,
+				LogoURL:     seller.LogoURL,
+			}
+			return brand, nil, nil
+		}
+	}
+
+	return nil, nil, ErrBrandNotFound
+}
+
+
 
 func (s *Service) UpdateVariantPricesForSeller(ctx context.Context, currentUserID uuid.UUID, productID uuid.UUID, req UpdateVariantPricesRequest) (Product, error) {
 	seller, err := s.getSellerForUser(ctx, currentUserID)

@@ -2055,3 +2055,59 @@ func (r *Repository) FindProductCreateIdempotency(ctx context.Context, sellerID 
 		RequestHash: hash,
 	}, nil
 }
+
+type catalogBrandRow struct {
+	ID          uuid.UUID
+	Name        string
+	Slug        string
+	Description *string
+	LogoURL     *string
+	IsActive    bool
+}
+
+func (r *Repository) GetBrandByID(ctx context.Context, id uuid.UUID) (*catalogBrandRow, error) {
+	query := `
+		SELECT id, name, slug, description, logo_url, is_active
+		FROM brands
+		WHERE id = $1
+	`
+	var b catalogBrandRow
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&b.ID, &b.Name, &b.Slug, &b.Description, &b.LogoURL, &b.IsActive,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBrandNotFound
+		}
+		return nil, fmt.Errorf("failed to get brand by id: %w", err)
+	}
+	return &b, nil
+}
+
+func (r *Repository) GetBrandBySlug(ctx context.Context, slug string) (*catalogBrandRow, error) {
+	query := `
+		SELECT id, name, slug, description, logo_url, is_active
+		FROM brands
+		WHERE slug = $1
+	`
+	var b catalogBrandRow
+	err := r.db.QueryRow(ctx, query, slug).Scan(
+		&b.ID, &b.Name, &b.Slug, &b.Description, &b.LogoURL, &b.IsActive,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBrandNotFound
+		}
+		return nil, fmt.Errorf("failed to get brand by slug: %w", err)
+	}
+	return &b, nil
+}
+
+func (r *Repository) GetLinkedSellerForBrand(ctx context.Context, brandID uuid.UUID) (*uuid.UUID, error) {
+	var sellerID uuid.UUID
+	err := r.db.QueryRow(ctx, "SELECT seller_id FROM seller_brands WHERE brand_id = $1 AND status = 'active' LIMIT 1", brandID).Scan(&sellerID)
+	if err != nil {
+		return nil, err
+	}
+	return &sellerID, nil
+}

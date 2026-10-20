@@ -1127,6 +1127,104 @@ func (h *Handler) GetPublicSellerStore(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func (h *Handler) GetPublicBrandStore(w http.ResponseWriter, r *http.Request) {
+	idOrSlug := chi.URLParam(r, "idOrSlug")
+	if idOrSlug == "" {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "Missing brand id or slug")
+		return
+	}
+
+	brand, brandID, err := h.service.GetPublicBrand(r.Context(), idOrSlug)
+	if err != nil {
+		h.writeError(w, http.StatusNotFound, "not_found", "Brand not found or not available")
+		return
+	}
+
+	filter := PublicProductFilter{}
+	if brandID != nil {
+		filter.BrandID = brandID
+	} else {
+		filter.SellerID = &brand.ID
+	}
+
+	if q := r.URL.Query().Get("q"); q != "" {
+		filter.Query = &q
+	}
+	if catID := r.URL.Query().Get("categoryId"); catID != "" && catID != "all" {
+		if id, err := uuid.Parse(catID); err == nil {
+			filter.CategoryID = &id
+		} else {
+			h.writeError(w, http.StatusBadRequest, "invalid_categoryId", "Invalid categoryId format")
+			return
+		}
+	}
+	if size := r.URL.Query().Get("size"); size != "" {
+		filter.Size = &size
+	}
+	if minPriceStr := r.URL.Query().Get("minPriceCents"); minPriceStr != "" {
+		var p int64
+		fmt.Sscanf(minPriceStr, "%d", &p)
+		filter.MinPriceCents = &p
+	}
+	if maxPriceStr := r.URL.Query().Get("maxPriceCents"); maxPriceStr != "" {
+		var p int64
+		fmt.Sscanf(maxPriceStr, "%d", &p)
+		filter.MaxPriceCents = &p
+	}
+	if filter.MinPriceCents != nil && filter.MaxPriceCents != nil {
+		if *filter.MinPriceCents > *filter.MaxPriceCents {
+			h.writeError(w, http.StatusBadRequest, "invalid_price_range", "minPriceCents cannot be greater than maxPriceCents")
+			return
+		}
+	}
+	if inStockStr := r.URL.Query().Get("inStock"); inStockStr == "true" {
+		t := true
+		filter.InStock = &t
+	}
+	if sort := r.URL.Query().Get("sort"); sort != "" {
+		filter.Sort = &sort
+	}
+
+	p := pagination.FromRequest(r)
+	limit, offset := p.Limit, p.Offset
+
+	listResp, err := h.service.ListPublicProducts(r.Context(), filter, limit, offset)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get brand products")
+		return
+	}
+
+	// Fallback check: if brandID had 0 products, but there's a linked seller in seller_brands, try seller's products
+	if listResp.TotalCount == 0 && brandID != nil {
+		if linkedSellerID, err := h.service.repo.GetLinkedSellerForBrand(r.Context(), *brandID); err == nil && linkedSellerID != nil {
+			fallbackFilter := filter
+			fallbackFilter.BrandID = nil
+			fallbackFilter.SellerID = linkedSellerID
+			if fallbackResp, err := h.service.ListPublicProducts(r.Context(), fallbackFilter, limit, offset); err == nil && fallbackResp.TotalCount > 0 {
+				listResp = fallbackResp
+			}
+		}
+	}
+
+	type brandStoreResponse struct {
+		Brand      any `json:"brand"`
+		Seller     any `json:"seller,omitempty"`
+		Items      any `json:"items"`
+		TotalCount int `json:"totalCount"`
+	}
+
+	resp := brandStoreResponse{
+		Brand:      brand,
+		Seller:     brand,
+		Items:      listResp.Items,
+		TotalCount: listResp.TotalCount,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+
 func (h *Handler) UpdatePrices(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	productID, ok := h.parseUUIDParam(w, r, "id")

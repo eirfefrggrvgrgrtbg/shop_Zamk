@@ -225,6 +225,7 @@ export interface Brand {
   id: string;
   name: string;
   slug: string;
+  description?: string;
   logoUrl?: string;
 }
 
@@ -3200,4 +3201,11 @@ export interface AdminCollectionSubmission extends CollectionSubmission {
   brandName: string;
   collectionSlug: string;
   reviewerName?: string | null;
+}
+
+export interface PublicBrandStorefrontResponse {
+  brand: Brand & { brandName?: string };
+  seller?: any;
+  items: ProductSummary[];
+  totalCount: number;
 }

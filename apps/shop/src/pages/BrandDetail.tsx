@@ -3,34 +3,50 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ProductCard } from '../components/product/ProductCard';
-import { InfoPanel, SectionHeader } from '../components/editorial/StudioKit';
-import { fetchBrands, fetchProducts } from '../api/publicCatalog';
-import type { Brand, Product } from '../types/catalog';
+import { fetchPublicBrand, type PublicBrandStorefront } from '../api/publicCatalog';
+import type { Product } from '../types/catalog';
+
+function formatItemCount(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod100 >= 11 && mod100 <= 14) return `${count} вещей`;
+  if (mod10 === 1) return `${count} вещь`;
+  if (mod10 >= 2 && mod10 <= 4) return `${count} вещи`;
+  return `${count} вещей`;
+}
 
 export function BrandDetail() {
-  const { id } = useParams<{ id: string }>();
-  const [brand, setBrand] = useState<Brand | null>(null);
+  const params = useParams<{ id?: string; slugOrId?: string }>();
+  const identifier = params.id || params.slugOrId;
+
+  const [brand, setBrand] = useState<PublicBrandStorefront['brand'] | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadBrand() {
-      if (!id) return;
+      if (!identifier) return;
       setIsLoading(true);
-      setError('');
+      setError(null);
 
       try {
-        const [brands, productsRes] = await Promise.all([fetchBrands(), fetchProducts({ brandId: id })]);
+        const res = await fetchPublicBrand(identifier);
         if (!cancelled) {
-          setBrand(brands.find((item) => item.id === id) ?? null);
-          setProducts(productsRes.items);
+          setBrand(res?.brand || null);
+          setProducts(res?.items || []);
+          setTotalCount(res?.totalCount || 0);
         }
-      } catch {
+      } catch (err: any) {
         if (!cancelled) {
-          setError('Не удалось загрузить бренд. Проверьте, запущен ли backend.');
+          if (err?.status === 404 || err?.response?.status === 404 || err?.message?.includes('404')) {
+            setError('not_found');
+          } else {
+            setError('server_error');
+          }
         }
       } finally {
         if (!cancelled) {
@@ -44,69 +60,125 @@ export function BrandDetail() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [identifier]);
 
   if (isLoading) {
     return (
-      <div className='relative z-10 min-h-screen pt-36'>
-        <div className='container mx-auto px-4 sm:px-6 max-w-4xl text-center text-ash'>Загрузка бренда...</div>
+      <div className='relative z-10 min-h-screen pt-36 pb-20'>
+        <div className='container mx-auto px-4 sm:px-6 max-w-xl text-center text-xs font-mono uppercase tracking-widest text-ash'>
+          Загрузка витрины бренда...
+        </div>
       </div>
     );
   }
 
   if (error || !brand) {
     return (
-      <div className='relative z-10 min-h-screen pt-36'>
-        <div className='container mx-auto px-4 sm:px-6 max-w-4xl text-center'>
-          <h1 className='text-4xl font-serif text-graphite dark:text-white'>{error || 'Бренд не найден'}</h1>
-          <Link to='/brands' className='inline-block mt-6'>
-            <Button>К брендам</Button>
-          </Link>
+      <div className='relative z-10 min-h-screen pt-36 pb-20'>
+        <div className='container mx-auto px-4 sm:px-6 max-w-xl text-center'>
+          <h1 className='text-3xl md:text-4xl font-serif text-graphite dark:text-white mb-3'>
+            {error === 'server_error' ? 'Ошибка загрузки' : 'Бренд не найден'}
+          </h1>
+          <p className='text-sm text-graphite-light dark:text-white/60 mb-6'>
+            {error === 'server_error'
+              ? 'Не удалось загрузить данные бренда. Пожалуйста, попробуйте позже.'
+              : 'Возможно, страница бренда была перемещена или ещё не опубликована.'}
+          </p>
+          <div className='flex justify-center gap-3'>
+            <Link to='/brands'>
+              <Button>К брендам</Button>
+            </Link>
+            <Link to='/catalog'>
+              <Button variant='outline'>В каталог</Button>
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className='relative z-10 min-h-screen pt-16 md:pt-20 pb-20'>
+    <div className='relative z-10 min-h-screen pt-24 md:pt-28 pb-20'>
       <div className='container mx-auto px-4 sm:px-6 max-w-[1400px]'>
-        <Link to='/brands' className='inline-flex items-center gap-2 text-sm text-ash dark:text-white/60 hover:text-graphite dark:hover:text-white'>
-          <ArrowLeft className='w-4 h-4' /> Все бренды
+        {/* Navigation Breadcrumb */}
+        <Link
+          to='/brands'
+          className='inline-flex items-center gap-2 text-xs uppercase tracking-widest text-ash hover:text-graphite dark:text-white/60 dark:hover:text-white transition-colors'
+        >
+          <ArrowLeft className='w-3.5 h-3.5' /> Все бренды
         </Link>
 
-        <section className='mt-6 overflow-hidden rounded-[0.8rem] border border-white/45 dark:border-white/10 bg-white/16 dark:bg-white/5 backdrop-blur-sm'>
-          <div className='relative h-[210px] md:h-[270px]'>
-            <div className='absolute inset-0 bg-[radial-gradient(ellipse_at_18%_50%,rgba(166,194,223,0.54),transparent_50%),radial-gradient(ellipse_at_56%_48%,rgba(198,217,238,0.68),transparent_56%),radial-gradient(ellipse_at_84%_52%,rgba(170,197,226,0.55),transparent_52%)] dark:opacity-20' />
-            <div className='absolute inset-0 bg-[linear-gradient(180deg,rgba(242,247,252,0.74),rgba(236,242,249,0.64))] dark:hidden' />
-            <div className='relative z-10 h-full px-5 md:px-10 flex flex-col items-start justify-center gap-2 md:flex-row md:items-center md:justify-between md:gap-7'>
-              <h2 className='font-serif text-[clamp(2.2rem,6.2vw,6.4rem)] text-white/43 dark:text-white/30 leading-[0.8] tracking-[-0.03em]'>{brand.country}</h2>
-              <h3 className='font-serif text-[clamp(2.1rem,5.9vw,6.2rem)] text-white/42 dark:text-white/30 leading-[0.82] tracking-[-0.03em] text-center'>{brand.name}</h3>
-              <div className='flex h-[124px] w-[96px] md:h-[154px] md:w-[118px] items-center justify-center overflow-hidden border border-border-lighter dark:border-white/20 bg-white/50 dark:bg-black/30'>
-                {brand.image ? <img src={brand.image} alt={brand.name} className='h-full w-full object-cover grayscale' /> : <span className='text-4xl font-serif text-ash'>{brand.name.slice(0, 1)}</span>}
+        {/* Optional Cover Banner */}
+        {brand.coverUrl && (
+          <div className='mt-6 mb-8 overflow-hidden rounded-[1.5rem] max-h-[380px] border border-border-lighter dark:border-white/10'>
+            <img src={brand.coverUrl} alt={`${brand.name} cover`} className='w-full h-full object-cover' />
+          </div>
+        )}
+
+        {/* Brand Header Identity */}
+        <section className='mt-6 pb-10 border-b border-border-lighter dark:border-white/10'>
+          <div className='flex flex-col sm:flex-row items-start sm:items-center gap-6 sm:gap-8'>
+            {brand.logoUrl && (
+              <div className='w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl border border-border-lighter dark:border-white/10 overflow-hidden bg-white/70 dark:bg-white/5 p-2 shrink-0 flex items-center justify-center backdrop-blur-sm shadow-xs'>
+                <img src={brand.logoUrl} alt={`${brand.name} logo`} className='w-full h-full object-contain' />
               </div>
+            )}
+            <div className='flex-1 min-w-0'>
+              <div className='flex items-center gap-3 mb-2'>
+                <span className='text-[10px] font-mono uppercase tracking-[0.2em] text-ash'>
+                  Независимый бренд
+                </span>
+              </div>
+              <h1 className='text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif text-graphite dark:text-white tracking-tight leading-tight'>
+                {brand.name}
+              </h1>
+              {brand.description && (
+                <p className='mt-4 max-w-2xl text-sm md:text-base text-graphite-light dark:text-white/70 font-light leading-relaxed'>
+                  {brand.description}
+                </p>
+              )}
             </div>
           </div>
         </section>
 
-        <div className='mt-8 grid grid-cols-1 md:grid-cols-2 gap-5'>
-          <InfoPanel title='Описание бренда'>{brand.description || 'Информация пока не указана.'}</InfoPanel>
-          <InfoPanel title='Детали'>{brand.origin || brand.country || 'Информация пока не указана.'}</InfoPanel>
+        {/* Product Catalog Section */}
+        <div className='mt-10 mb-8 flex items-baseline justify-between gap-4'>
+          <div>
+            <p className='text-[10px] font-mono uppercase tracking-widest text-ash mb-1'>Архив</p>
+            <h2 className='text-2xl md:text-3xl font-serif text-graphite dark:text-white'>
+              Коллекция
+            </h2>
+          </div>
+          <span className='text-xs font-mono uppercase tracking-widest text-ash'>
+            {totalCount > 0 ? formatItemCount(totalCount) : '0 вещей'}
+          </span>
         </div>
 
-        <section className='mt-12'>
-          <SectionHeader label='Товары бренда' title={`${brand.name} в каталоге`} description={products.length > 0 ? `Доступно ${products.length} позиций` : 'Товары бренда пока не найдены'} />
-          {products.length > 0 ? (
-            <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
-              {products.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
+        {/* Products Grid */}
+        {products.length > 0 ? (
+          <div className='grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6'>
+            {products.map((product) => (
+              <ProductCard key={product.id} product={product} placement='brand_storefront' />
+            ))}
+          </div>
+        ) : (
+          <div className='py-20 px-6 rounded-2xl border border-dashed border-border-lighter dark:border-white/10 bg-white/40 dark:bg-white/5 text-center'>
+            <h3 className='text-xl md:text-2xl font-serif text-graphite dark:text-white mb-2'>
+              В архиве бренда пока нет доступных вещей
+            </h3>
+            <p className='text-sm text-graphite-light dark:text-white/60 max-w-md mx-auto mb-6'>
+              Новые поступления и дропы бренда появятся здесь после публикации.
+            </p>
+            <div className='flex flex-wrap justify-center gap-3'>
+              <Link to='/catalog'>
+                <Button>В каталог</Button>
+              </Link>
+              <Link to='/brands'>
+                <Button variant='outline'>Все бренды</Button>
+              </Link>
             </div>
-          ) : (
-            <div className='rounded-3xl border border-dashed border-border-lighter bg-white/60 p-8 text-center text-sm text-ash dark:border-white/10 dark:bg-white/5'>
-              Товары бренда пока не найдены.
-            </div>
-          )}
-        </section>
+          </div>
+        )}
       </div>
     </div>
   );

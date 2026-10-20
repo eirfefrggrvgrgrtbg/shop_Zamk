@@ -542,7 +542,7 @@ export function ProductDetail() {
               const el = document.getElementById('product-reviews-section');
               el?.scrollIntoView({ behavior: 'smooth' });
             }}
-            brandHref={product.brandId ? `/brand/${product.brandId}` : null}
+            brandHref={product.brandId ? `/brand/${product.brandId}` : (product.sellerSlug ? `/brand/${product.sellerSlug}` : null)}
             deliveryHref="/delivery"
             returnsHref="/returns"
             sellerHref={product.sellerSlug ? `/seller/${product.sellerSlug}` : null}
