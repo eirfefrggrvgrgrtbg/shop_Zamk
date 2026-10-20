@@ -30,7 +30,7 @@ vi.mock('../contexts/CartContext', () => ({
 }));
 
 vi.mock('../components/PromoCodeBox', () => ({ PromoCodeBox: () => null }));
-vi.mock('../contexts/PromoContext', () => ({
+vi.mock('../contexts/promoContextValue', () => ({
   usePromo: () => ({ appliedCode: null, discount: 0, isChecking: false }),
 }));
 

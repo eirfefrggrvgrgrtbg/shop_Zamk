@@ -9,7 +9,7 @@ import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
 import { formatVariantDetails, getCartItemImageUrl } from '../lib/variantSelection';
 import { InfoPanel } from '../components/editorial/StudioKit';
 import { PromoCodeBox } from '../components/PromoCodeBox';
-import { usePromo } from '../contexts/PromoContext';
+import { usePromo } from '../contexts/promoContextValue';
 
 const isUUID = (val?: string): boolean =>
   !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);

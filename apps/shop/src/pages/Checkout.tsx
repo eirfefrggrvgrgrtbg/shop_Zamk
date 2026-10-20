@@ -12,7 +12,7 @@ import type { PublicDeliveryMethod } from '@zamk/api-client/src/types';
 import { useAuth } from '../contexts/AuthContext';
 import { formatVariantDetails } from '../lib/variantSelection';
 import { PromoCodeBox } from '../components/PromoCodeBox';
-import { usePromo } from '../contexts/PromoContext';
+import { usePromo } from '../contexts/promoContextValue';
 import { isPromoRejection } from '../lib/promo';
 import { trackCheckoutStarted, getOrRenewSession, getOrCreateVisitorId } from '../lib/behavior';
 

@@ -32,7 +32,7 @@ vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
     isAuthenticated: true,
     isInitializing: false,
-    user: { name: 'Иван Петров', email: 'ivan@example.com' },
+    user: { id: 'u1', name: 'Иван Петров', email: 'ivan@example.com' },
     openAuthModal: vi.fn(),
   }),
 }));

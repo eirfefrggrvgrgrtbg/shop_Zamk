@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { useAuth } from '../contexts/AuthContext';
-import { usePromo } from '../contexts/PromoContext';
+import { usePromo } from '../contexts/promoContextValue';
 import { formatPrice } from '../lib/utils';
 
 export function PromoCodeBox() {
