@@ -1113,13 +1113,27 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 		)`)
 	}
 
-	if filter.Size != nil && *filter.Size != "" {
-		queryBuilder.WriteString(fmt.Sprintf(` AND EXISTS (
+	if sizes := effectiveSizeLabels(filter); len(sizes) > 0 {
+		// A product matches when at least one of its PURCHASABLE variants has a selected size.
+		// A variant is purchasable when active with free stock (total - reserved) > 0. EXISTS keeps one row per product.
+		sizeClause := fmt.Sprintf(` AND EXISTS (
 			SELECT 1 FROM product_variants v
-			WHERE v.product_id = p.id AND v.is_active = true AND v.size = $%d
-		)`, argID))
-		args = append(args, *filter.Size)
+			LEFT JOIN size_values sv ON sv.id = v.size_value_id AND sv.is_active = true
+			LEFT JOIN size_systems ss ON ss.id = sv.size_system_id
+			WHERE v.product_id = p.id AND v.is_active = true
+			AND (
+				SELECT COALESCE(SUM(GREATEST(0, ii.total_stock - ii.reserved_stock)), 0)
+				FROM inventory_items ii WHERE ii.product_variant_id = v.id
+			) > 0
+			AND (sv.value = ANY($%d::text[]) OR (v.size_value_id IS NULL AND v.size = ANY($%d::text[])))`, argID, argID)
+		args = append(args, sizes)
 		argID++
+		if filter.SizeSystem != nil && *filter.SizeSystem != "" {
+			sizeClause += fmt.Sprintf(` AND ss.code = $%d`, argID)
+			args = append(args, *filter.SizeSystem)
+			argID++
+		}
+		queryBuilder.WriteString(sizeClause + ")")
 	}
 
 	// Calculate total count before applying limit, offset, and order
@@ -2119,4 +2133,14 @@ func (r *Repository) GetLinkedSellerForBrand(ctx context.Context, brandID uuid.U
 		return nil, err
 	}
 	return &sellerID, nil
+}
+
+
+// effectiveSizeLabels merges the legacy single `Size` with `Sizes`.
+func effectiveSizeLabels(filter PublicProductFilter) []string {
+	out := append([]string{}, filter.Sizes...)
+	if filter.Size != nil && *filter.Size != "" {
+		out = append(out, *filter.Size)
+	}
+	return out
 }

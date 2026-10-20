@@ -906,6 +906,24 @@ func (e *FilterError) Error() string {
 	return e.Message
 }
 
+// applySizeFilter reads `size` (repeatable and/or comma-separated labels) and the optional `sizeSystem` code.
+func applySizeFilter(r *http.Request, filter *PublicProductFilter) {
+	seen := map[string]bool{}
+	for _, raw := range r.URL.Query()["size"] {
+		for _, part := range strings.Split(raw, ",") {
+			label := strings.TrimSpace(part)
+			if label == "" || len(label) > 32 || seen[label] || len(filter.Sizes) >= 30 {
+				continue
+			}
+			seen[label] = true
+			filter.Sizes = append(filter.Sizes, label)
+		}
+	}
+	if sys := strings.TrimSpace(r.URL.Query().Get("sizeSystem")); sys != "" && len(sys) <= 32 {
+		filter.SizeSystem = &sys
+	}
+}
+
 func ParsePublicProductFilter(r *http.Request) (PublicProductFilter, pagination.Params, *FilterError) {
 	page := pagination.FromRequest(r)
 
@@ -939,9 +957,7 @@ func ParsePublicProductFilter(r *http.Request) (PublicProductFilter, pagination.
 		filter.SellerID = &id
 	}
 
-	if size := r.URL.Query().Get("size"); size != "" {
-		filter.Size = &size
-	}
+	applySizeFilter(r, &filter)
 
 	if sortVal := r.URL.Query().Get("sort"); sortVal != "" {
 		filter.Sort = &sortVal
@@ -1075,9 +1091,7 @@ func (h *Handler) GetPublicSellerStore(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if size := r.URL.Query().Get("size"); size != "" {
-		filter.Size = &size
-	}
+	applySizeFilter(r, &filter)
 	if minPriceStr := r.URL.Query().Get("minPriceCents"); minPriceStr != "" {
 		var p int64
 		fmt.Sscanf(minPriceStr, "%d", &p)
@@ -1158,9 +1172,7 @@ func (h *Handler) GetPublicBrandStore(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if size := r.URL.Query().Get("size"); size != "" {
-		filter.Size = &size
-	}
+	applySizeFilter(r, &filter)
 	if minPriceStr := r.URL.Query().Get("minPriceCents"); minPriceStr != "" {
 		var p int64
 		fmt.Sscanf(minPriceStr, "%d", &p)

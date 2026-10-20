@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, SlidersHorizontal, X, Check } from 'lucide-react';
 import { ProductCard } from '../components/product/ProductCard';
@@ -18,7 +18,6 @@ const SORT_OPTIONS = [
   { value: 'rating_desc', label: 'По высокому рейтингу' },
 ];
 
-const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 const DEFAULT_PRICE_RANGE: [number, number] = [0, 100000];
 
 // Компонент раскрывающейся секции фильтра
@@ -91,8 +90,12 @@ export function Catalog() {
     Number(searchParams.get('maxPriceCents')) / 100 || DEFAULT_PRICE_RANGE[1]
   ]);
   const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'default');
-  const [activeSize, setActiveSize] = useState<string | null>(searchParams.get('size'));
   const [onlyInStock, setOnlyInStock] = useState(searchParams.get('inStock') === 'true');
+
+  // Sizes live in the URL (single source of truth) so Back/Forward and reloads restore them.
+  const sizeKey = searchParams.get('size') || '';
+  const activeSizeSystem = searchParams.get('sizeSystem');
+  const activeSizes = useMemo(() => sizeKey.split(',').filter(Boolean), [sizeKey]);
 
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [apiProducts, setApiProducts] = useState<Product[]>([]);
@@ -107,6 +110,9 @@ export function Catalog() {
   const PAGE_LIMIT = 24;
 
   const metaLoaded = useRef(false);
+  // Always the latest URL params: async work below must never write back a stale copy.
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
 
   const buildParams = useCallback(() => {
     const params: Record<string, any> = { limit: PAGE_LIMIT };
@@ -115,18 +121,23 @@ export function Catalog() {
     }
     if (activeCategory !== 'all') params.categoryId = activeCategory;
     if (activeBrand) params.brandId = activeBrand;
-    if (activeSize) params.size = activeSize;
+    if (activeSizes.length > 0) {
+      params.size = activeSizes.join(',');
+      if (activeSizeSystem) params.sizeSystem = activeSizeSystem;
+    }
     if (onlyInStock) params.inStock = 'true';
     if (priceRange[0] > DEFAULT_PRICE_RANGE[0]) params.minPriceCents = priceRange[0] * 100;
     if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) params.maxPriceCents = priceRange[1] * 100;
     const searchQuery = searchParams.get('q');
     if (searchQuery) params.q = searchQuery;
     return params;
-  }, [activeCategory, activeBrand, activeSize, onlyInStock, priceRange, sortBy, searchParams]);
+  }, [activeCategory, activeBrand, activeSizes, activeSizeSystem, onlyInStock, priceRange, sortBy, searchParams]);
 
   useEffect(() => {
     setOffset(0);
     setApiProducts([]);
+    // Ignore responses of superseded requests (rapid filter toggling must not show stale results).
+    let cancelled = false;
 
     async function loadProducts() {
       try {
@@ -137,6 +148,7 @@ export function Catalog() {
           ? [await fetchProducts(params, { isCustomer }), categories, brands]
           : await Promise.all([fetchProducts(params, { isCustomer }), fetchCategories(), fetchBrands()]);
 
+        if (cancelled) return;
         if (!metaLoaded.current) {
           setCategories(apiCategories as Category[]);
           setBrands(apiBrands as Brand[]);
@@ -149,10 +161,9 @@ export function Catalog() {
         setError(null);
 
         // Sync URL
-        const newParams = new URLSearchParams(searchParams);
+        const newParams = new URLSearchParams(searchParamsRef.current);
         if (activeCategory !== 'all') newParams.set('categoryId', activeCategory); else newParams.delete('categoryId');
         if (activeBrand) newParams.set('brandId', activeBrand); else newParams.delete('brandId');
-        if (activeSize) newParams.set('size', activeSize); else newParams.delete('size');
         if (onlyInStock) newParams.set('inStock', 'true'); else newParams.delete('inStock');
         if (priceRange[0] > DEFAULT_PRICE_RANGE[0]) newParams.set('minPriceCents', (priceRange[0] * 100).toString()); else newParams.delete('minPriceCents');
         if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) newParams.set('maxPriceCents', (priceRange[1] * 100).toString()); else newParams.delete('maxPriceCents');
@@ -161,18 +172,24 @@ export function Catalog() {
         } else {
           newParams.delete('sort');
         }
-        setSearchParams(newParams, { replace: true });
+        if (newParams.toString() !== searchParamsRef.current.toString()) {
+          setSearchParams(newParams, { replace: true });
+        }
 
       } catch (err) {
+        if (cancelled) return;
         console.error('Failed to load products:', err);
         setError('Не удалось загрузить товары. Попробуйте позже.');
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
     loadProducts();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCategory, activeBrand, activeSize, onlyInStock, priceRange, sortBy, searchParams.get('q'), isCustomer]);
+  }, [activeCategory, activeBrand, sizeKey, activeSizeSystem, onlyInStock, priceRange, sortBy, searchParams.get('q'), isCustomer]);
 
   const loadMore = async () => {
     if (isLoadingMore || !hasMore) return;
@@ -193,20 +210,78 @@ export function Catalog() {
 
   const categoryOptions: Category[] = [{ id: 'all', slug: 'all', name: 'Все товары', icon: '✦' }, ...categories];
   const hasActivePriceFilter = priceRange[0] !== DEFAULT_PRICE_RANGE[0] || priceRange[1] !== DEFAULT_PRICE_RANGE[1];
-  const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeSize !== null || onlyInStock || hasActivePriceFilter;
-  const activeFiltersCount = (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (activeSize ? 1 : 0) + (onlyInStock ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
+  const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeSizes.length > 0 || onlyInStock || hasActivePriceFilter;
+  const activeFiltersCount = (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (activeSizes.length > 0 ? 1 : 0) + (onlyInStock ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
 
   const resetFilters = () => {
     setActiveCategory('all');
     setActiveBrand(null);
-    setActiveSize(null);
+    setActiveCategory('all');
+    clearSizes(true);
     setOnlyInStock(false);
     setPriceRange(DEFAULT_PRICE_RANGE);
   };
 
-  const toggleSize = (size: string) => {
-    setActiveSize(prev => prev === size ? null : size);
+  // Size groups: the current category's own system; for "all" every distinct system, kept apart.
+  const sizeGroups = useMemo(() => {
+    if (activeCategory !== 'all') {
+      const sys = categories.find((c) => c.id === activeCategory)?.sizeSystem;
+      return sys && sys.values.length > 0 ? [sys] : [];
+    }
+    const byCode = new Map<string, NonNullable<Category['sizeSystem']>>();
+    for (const c of categories) {
+      if (c.sizeSystem && c.sizeSystem.values.length > 0 && !byCode.has(c.sizeSystem.code)) byCode.set(c.sizeSystem.code, c.sizeSystem);
+    }
+    return [...byCode.values()];
+  }, [activeCategory, categories]);
+
+  const writeSizes = (sizes: string[], system: string | null, replace: boolean) => {
+    const next = new URLSearchParams(searchParams);
+    if (sizes.length > 0 && system) {
+      next.set('size', sizes.join(','));
+      next.set('sizeSystem', system);
+    } else {
+      next.delete('size');
+      next.delete('sizeSystem');
+    }
+    setSearchParams(next, { replace });
   };
+
+  const clearSizes = (replace = false) => writeSizes([], null, replace);
+
+  const toggleSize = (systemCode: string, size: string) => {
+    // Selecting inside another system replaces the selection: systems are never mixed.
+    const base = systemCode === activeSizeSystem ? activeSizes : [];
+    const picked = base.includes(size) ? base.filter((s) => s !== size) : [...base, size];
+    // canonical order = the system's own size order, so URLs are stable regardless of click order
+    const order = sizeGroups.find((g) => g.code === systemCode)?.values.map((v) => v.value) ?? [];
+    const next = [...picked].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    writeSizes(next, systemCode, false);
+  };
+
+  const removeSize = (size: string) => writeSizes(activeSizes.filter((s) => s !== size), activeSizeSystem, false);
+
+  // Category change: keep only sizes that are valid for the new category's system.
+  const changeCategory = (categoryId: string) => {
+    setActiveCategory(categoryId);
+    if (activeSizes.length === 0) return;
+    const sys = categoryId === 'all' ? null : categories.find((c) => c.id === categoryId)?.sizeSystem;
+    if (categoryId === 'all') return; // every system stays selectable under "all"
+    if (!sys || sys.code !== activeSizeSystem) return clearSizes(true);
+    const allowed = new Set(sys.values.map((v) => v.value));
+    writeSizes(activeSizes.filter((v) => allowed.has(v)), sys.code, true);
+  };
+
+  // A crafted/stale URL must not keep sizes that don't exist for the current category.
+  useEffect(() => {
+    if (!metaLoaded.current || activeSizes.length === 0) return;
+    const group = sizeGroups.find((g) => g.code === activeSizeSystem);
+    if (!group) return clearSizes(true);
+    const allowed = new Set(group.values.map((v) => v.value));
+    const valid = activeSizes.filter((v) => allowed.has(v));
+    if (valid.length !== activeSizes.length) writeSizes(valid, activeSizeSystem, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sizeGroups, sizeKey, activeSizeSystem, categories.length]);
 
   const FiltersContent = () => (
     <div className="flex flex-col px-1 pb-4">
@@ -222,7 +297,7 @@ export function Catalog() {
                 label={category.name}
                 count={category.count}
                 isActive={activeCategory === category.id}
-                onClick={() => setActiveCategory(category.id)}
+                onClick={() => changeCategory(category.id)}
               />
             ))
           )}
@@ -230,23 +305,49 @@ export function Catalog() {
       </FilterSection>
 
       {/* Размеры */}
-      <FilterSection title="Размер" defaultOpen={activeSize !== null}>
-        <div className="grid grid-cols-4 gap-2">
-          {SIZES.map((size) => (
-            <button
-              key={size}
-              onClick={() => toggleSize(size)}
-              className={cn(
-                "h-8 border text-[11px] font-mono transition-all flex items-center justify-center rounded-[2px]",
-                activeSize === size
-                  ? "bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
-                  : "bg-transparent border-black/20 dark:border-white/20 text-black/60 dark:text-white/60 hover:border-black/50 dark:hover:border-white/50 hover:text-black dark:hover:text-white"
-              )}
-            >
-              {size}
-            </button>
-          ))}
-        </div>
+      <FilterSection title="Размер" defaultOpen>
+        {sizeGroups.length === 0 ? (
+          <p className="py-1 text-xs text-black/45 dark:text-white/45" data-testid="size-filter-empty">
+            Для этой категории размерная сетка не задана
+          </p>
+        ) : (
+          <div className="flex flex-col gap-4" data-testid="size-filter">
+            {sizeGroups.map((group) => (
+              <div key={group.code}>
+                {sizeGroups.length > 1 && (
+                  <p className="mb-2 text-[10px] font-mono uppercase tracking-widest text-black/40 dark:text-white/40">{group.name}</p>
+                )}
+                <div className="grid grid-cols-4 gap-2">
+                  {group.values.map(({ value }) => {
+                    const isActive = group.code === activeSizeSystem && activeSizes.includes(value);
+                    return (
+                      <button
+                        key={`${group.code}-${value}`}
+                        type="button"
+                        aria-pressed={isActive}
+                        data-testid={`size-filter-${group.code}-${value}`}
+                        onClick={() => toggleSize(group.code, value)}
+                        className={cn(
+                          "h-8 border text-[11px] font-mono transition-all flex items-center justify-center rounded-[2px]",
+                          isActive
+                            ? "bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
+                            : "bg-transparent border-black/20 dark:border-white/20 text-black/60 dark:text-white/60 hover:border-black/50 dark:hover:border-white/50 hover:text-black dark:hover:text-white"
+                        )}
+                      >
+                        {value}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            {activeSizes.length > 0 && (
+              <button type="button" onClick={() => clearSizes()} className="self-start text-[11px] underline text-black/60 dark:text-white/60">
+                Сбросить размеры
+              </button>
+            )}
+          </div>
+        )}
       </FilterSection>
 
       {/* Продавцы */}
@@ -385,7 +486,7 @@ export function Catalog() {
                 )}
               </div>
               <div className="px-6 pb-6 pt-2 overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-black/10 dark:[&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-track]:bg-transparent">
-                <FiltersContent />
+                {FiltersContent()}
               </div>
             </div>
           </aside>
@@ -398,7 +499,7 @@ export function Catalog() {
                 {activeCategory !== 'all' && (
                   <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
                     {categoryOptions.find(c => c.id === activeCategory)?.name}
-                    <button type="button" aria-label="Снять фильтр категории" onClick={() => setActiveCategory('all')} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
+                    <button type="button" aria-label="Снять фильтр категории" onClick={() => changeCategory('all')} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
                 {activeBrand && (
@@ -407,12 +508,12 @@ export function Catalog() {
                     <button type="button" aria-label="Снять фильтр бренда" onClick={() => setActiveBrand(null)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
-                {activeSize && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
-                    {activeSize}
-                    <button type="button" aria-label={`Снять фильтр размера ${activeSize}`} onClick={() => setActiveSize(null)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
+                {activeSizes.map((size) => (
+                  <span key={size} data-testid={`size-tag-${size}`} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
+                    {size}
+                    <button type="button" aria-label={`Снять фильтр размера ${size}`} onClick={() => removeSize(size)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
-                )}
+                ))}
                 {onlyInStock && (
                   <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
                     В наличии
@@ -480,7 +581,7 @@ export function Catalog() {
       {/* Mobile Filters Drawer */}
       <Drawer isOpen={showMobileFilters} onClose={() => setShowMobileFilters(false)} title="Фильтры">
         <div className="pb-20 bg-white/80 dark:bg-black/40 backdrop-blur-xl">
-          <FiltersContent />
+          {FiltersContent()}
         </div>
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-t border-black/10 dark:border-white/10">
           <Button

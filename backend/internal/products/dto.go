@@ -259,6 +259,8 @@ type PublicProductFilter struct {
 	BrandIDs      []uuid.UUID        `json:"-"` // internal: match any of these stable brands.id values
 	SellerID      *uuid.UUID         `json:"sellerId,omitempty"`
 	Size          *string            `json:"size,omitempty"`
+	Sizes         []string           `json:"sizes,omitempty"`      // size labels; a product matches if ANY purchasable variant has one of them
+	SizeSystem    *string            `json:"sizeSystem,omitempty"` // optional size system code to avoid mixing systems (e.g. INT vs EU)
 	MinPriceCents *int64             `json:"minPriceCents,omitempty"`
 	MaxPriceCents *int64             `json:"maxPriceCents,omitempty"`
 	InStock       *bool              `json:"inStock,omitempty"`

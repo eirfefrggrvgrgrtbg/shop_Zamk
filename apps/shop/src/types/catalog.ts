@@ -81,4 +81,6 @@ export interface Category {
   name: string;
   icon: string;
   count?: number;
+  /** Default size system of the category with its active values (drives the size filter). */
+  sizeSystem?: { code: string; name: string; values: Array<{ value: string; sortOrder: number }> };
 }

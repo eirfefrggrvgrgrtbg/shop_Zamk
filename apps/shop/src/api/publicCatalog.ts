@@ -82,6 +82,7 @@ export async function fetchCategories(): Promise<UICategory[]> {
     slug: c.slug,
     name: c.name,
     icon: '✦',
+    sizeSystem: (c as any).sizeSystem || undefined,
   }));
 }
 

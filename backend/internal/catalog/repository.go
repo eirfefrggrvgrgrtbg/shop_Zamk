@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 )
 
 type Repository struct {
@@ -76,7 +77,76 @@ func (r *Repository) ListCategories(ctx context.Context, activeOnly bool) ([]Cat
 		}
 		categories = append(categories, c)
 	}
-	return categories, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if err := r.attachSizeSystems(ctx, categories); err != nil {
+		return nil, err
+	}
+	return categories, nil
+}
+
+// attachSizeSystems adds each category's default size system (single query, no N+1).
+func (r *Repository) attachSizeSystems(ctx context.Context, categories []Category) error {
+	rows, err := r.db.Query(ctx, `
+		SELECT DISTINCT ON (css.category_id, sv.id)
+			css.category_id, ss.code, ss.name, sv.value, sv.sort_order, css.is_default, css.sort_order
+		FROM category_size_systems css
+		JOIN size_systems ss ON ss.id = css.size_system_id AND ss.is_active = true
+		JOIN size_values sv ON sv.size_system_id = ss.id AND sv.is_active = true
+		ORDER BY css.category_id, sv.id
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to load category size systems: %w", err)
+	}
+	defer rows.Close()
+
+	type entry struct {
+		code, name, value    string
+		valueOrder, sysOrder int
+		isDefault            bool
+	}
+	byCat := map[uuid.UUID][]entry{}
+	for rows.Next() {
+		var catID uuid.UUID
+		var e entry
+		if err := rows.Scan(&catID, &e.code, &e.name, &e.value, &e.valueOrder, &e.isDefault, &e.sysOrder); err != nil {
+			return err
+		}
+		byCat[catID] = append(byCat[catID], e)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i := range categories {
+		entries := byCat[categories[i].ID]
+		if len(entries) == 0 {
+			continue
+		}
+		// pick one system: default first, then lowest sort order, then code
+		best := entries[0]
+		for _, e := range entries[1:] {
+			if (e.isDefault && !best.isDefault) ||
+				(e.isDefault == best.isDefault && (e.sysOrder < best.sysOrder || (e.sysOrder == best.sysOrder && e.code < best.code))) {
+				best = e
+			}
+		}
+		sys := &CategorySizeSystem{Code: best.code, Name: best.name, Values: []CategorySizeValue{}}
+		for _, e := range entries {
+			if e.code == best.code {
+				sys.Values = append(sys.Values, CategorySizeValue{Value: e.value, SortOrder: e.valueOrder})
+			}
+		}
+		sort.Slice(sys.Values, func(a, b int) bool {
+			if sys.Values[a].SortOrder != sys.Values[b].SortOrder {
+				return sys.Values[a].SortOrder < sys.Values[b].SortOrder
+			}
+			return sys.Values[a].Value < sys.Values[b].Value
+		})
+		categories[i].SizeSystem = sys
+	}
+	return nil
 }
 
 func (r *Repository) CreateBrand(ctx context.Context, b *Brand) error {
