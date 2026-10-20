@@ -1795,9 +1795,17 @@ func (s *Service) GetAdminCampaign(ctx context.Context, id uuid.UUID) (*Campaign
 	return s.repo.GetAdminCampaign(ctx, id)
 }
 
-// UpdateAdminCampaign updates campaign fields.
+// UpdateAdminCampaign updates campaign fields. The campaign row is locked for the whole
+// read-validate-write cycle, so concurrent updates are serialized and a status change is always
+// validated against the status it actually replaces.
 func (s *Service) UpdateAdminCampaign(ctx context.Context, id uuid.UUID, req AdminUpdateCampaignRequest) (*CampaignDetailView, error) {
-	campaign, err := s.repo.GetCampaignByID(ctx, id)
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	campaign, err := s.repo.GetCampaignForUpdateTx(ctx, tx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1816,6 +1824,9 @@ func (s *Service) UpdateAdminCampaign(ctx context.Context, id uuid.UUID, req Adm
 		campaign.Description = req.Description
 	}
 	if req.Status != nil {
+		if err := ValidateAdvertisingTransition(campaign.Status, *req.Status); err != nil {
+			return nil, err
+		}
 		campaign.Status = *req.Status
 	}
 	if req.CampaignChannel != nil {
@@ -1838,8 +1849,11 @@ func (s *Service) UpdateAdminCampaign(ctx context.Context, id uuid.UUID, req Adm
 		return nil, err
 	}
 
-	if err := s.repo.UpdateCampaign(ctx, campaign); err != nil {
+	if err := s.repo.UpdateCampaignTx(ctx, tx, campaign); err != nil {
 		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit campaign update: %w", err)
 	}
 
 	return s.repo.GetAdminCampaign(ctx, id)

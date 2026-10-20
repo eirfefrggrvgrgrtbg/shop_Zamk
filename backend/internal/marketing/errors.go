@@ -7,6 +7,7 @@ var (
 	ErrInvalidSort                         = errors.New("invalid sort")
 	ErrFavoritesCoverageIncomplete         = errors.New("favorites tracking coverage is incomplete for period")
 	ErrConversionCoverageIncomplete        = errors.New("conversion tracking coverage is incomplete for period")
+	ErrInvalidCampaignTransition           = errors.New("campaign status transition is not allowed")
 	ErrInvalidCampaignStatus               = errors.New("invalid campaign status")
 	ErrInvalidDiscountType                  = errors.New("invalid discount type")
 	ErrFixedDiscountNotAllowed              = errors.New("fixed discount is not supported for platform-funded campaigns in V1")

@@ -87,6 +87,10 @@ func (r *Repository) CreateCampaignTx(ctx context.Context, db DBExecutor, c *Mar
 }
 
 func (r *Repository) GetCampaignByID(ctx context.Context, id uuid.UUID) (*MarketingCampaign, error) {
+	return r.getCampaign(ctx, r.pool, id)
+}
+
+func (r *Repository) getCampaign(ctx context.Context, db DBExecutor, id uuid.UUID) (*MarketingCampaign, error) {
 	query := `
 		SELECT
 			id, seller_id, title, description, funding_mode, status, campaign_channel, campaign_type, planned_budget_cents, discount_type,
@@ -102,7 +106,7 @@ func (r *Repository) GetCampaignByID(ctx context.Context, id uuid.UUID) (*Market
 	`
 	var c MarketingCampaign
 	var fMode, status, dType string
-	err := r.pool.QueryRow(ctx, query, id).Scan(
+	err := db.QueryRow(ctx, query, id).Scan(
 		&c.ID, &c.SellerID, &c.Title, &c.Description, &fMode, &status, &c.CampaignChannel, &c.CampaignType, &c.PlannedBudgetCents, &dType,
 		&c.SellerDiscountBps, &c.SellerDiscountFixedCents,
 		&c.RequestedZamkShareBps, &c.RequestedZamkBudgetCapCents,
@@ -1489,6 +1493,11 @@ func (r *Repository) DisableTrackingLink(ctx context.Context, campaignID, linkID
 }
 
 func (r *Repository) UpdateCampaign(ctx context.Context, c *MarketingCampaign) error {
+	return r.UpdateCampaignTx(ctx, r.pool, c)
+}
+
+// UpdateCampaignTx updates an advertising campaign through the given executor (pool or transaction).
+func (r *Repository) UpdateCampaignTx(ctx context.Context, db DBExecutor, c *MarketingCampaign) error {
 	var chStr, tpStr *string
 	if c.CampaignChannel != nil {
 		s := string(*c.CampaignChannel)
@@ -1504,7 +1513,7 @@ func (r *Repository) UpdateCampaign(ctx context.Context, c *MarketingCampaign) e
 		    planned_budget_cents = $6, starts_at = $7, ends_at = $8, updated_at = now()
 		WHERE id = $9 AND purpose = 'advertising'
 	`
-	cmd, err := r.pool.Exec(ctx, query,
+	cmd, err := db.Exec(ctx, query,
 		c.Title, c.Description, string(c.Status), chStr, tpStr,
 		c.PlannedBudgetCents, c.StartsAt, c.EndsAt, c.ID,
 	)

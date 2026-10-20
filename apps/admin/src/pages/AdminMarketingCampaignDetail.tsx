@@ -159,7 +159,13 @@ export function AdminMarketingCampaignDetail() {
       setSuccess(`Статус кампании обновлен: ${STATUS_LABELS[newStatus]?.label || newStatus}`);
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      setError(err?.message || 'Не удалось обновить статус кампании');
+      if (err?.code === 'invalid_status_transition' || err?.status === 409) {
+        setError('Такой переход статуса недоступен: возможно, кампанию уже изменили. Данные обновлены.');
+        // Resync silently: the status shown may be stale after a concurrent change.
+        getAdminCampaign(id).then(setCampaign).catch(() => undefined);
+      } else {
+        setError(err?.message || 'Не удалось обновить статус кампании');
+      }
     }
   };
 

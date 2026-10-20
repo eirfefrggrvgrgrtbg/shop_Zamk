@@ -126,6 +126,10 @@ func (h *Handler) UpdateAdminCampaign(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Campaign not found")
 			return
 		}
+		if errors.Is(err, ErrInvalidCampaignTransition) {
+			h.writeError(w, http.StatusConflict, "invalid_status_transition", err.Error())
+			return
+		}
 		if errors.Is(err, ErrInvalidCampaignChannel) || errors.Is(err, ErrInvalidCampaignType) ||
 			errors.Is(err, ErrInvalidPlannedBudget) || errors.Is(err, ErrInvalidCampaignStatus) {
 			h.writeError(w, http.StatusBadRequest, "invalid_parameter", err.Error())

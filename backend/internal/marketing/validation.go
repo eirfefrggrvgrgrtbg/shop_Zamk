@@ -270,3 +270,30 @@ func ValidateOrderItemPromotion(p *OrderItemPromotion) error {
 
 	return nil
 }
+
+// advertisingTransitions is the lifecycle of admin-managed advertising campaigns.
+// They are created as approved; promotion campaigns follow their own seller/admin review flow.
+// ended, cancelled and rejected are terminal. Draft/Paused states do not exist for advertising yet.
+var advertisingTransitions = map[CampaignStatus][]CampaignStatus{
+	CampaignStatusDraft:          {CampaignStatusCancelled},
+	CampaignStatusSubmitted:      {CampaignStatusCancelled},
+	CampaignStatusCounterOffered: {CampaignStatusCancelled},
+	CampaignStatusApproved:       {CampaignStatusActive, CampaignStatusEnded, CampaignStatusCancelled},
+	// active -> approved is the legacy "pause" marker used by earlier Admin versions and existing tests;
+	// approved campaigns track exactly like active ones, so it has no behavioural effect.
+	CampaignStatusActive:         {CampaignStatusApproved, CampaignStatusEnded, CampaignStatusCancelled},
+}
+
+// ValidateAdvertisingTransition checks a status change of an advertising campaign.
+// Keeping the same status is always allowed (field edits); anything else must be listed.
+func ValidateAdvertisingTransition(from, to CampaignStatus) error {
+	if from == to {
+		return nil
+	}
+	for _, allowed := range advertisingTransitions[from] {
+		if allowed == to {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s -> %s", ErrInvalidCampaignTransition, from, to)
+}

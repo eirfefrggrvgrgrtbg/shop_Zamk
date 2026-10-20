@@ -115,6 +115,18 @@ describe('AdminMarketingCampaignDetail (M1.1)', () => {
     expect(screen.getByTestId('campaign-status-badge').textContent).toBe('Одобрена');
   });
 
+  it('explains a rejected transition and resyncs the stale status from the server', async () => {
+    const conflict = Object.assign(new Error('campaign status transition is not allowed: ended -> active'), { code: 'invalid_status_transition', status: 409 });
+    vi.mocked(adminApi.updateAdminCampaign).mockRejectedValue(conflict);
+    vi.mocked(adminApi.getAdminCampaign).mockResolvedValueOnce(base()).mockResolvedValue(base({ status: 'ended' }));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('activate-campaign-button')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('activate-campaign-button'));
+    await waitFor(() => expect(screen.getByTestId('detail-error').textContent).toContain('Такой переход статуса недоступен'));
+    await waitFor(() => expect(screen.getByTestId('campaign-status-badge').textContent).toBe('Завершена'));
+    expect(screen.queryByTestId('activate-campaign-button')).toBeNull();
+  });
+
   it('read-only users get no edit or status actions', async () => {
     vi.mocked(useAdminAuth).mockReturnValue(auth(['marketing.campaigns.read']));
     mount();
