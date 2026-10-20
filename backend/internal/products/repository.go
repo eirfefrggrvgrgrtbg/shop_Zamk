@@ -1113,10 +1113,10 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 		)`)
 	}
 
-	if sizes := effectiveSizeLabels(filter); len(sizes) > 0 {
-		// A product matches when at least one of its PURCHASABLE variants has a selected size.
+	if sizes, colors := effectiveSizeLabels(filter), filter.ColorIDs; len(sizes) > 0 || len(colors) > 0 {
+		// ONE purchasable variant must satisfy every selected dimension: (any selected color) AND (any selected size).
 		// A variant is purchasable when active with free stock (total - reserved) > 0. EXISTS keeps one row per product.
-		sizeClause := fmt.Sprintf(` AND EXISTS (
+		clause := ` AND EXISTS (
 			SELECT 1 FROM product_variants v
 			LEFT JOIN size_values sv ON sv.id = v.size_value_id AND sv.is_active = true
 			LEFT JOIN size_systems ss ON ss.id = sv.size_system_id
@@ -1124,16 +1124,25 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 			AND (
 				SELECT COALESCE(SUM(GREATEST(0, ii.total_stock - ii.reserved_stock)), 0)
 				FROM inventory_items ii WHERE ii.product_variant_id = v.id
-			) > 0
+			) > 0`
+		if len(sizes) > 0 {
+			clause += fmt.Sprintf(`
 			AND (sv.value = ANY($%d::text[]) OR (v.size_value_id IS NULL AND v.size = ANY($%d::text[])))`, argID, argID)
-		args = append(args, sizes)
-		argID++
-		if filter.SizeSystem != nil && *filter.SizeSystem != "" {
-			sizeClause += fmt.Sprintf(` AND ss.code = $%d`, argID)
-			args = append(args, *filter.SizeSystem)
+			args = append(args, sizes)
+			argID++
+			if filter.SizeSystem != nil && *filter.SizeSystem != "" {
+				clause += fmt.Sprintf(` AND ss.code = $%d`, argID)
+				args = append(args, *filter.SizeSystem)
+				argID++
+			}
+		}
+		if len(colors) > 0 {
+			// Only the canonical dictionary id is matched; free-text color names are never merged by name.
+			clause += fmt.Sprintf(` AND v.color_id = ANY($%d::uuid[])`, argID)
+			args = append(args, colors)
 			argID++
 		}
-		queryBuilder.WriteString(sizeClause + ")")
+		queryBuilder.WriteString(clause + ")")
 	}
 
 	// Calculate total count before applying limit, offset, and order

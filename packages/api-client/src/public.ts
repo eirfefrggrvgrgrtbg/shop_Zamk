@@ -49,6 +49,19 @@ export const getCategories = async (): Promise<Category[]> => {
   return res?.items || (Array.isArray(res) ? res : []);
 };
 
+export interface PublicColor {
+  id: string;
+  code: string;
+  nameRu: string;
+  hex?: string;
+}
+
+/** Canonical colors present on purchasable variants of storefront-eligible products. */
+export const getPublicColors = async (): Promise<PublicColor[]> => {
+  const res = await request<any>('GET', '/public/colors');
+  return res?.items || (Array.isArray(res) ? res : []);
+};
+
 export const getDeliveryMethods = async (): Promise<PublicDeliveryMethod[]> => {
   const res = await request<any>('GET', '/public/delivery-methods');
   return res?.items || (Array.isArray(res) ? res : []);

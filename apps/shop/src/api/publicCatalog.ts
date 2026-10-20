@@ -1,4 +1,4 @@
-import { getProducts, getDirectSaleProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller, getProductPreviewByToken, getSimilarProducts, getPopularProducts, getCollections, getCollection } from '@zamk/api-client/src/public';
+import { getProducts, getDirectSaleProducts, getProduct, getCategories, getBrands, getPublicColors, getProductReviews, getPublicSeller, getProductPreviewByToken, getSimilarProducts, getPopularProducts, getCollections, getCollection } from '@zamk/api-client/src/public';
 import type { ProductSummary } from '@zamk/api-client/src/types';
 import type { Product as UIProduct, Brand as UIBrand, Category as UICategory, Review as UIReview } from '../types/catalog';
 
@@ -73,6 +73,22 @@ export async function fetchBrands(): Promise<UIBrand[]> {
   cachedBrands = {};
   mapped.forEach(b => { cachedBrands[b.id] = b.name; });
   return mapped;
+}
+
+export interface CatalogColor {
+  id: string;
+  name: string;
+  /** Dictionary hex; shown as a swatch only when the dictionary provides a valid value. */
+  hex?: string;
+}
+
+export async function fetchColors(): Promise<CatalogColor[]> {
+  const colors = await getPublicColors();
+  return colors.map((c) => ({
+    id: c.id,
+    name: c.nameRu,
+    hex: c.hex && /^#[0-9a-fA-F]{6}$/.test(c.hex) ? c.hex : undefined,
+  }));
 }
 
 export async function fetchCategories(): Promise<UICategory[]> {

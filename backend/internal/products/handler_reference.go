@@ -2,9 +2,9 @@ package products
 
 import (
 	"encoding/json"
-	"net/http"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"net/http"
 )
 
 func (h *Handler) GetCategorySchema(w http.ResponseWriter, r *http.Request) {
@@ -83,4 +83,16 @@ func (h *Handler) ListDictionaryValues(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(values)
+}
+
+// ListPublicColors returns the canonical colors used by purchasable variants of storefront-eligible products
+// (source for the catalog color filter). Read-only; dictionary values are returned as stored.
+func (h *Handler) ListPublicColors(w http.ResponseWriter, r *http.Request) {
+	colors, err := h.service.ListPublicColors(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list colors")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"items": colors})
 }

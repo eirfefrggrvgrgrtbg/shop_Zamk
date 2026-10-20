@@ -2427,6 +2427,36 @@ func (s *Service) ListColors(ctx context.Context) ([]Color, error) {
 	return res, nil
 }
 
+// ListPublicColors lists dictionary colors that currently exist on a purchasable variant of an eligible product.
+func (s *Service) ListPublicColors(ctx context.Context) ([]Color, error) {
+	rows, err := s.dbPool.Pool.Query(ctx, `
+		SELECT c.id, c.code, c.name_ru, c.hex, c.sort_order
+		FROM colors c
+		WHERE c.is_active = true AND EXISTS (
+			SELECT 1 FROM product_variants v
+			JOIN products p ON p.id = v.product_id
+			JOIN sellers s ON s.id = p.seller_id
+			WHERE v.color_id = c.id AND v.is_active = true
+			AND (SELECT COALESCE(SUM(GREATEST(0, ii.total_stock - ii.reserved_stock)), 0) FROM inventory_items ii WHERE ii.product_variant_id = v.id) > 0
+			AND `+CanonicalStorefrontEligibilitySQL("p", "s")+`
+		)
+		ORDER BY c.sort_order, c.name_ru, c.id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	res := []Color{}
+	for rows.Next() {
+		var c Color
+		if err := rows.Scan(&c.ID, &c.Code, &c.NameRU, &c.Hex, &c.SortOrder); err != nil {
+			return nil, err
+		}
+		res = append(res, c)
+	}
+	return res, rows.Err()
+}
+
 func (s *Service) ListMaterials(ctx context.Context) ([]Material, error) {
 	rows, err := s.dbPool.Pool.Query(ctx, "SELECT id, code, name_ru, sort_order FROM materials WHERE is_active = true ORDER BY sort_order")
 	if err != nil {

@@ -261,6 +261,7 @@ type PublicProductFilter struct {
 	Size          *string            `json:"size,omitempty"`
 	Sizes         []string           `json:"sizes,omitempty"`      // size labels; a product matches if ANY purchasable variant has one of them
 	SizeSystem    *string            `json:"sizeSystem,omitempty"` // optional size system code to avoid mixing systems (e.g. INT vs EU)
+	ColorIDs      []uuid.UUID        `json:"colorIds,omitempty"`   // canonical colors.id values; OR between colors, AND with sizes on ONE purchasable variant
 	MinPriceCents *int64             `json:"minPriceCents,omitempty"`
 	MaxPriceCents *int64             `json:"maxPriceCents,omitempty"`
 	InStock       *bool              `json:"inStock,omitempty"`

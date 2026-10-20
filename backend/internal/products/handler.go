@@ -906,7 +906,7 @@ func (e *FilterError) Error() string {
 	return e.Message
 }
 
-// applySizeFilter reads `size` (repeatable and/or comma-separated labels) and the optional `sizeSystem` code.
+// applySizeFilter reads `size` (repeatable and/or comma-separated labels), the optional `sizeSystem` code and `colorId` values.
 func applySizeFilter(r *http.Request, filter *PublicProductFilter) {
 	seen := map[string]bool{}
 	for _, raw := range r.URL.Query()["size"] {
@@ -917,6 +917,21 @@ func applySizeFilter(r *http.Request, filter *PublicProductFilter) {
 			}
 			seen[label] = true
 			filter.Sizes = append(filter.Sizes, label)
+		}
+	}
+	for _, raw := range r.URL.Query()["colorId"] {
+		for _, part := range strings.Split(raw, ",") {
+			id, err := uuid.Parse(strings.TrimSpace(part))
+			if err != nil || len(filter.ColorIDs) >= 30 {
+				continue
+			}
+			dup := false
+			for _, e := range filter.ColorIDs {
+				dup = dup || e == id
+			}
+			if !dup {
+				filter.ColorIDs = append(filter.ColorIDs, id)
+			}
 		}
 	}
 	if sys := strings.TrimSpace(r.URL.Query().Get("sizeSystem")); sys != "" && len(sys) <= 32 {

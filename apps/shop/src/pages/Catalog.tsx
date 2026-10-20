@@ -5,7 +5,7 @@ import { ProductCard } from '../components/product/ProductCard';
 import { Drawer } from '../components/ui/Drawer';
 import { SortDropdown } from '../components/editorial/StudioKit';
 import { Button } from '../components/ui/Button';
-import { fetchBrands, fetchCategories, fetchProducts } from '../api/publicCatalog';
+import { fetchBrands, fetchCategories, fetchColors, fetchProducts, type CatalogColor } from '../api/publicCatalog';
 import { useAuth } from '../contexts/AuthContext';
 import type { Brand, Category, Product } from '../types/catalog';
 import { cn } from '../lib/utils';
@@ -94,6 +94,8 @@ export function Catalog() {
   const minPriceUrl = Number(searchParams.get('minPriceCents')) / 100 || DEFAULT_PRICE_RANGE[0];
   const maxPriceUrl = Number(searchParams.get('maxPriceCents')) / 100 || DEFAULT_PRICE_RANGE[1];
   const priceRange: [number, number] = [minPriceUrl, maxPriceUrl];
+  const colorKey = searchParams.get('colorId') || '';
+  const activeColors = useMemo(() => colorKey.split(',').filter(Boolean), [colorKey]);
   const sizeKey = searchParams.get('size') || '';
   const activeSizeSystem = searchParams.get('sizeSystem');
   const activeSizes = useMemo(() => sizeKey.split(',').filter(Boolean), [sizeKey]);
@@ -146,6 +148,7 @@ export function Catalog() {
   const [totalProducts, setTotalProducts] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [colors, setColors] = useState<CatalogColor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -165,13 +168,14 @@ export function Catalog() {
       params.size = activeSizes.join(',');
       if (activeSizeSystem) params.sizeSystem = activeSizeSystem;
     }
+    if (activeColors.length > 0) params.colorId = activeColors.join(',');
     if (onlyInStock) params.inStock = 'true';
     if (priceRange[0] > DEFAULT_PRICE_RANGE[0]) params.minPriceCents = priceRange[0] * 100;
     if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) params.maxPriceCents = priceRange[1] * 100;
     const searchQuery = searchParams.get('q');
     if (searchQuery) params.q = searchQuery;
     return params;
-  }, [activeCategory, activeBrand, activeSizes, activeSizeSystem, onlyInStock, minPriceUrl, maxPriceUrl, sortBy, searchParams]);
+  }, [activeCategory, activeBrand, activeSizes, activeSizeSystem, activeColors, onlyInStock, minPriceUrl, maxPriceUrl, sortBy, searchParams]);
 
   useEffect(() => {
     setOffset(0);
@@ -184,14 +188,21 @@ export function Catalog() {
         setIsLoading(true);
         const params = { ...buildParams(), offset: 0 };
 
-        const [productsRes, apiCategories, apiBrands] = metaLoaded.current
-          ? [await fetchProducts(params, { isCustomer }), categories, brands]
-          : await Promise.all([fetchProducts(params, { isCustomer }), fetchCategories(), fetchBrands()]);
+        const [productsRes, apiCategories, apiBrands, apiColors] = metaLoaded.current
+          ? [await fetchProducts(params, { isCustomer }), categories, brands, colors]
+          : await Promise.all([
+              fetchProducts(params, { isCustomer }),
+              fetchCategories(),
+              fetchBrands(),
+              // the color list is optional: a failure must not break the catalog
+              Promise.resolve().then(() => fetchColors()).catch(() => [] as CatalogColor[]),
+            ]);
 
         if (cancelled) return;
         if (!metaLoaded.current) {
           setCategories(apiCategories as Category[]);
           setBrands(apiBrands as Brand[]);
+          setColors(apiColors as CatalogColor[]);
           metaLoaded.current = true;
         }
 
@@ -213,7 +224,7 @@ export function Catalog() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCategory, activeBrand, sizeKey, activeSizeSystem, onlyInStock, minPriceUrl, maxPriceUrl, sortBy, searchParams.get('q'), isCustomer]);
+  }, [activeCategory, activeBrand, sizeKey, activeSizeSystem, colorKey, onlyInStock, minPriceUrl, maxPriceUrl, sortBy, searchParams.get('q'), isCustomer]);
 
   const loadMore = async () => {
     if (isLoadingMore || !hasMore) return;
@@ -234,12 +245,12 @@ export function Catalog() {
 
   const categoryOptions: Category[] = [{ id: 'all', slug: 'all', name: 'Все товары', icon: '✦' }, ...categories];
   const hasActivePriceFilter = priceRange[0] !== DEFAULT_PRICE_RANGE[0] || priceRange[1] !== DEFAULT_PRICE_RANGE[1];
-  const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeSizes.length > 0 || onlyInStock || hasActivePriceFilter;
-  const activeFiltersCount = (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (activeSizes.length > 0 ? 1 : 0) + (onlyInStock ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
+  const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeSizes.length > 0 || activeColors.length > 0 || onlyInStock || hasActivePriceFilter;
+  const activeFiltersCount = (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (activeSizes.length > 0 ? 1 : 0) + (activeColors.length > 0 ? 1 : 0) + (onlyInStock ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
 
   const resetFilters = () =>
     updateParams((p) => {
-      ['categoryId', 'brandId', 'size', 'sizeSystem', 'inStock', 'minPriceCents', 'maxPriceCents'].forEach((k) => p.delete(k));
+      ['categoryId', 'brandId', 'size', 'sizeSystem', 'colorId', 'inStock', 'minPriceCents', 'maxPriceCents'].forEach((k) => p.delete(k));
     });
 
   // Size groups: the current category's own system; for "all" every distinct system, kept apart.
@@ -268,17 +279,40 @@ export function Catalog() {
 
   const clearSizes = (replace = false) => writeSizes([], null, replace);
 
-  const toggleSize = (systemCode: string, size: string) => {
-    // Selecting inside another system replaces the selection: systems are never mixed.
-    const base = systemCode === activeSizeSystem ? activeSizes : [];
-    const picked = base.includes(size) ? base.filter((s) => s !== size) : [...base, size];
-    // canonical order = the system's own size order, so URLs are stable regardless of click order
-    const order = sizeGroups.find((g) => g.code === systemCode)?.values.map((v) => v.value) ?? [];
-    const next = [...picked].sort((a, b) => order.indexOf(a) - order.indexOf(b));
-    writeSizes(next, systemCode, false);
-  };
+  const readList = (p: URLSearchParams, key: string) => (p.get(key) || '').split(',').filter(Boolean);
+  // Toggles read the LATEST params inside the writer, so rapid consecutive clicks never lose an update.
+  const writeColors = (next: string[]) => updateParams((p) => setParam(p, 'colorId', next.length > 0 ? next.join(',') : null));
+  const toggleColor = (id: string) =>
+    updateParams((p) => {
+      const cur = readList(p, 'colorId');
+      setParam(p, 'colorId', (cur.includes(id) ? cur.filter((c) => c !== id) : [...cur, id]).join(',') || null);
+    });
+  const removeColor = (id: string) =>
+    updateParams((p) => setParam(p, 'colorId', readList(p, 'colorId').filter((c) => c !== id).join(',') || null));
+  const colorName = (id: string) => colors.find((c) => c.id === id)?.name ?? 'Цвет';
 
-  const removeSize = (size: string) => writeSizes(activeSizes.filter((s) => s !== size), activeSizeSystem, false);
+  const toggleSize = (systemCode: string, size: string) =>
+    updateParams((p) => {
+      // Selecting inside another system replaces the selection: systems are never mixed.
+      const base = p.get('sizeSystem') === systemCode ? readList(p, 'size') : [];
+      const picked = base.includes(size) ? base.filter((s) => s !== size) : [...base, size];
+      // canonical order = the system's own size order, so URLs are stable regardless of click order
+      const order = sizeGroups.find((g) => g.code === systemCode)?.values.map((v) => v.value) ?? [];
+      const next = [...picked].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      if (next.length > 0) {
+        p.set('size', next.join(','));
+        p.set('sizeSystem', systemCode);
+      } else {
+        p.delete('size');
+        p.delete('sizeSystem');
+      }
+    });
+
+  const removeSize = (size: string) =>
+    updateParams((p) => {
+      const next = readList(p, 'size').filter((s) => s !== size);
+      if (next.length > 0) p.set('size', next.join(',')); else { p.delete('size'); p.delete('sizeSystem'); }
+    });
 
   // Category change is ONE URL write (one history entry): category + only the sizes valid for it.
   const changeCategory = (categoryId: string) =>
@@ -369,6 +403,51 @@ export function Catalog() {
             {activeSizes.length > 0 && (
               <button type="button" onClick={() => clearSizes()} className="self-start text-[11px] underline text-black/60 dark:text-white/60">
                 Сбросить размеры
+              </button>
+            )}
+          </div>
+        )}
+      </FilterSection>
+
+      {/* Цвет */}
+      <FilterSection title="Цвет" defaultOpen>
+        {colors.length === 0 ? (
+          <p className="py-1 text-xs text-black/45 dark:text-white/45" data-testid="color-filter-empty">Цвета пока недоступны</p>
+        ) : (
+          <div className="flex flex-col gap-1" data-testid="color-filter">
+            {colors.map((color) => {
+              const isActive = activeColors.includes(color.id);
+              return (
+                <button
+                  key={color.id}
+                  type="button"
+                  aria-pressed={isActive}
+                  data-testid={`color-filter-${color.id}`}
+                  onClick={() => toggleColor(color.id)}
+                  className="flex items-center gap-3 w-full py-1.5 text-left group"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "w-4 h-4 rounded-full border shrink-0 flex items-center justify-center",
+                      isActive ? "border-black dark:border-white ring-1 ring-black dark:ring-white ring-offset-1 ring-offset-white dark:ring-offset-black" : "border-black/25 dark:border-white/30",
+                      !color.hex && "bg-transparent"
+                    )}
+                    style={color.hex ? { backgroundColor: color.hex } : undefined}
+                  />
+                  <span className={cn(
+                    "text-[12px] font-sans font-light tracking-wide transition-colors",
+                    isActive ? "text-black dark:text-white font-normal" : "text-black/70 dark:text-white/70 group-hover:text-black dark:group-hover:text-white"
+                  )}>
+                    {color.name}
+                  </span>
+                  {isActive && <Check className="w-3.5 h-3.5 ml-auto text-black dark:text-white" strokeWidth={2.5} />}
+                </button>
+              );
+            })}
+            {activeColors.length > 0 && (
+              <button type="button" onClick={() => writeColors([])} className="self-start mt-1 text-[11px] underline text-black/60 dark:text-white/60">
+                Сбросить цвета
               </button>
             )}
           </div>
@@ -537,6 +616,12 @@ export function Catalog() {
                   <span key={size} data-testid={`size-tag-${size}`} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
                     {size}
                     <button type="button" aria-label={`Снять фильтр размера ${size}`} onClick={() => removeSize(size)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
+                  </span>
+                ))}
+                {activeColors.map((id) => (
+                  <span key={id} data-testid={`color-tag-${id}`} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-ice dark:bg-white/10 text-sm text-graphite dark:text-white">
+                    {colorName(id)}
+                    <button type="button" aria-label={`Снять фильтр цвета ${colorName(id)}`} onClick={() => removeColor(id)} className="ml-1 hover:text-error"><X className="w-3.5 h-3.5" /></button>
                   </span>
                 ))}
                 {onlyInStock && (
