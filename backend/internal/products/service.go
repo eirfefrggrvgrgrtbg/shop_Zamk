@@ -187,7 +187,7 @@ func (s *Service) CreateProductForSeller(ctx context.Context, currentUserID uuid
 			SellerSKU:    vr.SellerSKU,
 			ColorID:      vr.ColorID,
 			SizeValueID:  vr.SizeValueID,
-			ShadeName:    vr.ShadeName,
+			ShadeName:    normalizeShadeName(vr.ShadeName),
 			Barcode:      nil, // Seller cannot provide barcode
 			PriceCents:   vr.PriceCents,
 			IsActive:     true,
@@ -585,6 +585,21 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 				CreatedAt:    now,
 				UpdatedAt:    now,
 			}
+
+			// A client that omits `color` (legacy text) or `shadeName` must not erase what is stored:
+			// omitted = keep, explicit empty string = clear (shade only).
+			for _, ev := range existingVariants {
+				if ev.ID == varID {
+					if vr.Color == nil {
+						v.Color = ev.Color
+					}
+					if vr.ShadeName == nil {
+						v.ShadeName = ev.ShadeName
+					}
+					break
+				}
+			}
+			v.ShadeName = normalizeShadeName(v.ShadeName)
 
 			wasPlaceholder := false
 			if v.Barcode != nil && IsPlaceholderBarcode(*v.Barcode) {
@@ -1972,6 +1987,9 @@ func (s *Service) validateCategorySchema(
 	}
 
 	if err := s.validateSizeChartRows(ctx, categoryID, sizeChartRows); err != nil {
+		return err
+	}
+	if err := s.validateVariantColors(ctx, vReqs); err != nil {
 		return err
 	}
 

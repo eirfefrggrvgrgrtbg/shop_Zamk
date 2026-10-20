@@ -32,6 +32,7 @@ export interface ProductStudioUpdateRequestPayload {
   variants?: Array<{
     id?: string;
     colorId?: string;
+    shadeName?: string;
     sizeValueId?: string;
     sellerSku?: string;
     barcode?: string;
@@ -125,6 +126,8 @@ export function buildProductStudioUpdateRequest(
       .map((v) => ({
         id: isCanonicalVariantId(v.id) ? v.id : undefined,
         colorId: v.colorId || undefined,
+        // undefined = keep stored shade; '' = clear it
+        shadeName: v.shadeName !== undefined ? v.shadeName : undefined,
         sizeValueId: v.sizeValueId || undefined,
         sellerSku: v.sellerSku ? v.sellerSku.trim() : undefined,
         barcode: v.barcode ? v.barcode.trim() : undefined,

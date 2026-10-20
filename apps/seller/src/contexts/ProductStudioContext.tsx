@@ -95,6 +95,10 @@ export interface ProductStudioVariant {
   colorId?: string;
   colorName?: string;
   colorHex?: string;
+  /** Optional free-text description of the exact shade (e.g. «Графитовый»); NOT used for filtering. */
+  shadeName?: string;
+  /** Legacy free-text color of a variant that has no dictionary color_id yet (read-only, never auto-assigned). */
+  legacyColorText?: string;
   sizeValueId?: string;
   size?: string;
   sellerSku?: string;

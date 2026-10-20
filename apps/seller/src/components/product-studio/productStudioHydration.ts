@@ -106,6 +106,8 @@ export function hydrateProductStudioDraft({
       colorId: v.colorId || undefined,
       colorName: v.colorName || undefined,
       colorHex: v.colorHex || undefined,
+      shadeName: v.shadeName || undefined,
+      legacyColorText: !v.colorId && v.color ? v.color : undefined,
       sizeValueId: v.sizeValueId || undefined,
       size: v.size || (v as any).sizeName || undefined,
       sellerSku: v.sellerSku || (v as any).sku || undefined,

@@ -1130,4 +1130,92 @@ describe('ProductStudioVisualWorkspace - In-Canvas Constructor', () => {
       expect(screen.getByTestId('size-popover').textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i);
     });
   });
+
+  describe('CATALOG.C4 color + shade on variants', () => {
+    it('shows swatch + name, saves an optional shade per color and keeps variant identity', async () => {
+      let currentCtx: any;
+      render(<TestWrapper initialDraft={{ ...baseDraft }} contextCallback={(ctx) => (currentCtx = ctx)} />);
+      fireEvent.click(screen.getByLabelText('Управление цветами'));
+      const popover = await screen.findByTestId('color-popover');
+      expect(within(popover).getByText('Чёрный')).toBeTruthy();
+      const input = within(popover).getByTestId('shade-input-col-black');
+      fireEvent.change(input, { target: { value: '  Угольный ' } });
+      fireEvent.click(within(popover).getByRole('button', { name: 'Готово' }));
+      const v = currentCtx.draft.variants.find((x: any) => x.colorId === 'col-black');
+      expect(v.id).toBe('var-1');
+      expect(v.shadeName).toBe('Угольный');
+      expect(v.colorId).toBe('col-black');
+    });
+
+    it('clearing the shade sends an explicit empty value; untouched shade stays undefined', async () => {
+      let currentCtx: any;
+      render(
+        <TestWrapper
+          initialDraft={{ ...baseDraft, variants: [{ ...(baseDraft.variants as any)[0], shadeName: 'Старый' }] }}
+          contextCallback={(ctx) => (currentCtx = ctx)}
+        />
+      );
+      fireEvent.click(screen.getByLabelText('Управление цветами'));
+      const popover = await screen.findByTestId('color-popover');
+      expect((within(popover).getByTestId('shade-input-col-black') as HTMLInputElement).value).toBe('Старый');
+      fireEvent.change(within(popover).getByTestId('shade-input-col-black'), { target: { value: '' } });
+      fireEvent.click(within(popover).getByRole('button', { name: 'Готово' }));
+      expect(currentCtx.draft.variants[0].shadeName).toBe('');
+    });
+
+    it('legacy text-only variants: shows the old value, never auto-assigns, and adopts them on explicit color choice', async () => {
+      let currentCtx: any;
+      render(
+        <TestWrapper
+          initialDraft={{
+            ...baseDraft,
+            colors: [],
+            variants: [
+              { id: 'legacy-s', sizeValueId: 'sz-s', size: 'S', sellerSku: 'SKU-S', priceCents: 1000, legacyColorText: 'Чёрный' },
+              { id: 'legacy-m', sizeValueId: 'sz-m', size: 'M', sellerSku: 'SKU-M', priceCents: 1200, legacyColorText: 'Чёрный' },
+            ],
+          }}
+          contextCallback={(ctx) => (currentCtx = ctx)}
+        />
+      );
+      expect(currentCtx.draft.variants.every((v: any) => !v.colorId)).toBe(true);
+      fireEvent.click(screen.getByLabelText('Добавить цвет'));
+      const popover = await screen.findByTestId('color-popover');
+      expect(within(popover).getByTestId('legacy-color-hint').textContent).toContain('Чёрный');
+      // nothing assigned until the seller picks a dictionary color
+      expect(currentCtx.draft.variants.every((v: any) => !v.colorId)).toBe(true);
+      fireEvent.click(within(popover).getByText('Белый'));
+      fireEvent.click(within(popover).getByTestId('legacy-color-as-shade-btn'));
+      expect((within(popover).getByTestId('shade-input-col-white') as HTMLInputElement).value).toBe('Чёрный');
+      fireEvent.click(within(popover).getByRole('button', { name: 'Готово' }));
+      const vs = currentCtx.draft.variants;
+      expect(vs).toHaveLength(2); // adopted, not duplicated
+      expect(vs.map((v: any) => v.id).sort()).toEqual(['legacy-m', 'legacy-s']);
+      expect(vs.every((v: any) => v.colorId === 'col-white')).toBe(true);
+      expect(vs.find((v: any) => v.id === 'legacy-s').sellerSku).toBe('SKU-S');
+      expect(vs.find((v: any) => v.id === 'legacy-m').priceCents).toBe(1200);
+    });
+
+    it('replacing one color by another keeps variant ids, SKUs, prices and moves photo bindings', async () => {
+      let currentCtx: any;
+      render(
+        <TestWrapper
+          initialDraft={{
+            ...baseDraft,
+            variants: [{ id: 'var-keep', colorId: 'col-black', colorName: 'Чёрный', sizeValueId: 'sz-m', size: 'M', sellerSku: 'KEEP-1', priceCents: 777 }],
+          }}
+          contextCallback={(ctx) => (currentCtx = ctx)}
+        />
+      );
+      fireEvent.click(screen.getByLabelText('Управление цветами'));
+      const popover = await screen.findByTestId('color-popover');
+      fireEvent.click(within(popover).getByText('Чёрный')); // off
+      fireEvent.click(within(popover).getByText('Белый')); // on
+      fireEvent.click(within(popover).getByRole('button', { name: 'Готово' }));
+      expect(currentCtx.draft.variants).toHaveLength(1);
+      expect(currentCtx.draft.variants[0]).toMatchObject({ id: 'var-keep', colorId: 'col-white', sellerSku: 'KEEP-1', priceCents: 777, sizeValueId: 'sz-m' });
+      expect(currentCtx.draft.colors.map((c: any) => c.id)).toEqual(['col-white']);
+      expect(currentCtx.draft.images.every((i: any) => i.colorId === 'col-white')).toBe(true);
+    });
+  });
 });

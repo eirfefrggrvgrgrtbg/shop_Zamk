@@ -390,6 +390,12 @@ export function reconcileProductStudioVariantMatrix(
   const oldSizeIds = new Set((oldSizes || []).map(s => s.id));
   const hasOldData = oldColors !== undefined && oldSizes !== undefined;
 
+  // Legacy variants (free-text color, no dictionary color_id) are ADOPTED, never duplicated or dropped:
+  // when the seller explicitly picks the first color, each colorless active variant becomes that color's variant
+  // for the same size, keeping its id, SKU, price and stock identity. Other selected colors get new variants.
+  const adoptingColorId = colors.length > 0 ? colors[0].id : undefined;
+  const adopted = new Set<ProductStudioVariant>();
+
   return (tuples.map((tuple, index) => {
     // Only current ACTIVE variants may be candidates for preservation.
     // Inactive historical records (isActive === false) are treated as nonexistent.
@@ -402,6 +408,20 @@ export function reconcileProductStudioVariantMatrix(
 
     if (existing) {
       return { ...existing, isActive: true };
+    }
+
+    if (tuple.colorId && tuple.colorId === adoptingColorId) {
+      const legacy = currentVariants.find(
+        (v) =>
+          v.isActive !== false &&
+          !v.colorId &&
+          !adopted.has(v) &&
+          (v.sizeValueId || undefined) === (tuple.sizeValueId || undefined)
+      );
+      if (legacy) {
+        adopted.add(legacy);
+        return { ...legacy, colorId: tuple.colorId, colorName: tuple.colorName, colorHex: tuple.colorHex, isActive: true };
+      }
     }
 
     // Sparse matrix logic: if this tuple doesn't exist, we only create it if it's forced by a NEW color or NEW size,
@@ -544,4 +564,33 @@ export function toggleProductStudioVariantTuple(
     allowed: true,
     variants: [...activeVariants, newVariant],
   };
+}
+
+/**
+ * Seller replaced N colors by N other colors in one step: treat it as "change the color of these variants".
+ * Variants (id, SKU, price, stock identity) and image bindings move to the new color in order, instead of
+ * being deleted and re-created. Returns null when the change is not a pure swap.
+ */
+export function planColorSwap(
+  oldColorIds: string[],
+  nextColors: CanonicalColorInput[]
+): Map<string, CanonicalColorInput> | null {
+  const next = new Set(nextColors.map((c) => c.id));
+  const old = new Set(oldColorIds);
+  const removed = oldColorIds.filter((id) => !next.has(id));
+  const added = nextColors.filter((c) => !old.has(c.id));
+  if (removed.length === 0 || removed.length !== added.length) return null;
+  const map = new Map<string, CanonicalColorInput>();
+  removed.forEach((id, i) => map.set(id, added[i]));
+  return map;
+}
+
+export function applyColorSwapToVariants(
+  variants: ProductStudioVariant[],
+  swap: Map<string, CanonicalColorInput>
+): ProductStudioVariant[] {
+  return variants.map((v) => {
+    const target = v.colorId ? swap.get(v.colorId) : undefined;
+    return target ? { ...v, colorId: target.id, colorName: target.name, colorHex: target.hex } : v;
+  });
 }

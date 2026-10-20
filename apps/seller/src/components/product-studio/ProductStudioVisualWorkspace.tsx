@@ -28,6 +28,8 @@ import {
 } from "./productStudioPresentationAdapter";
 import {
   reconcileProductStudioVariantMatrix,
+  planColorSwap,
+  applyColorSwapToVariants,
   resolveProductStudioDimensionType,
 } from "./productStudioMatrixHelper";
 import {
@@ -83,6 +85,8 @@ export function ProductStudioVisualWorkspace() {
   // Popover state
   const [isColorPopoverOpen, setIsColorPopoverOpen] = useState(false);
   const [pendingSelectedColorIds, setPendingSelectedColorIds] = useState<Set<string>>(new Set());
+  // Optional shade description per selected color (separate from the dictionary color that drives filtering)
+  const [pendingShades, setPendingShades] = useState<Record<string, string>>({});
 
   const [isSizePopoverOpen, setIsSizePopoverOpen] = useState(false);
   const [pendingSelectedSizeIds, setPendingSelectedSizeIds] = useState<Set<string>>(new Set());
@@ -493,6 +497,11 @@ export function ProductStudioVisualWorkspace() {
   const handleOpenColorPopover = () => {
     setIsSizePopoverOpen(false);
     setPendingSelectedColorIds(new Set((draft.colors || []).map((c: any) => c.id)));
+    const shades: Record<string, string> = {};
+    for (const v of draft.variants || []) {
+      if (v.isActive !== false && v.colorId && v.shadeName && !shades[v.colorId]) shades[v.colorId] = v.shadeName;
+    }
+    setPendingShades(shades);
     setIsColorPopoverOpen(true);
   };
 
@@ -532,17 +541,35 @@ export function ProductStudioVisualWorkspace() {
       });
     }
 
+    // Pure color swap (N removed = N added): the variants KEEP their identity and just get the new color.
+    const swap = planColorSwap((draft.colors || []).map((c: any) => c.id), nextColors);
+    const baseVariants = swap ? applyColorSwapToVariants(draft.variants || [], swap) : (draft.variants || []);
+    const baseOldColors = swap
+      ? (draft.colors || []).map((c: any) => (swap.get(c.id) ? { ...swap.get(c.id)! } : c))
+      : (draft.colors || []);
+
     const updatedVariants = reconcileProductStudioVariantMatrix(
       effectiveDimensionType || draft.dimensionType || 'COLOR_AND_SIZE',
       nextColors,
       currentSizes,
-      draft.variants || [],
-      (draft.colors || []) as any,
+      baseVariants,
+      baseOldColors as any,
       currentSizes
     );
 
+    // Shade name: optional per-color description applied to all variants of that color.
+    // undefined keeps the stored value untouched; '' clears it.
+    for (const variant of updatedVariants) {
+      if (!variant.colorId || !pendingSelectedColorIds.has(variant.colorId)) continue;
+      const shade = (pendingShades[variant.colorId] || '').trim();
+      variant.shadeName = shade || (variant.shadeName ? '' : undefined);
+    }
+
     const nextColorIds = new Set(nextColors.map((c: any) => c.id));
-    const reconciledImages = reconcileMediaOnColorRemoval(draft.images, nextColorIds, mediaMode);
+    const swappedImages = swap
+      ? (draft.images || []).map((img) => (img.colorId && swap.get(img.colorId) ? { ...img, colorId: swap.get(img.colorId)!.id } : img))
+      : draft.images;
+    const reconciledImages = reconcileMediaOnColorRemoval(swappedImages, nextColorIds, mediaMode);
 
     updateDraft({
       colors: nextColors,
@@ -711,6 +738,10 @@ export function ProductStudioVisualWorkspace() {
     ).length === 0;
   }, [mediaMode, selectedColorObj, draft.images]);
   const isColorAttention = isFieldAttention("color");
+  const legacyColorTexts = useMemo(
+    () => Array.from(new Set((draft.variants || []).filter((v) => v.isActive !== false && !v.colorId && v.legacyColorText).map((v) => v.legacyColorText as string))),
+    [draft.variants]
+  );
   const isSizeAttention = isFieldAttention("size");
   const isDescriptionAttention = isFieldAttention("description");
   const isCompositionAttention = isFieldAttention("composition");
@@ -1599,6 +1630,52 @@ export function ProductStudioVisualWorkspace() {
                       );
                     })}
                   </div>
+                  {legacyColorTexts.length > 0 && (
+                    <div data-testid="legacy-color-hint" className="mb-3 rounded-lg border border-amber-200 dark:border-amber-800/40 bg-amber-50/60 dark:bg-amber-950/20 p-2.5 text-[11px] text-amber-900 dark:text-amber-200">
+                      <p>
+                        Прежний цвет (текст): <strong>{legacyColorTexts.join(', ')}</strong>. Он не связан со справочником —
+                        выберите основной цвет выше, и варианты получат его. Автоматически цвет не назначается.
+                      </p>
+                      {pendingSelectedColorIds.size > 0 && (
+                        <button
+                          type="button"
+                          data-testid="legacy-color-as-shade-btn"
+                          className="mt-1.5 underline font-medium"
+                          onClick={() => {
+                            const first = colorsList.find((c: any) => pendingSelectedColorIds.has(c.id));
+                            if (first) setPendingShades((prev) => ({ ...prev, [first.id]: legacyColorTexts[0] }));
+                          }}
+                        >
+                          Использовать как название оттенка
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {pendingSelectedColorIds.size > 0 && (
+                    <div className="mb-3 space-y-2 border-t border-border-soft dark:border-white/10 pt-3">
+                      <p className="text-[11px] text-ash">
+                        Название оттенка — необязательное описание вещи (например «Графитовый»). В фильтре каталога участвует только основной цвет.
+                      </p>
+                      {colorsList.filter((c: any) => pendingSelectedColorIds.has(c.id)).map((c: any) => (
+                        <label key={c.id} className="flex items-center gap-2 text-xs text-graphite dark:text-white">
+                          <span
+                            className="w-4 h-4 rounded-full border border-gray-300 dark:border-white/20 shrink-0"
+                            style={{ backgroundColor: c.hex || c.hexValue || "#cccccc" }}
+                          />
+                          <input
+                            type="text"
+                            maxLength={60}
+                            aria-label={`Оттенок: ${c.nameRu}`}
+                            data-testid={`shade-input-${c.id}`}
+                            placeholder="Оттенок (необязательно)"
+                            value={pendingShades[c.id] || ''}
+                            onChange={(e) => setPendingShades((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                            className="flex-1 min-w-0 px-2 py-1 rounded-md border border-border-soft dark:border-white/10 bg-transparent text-xs"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  )}
                   <button
                     type="button"
                     data-testid="color-popover-apply-btn"
