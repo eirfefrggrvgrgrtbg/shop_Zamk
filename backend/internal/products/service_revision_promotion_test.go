@@ -31,6 +31,8 @@ func setupRevisionPromotionFixture(t *testing.T) revisionPromotionFixture {
 	dsn := testutil.GetTestDatabaseURL()
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
+	// Idempotent with the callers' own deferred Close; guarantees release for callers that do not close.
+	t.Cleanup(pool.Close)
 
 	testutil.AssertTestDatabase(t, pool)
 

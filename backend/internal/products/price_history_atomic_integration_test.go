@@ -43,6 +43,8 @@ func setupPriceHistoryTestDB(t *testing.T) (*postgres.Client, *products.Service,
 
 	db, err := postgres.NewClient(ctx, dsn)
 	require.NoError(t, err)
+	// Registered first so the pool is closed after the fixture cleanups (Cleanup runs LIFO).
+	t.Cleanup(db.Close)
 
 	testutil.AssertTestDatabase(t, db.Pool)
 
