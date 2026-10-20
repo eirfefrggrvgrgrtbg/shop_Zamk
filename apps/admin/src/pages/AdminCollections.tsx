@@ -81,9 +81,12 @@ export function AdminCollections() {
           <h1>Подборки</h1>
           <p>Редакторские подборки товаров для витрины. Это не скидки и не рекламные кампании.</p>
         </div>
-        <button type="button" className="m-button m-primary" onClick={() => setIsCreating((v) => !v)}>
-          {isCreating ? 'Отмена' : 'Создать подборку'}
-        </button>
+        <div className="flex items-center gap-3">
+          <Link to="/collection-submissions" className="m-button">Заявки продавцов</Link>
+          <button type="button" className="m-button m-primary" onClick={() => setIsCreating((v) => !v)}>
+            {isCreating ? 'Отмена' : 'Создать подборку'}
+          </button>
+        </div>
       </div>
 
       {isCreating && (

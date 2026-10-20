@@ -45,6 +45,7 @@ import { AdminCategories } from './pages/AdminCategories';
 import { AdminBrands } from './pages/AdminBrands';
 import { AdminCollections } from './pages/AdminCollections';
 import { AdminCollectionDetail } from './pages/AdminCollectionDetail';
+import { AdminCollectionSubmissions } from './pages/AdminCollectionSubmissions';
 import { AdminCatalog } from './pages/AdminCatalog';
 import { AdminChangePassword } from './pages/AdminChangePassword';
 import { AdminRoles } from './pages/AdminRoles';
@@ -89,6 +90,7 @@ export default function App() {
             <Route path="/products" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/products')}><AdminProducts /></AdminProtectedRoute>} />
             <Route path="/products/:productId" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/products')}><AdminProductDetail /></AdminProtectedRoute>} />
             <Route path="/collections" element={<AdminProtectedRoute permission="storefront.manage"><AdminCollections /></AdminProtectedRoute>} />
+            <Route path="/collection-submissions" element={<AdminProtectedRoute permission="storefront.manage"><AdminCollectionSubmissions /></AdminProtectedRoute>} />
             <Route path="/collections/:id" element={<AdminProtectedRoute permission="storefront.manage"><AdminCollectionDetail /></AdminProtectedRoute>} />
             <Route path="/marketing" element={<Navigate to="/marketing/overview" replace />} />
             <Route path="/marketing/overview" element={<AdminProtectedRoute permission={getStaffScreenVisibility('/marketing')}><AdminMarketingOverview /></AdminProtectedRoute>} />

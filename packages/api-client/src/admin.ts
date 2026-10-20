@@ -1139,3 +1139,17 @@ export const updateAdminCollection = async (id: string, input: import('./types')
 export const replaceAdminCollectionItems = async (id: string, productIds: string[]): Promise<void> => {
   return request<void>('PUT', `/admin/merchandising/collections/${id}/items`, { body: { productIds } });
 };
+
+// --- Editorial collection submissions (review) ---
+export const getAdminCollectionSubmissions = async (status: 'pending' | 'accepted' | 'rejected' | 'all' = 'pending'): Promise<import('./types').AdminCollectionSubmission[]> => {
+  const res = await request<{ items?: import('./types').AdminCollectionSubmission[] }>('GET', `/admin/merchandising/submissions?status=${status}`);
+  return res?.items || [];
+};
+
+export const acceptAdminCollectionSubmission = async (id: string): Promise<import('./types').AdminCollectionSubmission> => {
+  return request('POST', `/admin/merchandising/submissions/${id}/accept`);
+};
+
+export const rejectAdminCollectionSubmission = async (id: string, reason?: string): Promise<import('./types').AdminCollectionSubmission> => {
+  return request('POST', `/admin/merchandising/submissions/${id}/reject`, { body: { reason: reason || '' } });
+};

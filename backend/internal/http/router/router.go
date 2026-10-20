@@ -470,6 +470,15 @@ func New(
 		sellerAnalyticsHandler.RegisterRoutes(r)
 	})
 
+	r.Route("/api/seller/collections", func(r chi.Router) {
+		r.Use(appMiddleware.AuthMiddleware(tokenService))
+		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
+
+		r.Get("/", merchHandler.ListSellerCollectionOptions)
+		r.Get("/submissions", merchHandler.ListSellerSubmissions)
+		r.Post("/submissions", merchHandler.CreateSellerSubmission)
+	})
+
 	r.Route("/api/seller/promotions", func(r chi.Router) {
 		r.Use(appMiddleware.AuthMiddleware(tokenService))
 		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
@@ -559,6 +568,9 @@ func New(
 			r.With(perm("storefront.manage")).Get("/collections/{id}", merchHandler.GetAdminCollection)
 			r.With(perm("storefront.manage")).Patch("/collections/{id}", merchHandler.UpdateCollection)
 			r.With(perm("storefront.manage")).Put("/collections/{id}/items", merchHandler.ReplaceCollectionItems)
+			r.With(perm("storefront.manage")).Get("/submissions", merchHandler.ListAdminSubmissions)
+			r.With(perm("storefront.manage")).Post("/submissions/{id}/accept", merchHandler.AcceptSubmission)
+			r.With(perm("storefront.manage")).Post("/submissions/{id}/reject", merchHandler.RejectSubmission)
 		})
 
 		r.With(uploadLimit, perm("brands.update")).Post("/brands/{id}/logo/upload", storageHandler.UploadAdminBrandLogo)

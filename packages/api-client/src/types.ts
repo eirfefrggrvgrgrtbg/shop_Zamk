@@ -3172,3 +3172,32 @@ export interface SellerPromoStatsOrder {
 export interface SellerPromoStatsDetail extends SellerPromoStats {
   recentOrders: SellerPromoStatsOrder[];
 }
+
+// --- Seller submissions to editorial collections ---
+export type CollectionSubmissionStatus = 'pending' | 'accepted' | 'rejected';
+
+export interface SellerCollectionOption {
+  id: string;
+  slug: string;
+  title: string;
+  description?: string | null;
+}
+
+export interface CollectionSubmission {
+  id: string;
+  collectionId: string;
+  collectionTitle: string;
+  product: { id: string; title: string; imageUrl?: string | null; status: string };
+  status: CollectionSubmissionStatus;
+  sellerComment?: string | null;
+  rejectionReason?: string | null;
+  createdAt: string;
+  reviewedAt?: string | null;
+}
+
+export interface AdminCollectionSubmission extends CollectionSubmission {
+  sellerId: string;
+  brandName: string;
+  collectionSlug: string;
+  reviewerName?: string | null;
+}

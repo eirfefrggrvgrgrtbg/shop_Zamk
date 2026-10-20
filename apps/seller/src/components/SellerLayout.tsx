@@ -17,7 +17,8 @@ import {
   X,
   ChevronDown,
   LayoutDashboard,
-  Tag
+  Tag,
+  BookOpen
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { NotificationBell } from './notifications/NotificationBell';
@@ -130,10 +131,11 @@ export const NAV_GROUPS: NavDropdownGroup[] = [
   {
     id: 'sales',
     label: 'Продажи',
-    matchPaths: ['/orders', '/returns', '/reviews', '/promotions'],
+    matchPaths: ['/orders', '/returns', '/reviews', '/promotions', '/collections'],
     items: [
       { name: 'Заказы', path: '/orders', icon: ShoppingCart },
       { name: 'Промокоды', path: '/promotions', icon: Tag },
+      { name: 'Подборки', path: '/collections', icon: BookOpen },
       { name: 'Возвраты', path: '/returns', icon: RotateCcw },
       { name: 'Отзывы', path: '/reviews', icon: MessageSquare },
     ],

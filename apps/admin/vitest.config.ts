@@ -49,6 +49,7 @@ export default defineConfig({
       'src/components/marketing/**/*.test.{ts,tsx}',
       'src/pages/AdminCollections.test.tsx',
       'src/pages/AdminCollectionDetail.test.tsx',
+      'src/pages/AdminCollectionSubmissions.test.tsx',
       'src/lib/collectionSlug.test.ts',
       'src/pages/support/**/*.test.{ts,tsx}',
       'src/config/**/*.test.{ts,tsx}',

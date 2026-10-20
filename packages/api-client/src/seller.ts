@@ -405,3 +405,22 @@ export const updateSellerPromotion = async (
 ): Promise<SellerPromotion> => {
   return request<SellerPromotion>('PATCH', `/seller/promotions/${id}`, { body: input });
 };
+
+// --- Editorial collection submissions ---
+export const getSellerCollectionOptions = async (): Promise<import('./types').SellerCollectionOption[]> => {
+  const res = await request<{ items?: import('./types').SellerCollectionOption[] }>('GET', '/seller/collections');
+  return res?.items || [];
+};
+
+export const getSellerCollectionSubmissions = async (): Promise<import('./types').CollectionSubmission[]> => {
+  const res = await request<{ items?: import('./types').CollectionSubmission[] }>('GET', '/seller/collections/submissions');
+  return res?.items || [];
+};
+
+export const createSellerCollectionSubmission = async (input: {
+  collectionId: string;
+  productId: string;
+  comment?: string;
+}): Promise<import('./types').CollectionSubmission> => {
+  return request('POST', '/seller/collections/submissions', { body: input });
+};
