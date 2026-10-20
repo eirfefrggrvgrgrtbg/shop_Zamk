@@ -206,8 +206,8 @@ describe('Admin Marketing Operational Workspace (ADS.2A / C2.4)', () => {
 
       await screen.findByText('Platform Summer Sale 2026');
       const row = screen.getByTestId(`campaign-row-${mockCampaigns[0].id}`);
-      // Formatted date in Russian locale
-      expect(within(row).getByText(/01\.06\.26/)).toBeTruthy();
+      // Campaign periods are shown in Moscow time; 2026-06-01T00:00Z is 03:00 MSK, so the time is shown.
+      expect(within(row).getByText(/01\.06\.2026 03:00 — до 01\.09\.2026 02:59 МСК/)).toBeTruthy();
     });
 
     it('handles long campaign names safely without breaking table structure', async () => {

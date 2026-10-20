@@ -51,7 +51,7 @@ func (r *Repository) CreateCampaignTx(ctx context.Context, db DBExecutor, c *Mar
 			zamk_reserved_cents, zamk_spent_cents,
 			rejection_reason, admin_comment,
 			starts_at, ends_at, submitted_at, decided_at, decided_by_staff_id,
-			created_at, updated_at, purpose
+			created_at, updated_at, purpose, legacy_approved_tracking
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
 			$11, $12,
@@ -60,7 +60,7 @@ func (r *Repository) CreateCampaignTx(ctx context.Context, db DBExecutor, c *Mar
 			$17, $18,
 			$19, $20,
 			$21, $22, $23, $24, $25,
-			$26, $27, $28
+			$26, $27, $28, $29
 		)
 	`
 	args := []any{
@@ -71,7 +71,7 @@ func (r *Repository) CreateCampaignTx(ctx context.Context, db DBExecutor, c *Mar
 		c.ZamkReservedCents, c.ZamkSpentCents,
 		c.RejectionReason, c.AdminComment,
 		c.StartsAt, c.EndsAt, c.SubmittedAt, c.DecidedAt, c.DecidedByStaffID,
-		c.CreatedAt, c.UpdatedAt, c.Purpose,
+		c.CreatedAt, c.UpdatedAt, c.Purpose, c.LegacyApprovedTracking,
 	}
 	_, err := db.Exec(ctx, query, args...)
 	if err != nil {
@@ -100,7 +100,7 @@ func (r *Repository) getCampaign(ctx context.Context, db DBExecutor, id uuid.UUI
 			zamk_reserved_cents, zamk_spent_cents,
 			rejection_reason, admin_comment,
 			starts_at, ends_at, submitted_at, decided_at, decided_by_staff_id,
-			created_at, updated_at, purpose
+			created_at, updated_at, purpose, legacy_approved_tracking
 		FROM marketing_campaigns
 		WHERE id = $1
 	`
@@ -114,7 +114,7 @@ func (r *Repository) getCampaign(ctx context.Context, db DBExecutor, id uuid.UUI
 		&c.ZamkReservedCents, &c.ZamkSpentCents,
 		&c.RejectionReason, &c.AdminComment,
 		&c.StartsAt, &c.EndsAt, &c.SubmittedAt, &c.DecidedAt, &c.DecidedByStaffID,
-		&c.CreatedAt, &c.UpdatedAt, &c.Purpose,
+		&c.CreatedAt, &c.UpdatedAt, &c.Purpose, &c.LegacyApprovedTracking,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -604,7 +604,7 @@ func (r *Repository) GetCampaignForUpdateTx(ctx context.Context, db DBExecutor, 
 			zamk_reserved_cents, zamk_spent_cents,
 			rejection_reason, admin_comment,
 			starts_at, ends_at, submitted_at, decided_at, decided_by_staff_id,
-			created_at, updated_at, purpose
+			created_at, updated_at, purpose, legacy_approved_tracking
 		FROM marketing_campaigns
 		WHERE id = $1
 		FOR UPDATE
@@ -619,7 +619,7 @@ func (r *Repository) GetCampaignForUpdateTx(ctx context.Context, db DBExecutor, 
 		&c.ZamkReservedCents, &c.ZamkSpentCents,
 		&c.RejectionReason, &c.AdminComment,
 		&c.StartsAt, &c.EndsAt, &c.SubmittedAt, &c.DecidedAt, &c.DecidedByStaffID,
-		&c.CreatedAt, &c.UpdatedAt, &c.Purpose,
+		&c.CreatedAt, &c.UpdatedAt, &c.Purpose, &c.LegacyApprovedTracking,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1510,12 +1510,15 @@ func (r *Repository) UpdateCampaignTx(ctx context.Context, db DBExecutor, c *Mar
 	query := `
 		UPDATE marketing_campaigns
 		SET title = $1, description = $2, status = $3, campaign_channel = $4, campaign_type = $5,
-		    planned_budget_cents = $6, starts_at = $7, ends_at = $8, updated_at = now()
+		    planned_budget_cents = $6, starts_at = $7, ends_at = $8,
+		    approved_zamk_share_bps = $10, approved_zamk_budget_cap_cents = $11,
+		    legacy_approved_tracking = $12, updated_at = now()
 		WHERE id = $9 AND purpose = 'advertising'
 	`
 	cmd, err := db.Exec(ctx, query,
 		c.Title, c.Description, string(c.Status), chStr, tpStr,
 		c.PlannedBudgetCents, c.StartsAt, c.EndsAt, c.ID,
+		c.ApprovedZamkShareBps, c.ApprovedZamkBudgetCapCents, c.LegacyApprovedTracking,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update campaign: %w", err)
@@ -1537,7 +1540,7 @@ func (r *Repository) ListAdminCampaigns(ctx context.Context) ([]CampaignDetailVi
 			c.zamk_reserved_cents, c.zamk_spent_cents,
 			c.rejection_reason, c.admin_comment,
 			c.starts_at, c.ends_at, c.submitted_at, c.decided_at, c.decided_by_staff_id,
-			c.created_at, c.updated_at, c.purpose,
+			c.created_at, c.updated_at, c.purpose, c.legacy_approved_tracking,
 			COALESCE(COUNT(l.id), 0) AS tracking_link_count
 		FROM marketing_campaigns c
 		LEFT JOIN campaign_tracking_links l ON l.campaign_id = c.id
@@ -1564,7 +1567,7 @@ func (r *Repository) ListAdminCampaigns(ctx context.Context) ([]CampaignDetailVi
 			&v.ZamkReservedCents, &v.ZamkSpentCents,
 			&v.RejectionReason, &v.AdminComment,
 			&v.StartsAt, &v.EndsAt, &v.SubmittedAt, &v.DecidedAt, &v.DecidedByStaffID,
-			&v.CreatedAt, &v.UpdatedAt, &v.Purpose,
+			&v.CreatedAt, &v.UpdatedAt, &v.Purpose, &v.LegacyApprovedTracking,
 			&v.TrackingLinkCount,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan admin campaign view: %w", err)
@@ -1596,7 +1599,7 @@ func (r *Repository) GetAdminCampaign(ctx context.Context, id uuid.UUID) (*Campa
 			c.zamk_reserved_cents, c.zamk_spent_cents,
 			c.rejection_reason, c.admin_comment,
 			c.starts_at, c.ends_at, c.submitted_at, c.decided_at, c.decided_by_staff_id,
-			c.created_at, c.updated_at, c.purpose,
+			c.created_at, c.updated_at, c.purpose, c.legacy_approved_tracking,
 			COALESCE(COUNT(l.id), 0) AS tracking_link_count
 		FROM marketing_campaigns c
 		LEFT JOIN campaign_tracking_links l ON l.campaign_id = c.id
@@ -1615,7 +1618,7 @@ func (r *Repository) GetAdminCampaign(ctx context.Context, id uuid.UUID) (*Campa
 		&v.ZamkReservedCents, &v.ZamkSpentCents,
 		&v.RejectionReason, &v.AdminComment,
 		&v.StartsAt, &v.EndsAt, &v.SubmittedAt, &v.DecidedAt, &v.DecidedByStaffID,
-		&v.CreatedAt, &v.UpdatedAt, &v.Purpose,
+		&v.CreatedAt, &v.UpdatedAt, &v.Purpose, &v.LegacyApprovedTracking,
 		&v.TrackingLinkCount,
 	)
 	if err != nil {

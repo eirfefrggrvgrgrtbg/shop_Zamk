@@ -32,7 +32,7 @@ import type {
   AdminCampaignMetrics,
 } from '@zamk/api-client/src/types';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
-import { money, number, percent, dayUtc, dateInputValue, startOfDayIso, endOfDayIso, validateCampaignPlan } from '../components/marketing/marketingPresentation';
+import { money, number, percent, validateCampaignPlan, campaignDayStartIso, campaignDayEndExclusiveIso, campaignStartInputValue, campaignEndInputValue, formatCampaignStart, formatCampaignEnd, CAMPAIGN_TZ_LABEL } from '../components/marketing/marketingPresentation';
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
@@ -40,6 +40,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   counter_offered: { label: 'Контрпредложение', color: 'bg-purple-100 text-purple-800' },
   approved: { label: 'Одобрена', color: 'bg-blue-100 text-blue-800' },
   active: { label: 'Активна', color: 'bg-green-100 text-green-800' },
+  paused: { label: 'Приостановлена', color: 'bg-amber-100 text-amber-800' },
   ended: { label: 'Завершена', color: 'bg-gray-200 text-gray-700' },
   rejected: { label: 'Отклонена', color: 'bg-red-100 text-red-800' },
   cancelled: { label: 'Отменена', color: 'bg-red-200 text-red-900' },
@@ -63,6 +64,54 @@ const TYPE_LABELS: Record<string, string> = {
   retargeting: 'Ретаргетинг',
   special_promo: 'Специальная акция',
 };
+
+// Advertising lifecycle (M1.3), mirrors the server rules:
+// draft -> approved -> active <-> paused; active|paused -> ended; draft|approved|active|paused -> cancelled.
+type LifecycleAction = { to: CampaignStatus; label: string; testId: string; tone: 'primary' | 'neutral' | 'warn' | 'danger'; confirm?: string };
+const LIFECYCLE_ACTIONS: Record<string, LifecycleAction[]> = {
+  draft: [
+    { to: 'approved', label: 'Подтвердить готовность', testId: 'approve-campaign-button', tone: 'primary' },
+  ],
+  approved: [
+    { to: 'active', label: 'Запустить', testId: 'activate-campaign-button', tone: 'primary' },
+  ],
+  active: [
+    { to: 'paused', label: 'Приостановить', testId: 'pause-campaign-button', tone: 'warn' },
+    { to: 'ended', label: 'Завершить', testId: 'end-campaign-button', tone: 'neutral', confirm: 'Завершить кампанию? Это действие необратимо: переходы по ссылкам прекратятся, редактирование и повторный запуск будут недоступны. История и аналитика сохранятся.' },
+  ],
+  paused: [
+    { to: 'active', label: 'Возобновить', testId: 'resume-campaign-button', tone: 'primary' },
+    { to: 'ended', label: 'Завершить', testId: 'end-campaign-button', tone: 'neutral', confirm: 'Завершить кампанию? Это действие необратимо: переходы по ссылкам прекратятся, редактирование и повторный запуск будут недоступны. История и аналитика сохранятся.' },
+  ],
+};
+const CANCELLABLE = new Set(['draft', 'approved', 'active', 'paused', 'submitted', 'counter_offered']);
+const CLOSED = new Set(['ended', 'cancelled', 'rejected']);
+const CANCEL_CONFIRM = 'Отменить кампанию? Это действие необратимо: трафик по ссылкам будет остановлен, повторная активация невозможна.';
+const TONE_CLASSES: Record<LifecycleAction['tone'], string> = {
+  primary: 'bg-green-600 text-white hover:bg-green-700',
+  neutral: 'bg-gray-600 text-white hover:bg-gray-700',
+  warn: 'bg-amber-600 text-white hover:bg-amber-700',
+  danger: 'bg-white text-red-700 border border-red-300 hover:bg-red-50',
+};
+const READINESS_FIELDS: Record<string, string> = {
+  title: 'название', campaignChannel: 'канал', campaignType: 'тип кампании', startsAt: 'дату начала',
+};
+
+/** Human message for lifecycle API errors; returns null for unknown errors. */
+function lifecycleErrorMessage(err: any): string | null {
+  const code = err?.code;
+  const raw: string = err?.rawMessage || err?.message || '';
+  if (code === 'campaign_not_ready' || err?.status === 422) {
+    const missing = raw.split('missing ')[1];
+    const fields = missing ? missing.split(',').map(f => READINESS_FIELDS[f.trim()] || f.trim()).join(', ') : '';
+    return fields ? `Кампания не готова: заполните ${fields}.` : 'Кампания не готова к этому шагу: заполните обязательные поля.';
+  }
+  if (code === 'campaign_closed') return 'Кампания завершена или отменена: изменения недоступны. Данные обновлены.';
+  if (code === 'invalid_status_transition' || err?.status === 409) {
+    return 'Такой переход статуса недоступен: возможно, кампанию уже изменили. Данные обновлены.';
+  }
+  return null;
+}
 
 export function AdminMarketingCampaignDetail() {
   const { id } = useParams<{ id: string }>();
@@ -147,24 +196,24 @@ export function AdminMarketingCampaignDetail() {
     setTimeout(() => setCopiedToken(null), 2000);
   };
 
-  const handleStatusChange = async (newStatus: CampaignStatus) => {
+  const handleStatusChange = async (newStatus: CampaignStatus, confirmText?: string) => {
     if (!id) return;
-    if (newStatus === 'ended' && !window.confirm('Завершить кампанию? Это действие необратимо: переходы по её ссылкам будут остановлены, возобновить кампанию нельзя.')) {
+    if (confirmText && !window.confirm(confirmText)) {
       return;
     }
     try {
       setError(null);
       const updated = await updateAdminCampaign(id, { status: newStatus });
       setCampaign(updated);
-      setSuccess(`Статус кампании обновлен: ${STATUS_LABELS[newStatus]?.label || newStatus}`);
+      setIsEditing(false);
+      setSuccess(`Статус кампании: ${STATUS_LABELS[newStatus]?.label || newStatus}`);
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      if (err?.code === 'invalid_status_transition' || err?.status === 409) {
-        setError('Такой переход статуса недоступен: возможно, кампанию уже изменили. Данные обновлены.');
+      const msg = lifecycleErrorMessage(err);
+      setError(msg || err?.message || 'Не удалось обновить статус кампании');
+      if (err?.status === 409 || err?.code === 'invalid_status_transition' || err?.code === 'campaign_closed') {
         // Resync silently: the status shown may be stale after a concurrent change.
         getAdminCampaign(id).then(setCampaign).catch(() => undefined);
-      } else {
-        setError(err?.message || 'Не удалось обновить статус кампании');
       }
     }
   };
@@ -176,8 +225,8 @@ export function AdminMarketingCampaignDetail() {
     setEditChannel((campaign.campaignChannel as CampaignChannel) ?? '');
     setEditType((campaign.campaignType as CampaignType) ?? '');
     setEditBudgetRub(campaign.plannedBudgetCents ? String(Math.round(campaign.plannedBudgetCents / 100)) : '');
-    setEditStartsAt(dateInputValue(campaign.startsAt));
-    setEditEndsAt(dateInputValue(campaign.endsAt));
+    setEditStartsAt(campaignStartInputValue(campaign.startsAt));
+    setEditEndsAt(campaignEndInputValue(campaign.endsAt));
     setEditError(null);
     setIsEditing(true);
   };
@@ -204,8 +253,9 @@ export function AdminMarketingCampaignDetail() {
       const cents = Number(editBudgetRub) * 100;
       if (cents !== campaign.plannedBudgetCents) patch.plannedBudgetCents = cents;
     }
-    if (editStartsAt && editStartsAt !== dateInputValue(campaign.startsAt)) patch.startsAt = startOfDayIso(editStartsAt);
-    if (editEndsAt && editEndsAt !== dateInputValue(campaign.endsAt)) patch.endsAt = endOfDayIso(editEndsAt);
+    // Unchanged days are not re-sent, so legacy end instants are never silently moved.
+    if (editStartsAt && editStartsAt !== campaignStartInputValue(campaign.startsAt)) patch.startsAt = campaignDayStartIso(editStartsAt);
+    if (editEndsAt && editEndsAt !== campaignEndInputValue(campaign.endsAt)) patch.endsAt = campaignDayEndExclusiveIso(editEndsAt);
     if (Object.keys(patch).length === 0) {
       setIsEditing(false);
       return;
@@ -219,7 +269,8 @@ export function AdminMarketingCampaignDetail() {
       setSuccess('Изменения сохранены');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      setEditError(err?.message || 'Не удалось сохранить изменения');
+      setEditError(lifecycleErrorMessage(err) || err?.message || 'Не удалось сохранить изменения');
+      if (err?.code === 'campaign_closed') getAdminCampaign(id).then(setCampaign).catch(() => undefined);
     } finally {
       setIsSavingEdit(false);
     }
@@ -359,10 +410,10 @@ export function AdminMarketingCampaignDetail() {
             </div>
           </div>
 
-          {/* Status actions: only transitions that change real backend behaviour */}
+          {/* Lifecycle actions: exactly the transitions the server accepts */}
           {hasPermission('marketing.campaigns.write') && campaign.purpose === 'advertising' && (
-            <div className="flex items-center space-x-2">
-              {!isEditing && campaign.status !== 'ended' && campaign.status !== 'cancelled' && campaign.status !== 'rejected' && (
+            <div className="flex flex-wrap items-center gap-2" data-testid="campaign-lifecycle-actions">
+              {!isEditing && !CLOSED.has(campaign.status) && (
                 <button
                   onClick={startEdit}
                   data-testid="edit-campaign-button"
@@ -371,28 +422,42 @@ export function AdminMarketingCampaignDetail() {
                   Редактировать
                 </button>
               )}
-              {campaign.status === 'approved' && (
+              {(LIFECYCLE_ACTIONS[campaign.status] || []).map(action => (
                 <button
-                  onClick={() => handleStatusChange('active')}
-                  data-testid="activate-campaign-button"
-                  className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs font-medium hover:bg-green-700 transition-colors shadow-2xs"
+                  key={action.testId}
+                  onClick={() => handleStatusChange(action.to, action.confirm)}
+                  data-testid={action.testId}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors shadow-2xs ${TONE_CLASSES[action.tone]}`}
                 >
-                  Отметить активной
+                  {action.label}
                 </button>
-              )}
-              {(campaign.status === 'approved' || campaign.status === 'active') && (
+              ))}
+              {CANCELLABLE.has(campaign.status) && (
                 <button
-                  onClick={() => handleStatusChange('ended')}
-                  data-testid="end-campaign-button"
-                  className="px-3 py-1.5 bg-gray-600 text-white rounded-md text-xs font-medium hover:bg-gray-700 transition-colors shadow-2xs"
+                  onClick={() => handleStatusChange('cancelled', CANCEL_CONFIRM)}
+                  data-testid="cancel-campaign-button"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${TONE_CLASSES.danger}`}
                 >
-                  Завершить
+                  Отменить кампанию
                 </button>
               )}
             </div>
           )}
         </div>
       </div>
+
+      {campaign.purpose === 'advertising' && (
+        <div className="p-3 bg-gray-50 border border-gray-200 rounded-md text-gray-600 text-xs" data-testid="campaign-traffic-note">
+          {campaign.status === 'active' && 'Кампания активна: переходы по ссылкам принимаются в пределах периода действия.'}
+          {campaign.status === 'paused' && 'Кампания приостановлена: новые переходы и рекламные сессии не принимаются. Ссылки, история и аналитика сохранены.'}
+          {campaign.status === 'draft' && 'Черновик: настройки можно менять, трафик не принимается. Для одобрения нужны канал, тип и дата начала.'}
+          {campaign.status === 'approved' && (campaign.legacyApprovedTracking
+            ? 'Кампания создана до появления жизненного цикла: в статусе «Одобрена» её ссылки продолжают принимать трафик. Запустите кампанию, чтобы управлять паузой.'
+            : 'Кампания готова к запуску. Ссылки можно подготовить заранее, трафик начнётся после запуска.')}
+          {CLOSED.has(campaign.status) && 'Кампания закрыта: трафик не принимается, изменения недоступны. Доступна историческая аналитика.'}
+          {(campaign.status === 'submitted' || campaign.status === 'counter_offered') && 'Устаревший статус: доступна только отмена.'}
+        </div>
+      )}
 
       {campaign.purpose !== 'advertising' && (
         <div className="p-3 bg-gray-50 border border-gray-200 rounded-md text-gray-600 text-xs" data-testid="promotion-readonly-note">
@@ -450,7 +515,7 @@ export function AdminMarketingCampaignDetail() {
           <div className="text-xs font-medium text-gray-500 uppercase">Сроки проведения</div>
           <div className="mt-1 text-sm text-gray-700 flex items-center">
             <Calendar className="h-4 w-4 mr-1 text-gray-400" />
-            {dayUtc(campaign.startsAt)} — {campaign.endsAt ? dayUtc(campaign.endsAt) : 'без окончания'}
+            {campaign.startsAt || campaign.endsAt ? `${formatCampaignStart(campaign.startsAt)} — ${formatCampaignEnd(campaign.endsAt)} ${CAMPAIGN_TZ_LABEL}` : 'Период не задан'}
           </div>
         </div>
       </div>
@@ -483,7 +548,7 @@ export function AdminMarketingCampaignDetail() {
               <input data-testid="edit-budget-input" inputMode="numeric" value={editBudgetRub} onChange={e => setEditBudgetRub(e.target.value.replace(/\D/g, ''))} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 tabular-nums" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Период (даты включительно, UTC)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Период (даты включительно, {CAMPAIGN_TZ_LABEL})</label>
               <div className="flex items-center gap-2">
                 <input type="date" aria-label="Дата начала" value={editStartsAt} onChange={e => setEditStartsAt(e.target.value)} className="w-full text-xs border border-gray-200 rounded-lg px-2 py-2" />
                 <span className="text-gray-300">—</span>
@@ -541,7 +606,7 @@ export function AdminMarketingCampaignDetail() {
             </p>
           </div>
 
-          {hasPermission('marketing.campaigns.write') && (
+          {hasPermission('marketing.campaigns.write') && !CLOSED.has(campaign.status) && (
             <button
               onClick={() => {
                 resetLinkForm();

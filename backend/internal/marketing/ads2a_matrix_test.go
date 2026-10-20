@@ -267,6 +267,8 @@ func TestADS2A_CaseB_SellerCampaignRegression(t *testing.T) {
 }
 
 // Case C: Campaign update
+var caseCStart = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
 func TestADS2A_CaseC_CampaignUpdate(t *testing.T) {
 	_, _, svc := setupTestMarketingDB(t)
 	ctx := context.Background()
@@ -280,6 +282,7 @@ func TestADS2A_CaseC_CampaignUpdate(t *testing.T) {
 		CampaignChannel: &channel,
 		CampaignType:    &campType,
 		DiscountType:    marketing.DiscountTypePercent,
+		StartsAt:        &caseCStart, // M1.3: a start is required outside of draft
 	}
 	require.NoError(t, svc.CreateAdminCampaign(ctx, camp))
 
@@ -1294,6 +1297,7 @@ func TestADS2A_CaseAF_HistoricalAttributionImmutableAfterCampaignEditOrPause(t *
 		CampaignType:       &campType,
 		PlannedBudgetCents: &initialBudget,
 		DiscountType:       marketing.DiscountTypePercent,
+		StartsAt:           &caseCStart,
 	}
 	require.NoError(t, f.marketingSvc.CreateAdminCampaign(ctx, camp))
 
@@ -1350,7 +1354,7 @@ func TestADS2A_CaseAF_HistoricalAttributionImmutableAfterCampaignEditOrPause(t *
 
 	// 3. Campaign is later PAUSED, its title changed, its budget changed
 	newTitle := "Renamed Campaign AF"
-	newStatus := marketing.CampaignStatusApproved // paused
+	newStatus := marketing.CampaignStatusPaused // M1.3: a real pause (active -> approved is no longer allowed)
 	newBudget := int64(99999999)
 
 	_, err = f.marketingSvc.UpdateAdminCampaign(ctx, camp.ID, marketing.AdminUpdateCampaignRequest{

@@ -1624,6 +1624,11 @@ func (s *Service) CreateAdminCampaign(ctx context.Context, campaign *MarketingCa
 			campaign.SellerDiscountBps = 1000
 		}
 	}
+	// Campaigns created by M1.3+ never use the pre-lifecycle "approved accepts traffic" rule.
+	campaign.LegacyApprovedTracking = false
+	if err := ValidateAdvertisingPeriod(campaign); err != nil {
+		return err
+	}
 	if err := ValidateCampaign(campaign); err != nil {
 		return err
 	}
@@ -1635,6 +1640,11 @@ func (s *Service) CreateTrackingLink(ctx context.Context, link *CampaignTracking
 	campaign, err := s.repo.GetCampaignByID(ctx, link.CampaignID)
 	if err != nil {
 		return err
+	}
+	// Links may be prepared for draft/approved/paused campaigns (they only carry traffic while active),
+	// but a completed, cancelled or rejected campaign never gets new links.
+	if IsTerminalAdvertisingStatus(campaign.Status) {
+		return ErrCampaignClosed
 	}
 
 	if link.PromoCodeID != nil {
@@ -1697,17 +1707,8 @@ func (s *Service) ResolveTrackingLink(ctx context.Context, token string, baseURL
 		return "", err
 	}
 
-	// Only active or approved campaigns can be tracked
-	if campaign.Status != CampaignStatusActive && campaign.Status != CampaignStatusApproved {
-		return "", ErrCampaignNotActive
-	}
-
-	now := time.Now().UTC()
-	if campaign.StartsAt != nil && now.Before(*campaign.StartsAt) {
-		return "", ErrCampaignNotStarted
-	}
-	if campaign.EndsAt != nil && now.After(*campaign.EndsAt) {
-		return "", ErrCampaignExpired
+	if err := CheckCampaignAcceptsTraffic(campaign, time.Now().UTC()); err != nil {
+		return "", err
 	}
 
 	cleanBase := strings.TrimRight(baseURL, "/")
@@ -1771,16 +1772,8 @@ func (s *Service) ResolveCampaignToken(ctx context.Context, token string) (*uuid
 	if err != nil {
 		return nil, err
 	}
-	if campaign.Status != CampaignStatusActive && campaign.Status != CampaignStatusApproved {
-		return nil, ErrCampaignNotActive
-	}
-
-	now := time.Now().UTC()
-	if campaign.StartsAt != nil && now.Before(*campaign.StartsAt) {
-		return nil, ErrCampaignNotStarted
-	}
-	if campaign.EndsAt != nil && now.After(*campaign.EndsAt) {
-		return nil, ErrCampaignExpired
+	if err := CheckCampaignAcceptsTraffic(campaign, time.Now().UTC()); err != nil {
+		return nil, err
 	}
 	return &campaign.ID, nil
 }
@@ -1795,7 +1788,7 @@ func (s *Service) GetAdminCampaign(ctx context.Context, id uuid.UUID) (*Campaign
 	return s.repo.GetAdminCampaign(ctx, id)
 }
 
-// UpdateAdminCampaign updates campaign fields. The campaign row is locked for the whole
+// UpdateAdminCampaign updates campaign fields and status. The campaign row is locked for the whole
 // read-validate-write cycle, so concurrent updates are serialized and a status change is always
 // validated against the status it actually replaces.
 func (s *Service) UpdateAdminCampaign(ctx context.Context, id uuid.UUID, req AdminUpdateCampaignRequest) (*CampaignDetailView, error) {
@@ -1814,6 +1807,15 @@ func (s *Service) UpdateAdminCampaign(ctx context.Context, id uuid.UUID, req Adm
 		return nil, ErrCampaignNotFound
 	}
 
+	from := campaign.Status
+	if IsTerminalAdvertisingStatus(from) {
+		// A closed campaign is read-only; only an idempotent repeat of its own status is accepted.
+		if req.Status == nil || *req.Status != from || req.hasFieldChanges() {
+			return nil, fmt.Errorf("%w (status %s)", ErrCampaignClosed, from)
+		}
+		return s.repo.GetAdminCampaign(ctx, id)
+	}
+
 	if req.Title != nil {
 		if strings.TrimSpace(*req.Title) == "" {
 			return nil, fmt.Errorf("campaign title cannot be empty")
@@ -1822,12 +1824,6 @@ func (s *Service) UpdateAdminCampaign(ctx context.Context, id uuid.UUID, req Adm
 	}
 	if req.Description != nil {
 		campaign.Description = req.Description
-	}
-	if req.Status != nil {
-		if err := ValidateAdvertisingTransition(campaign.Status, *req.Status); err != nil {
-			return nil, err
-		}
-		campaign.Status = *req.Status
 	}
 	if req.CampaignChannel != nil {
 		campaign.CampaignChannel = req.CampaignChannel
@@ -1845,6 +1841,34 @@ func (s *Service) UpdateAdminCampaign(ctx context.Context, id uuid.UUID, req Adm
 		campaign.EndsAt = req.EndsAt
 	}
 
+	if req.Status != nil && *req.Status != from {
+		to := *req.Status
+		if err := ValidateAdvertisingTransition(from, to); err != nil {
+			return nil, err
+		}
+		campaign.Status = to
+		// Any lifecycle move ends the pre-M1.3 compatibility rule for this campaign.
+		campaign.LegacyApprovedTracking = false
+		// Approval confirms the requested placeholder terms of platform-funded advertising rows,
+		// exactly as creation of an approved campaign did before M1.3.
+		if from == CampaignStatusDraft && campaign.FundingMode != FundingModeSeller {
+			if campaign.ApprovedZamkShareBps == 0 {
+				campaign.ApprovedZamkShareBps = campaign.RequestedZamkShareBps
+			}
+			if campaign.ApprovedZamkBudgetCapCents == 0 {
+				campaign.ApprovedZamkBudgetCapCents = campaign.RequestedZamkBudgetCapCents
+			}
+		}
+	}
+
+	if err := ValidateAdvertisingPeriod(campaign); err != nil {
+		return nil, err
+	}
+	if campaign.Status != CampaignStatusDraft && !IsTerminalAdvertisingStatus(campaign.Status) {
+		if err := ValidateAdvertisingReadiness(campaign); err != nil {
+			return nil, err
+		}
+	}
 	if err := ValidateCampaign(campaign); err != nil {
 		return nil, err
 	}
@@ -1857,6 +1881,31 @@ func (s *Service) UpdateAdminCampaign(ctx context.Context, id uuid.UUID, req Adm
 	}
 
 	return s.repo.GetAdminCampaign(ctx, id)
+}
+
+// CheckCampaignAcceptsTraffic decides whether a tracking link of the campaign may open a new
+// redirect or start new campaign attribution at the given moment.
+//
+// Status: active only; approved only for pre-M1.3 rows (LegacyApprovedTracking) and for promotion
+// campaigns, whose rules are unchanged. Draft, paused and closed campaigns never accept traffic.
+// Period: half-open [starts_at, ends_at): the end instant itself is already outside the campaign.
+func CheckCampaignAcceptsTraffic(c *MarketingCampaign, now time.Time) error {
+	switch c.Status {
+	case CampaignStatusActive:
+	case CampaignStatusApproved:
+		if c.Purpose == CampaignPurposeAdvertising && !c.LegacyApprovedTracking {
+			return ErrCampaignNotActive
+		}
+	default:
+		return ErrCampaignNotActive
+	}
+	if c.StartsAt != nil && now.Before(*c.StartsAt) {
+		return ErrCampaignNotStarted
+	}
+	if c.EndsAt != nil && !now.Before(*c.EndsAt) {
+		return ErrCampaignExpired
+	}
+	return nil
 }
 
 // ListCampaignTrackingLinks lists tracking links for a campaign.

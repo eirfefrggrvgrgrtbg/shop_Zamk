@@ -36,7 +36,7 @@ func ValidateCampaign(c *MarketingCampaign) error {
 
 	switch c.Status {
 	case CampaignStatusDraft, CampaignStatusSubmitted, CampaignStatusCounterOffered,
-		CampaignStatusApproved, CampaignStatusActive, CampaignStatusEnded,
+		CampaignStatusApproved, CampaignStatusActive, CampaignStatusPaused, CampaignStatusEnded,
 		CampaignStatusRejected, CampaignStatusCancelled:
 		// valid
 	default:
@@ -271,21 +271,29 @@ func ValidateOrderItemPromotion(p *OrderItemPromotion) error {
 	return nil
 }
 
-// advertisingTransitions is the lifecycle of admin-managed advertising campaigns.
-// They are created as approved; promotion campaigns follow their own seller/admin review flow.
-// ended, cancelled and rejected are terminal. Draft/Paused states do not exist for advertising yet.
+// advertisingTransitions is the lifecycle of admin-managed advertising campaigns (M1.3):
+//
+//	draft -> approved -> active <-> paused; active|paused -> ended (COMPLETED);
+//	draft|approved|active|paused -> cancelled.
+//
+// ended, cancelled and rejected are terminal. Legacy submitted/counter_offered rows can only be
+// cancelled; no new process is invented for them. active -> approved is not a pause.
 var advertisingTransitions = map[CampaignStatus][]CampaignStatus{
-	CampaignStatusDraft:          {CampaignStatusCancelled},
+	CampaignStatusDraft:          {CampaignStatusApproved, CampaignStatusCancelled},
+	CampaignStatusApproved:       {CampaignStatusActive, CampaignStatusCancelled},
+	CampaignStatusActive:         {CampaignStatusPaused, CampaignStatusEnded, CampaignStatusCancelled},
+	CampaignStatusPaused:         {CampaignStatusActive, CampaignStatusEnded, CampaignStatusCancelled},
 	CampaignStatusSubmitted:      {CampaignStatusCancelled},
 	CampaignStatusCounterOffered: {CampaignStatusCancelled},
-	CampaignStatusApproved:       {CampaignStatusActive, CampaignStatusEnded, CampaignStatusCancelled},
-	// active -> approved is the legacy "pause" marker used by earlier Admin versions and existing tests;
-	// approved campaigns track exactly like active ones, so it has no behavioural effect.
-	CampaignStatusActive:         {CampaignStatusApproved, CampaignStatusEnded, CampaignStatusCancelled},
+}
+
+// IsTerminalAdvertisingStatus reports statuses in which an advertising campaign is closed for changes.
+func IsTerminalAdvertisingStatus(st CampaignStatus) bool {
+	return st == CampaignStatusEnded || st == CampaignStatusCancelled || st == CampaignStatusRejected
 }
 
 // ValidateAdvertisingTransition checks a status change of an advertising campaign.
-// Keeping the same status is always allowed (field edits); anything else must be listed.
+// Keeping the same status is allowed (field edits are checked separately); anything else must be listed.
 func ValidateAdvertisingTransition(from, to CampaignStatus) error {
 	if from == to {
 		return nil
@@ -296,4 +304,34 @@ func ValidateAdvertisingTransition(from, to CampaignStatus) error {
 		}
 	}
 	return fmt.Errorf("%w: %s -> %s", ErrInvalidCampaignTransition, from, to)
+}
+
+// ValidateAdvertisingPeriod checks the half-open period [starts_at, ends_at).
+func ValidateAdvertisingPeriod(c *MarketingCampaign) error {
+	if c.StartsAt != nil && c.EndsAt != nil && !c.EndsAt.After(*c.StartsAt) {
+		return ErrInvalidCampaignPeriod
+	}
+	return nil
+}
+
+// ValidateAdvertisingReadiness is the full validation required outside of draft: a campaign that can
+// be launched must have a channel, a type and a start of its period. Drafts may be incomplete.
+func ValidateAdvertisingReadiness(c *MarketingCampaign) error {
+	var missing []string
+	if strings.TrimSpace(c.Title) == "" {
+		missing = append(missing, "title")
+	}
+	if c.CampaignChannel == nil || *c.CampaignChannel == "" {
+		missing = append(missing, "campaignChannel")
+	}
+	if c.CampaignType == nil || *c.CampaignType == "" {
+		missing = append(missing, "campaignType")
+	}
+	if c.StartsAt == nil {
+		missing = append(missing, "startsAt")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("%w: missing %s", ErrCampaignNotReady, strings.Join(missing, ", "))
+	}
+	return ValidateAdvertisingPeriod(c)
 }

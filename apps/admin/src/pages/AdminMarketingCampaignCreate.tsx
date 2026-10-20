@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { createAdminCampaign, getAdminSellers } from '@zamk/api-client/src/admin';
 import type { CampaignChannel, CampaignType, AdminSeller } from '@zamk/api-client/src/types';
-import { money, validateCampaignPlan, startOfDayIso, endOfDayIso, dayUtc } from '../components/marketing/marketingPresentation';
+import { money, validateCampaignPlan, campaignDayStartIso, campaignDayEndExclusiveIso, formatCampaignStart, formatCampaignEnd, CAMPAIGN_TZ_LABEL } from '../components/marketing/marketingPresentation';
 
 export function AdminMarketingCampaignCreate() {
   const navigate = useNavigate();
@@ -88,8 +88,8 @@ export function AdminMarketingCampaignCreate() {
         campaignChannel: channel,
         campaignType: campaignType,
         plannedBudgetCents: bCents ?? undefined,
-        startsAt: startsAt ? startOfDayIso(startsAt) : undefined,
-        endsAt: endsAt ? endOfDayIso(endsAt) : undefined,
+        startsAt: startsAt ? campaignDayStartIso(startsAt) : undefined,
+        endsAt: endsAt ? campaignDayEndExclusiveIso(endsAt) : undefined,
         description: description.trim() || undefined,
       });
       navigate(`/marketing/campaigns/${res.id}`);
@@ -153,8 +153,9 @@ export function AdminMarketingCampaignCreate() {
           )}
 
           <div className="mb-6 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3" data-testid="campaign-create-status-note">
-            Кампания создаётся сразу со статусом «Одобрена» — черновики рекламных кампаний пока не поддерживаются.
-            Переходы по трекинговым ссылкам начинают работать после создания ссылки и в рамках указанного периода (даты включительно, UTC).
+            Кампания сохраняется как черновик: настройки можно дополнить позже, трафик не принимается.
+            Для подтверждения готовности нужны канал, тип и дата начала; переходы по ссылкам начнутся только после запуска.
+            Даты — календарные дни по московскому времени (МСК), день окончания включён.
           </div>
 
           <form onSubmit={handleCreate} className="space-y-8">
@@ -344,7 +345,7 @@ export function AdminMarketingCampaignCreate() {
                 data-testid="submit-create-campaign"
                 className="m-button m-primary"
               >
-                {isSubmitting ? 'Создание...' : 'Создать кампанию'}
+                {isSubmitting ? 'Сохранение...' : 'Сохранить черновик'}
               </button>
               <Link to="/marketing/campaigns" className="m-button">
                 Отмена
@@ -384,7 +385,7 @@ export function AdminMarketingCampaignCreate() {
               <div>
                 <div className="text-gray-400 mb-1">Период</div>
                 <div className="text-gray-900 tabular-nums">
-                  {startsAt ? dayUtc(startOfDayIso(startsAt)) : 'с —'} — {endsAt ? dayUtc(endOfDayIso(endsAt)) : '∞'}
+                  {startsAt ? formatCampaignStart(campaignDayStartIso(startsAt)) : 'с —'} — {endsAt ? formatCampaignEnd(campaignDayEndExclusiveIso(endsAt)) : 'без окончания'} {CAMPAIGN_TZ_LABEL}
                 </div>
               </div>
 

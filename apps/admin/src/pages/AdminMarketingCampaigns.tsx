@@ -4,7 +4,7 @@ import { getAdminCampaigns, getAdminMarketingCampaignMetrics } from '@zamk/api-c
 import type { AdminCampaign, AdminCampaignMetrics, CampaignChannel, CampaignType } from '@zamk/api-client/src/types';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 import { AdminMarketingTabs } from '../components/marketing/AdminMarketingTabs';
-import { money, number, percent, date, statusLabels, channelLabels, typeLabels, purposeLabels } from '../components/marketing/marketingPresentation';
+import { money, number, percent, statusLabels, channelLabels, typeLabels, purposeLabels, formatCampaignPeriod } from '../components/marketing/marketingPresentation';
 
 export function AdminMarketingCampaigns() {
   const navigate = useNavigate();
@@ -74,12 +74,6 @@ export function AdminMarketingCampaigns() {
     });
   }, [campaigns, query, purposeFilter, statusFilter, channelFilter, typeFilter]);
 
-  const formatPeriod = (startsAt?: string | null, endsAt?: string | null) => {
-    if (startsAt && endsAt) return `${date(startsAt)} — ${date(endsAt)}`;
-    if (startsAt) return `с ${date(startsAt)}`;
-    if (endsAt) return `до ${date(endsAt)}`;
-    return 'Бессрочно';
-  };
 
   return (
     <div className="marketing-workspace space-y-6 pb-12" data-testid="admin-marketing-campaigns-page">
@@ -246,7 +240,7 @@ export function AdminMarketingCampaigns() {
                         </span>
                       </td>
                       <td className="tabular-nums text-gray-600">
-                        {formatPeriod(c.startsAt, c.endsAt)}
+                        {formatCampaignPeriod(c.startsAt, c.endsAt)}
                       </td>
                       <td className="numeric">
                         {c.plannedBudgetCents ? money(c.plannedBudgetCents) : '—'}

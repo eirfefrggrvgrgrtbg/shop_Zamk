@@ -75,7 +75,7 @@ func (h *Handler) CreateAdminCampaign(w http.ResponseWriter, r *http.Request) {
 		Title:                    req.Title,
 		Description:              req.Description,
 		FundingMode:              req.FundingMode,
-		Status:                   CampaignStatusApproved, // Admin created campaigns start as approved
+		Status:                   CampaignStatusDraft, // M1.3: advertising campaigns start as drafts
 		CampaignChannel:          req.CampaignChannel,
 		CampaignType:             req.CampaignType,
 		PlannedBudgetCents:       req.PlannedBudgetCents,
@@ -90,7 +90,7 @@ func (h *Handler) CreateAdminCampaign(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, ErrInvalidFundingMode) || errors.Is(err, ErrInvalidCampaignStatus) ||
 			errors.Is(err, ErrInvalidDiscountType) || errors.Is(err, ErrInvalidCampaignChannel) ||
 			errors.Is(err, ErrInvalidCampaignType) || errors.Is(err, ErrInvalidPlannedBudget) ||
-			errors.Is(err, ErrInvalidCampaignPurpose) {
+			errors.Is(err, ErrInvalidCampaignPurpose) || errors.Is(err, ErrInvalidCampaignPeriod) {
 			h.writeError(w, http.StatusBadRequest, "invalid_parameter", err.Error())
 			return
 		}
@@ -128,6 +128,18 @@ func (h *Handler) UpdateAdminCampaign(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, ErrInvalidCampaignTransition) {
 			h.writeError(w, http.StatusConflict, "invalid_status_transition", err.Error())
+			return
+		}
+		if errors.Is(err, ErrCampaignClosed) {
+			h.writeError(w, http.StatusConflict, "campaign_closed", err.Error())
+			return
+		}
+		if errors.Is(err, ErrCampaignNotReady) {
+			h.writeError(w, http.StatusUnprocessableEntity, "campaign_not_ready", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidCampaignPeriod) {
+			h.writeError(w, http.StatusBadRequest, "invalid_parameter", err.Error())
 			return
 		}
 		if errors.Is(err, ErrInvalidCampaignChannel) || errors.Is(err, ErrInvalidCampaignType) ||
@@ -197,6 +209,10 @@ func (h *Handler) CreateTrackingLink(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.CreateTrackingLink(r.Context(), link); err != nil {
 		if errors.Is(err, ErrCampaignNotFound) || errors.Is(err, ErrPromoCodeNotFound) {
 			h.writeError(w, http.StatusNotFound, "not_found", err.Error())
+			return
+		}
+		if errors.Is(err, ErrCampaignClosed) {
+			h.writeError(w, http.StatusConflict, "campaign_closed", err.Error())
 			return
 		}
 		if errors.Is(err, ErrInvalidTargetConfig) || errors.Is(err, ErrInvalidLandingPath) ||

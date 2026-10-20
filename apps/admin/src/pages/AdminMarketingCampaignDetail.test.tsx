@@ -48,7 +48,7 @@ const mount = () =>
     </MemoryRouter>
   );
 
-describe('AdminMarketingCampaignDetail (M1.1)', () => {
+describe('AdminMarketingCampaignDetail (M1.1/M1.3)', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(useAdminAuth).mockReturnValue(auth(['marketing.campaigns.read', 'marketing.campaigns.write']));
@@ -76,14 +76,55 @@ describe('AdminMarketingCampaignDetail (M1.1)', () => {
     expect(screen.getByTestId('campaign-title').textContent).toBe('Summer');
   });
 
-  it('offers only real status transitions: no pause, activate only when approved, end with confirmation', async () => {
+  const actionIds = ['approve-campaign-button', 'activate-campaign-button', 'pause-campaign-button', 'resume-campaign-button', 'end-campaign-button', 'cancel-campaign-button', 'edit-campaign-button'];
+  const visibleActions = () => actionIds.filter(t => screen.queryByTestId(t));
+
+  it.each([
+    ['draft', ['approve-campaign-button', 'cancel-campaign-button', 'edit-campaign-button']],
+    ['approved', ['activate-campaign-button', 'cancel-campaign-button', 'edit-campaign-button']],
+    ['active', ['pause-campaign-button', 'end-campaign-button', 'cancel-campaign-button', 'edit-campaign-button']],
+    ['paused', ['resume-campaign-button', 'end-campaign-button', 'cancel-campaign-button', 'edit-campaign-button']],
+    ['ended', []],
+    ['cancelled', []],
+    ['rejected', []],
+    ['submitted', ['cancel-campaign-button', 'edit-campaign-button']],
+  ])('status %s offers exactly the server-allowed actions', async (status, expected) => {
+    vi.mocked(adminApi.getAdminCampaign).mockResolvedValue(base({ status: status as any }));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('campaign-title')).toBeTruthy());
+    expect(visibleActions().sort()).toEqual([...expected].sort());
+    if (['ended', 'cancelled', 'rejected'].includes(status)) {
+      expect(screen.queryByTestId('create-tracking-link-button')).toBeNull();
+    } else {
+      expect(screen.getByTestId('create-tracking-link-button')).toBeTruthy();
+    }
+  });
+
+  it('pause and resume call the API and show the real traffic state', async () => {
+    vi.mocked(adminApi.getAdminCampaign).mockResolvedValue(base({ status: 'active' }));
+    vi.mocked(adminApi.updateAdminCampaign)
+      .mockResolvedValueOnce(base({ status: 'paused' }))
+      .mockResolvedValueOnce(base({ status: 'active' }));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('pause-campaign-button')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('pause-campaign-button'));
+    await waitFor(() => expect(screen.getByTestId('campaign-status-badge').textContent).toBe('Приостановлена'));
+    expect(adminApi.updateAdminCampaign).toHaveBeenLastCalledWith(ID, { status: 'paused' });
+    expect(screen.getByTestId('campaign-traffic-note').textContent).toContain('новые переходы и рекламные сессии не принимаются');
+    fireEvent.click(screen.getByTestId('resume-campaign-button'));
+    await waitFor(() => expect(screen.getByTestId('campaign-status-badge').textContent).toBe('Активна'));
+    expect(adminApi.updateAdminCampaign).toHaveBeenLastCalledWith(ID, { status: 'active' });
+  });
+
+  it('complete and cancel require confirmation; after completion the campaign is read-only', async () => {
+    vi.mocked(adminApi.getAdminCampaign).mockResolvedValue(base({ status: 'active' }));
     vi.mocked(adminApi.updateAdminCampaign).mockResolvedValue(base({ status: 'ended' }));
     const confirm = vi.spyOn(window, 'confirm');
     mount();
     await waitFor(() => expect(screen.getByTestId('end-campaign-button')).toBeTruthy());
-    expect(screen.queryByTestId('pause-campaign-button')).toBeNull();
-    expect(screen.getByTestId('activate-campaign-button')).toBeTruthy();
 
+    confirm.mockReturnValueOnce(false);
+    fireEvent.click(screen.getByTestId('cancel-campaign-button'));
     confirm.mockReturnValueOnce(false);
     fireEvent.click(screen.getByTestId('end-campaign-button'));
     expect(adminApi.updateAdminCampaign).not.toHaveBeenCalled();
@@ -92,17 +133,32 @@ describe('AdminMarketingCampaignDetail (M1.1)', () => {
     fireEvent.click(screen.getByTestId('end-campaign-button'));
     await waitFor(() => expect(adminApi.updateAdminCampaign).toHaveBeenCalledWith(ID, { status: 'ended' }));
     await waitFor(() => expect(screen.getByTestId('campaign-status-badge').textContent).toBe('Завершена'));
-    expect(screen.queryByTestId('end-campaign-button')).toBeNull();
-    expect(screen.queryByTestId('activate-campaign-button')).toBeNull();
-    expect(screen.queryByTestId('edit-campaign-button')).toBeNull();
+    expect(visibleActions()).toEqual([]);
   });
 
-  it('an active campaign can only be ended, not re-activated or paused', async () => {
-    vi.mocked(adminApi.getAdminCampaign).mockResolvedValue(base({ status: 'active' }));
+  it('draft approval shows which fields the server still needs (422)', async () => {
+    vi.mocked(adminApi.getAdminCampaign).mockResolvedValue(base({ status: 'draft' }));
+    vi.mocked(adminApi.updateAdminCampaign).mockRejectedValue(Object.assign(
+      new Error('campaign is not ready: missing campaignChannel, startsAt'),
+      { code: 'campaign_not_ready', status: 422, rawMessage: 'campaign is not ready: missing campaignChannel, startsAt' },
+    ));
     mount();
-    await waitFor(() => expect(screen.getByTestId('end-campaign-button')).toBeTruthy());
-    expect(screen.queryByTestId('activate-campaign-button')).toBeNull();
-    expect(screen.queryByTestId('pause-campaign-button')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('approve-campaign-button')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('approve-campaign-button'));
+    await waitFor(() => expect(screen.getByTestId('detail-error').textContent).toBe('Кампания не готова: заполните канал, дату начала.'));
+    expect(screen.getByTestId('campaign-status-badge').textContent).toBe('Черновик');
+  });
+
+  it('a pre-lifecycle approved campaign explains that it still accepts traffic', async () => {
+    vi.mocked(adminApi.getAdminCampaign).mockResolvedValue(base({ status: 'approved', legacyApprovedTracking: true }));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('campaign-traffic-note').textContent).toContain('продолжают принимать трафик'));
+  });
+
+  it('shows the period in Moscow time with an inclusive last day', async () => {
+    vi.mocked(adminApi.getAdminCampaign).mockResolvedValue(base({ startsAt: '2026-11-09T21:00:00.000Z', endsAt: '2026-11-30T21:00:00.000Z' }));
+    mount();
+    await waitFor(() => expect(screen.getByText(/10\.11\.2026 — 30\.11\.2026 МСК/)).toBeTruthy());
   });
 
   it('does not show a success when the status update fails', async () => {
@@ -131,7 +187,7 @@ describe('AdminMarketingCampaignDetail (M1.1)', () => {
     vi.mocked(useAdminAuth).mockReturnValue(auth(['marketing.campaigns.read']));
     mount();
     await waitFor(() => expect(screen.getByTestId('campaign-title')).toBeTruthy());
-    for (const t of ['edit-campaign-button', 'activate-campaign-button', 'end-campaign-button']) {
+    for (const t of actionIds) {
       expect(screen.queryByTestId(t)).toBeNull();
     }
   });
@@ -140,8 +196,7 @@ describe('AdminMarketingCampaignDetail (M1.1)', () => {
     vi.mocked(adminApi.getAdminCampaign).mockResolvedValue(base({ purpose: 'promotion' }));
     mount();
     await waitFor(() => expect(screen.getByTestId('promotion-readonly-note')).toBeTruthy());
-    expect(screen.queryByTestId('edit-campaign-button')).toBeNull();
-    expect(screen.queryByTestId('end-campaign-button')).toBeNull();
+    expect(visibleActions()).toEqual([]);
   });
 
   it('edit sends only changed fields with inclusive end date and validates the plan', async () => {
@@ -166,7 +221,7 @@ describe('AdminMarketingCampaignDetail (M1.1)', () => {
     await waitFor(() => expect(adminApi.updateAdminCampaign).toHaveBeenCalledWith(ID, {
       title: 'Summer 2',
       plannedBudgetCents: 7000000,
-      endsAt: '2026-09-15T23:59:59.000Z',
+      endsAt: '2026-09-15T21:00:00.000Z', // 15.09 inclusive -> 16.09 00:00 MSK
     }));
     await waitFor(() => expect(screen.getByTestId('campaign-title').textContent).toBe('Summer 2'));
   });

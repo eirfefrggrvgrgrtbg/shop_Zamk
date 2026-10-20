@@ -226,8 +226,9 @@ describe('AdminMarketingCampaignCreate', () => {
           campaignChannel: 'influencer',
           campaignType: 'drop',
           plannedBudgetCents: 12000000,
-          startsAt: '2026-06-01T00:00:00.000Z',
-          endsAt: '2026-06-30T23:59:59.000Z', // end date is inclusive
+          // days are Moscow calendar days; the end is exclusive: 30.06 inclusive -> 01.07 00:00 MSK
+          startsAt: '2026-05-31T21:00:00.000Z',
+          endsAt: '2026-06-30T21:00:00.000Z',
           description: 'Exclusive summer drop',
           discountType: 'percent',
         })
@@ -252,10 +253,11 @@ describe('AdminMarketingCampaignCreate', () => {
     expect(adminApi.createAdminCampaign).not.toHaveBeenCalled();
   });
 
-  it('states that drafts are not supported and shows API errors without navigating', async () => {
+  it('saves a draft and shows API errors without navigating', async () => {
     vi.mocked(adminApi.createAdminCampaign).mockRejectedValue(new Error('invalid_parameter: bad channel'));
     mount();
-    expect(screen.getByTestId('campaign-create-status-note').textContent).toContain('черновики');
+    expect(screen.getByTestId('campaign-create-status-note').textContent).toContain('черновик');
+    expect(screen.getByTestId('submit-create-campaign').textContent).toBe('Сохранить черновик');
 
     fireEvent.change(screen.getByTestId('campaign-title-input'), { target: { value: 'Will fail' } });
     fireEvent.click(screen.getByTestId('submit-create-campaign'));

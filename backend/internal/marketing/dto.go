@@ -171,6 +171,12 @@ type AdminCreateCampaignRequest struct {
 	EndsAt                   *time.Time         `json:"endsAt,omitempty"`
 }
 
+// hasFieldChanges reports whether the request edits anything besides the status.
+func (r AdminUpdateCampaignRequest) hasFieldChanges() bool {
+	return r.Title != nil || r.Description != nil || r.CampaignChannel != nil || r.CampaignType != nil ||
+		r.PlannedBudgetCents != nil || r.StartsAt != nil || r.EndsAt != nil
+}
+
 type AdminUpdateCampaignRequest struct {
 	Title              *string          `json:"title,omitempty"`
 	Description        *string          `json:"description,omitempty"`

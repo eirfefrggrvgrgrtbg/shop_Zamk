@@ -2788,7 +2788,7 @@ export interface UpdateSellerPromotionRequest {
 
 export type CampaignPurpose = 'advertising' | 'promotion';
 export type CampaignFundingMode = 'seller' | 'zamk' | 'cofunded';
-export type CampaignStatus = 'draft' | 'submitted' | 'counter_offered' | 'approved' | 'active' | 'ended' | 'rejected' | 'cancelled';
+export type CampaignStatus = 'draft' | 'submitted' | 'counter_offered' | 'approved' | 'active' | 'paused' | 'ended' | 'rejected' | 'cancelled';
 export type CampaignDiscountType = 'percent' | 'fixed';
 export type CampaignChannel = 'telegram' | 'vk' | 'instagram' | 'influencer' | 'email' | 'direct' | 'search_ads';
 export type CampaignType = 'influencer' | 'drop' | 'seasonal_sale' | 'brand_awareness' | 'retargeting' | 'special_promo';
@@ -2813,6 +2813,8 @@ export interface AdminCampaign {
   createdAt: string;
   updatedAt: string;
   trackingLinkCount?: number;
+  /** Pre-M1.3 row: status approved still accepts tracking traffic until the campaign is moved on. */
+  legacyApprovedTracking?: boolean;
 }
 
 export interface AdminCampaignTrackingLink {

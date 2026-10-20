@@ -22,6 +22,7 @@ const (
 	CampaignStatusCounterOffered CampaignStatus = "counter_offered"
 	CampaignStatusApproved       CampaignStatus = "approved"
 	CampaignStatusActive         CampaignStatus = "active"
+	CampaignStatusPaused         CampaignStatus = "paused"
 	CampaignStatusEnded          CampaignStatus = "ended"
 	CampaignStatusRejected       CampaignStatus = "rejected"
 	CampaignStatusCancelled      CampaignStatus = "cancelled"
@@ -138,6 +139,9 @@ type MarketingCampaign struct {
 	DecidedByStaffID            *uuid.UUID       `json:"decidedByStaffId,omitempty" db:"decided_by_staff_id"`
 	CreatedAt                   time.Time        `json:"createdAt" db:"created_at"`
 	UpdatedAt                   time.Time        `json:"updatedAt" db:"updated_at"`
+	// LegacyApprovedTracking keeps the pre-M1.3 rule "approved accepts tracking traffic" for
+	// advertising campaigns that existed before the lifecycle migration (000115).
+	LegacyApprovedTracking bool `json:"legacyApprovedTracking" db:"legacy_approved_tracking"`
 }
 
 type CampaignDetailView struct {
