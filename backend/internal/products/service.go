@@ -1773,7 +1773,21 @@ func (s *Service) GetPublicBrand(ctx context.Context, idOrSlug string) (*PublicB
 				BrandName:   b.Name,
 				Slug:        b.Slug,
 				Description: b.Description,
+				History:     b.History,
 				LogoURL:     b.LogoURL,
+				CoverURL:    b.CoverURL,
+			}
+			if (brand.CoverURL == nil || brand.History == nil) && s.sellerRepo != nil {
+				if linkedSellerID, sErr := s.repo.GetLinkedSellerForBrand(ctx, b.ID); sErr == nil && linkedSellerID != nil {
+					if linkedSeller, err := s.sellerRepo.GetSellerByID(ctx, *linkedSellerID); err == nil && linkedSeller != nil {
+						if brand.CoverURL == nil {
+							brand.CoverURL = linkedSeller.CoverURL
+						}
+						if brand.History == nil {
+							brand.History = linkedSeller.History
+						}
+					}
+				}
 			}
 			return brand, &b.ID, nil
 		}
@@ -1787,7 +1801,21 @@ func (s *Service) GetPublicBrand(ctx context.Context, idOrSlug string) (*PublicB
 			BrandName:   b.Name,
 			Slug:        b.Slug,
 			Description: b.Description,
+			History:     b.History,
 			LogoURL:     b.LogoURL,
+			CoverURL:    b.CoverURL,
+		}
+		if (brand.CoverURL == nil || brand.History == nil) && s.sellerRepo != nil {
+			if linkedSellerID, sErr := s.repo.GetLinkedSellerForBrand(ctx, b.ID); sErr == nil && linkedSellerID != nil {
+				if linkedSeller, err := s.sellerRepo.GetSellerByID(ctx, *linkedSellerID); err == nil && linkedSeller != nil {
+					if brand.CoverURL == nil {
+						brand.CoverURL = linkedSeller.CoverURL
+					}
+					if brand.History == nil {
+						brand.History = linkedSeller.History
+					}
+				}
+			}
 		}
 		return brand, &b.ID, nil
 	}
@@ -1815,7 +1843,9 @@ func (s *Service) GetPublicBrand(ctx context.Context, idOrSlug string) (*PublicB
 				BrandName:   brandName,
 				Slug:        slug,
 				Description: seller.Description,
+				History:     seller.History,
 				LogoURL:     seller.LogoURL,
+				CoverURL:    seller.CoverURL,
 			}
 			return brand, nil, nil
 		}

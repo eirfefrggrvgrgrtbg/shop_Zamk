@@ -498,6 +498,48 @@ func (s *Service) UploadSellerProfileImage(ctx context.Context, userID uuid.UUID
 	}, nil
 }
 
+func (s *Service) UploadSellerCoverImage(ctx context.Context, userID uuid.UUID, reader io.Reader, filename string, size int64, contentType string, maxSizeMB int64) (*SellerCoverResponse, error) {
+	ext := filepath.Ext(filename)
+	if err := validateImage(contentType, ext, size, maxSizeMB); err != nil {
+		return nil, err
+	}
+
+	seller, _, err := s.sellersRepo.GetSellerByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get seller: %w", err)
+	}
+
+	objectKey := fmt.Sprintf("sellers/%s/cover_%s%s", seller.ID.String(), uuid.New().String(), ext)
+
+	buf := new(bytes.Buffer)
+	if _, err := buf.ReadFrom(reader); err != nil {
+		return nil, fmt.Errorf("failed to read image: %w", err)
+	}
+	fileBytes := buf.Bytes()
+	size = int64(len(fileBytes))
+
+	stored, err := s.provider.UploadImage(ctx, bytes.NewReader(fileBytes), size, objectKey, contentType)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err != nil {
+			go func() {
+				_ = s.provider.DeleteObject(context.Background(), objectKey)
+			}()
+		}
+	}()
+
+	if err = s.sellersRepo.UpdateSellerCover(ctx, seller.ID, stored.ObjectURL, stored.ObjectKey); err != nil {
+		return nil, err
+	}
+
+	return &SellerCoverResponse{
+		CoverURL: stored.ObjectURL,
+	}, nil
+}
+
 func (s *Service) DeleteSellerProductImage(ctx context.Context, userID, productID, imageID uuid.UUID) error {
 	seller, _, err := s.sellersRepo.GetSellerByUserID(ctx, userID)
 	if err != nil {

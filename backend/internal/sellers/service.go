@@ -425,6 +425,22 @@ func (s *Service) UpdateSellerProfile(ctx context.Context, currentUserID uuid.UU
 		return nil, err
 	}
 
+	if req.BrandName != nil && len(strings.TrimSpace(*req.BrandName)) > 100 {
+		return nil, errors.New("brandName exceeds maximum length of 100 characters")
+	}
+	if req.Description != nil && len(*req.Description) > 2000 {
+		return nil, errors.New("description exceeds maximum length of 2000 characters")
+	}
+	if req.History != nil && len(*req.History) > 10000 {
+		return nil, errors.New("history exceeds maximum length of 10000 characters")
+	}
+	if req.CoverURL != nil && len(*req.CoverURL) > 2048 {
+		return nil, errors.New("coverUrl exceeds maximum length of 2048 characters")
+	}
+	if req.LogoURL != nil && len(*req.LogoURL) > 2048 {
+		return nil, errors.New("logoUrl exceeds maximum length of 2048 characters")
+	}
+
 	if req.Slug != nil && *req.Slug != "" {
 		existing, slugErr := s.repo.GetSellerBySlug(ctx, *req.Slug)
 		if slugErr == nil && existing != nil && existing.ID != seller.ID {
@@ -434,6 +450,11 @@ func (s *Service) UpdateSellerProfile(ctx context.Context, currentUserID uuid.UU
 
 	if err := s.repo.UpdateSellerProfile(ctx, seller.ID, req); err != nil {
 		return nil, err
+	}
+
+	// If seller has a primary owned brand, sync storefront metadata to the owned brand
+	if ownedBrandID, err := s.repo.GetPrimaryOwnedBrandForSeller(ctx, seller.ID); err == nil && ownedBrandID != nil {
+		_ = s.repo.UpdateBrandProfile(ctx, *ownedBrandID, req.BrandName, req.Description, req.History, req.LogoURL, req.CoverURL)
 	}
 
 	return s.GetSellerMe(ctx, currentUserID)

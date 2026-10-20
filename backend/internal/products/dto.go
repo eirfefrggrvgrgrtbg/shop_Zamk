@@ -141,7 +141,9 @@ type PublicBrand struct {
 	BrandName   string    `json:"brandName"`
 	Slug        string    `json:"slug"`
 	Description *string   `json:"description,omitempty"`
+	History     *string   `json:"history,omitempty"`
 	LogoURL     *string   `json:"logoUrl,omitempty"`
+	CoverURL    *string   `json:"coverUrl,omitempty"`
 }
 
 type PublicProduct struct {

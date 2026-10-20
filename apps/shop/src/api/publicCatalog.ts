@@ -49,17 +49,14 @@ export async function fetchBrands(): Promise<UIBrand[]> {
   const activeBrands = (brands || []).filter(b => (b as any).isActive !== false);
 
   const seenIds = new Set<string>();
-  const seenNames = new Set<string>();
   const mapped: UIBrand[] = [];
 
   for (const b of activeBrands) {
     if (!b || !b.id || !b.name) continue;
-    const normName = b.name.trim().toLowerCase();
-    if (seenIds.has(b.id) || seenNames.has(normName)) {
+    if (seenIds.has(b.id)) {
       continue;
     }
     seenIds.add(b.id);
-    seenNames.add(normName);
     mapped.push({
       id: b.id,
       name: b.name.trim(),
@@ -252,6 +249,7 @@ export interface PublicBrandStorefront {
     name: string;
     slug: string;
     description?: string;
+    history?: string;
     logoUrl?: string;
     coverUrl?: string;
   };
@@ -280,6 +278,7 @@ export async function fetchPublicBrand(slugOrId: string, params?: any): Promise<
       name: brandData.name || brandData.brandName || 'Бренд',
       slug: brandData.slug || slugOrId,
       description: brandData.description || undefined,
+      history: brandData.history || undefined,
       logoUrl: brandData.logoUrl || undefined,
       coverUrl: brandData.coverUrl || undefined,
     },

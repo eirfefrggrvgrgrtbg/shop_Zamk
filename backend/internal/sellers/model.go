@@ -34,10 +34,13 @@ type Seller struct {
 	ReviewsCount  int          `json:"reviewsCount"`
 	Status        SellerStatus `json:"status"`
 	IsPlatform    bool         `json:"isPlatform"`
-	LogoURL       *string      `json:"logoUrl,omitempty"`
-	LogoObjectKey *string      `json:"logoObjectKey,omitempty"`
-	CreatedAt     time.Time    `json:"createdAt"`
-	UpdatedAt     time.Time    `json:"updatedAt"`
+	LogoURL        *string      `json:"logoUrl,omitempty"`
+	LogoObjectKey  *string      `json:"logoObjectKey,omitempty"`
+	CoverURL       *string      `json:"coverUrl,omitempty"`
+	CoverObjectKey *string      `json:"coverObjectKey,omitempty"`
+	History        *string      `json:"history,omitempty"`
+	CreatedAt      time.Time    `json:"createdAt"`
+	UpdatedAt      time.Time    `json:"updatedAt"`
 }
 
 type SellerUser struct {

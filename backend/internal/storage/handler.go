@@ -297,6 +297,40 @@ func (h *Handler) UploadSellerProfileImage(w http.ResponseWriter, r *http.Reques
 	h.writeJSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) UploadSellerCoverImage(w http.ResponseWriter, r *http.Request) {
+	sellerIDRaw := r.Context().Value("userID")
+	userID, ok := sellerIDRaw.(uuid.UUID)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "user id not found in context")
+		return
+	}
+
+	file, header, _, err := h.parseUploadRequest(r)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid_request", "invalid request: "+err.Error())
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+
+	resp, err := h.service.UploadSellerCoverImage(r.Context(), userID, file, header.Filename, header.Size, contentType, int64(h.cfg.UploadMaxSizeMB))
+	if err != nil {
+		if err == ErrInvalidMimeType || err == ErrInvalidExtension {
+			h.writeError(w, http.StatusBadRequest, "invalid_file_type", err.Error())
+			return
+		}
+		if err == ErrFileTooLarge {
+			h.writeError(w, http.StatusBadRequest, "file_too_large", err.Error())
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "upload failed")
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, resp)
+}
+
 func (h *Handler) DeleteSellerProductImage(w http.ResponseWriter, r *http.Request) {
 	productIDStr := chi.URLParam(r, "id")
 	productID, err := uuid.Parse(productIDStr)

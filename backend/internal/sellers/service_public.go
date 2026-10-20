@@ -42,7 +42,9 @@ func (s *Service) GetPublicSeller(ctx context.Context, idOrSlug string) (*Public
 		BrandName:   brandName,
 		Slug:        slug,
 		Description: seller.Description,
+		History:     seller.History,
 		LogoURL:     seller.LogoURL,
+		CoverURL:    seller.CoverURL,
 	}
 
 	return publicSeller, nil

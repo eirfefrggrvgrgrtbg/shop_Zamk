@@ -2061,19 +2061,21 @@ type catalogBrandRow struct {
 	Name        string
 	Slug        string
 	Description *string
+	History     *string
 	LogoURL     *string
+	CoverURL    *string
 	IsActive    bool
 }
 
 func (r *Repository) GetBrandByID(ctx context.Context, id uuid.UUID) (*catalogBrandRow, error) {
 	query := `
-		SELECT id, name, slug, description, logo_url, is_active
+		SELECT id, name, slug, description, history, logo_url, cover_url, is_active
 		FROM brands
 		WHERE id = $1
 	`
 	var b catalogBrandRow
 	err := r.db.QueryRow(ctx, query, id).Scan(
-		&b.ID, &b.Name, &b.Slug, &b.Description, &b.LogoURL, &b.IsActive,
+		&b.ID, &b.Name, &b.Slug, &b.Description, &b.History, &b.LogoURL, &b.CoverURL, &b.IsActive,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -2086,13 +2088,13 @@ func (r *Repository) GetBrandByID(ctx context.Context, id uuid.UUID) (*catalogBr
 
 func (r *Repository) GetBrandBySlug(ctx context.Context, slug string) (*catalogBrandRow, error) {
 	query := `
-		SELECT id, name, slug, description, logo_url, is_active
+		SELECT id, name, slug, description, history, logo_url, cover_url, is_active
 		FROM brands
 		WHERE slug = $1
 	`
 	var b catalogBrandRow
 	err := r.db.QueryRow(ctx, query, slug).Scan(
-		&b.ID, &b.Name, &b.Slug, &b.Description, &b.LogoURL, &b.IsActive,
+		&b.ID, &b.Name, &b.Slug, &b.Description, &b.History, &b.LogoURL, &b.CoverURL, &b.IsActive,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

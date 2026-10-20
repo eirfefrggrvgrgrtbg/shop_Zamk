@@ -111,7 +111,12 @@ export function BrandDetail() {
         {/* Optional Cover Banner */}
         {brand.coverUrl && (
           <div className='mt-6 mb-8 overflow-hidden rounded-[1.5rem] max-h-[380px] border border-border-lighter dark:border-white/10'>
-            <img src={brand.coverUrl} alt={`${brand.name} cover`} className='w-full h-full object-cover' />
+            <img
+              src={brand.coverUrl}
+              alt={`${brand.name} cover`}
+              className='w-full h-full object-cover'
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
           </div>
         )}
 
@@ -120,7 +125,12 @@ export function BrandDetail() {
           <div className='flex flex-col sm:flex-row items-start sm:items-center gap-6 sm:gap-8'>
             {brand.logoUrl && (
               <div className='w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl border border-border-lighter dark:border-white/10 overflow-hidden bg-white/70 dark:bg-white/5 p-2 shrink-0 flex items-center justify-center backdrop-blur-sm shadow-xs'>
-                <img src={brand.logoUrl} alt={`${brand.name} logo`} className='w-full h-full object-contain' />
+                <img
+                  src={brand.logoUrl}
+                  alt={`${brand.name} logo`}
+                  className='w-full h-full object-contain'
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
               </div>
             )}
             <div className='flex-1 min-w-0'>
@@ -136,6 +146,16 @@ export function BrandDetail() {
                 <p className='mt-4 max-w-2xl text-sm md:text-base text-graphite-light dark:text-white/70 font-light leading-relaxed'>
                   {brand.description}
                 </p>
+              )}
+              {brand.history && (
+                <div className='mt-5 pt-4 border-t border-border-lighter/60 dark:border-white/5 max-w-2xl'>
+                  <span className='text-[10px] font-mono uppercase tracking-[0.16em] text-ash block mb-2'>
+                    История бренда
+                  </span>
+                  <p className='text-xs md:text-sm text-graphite-light dark:text-white/70 font-light leading-relaxed whitespace-pre-line'>
+                    {brand.history}
+                  </p>
+                </div>
               )}
             </div>
           </div>

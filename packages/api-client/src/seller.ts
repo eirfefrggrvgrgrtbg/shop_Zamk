@@ -201,6 +201,12 @@ export const uploadSellerLogo = async (file: File): Promise<{ logoUrl: string }>
   return request<{ logoUrl: string }>('POST', '/seller/me/logo/upload', { body: formData });
 };
 
+export const uploadSellerCover = async (file: File): Promise<{ coverUrl: string }> => {
+  const formData = new FormData();
+  formData.append('cover', file);
+  return request<{ coverUrl: string }>('POST', '/seller/me/cover/upload', { body: formData });
+};
+
 export const getSellerWarnings = async (): Promise<SellerWarning[]> => {
   const res = await request<any>('GET', '/seller/warnings');
   return res?.items || (Array.isArray(res) ? res : []);

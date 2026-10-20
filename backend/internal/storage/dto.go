@@ -19,3 +19,7 @@ type BrandLogoResponse struct {
 type SellerLogoResponse struct {
 	LogoURL string `json:"logoUrl"`
 }
+
+type SellerCoverResponse struct {
+	CoverURL string `json:"coverUrl"`
+}

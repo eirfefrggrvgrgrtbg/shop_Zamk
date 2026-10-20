@@ -241,6 +241,7 @@ func New(
 		r.Get("/", sellersHandler.GetSellerMe)
 		r.Patch("/", sellersHandler.UpdateSellerProfile)
 		r.With(uploadLimit).Post("/logo/upload", storageHandler.UploadSellerProfileImage)
+		r.With(uploadLimit).Post("/cover/upload", storageHandler.UploadSellerCoverImage)
 	})
 
 	r.Route("/api/seller/onboarding", func(r chi.Router) {

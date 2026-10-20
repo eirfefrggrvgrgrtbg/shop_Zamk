@@ -69,6 +69,9 @@ type SellerMeResponse struct {
 type UpdateSellerProfileRequest struct {
 	BrandName    *string `json:"brandName,omitempty"`
 	Description  *string `json:"description,omitempty"`
+	History      *string `json:"history,omitempty"`
+	CoverURL     *string `json:"coverUrl,omitempty"`
+	LogoURL      *string `json:"logoUrl,omitempty"`
 	ContactEmail *string `json:"contactEmail,omitempty"`
 	ContactPhone *string `json:"contactPhone,omitempty"`
 	Slug         *string `json:"slug,omitempty"`
@@ -79,7 +82,9 @@ type PublicSeller struct {
 	BrandName   string    `json:"brandName"`
 	Slug        string    `json:"slug"`
 	Description *string   `json:"description,omitempty"`
+	History     *string   `json:"history,omitempty"`
 	LogoURL     *string   `json:"logoUrl,omitempty"`
+	CoverURL    *string   `json:"coverUrl,omitempty"`
 }
 
 // ---- Phase E: Seller Management DTOs ----

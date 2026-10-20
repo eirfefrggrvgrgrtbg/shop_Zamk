@@ -54,13 +54,13 @@ func (r *Repository) CreateSellerUser(ctx context.Context, su *SellerUser) error
 
 func (r *Repository) GetSellerByID(ctx context.Context, id uuid.UUID) (*Seller, error) {
 	query := `
-		SELECT id, brand_name, slug, description, contact_email, contact_phone, status, logo_url, logo_object_key, average_rating, reviews_count, created_at, updated_at
+		SELECT id, brand_name, slug, description, contact_email, contact_phone, status, logo_url, logo_object_key, cover_url, cover_object_key, history, average_rating, reviews_count, created_at, updated_at
 		FROM sellers
 		WHERE id = $1
 	`
 	var s Seller
 	err := r.db.QueryRow(ctx, query, id).Scan(
-		&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.AverageRating, &s.ReviewsCount, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.CoverURL, &s.CoverObjectKey, &s.History, &s.AverageRating, &s.ReviewsCount, &s.CreatedAt, &s.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -73,13 +73,13 @@ func (r *Repository) GetSellerByID(ctx context.Context, id uuid.UUID) (*Seller, 
 
 func (r *Repository) GetSellerBySlug(ctx context.Context, slug string) (*Seller, error) {
 	query := `
-		SELECT id, brand_name, slug, description, contact_email, contact_phone, status, logo_url, logo_object_key, average_rating, reviews_count, created_at, updated_at
+		SELECT id, brand_name, slug, description, contact_email, contact_phone, status, logo_url, logo_object_key, cover_url, cover_object_key, history, average_rating, reviews_count, created_at, updated_at
 		FROM sellers
 		WHERE slug = $1
 	`
 	var s Seller
 	err := r.db.QueryRow(ctx, query, slug).Scan(
-		&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.AverageRating, &s.ReviewsCount, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.CoverURL, &s.CoverObjectKey, &s.History, &s.AverageRating, &s.ReviewsCount, &s.CreatedAt, &s.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -92,7 +92,7 @@ func (r *Repository) GetSellerBySlug(ctx context.Context, slug string) (*Seller,
 
 func (r *Repository) GetSellerByUserID(ctx context.Context, userID uuid.UUID) (*Seller, *SellerUser, error) {
 	query := `
-		SELECT s.id, s.brand_name, s.slug, s.description, s.contact_email, s.contact_phone, s.status, s.logo_url, s.logo_object_key, s.average_rating, s.reviews_count, s.created_at, s.updated_at,
+		SELECT s.id, s.brand_name, s.slug, s.description, s.contact_email, s.contact_phone, s.status, s.logo_url, s.logo_object_key, s.cover_url, s.cover_object_key, s.history, s.average_rating, s.reviews_count, s.created_at, s.updated_at,
 		       su.id, su.seller_id, su.user_id, su.role, su.created_at
 		FROM sellers s
 		JOIN seller_users su ON s.id = su.seller_id
@@ -101,7 +101,7 @@ func (r *Repository) GetSellerByUserID(ctx context.Context, userID uuid.UUID) (*
 	var s Seller
 	var su SellerUser
 	err := r.db.QueryRow(ctx, query, userID).Scan(
-		&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.AverageRating, &s.ReviewsCount, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.BrandName, &s.Slug, &s.Description, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.LogoURL, &s.LogoObjectKey, &s.CoverURL, &s.CoverObjectKey, &s.History, &s.AverageRating, &s.ReviewsCount, &s.CreatedAt, &s.UpdatedAt,
 		&su.ID, &su.SellerID, &su.UserID, &su.Role, &su.CreatedAt,
 	)
 	if err != nil {
@@ -417,11 +417,15 @@ func (r *Repository) UpdateSellerProfile(ctx context.Context, sellerID uuid.UUID
 			contact_email = COALESCE($3, contact_email),
 			contact_phone = COALESCE($4, contact_phone),
 			slug          = COALESCE($5, slug),
+			history       = COALESCE($6, history),
+			cover_url     = COALESCE($7, cover_url),
+			logo_url      = COALESCE($8, logo_url),
 			updated_at    = now()
-		WHERE id = $6
+		WHERE id = $9
 	`
 	res, err := r.db.Exec(ctx, query,
 		req.BrandName, req.Description, req.ContactEmail, req.ContactPhone, req.Slug,
+		req.History, req.CoverURL, req.LogoURL,
 		sellerID,
 	)
 	if err != nil {
@@ -445,6 +449,59 @@ func (r *Repository) UpdateSellerLogo(ctx context.Context, sellerID uuid.UUID, l
 	}
 	if res.RowsAffected() == 0 {
 		return ErrSellerNotFound
+	}
+	return nil
+}
+
+func (r *Repository) UpdateSellerCover(ctx context.Context, sellerID uuid.UUID, coverURL string, coverObjectKey string) error {
+	query := `
+		UPDATE sellers
+		SET cover_url = $1, cover_object_key = $2, updated_at = now()
+		WHERE id = $3
+	`
+	res, err := r.db.Exec(ctx, query, coverURL, coverObjectKey, sellerID)
+	if err != nil {
+		return fmt.Errorf("failed to update seller cover: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return ErrSellerNotFound
+	}
+	return nil
+}
+
+func (r *Repository) GetPrimaryOwnedBrandForSeller(ctx context.Context, sellerID uuid.UUID) (*uuid.UUID, error) {
+	query := `
+		SELECT brand_id
+		FROM seller_brands
+		WHERE seller_id = $1 AND is_primary = true AND relationship_type = 'owner' AND status = 'active'
+		LIMIT 1
+	`
+	var brandID uuid.UUID
+	err := r.db.QueryRow(ctx, query, sellerID).Scan(&brandID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to query owned brand: %w", err)
+	}
+	return &brandID, nil
+}
+
+func (r *Repository) UpdateBrandProfile(ctx context.Context, brandID uuid.UUID, name, description, history, logoURL, coverURL *string) error {
+	query := `
+		UPDATE brands
+		SET
+			name        = COALESCE($1, name),
+			description = COALESCE($2, description),
+			history     = COALESCE($3, history),
+			logo_url    = COALESCE($4, logo_url),
+			cover_url   = COALESCE($5, cover_url),
+			updated_at  = now()
+		WHERE id = $6
+	`
+	_, err := r.db.Exec(ctx, query, name, description, history, logoURL, coverURL, brandID)
+	if err != nil {
+		return fmt.Errorf("failed to update brand profile: %w", err)
 	}
 	return nil
 }

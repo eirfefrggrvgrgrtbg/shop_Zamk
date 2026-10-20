@@ -1,0 +1,9 @@
+ALTER TABLE sellers
+    ADD COLUMN IF NOT EXISTS cover_url TEXT,
+    ADD COLUMN IF NOT EXISTS cover_object_key TEXT,
+    ADD COLUMN IF NOT EXISTS history TEXT;
+
+ALTER TABLE brands
+    ADD COLUMN IF NOT EXISTS cover_url TEXT,
+    ADD COLUMN IF NOT EXISTS cover_object_key TEXT,
+    ADD COLUMN IF NOT EXISTS history TEXT;

@@ -617,9 +617,11 @@ export interface SellerMe {
     brandName: string;
     slug: string;
     description?: string;
+    history?: string;
     contactEmail: string;
     contactPhone?: string;
     logoUrl?: string;
+    coverUrl?: string;
     status: string;
     createdAt: string;
     updatedAt: string;
@@ -629,6 +631,9 @@ export interface SellerMe {
 export interface UpdateSellerProfileRequest {
   brandName?: string;
   description?: string;
+  history?: string;
+  coverUrl?: string;
+  logoUrl?: string;
   contactEmail?: string;
   contactPhone?: string;
   slug?: string;
