@@ -71,6 +71,9 @@ func (s *Service) CreateSellerCampaign(ctx context.Context, sellerID uuid.UUID, 
 		EndsAt:                   req.EndsAt,
 	}
 
+	if err := validateNotFullPercentDiscount(campaign.DiscountType, campaign.SellerDiscountBps+campaign.RequestedZamkShareBps); err != nil {
+		return nil, err
+	}
 	if err := ValidateCampaign(campaign); err != nil {
 		return nil, err
 	}
@@ -111,6 +114,9 @@ func (s *Service) CreateCofundedApplication(ctx context.Context, sellerID uuid.U
 		EndsAt:                      req.EndsAt,
 	}
 
+	if err := validateNotFullPercentDiscount(campaign.DiscountType, campaign.SellerDiscountBps+campaign.RequestedZamkShareBps); err != nil {
+		return nil, err
+	}
 	if err := ValidateCampaign(campaign); err != nil {
 		return nil, err
 	}
@@ -287,6 +293,9 @@ func (s *Service) CreatePromoCode(ctx context.Context, sellerID uuid.UUID, req C
 		promo.PerCustomerUsageLimit = 1
 	}
 
+	if err := validateNotFullPercentDiscount(promo.DiscountType, promo.DiscountValueBps); err != nil {
+		return nil, err
+	}
 	if err := ValidatePromoCode(promo); err != nil {
 		return nil, err
 	}
@@ -612,8 +621,29 @@ func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 			totalCustomerPaid += lineRes.TotalCustomerPaidCents
 		}
 
-		// Apply maximum discount cap if order-level discount exceeds cap
-		if promo.MaxDiscountCents != nil && *promo.MaxDiscountCents > 0 && totalSellerDiscount > *promo.MaxDiscountCents {
+		// max_discount_cents caps the promo's total customer discount for the order (seller + ZAMK).
+		// Co-funded: the capped amount is split between the parties in proportion to their agreed
+		// shares; neither party pays more than its uncapped share (M0.3).
+		if promo.MaxDiscountCents != nil && *promo.MaxDiscountCents > 0 && totalZamkSubsidy > 0 &&
+			totalSellerDiscount+totalZamkSubsidy > *promo.MaxDiscountCents {
+			ids := make([]string, len(promotedLines))
+			lines := make([]LineSplitDiscountResult, len(promotedLines))
+			for i, pl := range promotedLines {
+				ids[i] = pl.OrderItemID.String()
+				lines[i] = pl.lineResult()
+			}
+			capped, err := AllocateCappedCofundedDiscount(*promo.MaxDiscountCents, lines, ids)
+			if err != nil {
+				return nil, err
+			}
+			totalSellerDiscount, totalZamkSubsidy, totalCustomerPaid = 0, 0, 0
+			for i := range promotedLines {
+				promotedLines[i].applyLineResult(capped[i])
+				totalSellerDiscount += capped[i].TotalSellerDiscountCents
+				totalZamkSubsidy += capped[i].TotalZamkSubsidyCents
+				totalCustomerPaid += capped[i].TotalCustomerPaidCents
+			}
+		} else if promo.MaxDiscountCents != nil && *promo.MaxDiscountCents > 0 && totalSellerDiscount > *promo.MaxDiscountCents {
 			targetDiscount := *promo.MaxDiscountCents
 			fixedInputs := make([]PromotedItemInput, len(eligibleItems))
 			for i, it := range eligibleItems {
@@ -696,6 +726,15 @@ func (s *Service) ValidateAndCalculateCheckoutPromoTx(
 			})
 			totalSellerDiscount += lineRes.TotalSellerDiscountCents
 			totalCustomerPaid += lineRes.TotalCustomerPaidCents
+		}
+	}
+
+	// 9b. No promotion may make an item completely free, whatever the funding (seller, ZAMK, co-funded,
+	// fixed amount) and whenever the promo was created (temporary PO rule, M0.3).
+	for _, pl := range promotedLines {
+		discount := pl.TotalSellerDiscountCents + pl.TotalZamkSubsidyCents
+		if discount > 0 && pl.TotalCustomerPaidCents <= 0 {
+			return nil, ErrPromoFullDiscount
 		}
 	}
 
@@ -965,6 +1004,9 @@ func (s *Service) CreateSellerPromotion(ctx context.Context, sellerID uuid.UUID,
 	case DiscountTypePercent:
 		if req.DiscountValueBps <= 0 || req.DiscountValueBps > 10000 {
 			return nil, fmt.Errorf("%w: percent discount must be between 1 and 10000 bps", ErrInvalidDiscountValue)
+		}
+		if req.DiscountValueBps >= 10000 {
+			return nil, fmt.Errorf("%w: %w", ErrInvalidDiscountValue, ErrFullDiscountNotAllowed)
 		}
 		if req.DiscountValueFixedCents != 0 {
 			return nil, fmt.Errorf("%w: fixed cents must be zero for percent discount", ErrInvalidDiscountValue)
@@ -1397,8 +1439,13 @@ func (s *Service) UpdateSellerPromotion(ctx context.Context, sellerID, promoID u
 		promo.PerCustomerUsageLimit = *req.PerCustomerUsageLimit
 	}
 
-	// 5. Update active toggle
+	// 5. Update active toggle. A pre-existing 100% promo may be deactivated but never (re)activated.
 	if req.IsActive != nil {
+		if *req.IsActive && !promo.IsActive {
+			if err := validateNotFullPercentDiscount(promo.DiscountType, promo.DiscountValueBps); err != nil {
+				return nil, err
+			}
+		}
 		promo.IsActive = *req.IsActive
 	}
 
@@ -1916,4 +1963,42 @@ func (s *Service) ListCampaignTrackingLinks(ctx context.Context, campaignID uuid
 // DisableTrackingLink disables a tracking link.
 func (s *Service) DisableTrackingLink(ctx context.Context, campaignID, linkID uuid.UUID) (*CampaignTrackingLink, error) {
 	return s.repo.DisableTrackingLink(ctx, campaignID, linkID)
+}
+
+// validateNotFullPercentDiscount rejects percent discounts that would make an item free.
+func validateNotFullPercentDiscount(dt DiscountType, totalBps int) error {
+	if dt == DiscountTypePercent && totalBps >= 10000 {
+		return fmt.Errorf("%w: %w", ErrInvalidDiscountValue, ErrFullDiscountNotAllowed)
+	}
+	return nil
+}
+
+func (pl PromotedLineResult) lineResult() LineSplitDiscountResult {
+	return LineSplitDiscountResult{
+		BaseUnitPriceCents:          pl.BaseUnitPriceCents,
+		SellerDiscountUnitCents:     pl.SellerDiscountUnitCents,
+		ZamkSubsidyUnitCents:        pl.ZamkSubsidyUnitCents,
+		CustomerPaidUnitPriceCents:  pl.CustomerPaidUnitPriceCents,
+		CommissionBaseUnitCents:     pl.CommissionBaseUnitCents,
+		Quantity:                    pl.Quantity,
+		TotalSellerDiscountCents:    pl.TotalSellerDiscountCents,
+		TotalZamkSubsidyCents:       pl.TotalZamkSubsidyCents,
+		TotalCustomerPaidCents:      pl.TotalCustomerPaidCents,
+		TotalCommissionBaseCents:    pl.TotalCommissionBaseCents,
+		CommissionRateBps:           pl.CommissionRateBps,
+		TotalCommissionChargedCents: pl.TotalCommissionChargedCents,
+	}
+}
+
+func (pl *PromotedLineResult) applyLineResult(r LineSplitDiscountResult) {
+	pl.SellerDiscountUnitCents = r.SellerDiscountUnitCents
+	pl.ZamkSubsidyUnitCents = r.ZamkSubsidyUnitCents
+	pl.CustomerPaidUnitPriceCents = r.CustomerPaidUnitPriceCents
+	pl.CommissionBaseUnitCents = r.CommissionBaseUnitCents
+	pl.TotalSellerDiscountCents = r.TotalSellerDiscountCents
+	pl.TotalZamkSubsidyCents = r.TotalZamkSubsidyCents
+	pl.TotalCustomerPaidCents = r.TotalCustomerPaidCents
+	pl.TotalCommissionBaseCents = r.TotalCommissionBaseCents
+	pl.CommissionRateBps = r.CommissionRateBps
+	pl.TotalCommissionChargedCents = r.TotalCommissionChargedCents
 }

@@ -74,8 +74,12 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, marketing.ErrPromoNotFound) || errors.Is(err, marketing.ErrPromoInactive) || errors.Is(err, marketing.ErrPromoNotStarted) ||
 			errors.Is(err, marketing.ErrPromoExpired) || errors.Is(err, marketing.ErrPromoMinSubtotal) || errors.Is(err, marketing.ErrPromoMinQuantity) || errors.Is(err, marketing.ErrPromoMinDistinctProducts) || errors.Is(err, marketing.ErrPromoGlobalLimit) ||
 			errors.Is(err, marketing.ErrPromoCustomerLimit) || errors.Is(err, marketing.ErrPromoFirstOrderOnly) || errors.Is(err, marketing.ErrPromoRepeatCustomerRequired) || errors.Is(err, marketing.ErrPromoNotApplicable) ||
-			errors.Is(err, marketing.ErrPromoBudgetExhausted) {
+			errors.Is(err, marketing.ErrPromoBudgetExhausted) || errors.Is(err, marketing.ErrPromoFullDiscount) {
 			h.writeError(w, http.StatusBadRequest, "invalid_order", err.Error())
+			return
+		}
+		if errors.Is(err, ErrSelfPurchase) {
+			h.writeError(w, http.StatusUnprocessableEntity, "self_purchase_not_allowed", "Нельзя оформить заказ на товары собственного магазина")
 			return
 		}
 		if errors.Is(err, ErrIdempotencyKeyConflict) {
@@ -119,7 +123,7 @@ func (h *Handler) ValidatePromo(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, marketing.ErrPromoNotFound) || errors.Is(err, marketing.ErrPromoInactive) || errors.Is(err, marketing.ErrPromoNotStarted) ||
 			errors.Is(err, marketing.ErrPromoExpired) || errors.Is(err, marketing.ErrPromoMinSubtotal) || errors.Is(err, marketing.ErrPromoMinQuantity) || errors.Is(err, marketing.ErrPromoMinDistinctProducts) || errors.Is(err, marketing.ErrPromoGlobalLimit) ||
 			errors.Is(err, marketing.ErrPromoCustomerLimit) || errors.Is(err, marketing.ErrPromoFirstOrderOnly) || errors.Is(err, marketing.ErrPromoRepeatCustomerRequired) || errors.Is(err, marketing.ErrPromoNotApplicable) ||
-			errors.Is(err, marketing.ErrPromoBudgetExhausted) {
+			errors.Is(err, marketing.ErrPromoBudgetExhausted) || errors.Is(err, marketing.ErrPromoFullDiscount) {
 			h.writeError(w, http.StatusBadRequest, "invalid_promo", err.Error())
 			return
 		}

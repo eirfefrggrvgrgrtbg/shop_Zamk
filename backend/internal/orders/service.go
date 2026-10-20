@@ -129,6 +129,12 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 
 		orderID := uuid.New()
 
+		// Self-purchase guard: nothing is reserved and no order is created when the buyer belongs to the
+		// store (owner or manager in seller_users) of any product in the cart.
+		if err := s.ensureNotOwnStoreProductsTx(ctx, tx, userID, userCart.Items); err != nil {
+			return err
+		}
+
 		// Prepare order items and reservations
 		for _, item := range userCart.Items {
 			// Validate product and variant
@@ -856,6 +862,29 @@ type snapshotData struct {
 	Sku          *string
 	ImageURL     *string
 	PriceCents   int64
+}
+
+// ensureNotOwnStoreProductsTx rejects a checkout whose cart contains a product of a store the buyer
+// is a member of. Only a boolean is read, so no store or membership details are exposed.
+func (s *Service) ensureNotOwnStoreProductsTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []cart.CartItem) error {
+	productIDs := make([]uuid.UUID, 0, len(items))
+	for _, it := range items {
+		productIDs = append(productIDs, it.ProductID)
+	}
+	var own bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM products p
+			JOIN seller_users su ON su.seller_id = p.seller_id
+			WHERE su.user_id = $1 AND p.id = ANY($2)
+		)`, userID, productIDs).Scan(&own); err != nil {
+		return fmt.Errorf("failed to check store membership: %w", err)
+	}
+	if own {
+		return ErrSelfPurchase
+	}
+	return nil
 }
 
 // defaultCommissionBps is the marketplace rate applied to sellers without an individual commission rule.

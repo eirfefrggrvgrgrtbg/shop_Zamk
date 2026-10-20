@@ -11,4 +11,6 @@ var (
 	ErrOrderNotCancellable     = errors.New("order is not cancellable")
 	ErrOrderAlreadyCancelled   = errors.New("order is already cancelled")
 	ErrIdempotencyKeyConflict  = errors.New("idempotency key conflict")
+	// ErrSelfPurchase: the buyer is an owner or manager of a store whose product is in the cart.
+	ErrSelfPurchase = errors.New("cannot buy products of your own store")
 )

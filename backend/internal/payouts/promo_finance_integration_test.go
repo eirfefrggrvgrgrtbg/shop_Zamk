@@ -715,14 +715,23 @@ func TestM01_O_RollbackAndFailClosed(t *testing.T) {
 	assert.Empty(t, f.ledger(item.ID))
 }
 
-// P. 100% seller discount — no accrual at the full price.
+// P. A historical order whose promotion made the item free (allowed before M0.3) is still processed:
+// no accrual at the full price and nothing to refund. New 100% promos are rejected (see M0.3 tests),
+// so the snapshot is rewritten here to the shape such an order has in the database.
 func TestM01_P_SellerDiscount100(t *testing.T) {
 	f := newFinFixture(t)
 	seller, buyer := f.seller(), f.buyer()
 	f.addToCart(buyer, f.product(seller, 1_000_000), 1)
-	order := f.checkout(buyer, f.sellerPromo(seller, marketing.CreateSellerPromoRequest{DiscountType: marketing.DiscountTypePercent, DiscountValueBps: 10000}))
-	assert.Equal(t, deliveryPriceCents, order.TotalPriceCents)
+	order := f.checkout(buyer, f.sellerPromo(seller, marketing.CreateSellerPromoRequest{DiscountType: marketing.DiscountTypePercent, DiscountValueBps: 5000}))
 	item := onlyItem(t, order)
+	f.exec(`UPDATE order_item_promotions SET seller_discount_unit_cents = base_unit_price_cents,
+			customer_paid_unit_price_cents = 0, commission_base_unit_cents = 0,
+			total_seller_discount_cents = base_unit_price_cents * quantity, total_customer_paid_cents = 0,
+			total_commission_base_cents = 0, total_commission_charged_cents = 0
+		WHERE order_item_id = $1`, item.ID)
+	f.exec(`UPDATE orders SET total_price_cents = $2 WHERE id = $1`, order.ID, deliveryPriceCents)
+	order.TotalPriceCents = deliveryPriceCents
+
 	f.pay(buyer, order.ID)
 	f.deliver(*item.OrderFulfillmentID, time.Now())
 	assertLine(t, f.ledger(item.ID), 0, 0, 0)

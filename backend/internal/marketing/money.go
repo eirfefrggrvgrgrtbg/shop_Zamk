@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
+	"sort"
 )
 
 var (
@@ -331,4 +333,151 @@ func AllocateSellerFixedDiscount(fixedDiscountCents int64, items []PromotedItemI
 	}
 
 	return results, nil
+}
+
+// mulDivFloor returns floor(a*b/c) for non-negative operands without int64 overflow.
+func mulDivFloor(a, b, c int64) int64 {
+	if c <= 0 {
+		return 0
+	}
+	r := new(big.Int).Mul(big.NewInt(a), big.NewInt(b))
+	return r.Quo(r, big.NewInt(c)).Int64()
+}
+
+func mulMod(a, b, c int64) int64 {
+	if c <= 0 {
+		return 0
+	}
+	r := new(big.Int).Mul(big.NewInt(a), big.NewInt(b))
+	return r.Rem(r, big.NewInt(c)).Int64()
+}
+
+// AllocateCappedCofundedDiscount applies an order-level cap (max_discount_cents) to co-funded percent
+// lines. The capped total is split between seller and ZAMK in proportion to their uncapped totals:
+//
+//	seller_target = floor(cap * S / T), zamk_target = cap - seller_target   (T = S + Z)
+//
+// so the rounding remainder of the split goes to ZAMK and the seller never pays more than its share.
+// ZAMK subsidy is stored per unit (order_item_promotions requires total = unit * quantity), so it is
+// assigned in whole units per line, never above the line's uncapped unit subsidy; a remainder smaller
+// than one unit step is carried by the seller only while the seller stays within its uncapped share.
+// Seller discount is spread over lines in proportion to the uncapped seller discount (largest
+// remainder, then larger line, then id), never above the uncapped line amount.
+// Each line keeps: commission_base = base - seller, customer_paid = commission_base - zamk.
+func AllocateCappedCofundedDiscount(capCents int64, lines []LineSplitDiscountResult, ids []string) ([]LineSplitDiscountResult, error) {
+	if capCents <= 0 {
+		return nil, fmt.Errorf("discount cap must be positive: %d", capCents)
+	}
+	if len(lines) != len(ids) {
+		return nil, fmt.Errorf("lines and ids length mismatch")
+	}
+	var S, Z int64
+	for _, l := range lines {
+		if l.Quantity <= 0 {
+			return nil, fmt.Errorf("item quantity must be positive: %d", l.Quantity)
+		}
+		S += l.TotalSellerDiscountCents
+		Z += l.TotalZamkSubsidyCents
+	}
+	T := S + Z
+	out := make([]LineSplitDiscountResult, len(lines))
+	copy(out, lines)
+	if T <= capCents {
+		return out, nil
+	}
+
+	sellerTarget := mulDivFloor(capCents, S, T)
+	zamkTarget := capCents - sellerTarget
+
+	type ord struct {
+		idx  int
+		rem  int64
+		size int64
+		id   string
+	}
+	sortOrd := func(list []ord) {
+		sort.SliceStable(list, func(a, b int) bool {
+			if list[a].rem != list[b].rem {
+				return list[a].rem > list[b].rem
+			}
+			if list[a].size != list[b].size {
+				return list[a].size > list[b].size
+			}
+			return list[a].id < list[b].id
+		})
+	}
+
+	// ZAMK: whole units per line, proportional, never above the uncapped unit subsidy.
+	zamkUnit := make([]int64, len(lines))
+	var zamkAssigned int64
+	zOrder := make([]ord, len(lines))
+	for i, l := range lines {
+		zamkUnit[i] = mulDivFloor(l.ZamkSubsidyUnitCents, capCents, T)
+		zamkAssigned += zamkUnit[i] * int64(l.Quantity)
+		zOrder[i] = ord{idx: i, rem: mulMod(l.ZamkSubsidyUnitCents, capCents, T), size: l.TotalZamkSubsidyCents, id: ids[i]}
+	}
+	sortOrd(zOrder)
+	for progress := true; progress; {
+		progress = false
+		for _, o := range zOrder {
+			q := int64(lines[o.idx].Quantity)
+			if zamkUnit[o.idx] < lines[o.idx].ZamkSubsidyUnitCents && zamkAssigned+q <= zamkTarget {
+				zamkUnit[o.idx]++
+				zamkAssigned += q
+				progress = true
+			}
+		}
+	}
+
+	// Seller: the rest of the cap, never above its uncapped total.
+	sellerTotal := capCents - zamkAssigned
+	if sellerTotal > S {
+		sellerTotal = S
+	}
+	sellerLine := make([]int64, len(lines))
+	var sellerAssigned int64
+	sOrder := make([]ord, len(lines))
+	for i, l := range lines {
+		sellerLine[i] = mulDivFloor(sellerTotal, l.TotalSellerDiscountCents, S)
+		sellerAssigned += sellerLine[i]
+		sOrder[i] = ord{idx: i, rem: mulMod(sellerTotal, l.TotalSellerDiscountCents, S), size: l.TotalSellerDiscountCents, id: ids[i]}
+	}
+	sortOrd(sOrder)
+	for progress := true; progress && sellerAssigned < sellerTotal; {
+		progress = false
+		for _, o := range sOrder {
+			if sellerAssigned >= sellerTotal {
+				break
+			}
+			if sellerLine[o.idx] < lines[o.idx].TotalSellerDiscountCents {
+				sellerLine[o.idx]++
+				sellerAssigned++
+				progress = true
+			}
+		}
+	}
+
+	for i, l := range lines {
+		q := int64(l.Quantity)
+		gross := l.BaseUnitPriceCents * q
+		sellerUnit := sellerLine[i] / q
+		commBase := gross - sellerLine[i]
+		comm := RoundBps(commBase, l.CommissionRateBps)
+		out[i] = LineSplitDiscountResult{
+			BaseUnitPriceCents:          l.BaseUnitPriceCents,
+			SellerDiscountUnitCents:     sellerUnit,
+			ZamkSubsidyUnitCents:        zamkUnit[i],
+			CustomerPaidUnitPriceCents:  l.BaseUnitPriceCents - sellerUnit - zamkUnit[i],
+			CommissionBaseUnitCents:     l.BaseUnitPriceCents - sellerUnit,
+			Quantity:                    l.Quantity,
+			TotalSellerDiscountCents:    sellerLine[i],
+			TotalZamkSubsidyCents:       zamkUnit[i] * q,
+			TotalCustomerPaidCents:      commBase - zamkUnit[i]*q,
+			TotalCommissionBaseCents:    commBase,
+			CommissionRateBps:           l.CommissionRateBps,
+			TotalCommissionChargedCents: comm,
+			SellerNetEarningTotalCents:  commBase - comm,
+		}
+	}
+	return out, nil
 }

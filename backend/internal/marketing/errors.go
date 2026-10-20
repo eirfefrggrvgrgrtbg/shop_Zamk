@@ -49,6 +49,7 @@ var (
 	ErrPromoRepeatCustomerRequired  = errors.New("promo_repeat_customer_required")
 	ErrPromoNotApplicable           = errors.New("promo_not_applicable")
 	ErrPromoBudgetExhausted         = errors.New("promo_budget_exhausted")
+	ErrPromoFullDiscount            = errors.New("promo_full_discount_not_allowed")
 	ErrPromoOrderAlreadyHasPromo    = errors.New("promo_order_already_has_promo")
 	ErrPromoUsageNotFound           = errors.New("promo_usage_not_found")
 	ErrPromoUsageNotReserved        = errors.New("promo_usage_not_reserved")
@@ -61,6 +62,8 @@ var (
 	ErrInvalidDates                  = errors.New("ends_at must be strictly after starts_at")
 	ErrPromoAlreadyExpired           = errors.New("cannot create an already expired promo code")
 	ErrInvalidDiscountValue          = errors.New("invalid discount value")
+	// ErrFullDiscountNotAllowed: a promotion may not make an item completely free (temporary PO rule, M0.3).
+	ErrFullDiscountNotAllowed        = errors.New("promotion cannot discount an item by 100%")
 	ErrInvalidLimit                  = errors.New("usage limit must be positive")
 	ErrProductNotOwnedBySeller       = errors.New("one or more products do not belong to the seller")
 	ErrInvalidProductScope           = errors.New("invalid product scope")

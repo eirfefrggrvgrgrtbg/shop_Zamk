@@ -129,6 +129,10 @@ func (h *Handler) CreateSellerPromotion(w http.ResponseWriter, r *http.Request) 
 			h.writeError(w, http.StatusBadRequest, "invalid_dates", "Дата окончания должна быть позже даты начала")
 			return
 		}
+		if errors.Is(err, ErrFullDiscountNotAllowed) {
+			h.writeError(w, http.StatusBadRequest, "full_discount_not_allowed", "Промокод не может давать скидку 100% стоимости товара")
+			return
+		}
 		if errors.Is(err, ErrInvalidDiscountType) || errors.Is(err, ErrInvalidDiscountValue) {
 			h.writeError(w, http.StatusBadRequest, "invalid_discount", err.Error())
 			return
@@ -271,6 +275,10 @@ func (h *Handler) UpdateSellerPromotion(w http.ResponseWriter, r *http.Request) 
 		}
 		if errors.Is(err, ErrInvalidLimit) {
 			h.writeError(w, http.StatusBadRequest, "invalid_limit", err.Error())
+			return
+		}
+		if errors.Is(err, ErrFullDiscountNotAllowed) {
+			h.writeError(w, http.StatusBadRequest, "full_discount_not_allowed", "Промокод со скидкой 100% нельзя активировать")
 			return
 		}
 		h.writeError(w, http.StatusBadRequest, "validation_error", err.Error())

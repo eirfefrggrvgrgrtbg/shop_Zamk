@@ -4446,6 +4446,16 @@ describe('SellerPromotions Component & Interaction Tests', () => {
       expect(scrollMock).toHaveBeenCalled();
     });
 
+    it('rejects a 100% percent discount before calling the API (M0.3)', async () => {
+      await openCreatePromoModal();
+      fireEvent.change(screen.getByTestId('input-promo-code'), { target: { value: 'FULLFREE' } });
+      fireEvent.change(screen.getByTestId('input-discount-percent'), { target: { value: '100' } });
+      fireEvent.submit(screen.getByTestId('create-promo-modal').querySelector('form')!);
+      await waitFor(() => {
+        expect(screen.getByText('Скидка должна быть больше 0% и меньше 100%.')).toBeTruthy();
+      });
+    });
+
     it('M. earlier invalid field priority: invalid discount percent focuses input-discount-percent even if min quantity is also invalid', async () => {
       const scrollMock = vi.fn();
       window.HTMLElement.prototype.scrollIntoView = scrollMock;
@@ -4455,7 +4465,7 @@ describe('SellerPromotions Component & Interaction Tests', () => {
       fireEvent.change(screen.getByTestId('input-min-quantity'), { target: { value: '0' } });
       fireEvent.submit(screen.getByTestId('create-promo-modal').querySelector('form')!);
       await waitFor(() => {
-        expect(screen.getByText('Скидка должна быть от 1% до 100%.')).toBeTruthy();
+        expect(screen.getByText('Скидка должна быть больше 0% и меньше 100%.')).toBeTruthy();
       });
       expect(document.activeElement).toBe(screen.getByTestId('input-discount-percent'));
       expect(scrollMock).toHaveBeenCalled();

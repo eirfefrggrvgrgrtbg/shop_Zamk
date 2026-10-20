@@ -1376,7 +1376,7 @@ func TestMatrixV_SellerIDCannotBeSpoofedThroughSellerHTTPRequest(t *testing.T) {
 // -------------------------------------------------------------
 // MATRIX W: Canonical maximum valid percent boundary is accepted
 // -------------------------------------------------------------
-func TestMatrixW_CanonicalMaximumValidPercentBoundaryAccepted(t *testing.T) {
+func TestMatrixW_MaximumPercentBelowFullDiscount(t *testing.T) {
 	client, repo, svc := setupTestMarketingDB(t)
 	sellerID := createTestSeller(t, client)
 	var campaignIDs []uuid.UUID
@@ -1384,23 +1384,29 @@ func TestMatrixW_CanonicalMaximumValidPercentBoundaryAccepted(t *testing.T) {
 
 	ctx := context.Background()
 	code := uniqueCode("MAXPCT")
-	// Canonical upper boundary is 10000 bps (100.00%)
+	// M0.3: the highest accepted percent is 9999 bps (99.99%); 100% is rejected (temporary PO rule).
 	req := marketing.CreateSellerPromoRequest{
 		Code:             code,
 		DiscountType:     marketing.DiscountTypePercent,
-		DiscountValueBps: 10000,
+		DiscountValueBps: 9999,
 	}
 
 	res, err := svc.CreateSellerPromotion(ctx, sellerID, req)
-	require.NoError(t, err, "Canonical 10000 bps (100%) must be accepted")
+	require.NoError(t, err, "9999 bps (99.99%) must be accepted")
 	require.NotNil(t, res)
 	campaignIDs = append(campaignIDs, res.CampaignID)
 
-	assert.Equal(t, 10000, res.DiscountValueBps)
+	assert.Equal(t, 9999, res.DiscountValueBps)
 
 	c, err := repo.GetCampaignByID(ctx, res.CampaignID)
 	require.NoError(t, err)
-	assert.Equal(t, 10000, c.SellerDiscountBps)
+	assert.Equal(t, 9999, c.SellerDiscountBps)
+
+	req.Code = uniqueCode("FULLPCT")
+	req.DiscountValueBps = 10000
+	_, err = svc.CreateSellerPromotion(ctx, sellerID, req)
+	require.ErrorIs(t, err, marketing.ErrFullDiscountNotAllowed)
+	require.ErrorIs(t, err, marketing.ErrInvalidDiscountValue, "still reported as an invalid discount value")
 }
 
 // -------------------------------------------------------------

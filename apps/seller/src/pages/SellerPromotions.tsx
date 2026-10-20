@@ -574,9 +574,9 @@ export function SellerPromotions() {
 
       if (createDiscountType === 'percent') {
         const pct = parseFloat(createDiscountPercent);
-        if (isNaN(pct) || pct <= 0 || pct > 100) {
+        if (isNaN(pct) || pct <= 0 || pct >= 100) {
           scrollToAndFocus('input-discount-percent');
-          throw new Error('Скидка должна быть от 1% до 100%.');
+          throw new Error('Скидка должна быть больше 0% и меньше 100%.');
         }
         req.discountValueBps = Math.round(pct * 100);
       } else {
@@ -712,6 +712,8 @@ export function SellerPromotions() {
         setCreateError('Некорректная область действия промокода.');
       } else if (err.data?.code === 'invalid_max_discount' || err.code === 'invalid_max_discount') {
         setCreateError('Максимальная скидка должна быть положительным числом.');
+      } else if (err.data?.code === 'full_discount_not_allowed' || err.code === 'full_discount_not_allowed') {
+        setCreateError('Промокод не может давать скидку 100% стоимости товара.');
       } else {
         setCreateError(err.message || err.data?.message || 'Не удалось создать промокод.');
       }
@@ -1144,7 +1146,7 @@ export function SellerPromotions() {
                   <input
                     type="number"
                     min="1"
-                    max="100"
+                    max="99.99"
                     step="0.01"
                     required
                     data-testid="input-discount-percent"
