@@ -55,12 +55,14 @@ export interface Product {
 export interface Brand {
   id: string;
   name: string;
+  slug?: string;
   description: string;
   history?: string;
   philosophy?: string;
   origin?: string;
   country: string;
   image: string;
+  isActive?: boolean;
 }
 
 export interface Collection {

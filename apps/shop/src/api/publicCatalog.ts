@@ -46,13 +46,32 @@ export async function mapFavoritesToCatalog(items: ProductSummary[]): Promise<UI
 
 export async function fetchBrands(): Promise<UIBrand[]> {
   const brands = await getBrands();
-  const mapped = brands.map(b => ({
-    id: b.id,
-    name: b.name,
-    description: b.description || '',
-    country: '',
-    image: b.logoUrl || ''
-  }));
+  const activeBrands = (brands || []).filter(b => (b as any).isActive !== false);
+
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  const mapped: UIBrand[] = [];
+
+  for (const b of activeBrands) {
+    if (!b || !b.id || !b.name) continue;
+    const normName = b.name.trim().toLowerCase();
+    if (seenIds.has(b.id) || seenNames.has(normName)) {
+      continue;
+    }
+    seenIds.add(b.id);
+    seenNames.add(normName);
+    mapped.push({
+      id: b.id,
+      name: b.name.trim(),
+      slug: b.slug || b.id,
+      description: b.description || '',
+      country: '',
+      image: b.logoUrl || '',
+      isActive: true,
+    });
+  }
+
+  mapped.sort((a, b) => a.name.localeCompare(b.name, 'ru', { sensitivity: 'base' }));
 
   cachedBrands = {};
   mapped.forEach(b => { cachedBrands[b.id] = b.name; });
