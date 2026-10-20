@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useProductStudio } from '../../contexts/ProductStudioContext';
+import { useProductStudio, type ProductStudioVariant } from '../../contexts/ProductStudioContext';
 import { ProductStudioSectionNav } from './ProductStudioSectionNav';
 import { SellerSurface } from '../SellerSurface';
 import { FileText, Image, Sliders, Layers, DollarSign, ShieldCheck, Folder, Link2, Pencil, Trash2, Plus, GripVertical, CheckCircle, AlertCircle, AlertTriangle, X, Loader2, Sparkles, Crop, Check } from 'lucide-react';
@@ -41,7 +41,9 @@ import {
   resolveProductStudioDimensionType,
   canDeactivateVariantTuple,
   toggleProductStudioVariantTuple,
+  isVariantLockedByStock,
   BLOCKED_LAST_CELL_TOOLTIP,
+  BLOCKED_STOCK_CELL_TOOLTIP,
 } from './productStudioMatrixHelper';
 import { getSellerColors, getSellerSizeValues, generateSellerSKUs, type SellerColor, type SellerSizeValue } from '@zamk/api-client';
 
@@ -793,9 +795,14 @@ export function ProductStudioFormWorkspace() {
     return content;
   };
 
+  // Cells switched off in this session keep their variant (id, SKU, price) so switching back on restores it.
+  const switchedOffVariantsRef = useRef<ProductStudioVariant[]>([]);
+
   const toggleMatrixCell = (colorId: string, sizeValueId: string, currentlyActive: boolean) => {
     const color = configuredColors.find((c) => c.id === colorId);
     const size = configuredSizes.find((s) => s.id === sizeValueId);
+    const isCell = (v: ProductStudioVariant) => v.colorId === colorId && v.sizeValueId === sizeValueId;
+    const switchedOff = currentlyActive ? (draft.variants || []).find((v) => v.isActive !== false && isCell(v)) : undefined;
     const result = toggleProductStudioVariantTuple(
       draft.variants || [],
       {
@@ -805,13 +812,19 @@ export function ProductStudioFormWorkspace() {
         sizeValueId,
         size: size?.label,
       },
-      currentlyActive
+      currentlyActive,
+      undefined,
+      switchedOffVariantsRef.current
     );
 
     if (!result.allowed) {
       return;
     }
 
+    switchedOffVariantsRef.current = switchedOffVariantsRef.current.filter((v) => !isCell(v));
+    if (switchedOff) {
+      switchedOffVariantsRef.current.push(switchedOff);
+    }
     updateDraft({ variants: result.variants });
     markTouched('variants');
   };
@@ -2119,11 +2132,14 @@ export function ProductStudioFormWorkspace() {
                             </div>
                           </td>
                           {configuredSizes.map((s) => {
-                            const isActive = activeVariants.some(
+                            const cellVariant = activeVariants.find(
                               (v) => v.colorId === c.id && v.sizeValueId === s.id
                             );
+                            const isActive = Boolean(cellVariant);
+                            const isStockLocked = isActive && isVariantLockedByStock(cellVariant);
                             const isCellBlocked =
-                              isActive && !canDeactivateVariantTuple(activeVariants, c.id, s.id);
+                              isStockLocked || (isActive && !canDeactivateVariantTuple(activeVariants, c.id, s.id));
+                            const blockedTooltip = isStockLocked ? BLOCKED_STOCK_CELL_TOOLTIP : BLOCKED_LAST_CELL_TOOLTIP;
                             return (
                               <td
                                 key={s.id}
@@ -2134,12 +2150,12 @@ export function ProductStudioFormWorkspace() {
                                   data-testid={`form-matrix-cell-${c.id}-${s.id}`}
                                   aria-label={
                                     isCellBlocked
-                                      ? BLOCKED_LAST_CELL_TOOLTIP
+                                      ? blockedTooltip
                                       : isActive
                                       ? `Отключить вариант ${c.name} ${s.label}`
                                       : `Включить вариант ${c.name} ${s.label}`
                                   }
-                                  title={isCellBlocked ? BLOCKED_LAST_CELL_TOOLTIP : undefined}
+                                  title={isCellBlocked ? blockedTooltip : undefined}
                                   onClick={() => toggleMatrixCell(c.id, s.id, isActive)}
                                   className={cn(
                                     "w-7 h-7 rounded-md inline-flex items-center justify-center transition-colors",

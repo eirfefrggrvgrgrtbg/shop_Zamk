@@ -105,6 +105,9 @@ export interface ProductStudioVariant {
   barcode?: string;
   priceCents?: number;
   isActive?: boolean;
+  /** Read-only warehouse state of a persisted variant (from the seller product GET); never sent on save. */
+  totalStock?: number;
+  reservedStock?: number;
 }
 
 export interface ProductStudioDraft {

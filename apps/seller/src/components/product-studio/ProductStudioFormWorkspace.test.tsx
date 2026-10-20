@@ -831,6 +831,41 @@ describe('ProductStudioFormWorkspace - Variant Editing Parity (PS.R4B3.1C4C3B3A)
       expect(screen.getByTestId('form-matrix-cell-col-white-sz-l')).toBeTruthy();
     });
 
+    it('C5. switching a cell off and on restores the same variant id, SKU and price', async () => {
+      let latestCtx: any = null;
+      const draft = {
+        ...twoByTwoDraft,
+        variants: twoByTwoDraft.variants!.map((v) => (v.id === 'v-w-m' ? { ...v, sellerSku: 'WM-1', priceCents: 777700 } : v)),
+      };
+      render(<TestWrapper initialDraft={draft} contextCallback={(ctx) => { latestCtx = ctx; }} />);
+      await waitFor(() => expect(screen.getByTestId('form-matrix-cell-col-white-sz-m')).toBeTruthy());
+
+      fireEvent.click(screen.getByTestId('form-matrix-cell-col-white-sz-m'));
+      await waitFor(() => expect(latestCtx?.draft.variants?.filter((v: any) => v.isActive !== false)).toHaveLength(3));
+      fireEvent.click(screen.getByTestId('form-matrix-cell-col-white-sz-m'));
+      await waitFor(() => {
+        const wm = latestCtx?.draft.variants?.find((v: any) => v.colorId === 'col-white' && v.sizeValueId === 'sz-m');
+        expect(wm?.id).toBe('v-w-m');
+        expect(wm?.sellerSku).toBe('WM-1');
+        expect(wm?.priceCents).toBe(777700);
+      });
+    });
+
+    it('C5. a cell whose variant has warehouse stock is locked with an explanation', async () => {
+      let latestCtx: any = null;
+      const draft = {
+        ...twoByTwoDraft,
+        variants: twoByTwoDraft.variants!.map((v) => (v.id === 'v-w-m' ? { ...v, totalStock: 4, reservedStock: 1 } : v)),
+      };
+      render(<TestWrapper initialDraft={draft} contextCallback={(ctx) => { latestCtx = ctx; }} />);
+      await waitFor(() => expect(screen.getByTestId('form-matrix-cell-col-white-sz-m')).toBeTruthy());
+
+      const cell = screen.getByTestId('form-matrix-cell-col-white-sz-m');
+      expect(cell.getAttribute('title')).toContain('остатки или резерв');
+      fireEvent.click(cell);
+      expect(latestCtx?.draft.variants?.filter((v: any) => v.isActive !== false)).toHaveLength(4);
+    });
+
     it('2 & 3 & 4. ordinary active cell can toggle OFF, remains rendered, and can toggle ON', async () => {
       let latestCtx: any = null;
       render(

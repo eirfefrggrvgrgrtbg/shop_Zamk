@@ -535,21 +535,23 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 
 	getVariantID := func(vr ProductVariantRequest) (uuid.UUID, *string) {
 		if vr.ID != nil && *vr.ID != uuid.Nil {
-			matchedExisting[*vr.ID] = true
-			var existingBc *string
+			// Only ids of this product's own variants are honoured; a foreign id falls through to combination matching.
 			for _, ev := range existingVariants {
 				if ev.ID == *vr.ID {
-					existingBc = ev.Barcode
-					break
-				}
-			}
-			return *vr.ID, existingBc
-		}
-		if vr.ColorID != nil && vr.SizeValueID != nil {
-			for _, ev := range existingVariants {
-				if !matchedExisting[ev.ID] && ev.ColorID != nil && *ev.ColorID == *vr.ColorID && ev.SizeValueID != nil && *ev.SizeValueID == *vr.SizeValueID {
 					matchedExisting[ev.ID] = true
 					return ev.ID, ev.Barcode
+				}
+			}
+		}
+		if vr.ColorID != nil && vr.SizeValueID != nil {
+			// Re-selecting a combination reuses its variant (active first, then a previously deactivated one),
+			// so id, SKU, stock records and order history stay attached and no duplicate is created.
+			for _, wantActive := range []bool{true, false} {
+				for _, ev := range existingVariants {
+					if ev.IsActive == wantActive && !matchedExisting[ev.ID] && ev.ColorID != nil && *ev.ColorID == *vr.ColorID && ev.SizeValueID != nil && *ev.SizeValueID == *vr.SizeValueID {
+						matchedExisting[ev.ID] = true
+						return ev.ID, ev.Barcode
+					}
 				}
 			}
 		}
@@ -595,6 +597,15 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 					}
 					if vr.ShadeName == nil {
 						v.ShadeName = ev.ShadeName
+					}
+					// Re-selecting a deactivated combination restores its commercial data when the client sends none.
+					if !ev.IsActive {
+						if v.SellerSKU == nil || strings.TrimSpace(*v.SellerSKU) == "" {
+							v.SellerSKU = ev.SellerSKU
+						}
+						if v.PriceCents == nil {
+							v.PriceCents = ev.PriceCents
+						}
 					}
 					break
 				}
@@ -1071,7 +1082,46 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 	})
 
 	if err != nil {
+		var deactErr *VariantDeactivationBlockedError
+		if errors.As(err, &deactErr) {
+			observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+				EventName: "product.variant_deactivation_blocked",
+				Domain:    "product",
+				Action:    "variant_deactivate",
+				Result:    "blocked",
+				ActorID:   currentUserID.String(),
+				ActorRole: "seller",
+				Attributes: []slog.Attr{
+					slog.String("product_id", p.ID.String()),
+					slog.String("variant_id", deactErr.VariantID.String()),
+					slog.String("reason", deactErr.Reason),
+				},
+			})
+		}
 		return Product{}, err
+	}
+
+	if req.Variants != nil && revision == nil {
+		deactivated := 0
+		for _, ev := range existingVariants {
+			if ev.IsActive && !matchedExisting[ev.ID] {
+				deactivated++
+			}
+		}
+		if deactivated > 0 {
+			observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+				EventName: "product.variants_deactivated",
+				Domain:    "product",
+				Action:    "variant_deactivate",
+				Result:    "success",
+				ActorID:   currentUserID.String(),
+				ActorRole: "seller",
+				Attributes: []slog.Attr{
+					slog.String("product_id", p.ID.String()),
+					slog.Int("deactivated_count", deactivated),
+				},
+			})
+		}
 	}
 
 	if normalizedCount > 0 {
@@ -2395,7 +2445,8 @@ func (s *Service) GetCategoryAttributeSchema(ctx context.Context, categoryID uui
 
 	// 3. Size Chart Requirements
 	var requiredChart bool
-	err = s.dbPool.Pool.QueryRow(ctx, "SELECT size_chart_required FROM categories WHERE id = $1", categoryID).Scan(&requiredChart)
+	var catName, catSlug string
+	err = s.dbPool.Pool.QueryRow(ctx, "SELECT size_chart_required, name, slug FROM categories WHERE id = $1", categoryID).Scan(&requiredChart, &catName, &catSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -2420,6 +2471,10 @@ func (s *Service) GetCategoryAttributeSchema(ctx context.Context, categoryID uui
 	}
 
 	return map[string]interface{}{
+		// id/name/slug belong to the SellerCategorySchema client contract: Seller Studio matches the schema to the draft category.
+		"id":   categoryID,
+		"name": catName,
+		"slug": catSlug,
 		"attributes": attributes,
 		"allowedSizeSystems": allowedSizeSystems,
 		"sizeChartRequired": requiredChart,

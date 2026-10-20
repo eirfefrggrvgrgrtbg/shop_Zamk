@@ -114,6 +114,8 @@ export function hydrateProductStudioDraft({
       barcode: v.barcode || undefined,
       priceCents: typeof v.priceCents === 'number' ? v.priceCents : product.priceCents,
       isActive: true,
+      totalStock: typeof v.totalStock === 'number' ? v.totalStock : undefined,
+      reservedStock: typeof v.reservedStock === 'number' ? v.reservedStock : undefined,
     };
   });
 

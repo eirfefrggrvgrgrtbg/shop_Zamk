@@ -427,7 +427,21 @@ func (r *Repository) MergeProductVariants(ctx context.Context, productID uuid.UU
 		incomingMap[v.ID] = true
 	}
 
-	// Phase 2: Soft delete any existing variants not in incomingMap BEFORE inserting/updating
+	// Phase 2: Soft delete any existing variants not in incomingMap BEFORE inserting/updating.
+	// A variant that still has stock, reservations or open orders/returns/supplies is never deactivated:
+	// the whole save is refused instead (CATALOG.C5). Order history alone does not block, the row is kept.
+	for _, ev := range existingVariants {
+		if incomingMap[ev.ID] || !ev.IsActive {
+			continue
+		}
+		reason, err := r.variantDeactivationBlockReason(ctx, ev.ID)
+		if err != nil {
+			return err
+		}
+		if reason != "" {
+			return &VariantDeactivationBlockedError{VariantID: ev.ID, Label: variantLabel(ev), Reason: reason}
+		}
+	}
 	for id := range existingMap {
 		if !incomingMap[id] {
 			softDeleteQuery := `UPDATE product_variants SET is_active = false, updated_at = now() WHERE id = $1 AND product_id = $2`

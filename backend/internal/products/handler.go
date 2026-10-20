@@ -281,6 +281,11 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeErrorWithDetails(w, http.StatusBadRequest, "duplicate_sku", msg, map[string]any{"sku": skuErr.SKU})
 			return
 		}
+		var deactErr *VariantDeactivationBlockedError
+		if errors.As(err, &deactErr) {
+			h.writeErrorWithDetails(w, http.StatusConflict, "variant_deactivation_blocked", deactErr.SellerMessage(), map[string]any{"variantId": deactErr.VariantID.String(), "reason": deactErr.Reason})
+			return
+		}
 		if errors.Is(err, ErrSellerBlocked) {
 			h.writeError(w, http.StatusForbidden, "seller_blocked", "Магазин заблокирован или архивирован. Действие недоступно.")
 			return

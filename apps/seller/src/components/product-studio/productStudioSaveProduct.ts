@@ -70,6 +70,20 @@ export function isCanonicalVariantId(id?: string): boolean {
   return UUID_REGEX.test(id.trim());
 }
 
+const PRODUCT_SAVE_GENERIC_ERROR = 'Не удалось сохранить товар. Попробуйте ещё раз.';
+
+/**
+ * Seller-facing message for a failed product PATCH. A refused variant deactivation (stock, reserve,
+ * open order/return/supply) carries a concrete reason from the backend; everything else stays generic.
+ */
+export function getProductStudioSaveErrorMessage(err: unknown): string {
+  const e = err as { code?: string; rawMessage?: string } | null | undefined;
+  if (e?.code === 'variant_deactivation_blocked' && typeof e.rawMessage === 'string' && e.rawMessage.trim()) {
+    return e.rawMessage.trim();
+  }
+  return PRODUCT_SAVE_GENERIC_ERROR;
+}
+
 export function buildProductStudioUpdateRequest(
   workingDraft: ProductStudioDraft,
   baselineDraft: ProductStudioDraft
@@ -399,8 +413,8 @@ export async function orchestrateProductStudioEditSave({
   // 5. Send exactly ONE PATCH request
   try {
     await updateProductFn(productId, patchPayload);
-  } catch (_err: any) {
-    onError('Не удалось сохранить товар. Попробуйте ещё раз.');
+  } catch (err: unknown) {
+    onError(getProductStudioSaveErrorMessage(err));
     return;
   }
 

@@ -212,6 +212,9 @@ export interface ProductVariant {
   priceCents?: number;
   isActive: boolean;
   inStock?: boolean;
+  /** Seller endpoints only: warehouse totals of this variant. */
+  totalStock?: number;
+  reservedStock?: number;
 }
 
 export interface Category {

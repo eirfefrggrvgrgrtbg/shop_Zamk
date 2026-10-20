@@ -487,10 +487,22 @@ export function canDeactivateVariantTuple(
   return true;
 }
 
+export const BLOCKED_STOCK_CELL_TOOLTIP =
+  'На складе ZAMK есть остатки или резерв этого варианта — его нельзя отключить.';
+
+/**
+ * A persisted variant that still has stock or a reserve on the ZAMK warehouse cannot be switched off
+ * (the backend refuses it as well; open orders, returns and supplies are checked there on save).
+ */
+export function isVariantLockedByStock(variant?: ProductStudioVariant | null): boolean {
+  if (!variant) return false;
+  return (variant.totalStock ?? 0) > 0 || (variant.reservedStock ?? 0) > 0;
+}
+
 export interface ToggleVariantTupleResult {
   allowed: boolean;
   variants: ProductStudioVariant[];
-  reason?: 'LAST_CELL_IN_AXIS';
+  reason?: 'LAST_CELL_IN_AXIS' | 'HAS_STOCK';
 }
 
 /**
@@ -508,11 +520,20 @@ export function toggleProductStudioVariantTuple(
     size?: string;
   },
   currentlyActive: boolean,
-  createDraftVariantId: DraftVariantIdFactory = defaultDraftVariantIdFactory
+  createDraftVariantId: DraftVariantIdFactory = defaultDraftVariantIdFactory,
+  /** Variants switched off earlier in this session: switching the cell back on restores id, SKU and price. */
+  restorable: ProductStudioVariant[] = []
 ): ToggleVariantTupleResult {
   const activeVariants = (currentVariants || []).filter((v) => v.isActive !== false);
+  const sameTuple = (v: ProductStudioVariant) =>
+    (v.colorId || undefined) === (target.colorId || undefined) &&
+    (v.sizeValueId || undefined) === (target.sizeValueId || undefined);
 
   if (currentlyActive) {
+    if (isVariantLockedByStock(activeVariants.find(sameTuple))) {
+      return { allowed: false, variants: currentVariants, reason: 'HAS_STOCK' };
+    }
+
     const canDeactivate = canDeactivateVariantTuple(
       activeVariants,
       target.colorId,
@@ -527,18 +548,22 @@ export function toggleProductStudioVariantTuple(
       };
     }
 
-    const nextVariants = activeVariants.filter(
-      (v) =>
-        !(
-          (v.colorId || undefined) === (target.colorId || undefined) &&
-          (v.sizeValueId || undefined) === (target.sizeValueId || undefined)
-        )
-    );
+    const nextVariants = activeVariants.filter((v) => !sameTuple(v));
 
     return {
       allowed: true,
       variants: nextVariants,
     };
+  }
+
+  if (activeVariants.some(sameTuple)) {
+    // Already selected: never create a second variant for the same combination.
+    return { allowed: true, variants: activeVariants };
+  }
+
+  const previous = restorable.find(sameTuple);
+  if (previous) {
+    return { allowed: true, variants: [...activeVariants, { ...previous, isActive: true }] };
   }
 
   const newVariant: ProductStudioVariant = {
