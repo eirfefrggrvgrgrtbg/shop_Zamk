@@ -37,6 +37,7 @@ export default defineConfig({
       'src/components/AdminNavigationAccess.test.tsx',
       'src/pages/AdminMarketingCampaigns.test.tsx',
       'src/pages/AdminMarketingCampaignCreate.test.tsx',
+      'src/pages/AdminMarketingCampaignDetail.test.tsx',
       'src/pages/AdminMarketingOverview.test.tsx',
       'src/pages/AdminMarketingProducts.test.tsx',
       'src/pages/AdminMarketingDesigners.test.tsx',

@@ -17,6 +17,7 @@ import {
 import {
   getAdminCampaign,
   updateAdminCampaign,
+  getAdminMarketingCampaignMetrics,
   getAdminCampaignTrackingLinks,
   createAdminTrackingLink,
   disableAdminTrackingLink,
@@ -26,8 +27,12 @@ import type {
   AdminCampaignTrackingLink,
   CampaignTargetType,
   CampaignStatus,
+  CampaignChannel,
+  CampaignType,
+  AdminCampaignMetrics,
 } from '@zamk/api-client/src/types';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
+import { money, number, percent, dayUtc, dateInputValue, startOfDayIso, endOfDayIso, validateCampaignPlan } from '../components/marketing/marketingPresentation';
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   draft: { label: 'Черновик', color: 'bg-gray-100 text-gray-800' },
@@ -68,6 +73,22 @@ export function AdminMarketingCampaignDetail() {
   const [success, setSuccess] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
+  // 30-day traffic metrics (null = not loaded / unavailable)
+  const [metrics, setMetrics] = useState<AdminCampaignMetrics | null>(null);
+  const [metricsUnavailable, setMetricsUnavailable] = useState(false);
+
+  // Edit form
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editChannel, setEditChannel] = useState<CampaignChannel | ''>('');
+  const [editType, setEditType] = useState<CampaignType | ''>('');
+  const [editBudgetRub, setEditBudgetRub] = useState('');
+  const [editStartsAt, setEditStartsAt] = useState('');
+  const [editEndsAt, setEditEndsAt] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
   // Link create modal
   const [showCreateLinkModal, setShowCreateLinkModal] = useState(false);
   const [targetType, setTargetType] = useState<CampaignTargetType>('landing');
@@ -91,7 +112,24 @@ export function AdminMarketingCampaignDetail() {
       ]);
       setCampaign(camp);
       setTrackingLinks(Array.isArray(links) ? links : []);
+      // Traffic metrics are secondary: their failure must not hide the campaign itself.
+      try {
+        const to = new Date();
+        const from = new Date(to);
+        from.setUTCDate(from.getUTCDate() - 30);
+        const res = await getAdminMarketingCampaignMetrics(from.toISOString(), to.toISOString());
+        setMetrics(res.campaigns.find(m => m.campaignId === id) ?? null);
+        setMetricsUnavailable(false);
+      } catch {
+        setMetrics(null);
+        setMetricsUnavailable(true);
+      }
     } catch (err: any) {
+      // Never keep showing a previously opened campaign under another campaign's URL.
+      setCampaign(null);
+      setTrackingLinks([]);
+      setMetrics(null);
+      setIsEditing(false);
       setError(err?.message || 'Не удалось загрузить данные кампании');
     } finally {
       setIsLoading(false);
@@ -111,6 +149,9 @@ export function AdminMarketingCampaignDetail() {
 
   const handleStatusChange = async (newStatus: CampaignStatus) => {
     if (!id) return;
+    if (newStatus === 'ended' && !window.confirm('Завершить кампанию? Это действие необратимо: переходы по её ссылкам будут остановлены, возобновить кампанию нельзя.')) {
+      return;
+    }
     try {
       setError(null);
       const updated = await updateAdminCampaign(id, { status: newStatus });
@@ -119,6 +160,62 @@ export function AdminMarketingCampaignDetail() {
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(err?.message || 'Не удалось обновить статус кампании');
+    }
+  };
+
+  const startEdit = () => {
+    if (!campaign) return;
+    setEditTitle(campaign.title);
+    setEditDescription(campaign.description ?? '');
+    setEditChannel((campaign.campaignChannel as CampaignChannel) ?? '');
+    setEditType((campaign.campaignType as CampaignType) ?? '');
+    setEditBudgetRub(campaign.plannedBudgetCents ? String(Math.round(campaign.plannedBudgetCents / 100)) : '');
+    setEditStartsAt(dateInputValue(campaign.startsAt));
+    setEditEndsAt(dateInputValue(campaign.endsAt));
+    setEditError(null);
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !campaign) return;
+    if (!editTitle.trim()) {
+      setEditError('Укажите название кампании');
+      return;
+    }
+    const planError = validateCampaignPlan(editBudgetRub, editStartsAt, editEndsAt);
+    if (planError) {
+      setEditError(planError);
+      return;
+    }
+    // The API updates only the provided fields and cannot clear a value, so only changes are sent.
+    const patch: Record<string, unknown> = {};
+    if (editTitle.trim() !== campaign.title) patch.title = editTitle.trim();
+    if (editDescription.trim() !== (campaign.description ?? '') && editDescription.trim() !== '') patch.description = editDescription.trim();
+    if (editChannel && editChannel !== campaign.campaignChannel) patch.campaignChannel = editChannel;
+    if (editType && editType !== campaign.campaignType) patch.campaignType = editType;
+    if (editBudgetRub.trim() !== '') {
+      const cents = Number(editBudgetRub) * 100;
+      if (cents !== campaign.plannedBudgetCents) patch.plannedBudgetCents = cents;
+    }
+    if (editStartsAt && editStartsAt !== dateInputValue(campaign.startsAt)) patch.startsAt = startOfDayIso(editStartsAt);
+    if (editEndsAt && editEndsAt !== dateInputValue(campaign.endsAt)) patch.endsAt = endOfDayIso(editEndsAt);
+    if (Object.keys(patch).length === 0) {
+      setIsEditing(false);
+      return;
+    }
+    try {
+      setIsSavingEdit(true);
+      setEditError(null);
+      const updated = await updateAdminCampaign(id, patch);
+      setCampaign(updated);
+      setIsEditing(false);
+      setSuccess('Изменения сохранены');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setEditError(err?.message || 'Не удалось сохранить изменения');
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -210,6 +307,7 @@ export function AdminMarketingCampaignDetail() {
     return (
       <div className="p-8 text-center text-gray-500" data-testid="campaign-not-found">
         <h3 className="text-lg font-bold text-gray-900 mb-2">Кампания не найдена</h3>
+        {error && <p className="text-sm text-red-600 mb-3" data-testid="detail-load-error">{error}</p>}
         <Link to="/marketing/campaigns" className="text-indigo-600 hover:text-indigo-800">
           Вернуться к списку кампаний
         </Link>
@@ -255,28 +353,28 @@ export function AdminMarketingCampaignDetail() {
             </div>
           </div>
 
-          {/* Quick status actions for write users */}
-          {hasPermission('marketing.campaigns.write') && (
+          {/* Status actions: only transitions that change real backend behaviour */}
+          {hasPermission('marketing.campaigns.write') && campaign.purpose === 'advertising' && (
             <div className="flex items-center space-x-2">
-              {campaign.status !== 'active' && (
+              {!isEditing && campaign.status !== 'ended' && campaign.status !== 'cancelled' && campaign.status !== 'rejected' && (
+                <button
+                  onClick={startEdit}
+                  data-testid="edit-campaign-button"
+                  className="px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded-md text-xs font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Редактировать
+                </button>
+              )}
+              {campaign.status === 'approved' && (
                 <button
                   onClick={() => handleStatusChange('active')}
                   data-testid="activate-campaign-button"
                   className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs font-medium hover:bg-green-700 transition-colors shadow-2xs"
                 >
-                  Активировать
+                  Отметить активной
                 </button>
               )}
-              {campaign.status === 'active' && (
-                <button
-                  onClick={() => handleStatusChange('approved')}
-                  data-testid="pause-campaign-button"
-                  className="px-3 py-1.5 bg-amber-600 text-white rounded-md text-xs font-medium hover:bg-amber-700 transition-colors shadow-2xs"
-                >
-                  Приостановить
-                </button>
-              )}
-              {campaign.status !== 'ended' && campaign.status !== 'cancelled' && (
+              {(campaign.status === 'approved' || campaign.status === 'active') && (
                 <button
                   onClick={() => handleStatusChange('ended')}
                   data-testid="end-campaign-button"
@@ -289,6 +387,12 @@ export function AdminMarketingCampaignDetail() {
           )}
         </div>
       </div>
+
+      {campaign.purpose !== 'advertising' && (
+        <div className="p-3 bg-gray-50 border border-gray-200 rounded-md text-gray-600 text-xs" data-testid="promotion-readonly-note">
+          Промо-кампания: редактирование и смена статуса через админку не поддерживаются, кампания управляется продавцом.
+        </div>
+      )}
 
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm" data-testid="detail-error">
@@ -340,9 +444,76 @@ export function AdminMarketingCampaignDetail() {
           <div className="text-xs font-medium text-gray-500 uppercase">Сроки проведения</div>
           <div className="mt-1 text-sm text-gray-700 flex items-center">
             <Calendar className="h-4 w-4 mr-1 text-gray-400" />
-            {formatDate(campaign.startsAt)} — {formatDate(campaign.endsAt)}
+            {dayUtc(campaign.startsAt)} — {campaign.endsAt ? dayUtc(campaign.endsAt) : 'без окончания'}
           </div>
         </div>
+      </div>
+
+      {isEditing && (
+        <form onSubmit={handleSaveEdit} className="bg-white p-5 rounded-lg border border-gray-200 shadow-2xs space-y-4" data-testid="campaign-edit-form">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-900">Редактирование кампании</h2>
+          {editError && <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm" role="alert" data-testid="edit-error">{editError}</div>}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Название</label>
+            <input data-testid="edit-title-input" value={editTitle} onChange={e => setEditTitle(e.target.value)} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Канал</label>
+              <select aria-label="Канал" value={editChannel} onChange={e => setEditChannel(e.target.value as CampaignChannel)} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
+                {!editChannel && <option value="">—</option>}
+                {Object.entries(CHANNEL_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Тип кампании</label>
+              <select aria-label="Тип кампании" value={editType} onChange={e => setEditType(e.target.value as CampaignType)} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
+                {!editType && <option value="">—</option>}
+                {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Плановый бюджет, ₽</label>
+              <input data-testid="edit-budget-input" inputMode="numeric" value={editBudgetRub} onChange={e => setEditBudgetRub(e.target.value.replace(/\D/g, ''))} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 tabular-nums" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Период (даты включительно, UTC)</label>
+              <div className="flex items-center gap-2">
+                <input type="date" aria-label="Дата начала" value={editStartsAt} onChange={e => setEditStartsAt(e.target.value)} className="w-full text-xs border border-gray-200 rounded-lg px-2 py-2" />
+                <span className="text-gray-300">—</span>
+                <input type="date" aria-label="Дата окончания" value={editEndsAt} onChange={e => setEditEndsAt(e.target.value)} className="w-full text-xs border border-gray-200 rounded-lg px-2 py-2" />
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Описание</label>
+            <textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 min-h-[70px]" />
+          </div>
+          <p className="text-xs text-gray-400">Значения нельзя очистить через API: пустые поля остаются без изменений.</p>
+          <div className="flex items-center gap-3">
+            <button type="submit" disabled={isSavingEdit} data-testid="save-campaign-button" className="px-3.5 py-1.5 bg-violet-700 text-white rounded-md text-sm font-medium hover:bg-violet-800 disabled:opacity-60">
+              {isSavingEdit ? 'Сохранение…' : 'Сохранить'}
+            </button>
+            <button type="button" onClick={() => setIsEditing(false)} data-testid="cancel-edit-button" className="px-3.5 py-1.5 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50">Отмена</button>
+          </div>
+        </form>
+      )}
+
+      <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-2xs" data-testid="campaign-metrics">
+        <div className="flex items-baseline justify-between mb-2">
+          <div className="text-xs font-medium text-gray-500 uppercase">Трафик за 30 дней</div>
+          <div className="text-xs text-gray-400">Расходы на рекламу в системе не ведутся — ROAS не рассчитывается</div>
+        </div>
+        {metricsUnavailable ? (
+          <p className="text-sm text-gray-500" data-testid="metrics-unavailable">Метрики сейчас недоступны</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div><div className="text-xs text-gray-400">Сессии</div><div className="font-semibold tabular-nums" data-testid="metric-visits">{number(metrics?.visits ?? 0)}</div></div>
+            <div><div className="text-xs text-gray-400">Оплаченные заказы</div><div className="font-semibold tabular-nums" data-testid="metric-orders">{number(metrics?.paidOrders ?? 0)}</div></div>
+            <div><div className="text-xs text-gray-400">Выручка</div><div className="font-semibold tabular-nums" data-testid="metric-revenue">{money(metrics?.revenueCents ?? 0)}</div></div>
+            <div><div className="text-xs text-gray-400">Конверсия</div><div className="font-semibold tabular-nums" data-testid="metric-conversion">{metrics && metrics.visits > 0 && metrics.conversionRateBps !== undefined ? percent(metrics.conversionRateBps) : '—'}</div></div>
+          </div>
+        )}
       </div>
 
       {campaign.description && (

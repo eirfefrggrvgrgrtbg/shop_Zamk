@@ -227,11 +227,39 @@ describe('AdminMarketingCampaignCreate', () => {
           campaignType: 'drop',
           plannedBudgetCents: 12000000,
           startsAt: '2026-06-01T00:00:00.000Z',
-          endsAt: '2026-06-30T00:00:00.000Z',
+          endsAt: '2026-06-30T23:59:59.000Z', // end date is inclusive
           description: 'Exclusive summer drop',
           discountType: 'percent',
         })
       );
     });
+  });
+
+  it('rejects zero, fractional-looking and inverted plans without calling the API', async () => {
+    mount();
+    fireEvent.change(screen.getByTestId('campaign-title-input'), { target: { value: 'Bad plan' } });
+
+    fireEvent.change(screen.getByTestId('campaign-budget-input'), { target: { value: '0' } });
+    fireEvent.click(screen.getByTestId('submit-create-campaign'));
+    expect(await screen.findByText(/больше нуля/)).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId('campaign-budget-input'), { target: { value: '1000' } });
+    fireEvent.change(screen.getByLabelText('Дата начала'), { target: { value: '2026-07-10' } });
+    fireEvent.change(screen.getByLabelText('Дата окончания'), { target: { value: '2026-07-01' } });
+    fireEvent.click(screen.getByTestId('submit-create-campaign'));
+    expect(await screen.findByText(/не может быть раньше/)).toBeTruthy();
+
+    expect(adminApi.createAdminCampaign).not.toHaveBeenCalled();
+  });
+
+  it('states that drafts are not supported and shows API errors without navigating', async () => {
+    vi.mocked(adminApi.createAdminCampaign).mockRejectedValue(new Error('invalid_parameter: bad channel'));
+    mount();
+    expect(screen.getByTestId('campaign-create-status-note').textContent).toContain('черновики');
+
+    fireEvent.change(screen.getByTestId('campaign-title-input'), { target: { value: 'Will fail' } });
+    fireEvent.click(screen.getByTestId('submit-create-campaign'));
+    expect(await screen.findByText(/invalid_parameter/)).toBeTruthy();
+    expect(screen.queryByText('Детали кампании созданы')).toBeNull();
   });
 });

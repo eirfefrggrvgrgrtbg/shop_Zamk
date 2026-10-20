@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { createAdminCampaign, getAdminSellers } from '@zamk/api-client/src/admin';
 import type { CampaignChannel, CampaignType, AdminSeller } from '@zamk/api-client/src/types';
-import { money } from '../components/marketing/marketingPresentation';
+import { money, validateCampaignPlan, startOfDayIso, endOfDayIso, dayUtc } from '../components/marketing/marketingPresentation';
 
 export function AdminMarketingCampaignCreate() {
   const navigate = useNavigate();
@@ -30,13 +30,15 @@ export function AdminMarketingCampaignCreate() {
 
   useEffect(() => {
     let active = true;
-    getAdminSellers({ limit: 100, status: ['active'], search: '' })
-      .then(data => {
-        if (active) setSellers(data.items);
-      })
-      .catch(console.error);
-    return () => { active = false; };
-  }, []);
+    const timer = setTimeout(() => {
+      getAdminSellers({ limit: 100, status: ['active'], search: sellerQuery.trim() })
+        .then(data => {
+          if (active) setSellers(data.items);
+        })
+        .catch(console.error);
+    }, sellerQuery ? 250 : 0);
+    return () => { active = false; clearTimeout(timer); };
+  }, [sellerQuery]);
 
   const filteredSellers = sellers.filter(s => {
     const q = sellerQuery.toLowerCase();
@@ -65,8 +67,9 @@ export function AdminMarketingCampaignCreate() {
       scrollToTop();
       return;
     }
-    if (startsAt && endsAt && new Date(endsAt) < new Date(startsAt)) {
-      setFormError('Дата окончания не может быть раньше даты начала');
+    const planError = validateCampaignPlan(plannedBudgetRub, startsAt, endsAt);
+    if (planError) {
+      setFormError(planError);
       scrollToTop();
       return;
     }
@@ -74,7 +77,7 @@ export function AdminMarketingCampaignCreate() {
     setIsSubmitting(true);
     setFormError(null);
     try {
-      const bCents = plannedBudgetRub ? Math.round(parseFloat(plannedBudgetRub) * 100) : null;
+      const bCents = plannedBudgetRub ? Number(plannedBudgetRub) * 100 : null;
       const res = await createAdminCampaign({
         purpose: 'advertising',
         title: title.trim(),
@@ -85,8 +88,8 @@ export function AdminMarketingCampaignCreate() {
         campaignChannel: channel,
         campaignType: campaignType,
         plannedBudgetCents: bCents ?? undefined,
-        startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
-        endsAt: endsAt ? new Date(endsAt).toISOString() : undefined,
+        startsAt: startsAt ? startOfDayIso(startsAt) : undefined,
+        endsAt: endsAt ? endOfDayIso(endsAt) : undefined,
         description: description.trim() || undefined,
       });
       navigate(`/marketing/campaigns/${res.id}`);
@@ -115,7 +118,7 @@ export function AdminMarketingCampaignCreate() {
     special_promo: 'Специальная акция',
   };
 
-  const budgetCents = plannedBudgetRub ? Math.round(parseFloat(plannedBudgetRub) * 100) : null;
+  const budgetCents = plannedBudgetRub && /^\d+$/.test(plannedBudgetRub) ? Number(plannedBudgetRub) * 100 : null;
   const budgetFormatted = budgetCents !== null ? money(budgetCents) : '0 ₽';
 
   return (
@@ -148,6 +151,11 @@ export function AdminMarketingCampaignCreate() {
               <span>{formError}</span>
             </div>
           )}
+
+          <div className="mb-6 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3" data-testid="campaign-create-status-note">
+            Кампания создаётся сразу со статусом «Одобрена» — черновики рекламных кампаний пока не поддерживаются.
+            Переходы по трекинговым ссылкам начинают работать после создания ссылки и в рамках указанного периода (даты включительно, UTC).
+          </div>
 
           <form onSubmit={handleCreate} className="space-y-8">
             {/* Section 1: Campaign Basic Info */}
@@ -376,7 +384,7 @@ export function AdminMarketingCampaignCreate() {
               <div>
                 <div className="text-gray-400 mb-1">Период</div>
                 <div className="text-gray-900 tabular-nums">
-                  {startsAt ? new Date(startsAt).toLocaleDateString('ru-RU') : 'с —'} — {endsAt ? new Date(endsAt).toLocaleDateString('ru-RU') : '∞'}
+                  {startsAt ? dayUtc(startOfDayIso(startsAt)) : 'с —'} — {endsAt ? dayUtc(endOfDayIso(endsAt)) : '∞'}
                 </div>
               </div>
 

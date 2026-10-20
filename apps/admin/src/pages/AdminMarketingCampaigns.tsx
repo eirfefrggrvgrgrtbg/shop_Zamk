@@ -126,9 +126,7 @@ export function AdminMarketingCampaigns() {
           onChange={e => setStatusFilter(e.target.value)}
         >
           <option value="">Все статусы</option>
-          <option value="active">Активные</option>
-          <option value="draft">Черновики</option>
-          <option value="ended">Завершенные</option>
+          {Object.entries(statusLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <select
           aria-label="Канал"
@@ -192,7 +190,7 @@ export function AdminMarketingCampaigns() {
                   <th>Статус</th>
                   <th>Период</th>
                   <th className="numeric">Плановый бюджет</th>
-                  <th className="numeric">Сессии</th>
+                  <th className="numeric" title="Метрики за последние 30 дней">Сессии, 30 дн.</th>
                   <th className="numeric">Заказы</th>
                   <th className="numeric">Выручка</th>
                   <th className="numeric">Конверсия</th>
