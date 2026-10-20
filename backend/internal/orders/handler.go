@@ -133,7 +133,19 @@ func (h *Handler) ValidatePromo(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(calc)
+	json.NewEncoder(w).Encode(newPromoQuoteResponse(calc))
+}
+
+// PromoQuoteResponse is the customer-safe preview of a promo code. It deliberately exposes only the
+// code and the discount the customer gets: seller, campaign, funding and commission data stay internal.
+// The preview is advisory; CreateOrder recalculates and re-validates the promo on the server.
+type PromoQuoteResponse struct {
+	Code          string `json:"code"`
+	DiscountCents int64  `json:"discountCents"`
+}
+
+func newPromoQuoteResponse(calc *marketing.CheckoutPromoCalculation) PromoQuoteResponse {
+	return PromoQuoteResponse{Code: calc.Code, DiscountCents: calc.TotalOrderDiscountCents}
 }
 
 func (h *Handler) CancelCustomerOrder(w http.ResponseWriter, r *http.Request) {

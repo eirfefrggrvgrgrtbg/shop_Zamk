@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-route
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { CartProvider } from './contexts/CartContext';
+import { PromoProvider } from './contexts/PromoContext';
 import { FavoritesProvider } from './contexts/FavoritesContext';
 import { SearchProvider } from './contexts/SearchContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -113,6 +114,7 @@ function App() {
         <SearchProvider>
         <ToastProvider>
           <CartProvider>
+            <PromoProvider>
             <FavoritesProvider>
               <Router>
                 <ScrollToTop />
@@ -158,6 +160,7 @@ function App() {
                 <SearchOverlay />
               </Router>
             </FavoritesProvider>
+            </PromoProvider>
           </CartProvider>
         </ToastProvider>
       </SearchProvider>

@@ -29,6 +29,11 @@ vi.mock('../contexts/CartContext', () => ({
   }),
 }));
 
+vi.mock('../components/PromoCodeBox', () => ({ PromoCodeBox: () => null }));
+vi.mock('../contexts/PromoContext', () => ({
+  usePromo: () => ({ appliedCode: null, discount: 0, isChecking: false }),
+}));
+
 describe('SHOP PDP.2E2 — Cart Variant Image Truth (Frontend Acceptance)', () => {
   const whiteImgUrl = 'https://cdn.zamk.test/products/hoodie-white-primary.jpg';
   const blackImgUrl = 'https://cdn.zamk.test/products/hoodie-black-rendition.jpg';

@@ -11,12 +11,17 @@ import { getDeliveryMethods } from '@zamk/api-client/src/public';
 import type { PublicDeliveryMethod } from '@zamk/api-client/src/types';
 import { useAuth } from '../contexts/AuthContext';
 import { formatVariantDetails } from '../lib/variantSelection';
+import { PromoCodeBox } from '../components/PromoCodeBox';
+import { usePromo } from '../contexts/PromoContext';
+import { isPromoRejection } from '../lib/promo';
 import { trackCheckoutStarted, getOrRenewSession, getOrCreateVisitorId } from '../lib/behavior';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function Checkout() {
   const { items, totalPrice, clearCart } = useCart();
+  const { appliedCode, discount, isChecking: isPromoChecking, isUnconfirmed: isPromoUnconfirmed, rejectAfterCheckout, clear: clearPromo } = usePromo();
+  const submitLockRef = useRef(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [deliveryMethods, setDeliveryMethods] = useState<PublicDeliveryMethod[]>([]);
   const [selectedMethodId, setSelectedMethodId] = useState<string>('');
@@ -92,7 +97,7 @@ export function Checkout() {
   // Regenerate idempotency key when user actively modifies customer checkout details
   useEffect(() => {
     setIdempotencyKey(crypto.randomUUID());
-  }, [selectedMethodId, selectedAddressId, firstName, lastName, email, phone, address]);
+  }, [selectedMethodId, selectedAddressId, firstName, lastName, email, phone, address, appliedCode]);
 
   const handleCheckout = async () => {
     if (!isAuthenticated) {
@@ -100,7 +105,12 @@ export function Checkout() {
       return;
     }
 
-    if (isSubmitting || done) {
+    if (submitLockRef.current || isSubmitting || done) {
+      return;
+    }
+
+    if (appliedCode && (isPromoChecking || isPromoUnconfirmed)) {
+      setValidationError('Дождитесь подтверждения промокода или удалите его.');
       return;
     }
 
@@ -109,6 +119,7 @@ export function Checkout() {
       return;
     }
 
+    submitLockRef.current = true;
     setIsSubmitting(true);
 
     const trimmedEmail = email.trim();
@@ -127,12 +138,14 @@ export function Checkout() {
 
     if (!finalName || !trimmedEmail || !finalPhone || !finalAddress) {
       setValidationError('Укажите имя, email, телефон и адрес доставки.');
+      submitLockRef.current = false;
       setIsSubmitting(false);
       return;
     }
 
     if (!EMAIL_PATTERN.test(trimmedEmail)) {
       setValidationError('Укажите корректный email.');
+      submitLockRef.current = false;
       setIsSubmitting(false);
       return;
     }
@@ -140,6 +153,7 @@ export function Checkout() {
     const phoneDigits = finalPhone.replace(/\D/g, '');
     if (phoneDigits.length < 7) {
       setValidationError('Укажите корректный телефон, минимум 7 цифр.');
+      submitLockRef.current = false;
       setIsSubmitting(false);
       return;
     }
@@ -162,6 +176,7 @@ export function Checkout() {
           customerPhone: finalPhone,
           deliveryAddress: deliveryAddressText,
           deliveryMethodId: selectedMethodId,
+          promoCode: appliedCode ?? undefined,
           analyticsContext
         }, idempotencyKey);
         orderId = order.id;
@@ -174,6 +189,7 @@ export function Checkout() {
       setValidationError('');
       setDone(true);
       sessionStorage.removeItem('zamk_pending_order_id');
+      clearPromo();
       await clearCart();
 
       if (payment.integrationMode === 'mock') {
@@ -186,7 +202,13 @@ export function Checkout() {
         }
       }
     } catch (e: any) {
-      if (e.message && e.message.includes('Idempotency key conflict')) {
+      if (isPromoRejection(e)) {
+        // The promo stopped being valid between preview and order creation. No order was created;
+        // totals fall back to the real full price and the customer must confirm again.
+        rejectAfterCheckout(e);
+        setIdempotencyKey(crypto.randomUUID());
+        setValidationError('Промокод больше не действует. Проверьте обновлённую сумму и оформите заказ ещё раз.');
+      } else if (e.message && e.message.includes('Idempotency key conflict')) {
         setValidationError('Вы изменили данные после отправки заказа. Пожалуйста, проверьте информацию и попробуйте снова.');
         setIdempotencyKey(crypto.randomUUID()); // Reset key for next attempt
         setPendingOrderId(null);
@@ -200,6 +222,7 @@ export function Checkout() {
       } else {
         setValidationError(e.message || 'Не удалось сохранить заказ. Попробуйте ещё раз.');
       }
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -325,7 +348,7 @@ export function Checkout() {
 
   const selectedMethod = deliveryMethods.find(m => m.id === selectedMethodId);
   const delivery = selectedMethod ? selectedMethod.priceCents / 100 : 0;
-  const total = totalPrice + delivery;
+  const total = Math.max(totalPrice - discount, 0) + delivery;
 
   return (
     <div className='relative z-10 min-h-screen pt-24 md:pt-32 pb-20'>
@@ -506,8 +529,15 @@ export function Checkout() {
                 )})}
                 <div className='border-t border-border-lighter dark:border-white/10 pt-3 mt-3 space-y-2'>
                   <div className='flex justify-between text-graphite dark:text-white/84'><span>Товары</span><span>{formatPrice(totalPrice)}</span></div>
+                  {discount > 0 && (
+                    <div className='flex justify-between text-success' data-testid='checkout-promo-discount'>
+                      <span>Промокод {appliedCode}</span>
+                      <span>−{formatPrice(discount)}</span>
+                    </div>
+                  )}
+                  <PromoCodeBox />
                   <div className='flex justify-between text-graphite dark:text-white/84'><span>Доставка</span><span className='text-xs'>{delivery === 0 ? 'Бесплатно' : formatPrice(delivery)}</span></div>
-                  <div className='flex justify-between text-base font-semibold text-graphite dark:text-white'><span>Итого</span><span>{formatPrice(total)}</span></div>
+                  <div className='flex justify-between text-base font-semibold text-graphite dark:text-white'><span>Итого</span><span>{isPromoChecking && appliedCode ? 'Пересчитываем…' : formatPrice(total)}</span></div>
                 </div>
               </div>
 
@@ -521,7 +551,7 @@ export function Checkout() {
                 type='button'
                 className='w-full mt-5'
                 onClick={handleCheckout}
-                disabled={isSubmitting || items.some(i => i.inStock === false)}
+                disabled={isSubmitting || items.some(i => i.inStock === false) || (!!appliedCode && (isPromoChecking || isPromoUnconfirmed))}
               >
                 Оформить заказ
               </Button>

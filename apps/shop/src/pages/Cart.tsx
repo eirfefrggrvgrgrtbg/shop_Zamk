@@ -8,6 +8,8 @@ import { getProductEffectivePrice } from '../lib/orders';
 import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
 import { formatVariantDetails, getCartItemImageUrl } from '../lib/variantSelection';
 import { InfoPanel } from '../components/editorial/StudioKit';
+import { PromoCodeBox } from '../components/PromoCodeBox';
+import { usePromo } from '../contexts/PromoContext';
 
 const isUUID = (val?: string): boolean =>
   !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
@@ -19,8 +21,9 @@ function resolveBrandName(brandName?: string, productBrand?: string): string {
 
 export function Cart() {
   const { items, updateQuantity, removeItem, totalPrice, isLoadingCart } = useCart();
+  const { appliedCode, discount, isChecking } = usePromo();
   const delivery = 0; // Доставка рассчитывается при оформлении
-  const finalTotal = totalPrice + delivery;
+  const finalTotal = Math.max(totalPrice - discount, 0) + delivery;
 
   if (isLoadingCart) {
     return (
@@ -169,13 +172,20 @@ export function Cart() {
                   <span>Сумма товаров</span>
                   <span className='text-graphite'>{formatPrice(totalPrice)}</span>
                 </div>
+                {discount > 0 && (
+                  <div className='flex justify-between text-success' data-testid='cart-promo-discount'>
+                    <span>Промокод {appliedCode}</span>
+                    <span>−{formatPrice(discount)}</span>
+                  </div>
+                )}
+                <PromoCodeBox />
                 <div className='flex justify-between'>
                   <span>Доставка</span>
                   <span className='text-graphite text-xs flex items-center'>Рассчитывается при оформлении</span>
                 </div>
                 <div className='border-t border-border-lighter pt-3 mt-2 flex justify-between text-base font-semibold text-graphite'>
                   <span>Итого</span>
-                  <span>{formatPrice(finalTotal)}</span>
+                  <span>{isChecking && appliedCode ? 'Пересчитываем…' : formatPrice(finalTotal)}</span>
                 </div>
                 {items.some(i => i.inStock === false) && (
                   <p className="text-xs text-error mt-2">

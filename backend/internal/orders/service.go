@@ -232,7 +232,7 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 			}
 			calc, err := s.marketingSvc.ValidateAndCalculateCheckoutPromoTx(ctx, tx, userID, *req.PromoCode, promotedInputs, commissionBps, time.Now().UTC())
 			if err != nil {
-				return err
+				return normalizePromoLookupError(err)
 			}
 			promoCalc = calc
 		}
@@ -913,6 +913,15 @@ func (s *Service) resolveCommissionBpsTx(ctx context.Context, tx pgx.Tx, sellerI
 	return rate, nil
 }
 
+// normalizePromoLookupError maps the repository's "unknown code" error onto the customer-facing
+// promo_not_found rejection, so an unknown code is a 400 and not an internal error.
+func normalizePromoLookupError(err error) error {
+	if errors.Is(err, marketing.ErrPromoCodeNotFound) {
+		return marketing.ErrPromoNotFound
+	}
+	return err
+}
+
 // promoCommissionBpsTx resolves the frozen commission rate of the seller owning the promo code.
 // An unknown code falls back to the default rate and is rejected later by promo validation.
 func (s *Service) promoCommissionBpsTx(ctx context.Context, tx pgx.Tx, code string, frozen map[uuid.UUID]int) (int, error) {
@@ -1026,7 +1035,7 @@ func (s *Service) ValidateCartPromo(ctx context.Context, userID uuid.UUID, code 
 
 		res, err := s.marketingSvc.ValidateAndCalculateCheckoutPromoTx(ctx, tx, userID, code, promotedInputs, commissionBps, time.Now().UTC())
 		if err != nil {
-			return err
+			return normalizePromoLookupError(err)
 		}
 		calc = res
 		return nil
