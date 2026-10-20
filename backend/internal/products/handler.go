@@ -871,8 +871,29 @@ func (h *Handler) handleAdminModerationAction(w http.ResponseWriter, r *http.Req
 			h.writeError(w, http.StatusNotFound, "not_found", "Product not found")
 			return
 		}
+		if errors.Is(err, ErrRevisionNotPending) {
+			h.writeError(w, http.StatusConflict, "revision_not_pending", "Изменения уже обработаны: ревизия не ожидает модерации.")
+			return
+		}
 		if errors.Is(err, ErrInvalidStatusTransition) {
 			h.writeError(w, http.StatusUnprocessableEntity, "invalid_status", err.Error())
+			return
+		}
+		var deactErr *VariantDeactivationBlockedError
+		if errors.As(err, &deactErr) {
+			h.writeErrorWithDetails(w, http.StatusConflict, "variant_deactivation_blocked", deactErr.SellerMessage()+" Изменения не применены.", map[string]any{"variantId": deactErr.VariantID.String(), "reason": deactErr.Reason})
+			return
+		}
+		if errors.Is(err, ErrRevisionConflict) {
+			h.writeError(w, http.StatusConflict, "revision_conflict", "Варианты товара изменились после отправки ревизии. Изменения не применены — отклоните ревизию, продавец отправит актуальную.")
+			return
+		}
+		if errors.Is(err, ErrRevisionNotApplicable) && (errors.Is(err, ErrProductPriceInvalid) || errors.Is(err, ErrProductSKURequired) || errors.Is(err, ErrProductVariantsRequired)) {
+			h.writeError(w, http.StatusConflict, "revision_incomplete", "У варианта в ревизии нет цены или артикула продавца. Изменения не применены — верните товар продавцу на исправление.")
+			return
+		}
+		if errors.Is(err, ErrRevisionNotApplicable) {
+			h.writeError(w, http.StatusConflict, "revision_not_applicable", "Ревизию нельзя применить к текущему состоянию товара (фото или варианты). Изменения не применены.")
 			return
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to perform moderation action")

@@ -705,8 +705,30 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 
 	var modLog *ProductModerationLog
 	var revision *ProductRevision
+	var changes ProductRevisionChanges
 
-	if p.Status == StatusPublished {
+	// A published product, or one whose edit is already a pending revision (the live content is still the
+	// published one), is edited through a revision: nothing reaches the live rows before approval.
+	var prevChanges *ProductRevisionChanges
+	if p.Status == StatusPublished || p.Status == StatusPendingModeration || p.Status == StatusInReview {
+		prevRev, err := s.repo.GetPendingRevision(ctx, p.ID)
+		if err != nil {
+			return Product{}, err
+		}
+		if prevRev != nil {
+			b, err := json.Marshal(prevRev.ContentSnapshot)
+			if err != nil {
+				return Product{}, err
+			}
+			ch, err := parseRevisionChanges(b)
+			if err != nil {
+				return Product{}, err
+			}
+			prevChanges = &ch
+		}
+	}
+
+	if p.Status == StatusPublished || prevChanges != nil {
 		now := time.Now()
 		revID := uuid.New()
 				// Construct full target state for snapshot
@@ -779,6 +801,25 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		b, _ := json.Marshal(p)
 		json.Unmarshal(b, &snap)
 
+		// Variants and gallery are applied on approval only; record them explicitly (nil = unchanged)
+		// together with the live variant versions they were built against. Parts this edit does not
+		// touch are carried over from the pending revision it supersedes.
+		if req.Variants != nil {
+			changes.Variants = &variants
+			changes.VariantBase = variantBase(existingVariants)
+		} else if prevChanges != nil && prevChanges.Variants != nil {
+			changes.Variants = prevChanges.Variants
+			changes.VariantBase = prevChanges.VariantBase
+		}
+		if req.Images != nil {
+			changes.Images = &desiredMedia
+		} else if prevChanges != nil && prevChanges.Images != nil {
+			changes.Images = prevChanges.Images
+		}
+		if err := addRevisionChangesToSnapshot(snap, changes); err != nil {
+			return Product{}, fmt.Errorf("failed to build revision snapshot: %w", err)
+		}
+
 		revision = &ProductRevision{
 			ID: revID,
 			ProductID: p.ID,
@@ -791,7 +832,7 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		p.LiveRevisionID = &revID
 
 
-		if req.ContinueSelling == nil || !*req.ContinueSelling {
+		if p.Status == StatusPublished && (req.ContinueSelling == nil || !*req.ContinueSelling) || p.Status == StatusInReview {
 			oldStatus := p.Status
 			p.Status = StatusPendingModeration
 			p.SubmittedAt = &now
@@ -1015,8 +1056,8 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		} else {
 			// revision != nil (published product revision flow)
 			var revActiveVariants []ProductVariant
-			if req.Variants != nil {
-				for _, v := range variants {
+			if changes.Variants != nil {
+				for _, v := range *changes.Variants {
 					if v.IsActive {
 						revActiveVariants = append(revActiveVariants, v)
 					}
@@ -1034,8 +1075,8 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			}
 
 			var revImages []DesiredProductImage
-			if req.Images != nil {
-				revImages = desiredMedia
+			if changes.Images != nil {
+				revImages = *changes.Images
 			} else {
 				dbImages, err := txRepo.GetProductImages(ctx, p.ID)
 				if err != nil {
@@ -1054,6 +1095,27 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			}
 
 			if err := validateFinalProductMediaState(revActiveVariants, revImages); err != nil {
+				return err
+			}
+
+			// Early C5 feedback for the seller; the same guard runs again at approval against the then-current state.
+			if req.Variants != nil {
+				for _, ev := range existingVariants {
+					if !ev.IsActive || matchedExisting[ev.ID] {
+						continue
+					}
+					reason, err := txRepo.variantDeactivationBlockReason(ctx, ev.ID)
+					if err != nil {
+						return err
+					}
+					if reason != "" {
+						return &VariantDeactivationBlockedError{VariantID: ev.ID, Label: variantLabel(ev), Reason: reason}
+					}
+				}
+			}
+
+			// A newer submission is the full target state; older pending revisions must never be promoted later.
+			if err := txRepo.SupersedePendingRevisions(ctx, p.ID); err != nil {
 				return err
 			}
 
@@ -1168,6 +1230,15 @@ func (s *Service) GetSellerProduct(ctx context.Context, currentUserID, productID
 	p, err := s.repo.GetProductByIDForSeller(ctx, productID, seller.ID)
 	if err != nil {
 		return Product{}, err
+	}
+	// The seller edits the target state of a pending revision, not the live matrix it would replace.
+	pendingRev, err := s.repo.GetPendingRevisionView(ctx, productID)
+	if err != nil {
+		return Product{}, err
+	}
+	if pendingRev != nil && pendingRev.VariantsChanged {
+		p.Variants = overlayRevisionVariants(p.Variants, pendingRev.Variants)
+		PopulateProductAggregates(p)
 	}
 	return *p, nil
 }
@@ -1475,6 +1546,12 @@ func (s *Service) GetAdminProductDetail(ctx context.Context, productID uuid.UUID
 		p.Vision = visionDTO
 	}
 
+	pendingRev, err := s.repo.GetPendingRevisionView(ctx, productID)
+	if err != nil {
+		return Product{}, err
+	}
+	p.PendingRevision = pendingRev
+
 	return *p, nil
 }
 
@@ -1559,6 +1636,7 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 		CreatedAt:   now,
 	}
 
+	var promotedRevisionID *uuid.UUID
 	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
 
@@ -1567,7 +1645,12 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 			if err != nil {
 				return err
 			}
+			if txPendingRev == nil && fromStatus == StatusPublished {
+				// Approved or rejected concurrently since the pre-check: nothing left to apply.
+				return fmt.Errorf("%w: %w", ErrInvalidStatusTransition, ErrRevisionNotPending)
+			}
 			if txPendingRev != nil {
+				promotedRevisionID = &txPendingRev.ID
 				if err := txRepo.PromoteProductRevision(ctx, p.ID, txPendingRev.ID); err != nil {
 					return fmt.Errorf("failed to promote product revision: %w", err)
 				}
@@ -1617,6 +1700,42 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 
 		return nil
 	})
+
+	if err != nil && toStatus == StatusPublished && errors.Is(err, ErrRevisionNotApplicable) {
+		reason := "conflict"
+		var deactErr *VariantDeactivationBlockedError
+		if errors.As(err, &deactErr) {
+			reason = deactErr.Reason
+		} else if !errors.Is(err, ErrRevisionConflict) {
+			reason = "media"
+		}
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName: "product.revision_apply_blocked",
+			Domain:    "product",
+			Action:    "revision_apply",
+			Result:    "blocked",
+			ActorID:   adminUserID.String(),
+			ActorRole: "admin",
+			Attributes: []slog.Attr{
+				slog.String("product_id", p.ID.String()),
+				slog.String("reason", reason),
+			},
+		})
+	}
+	if err == nil && promotedRevisionID != nil {
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName: "product.revision_applied",
+			Domain:    "product",
+			Action:    "revision_apply",
+			Result:    "success",
+			ActorID:   adminUserID.String(),
+			ActorRole: "admin",
+			Attributes: []slog.Attr{
+				slog.String("product_id", p.ID.String()),
+				slog.String("revision_id", promotedRevisionID.String()),
+			},
+		})
+	}
 
 	if err == nil && toStatus == StatusPublished {
 		// Schedule Vision for the newly published (or revised) state

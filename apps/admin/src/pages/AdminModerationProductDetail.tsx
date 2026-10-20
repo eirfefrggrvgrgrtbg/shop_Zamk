@@ -30,6 +30,7 @@ import {
   getModerationProducts,
   getAdminProductErrorMessage,
   type AdminProductView,
+  type AdminProductVariantDisplay,
 } from '../api/adminProducts';
 import { AdminProductVisionPanel } from '../components/moderation/AdminProductVisionPanel';
 
@@ -279,6 +280,22 @@ export function AdminModerationProductDetail() {
   const failedChecksCount = failedChecks.length;
   const allChecksPassed = passedChecksCount === checks.length;
 
+  // Published product with a seller edit awaiting approval: decisions apply to the revision, the live product stays on sale.
+  const isPublishedRevision = product.status === 'published' && Boolean(product.pendingRevision);
+  const liveActiveVariantIds = new Set(product.variants.filter((v) => v.isActive).map((v) => v.id));
+  const pendingVariantRows: { variant: AdminProductVariantDisplay; change: 'added' | 'kept' | 'removed' }[] = [];
+  if (product.pendingRevision?.variantsChanged) {
+    const revisionIds = new Set(product.pendingRevision.variants.map((v) => v.id));
+    for (const v of product.pendingRevision.variants) {
+      pendingVariantRows.push({ variant: v, change: liveActiveVariantIds.has(v.id) ? 'kept' : 'added' });
+    }
+    for (const v of product.variants) {
+      if (v.isActive && !revisionIds.has(v.id)) {
+        pendingVariantRows.push({ variant: v, change: 'removed' });
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Header Navigation */}
@@ -314,8 +331,8 @@ export function AdminModerationProductDetail() {
             <span>{isGeneratingPreview ? 'Создание...' : 'Shop Preview'}</span>
           </button>
 
-          {/* Action buttons for pending_moderation and in_review */}
-          {(product.status === 'pending_moderation' || product.status === 'in_review') && (
+          {/* Action buttons for pending_moderation and in_review (and a published product's pending revision) */}
+          {(product.status === 'pending_moderation' || product.status === 'in_review' || isPublishedRevision) && (
             <>
               {product.status === 'pending_moderation' && (
                 <button
@@ -353,6 +370,7 @@ export function AdminModerationProductDetail() {
                 <span>Вернуть на исправление</span>
               </button>
 
+              {!isPublishedRevision && (
               <button
                 data-testid="btn-reject"
                 onClick={openRejectModal}
@@ -362,6 +380,7 @@ export function AdminModerationProductDetail() {
                 <X className="w-3.5 h-3.5" />
                 <span>Отклонить</span>
               </button>
+              )}
             </>
           )}
 
@@ -605,6 +624,47 @@ export function AdminModerationProductDetail() {
               </div>
             )}
           </div>
+
+          {product.pendingRevision && (
+            <div data-testid="pending-revision" className="bg-amber-50 dark:bg-amber-950/30 p-5 rounded-2xl border border-amber-200 dark:border-amber-800 shadow-sm space-y-3">
+              <h2 className="text-sm font-bold text-amber-900 dark:text-amber-200 border-b border-amber-200 pb-2">
+                Изменения продавца на модерации
+              </h2>
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                Ниже — то, что продавец хочет изменить. В действующем товаре изменения появятся только после одобрения.
+                {product.pendingRevision.imagesChanged && ` Фотографии изменены (${product.pendingRevision.imagesCount}).`}
+                {!product.pendingRevision.variantsChanged && ' Варианты не меняются.'}
+              </p>
+              {product.pendingRevision.variantsChanged && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b text-amber-700 uppercase text-[10px]">
+                        <th className="py-2 px-3">Цвет / Размер</th>
+                        <th className="py-2 px-3">Артикул продавца (SKU)</th>
+                        <th className="py-2 px-3 text-right">Цена</th>
+                        <th className="py-2 px-3 text-center">Изменение</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-100 dark:divide-amber-900">
+                      {pendingVariantRows.map(({ variant: v, change }) => (
+                        <tr key={v.id} data-testid="pending-revision-variant">
+                          <td className="py-2 px-3 font-medium text-slate-900 dark:text-white">{v.label}</td>
+                          <td className="py-2 px-3 font-mono text-slate-600 dark:text-slate-400">{v.sellerSku || v.sku || '—'}</td>
+                          <td className="py-2 px-3 text-right font-bold text-slate-900 dark:text-white">{v.price != null ? formatPrice(v.price) : '—'}</td>
+                          <td className="py-2 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${change === 'added' ? 'bg-emerald-100 text-emerald-800' : change === 'removed' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
+                              {change === 'added' ? 'Новый' : change === 'removed' ? 'Будет отключён' : 'Без изменений состава'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Variants Table */}
           <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">

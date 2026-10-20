@@ -623,7 +623,12 @@ func TestMediaFinalState_Matrix(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, products.ErrInvalidMediaMode)
 
-		// X. Revision cannot retain image for removed active color
+		// X. Revision cannot retain image for removed active color.
+		// Start from a clean published product: a still-pending W1 revision would carry its generic gallery forward (C5.1).
+		_, err = db.Pool.Exec(ctx, "UPDATE product_revisions SET status = 'rejected' WHERE product_id = $1 AND status = 'pending'", p.ID)
+		require.NoError(t, err)
+		_, err = db.Pool.Exec(ctx, "UPDATE products SET status = 'published' WHERE id = $1", p.ID)
+		require.NoError(t, err)
 		revReqOrphan := products.UpdateProductRequest{
 			Variants: []products.ProductVariantRequest{
 				{SellerSKU: &skuB, ColorID: &colorBlackID, PriceCents: ptr(int64(2500))},

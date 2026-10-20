@@ -132,6 +132,17 @@ export interface AdminProductView {
   submittedAt?: string;
   moderationComment?: string;
   vision?: AdminProductVision;
+  pendingRevision?: AdminProductPendingRevision;
+}
+
+/** Seller edit of a published product awaiting approval; applied to the live product only on approve. */
+export interface AdminProductPendingRevision {
+  id: string;
+  createdAt?: string;
+  variantsChanged: boolean;
+  variants: AdminProductVariantDisplay[];
+  imagesChanged: boolean;
+  imagesCount: number;
 }
 
 const statusLabels: Record<AdminProductStatus, string> = {
@@ -275,6 +286,21 @@ export const mapAdminProduct = (product: AdminProduct | ModerationProduct): Admi
     submittedAt: product.submittedAt,
     moderationComment: product.moderationComment,
     vision: (product as any).vision,
+    pendingRevision: mapPendingRevision((flexibleProduct as any).pendingRevision),
+  };
+};
+
+const mapPendingRevision = (rev: any): AdminProductPendingRevision | undefined => {
+  if (!rev || typeof rev.id !== 'string') {
+    return undefined;
+  }
+  return {
+    id: rev.id,
+    createdAt: rev.createdAt,
+    variantsChanged: Boolean(rev.variantsChanged),
+    variants: mapVariants(rev.variants),
+    imagesChanged: Boolean(rev.imagesChanged),
+    imagesCount: typeof rev.imagesCount === 'number' ? rev.imagesCount : 0,
   };
 };
 

@@ -854,7 +854,12 @@ func (r *Repository) ListAdminProducts(ctx context.Context, filter AdminProductF
 	}
 
 	if filter.Status != nil && *filter.Status != "" && *filter.Status != "all" {
-		conditions = append(conditions, fmt.Sprintf("p.status = $%d", argID))
+		if *filter.Status == StatusPendingModeration {
+			// A published product whose seller edit awaits approval (sold meanwhile) belongs in the moderation queue too.
+			conditions = append(conditions, fmt.Sprintf("(p.status = $%d OR (p.status = 'published' AND EXISTS (SELECT 1 FROM product_revisions pr WHERE pr.product_id = p.id AND pr.status = 'pending')))", argID))
+		} else {
+			conditions = append(conditions, fmt.Sprintf("p.status = $%d", argID))
+		}
 		args = append(args, *filter.Status)
 		argID++
 	}
@@ -1849,15 +1854,25 @@ func (r *Repository) PromoteProductRevision(ctx context.Context, productID, revi
 	queryRev := `
 		UPDATE product_revisions
 		SET status = 'approved', updated_at = now()
-		WHERE id = $1 AND product_id = $2
+		WHERE id = $1 AND product_id = $2 AND status = 'pending'
 		RETURNING content_snapshot
 	`
 	err := r.db.QueryRow(ctx, queryRev, revisionID, productID).Scan(&snapBytes)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return errors.New("revision not found")
+			return ErrRevisionNotPending
 		}
 		return fmt.Errorf("failed to approve revision: %w", err)
+	}
+
+	// Variants first: the C5 guard and the conflict check must pass before any live row changes.
+	// Any failure aborts the whole approval transaction, so nothing is applied partially.
+	changes, err := parseRevisionChanges(snapBytes)
+	if err != nil {
+		return err
+	}
+	if err := r.applyRevisionVariants(ctx, productID, changes); err != nil {
+		return fmt.Errorf("%w: %w", ErrRevisionNotApplicable, err)
 	}
 
 	var pSnap Product
@@ -1977,6 +1992,11 @@ func (r *Repository) PromoteProductRevision(ctx context.Context, productID, revi
 	}
 	if res.RowsAffected() == 0 {
 		return ErrProductNotFound
+	}
+
+	// Gallery after the product row: reconciliation owns main_image_url, which the snapshot holds at its old value.
+	if err := r.applyRevisionImages(ctx, productID, changes); err != nil {
+		return fmt.Errorf("%w: %w", ErrRevisionNotApplicable, err)
 	}
 	return nil
 }

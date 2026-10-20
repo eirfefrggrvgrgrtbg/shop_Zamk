@@ -86,6 +86,8 @@ type Product struct {
 	MaterialComposition []ProductMaterialComposition `json:"materialComposition,omitempty"`
 	SizeChart *ProductSizeChart `json:"sizeChart,omitempty"`
 	Vision    *AdminProductVisionDTO `json:"vision,omitempty"`
+	// PendingRevision is filled for Admin only: the seller's not yet applied edit of a published product.
+	PendingRevision *PendingRevisionView `json:"pendingRevision,omitempty"`
 }
 
 type RatingSummary struct {

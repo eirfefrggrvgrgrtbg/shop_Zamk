@@ -169,4 +169,38 @@ describe('AdminModerationProductDetail — AI Panel & Moderation Controls Bounda
       );
     });
   });
+
+  // C5.1: a published product's pending revision is shown and decided without blocking the live product
+  it('shows the pending revision matrix and offers approve / return, not block, for a published product', async () => {
+    vi.mocked(adminProductsApi.getAdminProduct).mockResolvedValue({
+      ...baseProduct,
+      status: 'published',
+      statusLabel: 'Опубликован',
+      variants: [
+        { id: 'var-1', label: 'Черный / S', sku: 'BS', price: 100, isActive: true },
+        { id: 'var-2', label: 'Белый / M', sku: 'WM', price: 110, isActive: true },
+      ],
+      pendingRevision: {
+        id: 'rev-1',
+        variantsChanged: true,
+        imagesChanged: false,
+        imagesCount: 0,
+        variants: [
+          { id: 'var-1', label: 'Черный / S', sku: 'BS', price: 100, isActive: true },
+          { id: 'var-new', label: 'Черный / M', sku: 'BM', price: 120, isActive: true },
+        ],
+      },
+    });
+    renderComponent();
+
+    const block = await screen.findByTestId('pending-revision');
+    expect(block.textContent).toContain('Черный / M');
+    expect(block.textContent).toContain('Новый');
+    expect(block.textContent).toContain('Будет отключён');
+    expect(screen.getAllByTestId('pending-revision-variant')).toHaveLength(3);
+    expect(screen.getByTestId('btn-approve')).toBeDefined();
+    expect(screen.getByTestId('btn-revise')).toBeDefined();
+    expect(screen.queryByTestId('btn-reject')).toBeNull();
+    expect(screen.queryByTestId('btn-start-review')).toBeNull();
+  });
 });
