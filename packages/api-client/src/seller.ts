@@ -20,6 +20,8 @@ import type {
   SellerProductPatchImageItem,
   SellerPromotion,
   SellerPromotionsResponse,
+  SellerPromoStats,
+  SellerPromoStatsDetail,
   CreateSellerPromotionRequest,
   UpdateSellerPromotionRequest,
   GetSellerProductsParams,
@@ -32,6 +34,8 @@ export type {
   SellerProductPatchImageItem,
   SellerPromotion,
   SellerPromotionsResponse,
+  SellerPromoStats,
+  SellerPromoStatsDetail,
   CreateSellerPromotionRequest,
   UpdateSellerPromotionRequest,
 };
@@ -377,6 +381,16 @@ export const setMainSellerProductImage = async (productId: string, imageId: stri
 
 export const getSellerPromotions = async (): Promise<SellerPromotionsResponse> => {
   return request<SellerPromotionsResponse>('GET', '/seller/promotions');
+};
+
+export const getSellerPromotionsStats = async (): Promise<{ items: SellerPromoStats[] }> => {
+  const res = await request<{ items?: SellerPromoStats[] }>('GET', '/seller/promotions/stats');
+  return { items: res?.items || [] };
+};
+
+export const getSellerPromotionStats = async (id: string): Promise<SellerPromoStatsDetail> => {
+  const res = await request<SellerPromoStatsDetail>('GET', `/seller/promotions/${id}/stats`);
+  return { ...res, recentOrders: res?.recentOrders || [] };
 };
 
 export const createSellerPromotion = async (

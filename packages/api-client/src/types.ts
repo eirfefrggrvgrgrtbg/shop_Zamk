@@ -3138,3 +3138,37 @@ export interface PublicCollectionDetail {
   coverImageUrl?: string | null;
   products: PublicCollectionProduct[];
 }
+
+// --- Seller promo code statistics (read-only, derived from existing usage rows) ---
+export type SellerPromoOutcome = 'reserved' | 'paid' | 'cancelled_after_payment' | 'released' | 'expired';
+
+export interface SellerPromoStats {
+  promoCodeId: string;
+  /** Orders holding the code but not paid yet. */
+  reservedOrders: number;
+  /** Paid orders that were not cancelled afterwards: the only orders counted as sales. */
+  paidOrders: number;
+  cancelledAfterPaymentOrders: number;
+  /** Orders that never got paid and gave the code back (payment failed, cancelled or expired). */
+  releasedOrders: number;
+  /** Paid orders with a completed return on a promo line. */
+  returnedOrders: number;
+  /** Customer-paid amount of the seller's promo lines in paid orders, before returns. */
+  salesCents: number;
+  /** Discount funded by the seller in paid orders, before returns. */
+  sellerDiscountCents: number;
+}
+
+export interface SellerPromoStatsOrder {
+  orderId: string;
+  orderNumber?: string;
+  outcome: SellerPromoOutcome;
+  at: string;
+  salesCents: number;
+  sellerDiscountCents: number;
+  returned: boolean;
+}
+
+export interface SellerPromoStatsDetail extends SellerPromoStats {
+  recentOrders: SellerPromoStatsOrder[];
+}

@@ -16,6 +16,8 @@ import type { SellerPromotion, SellerProduct } from '@zamk/api-client/src/types'
 
 vi.mock('@zamk/api-client/src/seller', () => ({
   getSellerPromotions: vi.fn(),
+  getSellerPromotionsStats: vi.fn().mockResolvedValue({ items: [] }),
+  getSellerPromotionStats: vi.fn(),
   createSellerPromotion: vi.fn(),
   updateSellerPromotion: vi.fn(),
   getSellerProducts: vi.fn(),

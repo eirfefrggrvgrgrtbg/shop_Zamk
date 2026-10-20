@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   getSellerPromotions,
+  getSellerPromotionsStats,
   createSellerPromotion,
   updateSellerPromotion,
   getSellerProducts,
@@ -10,6 +11,7 @@ import {
 } from '@zamk/api-client/src/seller';
 import type {
   SellerPromotion,
+  SellerPromoStats,
   SellerPromoDiscountType,
   CreateSellerPromotionRequest,
   UpdateSellerPromotionRequest,
@@ -36,10 +38,12 @@ import {
   Package,
   ChevronRight,
   ChevronDown,
+  BarChart3,
 } from 'lucide-react';
 import { SellerPageFrame, SellerPageHeader } from '../components/SellerPageFrame';
 import { SellerSurface, SellerModal } from '../components/SellerSurface';
 import { SellerDateTimePicker } from '../components/SellerDateTimePicker';
+import { PromoStatsModal, formatStatsMoney } from '../components/PromoStatsModal';
 import { cn, parseRubToCentsExact } from '../lib/utils';
 
 const currencyFormatter = new Intl.NumberFormat('ru-RU', {
@@ -171,6 +175,9 @@ export function SellerPromotions() {
   // Drawer / Modal states
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editPromo, setEditPromo] = useState<SellerPromotion | null>(null);
+  const [statsPromo, setStatsPromo] = useState<SellerPromotion | null>(null);
+  // Per-code effectiveness; null = not loaded (shown as a dash), the list itself never depends on it.
+  const [statsByPromo, setStatsByPromo] = useState<Record<string, SellerPromoStats> | null>(null);
 
   // Products state & lookup dictionary for persistent badge metadata
   const [productLookup, setProductLookup] = useState<Record<string, SellerProduct>>({});
@@ -351,6 +358,12 @@ export function SellerPromotions() {
       const data = await getSellerPromotions();
       setPromotions(data.items || []);
       setError('');
+      try {
+        const st = await getSellerPromotionsStats();
+        setStatsByPromo(Object.fromEntries((st.items || []).map((x) => [x.promoCodeId, x])));
+      } catch {
+        setStatsByPromo(null);
+      }
     } catch (err: any) {
       if (err.status === 403) {
         setError('Недостаточно прав для управления промокодами.');
@@ -883,6 +896,8 @@ export function SellerPromotions() {
                   <th className="px-6 py-3">Скидка</th>
                   <th className="px-6 py-3">Мин. заказ</th>
                   <th className="px-6 py-3">Использовано</th>
+                  <th className="px-6 py-3" title="Оплаченные и не отменённые заказы с кодом">Оплаченные заказы</th>
+                  <th className="px-6 py-3" title="Оплаченные товары вашего магазина по заказам с кодом, до учёта возвратов. Не дополнительная выручка.">Продажи с кодом</th>
                   <th className="px-6 py-3">Лимиты</th>
                   <th className="px-6 py-3">Период действия</th>
                   <th className="px-6 py-3">Статус</th>
@@ -993,6 +1008,30 @@ export function SellerPromotions() {
                           </span>
                         )}
                       </td>
+                      <td className="px-6 py-4 text-gray-600" data-testid={`promo-paid-${p.code}`}>
+                        {statsByPromo && statsByPromo[p.id] ? (
+                          <>
+                            <span className="font-medium text-gray-900">{statsByPromo[p.id].paidOrders}</span>
+                            {statsByPromo[p.id].returnedOrders > 0 && (
+                              <div className="text-xs text-amber-700">возвраты: {statsByPromo[p.id].returnedOrders}</div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600" data-testid={`promo-sales-${p.code}`}>
+                        {statsByPromo && statsByPromo[p.id] ? (
+                          <>
+                            <div className="font-medium text-gray-900">{formatStatsMoney(statsByPromo[p.id].salesCents)}</div>
+                            <div className="text-xs text-gray-500">
+                              скидка за ваш счёт {formatStatsMoney(statsByPromo[p.id].sellerDiscountCents)}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4 text-xs text-gray-500 space-y-0.5">
                         <div>
                           Общий:{' '}
@@ -1044,6 +1083,15 @@ export function SellerPromotions() {
                             ) : (
                               <Play className="w-3.5 h-3.5" />
                             )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStatsPromo(p)}
+                            title="Подробная статистика"
+                            data-testid={`promo-stats-button-${p.code}`}
+                            className="p-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                          >
+                            <BarChart3 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             type="button"
@@ -2690,6 +2738,7 @@ export function SellerPromotions() {
           </form>
         )}
       </SellerModal>
+      <PromoStatsModal promo={statsPromo} onClose={() => setStatsPromo(null)} />
     </SellerPageFrame>
   );
 }

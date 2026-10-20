@@ -475,6 +475,8 @@ func New(
 		r.Use(appMiddleware.RequireSellerAccess(), sellersHandler.RequireActiveSeller)
 
 		r.Get("/", marketingHandler.ListSellerPromotions)
+		r.Get("/stats", marketingHandler.ListSellerPromoStats)
+		r.Get("/{id}/stats", marketingHandler.GetSellerPromoStats)
 		r.Post("/", marketingHandler.CreateSellerPromotion)
 		r.Patch("/{id}", marketingHandler.UpdateSellerPromotion)
 	})
