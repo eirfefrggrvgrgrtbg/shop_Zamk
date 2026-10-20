@@ -303,10 +303,10 @@ export const STAFF_WORK_MODULES: StaffWorkModule[] = [
           {
             capability: 'storefront.manage',
             title: 'Управление витриной',
-            description: 'Настройка баннеров, промо-блоков и главной страницы магазина',
+            description: 'Редакторские подборки товаров для витрины магазина',
             class: 'write',
             criticality: 'normal',
-            surface: 'future',
+            surface: 'current_ui',
           },
           {
             capability: 'testing.manage',

@@ -3080,3 +3080,61 @@ export interface SavedQueryUpdateRequest {
   description?: string;
   querySpec?: QueryRequest;
 }
+
+// --- Editorial collections (merchandising) ---
+export interface EditorialCollection {
+  id: string;
+  slug: string;
+  title: string;
+  description?: string | null;
+  coverImageUrl?: string | null;
+  isActive: boolean;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminCollectionItem {
+  productId: string;
+  title: string;
+  status: string;
+  sortOrder: number;
+}
+
+export interface AdminCollectionDetail extends EditorialCollection {
+  items: AdminCollectionItem[];
+}
+
+export interface AdminCollectionInput {
+  slug: string;
+  title: string;
+  description?: string | null;
+  coverImageUrl?: string | null;
+  isActive: boolean;
+  startsAt?: string | null;
+  endsAt?: string | null;
+}
+
+export interface PublicCollectionProduct {
+  id: string;
+  title: string;
+  priceCents: number;
+  oldPriceCents?: number;
+  mainImageUrl?: string;
+  categoryId?: string;
+  brandId?: string;
+  sellerId?: string;
+  sellerSlug?: string;
+  sellerName?: string;
+  rating?: RatingSummary;
+}
+
+export interface PublicCollectionDetail {
+  id: string;
+  slug: string;
+  title: string;
+  description?: string | null;
+  coverImageUrl?: string | null;
+  products: PublicCollectionProduct[];
+}

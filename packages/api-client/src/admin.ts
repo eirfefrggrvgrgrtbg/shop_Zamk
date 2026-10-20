@@ -1116,3 +1116,26 @@ export const updateAdminMarketingSavedQuery = async (id: string, data: SavedQuer
 export const deleteAdminMarketingSavedQuery = async (id: string): Promise<void> => {
   return request<void>('DELETE', `/admin/marketing/saved-queries/${id}`);
 };
+
+// --- Editorial collections ---
+export const getAdminCollections = async (): Promise<import('./types').EditorialCollection[]> => {
+  const res = await request<any>('GET', '/admin/merchandising/collections');
+  return Array.isArray(res) ? res : res?.items || [];
+};
+
+export const getAdminCollection = async (id: string): Promise<import('./types').AdminCollectionDetail> => {
+  const res = await request<import('./types').AdminCollectionDetail>('GET', `/admin/merchandising/collections/${id}`);
+  return { ...res, items: res?.items || [] };
+};
+
+export const createAdminCollection = async (input: import('./types').AdminCollectionInput): Promise<import('./types').EditorialCollection> => {
+  return request('POST', '/admin/merchandising/collections', { body: input });
+};
+
+export const updateAdminCollection = async (id: string, input: import('./types').AdminCollectionInput): Promise<import('./types').EditorialCollection> => {
+  return request('PATCH', `/admin/merchandising/collections/${id}`, { body: input });
+};
+
+export const replaceAdminCollectionItems = async (id: string, productIds: string[]): Promise<void> => {
+  return request<void>('PUT', `/admin/merchandising/collections/${id}/items`, { body: { productIds } });
+};

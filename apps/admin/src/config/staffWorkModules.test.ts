@@ -97,7 +97,7 @@ describe('STAFF_WORK_MODULES Presentation Config', () => {
 
     expect(actionMap.get('security.read')?.surface).toBe('backend_only');
     expect(actionMap.get('testing.manage')?.surface).toBe('backend_only');
-    expect(actionMap.get('storefront.manage')?.surface).toBe('future');
+    expect(actionMap.get('storefront.manage')?.surface).toBe('current_ui');
     expect(actionMap.get('auctions.manage_settings')?.surface).toBe('future');
 
     // Normal actions with current UI

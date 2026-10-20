@@ -445,12 +445,32 @@ describe('EMP.1C3C2R.2B — Admin Navigation and Route Guards Alignment', () => 
     unmount2();
   });
 
+  // M15. editorial collections appear only for storefront.manage
+  it('M15: collections nav entry requires storefront.manage', () => {
+    mockAuth(['storefront.manage']);
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    expect(within(getSidebar()).getByText('Подборки')).toBeDefined();
+    unmount();
+    cleanup();
+
+    mockAuth(['marketing.campaigns.read']);
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AdminLayout />
+      </MemoryRouter>
+    );
+    expect(within(getSidebar()).queryByText('Подборки')).toBeNull();
+  });
+
   // N. screenless capabilities do not create sidebar entries
   it('N: screenless capabilities do not create phantom sidebar entries', () => {
     mockAuth([
       'security.read',
       'testing.manage',
-      'storefront.manage',
       'auctions.manage_settings',
     ]);
     render(

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -15,10 +16,21 @@ type Handler struct {
 	validator *validator.Validate
 }
 
+// slugPattern is the URL slug format: lowercase latin letters and digits separated by single dashes.
+var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+
 func NewHandler(service *Service) *Handler {
+	v := validator.New()
+	// The request DTOs use `alphanum_dash`; without this registration validator panics on every
+	// create/update request, so the admin API was unusable over HTTP.
+	if err := v.RegisterValidation("alphanum_dash", func(fl validator.FieldLevel) bool {
+		return slugPattern.MatchString(fl.Field().String())
+	}); err != nil {
+		panic(err)
+	}
 	return &Handler{
 		service:   service,
-		validator: validator.New(),
+		validator: v,
 	}
 }
 

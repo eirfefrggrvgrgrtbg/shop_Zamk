@@ -167,6 +167,7 @@ export function AdminLayout({ children }: { children?: React.ReactNode }) {
   const marketingNavItems: NavItem[] = [
     { name: 'Сводка', path: '/marketing', icon: BarChart3, permission: 'marketing.campaigns.read' },
     { name: 'Кампании', path: '/marketing/campaigns', icon: Megaphone, permission: 'marketing.campaigns.read' },
+    { name: 'Подборки', path: '/collections', icon: BookOpen, permission: 'storefront.manage' },
   ].filter(isNavItemVisible);
 
   const warehouseNavItems: NavItem[] = [

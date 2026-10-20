@@ -29,6 +29,7 @@ import { Brands } from './pages/Brands';
 import { NewArrivals } from './pages/NewArrivals';
 import { About } from './pages/About';
 import { Collections } from './pages/Collections';
+import { CollectionDetail } from './pages/CollectionDetail';
 import { Returns } from './pages/Returns';
 import { ReturnDetail } from './pages/ReturnDetail';
 import { Delivery } from './pages/Delivery';
@@ -145,6 +146,7 @@ function App() {
                     <Route path="/new" element={<NewArrivals />} />
                     <Route path="/about" element={<About />} />
                     <Route path="/collections" element={<Collections />} />
+                    <Route path="/collections/:slug" element={<CollectionDetail />} />
                     <Route path="/returns" element={<Returns />} />
                     <Route path="/returns/:returnId" element={<ReturnDetail />} />
                     <Route path="/profile/returns" element={<Returns />} />

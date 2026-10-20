@@ -100,3 +100,14 @@ export const getAuctionLots = async (id: string): Promise<AuctionLot[]> => {
 export const getAuctionLot = async (id: string): Promise<AuctionLot> => {
   return request<AuctionLot>('GET', `/public/auction-lots/${id}`);
 };
+
+// --- Editorial collections ---
+export const getCollections = async (): Promise<import('./types').EditorialCollection[]> => {
+  const res = await request<any>('GET', '/public/collections');
+  return Array.isArray(res) ? res : res?.items || [];
+};
+
+export const getCollection = async (slug: string): Promise<import('./types').PublicCollectionDetail> => {
+  const res = await request<import('./types').PublicCollectionDetail>('GET', `/public/collections/${encodeURIComponent(slug)}`);
+  return { ...res, products: res?.products || [] };
+};

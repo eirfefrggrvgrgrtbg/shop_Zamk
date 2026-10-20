@@ -1,4 +1,4 @@
-import { getProducts, getDirectSaleProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller, getProductPreviewByToken, getSimilarProducts, getPopularProducts } from '@zamk/api-client/src/public';
+import { getProducts, getDirectSaleProducts, getProduct, getCategories, getBrands, getProductReviews, getPublicSeller, getProductPreviewByToken, getSimilarProducts, getPopularProducts, getCollections, getCollection } from '@zamk/api-client/src/public';
 import type { ProductSummary } from '@zamk/api-client/src/types';
 import type { Product as UIProduct, Brand as UIBrand, Category as UICategory, Review as UIReview } from '../types/catalog';
 
@@ -357,5 +357,56 @@ export async function fetchProductPreviewByToken(token: string): Promise<UIProdu
       sizeValueId: v.sizeValueId
     })) || [],
     isPreview: true,
+  };
+}
+
+
+export interface UICollectionSummary {
+  id: string;
+  slug: string;
+  title: string;
+  description?: string;
+  coverImageUrl?: string;
+}
+
+export interface UICollectionDetail extends UICollectionSummary {
+  products: UIProduct[];
+}
+
+export async function fetchCollections(): Promise<UICollectionSummary[]> {
+  const items = await getCollections();
+  return items.map((c) => ({
+    id: c.id,
+    slug: c.slug,
+    title: c.title,
+    description: c.description || undefined,
+    coverImageUrl: c.coverImageUrl || undefined,
+  }));
+}
+
+/** Returns null when the collection is not published (404 from the API). */
+export async function fetchCollectionBySlug(slug: string): Promise<UICollectionDetail | null> {
+  if (Object.keys(cachedBrands).length === 0) {
+    await fetchBrands().catch(() => {});
+  }
+  let res;
+  try {
+    res = await getCollection(slug);
+  } catch (e) {
+    if ((e as { status?: number })?.status === 404) return null;
+    throw e;
+  }
+  return {
+    id: res.id,
+    slug: res.slug,
+    title: res.title,
+    description: res.description || undefined,
+    coverImageUrl: res.coverImageUrl || undefined,
+    products: res.products.map((p) =>
+      mapProductSummaryToCatalog(
+        { ...p, slug: '', createdAt: '', status: 'published' },
+        (p.brandId && cachedBrands[p.brandId]) || p.sellerName || undefined,
+      ),
+    ),
   };
 }
