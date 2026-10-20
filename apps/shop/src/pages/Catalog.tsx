@@ -82,20 +82,64 @@ export function Catalog() {
   const { isAuthenticated, user } = useAuth();
   const isCustomer = Boolean(isAuthenticated && user?.role === 'customer');
 
-  // Initialize state from URL params
-  const [activeCategory, setActiveCategory] = useState(searchParams.get('categoryId') || 'all');
-  const [activeBrand, setActiveBrand] = useState<string | null>(searchParams.get('brandId'));
-  const [priceRange, setPriceRange] = useState<[number, number]>([
-    Number(searchParams.get('minPriceCents')) / 100 || DEFAULT_PRICE_RANGE[0],
-    Number(searchParams.get('maxPriceCents')) / 100 || DEFAULT_PRICE_RANGE[1]
-  ]);
-  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'default');
-  const [onlyInStock, setOnlyInStock] = useState(searchParams.get('inStock') === 'true');
+  // The URL is the single source of truth for every filter (category, brand, price, sizes, sort, stock):
+  // the UI is derived from it, so reloads, direct links and Back/Forward always restore the full filter set.
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
 
-  // Sizes live in the URL (single source of truth) so Back/Forward and reloads restore them.
+  const activeCategory = searchParams.get('categoryId') || 'all';
+  const activeBrand = searchParams.get('brandId');
+  const sortBy = searchParams.get('sort') || 'default';
+  const onlyInStock = searchParams.get('inStock') === 'true';
+  const minPriceUrl = Number(searchParams.get('minPriceCents')) / 100 || DEFAULT_PRICE_RANGE[0];
+  const maxPriceUrl = Number(searchParams.get('maxPriceCents')) / 100 || DEFAULT_PRICE_RANGE[1];
+  const priceRange: [number, number] = [minPriceUrl, maxPriceUrl];
   const sizeKey = searchParams.get('size') || '';
   const activeSizeSystem = searchParams.get('sizeSystem');
   const activeSizes = useMemo(() => sizeKey.split(',').filter(Boolean), [sizeKey]);
+
+  // Single writer: always starts from the LATEST params (ref is updated synchronously), so rapid or batched
+  // changes never overwrite each other. User changes push one history entry; sanitising uses replace.
+  const updateParams = (mutate: (p: URLSearchParams) => void, replace = false) => {
+    const next = new URLSearchParams(searchParamsRef.current);
+    mutate(next);
+    if (next.toString() === searchParamsRef.current.toString()) return;
+    searchParamsRef.current = next;
+    setSearchParams(next, { replace });
+  };
+  const setParam = (p: URLSearchParams, key: string, value: string | null) => {
+    if (value) p.set(key, value); else p.delete(key);
+  };
+  const setActiveBrand = (id: string | null) => updateParams((p) => setParam(p, 'brandId', id));
+  const setSortBy = (value: string) => updateParams((p) => setParam(p, 'sort', value && value !== 'default' ? value : null));
+  const setOnlyInStock = (next: boolean) => updateParams((p) => setParam(p, 'inStock', next ? 'true' : null));
+  const setPriceRange = ([min, max]: [number, number]) =>
+    updateParams((p) => {
+      setParam(p, 'minPriceCents', min > DEFAULT_PRICE_RANGE[0] ? String(min * 100) : null);
+      setParam(p, 'maxPriceCents', max < DEFAULT_PRICE_RANGE[1] ? String(max * 100) : null);
+    });
+
+  // Price inputs keep a local draft while typing and commit ONE history entry after the user pauses.
+  const [priceDraft, setPriceDraft] = useState<[string, string]>([
+    minPriceUrl > DEFAULT_PRICE_RANGE[0] ? String(minPriceUrl) : '',
+    maxPriceUrl < DEFAULT_PRICE_RANGE[1] ? String(maxPriceUrl) : '',
+  ]);
+  useEffect(() => {
+    setPriceDraft([
+      minPriceUrl > DEFAULT_PRICE_RANGE[0] ? String(minPriceUrl) : '',
+      maxPriceUrl < DEFAULT_PRICE_RANGE[1] ? String(maxPriceUrl) : '',
+    ]);
+  }, [minPriceUrl, maxPriceUrl]);
+  const priceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editPrice = (index: 0 | 1, raw: string) => {
+    const draft: [string, string] = index === 0 ? [raw, priceDraft[1]] : [priceDraft[0], raw];
+    setPriceDraft(draft);
+    if (priceTimer.current) clearTimeout(priceTimer.current);
+    priceTimer.current = setTimeout(() => {
+      setPriceRange([Number(draft[0]) || DEFAULT_PRICE_RANGE[0], Number(draft[1]) || DEFAULT_PRICE_RANGE[1]]);
+    }, 500);
+  };
+  useEffect(() => () => { if (priceTimer.current) clearTimeout(priceTimer.current); }, []);
 
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [apiProducts, setApiProducts] = useState<Product[]>([]);
@@ -110,10 +154,6 @@ export function Catalog() {
   const PAGE_LIMIT = 24;
 
   const metaLoaded = useRef(false);
-  // Always the latest URL params: async work below must never write back a stale copy.
-  const searchParamsRef = useRef(searchParams);
-  searchParamsRef.current = searchParams;
-
   const buildParams = useCallback(() => {
     const params: Record<string, any> = { limit: PAGE_LIMIT };
     if (sortBy && sortBy !== 'default') {
@@ -131,7 +171,7 @@ export function Catalog() {
     const searchQuery = searchParams.get('q');
     if (searchQuery) params.q = searchQuery;
     return params;
-  }, [activeCategory, activeBrand, activeSizes, activeSizeSystem, onlyInStock, priceRange, sortBy, searchParams]);
+  }, [activeCategory, activeBrand, activeSizes, activeSizeSystem, onlyInStock, minPriceUrl, maxPriceUrl, sortBy, searchParams]);
 
   useEffect(() => {
     setOffset(0);
@@ -160,22 +200,6 @@ export function Catalog() {
         setHasMore(productsRes.items.length === PAGE_LIMIT && productsRes.totalCount > PAGE_LIMIT);
         setError(null);
 
-        // Sync URL
-        const newParams = new URLSearchParams(searchParamsRef.current);
-        if (activeCategory !== 'all') newParams.set('categoryId', activeCategory); else newParams.delete('categoryId');
-        if (activeBrand) newParams.set('brandId', activeBrand); else newParams.delete('brandId');
-        if (onlyInStock) newParams.set('inStock', 'true'); else newParams.delete('inStock');
-        if (priceRange[0] > DEFAULT_PRICE_RANGE[0]) newParams.set('minPriceCents', (priceRange[0] * 100).toString()); else newParams.delete('minPriceCents');
-        if (priceRange[1] < DEFAULT_PRICE_RANGE[1]) newParams.set('maxPriceCents', (priceRange[1] * 100).toString()); else newParams.delete('maxPriceCents');
-        if (sortBy && sortBy !== 'default') {
-          newParams.set('sort', sortBy);
-        } else {
-          newParams.delete('sort');
-        }
-        if (newParams.toString() !== searchParamsRef.current.toString()) {
-          setSearchParams(newParams, { replace: true });
-        }
-
       } catch (err) {
         if (cancelled) return;
         console.error('Failed to load products:', err);
@@ -189,7 +213,7 @@ export function Catalog() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCategory, activeBrand, sizeKey, activeSizeSystem, onlyInStock, priceRange, sortBy, searchParams.get('q'), isCustomer]);
+  }, [activeCategory, activeBrand, sizeKey, activeSizeSystem, onlyInStock, minPriceUrl, maxPriceUrl, sortBy, searchParams.get('q'), isCustomer]);
 
   const loadMore = async () => {
     if (isLoadingMore || !hasMore) return;
@@ -213,14 +237,10 @@ export function Catalog() {
   const hasActiveFilters = activeCategory !== 'all' || activeBrand !== null || activeSizes.length > 0 || onlyInStock || hasActivePriceFilter;
   const activeFiltersCount = (activeBrand ? 1 : 0) + (activeCategory !== 'all' ? 1 : 0) + (activeSizes.length > 0 ? 1 : 0) + (onlyInStock ? 1 : 0) + (hasActivePriceFilter ? 1 : 0);
 
-  const resetFilters = () => {
-    setActiveCategory('all');
-    setActiveBrand(null);
-    setActiveCategory('all');
-    clearSizes(true);
-    setOnlyInStock(false);
-    setPriceRange(DEFAULT_PRICE_RANGE);
-  };
+  const resetFilters = () =>
+    updateParams((p) => {
+      ['categoryId', 'brandId', 'size', 'sizeSystem', 'inStock', 'minPriceCents', 'maxPriceCents'].forEach((k) => p.delete(k));
+    });
 
   // Size groups: the current category's own system; for "all" every distinct system, kept apart.
   const sizeGroups = useMemo(() => {
@@ -235,17 +255,16 @@ export function Catalog() {
     return [...byCode.values()];
   }, [activeCategory, categories]);
 
-  const writeSizes = (sizes: string[], system: string | null, replace: boolean) => {
-    const next = new URLSearchParams(searchParams);
-    if (sizes.length > 0 && system) {
-      next.set('size', sizes.join(','));
-      next.set('sizeSystem', system);
-    } else {
-      next.delete('size');
-      next.delete('sizeSystem');
-    }
-    setSearchParams(next, { replace });
-  };
+  const writeSizes = (sizes: string[], system: string | null, replace: boolean) =>
+    updateParams((p) => {
+      if (sizes.length > 0 && system) {
+        p.set('size', sizes.join(','));
+        p.set('sizeSystem', system);
+      } else {
+        p.delete('size');
+        p.delete('sizeSystem');
+      }
+    }, replace);
 
   const clearSizes = (replace = false) => writeSizes([], null, replace);
 
@@ -261,16 +280,22 @@ export function Catalog() {
 
   const removeSize = (size: string) => writeSizes(activeSizes.filter((s) => s !== size), activeSizeSystem, false);
 
-  // Category change: keep only sizes that are valid for the new category's system.
-  const changeCategory = (categoryId: string) => {
-    setActiveCategory(categoryId);
-    if (activeSizes.length === 0) return;
-    const sys = categoryId === 'all' ? null : categories.find((c) => c.id === categoryId)?.sizeSystem;
-    if (categoryId === 'all') return; // every system stays selectable under "all"
-    if (!sys || sys.code !== activeSizeSystem) return clearSizes(true);
-    const allowed = new Set(sys.values.map((v) => v.value));
-    writeSizes(activeSizes.filter((v) => allowed.has(v)), sys.code, true);
-  };
+  // Category change is ONE URL write (one history entry): category + only the sizes valid for it.
+  const changeCategory = (categoryId: string) =>
+    updateParams((p) => {
+      setParam(p, 'categoryId', categoryId === 'all' ? null : categoryId);
+      if (categoryId === 'all' || activeSizes.length === 0) return;
+      const sys = categories.find((c) => c.id === categoryId)?.sizeSystem;
+      const allowed = sys && sys.code === activeSizeSystem ? new Set(sys.values.map((v) => v.value)) : null;
+      const valid = allowed ? activeSizes.filter((v) => allowed.has(v)) : [];
+      if (sys && valid.length > 0) {
+        p.set('size', valid.join(','));
+        p.set('sizeSystem', sys.code);
+      } else {
+        p.delete('size');
+        p.delete('sizeSystem');
+      }
+    });
 
   // A crafted/stale URL must not keep sizes that don't exist for the current category.
   useEffect(() => {
@@ -380,8 +405,8 @@ export function Catalog() {
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] uppercase font-mono text-black/40 dark:text-white/40">От</span>
             <input
               type="number"
-              value={priceRange[0] || ''}
-              onChange={(e) => setPriceRange([Number(e.target.value) || 0, priceRange[1]])}
+              value={priceDraft[0]}
+              onChange={(e) => editPrice(0, e.target.value)}
               className="w-full h-8 pl-8 pr-2 rounded-[2px] border border-black/20 dark:border-white/20 bg-transparent text-[12px] font-mono text-black dark:text-white transition-colors focus:border-black/60 dark:focus:border-white/60 outline-none"
             />
           </div>
@@ -390,8 +415,8 @@ export function Catalog() {
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] uppercase font-mono text-black/40 dark:text-white/40">До</span>
             <input
               type="number"
-              value={priceRange[1] === 100000 ? '' : priceRange[1]}
-              onChange={(e) => setPriceRange([priceRange[0], Number(e.target.value) || 100000])}
+              value={priceDraft[1]}
+              onChange={(e) => editPrice(1, e.target.value)}
               className="w-full h-8 pl-8 pr-2 rounded-[2px] border border-black/20 dark:border-white/20 bg-transparent text-[12px] font-mono text-black dark:text-white transition-colors focus:border-black/60 dark:focus:border-white/60 outline-none"
             />
           </div>
@@ -401,7 +426,7 @@ export function Catalog() {
       {/* В наличии */}
       <FilterSection title="Наличие" defaultOpen={onlyInStock}>
         <button
-          onClick={() => setOnlyInStock(prev => !prev)}
+          onClick={() => setOnlyInStock(!onlyInStock)}
           className="flex items-center gap-3 py-1.5 group text-left w-full"
         >
           <div className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
