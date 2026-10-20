@@ -157,6 +157,14 @@ export async function fetchRecentlyViewed(limit = 12): Promise<{ items: UIProduc
   }
 }
 
+/** Personal feed of storefront-eligible products of the buyer's favorite brands. Errors propagate so the UI can show a retry. */
+export async function fetchFavoriteBrandProducts(limit = 12, offset = 0): Promise<{ items: UIProduct[], totalCount: number }> {
+  const { getFavoriteBrandProducts } = await import('@zamk/api-client/src/customer');
+  const res = await getFavoriteBrandProducts(limit, offset);
+  const items = await mapFavoritesToCatalog(res.items);
+  return { items, totalCount: res.totalCount };
+}
+
 export async function fetchForYouProducts(limit = 12): Promise<{ items: UIProduct[], totalCount: number }> {
   const { getCustomerForYou } = await import('@zamk/api-client/src/customer');
   try {

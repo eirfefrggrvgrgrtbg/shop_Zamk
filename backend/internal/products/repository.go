@@ -1080,6 +1080,12 @@ func (r *Repository) ListPublishedProducts(ctx context.Context, filter PublicPro
 		argID++
 	}
 
+	if filter.BrandIDs != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND p.brand_id = ANY($%d::uuid[])", argID))
+		args = append(args, filter.BrandIDs)
+		argID++
+	}
+
 	if filter.SellerID != nil {
 		queryBuilder.WriteString(fmt.Sprintf(" AND p.seller_id = $%d", argID))
 		args = append(args, *filter.SellerID)

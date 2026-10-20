@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -151,4 +153,68 @@ func (h *Handler) RemoveFavoriteBrand(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// FavoriteBrandFeed is the personal feed of storefront-eligible products of the buyer's active favorite brands.
+// Order is the canonical catalog order (published_at DESC, created_at DESC, id); published_at is not guaranteed
+// to be the first-publication time, so the feed is not presented as "new arrivals".
+type FavoriteBrandFeed struct {
+	Items      []products.PublicProduct `json:"items"`
+	TotalCount int                      `json:"totalCount"`
+	Order      string                   `json:"order"`
+}
+
+func (r *Repository) ListActiveFavoriteBrandIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT fb.brand_id FROM favorite_brands fb
+		INNER JOIN brands b ON b.id = fb.brand_id AND b.is_active = true
+		WHERE fb.user_id = $1
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (s *Service) ListFavoriteBrandProducts(ctx context.Context, userID uuid.UUID, limit, offset int) (FavoriteBrandFeed, error) {
+	feed := FavoriteBrandFeed{Items: []products.PublicProduct{}, Order: "catalog_default"}
+	ids, err := s.repo.ListActiveFavoriteBrandIDs(ctx, userID)
+	if err != nil {
+		return feed, err
+	}
+	if len(ids) == 0 || s.products == nil {
+		return feed, nil
+	}
+	// Eligibility (published, active seller, free stock) is applied by the canonical storefront predicate inside the listing.
+	resp, err := s.products.ListPublicProducts(ctx, products.PublicProductFilter{BrandIDs: ids}, limit, offset)
+	if err != nil {
+		return feed, err
+	}
+	feed.Items, feed.TotalCount = resp.Items, resp.TotalCount
+	return feed, nil
+}
+
+func (h *Handler) ListFavoriteBrandProducts(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromRequest(r)
+	if !ok {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "Missing user context")
+		return
+	}
+	page := pagination.FromRequest(r)
+	feed, err := h.service.ListFavoriteBrandProducts(r.Context(), userID, page.Limit, page.Offset)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list favorite brand products")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(feed)
 }

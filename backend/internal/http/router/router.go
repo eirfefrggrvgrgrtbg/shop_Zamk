@@ -343,6 +343,7 @@ func New(
 		r.Delete("/favorites/{productId}", favoritesHandler.RemoveFavorite)
 
 		r.Get("/favorite-brands", favoritesHandler.ListFavoriteBrands)
+		r.Get("/favorite-brands/products", favoritesHandler.ListFavoriteBrandProducts)
 		r.Post("/favorite-brands/{brandId}", favoritesHandler.AddFavoriteBrand)
 		r.Delete("/favorite-brands/{brandId}", favoritesHandler.RemoveFavoriteBrand)
 

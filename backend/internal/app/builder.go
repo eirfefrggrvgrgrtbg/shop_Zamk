@@ -171,7 +171,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	reviewsHandler = reviewsHandler.WithAudit(staffAuditRepo).WithStaffSvc(staffService)
 
 	favoritesRepo := favorites.NewRepository(pgClient.Pool)
-	favoritesService := favorites.NewService(favoritesRepo)
+	favoritesService := favorites.NewService(favoritesRepo).WithProducts(productsService)
 	favoritesHandler := favorites.NewHandler(favoritesService)
 
 	personalizationRepo := personalization.NewRepository(pgClient.Pool)

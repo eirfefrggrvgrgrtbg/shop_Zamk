@@ -1,10 +1,15 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Loader2, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { AccountLayout } from '../components/account/AccountLayout';
 import { useFavoriteBrands } from '../contexts/FavoriteBrandsContext';
+import { ProductCard } from '../components/product/ProductCard';
+import { fetchFavoriteBrandProducts } from '../api/publicCatalog';
+import type { Product } from '../types/catalog';
+
+const FEED_PAGE_SIZE = 12;
 
 export function FavoriteBrands() {
   return (
@@ -110,6 +115,100 @@ function FavoriteBrandsContent() {
           </li>
         ))}
       </ul>
+      <FavoriteBrandsFeed brandKey={brands.map((b) => b.id).join(',')} />
     </>
+  );
+}
+
+// Personal feed. Ordered by the canonical catalog order (not a reliable "new arrivals" signal), hence the neutral title.
+function FavoriteBrandsFeed({ brandKey }: { brandKey: string }) {
+  const [items, setItems] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [moreError, setMoreError] = useState<string | null>(null);
+  const requestId = useRef(0);
+
+  const loadFirst = useCallback(async () => {
+    const id = ++requestId.current;
+    setIsLoading(true);
+    setError(null);
+    setMoreError(null);
+    try {
+      const res = await fetchFavoriteBrandProducts(FEED_PAGE_SIZE, 0);
+      if (id !== requestId.current) return;
+      setItems(res.items);
+      setTotal(res.totalCount);
+    } catch {
+      if (id !== requestId.current) return;
+      setError('Не удалось загрузить вещи любимых брендов.');
+    } finally {
+      if (id === requestId.current) setIsLoading(false);
+    }
+  }, []);
+
+  // Refetch whenever the set of favorite brands changes (e.g. a brand was removed above).
+  useEffect(() => {
+    loadFirst();
+  }, [brandKey, loadFirst]);
+
+  const loadMore = async () => {
+    const id = requestId.current;
+    setIsLoadingMore(true);
+    setMoreError(null);
+    try {
+      const res = await fetchFavoriteBrandProducts(FEED_PAGE_SIZE, items.length);
+      if (id !== requestId.current) return;
+      setItems((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        return [...prev, ...res.items.filter((p) => !seen.has(p.id))];
+      });
+      setTotal(res.totalCount);
+    } catch {
+      if (id === requestId.current) setMoreError('Не удалось загрузить ещё. Попробуйте снова.');
+    } finally {
+      if (id === requestId.current) setIsLoadingMore(false);
+    }
+  };
+
+  return (
+    <section className="mt-12" aria-labelledby="favorite-brands-feed-title" data-testid="favorite-brands-feed">
+      <h2 id="favorite-brands-feed-title" className="text-2xl md:text-3xl font-serif text-graphite dark:text-white mb-6">
+        Вещи любимых брендов
+      </h2>
+      {isLoading ? (
+        <div className="flex justify-center items-center h-40" role="status" aria-label="Загрузка">
+          <Loader2 className="w-6 h-6 animate-spin text-graphite/40" />
+        </div>
+      ) : error ? (
+        <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-300 flex flex-wrap items-center justify-between gap-3">
+          <span>{error}</span>
+          <Button variant="outline" onClick={loadFirst}>Повторить</Button>
+        </div>
+      ) : items.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border-lighter dark:border-white/10 bg-white/40 dark:bg-white/5 p-8 text-center text-sm text-graphite-light dark:text-white/60">
+          Сейчас у ваших любимых брендов нет доступных вещей. Они появятся здесь, как только бренды опубликуют новые товары.
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+            {items.map((product) => (
+              <ProductCard key={product.id} product={product} placement="favorite_brands_feed" />
+            ))}
+          </div>
+          {moreError && (
+            <p role="alert" className="mt-4 text-center text-xs text-red-600 dark:text-red-300">{moreError}</p>
+          )}
+          {items.length < total && (
+            <div className="mt-8 flex justify-center">
+              <Button variant="outline" onClick={loadMore} disabled={isLoadingMore}>
+                {isLoadingMore ? 'Загрузка…' : 'Показать ещё'}
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
   );
 }

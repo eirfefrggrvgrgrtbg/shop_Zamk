@@ -7,8 +7,19 @@ import (
 	"github.com/google/uuid"
 )
 
+// ProductLister is the slice of the products service used for the personal brand feed.
+type ProductLister interface {
+	ListPublicProducts(ctx context.Context, filter products.PublicProductFilter, limit, offset int) (products.PublicProductListResponse, error)
+}
+
 type Service struct {
-	repo *Repository
+	repo     *Repository
+	products ProductLister
+}
+
+func (s *Service) WithProducts(p ProductLister) *Service {
+	s.products = p
+	return s
 }
 
 func NewService(repo *Repository) *Service {

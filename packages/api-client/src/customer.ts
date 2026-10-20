@@ -153,6 +153,14 @@ export const getFavoriteBrands = async (): Promise<import('./types').FavoriteBra
   return Array.isArray(res) ? res : (res?.items || []);
 };
 
+export const getFavoriteBrandProducts = async (
+  limit = 12,
+  offset = 0,
+): Promise<{ items: any[]; totalCount: number; order: string }> => {
+  const res = await request<any>('GET', `/customer/favorite-brands/products?limit=${limit}&offset=${offset}`);
+  return { items: res?.items || [], totalCount: res?.totalCount ?? 0, order: res?.order || '' };
+};
+
 export const addFavoriteBrand = async (brandId: string): Promise<any> => {
   return request('POST', `/customer/favorite-brands/${brandId}`);
 };
