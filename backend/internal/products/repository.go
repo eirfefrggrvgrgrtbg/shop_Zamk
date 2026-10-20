@@ -1733,6 +1733,7 @@ func (r *Repository) GetProductSizeChart(ctx context.Context, productID uuid.UUI
 		FROM product_size_chart_rows pscr
 		LEFT JOIN size_values sv ON pscr.size_value_id = sv.id
 		WHERE pscr.size_chart_id = $1
+		ORDER BY sv.sort_order ASC NULLS LAST, sv.value ASC
 	`, chart.ID)
 	if err != nil {
 		return nil, err

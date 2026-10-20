@@ -1971,6 +1971,10 @@ func (s *Service) validateCategorySchema(
 		return fmt.Errorf("cannot use non-leaf category %s", categoryID)
 	}
 
+	if err := s.validateSizeChartRows(ctx, categoryID, sizeChartRows); err != nil {
+		return err
+	}
+
 	// Fetch schema
 	rows, err := s.dbPool.Pool.Query(ctx, `
 		SELECT ad.id, ad.code, ad.value_type, ad.value_source, ad.scope, cad.required, cad.dictionary_id, cad.min_values, cad.max_values

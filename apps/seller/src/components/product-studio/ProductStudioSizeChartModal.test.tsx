@@ -180,4 +180,35 @@ describe('ProductStudioSizeChartModal', () => {
     ]);
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
+
+  it('explains that garment measurements (not body parameters) are expected', () => {
+    render(
+      <ProductStudioSizeChartModal isOpen={true} onClose={vi.fn()} schema={mockSchema} draftSizes={draftSizes} onSaveSizeChart={vi.fn()} />
+    );
+    expect(screen.getByTestId('size-chart-explainer').textContent).toMatch(/замеры самого изделия/);
+    expect(screen.getByTestId('size-chart-explainer').textContent).toMatch(/не параметры тела/);
+  });
+
+  it('clearing an optional parameter removes it from the saved chart; untouched sizes save as empty rows', () => {
+    const handleSave = vi.fn();
+    const existing = {
+      rows: [{ sizeValueId: 'sz-s', sizeValueName: 'S', measurements: { chest: 96, length: 70, sleeve: 62 } }],
+    } as any;
+    render(
+      <ProductStudioSizeChartModal
+        isOpen={true}
+        onClose={vi.fn()}
+        schema={mockSchema}
+        draftSizes={draftSizes}
+        sizeChart={existing}
+        onSaveSizeChart={handleSave}
+      />
+    );
+    expect((screen.getByTestId('measurement-input-sz-s-sleeve') as HTMLInputElement).value).toBe('62');
+    fireEvent.change(screen.getByTestId('measurement-input-sz-s-sleeve'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('size-chart-modal-save'));
+    const saved = handleSave.mock.calls[0][0];
+    expect(saved.rows[0].measurements).toEqual({ chest: 96, length: 70 });
+    expect(saved.rows[1].measurements).toEqual({});
+  });
 });

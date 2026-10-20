@@ -633,7 +633,7 @@ export function ProductPresentationCore({
                 </p>
                 {sizeChartSlot ? (
                   sizeChartSlot
-                ) : (
+                ) : (product.sizeChart?.rows?.length ?? 0) > 0 && (
                   <button
                     type="button"
                     onClick={() => setShowSizeChart(true)}
@@ -947,10 +947,28 @@ export function ProductPresentationCore({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-lighter dark:divide-white/10">
-                    {product.sizeChart.rows.map((row, i) => (
-                      <tr key={i} className="hover:bg-ice/30 dark:hover:bg-white/[0.02] transition-colors">
+                    {product.sizeChart.rows.map((row, i) => {
+                      // Highlight only when the chart row maps unambiguously to the selected size (by id, else by label).
+                      const isSelectedRow = !!selectedSize && (
+                        (row.sizeValueId && row.sizeValueId === selectedSize.id) ||
+                        (!row.sizeValueId && row.sizeValueName === selectedSize.label)
+                      );
+                      return (
+                      <tr
+                        key={i}
+                        data-testid="size-chart-row"
+                        data-selected={isSelectedRow ? 'true' : undefined}
+                        aria-current={isSelectedRow ? 'true' : undefined}
+                        className={cn(
+                          'transition-colors',
+                          isSelectedRow
+                            ? 'bg-graphite/5 dark:bg-white/10'
+                            : 'hover:bg-ice/30 dark:hover:bg-white/[0.02]'
+                        )}
+                      >
                         <td className="py-3 px-4 font-semibold text-graphite dark:text-white whitespace-nowrap">
                           {row.sizeValueName}
+                          {isSelectedRow && <span className="ml-2 text-[10px] uppercase tracking-wider text-ash">выбран</span>}
                         </td>
                         {activeFields.map((field) => (
                           <td key={field} className="py-3 px-4 text-ash font-mono text-xs sm:text-sm whitespace-nowrap">
@@ -958,12 +976,13 @@ export function ProductPresentationCore({
                           </td>
                         ))}
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
               <p className="mt-3 text-xs text-ash">
-                * Все замеры сняты по готовому изделию в разложенном виде. Допустимая погрешность ±1-2 см.
+                <span className="font-medium text-graphite dark:text-white">Замеры изделия</span> — размеры самой вещи, а не параметры тела. Сняты по готовому изделию в разложенном виде, допустимая погрешность ±1–2 см.
               </p>
             </div>
 

@@ -151,6 +151,23 @@ export function getSizeChartCompleteness(
     Boolean(schema?.sizeChartRequired) ||
     Boolean(schema?.attributes?.some((a) => a.valueSource === 'VARIANT_SIZE' && a.required));
 
+  // CATALOG.C1: a category that defines garment measurement fields lets the seller add them voluntarily,
+  // even when the table is not mandatory. Nothing becomes required in that case.
+  if (
+    schema &&
+    !categoryUsesSizes &&
+    (schema.sizeChartFields?.length ?? 0) > 0 &&
+    getOfferedSizes(draft).length > 0
+  ) {
+    return {
+      isNeeded: true,
+      requiredCellCount: 0,
+      filledRequiredCellCount: 0,
+      isComplete: true,
+      missingCells: [],
+    };
+  }
+
   if (!schema || !categoryUsesSizes) {
     return {
       isNeeded: false,

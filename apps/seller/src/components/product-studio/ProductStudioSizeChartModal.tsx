@@ -171,6 +171,11 @@ export function ProductStudioSizeChartModal({
           </button>
         </div>
 
+        <div className="px-6 py-3 text-xs text-graphite-light dark:text-white/70 bg-amber-50/50 dark:bg-amber-950/10 border-b border-border-soft dark:border-white/10 shrink-0" data-testid="size-chart-explainer">
+          <strong className="font-semibold">Укажите замеры самого изделия</strong>, снятые на разложенной вещи, а не параметры тела покупателя.
+          Необязательные параметры можно оставить пустыми — очистите ячейку, чтобы убрать значение. Таблицу можно не заполнять, если категория её не требует.
+        </div>
+
         {/* Progress Bar / Summary */}
         <div className="px-6 py-3 bg-[#fafafc] dark:bg-white/[0.02] border-b border-border-soft dark:border-white/10 flex items-center justify-between flex-wrap gap-2 shrink-0">
           <div className="flex items-center gap-2">

@@ -287,6 +287,25 @@ describe('productStudioReadinessHelper', () => {
     expect(c.missingCells).toHaveLength(2);
   });
 
+  it('getSizeChartCompleteness: optional chart is available (and never required) for a non-size category with chart fields', () => {
+    const optionalSchema = {
+      ...sampleSizeChartSchema,
+      dimensionType: 'NONE',
+      sizeChartRequired: false,
+      attributes: [],
+    } as any;
+    const draft = createTestDraft({
+      variants: [{ id: 'v1', sizeValueId: 'sz-s', size: 'S', priceCents: 1000 }],
+      sizeChart: { rows: [] },
+    });
+    const c = getSizeChartCompleteness(draft, optionalSchema);
+    expect(c.isNeeded).toBe(true);
+    expect(c.requiredCellCount).toBe(0);
+    expect(c.isComplete).toBe(true);
+    // no offered sizes -> nothing to measure, no button
+    expect(getSizeChartCompleteness(createTestDraft({ variants: [] }), optionalSchema).isNeeded).toBe(false);
+  });
+
   it('getSizeChartCompleteness: partial measurements are NOT complete', () => {
     const draft = createTestDraft({
       variants: [

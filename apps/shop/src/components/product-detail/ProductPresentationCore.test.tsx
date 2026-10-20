@@ -134,4 +134,51 @@ describe('ProductPresentationCore', () => {
     fireEvent.click(trigger);
     expect(screen.queryByRole('dialog', { name: 'Просмотр фотографии на весь экран' })).not.toBeNull();
   });
+
+  describe('size chart (CATALOG.C1)', () => {
+    const chart = {
+      fields: [
+        { code: 'CHEST', name: 'Обхват груди', unit: 'см' },
+        { code: 'LENGTH', name: 'Длина изделия', unit: 'см' },
+      ],
+      rows: [
+        { sizeValueId: 'size-1', sizeValueName: 'S', measurements: { CHEST: 100, LENGTH: 68 } },
+        { sizeValueId: 'size-2', sizeValueName: 'M', measurements: { CHEST: 104.5 } },
+      ],
+    };
+
+    it('shows no size-chart action when the product has no measurements', () => {
+      renderWithRouter(<ProductPresentationCore {...defaultProps} />);
+      expect(screen.queryByRole('button', { name: 'Таблица размеров' })).toBeNull();
+    });
+
+    it('opens the table with garment measurements, units and the explanation', () => {
+      renderWithRouter(<ProductPresentationCore {...defaultProps} product={{ ...mockProduct, sizeChart: chart } as any} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Таблица размеров' }));
+      expect(screen.getByText('Обхват груди, см')).not.toBeNull();
+      expect(screen.getByText('104.5')).not.toBeNull();
+      expect(screen.getAllByText('—').length).toBe(1); // M has no LENGTH: no fake value
+      expect(screen.getByText(/не параметры тела/)).not.toBeNull();
+    });
+
+    it('highlights only the row of the selected size', () => {
+      renderWithRouter(
+        <ProductPresentationCore
+          {...defaultProps}
+          product={{ ...mockProduct, sizeChart: chart } as any}
+          selectedSizeId="size-2"
+          selectedSize={{ id: 'size-2', label: 'M', state: 'SOLD_OUT' } as any}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Таблица размеров' }));
+      const rows = screen.getAllByTestId('size-chart-row');
+      expect(rows.map((r) => r.getAttribute('data-selected'))).toEqual([null, 'true']);
+    });
+
+    it('highlights nothing when no size is selected', () => {
+      renderWithRouter(<ProductPresentationCore {...defaultProps} product={{ ...mockProduct, sizeChart: chart } as any} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Таблица размеров' }));
+      expect(screen.getAllByTestId('size-chart-row').every((r) => r.getAttribute('data-selected') === null)).toBe(true);
+    });
+  });
 });
