@@ -272,13 +272,16 @@ function checkGitSafety(cmd, transcriptPath) {
 
     // 1. Check if this is a finalize.sh execution
     if (isFinalizeInvocation(tokens)) {
-      if (!isOwnerFinalizeAuthorized(transcriptPath)) {
-        return {
-          decision: 'deny',
-          reason: `Blocked by ZAMK Git Safety Hook: Canonical 'finalize.sh' is locked. Finalization requires explicit Product Owner acceptance authorization ('${AUTH_TOKEN}') in the latest user request.`
-        };
+      const hasPushFlag = tokens.some(t => t === '--push');
+      if (hasPushFlag) {
+        if (!isOwnerFinalizeAuthorized(transcriptPath)) {
+          return {
+            decision: 'deny',
+            reason: `Blocked by ZAMK Git Safety Hook: Pushing to remote via 'finalize.sh --push' requires explicit Product Owner authorization ('${AUTH_TOKEN}') in the latest user request.`
+          };
+        }
       }
-      // If authorized, finalize.sh is allowed!
+      // Canonical finalize.sh for local commit (or authorized push) is allowed
       continue;
     }
 
