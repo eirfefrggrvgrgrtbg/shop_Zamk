@@ -40,11 +40,11 @@ func (r *Repository) CreateOrderItemTx(ctx context.Context, tx pgx.Tx, item *Ord
 
 func (r *Repository) CreateOrderFulfillmentTx(ctx context.Context, tx pgx.Tx, f *OrderFulfillment) error {
 	query := `
-		INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, seller_amount_cents)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO order_fulfillments (id, order_id, seller_id, status, subtotal_cents, commission_bps, commission_frozen, seller_amount_cents)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at, updated_at
 	`
-	return tx.QueryRow(ctx, query, f.ID, f.OrderID, f.SellerID, f.Status, f.SubtotalCents, f.CommissionBps, f.SellerAmountCents).Scan(&f.CreatedAt, &f.UpdatedAt)
+	return tx.QueryRow(ctx, query, f.ID, f.OrderID, f.SellerID, f.Status, f.SubtotalCents, f.CommissionBps, f.CommissionFrozen, f.SellerAmountCents).Scan(&f.CreatedAt, &f.UpdatedAt)
 }
 
 func (r *Repository) MarkOrderFulfillmentsStatusTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, fromStatus, toStatus string) (int64, error) {

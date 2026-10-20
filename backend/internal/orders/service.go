@@ -293,6 +293,7 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 				Status:            "awaiting_payment",
 				SubtotalCents:     subtotal,
 				CommissionBps:     commissionBps,
+				CommissionFrozen:  true,
 				SellerAmountCents: sellerAmount,
 			}
 			if err := s.repo.CreateOrderFulfillmentTx(ctx, tx, f); err != nil {

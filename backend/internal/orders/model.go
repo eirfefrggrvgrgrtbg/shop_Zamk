@@ -58,6 +58,7 @@ type OrderFulfillment struct {
 	Status            string    `json:"status" db:"status"`
 	SubtotalCents     int64     `json:"subtotalCents" db:"subtotal_cents"`
 	CommissionBps     int       `json:"commissionBps" db:"commission_bps"`
+	CommissionFrozen  bool      `json:"-" db:"commission_frozen"`
 	SellerAmountCents int64     `json:"sellerAmountCents" db:"seller_amount_cents"`
 	CreatedAt         time.Time `json:"createdAt" db:"created_at"`
 	UpdatedAt         time.Time `json:"updatedAt" db:"updated_at"`

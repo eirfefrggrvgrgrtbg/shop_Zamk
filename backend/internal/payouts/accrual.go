@@ -38,7 +38,14 @@ type accrualLine struct {
 	CommissionCents     int64
 	CampaignID          *uuid.UUID
 	PromoCodeID         *uuid.UUID
+	CommissionSource    string
 }
+
+// Commission rate sources recorded in the sale_gross metadata.
+const (
+	commissionSourceFrozen = "frozen_at_checkout"
+	commissionSourceActive = "active_rule_at_delivery"
+)
 
 func (l accrualLine) SellerEarningCents() int64 {
 	return l.CommissionBaseCents - l.CommissionCents
@@ -53,6 +60,7 @@ func (l accrualLine) metadata() ([]byte, error) {
 		"customer_paid_cents":   l.CustomerPaidCents,
 		"commission_base_cents": l.CommissionBaseCents,
 		"commission_bps":        l.CommissionBps,
+		"commission_source":     l.CommissionSource,
 	}
 	if l.PromoCodeID != nil {
 		meta["pricing_basis"] = "promotion"
@@ -69,7 +77,7 @@ func (l accrualLine) metadata() ([]byte, error) {
 func (s *Service) accrueOrderItemsTx(ctx context.Context, tx pgx.Tx, filterSQL string, filterValue uuid.UUID) error {
 	query := fmt.Sprintf(`
 		SELECT oi.id, oi.order_id, oi.seller_id, oi.price_cents, oi.quantity,
-		       f.commission_bps,
+		       f.commission_bps, f.commission_frozen,
 		       oip.base_unit_price_cents, oip.total_seller_discount_cents, oip.total_zamk_subsidy_cents,
 		       oip.total_customer_paid_cents, oip.total_commission_base_cents,
 		       oip.commission_rate_bps, oip.total_commission_charged_cents,
@@ -96,6 +104,7 @@ func (s *Service) accrueOrderItemsTx(ctx context.Context, tx pgx.Tx, filterSQL s
 		PriceCents            int64
 		Quantity              int
 		FrozenBps             *int
+		CommissionFrozen      *bool
 		PromoBaseUnit         *int64
 		PromoSellerDiscount   *int64
 		PromoZamkSubsidy      *int64
@@ -111,7 +120,7 @@ func (s *Service) accrueOrderItemsTx(ctx context.Context, tx pgx.Tx, filterSQL s
 	for rows.Next() {
 		var r rawItem
 		if err := rows.Scan(&r.ID, &r.OrderID, &r.SellerID, &r.PriceCents, &r.Quantity,
-			&r.FrozenBps,
+			&r.FrozenBps, &r.CommissionFrozen,
 			&r.PromoBaseUnit, &r.PromoSellerDiscount, &r.PromoZamkSubsidy,
 			&r.PromoCustomerPaid, &r.PromoCommissionBase,
 			&r.PromoCommissionBps, &r.PromoCommission,
@@ -133,11 +142,16 @@ func (s *Service) accrueOrderItemsTx(ctx context.Context, tx pgx.Tx, filterSQL s
 			continue // idempotent: an order item is accrued exactly once
 		}
 
-		bps := 0
-		if r.FrozenBps != nil {
+		// Fulfillments created by checkout carry the rate frozen at order time. Legacy rows
+		// (commission_frozen = false, or no fulfillment at all) only hold the column default /
+		// marketplace config rate, so their rate is chosen at delivery as before M0.1.
+		frozen := r.FrozenBps != nil && r.CommissionFrozen != nil && *r.CommissionFrozen
+		var bps int
+		source := commissionSourceFrozen
+		if frozen {
 			bps = *r.FrozenBps
 		} else {
-			// Defensive fallback for rows without a fulfillment snapshot.
+			source = commissionSourceActive
 			bps, err = s.GetActiveCommissionRateBPS(ctx, r.SellerID)
 			if err != nil {
 				return fmt.Errorf("failed to get commission rate: %w", err)
@@ -154,10 +168,13 @@ func (s *Service) accrueOrderItemsTx(ctx context.Context, tx pgx.Tx, filterSQL s
 			CommissionBaseCents: baseGross,
 			CommissionBps:       bps,
 			CommissionCents:     (baseGross * int64(bps)) / 10000,
+			CommissionSource:    source,
 		}
 
 		if r.PromoCodeID != nil {
-			if *r.PromoCommissionBps != bps {
+			// The snapshot rate and charged commission of legacy promo orders were computed with the
+			// marketplace default rate, so they are only compared and reused for frozen fulfillments.
+			if frozen && *r.PromoCommissionBps != bps {
 				return fmt.Errorf("%w: order item %s snapshot %d bps, fulfillment %d bps",
 					ErrCommissionSnapshotMismatch, r.ID, *r.PromoCommissionBps, bps)
 			}
@@ -170,7 +187,11 @@ func (s *Service) accrueOrderItemsTx(ctx context.Context, tx pgx.Tx, filterSQL s
 			line.ZamkSubsidyCents = *r.PromoZamkSubsidy
 			line.CustomerPaidCents = *r.PromoCustomerPaid
 			line.CommissionBaseCents = *r.PromoCommissionBase
-			line.CommissionCents = *r.PromoCommission
+			if frozen {
+				line.CommissionCents = *r.PromoCommission
+			} else {
+				line.CommissionCents = (*r.PromoCommissionBase * int64(bps)) / 10000
+			}
 			line.CampaignID = r.CampaignID
 			line.PromoCodeID = r.PromoCodeID
 		}

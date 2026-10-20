@@ -48,6 +48,13 @@ All amounts are stored as kopecks (int64). Currency is `RUB`.
 - Delivery fee: not part of the commission base.
 - The commission rate is **frozen at checkout** per seller in `order_fulfillments.commission_bps`
   (the seller's latest `seller_commission_rules` row, otherwise `MARKETPLACE_COMMISSION_BPS`).
+- `order_fulfillments.commission_frozen = TRUE` marks such fulfillments (migration 000114). Legacy rows
+  (`FALSE`: created before M0.1 or by an old checkout during a rolling deploy) only hold the column default /
+  config rate, so accrual picks the seller's active rule at delivery instead (pre-M0.1 behaviour). For legacy
+  promo orders the snapshot keeps the discount economics (commission base, subsidy, customer paid) but its
+  rate and charged commission are not used; the commission is `commission_base * active_rate / 10000`.
+- The sale_gross metadata records `commission_source`: `frozen_at_checkout` or `active_rule_at_delivery`.
+- Order items that already have a `sale_gross` entry are never recalculated.
   Later rule changes never affect an existing order.
 - Seller ledger accrual (`payouts/accrual.go`, run at delivery) is per order item and idempotent
   (one `sale_gross` per order item). It reads only checkout snapshots, never current product or promo state.
