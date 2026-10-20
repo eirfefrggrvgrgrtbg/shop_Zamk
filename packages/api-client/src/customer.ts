@@ -148,6 +148,19 @@ export const removeFavorite = async (productId: string): Promise<any> => {
   return request('DELETE', `/customer/favorites/${productId}`);
 };
 
+export const getFavoriteBrands = async (): Promise<import('./types').FavoriteBrand[]> => {
+  const res = await request<any>('GET', '/customer/favorite-brands');
+  return Array.isArray(res) ? res : (res?.items || []);
+};
+
+export const addFavoriteBrand = async (brandId: string): Promise<any> => {
+  return request('POST', `/customer/favorite-brands/${brandId}`);
+};
+
+export const removeFavoriteBrand = async (brandId: string): Promise<any> => {
+  return request('DELETE', `/customer/favorite-brands/${brandId}`);
+};
+
 export const recordProductView = async (productId: string): Promise<any> => {
   return request('POST', `/customer/products/${productId}/view`);
 };

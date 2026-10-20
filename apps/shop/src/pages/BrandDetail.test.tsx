@@ -2,9 +2,26 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { BrandDetail } from './BrandDetail';
+
+
+const favState = vi.hoisted(() => ({
+  ids: [] as string[],
+  toggle: vi.fn(async (_id: string) => true),
+  user: { id: 'u-1' } as { id: string } | null,
+}));
+vi.mock('../contexts/FavoriteBrandsContext', () => ({
+  useFavoriteBrands: () => ({
+    isFavoriteBrand: (id: string) => favState.ids.includes(id),
+    toggleFavoriteBrand: favState.toggle,
+    pendingIds: [],
+  }),
+}));
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ user: favState.user }),
+}));
 
 const fetchPublicBrand = vi.fn();
 vi.mock('../api/publicCatalog', () => ({
@@ -32,6 +49,9 @@ const renderBrandDetail = (slugOrId = 'raf-simons') =>
 describe('BrandDetail storefront component (MARKETING.M1.8)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    favState.ids = [];
+    favState.user = { id: 'u-1' };
+    favState.toggle.mockImplementation(async () => true);
   });
 
   afterEach(() => {
@@ -142,5 +162,57 @@ describe('BrandDetail storefront component (MARKETING.M1.8)', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: /Ошибка загрузки/i })).toBeDefined();
     expect(screen.getByRole('link', { name: /К брендам/i })).toBeDefined();
+  });
+
+  describe('favorite brand action (MARKETING.M1.11)', () => {
+    const storefront = (favoritable: boolean) => ({
+      brand: { id: 'b-1', name: 'Fav Brand', slug: 'fav-brand', favoritable },
+      items: [],
+      totalCount: 0,
+    });
+
+    it('shows "В избранное" for an unsaved brand and toggles by stable brand id', async () => {
+      fetchPublicBrand.mockResolvedValue(storefront(true));
+      renderBrandDetail('fav-brand');
+      const btn = await screen.findByTestId('favorite-brand-toggle');
+      expect(btn.textContent).toContain('В избранное');
+      expect(btn.getAttribute('aria-pressed')).toBe('false');
+      fireEvent.click(btn);
+      await waitFor(() => expect(favState.toggle).toHaveBeenCalledWith('b-1'));
+    });
+
+    it('shows saved state for a saved brand', async () => {
+      favState.ids = ['b-1'];
+      fetchPublicBrand.mockResolvedValue(storefront(true));
+      renderBrandDetail('fav-brand');
+      const btn = await screen.findByTestId('favorite-brand-toggle');
+      expect(btn.textContent).toContain('В избранном');
+      expect(btn.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('shows an error when the API call fails for a signed-in buyer', async () => {
+      favState.toggle.mockResolvedValue(false);
+      fetchPublicBrand.mockResolvedValue(storefront(true));
+      renderBrandDetail('fav-brand');
+      fireEvent.click(await screen.findByTestId('favorite-brand-toggle'));
+      expect((await screen.findByRole('alert')).textContent).toMatch(/Не удалось сохранить/);
+    });
+
+    it('shows no error for an anonymous visitor (login prompt handled by the context)', async () => {
+      favState.user = null;
+      favState.toggle.mockResolvedValue(false);
+      fetchPublicBrand.mockResolvedValue(storefront(true));
+      renderBrandDetail('fav-brand');
+      fireEvent.click(await screen.findByTestId('favorite-brand-toggle'));
+      await waitFor(() => expect(favState.toggle).toHaveBeenCalled());
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('hides the action for seller-only storefronts without a brand id', async () => {
+      fetchPublicBrand.mockResolvedValue(storefront(false));
+      renderBrandDetail('fav-brand');
+      await screen.findByRole('heading', { level: 1, name: /Fav Brand/i });
+      expect(screen.queryByTestId('favorite-brand-toggle')).toBeNull();
+    });
   });
 });

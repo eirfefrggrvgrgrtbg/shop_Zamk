@@ -252,6 +252,8 @@ export interface PublicBrandStorefront {
     history?: string;
     logoUrl?: string;
     coverUrl?: string;
+    /** true only when id is a stable brands.id; seller-only storefronts cannot be saved as favorite brands */
+    favoritable: boolean;
   };
   items: UIProduct[];
   totalCount: number;
@@ -281,6 +283,7 @@ export async function fetchPublicBrand(slugOrId: string, params?: any): Promise<
       history: brandData.history || undefined,
       logoUrl: brandData.logoUrl || undefined,
       coverUrl: brandData.coverUrl || undefined,
+      favoritable: brandData.favoritable === true,
     },
     items: (res.items || []).map((p: any) => ({
       id: p.id,

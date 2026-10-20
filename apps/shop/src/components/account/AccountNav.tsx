@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { User, ShoppingBag, Heart, RotateCcw, Star } from 'lucide-react';
+import { User, ShoppingBag, Heart, RotateCcw, Star, Bookmark } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 const links = [
   { to: '/account', label: 'Профиль', icon: User, end: true },
   { to: '/orders', label: 'Заказы', icon: ShoppingBag, end: true },
   { to: '/favorites', label: 'Избранное', icon: Heart, end: true },
+  { to: '/favorite-brands', label: 'Любимые бренды', icon: Bookmark, end: true },
   { to: '/returns', label: 'Возвраты', icon: RotateCcw, end: true },
   { to: '/settings', label: 'Настройки', icon: RotateCcw, end: true },
 ];

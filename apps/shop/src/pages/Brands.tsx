@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, RotateCcw, Search, X } from 'lucide-react';
+import { ArrowRight, Bookmark, RotateCcw, Search, X } from 'lucide-react';
+import { useFavoriteBrands } from '../contexts/FavoriteBrandsContext';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { fetchBrands } from '../api/publicCatalog';
@@ -28,6 +29,7 @@ function getBrandPlural(count: number): string {
 }
 
 export function Brands() {
+  const { isFavoriteBrand, toggleFavoriteBrand, pendingIds } = useFavoriteBrands();
   const [brands, setBrands] = useState<Brand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -341,7 +343,7 @@ export function Brands() {
                               <span>{initial}</span>
                             )}
                           </div>
-                          <div className="min-w-0 flex-1">
+                          <div className="min-w-0 flex-1 pr-8">
                             <h2 className="text-xl sm:text-2xl font-serif font-medium text-graphite dark:text-white group-hover:text-graphite-dark dark:group-hover:text-white transition-colors truncate">
                               {brand.name}
                             </h2>
@@ -357,6 +359,21 @@ export function Brands() {
                           </p>
                         ) : null}
                       </div>
+                      <button
+                        type="button"
+                        data-testid={`brand-favorite-${brand.id}`}
+                        aria-pressed={isFavoriteBrand(brand.id)}
+                        aria-label={isFavoriteBrand(brand.id) ? `Убрать ${brand.name} из избранного` : `Добавить ${brand.name} в избранное`}
+                        disabled={pendingIds.includes(brand.id)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void toggleFavoriteBrand(brand.id);
+                        }}
+                        className="absolute top-4 right-4 p-2 rounded-full text-ash hover:text-graphite dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-50 transition-colors"
+                      >
+                        <Bookmark className="w-4 h-4" fill={isFavoriteBrand(brand.id) ? 'currentColor' : 'none'} />
+                      </button>
                     </Link>
                   );
                 })}

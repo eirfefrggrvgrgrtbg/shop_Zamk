@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Bookmark } from 'lucide-react';
+import { useFavoriteBrands } from '../contexts/FavoriteBrandsContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
 import { ProductCard } from '../components/product/ProductCard';
 import { fetchPublicBrand, type PublicBrandStorefront } from '../api/publicCatalog';
@@ -24,6 +26,9 @@ export function BrandDetail() {
   const [totalCount, setTotalCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { isFavoriteBrand, toggleFavoriteBrand, pendingIds } = useFavoriteBrands();
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +66,17 @@ export function BrandDetail() {
       cancelled = true;
     };
   }, [identifier]);
+
+  const handleToggleFavorite = async () => {
+    if (!brand) return;
+    setFavoriteError(null);
+    const wasFavorite = isFavoriteBrand(brand.id);
+    const ok = await toggleFavoriteBrand(brand.id);
+    // false without an error is the redirect-to-login path; only report real API failures
+    if (!ok && user) {
+      setFavoriteError(wasFavorite ? 'Не удалось убрать бренд из избранного.' : 'Не удалось сохранить бренд в избранное.');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -142,6 +158,28 @@ export function BrandDetail() {
               <h1 className='text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif text-graphite dark:text-white tracking-tight leading-tight'>
                 {brand.name}
               </h1>
+              {brand.favoritable && (
+                <div className='mt-5'>
+                  <button
+                    type='button'
+                    onClick={handleToggleFavorite}
+                    disabled={pendingIds.includes(brand.id)}
+                    aria-pressed={isFavoriteBrand(brand.id)}
+                    data-testid='favorite-brand-toggle'
+                    className={`inline-flex items-center gap-2 rounded-full border px-5 py-2 text-xs font-medium uppercase tracking-widest transition-colors disabled:opacity-60 ${
+                      isFavoriteBrand(brand.id)
+                        ? 'bg-graphite text-white border-graphite dark:bg-white dark:text-black dark:border-white'
+                        : 'border-border-lighter dark:border-white/20 text-graphite dark:text-white hover:border-graphite/40 dark:hover:border-white/50'
+                    }`}
+                  >
+                    <Bookmark className='w-3.5 h-3.5' fill={isFavoriteBrand(brand.id) ? 'currentColor' : 'none'} />
+                    {isFavoriteBrand(brand.id) ? 'В избранном' : 'В избранное'}
+                  </button>
+                  {favoriteError && (
+                    <p role='alert' className='mt-2 text-xs text-red-600 dark:text-red-300'>{favoriteError}</p>
+                  )}
+                </div>
+              )}
               {brand.description && (
                 <p className='mt-4 max-w-2xl text-sm md:text-base text-graphite-light dark:text-white/70 font-light leading-relaxed'>
                   {brand.description}

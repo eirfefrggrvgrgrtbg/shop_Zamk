@@ -3209,8 +3209,17 @@ export interface AdminCollectionSubmission extends CollectionSubmission {
 }
 
 export interface PublicBrandStorefrontResponse {
-  brand: Brand & { brandName?: string };
+  brand: Brand & { brandName?: string; favoritable?: boolean };
   seller?: any;
   items: ProductSummary[];
   totalCount: number;
+}
+
+export interface FavoriteBrand {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  logoUrl?: string;
+  addedAt: string;
 }

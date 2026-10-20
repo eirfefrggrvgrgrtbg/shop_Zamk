@@ -4,6 +4,8 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { CartProvider } from './contexts/CartContext';
 import { PromoProvider } from './contexts/PromoContext';
 import { FavoritesProvider } from './contexts/FavoritesContext';
+import { FavoriteBrandsProvider } from './contexts/FavoriteBrandsContext';
+import { FavoriteBrands } from './pages/FavoriteBrands';
 import { SearchProvider } from './contexts/SearchContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ToastContainer } from './components/ui/ToastContainer';
@@ -117,6 +119,7 @@ function App() {
           <CartProvider>
             <PromoProvider>
             <FavoritesProvider>
+            <FavoriteBrandsProvider>
               <Router>
                 <ScrollToTop />
                 <BehaviorRouterTracker />
@@ -132,11 +135,12 @@ function App() {
                     <Route path="/auction/lots/:id" element={<AuctionLotDetail />} />
                     <Route path="/auction/wins" element={<AuctionWins />} />
                     <Route path="/seller/:slugOrId" element={<BrandDetail />} />
-                    <Route path="/brand/:id" element={<BrandDetail />} />
+                    <Route path="/brand/:slugOrId" element={<BrandDetail />} />
                     <Route path="/cart" element={<Cart />} />
                     <Route path="/checkout" element={<Checkout />} />
                     <Route path="/dev/payments/mock/:paymentId" element={<DevMockPayment />} />
                     <Route path="/favorites" element={<Favorites />} />
+                    <Route path="/favorite-brands" element={<FavoriteBrands />} />
                     <Route path="/account" element={<Profile />} />
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/reviews" element={<CustomerReviews />} />
@@ -161,6 +165,7 @@ function App() {
                 <AuthModal />
                 <SearchOverlay />
               </Router>
+            </FavoriteBrandsProvider>
             </FavoritesProvider>
             </PromoProvider>
           </CartProvider>

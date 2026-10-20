@@ -1776,6 +1776,7 @@ func (s *Service) GetPublicBrand(ctx context.Context, idOrSlug string) (*PublicB
 				History:     b.History,
 				LogoURL:     b.LogoURL,
 				CoverURL:    b.CoverURL,
+				Favoritable: true,
 			}
 			if (brand.CoverURL == nil || brand.History == nil) && s.sellerRepo != nil {
 				if linkedSellerID, sErr := s.repo.GetLinkedSellerForBrand(ctx, b.ID); sErr == nil && linkedSellerID != nil {
@@ -1804,6 +1805,7 @@ func (s *Service) GetPublicBrand(ctx context.Context, idOrSlug string) (*PublicB
 			History:     b.History,
 			LogoURL:     b.LogoURL,
 			CoverURL:    b.CoverURL,
+			Favoritable: true,
 		}
 		if (brand.CoverURL == nil || brand.History == nil) && s.sellerRepo != nil {
 			if linkedSellerID, sErr := s.repo.GetLinkedSellerForBrand(ctx, b.ID); sErr == nil && linkedSellerID != nil {

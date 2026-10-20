@@ -144,6 +144,8 @@ type PublicBrand struct {
 	History     *string   `json:"history,omitempty"`
 	LogoURL     *string   `json:"logoUrl,omitempty"`
 	CoverURL    *string   `json:"coverUrl,omitempty"`
+	// Favoritable is true only when ID is a stable brands.id; seller-only storefronts carry a seller ID and cannot be saved as favorite brands.
+	Favoritable bool `json:"favoritable"`
 }
 
 type PublicProduct struct {

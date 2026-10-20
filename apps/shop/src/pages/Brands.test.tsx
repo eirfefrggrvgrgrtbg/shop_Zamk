@@ -7,6 +7,23 @@ import { MemoryRouter } from 'react-router-dom';
 import { Brands } from './Brands';
 import type { Brand } from '../types/catalog';
 
+
+const favState = vi.hoisted(() => ({
+  ids: [] as string[],
+  toggle: vi.fn(async (_id: string) => true),
+  user: { id: 'u-1' } as { id: string } | null,
+}));
+vi.mock('../contexts/FavoriteBrandsContext', () => ({
+  useFavoriteBrands: () => ({
+    isFavoriteBrand: (id: string) => favState.ids.includes(id),
+    toggleFavoriteBrand: favState.toggle,
+    pendingIds: [],
+  }),
+}));
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ user: favState.user }),
+}));
+
 const mockFetchBrands = vi.fn();
 vi.mock('../api/publicCatalog', () => ({
   fetchBrands: () => mockFetchBrands(),
@@ -70,6 +87,8 @@ const renderBrands = () =>
 describe('Brands catalog page (MARKETING.M1.9)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    favState.ids = [];
+    favState.toggle.mockImplementation(async () => true);
   });
 
   afterEach(() => {
@@ -207,5 +226,21 @@ describe('Brands catalog page (MARKETING.M1.9)', () => {
       expect(screen.getByText('Acne Studios')).toBeDefined();
     });
     expect(screen.getByText('Волчок')).toBeDefined();
+  });
+
+  it('favorite icon toggles by brand id without navigating, and reflects saved state', async () => {
+    favState.ids = ['b-2'];
+    mockFetchBrands.mockResolvedValue(sampleBrands);
+    render(
+      <MemoryRouter>
+        <Brands />
+      </MemoryRouter>,
+    );
+    const saved = await screen.findByTestId('brand-favorite-b-2');
+    expect(saved.getAttribute('aria-pressed')).toBe('true');
+    const unsaved = screen.getByTestId('brand-favorite-b-1');
+    expect(unsaved.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(unsaved);
+    await waitFor(() => expect(favState.toggle).toHaveBeenCalledWith('b-1'));
   });
 });
