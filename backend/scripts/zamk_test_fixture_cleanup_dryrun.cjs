@@ -30,12 +30,12 @@ const BCRYPT = `'^\\$2[aby]\\$'`;
 const RESERVED_DOMAIN = `'@(test\\.com|test\\.local|zamk\\.local|zamk\\.test|example\\.com|buyer\\.com|[a-z0-9-]+\\.test)$'`;
 const GENERATED = `'[0-9a-f]{8}'`;
 
-(async () => {
-  const c = new Client({ connectionString: DSN });
-  await c.connect();
+// classify(c, opts): `c` is a connected client INSIDE a transaction owned by the caller.
+//   opts.light         only the CERTAIN closure (A, A0, ENT): no probable/disputed/dictionary classification
+//   opts.onlyUsers     Set of user ids: only these users (and sellers owned solely by them) are roots
+async function classify(c, opts = {}) {
   const dbName = (await c.query('select current_database() d')).rows[0].d;
   if (dbName !== 'zamk_test') throw new Error(`refusing to run on ${dbName}`);
-  await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   const rows = async (sql, params) => (await c.query(sql, params)).rows;
   const snapshotAt = (await rows(`select now() n, txid_current_snapshot()::text s`))[0];
 
@@ -130,6 +130,27 @@ const GENERATED = `'[0-9a-f]{8}'`;
     return S;
   }
 
+  // TEST.DB.3: deleting a row must not change any row OUTSIDE the set through a non-owning foreign key
+  // (ON DELETE SET NULL / SET DEFAULT): history and audit authors are never nulled. Such a parent is excluded
+  // (blocked_by_external_reference), the closure is re-pruned, and this repeats to a fixed point. Only parents leave the set.
+  const blocked = {};
+  async function blockExternal(S) {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const f of fks) {
+        if (f.owns || !S[f.parent] || !S[f.parent].size) continue;
+        const inChild = S[f.child] ? [...S[f.child]] : [];
+        const hit = await SQLIDS(f.parent, `SELECT ${idExpr(f.parent)} i FROM ${q(f.parent)}
+          WHERE ${idExpr(f.parent)} = ANY($1::text[])
+            AND EXISTS (SELECT 1 FROM ${q(f.child)} WHERE (${list(f.child, f.ccols)}) IS NOT NULL AND (${list(f.child, f.ccols)}) = (${list(f.parent, f.pcols)}) AND NOT (${idExpr(f.child)} = ANY($2::text[])))`, [[...S[f.parent]], inChild]);
+        if (hit.length) { for (const id of hit) { S[f.parent].delete(id); (blocked[f.parent] ||= new Set()).add(id); } changed = true; }
+      }
+      if (changed) { await prune(S); await closeDownward(S); }
+    }
+    return S;
+  }
+
   // ---------- roots
   const sessionTable = tableNames.includes('user_sessions');
   const users = await rows(`
@@ -144,10 +165,11 @@ const GENERATED = `'[0-9a-f]{8}'`;
     else if (u.generated_identity && !u.has_session) U.certain.push(u.i);
     else U.probable.push(u.i);
   }
+  if (opts.onlyUsers) { U.certain = U.certain.filter((id) => opts.onlyUsers.has(id)); U.probable = []; U.disputed = []; }
   const certainUsers = new Set(U.certain);
   const sellerRows = await rows(`SELECT s.id::text i, coalesce(array_agg(su.user_id::text) FILTER (WHERE su.user_id IS NOT NULL), '{}') owners FROM sellers s LEFT JOIN seller_users su ON su.seller_id = s.id GROUP BY s.id`);
   const SE = { certain: [], probable: [], disputed: [] };
-  for (const s of sellerRows) {
+  for (const s of sellerRows.filter((x) => !opts.onlyUsers || x.owners.some((o) => opts.onlyUsers.has(o)))) {
     if (s.owners.length === 0) SE.probable.push(s.i);
     else if (s.owners.every((o) => certainUsers.has(o))) SE.certain.push(s.i);
     else SE.disputed.push(s.i);
@@ -156,7 +178,21 @@ const GENERATED = `'[0-9a-f]{8}'`;
   const A0 = await prune(await expand({ users: U.certain, sellers: SE.certain })); // certain by origin
   const A = {}; for (const [t, set] of Object.entries(A0)) A[t] = new Set(set);
   await closeDownward(A); // certain AND closed: deletable on its own
+  await blockExternal(A); // ... and deleting it changes no row outside it (no SET NULL / SET DEFAULT side effects)
   const ENT = {}; for (const [t, set] of Object.entries(A0)) ENT[t] = new Set([...set].filter((id) => !A[t].has(id))); // certain origin, tied to unconfirmed rows
+  // deletion order (children first) of a set, ownership edges only
+  const orderFor = (S) => {
+    const tablesS = Object.keys(S).filter((t) => S[t].size > 0);
+    const deps = {}; for (const t of tablesS) deps[t] = new Set();
+    for (const f of fks) if (f.owns && deps[f.parent] && deps[f.child] && f.parent !== f.child) deps[f.parent].add(f.child);
+    const out = []; const done = new Set(); const stack = new Set();
+    const visit = (t) => { if (done.has(t) || stack.has(t)) return; stack.add(t); for (const ch of deps[t]) visit(ch); stack.delete(t); done.add(t); out.push(t); };
+    tablesS.forEach(visit);
+    return out;
+  };
+  const helpers = { rows, q, list, idExpr, qid, fks, byParent, byChild, hasId, totals, tableNames, SQLIDS };
+  if (opts.light) return { dbName, snapshotAt, A, A0, ENT, U, SE, blocked, order: orderFor(A), ...helpers };
+
   const B0 = await prune(await expand({ users: U.probable, sellers: SE.probable }));
   const B = {}; // probable = reachable only from probable roots and not already certain
   for (const [t, set] of Object.entries(B0)) B[t] = new Set([...set].filter((id) => !(A0[t] && A0[t].has(id))));
@@ -296,31 +332,58 @@ const GENERATED = `'[0-9a-f]{8}'`;
     }
     return true;
   })());
+  check('certain set has no foreign-key side effects: no row outside it references it (any delete rule, SET NULL/CASCADE/SET DEFAULT included)', await (async () => {
+    for (const f of fks) {
+      if (!A[f.parent] || !A[f.parent].size) continue;
+      const bad = await SQLIDS(f.parent, `SELECT ${idExpr(f.parent)} i FROM ${q(f.parent)} WHERE ${idExpr(f.parent)} = ANY($1::text[]) AND EXISTS (SELECT 1 FROM ${q(f.child)} WHERE (${list(f.child, f.ccols)}) IS NOT NULL AND (${list(f.child, f.ccols)}) = (${list(f.parent, f.pcols)}) AND NOT (${idExpr(f.child)} = ANY($2::text[])))`, [[...A[f.parent]], A[f.child] ? [...A[f.child]] : []]);
+      if (bad.length) return false;
+    }
+    return true;
+  })());
+  check('certain set contains no protected dictionary row', ['categories', 'brands', 'colors', 'size_systems', 'size_values'].every((t) => !A[t] || A[t].size === 0));
   check('sellers: every seller is in exactly one class', SE.certain.length + SE.probable.length + SE.disputed.length === sellerRows.length);
   check('composite foreign keys were followed', true, fks.filter((f) => f.composite).map((f) => `${f.child}->${f.parent}`).join(', ') || 'none');
 
-  // ---------- deletion order (children first) for the CERTAIN class, ownership edges only
-  const tablesA = Object.keys(A).filter((t) => A[t].size > 0);
-  const deps = {}; for (const t of tablesA) deps[t] = new Set();
-  for (const f of fks) if (f.owns && deps[f.parent] && deps[f.child] && f.parent !== f.child) deps[f.parent].add(f.child);
-  const order = []; const done = new Set(); const stack = new Set();
-  const visit = (t) => { if (done.has(t) || stack.has(t)) return; stack.add(t); for (const ch of deps[t]) visit(ch); stack.delete(t); done.add(t); order.push(t); };
-  tablesA.forEach(visit);
+  const order = orderFor(A);
   report.deletionPlan = order.map((t, i) => ({ step: i + 1, table: t, rows: A[t].size, predicate: `${qid(t)} = ANY(manifest.${t})` }));
+  return { report, dbName, snapshotAt, A, A0, ENT, B, R, U, SE, blocked, order, userClass, sellerClass, ...helpers };
+}
 
+// canonical hash of a manifest's id sets (table names and ids sorted)
+function manifestHash(certain) {
+  const canon = Object.keys(certain).sort().map((t) => [t, [...certain[t]].sort()]);
+  return crypto.createHash('sha256').update(JSON.stringify(canon)).digest('hex');
+}
+
+async function rowHash(c, table, ids, hasId) {
+  const col = hasId ? 't.id::text' : 't.ctid::text';
+  const r = (await c.query(`SELECT md5(coalesce(string_agg(md5(t::text), ',' ORDER BY ${col}), '')) h, count(*)::int n FROM "${table}" t WHERE ${col} = ANY($1::text[])`, [ids])).rows[0];
+  return { hash: r.h, count: r.n };
+}
+
+async function main() {
+  const c = new Client({ connectionString: DSN });
+  await c.connect();
+  await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+  const res = await classify(c);
+  const { report, A, snapshotAt, dbName, userClass, sellerClass, blocked, order, hasId } = res;
+  const tablesA = Object.keys(A).filter((t) => A[t].size > 0);
   if (arg('--manifest')) {
-    const manifest = { database: dbName, snapshot: snapshotAt, certain: Object.fromEntries(tablesA.map((t) => [t, [...A[t]]])) };
-    fs.writeFileSync(arg('--manifest'), JSON.stringify(manifest));
-    report.manifestSha256 = crypto.createHash('sha256').update(JSON.stringify(manifest.certain)).digest('hex');
+    const certain = {}; const counts = {}; const rowHashes = {};
+    for (const t of order.filter((x) => tablesA.includes(x))) { certain[t] = [...A[t]]; counts[t] = certain[t].length; rowHashes[t] = (await rowHash(c, t, certain[t], hasId.has(t))).hash; }
+    const sha256 = manifestHash(certain);
+    fs.writeFileSync(arg('--manifest'), JSON.stringify({ version: 2, database: dbName, snapshot: snapshotAt, certain, counts, rowHashes, sha256 }));
+    report.manifestSha256 = sha256;
   }
   await c.query('COMMIT');
   await c.end();
 
-  // ---------- print
   const fmt = (r) => ({ table: r.table, total: r.total, certain: r.certain, entangled: r.entangled, probable: r.probable, disputed: r.disputed, protected: r.protected, unrelated: r.unrelated });
   console.log(`DRY-RUN on ${dbName}, one REPEATABLE READ READ ONLY snapshot (${snapshotAt.s}) — nothing is modified\n`);
   console.log('Roots and dictionaries:');
   console.table([userClass, sellerClass, ...report.dictionaries].map(fmt));
+  report.blockedByExternalReference = Object.fromEntries(Object.entries(blocked).map(([t, set]) => [t, set.size]));
+  console.log('blocked_by_external_reference (excluded: deleting them would null/alter rows outside the set):', JSON.stringify(report.blockedByExternalReference));
   console.log('Dependent tables (certain = deletable closure of CERTAIN roots):');
   console.table(report.tables.filter((r) => !['users', 'sellers'].includes(r.table) && (r.certain || r.entangled || r.probable || r.disputed)).map(fmt));
   console.log('Consistency checks:', report.checks.every((x) => x.ok) ? `ALL ${report.checks.length} PASS` : 'FAILURES BELOW');
@@ -330,4 +393,7 @@ const GENERATED = `'[0-9a-f]{8}'`;
   if (report.manifestSha256) console.log('\nmanifest sha256 (certain ids):', report.manifestSha256);
   if (arg('--json')) fs.writeFileSync(arg('--json'), JSON.stringify(report, null, 2));
   if (report.checks.some((x) => !x.ok)) process.exitCode = 2;
-})().catch((e) => { console.error('DRY-RUN FAILED:', e.message); process.exit(1); });
+}
+
+module.exports = { classify, manifestHash, rowHash, BCRYPT };
+if (require.main === module) main().catch((e) => { console.error('DRY-RUN FAILED:', e.message); process.exit(1); });
