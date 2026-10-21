@@ -632,9 +632,30 @@ export function AdminModerationProductDetail() {
               </h2>
               <p className="text-xs text-amber-800 dark:text-amber-300">
                 Ниже — то, что продавец хочет изменить. В действующем товаре изменения появятся только после одобрения.
-                {product.pendingRevision.imagesChanged && ` Фотографии изменены (${product.pendingRevision.imagesCount}).`}
                 {!product.pendingRevision.variantsChanged && ' Варианты не меняются.'}
               </p>
+              {product.pendingRevision.imagesChanged && (
+                <div data-testid="pending-revision-gallery" className="space-y-2">
+                  <h3 className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                    Предлагаемая галерея ({product.pendingRevision.images.length})
+                  </h3>
+                  {product.pendingRevision.imagesMissing > 0 && (
+                    <p data-testid="pending-revision-images-missing" className="text-xs font-semibold text-rose-700">
+                      Файлы {product.pendingRevision.imagesMissing} фото недоступны — одобрение невозможно, верните товар продавцу.
+                    </p>
+                  )}
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                    {product.pendingRevision.images.map((img, idx) => (
+                      <div key={img.id} data-testid="pending-revision-image" data-new={img.isNew ? 'true' : 'false'} className="relative aspect-[4/5] rounded-lg overflow-hidden border border-amber-200 bg-white">
+                        <img src={img.url} alt={img.altText || `Фото ${idx + 1}`} className="w-full h-full object-cover" />
+                        {img.isMain && <span className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/70 text-white text-[10px] rounded font-bold">Главное</span>}
+                        {img.isNew && <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-emerald-600 text-white text-[10px] rounded font-bold">Новое</span>}
+                        {img.isNew && !img.hasRendition && <span className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-rose-600 text-white text-[10px] rounded font-bold">Нет 4:5</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {product.pendingRevision.variantsChanged && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse">

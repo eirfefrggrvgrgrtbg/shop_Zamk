@@ -284,4 +284,31 @@ describe('PS.R4B3.1C4C3B3C — Section 19: Prominent Global Category Control', (
     expect(catControl.textContent).toContain('Худи');
     expect(catControl.textContent).not.toContain('123e4567-e89b-12d3-a456-426614174000');
   });
+
+  it('shows "Ожидает модерации" only while the product has a pending revision', () => {
+    const renderHeader = (hasPendingRevision: boolean) =>
+      render(
+        <MemoryRouter>
+          <ProductStudioProvider
+            entryMode="edit"
+            initialDraft={{
+              id: 'prod-2',
+              title: 'Пальто',
+              status: 'published',
+              hasPendingRevision,
+              categoryId: 'cat-coats',
+              categoryName: 'Верхняя одежда',
+            }}
+          >
+            <ProductStudioHeader />
+          </ProductStudioProvider>
+        </MemoryRouter>
+      );
+
+    renderHeader(true);
+    expect(screen.getByTestId('studio-pending-revision-badge').textContent).toBe('Ожидает модерации');
+    cleanup();
+    renderHeader(false);
+    expect(screen.queryByTestId('studio-pending-revision-badge')).toBeNull();
+  });
 });

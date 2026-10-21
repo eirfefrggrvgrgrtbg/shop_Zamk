@@ -199,6 +199,37 @@ describe('productStudioHydration mapper tests', () => {
     expect(draft.dimensionType).toBe('COLOR_AND_SIZE');
   });
 
+  it('marks the draft as waiting for moderation and keeps the pending photos in the proposed order', () => {
+    const draft = hydrateProductStudioDraft({
+      product: {
+        ...sampleProduct,
+        status: 'published',
+        pendingRevision: { id: 'rev-1', variantsChanged: false, imagesChanged: true, imagesCount: 2 },
+        images: [
+          { id: 'img-new', imageUrl: 'http://x/new.jpg', renditionUrl: 'http://x/new_r.jpg', sortOrder: 0, isMain: true, pending: true },
+          { id: 'img-old', imageUrl: 'http://x/old.jpg', sortOrder: 1, isMain: false },
+        ],
+      } as SellerProduct,
+      categorySchema: mockSchema,
+      canonicalColors: mockColors,
+      dictionaryValuesMap: mockDictMap,
+    });
+
+    expect(draft.hasPendingRevision).toBe(true);
+    expect(draft.images?.map((i) => i.uiKey)).toEqual(['img-new', 'img-old']);
+    expect(draft.images?.[0].renditionUrl).toBe('http://x/new_r.jpg');
+  });
+
+  it('is not marked as waiting for moderation without a pending revision', () => {
+    const draft = hydrateProductStudioDraft({
+      product: sampleProduct,
+      categorySchema: mockSchema,
+      canonicalColors: mockColors,
+      dictionaryValuesMap: mockDictMap,
+    });
+    expect(draft.hasPendingRevision).toBe(false);
+  });
+
   it('hydrates media preserving sort order and original index tie-breaker', () => {
     const draft = hydrateProductStudioDraft({
       product: sampleProduct,

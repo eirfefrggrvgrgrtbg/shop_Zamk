@@ -47,6 +47,15 @@ type ProductMediaStaging struct {
 	Height        int
 	CreatedAt     time.Time
 	ConsumedAt    *time.Time
+
+	// 4:5 crop and rendition of a staged photo (CATALOG.C5.2). Nil until the seller crops it.
+	// The rendition lives under the staged object key prefix, so promotion to product_images needs no S3 copy.
+	CropX              *float64
+	CropY              *float64
+	CropWidth          *float64
+	CropHeight         *float64
+	RenditionURL       *string
+	RenditionObjectKey *string
 }
 
 type ProductMediaCleanupJob struct {
@@ -449,24 +458,36 @@ func (r *Repository) ClaimMediaCleanupJob(ctx context.Context, leaseDuration tim
 func (r *Repository) ExpireStaleStagedMedia(ctx context.Context, uploadingStale time.Duration, readyStale time.Duration, consumedStale time.Duration, limit int) (int, error) {
 	query := `
 		WITH stale_batch AS (
-			SELECT id, status, object_key
-			FROM product_media_staging
-			WHERE (status = 'uploading' AND created_at < NOW() - make_interval(secs := $1))
-			   OR (status = 'ready' AND created_at < NOW() - make_interval(secs := $2))
-			   OR (status = 'consumed' AND consumed_at < NOW() - make_interval(secs := $3))
-			FOR UPDATE SKIP LOCKED
+			SELECT s.id, s.status, s.object_key
+			FROM product_media_staging s
+			WHERE (s.status = 'uploading' AND s.created_at < NOW() - make_interval(secs := $1))
+			   OR (s.status = 'ready' AND s.created_at < NOW() - make_interval(secs := $2)
+			       -- a photo proposed by a pending revision of a published product waits for the moderation decision
+			       AND NOT EXISTS (
+			           SELECT 1
+			           FROM product_revisions pr
+			           CROSS JOIN LATERAL jsonb_array_elements(COALESCE(pr.content_snapshot->'revisionImages', '[]'::jsonb)) e
+			           WHERE pr.product_id = s.product_id AND pr.status = 'pending' AND e->>'ID' = s.id::text
+			       ))
+			   OR (s.status = 'consumed' AND s.consumed_at < NOW() - make_interval(secs := $3))
+			FOR UPDATE OF s SKIP LOCKED
 			LIMIT $4
 		),
 		deleted AS (
 			DELETE FROM product_media_staging
 			WHERE id IN (SELECT id FROM stale_batch)
-			RETURNING id, status, object_key
+			RETURNING id, status, object_key, rendition_object_key
+		),
+		keys AS (
+			SELECT object_key AS key FROM deleted WHERE status IN ('uploading', 'ready')
+			UNION
+			SELECT rendition_object_key FROM deleted
+			WHERE status IN ('uploading', 'ready') AND rendition_object_key IS NOT NULL AND rendition_object_key != ''
 		),
 		enqueue AS (
 			INSERT INTO product_media_cleanup_jobs (object_key, next_attempt_at, generation)
-			SELECT object_key, NOW(), 1
-			FROM deleted
-			WHERE status IN ('uploading', 'ready')
+			SELECT key, NOW(), 1
+			FROM keys
 			ON CONFLICT (object_key) DO UPDATE SET
 				generation = product_media_cleanup_jobs.generation + 1,
 				next_attempt_at = NOW()

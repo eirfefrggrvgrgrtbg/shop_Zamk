@@ -460,6 +460,9 @@ func (h *Handler) CropSellerProductImage(w http.ResponseWriter, r *http.Request)
 			h.writeError(w, http.StatusForbidden, "forbidden", err.Error())
 			return
 		}
+		if h.writeStagedCropError(w, err) {
+			return
+		}
 		if err.Error() == "image does not belong to product" {
 			h.writeError(w, http.StatusNotFound, "not_found", "image not found")
 			return
@@ -501,6 +504,13 @@ func (h *Handler) AutoCropSellerProductImage(w http.ResponseWriter, r *http.Requ
 		}
 		if err == ErrProductMediaTooSmall {
 			h.writeError(w, http.StatusBadRequest, "product_media_too_small", err.Error())
+			return
+		}
+		if err == ErrInvalidCropParameters || err == ErrInvalidCropAspect {
+			h.writeError(w, http.StatusBadRequest, "product_media_invalid_crop", "Не удалось сохранить кадр 4:5. Попробуйте выбрать область фотографии ещё раз.")
+			return
+		}
+		if h.writeStagedCropError(w, err) {
 			return
 		}
 		if err.Error() == "image does not belong to product" {
@@ -555,4 +565,17 @@ func (h *Handler) SetMainProductImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// writeStagedCropError maps the outcomes of cropping a staged (not yet published) photo.
+func (h *Handler) writeStagedCropError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, products.ErrStagedMediaNotFound):
+		h.writeError(w, http.StatusNotFound, "not_found", "image not found")
+	case errors.Is(err, products.ErrStagedMediaAlreadyConsumed), errors.Is(err, products.ErrStagedMediaNotReady):
+		h.writeError(w, http.StatusConflict, "staged_media_not_ready", "Фотография ещё не готова или уже применена. Обновите страницу.")
+	default:
+		return false
+	}
+	return true
 }

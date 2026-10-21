@@ -125,6 +125,16 @@ export function ProductStudioHeader() {
                   {statusText}
                 </span>
 
+                {draft.hasPendingRevision && (
+                  <span
+                    data-testid="studio-pending-revision-badge"
+                    title="Изменения, которые вы видите, применятся к карточке после одобрения модератором"
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-300 shrink-0"
+                  >
+                    Ожидает модерации
+                  </span>
+                )}
+
                 <button
                   type="button"
                   data-testid="studio-readiness-summary"

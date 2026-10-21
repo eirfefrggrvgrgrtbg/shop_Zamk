@@ -121,6 +121,8 @@ export interface ProductStudioDraft {
   brandName?: string;
   sellerName?: string;
   status?: string;
+  /** The product is published and the displayed changes wait for moderation; the public card is unchanged. */
+  hasPendingRevision?: boolean;
   gender?: string;
   color?: string;
   material?: string;

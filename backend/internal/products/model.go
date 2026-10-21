@@ -139,6 +139,8 @@ type ProductImage struct {
 	CropHeight *float64  `json:"cropHeight,omitempty"`
 	IsMain    bool       `json:"isMain"`
 	CreatedAt time.Time `json:"createdAt"`
+	// Pending marks a new photo of a pending revision (a finished upload, not yet a product image).
+	Pending bool `json:"pending,omitempty"`
 }
 
 type ProductModerationLog struct {

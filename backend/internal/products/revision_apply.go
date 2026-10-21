@@ -41,6 +41,10 @@ type PendingRevisionView struct {
 	VariantsChanged bool             `json:"variantsChanged"`
 	ImagesChanged   bool             `json:"imagesChanged"`
 	ImagesCount     int              `json:"imagesCount"`
+	// Images is the proposed gallery in order (existing photos as stored, new ones from their uploads).
+	Images []ProductImage `json:"images,omitempty"`
+	// ImagesMissing counts proposed photos that no longer resolve (lost upload); approval would be refused.
+	ImagesMissing int `json:"imagesMissing,omitempty"`
 }
 
 func parseRevisionChanges(snapBytes []byte) (ProductRevisionChanges, error) {
@@ -154,6 +158,10 @@ func (r *Repository) applyRevisionImages(ctx context.Context, productID uuid.UUI
 		return nil
 	}
 	if ch.Images != nil {
+		// Every new photo must exist and have its 4:5 rendition before anything is promoted.
+		if err := r.requireRevisionPhotosReady(ctx, productID, *ch.Images); err != nil {
+			return err
+		}
 		var sellerID uuid.UUID
 		if err := r.db.QueryRow(ctx, `SELECT seller_id FROM products WHERE id = $1`, productID).Scan(&sellerID); err != nil {
 			return fmt.Errorf("failed to get product seller: %w", err)
@@ -206,6 +214,12 @@ func (r *Repository) GetPendingRevisionView(ctx context.Context, productID uuid.
 	if ch.Images != nil {
 		view.ImagesChanged = true
 		view.ImagesCount = len(*ch.Images)
+		st, err := r.resolveRevisionImages(ctx, productID, *ch.Images)
+		if err != nil {
+			return nil, err
+		}
+		view.Images = st.images
+		view.ImagesMissing = len(st.notFound) + len(st.notReady)
 	}
 	if ch.Variants != nil {
 		view.VariantsChanged = true
@@ -269,4 +283,15 @@ func overlayRevisionVariants(live, revision []ProductVariant) []ProductVariant {
 		}
 	}
 	return out
+}
+
+// mainImageOf returns the main photo's URL and object key of a gallery, or the given fallbacks.
+func mainImageOf(images []ProductImage, fallbackURL, fallbackKey *string) (*string, *string) {
+	for _, img := range images {
+		if img.IsMain {
+			url := img.ImageURL
+			return &url, img.ObjectKey
+		}
+	}
+	return fallbackURL, fallbackKey
 }

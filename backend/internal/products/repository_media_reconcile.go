@@ -149,7 +149,8 @@ func (r *Repository) ReconcileProductImagesTx(
 			SELECT
 				id, seller_id, product_id, client_media_id, status,
 				object_key, image_url, content_sha256, byte_size, width, height,
-				created_at, consumed_at
+				created_at, consumed_at,
+				crop_x, crop_y, crop_width, crop_height, rendition_url, rendition_object_key
 			FROM product_media_staging
 			WHERE seller_id = $1 AND product_id = $2 AND id = ANY($3)
 			ORDER BY id
@@ -166,6 +167,7 @@ func (r *Repository) ReconcileProductImagesTx(
 				&stg.ID, &stg.SellerID, &stg.ProductID, &stg.ClientMediaID, &stg.Status,
 				&stg.ObjectKey, &stg.ImageURL, &stg.ContentSHA256, &stg.ByteSize, &stg.Width, &stg.Height,
 				&stg.CreatedAt, &stg.ConsumedAt,
+				&stg.CropX, &stg.CropY, &stg.CropWidth, &stg.CropHeight, &stg.RenditionURL, &stg.RenditionObjectKey,
 			); err != nil {
 				return fmt.Errorf("failed to scan staged media: %w", err)
 			}
@@ -331,8 +333,9 @@ func (r *Repository) ReconcileProductImagesTx(
 			_, err := r.db.Exec(ctx, `
 				INSERT INTO product_images (
 					id, product_id, image_url, object_key, alt_text, sort_order,
-					color_id, width, height, is_main, created_at
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+					color_id, width, height, is_main, created_at,
+					crop_x, crop_y, crop_width, crop_height, rendition_url, rendition_object_key
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), $11, $12, $13, $14, $15, $16)
 			`,
 				c.desired.ID,
 				productID,
@@ -343,6 +346,8 @@ func (r *Repository) ReconcileProductImagesTx(
 				c.desired.ColorID,
 				w, h,
 				c.desired.IsMain,
+				c.staging.CropX, c.staging.CropY, c.staging.CropWidth, c.staging.CropHeight,
+				c.staging.RenditionURL, c.staging.RenditionObjectKey,
 			)
 			if err != nil {
 				return fmt.Errorf("failed to insert promoted image %s: %w", c.desired.ID, err)

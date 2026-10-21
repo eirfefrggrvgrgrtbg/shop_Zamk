@@ -38,6 +38,8 @@ type Service struct {
 	vision     VisionScheduler
 	rdb        *redis.Client
 	logger     *slog.Logger
+
+	mediaVerifier MediaObjectVerifier
 }
 
 func NewService(repo *Repository, sellerRepo *sellers.Repository, dbPool *postgres.Client, reviewsSvc *reviews.Service, notifs *notifications.Service) *Service {
@@ -1097,6 +1099,12 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 			if err := validateFinalProductMediaState(revActiveVariants, revImages); err != nil {
 				return err
 			}
+			// New photos must be finished uploads of this seller and product (early feedback; re-checked on approval).
+			if changes.Images != nil {
+				if err := txRepo.ValidateRevisionMediaReferences(ctx, p.ID, *changes.Images); err != nil {
+					return err
+				}
+			}
 
 			// Early C5 feedback for the seller; the same guard runs again at approval against the then-current state.
 			if req.Variants != nil {
@@ -1236,9 +1244,17 @@ func (s *Service) GetSellerProduct(ctx context.Context, currentUserID, productID
 	if err != nil {
 		return Product{}, err
 	}
-	if pendingRev != nil && pendingRev.VariantsChanged {
-		p.Variants = overlayRevisionVariants(p.Variants, pendingRev.Variants)
-		PopulateProductAggregates(p)
+	if pendingRev != nil {
+		if pendingRev.VariantsChanged {
+			p.Variants = overlayRevisionVariants(p.Variants, pendingRev.Variants)
+			PopulateProductAggregates(p)
+		}
+		if pendingRev.ImagesChanged {
+			// Studio shows and edits the proposed gallery; the published one stays untouched until approval.
+			p.Images = pendingRev.Images
+			p.MainImageURL, p.MainImageObjectKey = mainImageOf(pendingRev.Images, p.MainImageURL, p.MainImageObjectKey)
+		}
+		p.PendingRevision = pendingRev
 	}
 	return *p, nil
 }
@@ -1636,6 +1652,19 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 		CreatedAt:   now,
 	}
 
+	// Object storage is outside the PostgreSQL transaction: confirm the new photos' files exist (and are cropped)
+	// before anything is applied, so approval never publishes a broken URL.
+	if toStatus == StatusPublished {
+		if prePending, perr := s.repo.GetPendingRevision(ctx, p.ID); perr != nil {
+			return perr
+		} else if prePending != nil {
+			if verr := s.verifyRevisionMedia(ctx, p.ID, prePending.ContentSnapshot); verr != nil {
+				s.emitRevisionBlocked(ctx, adminUserID, p.ID, verr)
+				return verr
+			}
+		}
+	}
+
 	var promotedRevisionID *uuid.UUID
 	err = s.dbPool.RunInTx(ctx, func(tx pgx.Tx) error {
 		txRepo := s.repo.WithTx(tx)
@@ -1702,25 +1731,7 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 	})
 
 	if err != nil && toStatus == StatusPublished && errors.Is(err, ErrRevisionNotApplicable) {
-		reason := "conflict"
-		var deactErr *VariantDeactivationBlockedError
-		if errors.As(err, &deactErr) {
-			reason = deactErr.Reason
-		} else if !errors.Is(err, ErrRevisionConflict) {
-			reason = "media"
-		}
-		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
-			EventName: "product.revision_apply_blocked",
-			Domain:    "product",
-			Action:    "revision_apply",
-			Result:    "blocked",
-			ActorID:   adminUserID.String(),
-			ActorRole: "admin",
-			Attributes: []slog.Attr{
-				slog.String("product_id", p.ID.String()),
-				slog.String("reason", reason),
-			},
-		})
+		s.emitRevisionBlocked(ctx, adminUserID, p.ID, err)
 	}
 	if err == nil && promotedRevisionID != nil {
 		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
@@ -1745,6 +1756,37 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 	}
 
 	return err
+}
+
+func (s *Service) emitRevisionBlocked(ctx context.Context, adminUserID, productID uuid.UUID, err error) {
+	if !errors.Is(err, ErrRevisionNotApplicable) {
+		return
+	}
+	reason := "conflict"
+	var deactErr *VariantDeactivationBlockedError
+	switch {
+	case errors.As(err, &deactErr):
+		reason = deactErr.Reason
+	case errors.Is(err, ErrRevisionConflict):
+	case errors.Is(err, ErrStagedMediaRenditionMissing):
+		reason = "photo_not_cropped"
+	case errors.Is(err, ErrRevisionMediaObjectMissing):
+		reason = "photo_file_missing"
+	default:
+		reason = "media"
+	}
+	observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+		EventName: "product.revision_apply_blocked",
+		Domain:    "product",
+		Action:    "revision_apply",
+		Result:    "blocked",
+		ActorID:   adminUserID.String(),
+		ActorRole: "admin",
+		Attributes: []slog.Attr{
+			slog.String("product_id", productID.String()),
+			slog.String("reason", reason),
+		},
+	})
 }
 
 func (s *Service) ApproveProduct(ctx context.Context, adminUserID, productID uuid.UUID, comment *string) error {

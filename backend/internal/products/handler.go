@@ -888,6 +888,14 @@ func (h *Handler) handleAdminModerationAction(w http.ResponseWriter, r *http.Req
 			h.writeError(w, http.StatusConflict, "revision_conflict", "Варианты товара изменились после отправки ревизии. Изменения не применены — отклоните ревизию, продавец отправит актуальную.")
 			return
 		}
+		if errors.Is(err, ErrStagedMediaRenditionMissing) {
+			h.writeError(w, http.StatusConflict, "revision_photo_not_cropped", "У новой фотографии нет кадра 4:5. Изменения не применены — верните товар продавцу: фото нужно обрезать.")
+			return
+		}
+		if errors.Is(err, ErrRevisionMediaObjectMissing) || errors.Is(err, ErrInvalidMediaReference) || errors.Is(err, ErrStagedMediaNotReady) {
+			h.writeError(w, http.StatusConflict, "revision_photo_missing", "Файл новой фотографии недоступен. Изменения не применены — верните товар продавцу, чтобы он загрузил фото заново.")
+			return
+		}
 		if errors.Is(err, ErrRevisionNotApplicable) && (errors.Is(err, ErrProductPriceInvalid) || errors.Is(err, ErrProductSKURequired) || errors.Is(err, ErrProductVariantsRequired)) {
 			h.writeError(w, http.StatusConflict, "revision_incomplete", "У варианта в ревизии нет цены или артикула продавца. Изменения не применены — верните товар продавцу на исправление.")
 			return

@@ -119,6 +119,20 @@ func (s *S3Client) DownloadObjectBounded(ctx context.Context, objectKey string, 
 	return buf.Bytes(), nil
 }
 
+// ObjectExists reports whether the object is present in the bucket (used to confirm new revision photos before
+// they are published; a missing object is (false, nil), any other failure is an error).
+func (s *S3Client) ObjectExists(ctx context.Context, objectKey string) (bool, error) {
+	_, err := s.client.StatObject(ctx, s.cfg.Bucket, objectKey, minio.StatObjectOptions{})
+	if err == nil {
+		return true, nil
+	}
+	wrapped := wrapMinioError(err)
+	if errors.Is(wrapped, ErrObjectNotFound) {
+		return false, nil
+	}
+	return false, wrapped
+}
+
 func wrapMinioError(err error) error {
 	if err == nil {
 		return nil

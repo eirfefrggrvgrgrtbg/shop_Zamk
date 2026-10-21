@@ -262,6 +262,7 @@ export function hydrateProductStudioDraft({
     brandId,
     brandName,
     status,
+    hasPendingRevision: Boolean(product.pendingRevision),
     priceCents,
     oldPriceCents,
     images,

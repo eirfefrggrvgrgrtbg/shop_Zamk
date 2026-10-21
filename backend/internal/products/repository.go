@@ -242,6 +242,8 @@ func (r *Repository) ListProductMediaObjectKeysForCleanup(ctx context.Context, p
 			UNION
 			SELECT object_key AS key FROM product_media_staging WHERE product_id = $1 AND object_key IS NOT NULL AND object_key != ''
 			UNION
+			SELECT rendition_object_key AS key FROM product_media_staging WHERE product_id = $1 AND rendition_object_key IS NOT NULL AND rendition_object_key != ''
+			UNION
 			SELECT main_image_object_key AS key FROM products WHERE id = $1 AND main_image_object_key IS NOT NULL AND main_image_object_key != ''
 		) t
 	`

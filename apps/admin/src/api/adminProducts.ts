@@ -143,6 +143,20 @@ export interface AdminProductPendingRevision {
   variants: AdminProductVariantDisplay[];
   imagesChanged: boolean;
   imagesCount: number;
+  images: AdminPendingRevisionImage[];
+  imagesMissing: number;
+}
+
+export interface AdminPendingRevisionImage {
+  id: string;
+  url: string;
+  altText?: string;
+  colorId?: string;
+  isMain: boolean;
+  /** A new photo (not yet in the published gallery). */
+  isNew: boolean;
+  /** The 4:5 rendition exists; Admin cannot approve a new photo without it. */
+  hasRendition: boolean;
 }
 
 const statusLabels: Record<AdminProductStatus, string> = {
@@ -301,6 +315,16 @@ const mapPendingRevision = (rev: any): AdminProductPendingRevision | undefined =
     variants: mapVariants(rev.variants),
     imagesChanged: Boolean(rev.imagesChanged),
     imagesCount: typeof rev.imagesCount === 'number' ? rev.imagesCount : 0,
+    images: (Array.isArray(rev.images) ? rev.images : []).map((img: any) => ({
+      id: img.id,
+      url: img.renditionUrl || img.imageUrl,
+      altText: img.altText,
+      colorId: img.colorId ?? undefined,
+      isMain: Boolean(img.isMain),
+      isNew: Boolean(img.pending),
+      hasRendition: Boolean(img.renditionUrl),
+    })),
+    imagesMissing: typeof rev.imagesMissing === 'number' ? rev.imagesMissing : 0,
   };
 };
 

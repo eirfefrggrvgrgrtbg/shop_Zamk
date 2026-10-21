@@ -125,6 +125,8 @@ export interface ProductImage {
   cropHeight?: number;
   isMain?: boolean;
   createdAt?: string;
+  /** A new photo of a pending revision: uploaded, not yet part of the published gallery. */
+  pending?: boolean;
 }
 
 export interface StageSellerProductImageResponse {
@@ -192,6 +194,18 @@ export interface ProductDetail extends ProductSummary {
   sizeChart?: AdminProductSizeChart;
   attributes?: ProductAttributeValue[];
   gender?: string;
+  /** The seller's edit of a published product that waits for Admin approval (Seller/Admin product detail only). */
+  pendingRevision?: PendingProductRevision;
+}
+
+export interface PendingProductRevision {
+  id: string;
+  createdAt?: string;
+  variantsChanged: boolean;
+  imagesChanged: boolean;
+  imagesCount: number;
+  images?: ProductImage[];
+  imagesMissing?: number;
 }
 
 export interface ProductVariant {

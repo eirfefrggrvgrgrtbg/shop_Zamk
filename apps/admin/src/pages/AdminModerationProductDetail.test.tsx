@@ -185,6 +185,8 @@ describe('AdminModerationProductDetail — AI Panel & Moderation Controls Bounda
         variantsChanged: true,
         imagesChanged: false,
         imagesCount: 0,
+        images: [],
+        imagesMissing: 0,
         variants: [
           { id: 'var-1', label: 'Черный / S', sku: 'BS', price: 100, isActive: true },
           { id: 'var-new', label: 'Черный / M', sku: 'BM', price: 120, isActive: true },
@@ -202,5 +204,34 @@ describe('AdminModerationProductDetail — AI Panel & Moderation Controls Bounda
     expect(screen.getByTestId('btn-revise')).toBeDefined();
     expect(screen.queryByTestId('btn-reject')).toBeNull();
     expect(screen.queryByTestId('btn-start-review')).toBeNull();
+  });
+
+  it('shows the proposed gallery with new photos and flags a new photo without 4:5', async () => {
+    vi.mocked(adminProductsApi.getAdminProduct).mockResolvedValue({
+      ...baseProduct,
+      status: 'published',
+      statusLabel: 'Опубликован',
+      pendingRevision: {
+        id: 'rev-2',
+        variantsChanged: false,
+        imagesChanged: true,
+        imagesCount: 3,
+        imagesMissing: 0,
+        variants: [],
+        images: [
+          { id: 'n1', url: 'https://example.com/n1_r.jpg', isMain: true, isNew: true, hasRendition: true },
+          { id: 'o1', url: 'https://example.com/o1.jpg', isMain: false, isNew: false, hasRendition: true },
+          { id: 'n2', url: 'https://example.com/n2.jpg', isMain: false, isNew: true, hasRendition: false },
+        ],
+      },
+    });
+    renderComponent();
+
+    const gallery = await screen.findByTestId('pending-revision-gallery');
+    const items = screen.getAllByTestId('pending-revision-image');
+    expect(items).toHaveLength(3);
+    expect(items.map((i) => i.getAttribute('data-new'))).toEqual(['true', 'false', 'true']);
+    expect(gallery.textContent).toContain('Нет 4:5');
+    expect(screen.queryByTestId('pending-revision-images-missing')).toBeNull();
   });
 });

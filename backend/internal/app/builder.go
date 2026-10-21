@@ -145,6 +145,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	var storageHandler *storage.Handler
 	storageProvider, err := storage.NewS3Client(&cfg.S3)
 	if err == nil {
+		productsService.WithMediaObjectVerifier(storageProvider.ObjectExists)
 		storageService := storage.NewService(storageProvider, productsRepo, catalogRepo, sellersRepo, pgClient)
 		storageHandler = storage.NewHandler(storageService, &cfg.S3)
 	} else {
