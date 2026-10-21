@@ -12,3 +12,4 @@ cmd/**/main
 database.sqlite
 # Profiling
 tmp_profile_*/
+demo/bin/
