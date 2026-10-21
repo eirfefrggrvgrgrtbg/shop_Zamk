@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
@@ -23,7 +22,7 @@ func TestReconcileProductImagesTx(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	db, err := postgres.NewClient(ctx, dsn)
+	db, err := testutil.NewTrackedClient(t, ctx, dsn)
 	require.NoError(t, err)
 
 	// Canonical DB Safety Guard before any mutation

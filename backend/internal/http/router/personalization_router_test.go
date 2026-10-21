@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -47,7 +48,7 @@ func setupPersonalizationRouterTestEnv(t *testing.T) (context.Context, http.Hand
 		Worker: config.WorkerConfig{MarketplaceCommissionBPS: 1500},
 	}
 
-	pgClient, err := postgres.NewClient(ctx, testDBURL)
+	pgClient, err := testutil.NewTrackedClient(t, ctx, testDBURL)
 	require.NoError(t, err)
 
 	var dbName string

@@ -18,7 +18,6 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/app"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
@@ -26,7 +25,7 @@ import (
 func TestReconciliationEndpoints_RoutingAndRBAC(t *testing.T) {
 	ctx := context.Background()
 	dsn := testutil.GetTestDatabaseURL()
-	pgClient, err := postgres.NewClient(ctx, dsn)
+	pgClient, err := testutil.NewTrackedClient(t, ctx, dsn)
 	require.NoError(t, err)
 	defer pgClient.Close()
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +19,6 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/app"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
 )
@@ -39,7 +39,7 @@ func TestAdminReturnsReceivingRouter_RBAC(t *testing.T) {
 		Auth: config.AuthConfig{},
 		App:  config.AppConfig{Env: "test"},
 	}
-	pgClient, err := postgres.NewClient(ctx, testDBURL)
+	pgClient, err := testutil.NewTrackedClient(t, ctx, testDBURL)
 	require.NoError(t, err)
 	defer pgClient.Close()
 

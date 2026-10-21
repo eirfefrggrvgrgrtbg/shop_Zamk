@@ -2,6 +2,7 @@ package router_test
 
 import (
 	"context"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +17,6 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/app"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
 )
 
@@ -38,7 +38,7 @@ func TestCustomerOrderCancelAuthorization(t *testing.T) {
 		Worker: config.WorkerConfig{MarketplaceCommissionBPS: 1500},
 	}
 
-	pgClient, err := postgres.NewClient(ctx, testDBURL)
+	pgClient, err := testutil.NewTrackedClient(t, ctx, testDBURL)
 	require.NoError(t, err)
 	defer pgClient.Close()
 

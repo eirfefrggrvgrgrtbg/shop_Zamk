@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -22,7 +21,7 @@ var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4
 func TestM61A_AdminGlobalSearch(t *testing.T) {
 	ctx := context.Background()
 	dsn := testutil.GetTestDatabaseURL()
-	pool, err := pgxpool.New(ctx, dsn)
+	pool, err := testutil.NewTrackedPool(t, ctx, dsn)
 	require.NoError(t, err)
 	defer pool.Close()
 

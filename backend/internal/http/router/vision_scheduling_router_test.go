@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -44,7 +45,7 @@ func setupVisionRouterTestEnv(t *testing.T, visionEnabled bool) (context.Context
 		},
 	}
 
-	pgClient, err := postgres.NewClient(ctx, testDBURL)
+	pgClient, err := testutil.NewTrackedClient(t, ctx, testDBURL)
 	require.NoError(t, err)
 
 	var dbName string

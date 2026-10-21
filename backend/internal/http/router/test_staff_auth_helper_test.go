@@ -97,7 +97,7 @@ func syncRouterStaffRolePermissions(ctx context.Context, db postgres.DBTX, userI
 func TestRouterStaffAuthHelper_DualWriteInvariant(t *testing.T) {
 	ctx := context.Background()
 	testDBURL := testutil.GetTestDatabaseURL()
-	pgClient, err := postgres.NewClient(ctx, testDBURL)
+	pgClient, err := testutil.NewTrackedClient(t, ctx, testDBURL)
 	require.NoError(t, err)
 	defer pgClient.Close()
 

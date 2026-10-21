@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -43,7 +44,7 @@ func setupSessionIsolationEnv(t *testing.T) (context.Context, http.Handler, func
 		Worker: config.WorkerConfig{MarketplaceCommissionBPS: 1500},
 	}
 
-	pgClient, err := postgres.NewClient(ctx, testDBURL)
+	pgClient, err := testutil.NewTrackedClient(t, ctx, testDBURL)
 	require.NoError(t, err)
 
 	// Invariant check: only execute against zamk_test

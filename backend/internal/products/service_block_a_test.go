@@ -26,10 +26,8 @@ func setupBlockATestDB(t *testing.T) (*postgres.Client, *products.Service, uuid.
 	dsn := testutil.GetTestDatabaseURL()
 
 	ctx := context.Background()
-	db, err := postgres.NewClient(ctx, dsn)
+	db, err := testutil.NewTrackedClient(t, ctx, dsn)
 	require.NoError(t, err)
-	// Registered before the fixture cleanups below so the pool is closed after them (Cleanup runs LIFO).
-	t.Cleanup(db.Close)
 
 	var dbName string
 	err = db.Pool.QueryRow(ctx, "SELECT current_database()").Scan(&dbName)

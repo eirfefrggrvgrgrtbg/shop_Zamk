@@ -34,7 +34,7 @@ func setupFBOTestRouter(t *testing.T) (context.Context, *postgres.Client, *redis
 func setupFBOTestRouterWithLogger(t *testing.T, logWriter io.Writer) (context.Context, *postgres.Client, *redis.Client, http.Handler, *auth.TokenService, func()) {
 	ctx := context.Background()
 	dsn := testutil.GetTestDatabaseURL()
-	pgClient, err := postgres.NewClient(ctx, dsn)
+	pgClient, err := testutil.NewTrackedClient(t, ctx, dsn)
 	require.NoError(t, err)
 
 	testutil.AssertTestDatabase(t, pgClient.Pool)

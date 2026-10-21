@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"testing"
 	"time"
 
@@ -34,7 +35,7 @@ func setupForecastTestEnvironment(t *testing.T) (
 ) {
 	ctx := context.Background()
 
-	pgClient, err := postgres.NewClient(ctx, testDBURL)
+	pgClient, err := testutil.NewTrackedClient(t, ctx, testDBURL)
 	require.NoError(t, err)
 
 	var dbName string

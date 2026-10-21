@@ -2,12 +2,12 @@ package catalog_test
 
 import (
 	"context"
-	"testing"
-	"os"
-	"github.com/stretchr/testify/require"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/catalog"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	"os"
+	"testing"
 )
 
 func TestRepository_ListCategories_ActiveOnly(t *testing.T) {
@@ -20,7 +20,7 @@ func TestRepository_ListCategories_ActiveOnly(t *testing.T) {
 		dbURL = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
 	}
 
-	dbClient, err := postgres.NewClient(ctx, dbURL)
+	dbClient, err := testutil.NewTrackedClient(t, ctx, dbURL)
 	require.NoError(t, err)
 	defer dbClient.Close()
 
@@ -28,9 +28,9 @@ func TestRepository_ListCategories_ActiveOnly(t *testing.T) {
 
 	catID1 := uuid.New()
 	catID2 := uuid.New()
-	_, err = dbClient.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug, sort_order, is_active) VALUES ($1, 'Active Cat Test', $2, 1, true)", catID1, "active-" + catID1.String())
+	_, err = dbClient.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug, sort_order, is_active) VALUES ($1, 'Active Cat Test', $2, 1, true)", catID1, "active-"+catID1.String())
 	require.NoError(t, err)
-	_, err = dbClient.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug, sort_order, is_active) VALUES ($1, 'Inactive Cat Test', $2, 2, false)", catID2, "inactive-" + catID2.String())
+	_, err = dbClient.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug, sort_order, is_active) VALUES ($1, 'Inactive Cat Test', $2, 2, false)", catID2, "inactive-"+catID2.String())
 	require.NoError(t, err)
 
 	activeCats, err := repo.ListCategories(ctx, true)

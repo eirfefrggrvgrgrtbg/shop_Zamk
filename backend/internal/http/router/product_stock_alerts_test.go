@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -41,7 +42,7 @@ func setupProductStockAlertsTestEnv(t *testing.T) (context.Context, http.Handler
 		Worker: config.WorkerConfig{MarketplaceCommissionBPS: 1500},
 	}
 
-	pgClient, err := postgres.NewClient(ctx, testDBURL)
+	pgClient, err := testutil.NewTrackedClient(t, ctx, testDBURL)
 	require.NoError(t, err)
 
 	var dbName string
@@ -232,7 +233,6 @@ func TestNTF2_ProductStockAlerts(t *testing.T) {
 
 		return prodID, variantID
 	}
-
 
 	getAlertsForProduct := func(prodID uuid.UUID) []notifications.Notification {
 		dedupeKey := fmt.Sprintf("stock:critical:%s", prodID.String())
@@ -863,7 +863,6 @@ func TestNTF2_ProductStockAlerts(t *testing.T) {
 		assert.Equal(t, 1, modLogsCount, "Moderation logs must not be created by seller status changes (only the initial approval log exists)")
 	})
 
-
 	t.Run("N. ONE ORDER RESERVATION CAUSES ONE LOGICAL STOCK-ALERT RECONCILIATION", func(t *testing.T) {
 		prodID, varID := createProductFixture("Single Reconcile Product", "single-rec-"+uuid.New().String()[:8], "pending_moderation", 120000)
 		_, err := pgClient.Pool.Exec(ctx, `
@@ -971,7 +970,6 @@ func TestNTF2_ProductStockAlerts(t *testing.T) {
 				($4, $5, $6, 1, now(), now())
 		`, supplyItemID1, supplyID, var1, supplyItemID2, supplyID, var2)
 		require.NoError(t, err)
-
 
 		// 1. Arrive supply
 		arriveReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/admin/receiving/%s/arrive", supplyID), nil)

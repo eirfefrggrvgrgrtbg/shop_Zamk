@@ -41,10 +41,8 @@ func setupPriceHistoryTestDB(t *testing.T) (*postgres.Client, *products.Service,
 	dsn := testutil.GetTestDatabaseURL()
 	require.True(t, strings.Contains(dsn, "zamk_test"), "MUST run only against zamk_test")
 
-	db, err := postgres.NewClient(ctx, dsn)
+	db, err := testutil.NewTrackedClient(t, ctx, dsn)
 	require.NoError(t, err)
-	// Registered first so the pool is closed after the fixture cleanups (Cleanup runs LIFO).
-	t.Cleanup(db.Close)
 
 	testutil.AssertTestDatabase(t, db.Pool)
 

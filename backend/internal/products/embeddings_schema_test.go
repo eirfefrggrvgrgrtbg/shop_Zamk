@@ -3,12 +3,12 @@ package products_test
 import (
 	"context"
 	"errors"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func makeVector(dim int) string {
@@ -29,7 +29,7 @@ func TestEmbeddingsSchema(t *testing.T) {
 
 	// Safe test connection string: only zamk_test is allowed
 	const testConnStr = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
-	pool, err := pgxpool.New(ctx, testConnStr)
+	pool, err := testutil.NewTrackedPool(t, ctx, testConnStr)
 	if err != nil {
 		t.Fatalf("failed to connect to db: %v", err)
 	}

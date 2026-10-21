@@ -189,7 +189,7 @@ func TestDeliveryPayoutsIntegration(t *testing.T) {
 	}
 
 	dsn := testutil.GetTestDatabaseURL()
-	pgClient, err := postgres.NewClient(ctx, dsn)
+	pgClient, err := testutil.NewTrackedClient(t, ctx, dsn)
 	require.NoError(t, err)
 
 	// 1. Test DB safety guard before any fixture writes
