@@ -9,6 +9,7 @@ import { fetchBrands, fetchCategories, fetchColors, fetchProducts, type CatalogC
 import { useAuth } from '../contexts/AuthContext';
 import type { Brand, Category, Product } from '../types/catalog';
 import { cn } from '../lib/utils';
+import { buildSizeFilterModel, sanitizeSizeSystem } from '../lib/catalogSizes';
 
 const SORT_OPTIONS = [
   { value: 'default', label: 'По умолчанию' },
@@ -27,18 +28,27 @@ function FilterSection({ title, children, defaultOpen = true }: { title: string;
   return (
     <div className="border-b border-black/10 dark:border-white/10 py-4">
       <button
+        type="button"
+        aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between text-left group"
       >
         <span className="text-[10px] font-mono uppercase tracking-widest text-black dark:text-white/90">{title}</span>
         <ChevronDown className={cn("w-3.5 h-3.5 text-black/50 dark:text-white/50 transition-transform duration-300 group-hover:text-black dark:group-hover:text-white", isOpen && "rotate-180")} />
       </button>
-      <div className={cn("overflow-hidden transition-all duration-300 ease-in-out", isOpen ? "mt-4 max-h-[1000px] opacity-100" : "max-h-0 opacity-0")}>
-        {children}
+      {/* grid-rows animates to the content's real height: nothing is clipped, nothing needs a magic max-height */}
+      <div
+        aria-hidden={!isOpen}
+        className={cn("grid transition-[grid-template-rows,opacity,margin] duration-300 ease-in-out", isOpen ? "mt-4 grid-rows-[1fr] opacity-100" : "mt-0 grid-rows-[0fr] opacity-0 pointer-events-none")}
+      >
+        <div className="min-h-0 min-w-0 overflow-hidden">{children}</div>
       </div>
     </div>
   );
 }
+
+// Длинные списки (категории, бренды, цвета) прокручиваются внутри секции, а не растягивают панель
+const LIST_SCROLL = 'max-h-72 overflow-y-auto overscroll-contain pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-black/10 dark:[&::-webkit-scrollbar-thumb]:bg-white/10';
 
 // Строгий чекбокс для списков (категории, бренды, т.д.)
 function FilterCheckbox({
@@ -54,22 +64,23 @@ function FilterCheckbox({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="flex items-center justify-between w-full py-1.5 group text-left"
+      className="flex items-center justify-between gap-2 w-full py-1.5 group text-left"
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0">
         <div className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
           {isActive && <Check className="w-4 h-4 text-black dark:text-white" strokeWidth={2.5} />}
         </div>
-        <span className={cn(
-          "text-[12px] font-sans font-light tracking-wide transition-colors",
+        <span title={label} className={cn(
+          "text-[12px] font-sans font-light tracking-wide transition-colors truncate",
           isActive ? "text-black dark:text-white font-normal" : "text-black/70 dark:text-white/70 group-hover:text-black dark:group-hover:text-white"
         )}>
           {label}
         </span>
       </div>
       {count !== undefined && (
-        <span className="text-[10px] font-mono text-black/40 dark:text-white/40">
+        <span className="text-[10px] font-mono text-black/40 dark:text-white/40 shrink-0">
           [{count}]
         </span>
       )}
@@ -253,18 +264,11 @@ export function Catalog() {
       ['categoryId', 'brandId', 'size', 'sizeSystem', 'colorId', 'inStock', 'minPriceCents', 'maxPriceCents'].forEach((k) => p.delete(k));
     });
 
-  // Size groups: the current category's own system; for "all" every distinct system, kept apart.
-  const sizeGroups = useMemo(() => {
-    if (activeCategory !== 'all') {
-      const sys = categories.find((c) => c.id === activeCategory)?.sizeSystem;
-      return sys && sys.values.length > 0 ? [sys] : [];
-    }
-    const byCode = new Map<string, NonNullable<Category['sizeSystem']>>();
-    for (const c of categories) {
-      if (c.sizeSystem && c.sizeSystem.values.length > 0 && !byCode.has(c.sizeSystem.code)) byCode.set(c.sizeSystem.code, c.sizeSystem);
-    }
-    return [...byCode.values()];
-  }, [activeCategory, categories]);
+  // Size filter model: the current category's own system; for "all products" a few distinct systems, or a prompt
+  // to pick a category when there are too many / indistinguishable ones. Names are never merged; identity is `code`.
+  const sizeModel = useMemo(() => buildSizeFilterModel(categories, activeCategory), [activeCategory, categories]);
+  const sizeGroups = sizeModel.view.groups;
+  const validSizeSystems = sizeModel.validSystems;
 
   const writeSizes = (sizes: string[], system: string | null, replace: boolean) =>
     updateParams((p) => {
@@ -297,7 +301,7 @@ export function Catalog() {
       const base = p.get('sizeSystem') === systemCode ? readList(p, 'size') : [];
       const picked = base.includes(size) ? base.filter((s) => s !== size) : [...base, size];
       // canonical order = the system's own size order, so URLs are stable regardless of click order
-      const order = sizeGroups.find((g) => g.code === systemCode)?.values.map((v) => v.value) ?? [];
+      const order = validSizeSystems.find((g) => g.code === systemCode)?.values.map((v) => v.value) ?? [];
       const next = [...picked].sort((a, b) => order.indexOf(a) - order.indexOf(b));
       if (next.length > 0) {
         p.set('size', next.join(','));
@@ -319,7 +323,7 @@ export function Catalog() {
     updateParams((p) => {
       setParam(p, 'categoryId', categoryId === 'all' ? null : categoryId);
       if (categoryId === 'all' || activeSizes.length === 0) return;
-      const sys = categories.find((c) => c.id === categoryId)?.sizeSystem;
+      const sys = sanitizeSizeSystem(categories.find((c) => c.id === categoryId)?.sizeSystem);
       const allowed = sys && sys.code === activeSizeSystem ? new Set(sys.values.map((v) => v.value)) : null;
       const valid = allowed ? activeSizes.filter((v) => allowed.has(v)) : [];
       if (sys && valid.length > 0) {
@@ -334,19 +338,19 @@ export function Catalog() {
   // A crafted/stale URL must not keep sizes that don't exist for the current category.
   useEffect(() => {
     if (!metaLoaded.current || activeSizes.length === 0) return;
-    const group = sizeGroups.find((g) => g.code === activeSizeSystem);
+    const group = validSizeSystems.find((g) => g.code === activeSizeSystem);
     if (!group) return clearSizes(true);
     const allowed = new Set(group.values.map((v) => v.value));
     const valid = activeSizes.filter((v) => allowed.has(v));
     if (valid.length !== activeSizes.length) writeSizes(valid, activeSizeSystem, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sizeGroups, sizeKey, activeSizeSystem, categories.length]);
+  }, [validSizeSystems, sizeKey, activeSizeSystem, categories.length]);
 
   const FiltersContent = () => (
     <div className="flex flex-col px-1 pb-4">
       {/* Категории */}
       <FilterSection title="Категории" defaultOpen={activeCategory !== 'all'}>
-        <div className="flex flex-col gap-1">
+        <div className={cn("flex flex-col gap-1", LIST_SCROLL)}>
           {categories.length === 0 ? (
             <p className="py-2 text-xs text-black/45 dark:text-white/45">Категории пока не добавлены</p>
           ) : (
@@ -365,16 +369,27 @@ export function Catalog() {
 
       {/* Размеры */}
       <FilterSection title="Размер" defaultOpen>
-        {sizeGroups.length === 0 ? (
+        {sizeModel.view.kind === 'prompt' ? (
+          <div className="flex flex-col gap-2" data-testid="size-filter-prompt">
+            <p className="py-1 text-xs leading-relaxed text-black/55 dark:text-white/55">
+              Выберите категорию, чтобы увидеть доступные размеры
+            </p>
+            {activeSizes.length > 0 && (
+              <button type="button" onClick={() => clearSizes()} className="self-start text-[11px] underline text-black/60 dark:text-white/60">
+                Сбросить размеры
+              </button>
+            )}
+          </div>
+        ) : sizeGroups.length === 0 ? (
           <p className="py-1 text-xs text-black/45 dark:text-white/45" data-testid="size-filter-empty">
             Для этой категории размерная сетка не задана
           </p>
         ) : (
           <div className="flex flex-col gap-4" data-testid="size-filter">
             {sizeGroups.map((group) => (
-              <div key={group.code}>
+              <div key={group.code} className="min-w-0">
                 {sizeGroups.length > 1 && (
-                  <p className="mb-2 text-[10px] font-mono uppercase tracking-widest text-black/40 dark:text-white/40">{group.name}</p>
+                  <p title={group.name} className="mb-2 truncate text-[10px] font-mono uppercase tracking-widest text-black/40 dark:text-white/40">{group.name}</p>
                 )}
                 <div className="grid grid-cols-4 gap-2">
                   {group.values.map(({ value }) => {
@@ -384,16 +399,17 @@ export function Catalog() {
                         key={`${group.code}-${value}`}
                         type="button"
                         aria-pressed={isActive}
+                        title={value}
                         data-testid={`size-filter-${group.code}-${value}`}
                         onClick={() => toggleSize(group.code, value)}
                         className={cn(
-                          "h-8 border text-[11px] font-mono transition-all flex items-center justify-center rounded-[2px]",
+                          "h-8 min-w-0 px-1 border text-[11px] font-mono transition-all flex items-center justify-center rounded-[2px]",
                           isActive
                             ? "bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
                             : "bg-transparent border-black/20 dark:border-white/20 text-black/60 dark:text-white/60 hover:border-black/50 dark:hover:border-white/50 hover:text-black dark:hover:text-white"
                         )}
                       >
-                        {value}
+                        <span className="truncate">{value}</span>
                       </button>
                     );
                   })}
@@ -414,7 +430,7 @@ export function Catalog() {
         {colors.length === 0 ? (
           <p className="py-1 text-xs text-black/45 dark:text-white/45" data-testid="color-filter-empty">Цвета пока недоступны</p>
         ) : (
-          <div className="flex flex-col gap-1" data-testid="color-filter">
+          <div className={cn("flex flex-col gap-1", LIST_SCROLL)} data-testid="color-filter">
             {colors.map((color) => {
               const isActive = activeColors.includes(color.id);
               return (
@@ -435,8 +451,8 @@ export function Catalog() {
                     )}
                     style={color.hex ? { backgroundColor: color.hex } : undefined}
                   />
-                  <span className={cn(
-                    "text-[12px] font-sans font-light tracking-wide transition-colors",
+                  <span title={color.name} className={cn(
+                    "text-[12px] font-sans font-light tracking-wide transition-colors truncate min-w-0",
                     isActive ? "text-black dark:text-white font-normal" : "text-black/70 dark:text-white/70 group-hover:text-black dark:group-hover:text-white"
                   )}>
                     {color.name}
@@ -456,7 +472,7 @@ export function Catalog() {
 
       {/* Продавцы */}
       <FilterSection title="Продавец" defaultOpen={activeBrand !== null}>
-        <div className="flex flex-col gap-1">
+        <div className={cn("flex flex-col gap-1", LIST_SCROLL)}>
           <FilterCheckbox
             label="Все продавцы"
             isActive={activeBrand === null}
