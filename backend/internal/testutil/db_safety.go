@@ -30,7 +30,7 @@ type DBExecutor interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 }
 
-// VerifyTestDatabase verifies that the database connected to is strictly "zamk_test".
+// VerifyTestDatabase verifies that the database connected to is "zamk_test" or a disposable test database.
 // It returns a descriptive error if the connected database is anything else, preventing destructive test cleanup.
 func VerifyTestDatabase(ctx context.Context, db DBQueryRow) error {
 	if db == nil {
@@ -47,7 +47,8 @@ func VerifyTestDatabase(ctx context.Context, db DBQueryRow) error {
 	}
 
 	currentDB = strings.TrimSpace(currentDB)
-	if currentDB != RequiredTestDatabaseName {
+	// TEST.DB.4: a per-test disposable database (zamk_disposable_<12 hex>) is accepted too; it is even safer.
+	if currentDB != RequiredTestDatabaseName && !disposableNameRE.MatchString(currentDB) {
 		return fmt.Errorf("REFUSING DESTRUCTIVE TEST SETUP: expected database %q, connected to %q", RequiredTestDatabaseName, currentDB)
 	}
 

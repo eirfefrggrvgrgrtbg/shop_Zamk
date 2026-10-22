@@ -217,7 +217,9 @@ func TestM51_SchemaInvariants(t *testing.T) {
 	ctx := context.Background()
 
 	t.Cleanup(func() {
-		fix.client.Pool.Exec(ctx, "DELETE FROM return_item_units")
+		// TEST.DB.4: only the units of this fixture's returns (never the whole table)
+		fix.client.Pool.Exec(ctx, `DELETE FROM return_item_units WHERE return_item_id IN (
+			SELECT ri.id FROM return_items ri JOIN returns r ON r.id = ri.return_id WHERE r.user_id = $1)`, fix.userID)
 	})
 
 	tOrd := fix.createDeliveredOrder(t, time.Now().Add(-1*time.Hour), 2)

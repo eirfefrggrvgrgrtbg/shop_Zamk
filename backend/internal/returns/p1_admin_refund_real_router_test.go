@@ -277,7 +277,7 @@ func TestAdminRefundReserve_RealRouterAuth(t *testing.T) {
 	})
 
 	t.Run("admin_success", func(t *testing.T) {
-		defer data.Pool.Exec(context.Background(), "DELETE FROM refunds")
+		defer data.Pool.Exec(context.Background(), "DELETE FROM refunds WHERE order_id = $1", data.OrderID) // TEST.DB.4: own rows only
 		token := generateToken(data.AdminWithPermID, "admin")
 
 		bodyBytes, _ := json.Marshal(map[string]interface{}{

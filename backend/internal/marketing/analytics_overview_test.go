@@ -21,12 +21,13 @@ import (
 // TestAnalyticsOverview_Matrix tests marketing overview data according to Matrix A-AE.
 func TestAnalyticsOverview_Matrix(t *testing.T) {
 	ctx := context.Background()
-	dbURL := testutil.GetTestDatabaseURL()
+	dbURL := testutil.DisposableDatabaseURL(t) // TEST.DB.4: this test TRUNCATEs whole tables
 	db, err := pgxpool.New(ctx, dbURL)
 	require.NoError(t, err)
 	defer db.Close()
 
 	// Clear out relevant tables to ensure clean state
+	testutil.MustBeDisposableDatabase(t, db)
 	_, err = db.Exec(ctx, `TRUNCATE users, sellers, categories, brands, products, product_variants, marketing_campaigns, analytics_sessions, behavioral_events, orders, order_fulfillments, payments, order_items, returns, return_items, refunds CASCADE`)
 	require.NoError(t, err)
 

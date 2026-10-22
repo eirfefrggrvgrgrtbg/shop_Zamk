@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -104,10 +105,8 @@ func getNetCompensation(t *testing.T, env deductionTestEnv) int64 {
 func TestCompensation_00_DatabaseGuard(t *testing.T) {
 	client := setupTestDB(t)
 	defer client.Close()
-	var dbName string
-	err := client.Pool.QueryRow(context.Background(), "SELECT current_database()").Scan(&dbName)
-	require.NoError(t, err)
-	assert.Equal(t, "zamk_test", dbName)
+	// TEST.DB.4: payout tests TRUNCATE ledger tables, so they run on a disposable database, never a shared one.
+	require.NoError(t, testutil.VerifyDisposableDatabase(context.Background(), client.Pool))
 }
 
 // 1. Counterexample Test (Section 3 & 11)

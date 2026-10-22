@@ -26,12 +26,13 @@ import (
 // H. sum(daily.revenueCents) == canonical Overview revenueCents for same range
 func TestAnalyticsTrend_CanonicalTruth(t *testing.T) {
 	ctx := context.Background()
-	dbURL := testutil.GetTestDatabaseURL()
+	dbURL := testutil.DisposableDatabaseURL(t) // TEST.DB.4: this test TRUNCATEs whole tables
 	db, err := pgxpool.New(ctx, dbURL)
 	require.NoError(t, err)
 	defer db.Close()
 
 	// Clean database tables
+	testutil.MustBeDisposableDatabase(t, db)
 	_, err = db.Exec(ctx, `TRUNCATE users, sellers, categories, brands, products, product_variants, orders, order_fulfillments, payments, order_items, analytics_sessions CASCADE`)
 	require.NoError(t, err)
 

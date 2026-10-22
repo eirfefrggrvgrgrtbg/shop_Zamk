@@ -2,7 +2,6 @@ package orders
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
@@ -11,14 +10,12 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestC8FulfillmentCreation(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("Skipping test: TEST_DATABASE_URL not set")
-	}
+	dsn := testutil.DisposableDatabaseURL(t) // TEST.DB.4: this test deletes every order
 
 	ctx := context.Background()
 	db, err := pgxpool.New(ctx, dsn)
@@ -27,7 +24,8 @@ func TestC8FulfillmentCreation(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Clean up tables
+	// Clean up tables (only ever on this test's disposable database)
+	testutil.MustBeDisposableDatabase(t, db)
 	db.Exec(ctx, "DELETE FROM order_status_history")
 	db.Exec(ctx, "DELETE FROM order_reservations")
 	db.Exec(ctx, "DELETE FROM order_items")

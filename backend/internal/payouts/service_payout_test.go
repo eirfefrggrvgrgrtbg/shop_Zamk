@@ -16,7 +16,7 @@ import (
 )
 
 func setupTestDB(t *testing.T) *postgres.Client {
-	dsn := testutil.GetTestDatabaseURL()
+	dsn := testutil.DisposableDatabaseURL(t) // TEST.DB.4: these tests TRUNCATE financial tables
 	ctx := context.Background()
 	client, err := postgres.NewClient(ctx, dsn)
 	require.NoError(t, err)
@@ -27,6 +27,7 @@ func setupTestDB(t *testing.T) *postgres.Client {
 	require.NoError(t, testutil.EnsureCanonicalStarterTaxonomy(ctx, client.Pool))
 
 	// Truncate only payout financial tables
+	testutil.MustBeDisposableDatabase(t, client.Pool)
 	_, err = client.Pool.Exec(ctx, "TRUNCATE seller_ledger_entries CASCADE")
 	require.NoError(t, err)
 	_, err = client.Pool.Exec(ctx, "TRUNCATE payout_batches CASCADE")

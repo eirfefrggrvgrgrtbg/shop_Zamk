@@ -15,19 +15,27 @@ import (
 
 var testDB *pgxpool.Pool
 
+// TEST.DB.4: these tests TRUNCATE whole tables, so the package runs on its own disposable database, never zamk_test.
 func TestMain(m *testing.M) {
-	dbURL := testutil.GetTestDatabaseURL()
+	dbURL, dropDB, err := testutil.UseDisposableDatabaseForPackage()
+	if err != nil {
+		fmt.Printf("Unable to create a disposable test database: %v\n", err)
+		os.Exit(1)
+	}
 
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
 		fmt.Printf("Unable to connect to database: %v\n", err)
+		dropDB()
 		os.Exit(1)
 	}
 	testDB = pool
-	defer pool.Close()
 
-	os.Exit(m.Run())
+	code := m.Run()
+	pool.Close()
+	dropDB()
+	os.Exit(code)
 }
 
 type TestContext struct {
@@ -46,6 +54,7 @@ type TestContext struct {
 
 func setupTestContext(t *testing.T) *TestContext {
 	testutil.AssertTestDatabase(t, testDB)
+	testutil.MustBeDisposableDatabase(t, testDB) // the TRUNCATEs below never touch a shared database
 
 	ctx := context.Background()
 	repo := supplies.NewRepository(testDB)

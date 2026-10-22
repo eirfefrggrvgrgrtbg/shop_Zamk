@@ -18,7 +18,7 @@ func TestDashboardRepository_GetSummary(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	dbURL := testutil.GetTestDatabaseURL()
+	dbURL := testutil.DisposableDatabaseURL(t) // TEST.DB.4: this test TRUNCATEs whole tables
 	pgClient, err := postgres.NewClient(ctx, dbURL)
 	if err != nil {
 		t.Fatalf("Failed to connect to DB: %v", err)
@@ -28,6 +28,7 @@ func TestDashboardRepository_GetSummary(t *testing.T) {
 	testutil.AssertTestDatabase(t, pgClient.Pool)
 
 	// Clean up related tables before testing
+	testutil.MustBeDisposableDatabase(t, pgClient.Pool)
 	_, err = pgClient.Pool.Exec(ctx, `TRUNCATE TABLE payouts, auction_lots, inventory_items, products, sellers, orders, users CASCADE`)
 	if err != nil {
 		t.Fatalf("Failed to truncate tables: %v", err)
