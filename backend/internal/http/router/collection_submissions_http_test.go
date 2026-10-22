@@ -49,17 +49,10 @@ func TestCollectionSubmissions(t *testing.T) {
 	tokenService := auth.NewTokenService("test-secret", "test-secret-refresh", 60)
 
 	elig := products.CanonicalStorefrontEligibilitySQL("p", "s")
-	// Two distinct sellers: sellerA owns >=3 storefront-eligible products, sellerB owns >=1.
-	var sellerA, sellerB uuid.UUID
-	err = pgClient.Pool.QueryRow(ctx, `
-		SELECT p.seller_id FROM products p JOIN sellers s ON s.id = p.seller_id
-		WHERE `+elig+` GROUP BY p.seller_id HAVING count(*) >= 3 ORDER BY count(*) DESC LIMIT 1`).Scan(&sellerA)
-	require.NoError(t, err, "zamk_test needs a seller with >=3 eligible products")
-
-	err = pgClient.Pool.QueryRow(ctx, `
-		SELECT p.seller_id FROM products p JOIN sellers s ON s.id = p.seller_id
-		WHERE `+elig+` AND p.seller_id <> $1 GROUP BY p.seller_id HAVING count(*) >= 1 LIMIT 1`, sellerA).Scan(&sellerB)
-	require.NoError(t, err, "zamk_test needs a second distinct seller with >=1 eligible product")
+	// Two distinct, own sellers: sellerA owns 3 storefront-eligible products, sellerB owns 1 (isolated fixtures,
+	// never the sellers that happen to exist in the shared zamk_test).
+	sellerA := seedStorefrontSeller(t, pgClient.Pool, 3).SellerID
+	sellerB := seedStorefrontSeller(t, pgClient.Pool, 1).SellerID
 	eligibleOf := func(seller uuid.UUID) []uuid.UUID {
 		rows, err := pgClient.Pool.Query(ctx, `SELECT p.id FROM products p JOIN sellers s ON s.id = p.seller_id WHERE p.seller_id = $1 AND `+elig+` ORDER BY p.created_at DESC LIMIT 4`, seller)
 		require.NoError(t, err)

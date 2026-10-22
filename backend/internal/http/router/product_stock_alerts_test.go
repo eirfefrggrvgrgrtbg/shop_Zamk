@@ -197,6 +197,14 @@ func TestNTF2_ProductStockAlerts(t *testing.T) {
 		VALUES ($1, 'Alert Category', $2, true, now(), now())
 	`, catID, "alert-cat-"+catID.String()[:8])
 	require.NoError(t, err)
+	// C5.5: approval checks publication rules, so fixture products are publishable (brand, description, main photo).
+	pubBrandID := uuid.New()
+	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO brands (id, name, slug, is_active) VALUES ($1, $2, $2, true)`, pubBrandID, "fixture-brand-"+pubBrandID.String()[:8])
+	require.NoError(t, err)
+	makePublishable := func(prodID uuid.UUID) {
+		_, err := pgClient.Pool.Exec(ctx, `UPDATE products SET brand_id = $2, description = 'Товар для проверки правил публикации.', main_image_url = 'https://img.test/fixture.jpg' WHERE id = $1`, prodID, pubBrandID)
+		require.NoError(t, err)
+	}
 
 	var deliveryMethodID uuid.UUID
 	err = pgClient.Pool.QueryRow(ctx, "SELECT id FROM delivery_methods WHERE is_active = true LIMIT 1").Scan(&deliveryMethodID)
@@ -223,6 +231,7 @@ func TestNTF2_ProductStockAlerts(t *testing.T) {
 			) VALUES ($1, $2, $3, $4, $5, $6, 'RUB', $7, $8, $8, $8)
 		`, prodID, sellerID, catID, title, slug, priceCents, status, now)
 		require.NoError(t, err)
+		makePublishable(prodID)
 
 		_, err = pgClient.Pool.Exec(ctx, `
 			INSERT INTO product_variants (
@@ -611,6 +620,7 @@ func TestNTF2_ProductStockAlerts(t *testing.T) {
 			) VALUES ($1, $2, $3, 'Multi Variant Product', $4, 250000, 'RUB', 'pending_moderation', $5, $5, $5)
 		`, prodID, sellerID, catID, "multi-"+prodID.String()[:8], now)
 		require.NoError(t, err)
+		makePublishable(prodID)
 
 		skuA := "SKU-A-" + varA.String()[:8]
 		skuB := "SKU-B-" + varB.String()[:8]
@@ -928,6 +938,7 @@ func TestNTF2_ProductStockAlerts(t *testing.T) {
 			VALUES ($1, $2, $3, 'Multi-variant Receiving Product', $4, 200000, 'RUB', 'pending_moderation', $5, $5, $5)
 		`, prodID, sellerID, catID, "multi-recv-"+prodID.String()[:8], now)
 		require.NoError(t, err)
+		makePublishable(prodID)
 
 		_, err = pgClient.Pool.Exec(ctx, `
 			INSERT INTO product_variants (id, product_id, sku, seller_sku, barcode, price_cents, is_active, created_at, updated_at)

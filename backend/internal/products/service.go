@@ -1707,24 +1707,21 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 		CreatedAt:   now,
 	}
 
-	// A published product's revision is approved only if the product as approval would leave it passes the
-	// moderation checks (the same checks the Admin workplace shows): the live state alone neither blocks nor excuses it.
+	// Every approval to published is gated by the moderation checks of the product as approval would leave it (the
+	// same checks the Admin workplace shows): the first publication of a product as well as a published product's
+	// revision. The live state alone neither blocks nor excuses a revision. Nothing is written when a check fails.
 	var checkedRevisionID *uuid.UUID
-	if toStatus == StatusPublished && fromStatus == StatusPublished {
+	if toStatus == StatusPublished {
 		view, err := s.repo.GetPendingRevisionView(ctx, p.ID)
 		if err != nil {
 			return err
 		}
 		if view != nil {
 			checkedRevisionID = &view.ID
-			checks, err := s.moderationChecks(ctx, finalProduct(p, view))
-			if err != nil {
+		}
+		if fromStatus != StatusPublished || view != nil {
+			if err := s.enforceModerationChecks(ctx, adminUserID, p, view, fromStatus == StatusPublished); err != nil {
 				return err
-			}
-			if failed := failedChecks(checks); len(failed) > 0 {
-				cerr := &ModerationChecksError{Failed: failed}
-				s.emitRevisionBlocked(ctx, adminUserID, p.ID, cerr)
-				return cerr
 			}
 		}
 	}
@@ -1902,6 +1899,13 @@ func (s *Service) PublishProduct(ctx context.Context, adminUserID, productID uui
 	if !elig.IsEligible {
 		return &ErrNotPublishable{Reasons: elig.EligibilityReasons}
 	}
+	// First publication of an approved product: the same moderation checks as an approval. Un-hiding a product that
+	// was already on sale is not a new publication and keeps the eligibility rules only (historic products stay as is).
+	if p.Status == StatusApproved {
+		if err := s.enforceModerationChecks(ctx, adminUserID, p, nil, false); err != nil {
+			return err
+		}
+	}
 
 	now := time.Now()
 	fromStatus := p.Status
@@ -2068,7 +2072,13 @@ func (s *Service) GetPublicProduct(ctx context.Context, idOrSlug string) (Public
 		}
 	}
 
-	return MapToPublicProduct(*p), nil
+	pub := MapToPublicProduct(*p)
+	chars, err := s.publicCharacteristics(ctx, p)
+	if err != nil {
+		return PublicProduct{}, err
+	}
+	pub.Characteristics = chars
+	return pub, nil
 }
 
 func (s *Service) GetPublicBrand(ctx context.Context, idOrSlug string) (*PublicBrand, *uuid.UUID, error) {

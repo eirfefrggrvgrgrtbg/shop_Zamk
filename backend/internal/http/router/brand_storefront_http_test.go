@@ -22,7 +22,6 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/app"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 )
 
 func TestBrandStorefront_PublicEndpoint(t *testing.T) {
@@ -44,37 +43,12 @@ func TestBrandStorefront_PublicEndpoint(t *testing.T) {
 	r, cancel := app.BuildRouter(ctx, cfg, pgClient, redisClient, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	defer cancel()
 
-	// 1. Brand with multiple published products (via seller or brand)
-	elig := products.CanonicalStorefrontEligibilitySQL("p", "s")
-	var sellerID uuid.UUID
-	var sellerSlug string
-	var brandName string
-	err = pgClient.Pool.QueryRow(ctx, `
-		SELECT s.id, s.slug, s.brand_name
-		FROM sellers s
-		JOIN products p ON p.seller_id = s.id
-		WHERE `+elig+`
-		GROUP BY s.id, s.slug, s.brand_name
-		HAVING count(*) >= 2
-		ORDER BY count(*) DESC
-		LIMIT 1`).Scan(&sellerID, &sellerSlug, &brandName)
-	require.NoError(t, err, "need seller with at least 2 eligible products")
-
-	// Also check if seller has an active primary brand in brands table
-	var linkedBrandID *uuid.UUID
-	var linkedBrandSlug *string
-	var bID uuid.UUID
-	var bSlug string
-	bErr := pgClient.Pool.QueryRow(ctx, `
-		SELECT b.id, b.slug
-		FROM brands b
-		JOIN seller_brands sb ON sb.brand_id = b.id
-		WHERE sb.seller_id = $1 AND sb.status = 'active'
-		LIMIT 1`, sellerID).Scan(&bID, &bSlug)
-	if bErr == nil {
-		linkedBrandID = &bID
-		linkedBrandSlug = &bSlug
-	}
+	// 1. Own isolated storefront: a seller with its primary brand and 3 published, in-stock products (never the
+	// sellers that happen to exist in the shared zamk_test).
+	fx := seedStorefrontSeller(t, pgClient.Pool, 3)
+	sellerID, sellerSlug, brandName := fx.SellerID, fx.SellerSlug, fx.BrandName
+	_ = brandName
+	linkedBrandID, linkedBrandSlug := &fx.BrandID, &fx.BrandSlug
 
 	t.Run("1. Brand with multiple published products by seller slug", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/public/brands/"+sellerSlug, nil)
@@ -169,32 +143,8 @@ func TestBrandStorefront_PublicEndpoint(t *testing.T) {
 	})
 
 	t.Run("3b. Brand with exactly 1 published product", func(t *testing.T) {
-		var eligibleProdID uuid.UUID
-		err := pgClient.Pool.QueryRow(ctx, `
-			SELECT p.id
-			FROM products p
-			JOIN sellers s ON p.seller_id = s.id
-			WHERE `+elig+`
-			LIMIT 1`).Scan(&eligibleProdID)
-		require.NoError(t, err)
-
-		singleBrandID := uuid.New()
-		singleSlug := fmt.Sprintf("single-prod-brand-%s", singleBrandID.String()[:8])
-		_, err = pgClient.Pool.Exec(ctx, `
-			INSERT INTO brands (id, name, slug, description, is_active, created_at, updated_at)
-			VALUES ($1, 'Single Item Brand', $2, 'Solo piece studio', true, now(), now())`,
-			singleBrandID, singleSlug)
-		require.NoError(t, err)
-
-		var prevBrandID *uuid.UUID
-		_ = pgClient.Pool.QueryRow(ctx, `SELECT brand_id FROM products WHERE id = $1`, eligibleProdID).Scan(&prevBrandID)
-		_, err = pgClient.Pool.Exec(ctx, `UPDATE products SET brand_id = $1 WHERE id = $2`, singleBrandID, eligibleProdID)
-		require.NoError(t, err)
-
-		defer func() {
-			_, _ = pgClient.Pool.Exec(ctx, `UPDATE products SET brand_id = $1 WHERE id = $2`, prevBrandID, eligibleProdID)
-			_, _ = pgClient.Pool.Exec(ctx, `DELETE FROM brands WHERE id = $1`, singleBrandID)
-		}()
+		single := seedStorefrontSeller(t, pgClient.Pool, 1) // own one-product brand; no shared product is re-branded
+		singleSlug := single.BrandSlug
 
 		req := httptest.NewRequest("GET", "/api/public/brands/"+singleSlug, nil)
 		rec := httptest.NewRecorder()

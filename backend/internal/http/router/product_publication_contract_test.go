@@ -114,6 +114,14 @@ func TestProductPublicationContract(t *testing.T) {
 		VALUES ($1, 'Pub Category', $2, true, now(), now())
 	`, catID, catSlug)
 	require.NoError(t, err)
+	// C5.5: approval checks publication rules, so fixture products are publishable (brand, description, main photo).
+	pubBrandID := uuid.New()
+	_, err = pgClient.Pool.Exec(ctx, `INSERT INTO brands (id, name, slug, is_active) VALUES ($1, $2, $2, true)`, pubBrandID, "fixture-brand-"+pubBrandID.String()[:8])
+	require.NoError(t, err)
+	makePublishable := func(prodID uuid.UUID) {
+		_, err := pgClient.Pool.Exec(ctx, `UPDATE products SET brand_id = $2, description = 'Товар для проверки правил публикации.', main_image_url = 'https://img.test/fixture.jpg' WHERE id = $1`, prodID, pubBrandID)
+		require.NoError(t, err)
+	}
 
 	// 5. Ensure Delivery Method exists for order creation
 	var deliveryMethodID uuid.UUID
@@ -140,6 +148,7 @@ func TestProductPublicationContract(t *testing.T) {
 			) VALUES ($1, $2, $3, $4, $5, 500000, 'RUB', 'pending_moderation', $6, $6, $6)
 		`, prodID, sID, catID, title, slug, now)
 		require.NoError(t, err)
+		makePublishable(prodID)
 
 		_, err = pgClient.Pool.Exec(ctx, `
 			INSERT INTO product_variants (
@@ -150,6 +159,27 @@ func TestProductPublicationContract(t *testing.T) {
 
 		return prodID, variantID
 	}
+
+	t.Run("0. direct API cannot approve a product that fails the publication checks", func(t *testing.T) {
+		prodID, _ := createPendingProduct("No Photo Product", "no-photo-"+uuid.New().String()[:8], sellerID)
+		_, err := pgClient.Pool.Exec(ctx, `UPDATE products SET main_image_url = NULL WHERE id = $1`, prodID)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/admin/moderation/products/%s/approve", prodID), bytes.NewReader([]byte(`{"comment":"Approved"}`)))
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+		assert.Contains(t, rec.Body.String(), "moderation_checks_failed")
+		assert.Contains(t, rec.Body.String(), "main_image")
+
+		var status string
+		var approvedAt *time.Time
+		require.NoError(t, pgClient.Pool.QueryRow(ctx, `SELECT status, approved_at FROM products WHERE id = $1`, prodID).Scan(&status, &approvedAt))
+		assert.Equal(t, "pending_moderation", status, "nothing published")
+		assert.Nil(t, approvedAt)
+	})
 
 	t.Run("A. approved/published + free=0 -> hidden, PDP unavailable", func(t *testing.T) {
 		prodID, _ := createPendingProduct("Zero Stock Product", "zero-stock-"+uuid.New().String()[:8], sellerID)

@@ -25,6 +25,8 @@ export interface Product {
   materialComposition?: any[];
   careInstructions?: string;
   sizeChart?: any;
+  /** Approved product characteristics (readable name/value pairs), shown in the PDP «Характеристики» section. */
+  attributes?: { label: string; value: string }[];
   sizes?: string[];
   colors?: { name: string; hex?: string }[];
   variants?: {

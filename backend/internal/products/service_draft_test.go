@@ -544,6 +544,7 @@ func TestAdminDossierCanonicalFieldsAndPreview(t *testing.T) {
 	imageUrl := "http://localhost:9000/zamk-local/products/test.png"
 	p, err := svc.CreateProductForSeller(ctx, sellerID, products.CreateProductRequest{
 		Title:        title,
+		Description:  ptr("Худи для проверки досье модератора."),
 		CategoryID:   &catID,
 		Currency:     "RUB",
 		PriceCents:   450000,

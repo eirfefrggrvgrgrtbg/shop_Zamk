@@ -111,9 +111,20 @@ func TestModerationFirstAttemptPersistsAndExposesStatus(t *testing.T) {
 
 	priceCents := int64(250000)
 
+	// C5.5: approval checks the publication rules, so the product is a publishable one (own category, description, photo).
+	catID := uuid.New()
+	_, err = db.Pool.Exec(ctx, "INSERT INTO categories (id, name, slug) VALUES ($1, 'Moderation Cat', $2)", catID, "mod-cat-"+catID.String()[:8])
+	require.NoError(t, err)
+	// (the tracked client of setupBlockATestDB purges this category with the test's other rows)
+	description := "Товар для проверки первой модерации."
+	mainImage := "https://img.test/moderation.jpg"
+
 	// Create Product
 	createReq := products.CreateProductRequest{
-		Title:      "Moderation Target Product",
+		CategoryID:   &catID,
+		Description:  &description,
+		MainImageURL: &mainImage,
+		Title:        "Moderation Target Product",
 		Slug:       func(s string) *string { return &s }(uuid.New().String()),
 		PriceCents: priceCents,
 		Currency:   "RUB",

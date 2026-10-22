@@ -749,6 +749,11 @@ func (h *Handler) AdminPublishProduct(w http.ResponseWriter, r *http.Request) {
 
 	err := h.service.PublishProduct(r.Context(), adminID, productID, req.Comment)
 	if err != nil {
+		var checksErr *ModerationChecksError
+		if errors.As(err, &checksErr) {
+			h.writeModerationChecksError(w, checksErr)
+			return
+		}
 		var notPubErr *ErrNotPublishable
 		if errors.As(err, &notPubErr) {
 			w.Header().Set("Content-Type", "application/json")
@@ -886,7 +891,7 @@ func (h *Handler) handleAdminModerationAction(w http.ResponseWriter, r *http.Req
 		}
 		var checksErr *ModerationChecksError
 		if errors.As(err, &checksErr) {
-			h.writeErrorWithDetails(w, http.StatusConflict, "revision_checks_failed", "Итоговая версия товара не проходит проверки модерации. Изменения не применены — верните товар продавцу на исправление.", map[string]any{"failedChecks": checksErr.Failed})
+			h.writeModerationChecksError(w, checksErr)
 			return
 		}
 		if errors.Is(err, ErrRevisionConflict) {
@@ -1319,4 +1324,13 @@ func (h *Handler) UpdatePrices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// writeModerationChecksError: the product (or the result of its revision) fails the publication checks; nothing was applied.
+func (h *Handler) writeModerationChecksError(w http.ResponseWriter, e *ModerationChecksError) {
+	if e.Revision {
+		h.writeErrorWithDetails(w, http.StatusConflict, "revision_checks_failed", "Итоговая версия товара не проходит проверки модерации. Изменения не применены — верните товар продавцу на исправление.", map[string]any{"failedChecks": e.Failed})
+		return
+	}
+	h.writeErrorWithDetails(w, http.StatusConflict, "moderation_checks_failed", "Товар не проходит обязательные проверки публикации. Товар не опубликован — верните его продавцу на исправление.", map[string]any{"failedChecks": e.Failed})
 }

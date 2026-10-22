@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/google/uuid"
 )
 
@@ -36,14 +38,52 @@ type ModerationCheck struct {
 	Pass bool   `json:"pass"`
 }
 
-// ModerationChecksError lists the failed checks of a refused approval.
-type ModerationChecksError struct{ Failed []string }
+// ModerationChecksError lists the failed checks of a refused approval (Revision: of a published product's revision,
+// otherwise of a first publication).
+type ModerationChecksError struct {
+	Failed   []string
+	Revision bool
+}
 
 func (e *ModerationChecksError) Error() string {
 	return fmt.Sprintf("%v: %s", ErrModerationChecksFailed, strings.Join(e.Failed, ", "))
 }
 func (e *ModerationChecksError) Unwrap() []error {
-	return []error{ErrModerationChecksFailed, ErrRevisionNotApplicable}
+	if e.Revision {
+		return []error{ErrModerationChecksFailed, ErrRevisionNotApplicable}
+	}
+	return []error{ErrModerationChecksFailed}
+}
+
+// enforceModerationChecks refuses a publication whose resulting product fails the moderation checks. It is the one
+// gate used by every approval/publication path (first publication and revisions), before anything is written.
+func (s *Service) enforceModerationChecks(ctx context.Context, adminUserID uuid.UUID, live *Product, rev *PendingRevisionView, revision bool) error {
+	checks, err := s.moderationChecks(ctx, finalProduct(live, rev))
+	if err != nil {
+		return err
+	}
+	failed := failedChecks(checks)
+	if len(failed) == 0 {
+		return nil
+	}
+	cerr := &ModerationChecksError{Failed: failed, Revision: revision}
+	if revision {
+		s.emitRevisionBlocked(ctx, adminUserID, live.ID, cerr)
+	} else {
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName: "product.publish_blocked",
+			Domain:    "product",
+			Action:    "publish",
+			Result:    "blocked",
+			ActorID:   adminUserID.String(),
+			ActorRole: "admin",
+			Attributes: []slog.Attr{
+				slog.String("product_id", live.ID.String()),
+				slog.String("failed_checks", strings.Join(failed, ",")),
+			},
+		})
+	}
+	return cerr
 }
 
 // finalProduct is the product as approval would leave it: live data with every part the revision changes replaced.

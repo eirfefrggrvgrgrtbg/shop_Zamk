@@ -174,6 +174,8 @@ type PublicProduct struct {
 
 	MaterialComposition []ProductMaterialComposition `json:"materialComposition,omitempty"`
 	SizeChart   *ProductSizeChart `json:"sizeChart,omitempty"`
+	// Characteristics are the approved product characteristics, readable (detail endpoint only).
+	Characteristics []PublicCharacteristic `json:"characteristics,omitempty"`
 
 	Variants []PublicProductVariant `json:"variants,omitempty"`
 	Images   []PublicProductImage   `json:"images,omitempty"`

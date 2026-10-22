@@ -8,6 +8,17 @@ export const PRODUCT_PLACEHOLDER_IMAGE =
 // Cache for brands to map brandId to brand name
 let cachedBrands: Record<string, string> = {};
 
+const UUID_LIKE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Approved characteristics from the public product API as PDP spec rows; empty or technical values are dropped. */
+export function mapPublicCharacteristics(raw: unknown): { label: string; value: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((c): c is { name: string; value: string } => Boolean(c) && typeof (c as any).name === 'string' && typeof (c as any).value === 'string')
+    .map((c) => ({ label: c.name.trim(), value: c.value.trim() }))
+    .filter((c) => c.label !== '' && c.value !== '' && !UUID_LIKE.test(c.value) && !UUID_LIKE.test(c.label));
+}
+
 export function mapProductSummaryToCatalog(
   p: ProductSummary & { title?: string; priceCents?: number; oldPriceCents?: number; mainImageUrl?: string },
   brandName?: string
@@ -385,6 +396,7 @@ export async function fetchProductById(idOrSlug: string): Promise<UIProduct> {
     materialComposition: (p as any).materialComposition,
     careInstructions: (p as any).careInstructions,
     sizeChart: (p as any).sizeChart,
+    attributes: mapPublicCharacteristics((p as any).characteristics),
     rating: p.rating?.average,
     reviewsCount: p.rating?.count,
     sizes: p.variants?.map(v => v.size).filter(Boolean) as string[] || [],
@@ -440,6 +452,7 @@ export async function fetchProductPreviewByToken(token: string): Promise<UIProdu
     materialComposition: (p as any).materialComposition,
     careInstructions: (p as any).careInstructions,
     sizeChart: (p as any).sizeChart,
+    attributes: mapPublicCharacteristics((p as any).characteristics),
     materials: p.characteristics?.['Материал'] || '',
     rating: p.rating,
     reviewsCount: p.reviewsCount,
