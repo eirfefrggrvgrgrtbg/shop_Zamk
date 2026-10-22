@@ -1916,6 +1916,10 @@ func (r *Repository) PromoteProductRevision(ctx context.Context, productID, revi
 	if err := r.applyRevisionImages(ctx, productID, changes); err != nil {
 		return fmt.Errorf("%w: %w", ErrRevisionNotApplicable, err)
 	}
+	// Characteristics, composition and size chart (after the row: the size chart follows the approved category).
+	if err := r.applyRevisionCharacteristics(ctx, productID, changes); err != nil {
+		return fmt.Errorf("%w: %w", ErrRevisionNotApplicable, err)
+	}
 	return nil
 }
 

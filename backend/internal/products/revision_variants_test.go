@@ -144,7 +144,7 @@ func TestPublishedProductRevisionVariants(t *testing.T) {
 	bs, wm := r0[key("BS")], r0[key("WM")]
 	_, err = pool.Exec(ctx, `INSERT INTO inventory_items (id, product_id, seller_id, product_variant_id, total_stock, reserved_stock) VALUES (gen_random_uuid(),$1,$2,$3,5,1),(gen_random_uuid(),$1,$2,$4,4,0)`, p.ID, sellerID, bs.ID, wm.ID)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `UPDATE products SET status='published', published_at=now() WHERE id=$1`, p.ID)
+	_, err = pool.Exec(ctx, `UPDATE products SET status='published', published_at=now(), description='Платье для проверки ревизий вариантов.', main_image_url='https://img.test/rv.jpg' WHERE id=$1`, p.ID)
 	require.NoError(t, err)
 	stockBefore := stock()
 

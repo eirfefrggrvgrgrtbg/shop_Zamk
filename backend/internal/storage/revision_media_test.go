@@ -121,7 +121,7 @@ func TestRevisionPhotos(t *testing.T) {
 	mk("INSERT INTO seller_users (id, seller_id, user_id, role) VALUES ($1, $2, $3, 'owner'), ($4, $5, $6, 'owner')", uuid.New(), sellerID, userID, uuid.New(), strangerSellerID, strangerUserID)
 	mk("INSERT INTO brands (id, name, slug, is_active) VALUES ($1, 'RP Brand Name', $2, true)", brandID, "rp-brand-"+tag)
 	mk("INSERT INTO categories (id, name, slug) VALUES ($1, 'RP Cat', $2)", catID, "rp-cat-"+tag)
-	mk("INSERT INTO products (id, seller_id, brand_id, category_id, title, slug, status, price_cents, currency, description) VALUES ($1, $2, $3, $4, 'RP Prod', $5, 'published', 100000, 'RUB', 'd')", productID, sellerID, brandID, catID, "rp-prod-"+tag)
+	mk("INSERT INTO products (id, seller_id, brand_id, category_id, title, slug, status, price_cents, currency, description) VALUES ($1, $2, $3, $4, 'RP Prod', $5, 'published', 100000, 'RUB', 'Футболка для проверки фото в ревизиях.')", productID, sellerID, brandID, catID, "rp-prod-"+tag)
 	mk("INSERT INTO product_variants (id, product_id, sku, seller_sku, price_cents, is_active, barcode) VALUES ($1, $2, $3, $3, 100000, true, $4)", uuid.New(), productID, "RP-"+tag, "ZMK-rp"+tag)
 
 	oldImg := uuid.New()

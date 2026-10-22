@@ -78,6 +78,12 @@ func setupRevisionPromotionFixture(t *testing.T) revisionPromotionFixture {
 		VALUES ($1, $2, $3, 'Wool Coat V1', $4, 'Warm wool coat', 'published', 'seller', 'RUB', 25000, 5, now(), now())
 	`, productID, sellerID, categoryID, prodSlug)
 	require.NoError(t, err)
+	// C5.4: revision approval checks the resulting product, so the fixture is a publishable one (brand, main photo).
+	brandID := uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO brands (id, name, slug, is_active) VALUES ($1, $2, $2, true)`, brandID, "rp-brand-"+productID.String()[:8])
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE products SET brand_id = $2, main_image_url = 'https://img.test/coat.jpg' WHERE id = $1`, productID, brandID)
+	require.NoError(t, err)
 
 	prodRepo := products.NewRepository(pool)
 	sellerRepo := sellers.NewRepository(pool)
@@ -100,6 +106,8 @@ func TestProductsService_ApproveProduct_RevisionPromotion_Success(t *testing.T) 
 	fix := setupRevisionPromotionFixture(t)
 	defer fix.pool.Close()
 	ctx := context.Background()
+	_, err0 := fix.pool.Exec(ctx, `INSERT INTO product_variants (id, product_id, sku, seller_sku, price_cents, is_active) VALUES (gen_random_uuid(), $1, $2, $2, 25000, true)`, fix.productID, "rp-"+fix.productID.String()[:8])
+	require.NoError(t, err0)
 
 	// Initial version is 5
 	var verBefore int64

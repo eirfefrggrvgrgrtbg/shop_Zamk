@@ -67,6 +67,18 @@ const REVISE_OPTIONS = [
   'Другое замечание к контенту'
 ];
 
+const MODERATION_CHECK_TEXT: Record<string, { label: string; ok: string; fail: string; hint: string }> = {
+  main_image: { label: 'Главное изображение', ok: 'Изображение загружено', fail: 'Изображение отсутствует', hint: 'Главное фото товара' },
+  description: { label: 'Описание товара', ok: 'Описание заполнено корректно', fail: 'Описание отсутствует или слишком короткое (<10 симв.)', hint: 'Минимум 10 символов' },
+  category: { label: 'Категория привязана', ok: 'Категория привязана', fail: 'Категория не указана', hint: 'Категория маркетплейса' },
+  brand: { label: 'Бренд привязан', ok: 'Бренд привязан', fail: 'Бренд не указан', hint: 'Указан бренд' },
+  active_variants: { label: 'Активные варианты', ok: 'Обнаружены активные варианты', fail: 'Активные варианты отсутствуют', hint: 'Хотя бы 1 активный вариант' },
+  price: { label: 'Корректная цена', ok: 'Цена указана корректно (>0 ₽)', fail: 'Цена некорректна (≤ 0 ₽)', hint: 'Больше 0 ₽' },
+  sku_unique: { label: 'Уникальность SKU', ok: 'Дубли SKU отсутствуют', fail: 'Обнаружены дублирующие SKU', hint: 'Уникальные артикулы' },
+  required_attributes: { label: 'Обязательные характеристики', ok: 'Характеристики и состав заполнены', fail: 'Не заполнены обязательные характеристики или состав ≠ 100%', hint: 'По требованиям категории' },
+  size_chart: { label: 'Таблица размеров', ok: 'Таблица размеров заполнена', fail: 'Нет обязательной таблицы размеров', hint: 'Если категория требует' },
+};
+
 const REVISION_FIELD_LABELS: Record<string, string> = {
   title: 'Название',
   description: 'Описание',
@@ -192,6 +204,8 @@ export function AdminModerationProductDetail() {
       if (l === 'Активные варианты') return 'Отсутствуют активные варианты товара';
       if (l === 'Корректная цена') return 'Некорректная цена товара (≤ 0 ₽)';
       if (l === 'Уникальность SKU') return 'Обнаружены дублирующие SKU вариантов';
+      if (l === 'Обязательные характеристики') return 'Не заполнены обязательные характеристики или состав не равен 100%';
+      if (l === 'Таблица размеров') return 'Не заполнена обязательная таблица размеров';
       return l;
     });
     setSelectedReviseReasons(mapped);
@@ -278,20 +292,15 @@ export function AdminModerationProductDetail() {
 
   if (!product) return null;
 
-  // System Checks Rules
-  const checks = [
-    { label: 'Главное изображение', pass: !!product.image, resultText: !!product.image ? 'Изображение загружено' : 'Изображение отсутствует', hint: 'Главное фото товара' },
-    { label: 'Описание товара', pass: !!product.description && product.description.trim().length > 10, resultText: (!!product.description && product.description.trim().length > 10) ? 'Описание заполнено корректно' : 'Описание отсутствует или слишком короткое (<10 симв.)', hint: 'Минимум 10 символов' },
-    { label: 'Категория привязана', pass: !!product.category, resultText: !!product.category ? 'Категория привязана' : 'Категория не указана', hint: 'Категория маркетплейса' },
-    { label: 'Бренд привязан', pass: !!product.brand, resultText: !!product.brand ? 'Бренд привязан' : 'Бренд не указан', hint: 'Указан бренд' },
-    { label: 'Активные варианты', pass: (product.variants?.filter((v) => v.isActive).length ?? 0) > 0, resultText: (product.variants?.filter((v) => v.isActive).length ?? 0) > 0 ? 'Обнаружены активные варианты' : 'Активные варианты отсутствуют', hint: 'Хотя бы 1 активный вариант' },
-    { label: 'Корректная цена', pass: product.price > 0, resultText: product.price > 0 ? 'Цена указана корректно (>0 ₽)' : 'Цена некорректна (≤ 0 ₽)', hint: 'Больше 0 ₽' },
-    { label: 'Уникальность SKU', pass: new Set(product.variants.map((v) => v.sku).filter(Boolean)).size === product.variants.map((v) => v.sku).filter(Boolean).length, resultText: (new Set(product.variants.map((v) => v.sku).filter(Boolean)).size === product.variants.map((v) => v.sku).filter(Boolean).length) ? 'Дубли SKU отсутствуют' : 'Обнаружены дублирующие SKU', hint: 'Уникальные артикулы' },
-  ];
+  // Moderation checks of the product as approval would leave it: computed (and enforced on approval) by the backend.
+  const checks = (product.moderationChecks ?? []).map((c) => {
+    const text = MODERATION_CHECK_TEXT[c.code] ?? { label: c.code, ok: 'Проверка пройдена', fail: 'Проверка не пройдена', hint: '' };
+    return { code: c.code, label: text.label, pass: c.pass, resultText: c.pass ? text.ok : text.fail, hint: text.hint };
+  });
   const passedChecksCount = checks.filter((c) => c.pass).length;
   const failedChecks = checks.filter((c) => !c.pass);
   const failedChecksCount = failedChecks.length;
-  const allChecksPassed = passedChecksCount === checks.length;
+  const allChecksPassed = checks.length > 0 && passedChecksCount === checks.length;
 
   // Published product with a seller edit awaiting approval: decisions apply to the revision, the live product stays on sale.
   const isPublishedRevision = product.status === 'published' && Boolean(product.pendingRevision);
@@ -667,6 +676,52 @@ export function AdminModerationProductDetail() {
                     );
                   })}
                 </dl>
+              )}
+              {(product.pendingRevision.attributeChanges ?? []).length > 0 && (
+                <dl data-testid="pending-revision-attributes" className="space-y-2 text-xs">
+                  <h3 className="text-xs font-bold text-amber-900 dark:text-amber-200">Характеристики</h3>
+                  {(product.pendingRevision.attributeChanges ?? []).map((f) => (
+                    <div key={f.field} data-testid="pending-revision-attribute" className="grid grid-cols-1 sm:grid-cols-[10rem_1fr] gap-1">
+                      <dt className="font-bold text-amber-900 dark:text-amber-200">{f.field}</dt>
+                      <dd className="text-slate-900 dark:text-white break-words">
+                        <span className="line-through text-slate-500 dark:text-slate-400 mr-2">{f.current ?? '—'}</span>
+                        {f.proposed ?? '—'}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+              {product.pendingRevision.materialCompositionChanged && (
+                <div data-testid="pending-revision-composition" className="space-y-1 text-xs">
+                  <h3 className="font-bold text-amber-900 dark:text-amber-200">Состав</h3>
+                  <p className="text-slate-500 dark:text-slate-400 line-through">
+                    {(product.materialComposition ?? []).map((m) => `${m.materialName || 'Материал'} ${m.percentage}%`).join(', ') || '—'}
+                  </p>
+                  <p className="text-slate-900 dark:text-white font-semibold">
+                    {(product.pendingRevision.materialComposition ?? []).map((m) => `${m.materialName || 'Материал'} ${m.percentage}%`).join(', ') || 'Состав будет очищен'}
+                  </p>
+                </div>
+              )}
+              {product.pendingRevision.sizeChartChanged && (
+                <div data-testid="pending-revision-size-chart" className="space-y-1 text-xs overflow-x-auto">
+                  <h3 className="font-bold text-amber-900 dark:text-amber-200">Предлагаемая таблица размеров</h3>
+                  {(product.pendingRevision.sizeChartRows ?? []).length === 0 ? (
+                    <p className="text-slate-900 dark:text-white">Таблица размеров будет удалена</p>
+                  ) : (
+                    <table className="text-left border-collapse">
+                      <tbody>
+                        {(product.pendingRevision.sizeChartRows ?? []).map((row) => (
+                          <tr key={row.sizeValueId} data-testid="pending-revision-size-row" className="border-b border-amber-100 dark:border-amber-900">
+                            <td className="py-1 pr-4 font-semibold text-slate-900 dark:text-white">{row.sizeValueName || 'Размер'}</td>
+                            {Object.entries(row.measurements || {}).map(([k, v]) => (
+                              <td key={k} className="py-1 pr-4 text-slate-700 dark:text-slate-300">{k}: {String(v)} см</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               )}
               {product.pendingRevision.imagesChanged && (
                 <div data-testid="pending-revision-gallery" className="space-y-2">

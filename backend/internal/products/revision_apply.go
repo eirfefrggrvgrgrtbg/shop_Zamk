@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -31,6 +32,11 @@ type ProductRevisionChanges struct {
 	Images *[]DesiredProductImage `json:"revisionImages,omitempty"`
 	// VariantBase records updated_at of every live variant at submission; approval refuses if any of them moved.
 	VariantBase map[uuid.UUID]time.Time `json:"revisionVariantBase,omitempty"`
+	// Attributes, MaterialComposition and SizeChartRows are the full target product characteristics, composition
+	// and size chart (nil = unchanged; an empty list clears). Applied on approval in the same transaction.
+	Attributes          *[]ProductAttributeValue      `json:"revisionAttributes,omitempty"`
+	MaterialComposition *[]ProductMaterialComposition `json:"revisionMaterialComposition,omitempty"`
+	SizeChartRows       *[]ProductSizeChartRow        `json:"revisionSizeChartRows,omitempty"`
 }
 
 // PendingRevisionView is what Admin sees of a pending revision of a published product.
@@ -47,7 +53,15 @@ type PendingRevisionView struct {
 	ImagesMissing int `json:"imagesMissing,omitempty"`
 	// ChangedFields lists the product fields (title, description, prices…) the revision changes; filled for Admin.
 	ChangedFields []RevisionFieldChange `json:"changedFields,omitempty"`
-	scalars       revisionScalars
+	// Proposed characteristics, composition and size chart (only when the revision changes them).
+	AttributesChanged          bool                         `json:"attributesChanged"`
+	Attributes                 []ProductAttributeValue      `json:"attributes,omitempty"`
+	AttributeChanges           []RevisionAttributeChange    `json:"attributeChanges,omitempty"` // Admin: named live vs proposed values
+	MaterialCompositionChanged bool                         `json:"materialCompositionChanged"`
+	MaterialComposition        []ProductMaterialComposition `json:"materialComposition,omitempty"`
+	SizeChartChanged           bool                         `json:"sizeChartChanged"`
+	SizeChartRows              []ProductSizeChartRow        `json:"sizeChartRows,omitempty"`
+	scalars                    revisionScalars
 }
 
 func parseRevisionChanges(snapBytes []byte) (ProductRevisionChanges, error) {
@@ -215,6 +229,24 @@ func (r *Repository) GetPendingRevisionView(ctx context.Context, productID uuid.
 		return nil, err
 	}
 	view.scalars = parseRevisionScalars(snapBytes)
+	if ch.Attributes != nil {
+		view.AttributesChanged = true
+		view.Attributes = *ch.Attributes
+	}
+	if ch.MaterialComposition != nil {
+		view.MaterialCompositionChanged = true
+		view.MaterialComposition = *ch.MaterialComposition
+		if err := r.fillCompositionNames(ctx, view.MaterialComposition); err != nil {
+			return nil, err
+		}
+	}
+	if ch.SizeChartRows != nil {
+		view.SizeChartChanged = true
+		view.SizeChartRows = *ch.SizeChartRows
+		if err := r.fillSizeChartRowNames(ctx, view.SizeChartRows); err != nil {
+			return nil, err
+		}
+	}
 	if ch.Images != nil {
 		view.ImagesChanged = true
 		view.ImagesCount = len(*ch.Images)
@@ -298,4 +330,76 @@ func mainImageOf(images []ProductImage, fallbackURL, fallbackKey *string) (*stri
 		}
 	}
 	return fallbackURL, fallbackKey
+}
+
+// applyRevisionCharacteristics writes the approved characteristics, composition and size chart (only the parts the
+// revision changes). It runs inside the approval transaction, after the products row, so a failure rolls back the
+// whole approval. The size chart keeps its id (rows are replaced) and follows the product's current category.
+func (r *Repository) applyRevisionCharacteristics(ctx context.Context, productID uuid.UUID, ch ProductRevisionChanges) error {
+	if ch.Attributes != nil {
+		if err := r.InsertProductAttributeValues(ctx, productID, *ch.Attributes); err != nil {
+			return fmt.Errorf("apply characteristics: %w", err)
+		}
+	}
+	if ch.MaterialComposition != nil {
+		if err := r.InsertMaterialComposition(ctx, productID, *ch.MaterialComposition); err != nil {
+			return fmt.Errorf("apply composition: %w", err)
+		}
+	}
+	if ch.SizeChartRows == nil {
+		return nil
+	}
+	var categoryID *uuid.UUID
+	if err := r.db.QueryRow(ctx, `SELECT category_id FROM products WHERE id = $1`, productID).Scan(&categoryID); err != nil {
+		return err
+	}
+	if len(*ch.SizeChartRows) == 0 || categoryID == nil {
+		_, err := r.db.Exec(ctx, `DELETE FROM product_size_charts WHERE product_id = $1`, productID)
+		return err
+	}
+	var chartID uuid.UUID
+	err := r.db.QueryRow(ctx, `UPDATE product_size_charts SET category_id = $2 WHERE product_id = $1 RETURNING id`, productID, *categoryID).Scan(&chartID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = r.db.QueryRow(ctx, `INSERT INTO product_size_charts (id, product_id, category_id) VALUES (gen_random_uuid(), $1, $2) RETURNING id`, productID, *categoryID).Scan(&chartID)
+	}
+	if err != nil {
+		return fmt.Errorf("apply size chart: %w", err)
+	}
+	if _, err := r.db.Exec(ctx, `DELETE FROM product_size_chart_rows WHERE size_chart_id = $1`, chartID); err != nil {
+		return err
+	}
+	for _, row := range *ch.SizeChartRows {
+		if _, err := r.db.Exec(ctx, `INSERT INTO product_size_chart_rows (size_chart_id, size_value_id, measurements) VALUES ($1, $2, $3)`, chartID, row.SizeValueID, row.Measurements); err != nil {
+			return fmt.Errorf("apply size chart: %w", err)
+		}
+	}
+	return nil
+}
+
+// fillCompositionNames resolves material names of a proposed composition (the snapshot stores ids only).
+func (r *Repository) fillCompositionNames(ctx context.Context, comps []ProductMaterialComposition) error {
+	for i := range comps {
+		var name *string
+		if err := r.db.QueryRow(ctx, `SELECT name_ru FROM materials WHERE id = $1`, comps[i].MaterialID).Scan(&name); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		comps[i].MaterialName = name
+	}
+	return nil
+}
+
+// fillSizeChartRowNames resolves size labels of proposed size chart rows and orders them like the live chart.
+func (r *Repository) fillSizeChartRowNames(ctx context.Context, rows []ProductSizeChartRow) error {
+	order := map[uuid.UUID]int{}
+	for i := range rows {
+		var name *string
+		var sortOrder int
+		if err := r.db.QueryRow(ctx, `SELECT value, sort_order FROM size_values WHERE id = $1`, rows[i].SizeValueID).Scan(&name, &sortOrder); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		rows[i].SizeValueName = name
+		order[rows[i].SizeValueID] = sortOrder
+	}
+	sort.SliceStable(rows, func(a, b int) bool { return order[rows[a].SizeValueID] < order[rows[b].SizeValueID] })
+	return nil
 }

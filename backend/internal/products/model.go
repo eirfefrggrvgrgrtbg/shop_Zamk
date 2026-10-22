@@ -88,6 +88,8 @@ type Product struct {
 	Vision    *AdminProductVisionDTO `json:"vision,omitempty"`
 	// PendingRevision is filled for Admin only: the seller's not yet applied edit of a published product.
 	PendingRevision *PendingRevisionView `json:"pendingRevision,omitempty"`
+	// ModerationChecks (Admin only) are the publication checks of the product as approval would leave it.
+	ModerationChecks []ModerationCheck `json:"moderationChecks,omitempty"`
 }
 
 type RatingSummary struct {

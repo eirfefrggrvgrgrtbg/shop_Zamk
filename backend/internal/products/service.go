@@ -834,6 +834,26 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		} else if prevChanges != nil && prevChanges.Images != nil {
 			changes.Images = prevChanges.Images
 		}
+		// Characteristics, composition and size chart: the full target list when this edit sends it, otherwise the
+		// one already proposed by the superseded pending revision (an autosave without them keeps them).
+		if req.Attributes != nil {
+			attrs := append([]ProductAttributeValue{}, p.Attributes...)
+			changes.Attributes = &attrs
+		} else if prevChanges != nil {
+			changes.Attributes = prevChanges.Attributes
+		}
+		if req.MaterialComposition != nil {
+			comps := append([]ProductMaterialComposition{}, p.MaterialComposition...)
+			changes.MaterialComposition = &comps
+		} else if prevChanges != nil {
+			changes.MaterialComposition = prevChanges.MaterialComposition
+		}
+		if req.SizeChartRows != nil && p.SizeChart != nil {
+			rows := append([]ProductSizeChartRow{}, p.SizeChart.Rows...)
+			changes.SizeChartRows = &rows
+		} else if prevChanges != nil {
+			changes.SizeChartRows = prevChanges.SizeChartRows
+		}
 		if err := addRevisionChangesToSnapshot(snap, changes); err != nil {
 			return Product{}, fmt.Errorf("failed to build revision snapshot: %w", err)
 		}
@@ -1273,6 +1293,9 @@ func (s *Service) GetSellerProduct(ctx context.Context, currentUserID, productID
 			p.Images = pendingRev.Images
 			p.MainImageURL, p.MainImageObjectKey = mainImageOf(pendingRev.Images, p.MainImageURL, p.MainImageObjectKey)
 		}
+		// Characteristics, composition and size chart: Studio hydrates (and autosaves) the proposed ones.
+		final := finalProduct(p, pendingRev)
+		p.Attributes, p.MaterialComposition, p.SizeChart = final.Attributes, final.MaterialComposition, final.SizeChart
 		p.PendingRevision = pendingRev
 	}
 	return *p, nil
@@ -1587,7 +1610,17 @@ func (s *Service) GetAdminProductDetail(ctx context.Context, productID uuid.UUID
 	}
 	if pendingRev != nil {
 		pendingRev.ChangedFields = revisionFieldChanges(p, pendingRev.scalars)
+		if pendingRev.AttributesChanged {
+			if pendingRev.AttributeChanges, err = s.revisionAttributeChanges(ctx, p.Attributes, pendingRev.Attributes); err != nil {
+				return Product{}, err
+			}
+		}
 	}
+	checks, err := s.moderationChecks(ctx, finalProduct(p, pendingRev))
+	if err != nil {
+		return Product{}, err
+	}
+	p.ModerationChecks = checks
 	p.PendingRevision = pendingRev
 
 	return *p, nil
@@ -1674,6 +1707,28 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 		CreatedAt:   now,
 	}
 
+	// A published product's revision is approved only if the product as approval would leave it passes the
+	// moderation checks (the same checks the Admin workplace shows): the live state alone neither blocks nor excuses it.
+	var checkedRevisionID *uuid.UUID
+	if toStatus == StatusPublished && fromStatus == StatusPublished {
+		view, err := s.repo.GetPendingRevisionView(ctx, p.ID)
+		if err != nil {
+			return err
+		}
+		if view != nil {
+			checkedRevisionID = &view.ID
+			checks, err := s.moderationChecks(ctx, finalProduct(p, view))
+			if err != nil {
+				return err
+			}
+			if failed := failedChecks(checks); len(failed) > 0 {
+				cerr := &ModerationChecksError{Failed: failed}
+				s.emitRevisionBlocked(ctx, adminUserID, p.ID, cerr)
+				return cerr
+			}
+		}
+	}
+
 	// Object storage is outside the PostgreSQL transaction: confirm the new photos' files exist (and are cropped)
 	// before anything is applied, so approval never publishes a broken URL.
 	if toStatus == StatusPublished {
@@ -1699,6 +1754,10 @@ func (s *Service) applyModerationTransition(ctx context.Context, adminUserID, pr
 			if txPendingRev == nil && fromStatus == StatusPublished {
 				// Approved or rejected concurrently since the pre-check: nothing left to apply.
 				return fmt.Errorf("%w: %w", ErrInvalidStatusTransition, ErrRevisionNotPending)
+			}
+			if txPendingRev != nil && checkedRevisionID != nil && txPendingRev.ID != *checkedRevisionID {
+				// The seller replaced the revision after it was checked: never approve an unchecked one.
+				return fmt.Errorf("%w: %w", ErrRevisionNotApplicable, ErrRevisionConflict)
 			}
 			if txPendingRev != nil {
 				promotedRevisionID = &txPendingRev.ID
@@ -1794,6 +1853,8 @@ func (s *Service) emitRevisionBlocked(ctx context.Context, adminUserID, productI
 		reason = "photo_not_cropped"
 	case errors.Is(err, ErrRevisionMediaObjectMissing):
 		reason = "photo_file_missing"
+	case errors.Is(err, ErrModerationChecksFailed):
+		reason = "checks_failed"
 	default:
 		reason = "media"
 	}

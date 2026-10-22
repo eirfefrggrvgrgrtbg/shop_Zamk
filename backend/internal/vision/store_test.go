@@ -91,6 +91,12 @@ func setupTestFixture(t *testing.T, pool *pgxpool.Pool) testFixture {
 		VALUES ($1, $2, $3, 'Evening Silk Dress', $4, 'Fine silk dress', 'draft', 'seller', 'RUB', 15000, now(), now())
 	`, productID, sellerID, categoryID, prodSlug)
 	require.NoError(t, err)
+	// C5.4: revision approval checks the resulting product, so the product has a brand like any publishable one.
+	brandID := uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO brands (id, name, slug, is_active) VALUES ($1, $2, $2, true)`, brandID, "vs-brand-"+productID.String()[:8])
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE products SET brand_id = $2 WHERE id = $1`, productID, brandID)
+	require.NoError(t, err)
 
 	imageID := uuid.New()
 	objectKey := fmt.Sprintf("products/%s/%s/%s.jpg", sellerID, productID, imageID)

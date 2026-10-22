@@ -884,6 +884,11 @@ func (h *Handler) handleAdminModerationAction(w http.ResponseWriter, r *http.Req
 			h.writeErrorWithDetails(w, http.StatusConflict, "variant_deactivation_blocked", deactErr.SellerMessage()+" Изменения не применены.", map[string]any{"variantId": deactErr.VariantID.String(), "reason": deactErr.Reason})
 			return
 		}
+		var checksErr *ModerationChecksError
+		if errors.As(err, &checksErr) {
+			h.writeErrorWithDetails(w, http.StatusConflict, "revision_checks_failed", "Итоговая версия товара не проходит проверки модерации. Изменения не применены — верните товар продавцу на исправление.", map[string]any{"failedChecks": checksErr.Failed})
+			return
+		}
 		if errors.Is(err, ErrRevisionConflict) {
 			h.writeError(w, http.StatusConflict, "revision_conflict", "Варианты товара изменились после отправки ревизии. Изменения не применены — отклоните ревизию, продавец отправит актуальную.")
 			return

@@ -133,6 +133,7 @@ export interface AdminProductView {
   moderationComment?: string;
   vision?: AdminProductVision;
   pendingRevision?: AdminProductPendingRevision;
+  moderationChecks?: AdminModerationCheck[];
 }
 
 /** Seller edit of a published product awaiting approval; applied to the live product only on approve. */
@@ -147,6 +148,18 @@ export interface AdminProductPendingRevision {
   imagesMissing: number;
   /** Product fields (title, description, prices…) the revision changes, live value next to the proposed one. */
   changedFields?: AdminPendingRevisionFieldChange[];
+  /** Characteristics the revision changes, by name, live vs proposed value. */
+  attributeChanges?: AdminPendingRevisionFieldChange[];
+  materialCompositionChanged?: boolean;
+  materialComposition?: AdminProductCompositionItem[];
+  sizeChartChanged?: boolean;
+  sizeChartRows?: AdminProductSizeChartRow[];
+}
+
+/** Publication check of the product as approval would leave it (computed by the backend, which also enforces it). */
+export interface AdminModerationCheck {
+  code: string;
+  pass: boolean;
 }
 
 export interface AdminPendingRevisionFieldChange {
@@ -309,6 +322,11 @@ export const mapAdminProduct = (product: AdminProduct | ModerationProduct): Admi
     moderationComment: product.moderationComment,
     vision: (product as any).vision,
     pendingRevision: mapPendingRevision((flexibleProduct as any).pendingRevision),
+    moderationChecks: Array.isArray((flexibleProduct as any).moderationChecks)
+      ? (flexibleProduct as any).moderationChecks
+          .filter((c: any) => c && typeof c.code === 'string')
+          .map((c: any) => ({ code: c.code, pass: Boolean(c.pass) }))
+      : undefined,
   };
 };
 
@@ -340,6 +358,17 @@ const mapPendingRevision = (rev: any): AdminProductPendingRevision | undefined =
         current: typeof f.current === 'string' ? f.current : undefined,
         proposed: typeof f.proposed === 'string' ? f.proposed : undefined,
       })),
+    attributeChanges: (Array.isArray(rev.attributeChanges) ? rev.attributeChanges : [])
+      .filter((f: any) => f && typeof f.name === 'string')
+      .map((f: any) => ({
+        field: f.name,
+        current: typeof f.current === 'string' ? f.current : undefined,
+        proposed: typeof f.proposed === 'string' ? f.proposed : undefined,
+      })),
+    materialCompositionChanged: Boolean(rev.materialCompositionChanged),
+    materialComposition: Array.isArray(rev.materialComposition) ? rev.materialComposition : [],
+    sizeChartChanged: Boolean(rev.sizeChartChanged),
+    sizeChartRows: Array.isArray(rev.sizeChartRows) ? rev.sizeChartRows : [],
   };
 };
 

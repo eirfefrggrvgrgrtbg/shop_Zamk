@@ -237,6 +237,65 @@ describe('AdminModerationProductDetail — AI Panel & Moderation Controls Bounda
     expect(screen.getByTestId('btn-approve')).toBeDefined();
   });
 
+  // C5.4: the checks are the backend's checks of the RESULT, not rules evaluated on the live product
+  const allPass = ['main_image', 'description', 'category', 'brand', 'active_variants', 'price', 'sku_unique', 'required_attributes', 'size_chart'].map((code) => ({ code, pass: true }));
+
+  it('approves on the resulting product: a live product without a photo is not blocked when the revision adds one', async () => {
+    vi.mocked(adminProductsApi.getAdminProduct).mockResolvedValue({
+      ...baseProduct,
+      status: 'published',
+      image: '',
+      gallery: [],
+      moderationChecks: allPass,
+      pendingRevision: { id: 'rev-4', variantsChanged: false, imagesChanged: true, imagesCount: 1, imagesMissing: 0, variants: [],
+        images: [{ id: 'st-1', url: 'https://example.com/new.jpg', isMain: true, isNew: true, hasRendition: true }] },
+    });
+    renderComponent();
+    const approve = await screen.findByTestId('btn-approve');
+    expect((approve as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText('Изображение отсутствует')).toBeNull();
+  });
+
+  it('blocks approval when the resulting product fails a check, and names it', async () => {
+    vi.mocked(adminProductsApi.getAdminProduct).mockResolvedValue({
+      ...baseProduct,
+      status: 'published',
+      moderationChecks: allPass.map((c) => (c.code === 'required_attributes' ? { ...c, pass: false } : c)),
+      pendingRevision: { id: 'rev-5', variantsChanged: false, imagesChanged: false, imagesCount: 0, imagesMissing: 0, variants: [], images: [] },
+    });
+    renderComponent();
+    const approve = await screen.findByTestId('btn-approve');
+    expect((approve as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByText('Обязательные характеристики').length).toBeGreaterThan(0);
+  });
+
+  it('shows the proposed characteristics, composition and size chart next to the live ones', async () => {
+    vi.mocked(adminProductsApi.getAdminProduct).mockResolvedValue({
+      ...baseProduct,
+      status: 'published',
+      moderationChecks: allPass,
+      materialComposition: [{ materialId: 'm-1', materialName: 'Хлопок', percentage: 100 }],
+      pendingRevision: {
+        id: 'rev-6', variantsChanged: false, imagesChanged: false, imagesCount: 0, imagesMissing: 0, variants: [], images: [],
+        attributeChanges: [{ field: 'Сезон', current: 'Лето', proposed: 'Зима' }],
+        materialCompositionChanged: true,
+        materialComposition: [{ materialId: 'm-1', materialName: 'Хлопок', percentage: 60 }, { materialId: 'm-2', materialName: 'Полиэстер', percentage: 40 }],
+        sizeChartChanged: true,
+        sizeChartRows: [{ sizeValueId: 's', sizeValueName: 'S', measurements: { chest: 92 } }, { sizeValueId: 'm', sizeValueName: 'M', measurements: { chest: 96 } }],
+      },
+    });
+    renderComponent();
+    const attr = await screen.findByTestId('pending-revision-attribute');
+    expect(attr.textContent).toContain('Сезон');
+    expect(attr.textContent).toContain('Лето');
+    expect(attr.textContent).toContain('Зима');
+    const comp = screen.getByTestId('pending-revision-composition');
+    expect(comp.textContent).toContain('Хлопок 100%');
+    expect(comp.textContent).toContain('Хлопок 60%, Полиэстер 40%');
+    expect(screen.getAllByTestId('pending-revision-size-row')).toHaveLength(2);
+    expect(screen.getByTestId('pending-revision-size-chart').textContent).toContain('chest: 96 см');
+  });
+
   it('shows the proposed gallery with new photos and flags a new photo without 4:5', async () => {
     vi.mocked(adminProductsApi.getAdminProduct).mockResolvedValue({
       ...baseProduct,
