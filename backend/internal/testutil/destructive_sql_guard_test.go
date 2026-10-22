@@ -9,12 +9,12 @@ import (
 )
 
 // TEST.DB.4 static guard: a backend test file may execute table-wide destructive SQL (TRUNCATE, DROP TABLE/DATABASE/
-// SCHEMA, DELETE FROM <table> without WHERE) only if it runs on a disposable database and checks it right before
+// SCHEMA, DROP COLUMN, DELETE FROM <table> without WHERE) only if it runs on a disposable database and checks it right before
 // (testutil.MustBeDisposableDatabase). A new dangerous test therefore fails here instead of wiping a shared database.
 var (
 	execLineRE    = regexp.MustCompile(`\.(Exec|Query|QueryRow)\(`)
 	truncateRE    = regexp.MustCompile(`["\x60]\s*TRUNCATE\b|\bTRUNCATE\s+(TABLE\s+)?[a-z_]+[ ,;"\x60]`)
-	dropRE        = regexp.MustCompile(`["\x60]\s*DROP\s+(TABLE|DATABASE|SCHEMA)\b`)
+	dropRE        = regexp.MustCompile(`["\x60]\s*DROP\s+(TABLE|DATABASE|SCHEMA)\b|\bDROP\s+COLUMN\b`)
 	deleteAllRE   = regexp.MustCompile(`DELETE\s+FROM\s+[a-z_."]+\s*(["\x60;]|$)`)
 	nextLineEndRE = regexp.MustCompile(`^\s*["\x60]`)
 )
@@ -83,13 +83,14 @@ func TestDestructiveSQLOnlyOnDisposableDatabases(t *testing.T) {
 
 func TestDestructiveLinesDetector(t *testing.T) {
 	cases := map[string]bool{
-		"db.Exec(ctx, \"TRUNCATE TABLE users CASCADE\")":                              true,
-		"pool.Exec(ctx, `TRUNCATE users, sellers CASCADE`)":                            true,
-		"db.Exec(ctx, \"DELETE FROM orders\")":                                         true,
-		"db.Exec(ctx, \"DELETE FROM refunds WHERE order_id = $1\", id)":                false,
-		"x.Exec(ctx, \"DROP TABLE users\")":                                            true,
-		"now := time.Now().Truncate(time.Second)":                                      false,
-		"assert.NotContains(t, rawLog, \"DROP TABLE\")":                                false,
+		"db.Exec(ctx, \"TRUNCATE TABLE users CASCADE\")":                                  true,
+		"pool.Exec(ctx, `TRUNCATE users, sellers CASCADE`)":                               true,
+		"db.Exec(ctx, \"DELETE FROM orders\")":                                            true,
+		"db.Exec(ctx, \"DELETE FROM refunds WHERE order_id = $1\", id)":                   false,
+		"x.Exec(ctx, \"DROP TABLE users\")":                                               true,
+		"\t\tALTER TABLE promo_codes DROP COLUMN audience_type;":                          false, // outside an Exec call
+		"now := time.Now().Truncate(time.Second)":                                         false,
+		"assert.NotContains(t, rawLog, \"DROP TABLE\")":                                   false,
 		"svc.Query(ctx, Request{Dimensions: []string{\"source; DROP TABLE users; --\"}})": false,
 	}
 	for line, want := range cases {

@@ -541,11 +541,14 @@ func TestAudienceTargeting_AllCustomers_And_Immutability(t *testing.T) {
 
 func TestMigration000102_UpDownLossyRepeatCustomers(t *testing.T) {
 	ctx := context.Background()
-	client, err := postgres.NewClient(ctx, testutil.GetTestDatabaseURL())
+	// TEST.DB.4: this test migrates promo_codes down and up (DROP COLUMN, lossy), so it runs on its own disposable
+	// database; on the shared zamk_test it would erase the audience of every promo code.
+	client, err := postgres.NewClient(ctx, testutil.DisposableDatabaseURL(t))
 	require.NoError(t, err)
 	defer client.Close()
 
 	testutil.AssertTestDatabase(t, client.Pool)
+	testutil.MustBeDisposableDatabase(t, client.Pool)
 
 	// Ensure we start from an up-migrated state
 	_, _ = client.Pool.Exec(ctx, `
