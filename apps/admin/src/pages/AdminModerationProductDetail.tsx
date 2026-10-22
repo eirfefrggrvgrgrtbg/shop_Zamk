@@ -67,6 +67,19 @@ const REVISE_OPTIONS = [
   'Другое замечание к контенту'
 ];
 
+const REVISION_FIELD_LABELS: Record<string, string> = {
+  title: 'Название',
+  description: 'Описание',
+  categoryId: 'Категория',
+  brandId: 'Бренд',
+  gender: 'Пол',
+  color: 'Цвет',
+  material: 'Материал',
+  careInstructions: 'Уход',
+  priceCents: 'Цена',
+  oldPriceCents: 'Старая цена',
+};
+
 export function AdminModerationProductDetail() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
@@ -634,6 +647,27 @@ export function AdminModerationProductDetail() {
                 Ниже — то, что продавец хочет изменить. В действующем товаре изменения появятся только после одобрения.
                 {!product.pendingRevision.variantsChanged && ' Варианты не меняются.'}
               </p>
+              {(product.pendingRevision.changedFields ?? []).length > 0 && (
+                <dl data-testid="pending-revision-fields" className="space-y-2 text-xs">
+                  {(product.pendingRevision.changedFields ?? []).map((f) => {
+                    const show = (v?: string) => {
+                      if (v === undefined || v === '') return '—';
+                      if (f.field === 'priceCents' || f.field === 'oldPriceCents') return formatPrice(Number(v) / 100);
+                      if (f.field === 'categoryId' || f.field === 'brandId') return 'другое значение';
+                      return v;
+                    };
+                    return (
+                      <div key={f.field} data-testid={`pending-revision-field-${f.field}`} className="grid grid-cols-1 sm:grid-cols-[10rem_1fr] gap-1">
+                        <dt className="font-bold text-amber-900 dark:text-amber-200">{REVISION_FIELD_LABELS[f.field] || f.field}</dt>
+                        <dd className="text-slate-900 dark:text-white whitespace-pre-line break-words">
+                          <span className="line-through text-slate-500 dark:text-slate-400 mr-2">{f.field === 'categoryId' || f.field === 'brandId' ? '' : show(f.current)}</span>
+                          {show(f.proposed)}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              )}
               {product.pendingRevision.imagesChanged && (
                 <div data-testid="pending-revision-gallery" className="space-y-2">
                   <h3 className="text-xs font-bold text-amber-900 dark:text-amber-200">

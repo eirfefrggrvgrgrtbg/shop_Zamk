@@ -462,6 +462,22 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 		return Product{}, fmt.Errorf("%w: cannot edit product in status %s with seller status %s", ErrProductNotEditable, p.Status, seller.Status)
 	}
 
+	// An edit that supersedes a pending revision starts from that revision's proposed fields, not from the live row:
+	// a later autosave that sends only some fields must not silently drop the text changes already awaiting approval.
+	if p.Status == StatusPublished || p.Status == StatusPendingModeration || p.Status == StatusInReview {
+		prevRev, err := s.repo.GetPendingRevision(ctx, p.ID)
+		if err != nil {
+			return Product{}, err
+		}
+		if prevRev != nil {
+			b, err := json.Marshal(prevRev.ContentSnapshot)
+			if err != nil {
+				return Product{}, err
+			}
+			overlayRevisionScalars(p, parseRevisionScalars(b))
+		}
+	}
+
 	targetCategoryID := p.CategoryID
 	if req.CategoryID != nil {
 		targetCategoryID = req.CategoryID
@@ -1245,6 +1261,9 @@ func (s *Service) GetSellerProduct(ctx context.Context, currentUserID, productID
 		return Product{}, err
 	}
 	if pendingRev != nil {
+		// Text fields and prices too: after a reload Studio must show (and autosave) the proposed values, otherwise
+		// the next autosave would silently replace the pending text with the live one.
+		overlayRevisionScalars(p, pendingRev.scalars)
 		if pendingRev.VariantsChanged {
 			p.Variants = overlayRevisionVariants(p.Variants, pendingRev.Variants)
 			PopulateProductAggregates(p)
@@ -1565,6 +1584,9 @@ func (s *Service) GetAdminProductDetail(ctx context.Context, productID uuid.UUID
 	pendingRev, err := s.repo.GetPendingRevisionView(ctx, productID)
 	if err != nil {
 		return Product{}, err
+	}
+	if pendingRev != nil {
+		pendingRev.ChangedFields = revisionFieldChanges(p, pendingRev.scalars)
 	}
 	p.PendingRevision = pendingRev
 

@@ -45,6 +45,9 @@ type PendingRevisionView struct {
 	Images []ProductImage `json:"images,omitempty"`
 	// ImagesMissing counts proposed photos that no longer resolve (lost upload); approval would be refused.
 	ImagesMissing int `json:"imagesMissing,omitempty"`
+	// ChangedFields lists the product fields (title, description, prices…) the revision changes; filled for Admin.
+	ChangedFields []RevisionFieldChange `json:"changedFields,omitempty"`
+	scalars       revisionScalars
 }
 
 func parseRevisionChanges(snapBytes []byte) (ProductRevisionChanges, error) {
@@ -211,6 +214,7 @@ func (r *Repository) GetPendingRevisionView(ctx context.Context, productID uuid.
 	if err != nil {
 		return nil, err
 	}
+	view.scalars = parseRevisionScalars(snapBytes)
 	if ch.Images != nil {
 		view.ImagesChanged = true
 		view.ImagesCount = len(*ch.Images)

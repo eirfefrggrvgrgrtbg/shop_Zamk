@@ -145,6 +145,14 @@ export interface AdminProductPendingRevision {
   imagesCount: number;
   images: AdminPendingRevisionImage[];
   imagesMissing: number;
+  /** Product fields (title, description, prices…) the revision changes, live value next to the proposed one. */
+  changedFields?: AdminPendingRevisionFieldChange[];
+}
+
+export interface AdminPendingRevisionFieldChange {
+  field: string;
+  current?: string;
+  proposed?: string;
 }
 
 export interface AdminPendingRevisionImage {
@@ -325,6 +333,13 @@ const mapPendingRevision = (rev: any): AdminProductPendingRevision | undefined =
       hasRendition: Boolean(img.renditionUrl),
     })),
     imagesMissing: typeof rev.imagesMissing === 'number' ? rev.imagesMissing : 0,
+    changedFields: (Array.isArray(rev.changedFields) ? rev.changedFields : [])
+      .filter((f: any) => f && typeof f.field === 'string')
+      .map((f: any) => ({
+        field: f.field,
+        current: typeof f.current === 'string' ? f.current : undefined,
+        proposed: typeof f.proposed === 'string' ? f.proposed : undefined,
+      })),
   };
 };
 

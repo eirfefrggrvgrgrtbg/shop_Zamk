@@ -1877,94 +1877,10 @@ func (r *Repository) PromoteProductRevision(ctx context.Context, productID, revi
 		return fmt.Errorf("%w: %w", ErrRevisionNotApplicable, err)
 	}
 
-	var pSnap Product
-	var rawMap map[string]interface{}
-	if len(snapBytes) > 0 {
-		_ = json.Unmarshal(snapBytes, &pSnap)
-		_ = json.Unmarshal(snapBytes, &rawMap)
-	}
-
-	var title *string
-	if pSnap.Title != "" {
-		title = &pSnap.Title
-	} else if t, ok := rawMap["title"].(string); ok && t != "" {
-		title = &t
-	}
-
-	var desc *string
-	if pSnap.Description != nil {
-		desc = pSnap.Description
-	} else if d, ok := rawMap["description"].(string); ok {
-		desc = &d
-	}
-
-	var categoryID *uuid.UUID
-	if pSnap.CategoryID != nil {
-		categoryID = pSnap.CategoryID
-	}
-
-	var brandID *uuid.UUID
-	if pSnap.BrandID != nil {
-		brandID = pSnap.BrandID
-	}
-
-	var gender *string
-	if pSnap.Gender != nil {
-		gender = pSnap.Gender
-	} else if g, ok := rawMap["gender"].(string); ok {
-		gender = &g
-	}
-
-	var color *string
-	if pSnap.Color != nil {
-		color = pSnap.Color
-	} else if c, ok := rawMap["color"].(string); ok {
-		color = &c
-	}
-
-	var material *string
-	if pSnap.Material != nil {
-		material = pSnap.Material
-	} else if m, ok := rawMap["material"].(string); ok {
-		material = &m
-	}
-
-	var careInstructions *string
-	if pSnap.CareInstructions != nil {
-		careInstructions = pSnap.CareInstructions
-	} else if ci, ok := rawMap["careInstructions"].(string); ok {
-		careInstructions = &ci
-	}
-
-	var priceCents *int64
-	if pSnap.PriceCents > 0 {
-		priceCents = &pSnap.PriceCents
-	} else if pc, ok := rawMap["priceCents"].(float64); ok && pc > 0 {
-		i := int64(pc)
-		priceCents = &i
-	}
-
-	var oldPriceCents *int64
-	if pSnap.OldPriceCents != nil {
-		oldPriceCents = pSnap.OldPriceCents
-	} else if opc, ok := rawMap["oldPriceCents"].(float64); ok {
-		i := int64(opc)
-		oldPriceCents = &i
-	}
-
-	var mainImageURL *string
-	if pSnap.MainImageURL != nil {
-		mainImageURL = pSnap.MainImageURL
-	} else if miu, ok := rawMap["mainImageUrl"].(string); ok {
-		mainImageURL = &miu
-	}
-
-	var mainImageObjectKey *string
-	if pSnap.MainImageObjectKey != nil {
-		mainImageObjectKey = pSnap.MainImageObjectKey
-	} else if miok, ok := rawMap["mainImageObjectKey"].(string); ok {
-		mainImageObjectKey = &miok
-	}
+	f := parseRevisionScalars(snapBytes)
+	title, desc, categoryID, brandID, gender, color := f.Title, f.Description, f.CategoryID, f.BrandID, f.Gender, f.Color
+	material, careInstructions, priceCents, oldPriceCents := f.Material, f.CareInstructions, f.PriceCents, f.OldPriceCents
+	mainImageURL, mainImageObjectKey := f.MainImageURL, f.MainImageObjectKey
 
 	updateQuery := `
 		UPDATE products

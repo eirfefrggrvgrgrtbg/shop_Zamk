@@ -206,6 +206,37 @@ describe('AdminModerationProductDetail — AI Panel & Moderation Controls Bounda
     expect(screen.queryByTestId('btn-start-review')).toBeNull();
   });
 
+  // C5.3: Admin sees the proposed text and price next to the live values of the product still on sale
+  it('shows the proposed text and price changes of a published product', async () => {
+    vi.mocked(adminProductsApi.getAdminProduct).mockResolvedValue({
+      ...baseProduct,
+      status: 'published',
+      statusLabel: 'Опубликован',
+      pendingRevision: {
+        id: 'rev-3',
+        variantsChanged: false,
+        imagesChanged: false,
+        imagesCount: 0,
+        images: [],
+        imagesMissing: 0,
+        variants: [],
+        changedFields: [
+          { field: 'description', current: 'Старое описание', proposed: 'Новое описание' },
+          { field: 'priceCents', current: '1000000', proposed: '1200000' },
+          { field: 'categoryId', current: '11111111-1111-4111-8111-111111111111', proposed: '22222222-2222-4222-8222-222222222222' },
+        ],
+      },
+    });
+    renderComponent();
+
+    const fields = await screen.findByTestId('pending-revision-fields');
+    expect(screen.getByTestId('pending-revision-field-description').textContent).toContain('Новое описание');
+    expect(screen.getByTestId('pending-revision-field-description').textContent).toContain('Старое описание');
+    expect(screen.getByTestId('pending-revision-field-priceCents').textContent).toMatch(/12\s?000/);
+    expect(fields.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
+    expect(screen.getByTestId('btn-approve')).toBeDefined();
+  });
+
   it('shows the proposed gallery with new photos and flags a new photo without 4:5', async () => {
     vi.mocked(adminProductsApi.getAdminProduct).mockResolvedValue({
       ...baseProduct,

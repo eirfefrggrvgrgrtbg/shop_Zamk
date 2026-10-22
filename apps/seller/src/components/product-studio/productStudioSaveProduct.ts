@@ -54,6 +54,17 @@ export interface ProductStudioUpdateRequestPayload {
     boolValue?: boolean;
   }>;
   images?: SellerProductPatchImageItem[];
+  /** Published product: the edit becomes a pending revision and the approved version stays on sale meanwhile. */
+  continueSelling?: boolean;
+}
+
+/**
+ * The existing continueSelling contract (C5.1): an edit of a PUBLISHED product is stored as a pending revision while
+ * the last approved version keeps selling. The backend only honours it for a published product, so a blocked,
+ * archived, hidden or never-published product is never put on sale by it. Status comes from the server baseline.
+ */
+export function shouldContinueSelling(baselineDraft: Pick<ProductStudioDraft, 'status'>): boolean {
+  return (baselineDraft.status || '').toLowerCase() === 'published';
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -206,6 +217,10 @@ export function buildProductStudioUpdateRequest(
   const patchMedia = buildProductPatchMediaPayload(workingDraft, baselineDraft);
   if (patchMedia !== undefined) {
     payload.images = patchMedia;
+  }
+
+  if (shouldContinueSelling(baselineDraft)) {
+    payload.continueSelling = true;
   }
 
   return payload;
