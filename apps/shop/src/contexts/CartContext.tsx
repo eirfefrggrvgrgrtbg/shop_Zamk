@@ -14,6 +14,8 @@ export interface UIContextCartItem {
   title?: string;
   price?: number;
   inStock?: boolean;
+  availableQuantity?: number;
+  unavailableReason?: ApiCartItem['unavailableReason'];
   size?: string;
   color?: string;
   sellerSku?: string;
@@ -60,6 +62,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         title: item.title,
         price: item.priceCents ? item.priceCents / 100 : 0,
         inStock: item.inStock ?? true,
+        availableQuantity: item.availableQuantity,
+        unavailableReason: item.unavailableReason,
         size: item.size,
         color: item.color,
         sellerSku: item.sellerSku,
@@ -82,9 +86,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         } as Product : undefined)
       }));
 
-      // Backend does not return totalPriceCents — compute from items to stay consistent
+      // Backend does not return totalPriceCents — compute from items to stay consistent.
+      // Lines the server flags as unavailable are not purchasable and are not part of the payable total.
       const computedTotal = cart.items.reduce(
-        (sum, item) => sum + (item.priceCents ?? 0) * item.quantity,
+        (sum, item) => (item.unavailableReason ? sum : sum + (item.priceCents ?? 0) * item.quantity),
         0
       );
 

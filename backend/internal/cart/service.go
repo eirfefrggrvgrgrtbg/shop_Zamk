@@ -101,6 +101,16 @@ func (s *Service) UpdateItemQuantity(ctx context.Context, userID, itemID uuid.UU
 	if err != nil {
 		return nil, err
 	}
+	// Lowering the quantity of an unavailable line is always allowed (the buyer is fixing the cart);
+	// raising it is not.
+	if req.Quantity > foundItem.Quantity {
+		if info.Status != "published" {
+			return nil, ErrProductNotPublished
+		}
+		if !info.VariantActive {
+			return nil, ErrVariantNotFound
+		}
+	}
 	if info.Available < req.Quantity {
 		return nil, ErrInsufficientStock
 	}

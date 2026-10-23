@@ -34,7 +34,8 @@ func (r *Repository) GetCartByUserID(ctx context.Context, userID uuid.UUID) (*Ca
 		SELECT
 			ci.id, ci.cart_id, ci.product_id, ci.product_variant_id, ci.quantity, ci.created_at, ci.updated_at,
 			p.title, COALESCE(pv.price_cents, p.price_cents),
-			COALESCE(ii.total_stock - ii.reserved_stock, 0) > 0 AS in_stock,
+			COALESCE(ii.total_stock - ii.reserved_stock, 0) AS available,
+			p.status, pv.is_active,
 			COALESCE(sv.value, pv.size) AS size,
 			COALESCE(c.name_ru, pv.color) AS color,
 			COALESCE(pv.seller_sku, pv.sku) AS seller_sku,
@@ -76,13 +77,18 @@ func (r *Repository) GetCartByUserID(ctx context.Context, userID uuid.UUID) (*Ca
 
 	for rows.Next() {
 		var item CartItem
+		var productStatus sql.NullString
+		var variantActive sql.NullBool
 		if err := rows.Scan(
 			&item.ID, &item.CartID, &item.ProductID, &item.ProductVariantID, &item.Quantity, &item.CreatedAt, &item.UpdatedAt,
-			&item.Title, &item.PriceCents, &item.InStock,
+			&item.Title, &item.PriceCents, &item.AvailableQuantity,
+			&productStatus, &variantActive,
 			&item.Size, &item.Color, &item.SellerSKU, &item.ImageURL, &item.BrandName,
 		); err != nil {
 			return nil, err
 		}
+		item.UnavailableReason = UnavailableReasonFor(productStatus.String, variantActive.Bool, item.AvailableQuantity, item.Quantity)
+		item.InStock = item.AvailableQuantity > 0 && item.UnavailableReason != ReasonProductUnpublished && item.UnavailableReason != ReasonVariantInactive
 		cart.Items = append(cart.Items, item)
 	}
 

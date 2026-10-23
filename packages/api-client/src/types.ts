@@ -296,6 +296,8 @@ export interface CartItem {
   brandName?: string;
   priceCents?: number;
   inStock?: boolean;
+  availableQuantity?: number;
+  unavailableReason?: 'product_unpublished' | 'variant_inactive' | 'out_of_stock' | 'insufficient_stock';
 }
 
 export interface Cart {

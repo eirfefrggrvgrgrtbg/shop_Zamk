@@ -112,6 +112,11 @@ func (h *Handler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusBadRequest, "insufficient_stock", err.Error())
 			return
 		}
+		if errors.Is(err, ErrProductNotPublished) || errors.Is(err, ErrVariantNotFound) {
+			h.writeError(w, http.StatusBadRequest, "invalid_item", err.Error())
+			return
+		}
+		slog.ErrorContext(r.Context(), "cart update item failed", "error", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update item")
 		return
 	}

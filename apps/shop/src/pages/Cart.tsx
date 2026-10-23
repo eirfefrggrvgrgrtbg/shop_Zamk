@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Minus, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -10,6 +11,7 @@ import { formatVariantDetails, getCartItemImageUrl } from '../lib/variantSelecti
 import { InfoPanel } from '../components/editorial/StudioKit';
 import { PromoCodeBox } from '../components/PromoCodeBox';
 import { usePromo } from '../contexts/promoContextValue';
+import { cartUnavailableMessage, cartCanShrinkToAvailable, diffCartPrices, readLastSeenCartPrices, saveLastSeenCartPrices } from '../lib/cartAvailability';
 
 const isUUID = (val?: string): boolean =>
   !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
@@ -24,6 +26,15 @@ export function Cart() {
   const { appliedCode, discount, isChecking } = usePromo();
   const delivery = 0; // Доставка рассчитывается при оформлении
   const finalTotal = Math.max(totalPrice - discount, 0) + delivery;
+  // Цены, виденные при прошлом открытии, читаем один раз при монтировании; изменения выводятся при рендере.
+  const [lastSeenPrices] = useState(readLastSeenCartPrices);
+  const priceChanges = diffCartPrices(lastSeenPrices, items);
+  const hasUnavailable = items.some(i => cartUnavailableMessage(i) !== null);
+  const unavailableCount = items.filter(i => cartUnavailableMessage(i) !== null).length;
+
+  useEffect(() => {
+    if (!isLoadingCart) saveLastSeenCartPrices(items);
+  }, [items, isLoadingCart]);
 
   if (isLoadingCart) {
     return (
@@ -93,7 +104,9 @@ export function Cart() {
               const canonicalBrand = resolveBrandName(item.brandName, item.product?.brand);
               const productPrice = item.price || (item.product ? getProductEffectivePrice(item.product) : 0);
               const variantDetails = formatVariantDetails(item.color, item.size);
-              const isUnavailable = item.inStock === false;
+              const unavailableMessage = cartUnavailableMessage(item);
+              const isUnavailable = unavailableMessage !== null;
+              const priceChange = priceChanges[item.productVariantId];
 
               return (
               <article
@@ -109,7 +122,7 @@ export function Cart() {
                   <img src={productImage} alt={productName} className={cn('h-full w-full object-cover', isUnavailable && 'opacity-60 grayscale')} />
                   {isUnavailable && (
                     <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-[11px] font-medium text-white px-1 text-center">
-                      Нет в наличии
+                      Недоступно
                     </span>
                   )}
                 </Link>
@@ -120,8 +133,8 @@ export function Cart() {
                         <p className='text-xs uppercase tracking-[0.14em] text-ash' data-testid="cart-item-brand">{canonicalBrand}</p>
                       ) : null}
                       {isUnavailable && (
-                        <span className='text-xs font-medium text-error bg-error/10 dark:bg-error/20 px-2 py-0.5 rounded-full'>
-                          Товар закончился
+                        <span className='text-xs font-medium text-error bg-error/10 dark:bg-error/20 px-2 py-0.5 rounded-full' data-testid="cart-item-unavailable-reason" role="status">
+                          {unavailableMessage}
                         </span>
                       )}
                     </div>
@@ -133,6 +146,20 @@ export function Cart() {
                     <p className='mt-1 text-sm text-ash font-medium'>{variantDetails}</p>
                   )}
                   <p className='mt-2 text-sm text-graphite-light dark:text-gray-400'>{formatPrice(productPrice)}</p>
+                  {priceChange && !isUnavailable && (
+                    <p className='mt-1 text-xs text-ash' data-testid="cart-item-price-changed" role="status">
+                      Цена изменилась: было {formatPrice(priceChange.from)}, стало {formatPrice(priceChange.to)}
+                    </p>
+                  )}
+                  {cartCanShrinkToAvailable(item) && (
+                    <button
+                      type='button'
+                      className='mt-2 self-start text-xs font-medium text-graphite dark:text-gray-200 underline underline-offset-2'
+                      onClick={() => updateQuantity(item.id, item.availableQuantity ?? 1)}
+                    >
+                      Уменьшить до {item.availableQuantity} шт.
+                    </button>
+                  )}
 
                   <div className='mt-auto pt-4 flex items-center justify-between'>
                     <div className='flex items-center gap-2'>
@@ -141,7 +168,7 @@ export function Cart() {
                         aria-label={`Уменьшить количество ${productName}`}
                         className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed'
                         onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        disabled={isUnavailable}
+                        disabled={isUnavailable && item.unavailableReason !== 'insufficient_stock'}
                       >
                         <Minus className='w-3.5 h-3.5' />
                       </button>
@@ -169,9 +196,14 @@ export function Cart() {
             <InfoPanel title='Сводка заказа' className='sticky top-32'>
               <div className='space-y-3 text-sm'>
                 <div className='flex justify-between'>
-                  <span>Сумма товаров</span>
+                  <span>Сумма доступных товаров</span>
                   <span className='text-graphite'>{formatPrice(totalPrice)}</span>
                 </div>
+                {unavailableCount > 0 && (
+                  <p className='text-xs text-ash' data-testid="cart-total-excludes-hint">
+                    В сумму не входят недоступные позиции: {unavailableCount}
+                  </p>
+                )}
                 {discount > 0 && (
                   <div className='flex justify-between text-success' data-testid='cart-promo-discount'>
                     <span>Промокод {appliedCode}</span>
@@ -187,12 +219,12 @@ export function Cart() {
                   <span>Итого</span>
                   <span>{isChecking && appliedCode ? 'Пересчитываем…' : formatPrice(finalTotal)}</span>
                 </div>
-                {items.some(i => i.inStock === false) && (
-                  <p className="text-xs text-error mt-2">
-                    В корзине есть недоступные товары. Удалите их для оформления заказа.
+                {hasUnavailable && (
+                  <p className="text-xs text-error mt-2" data-testid="cart-unavailable-hint">
+                    В корзине есть недоступные товары. Удалите их или измените количество, чтобы оформить заказ.
                   </p>
                 )}
-                {items.some(i => i.inStock === false) ? (
+                {hasUnavailable ? (
                   <Button className='w-full gap-2 mt-4' disabled={true}>
                     Оформить заказ <ArrowRight className='w-4 h-4' />
                   </Button>
