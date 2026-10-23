@@ -1,6 +1,10 @@
 package payouts
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type BalanceResponse struct {
 	GrossSalesCents  int64  `json:"grossSalesCents"`
@@ -56,4 +60,48 @@ type AdminSellerBalance struct {
 type AdminSellerBalanceListResponse struct {
 	Items      []AdminSellerBalance `json:"items"`
 	TotalCount int                  `json:"totalCount"`
+}
+
+// AdminPayoutListItem is one payout batch as the admin sees it (PAYOUT.ADMIN.1). The list shows BATCHES:
+// statuses are the payout_batches statuses (scheduled, processing, paid, failed, held).
+type AdminPayoutListItem struct {
+	PayoutBatch
+	SellerName      *string `json:"sellerName"`
+	Currency        string  `json:"currency"`
+	EarningsCount   int     `json:"earningsCount"`
+	EntriesCount    int     `json:"entriesCount"`
+	ReturnHoldCents int64   `json:"returnHoldCents"`
+}
+
+// AdminPayoutEntry is one ledger row linked to a batch.
+type AdminPayoutEntry struct {
+	ID           uuid.UUID  `json:"id"`
+	Type         string     `json:"type"`
+	Reason       *string    `json:"reason"`
+	AmountCents  int64      `json:"amountCents"`
+	OrderID      *uuid.UUID `json:"orderId"`
+	OrderNumber  *string    `json:"orderNumber"`
+	OrderItemID  *uuid.UUID `json:"orderItemId"`
+	ProductTitle *string    `json:"productTitle"`
+	AvailableAt  *time.Time `json:"availableAt"`
+	CreatedAt    time.Time  `json:"createdAt"`
+}
+
+// AdminPayoutTotals splits a batch by ledger meaning; earnings + holds + adjustments = the batch amount at
+// formation, payout is the manually confirmed transfer (negative), if any.
+type AdminPayoutTotals struct {
+	EarningsCents    int64 `json:"earningsCents"`
+	ReturnHoldCents  int64 `json:"returnHoldCents"`
+	AdjustmentsCents int64 `json:"adjustmentsCents"`
+	PayoutCents      int64 `json:"payoutCents"`
+}
+
+type AdminPayoutDetail struct {
+	Payout                AdminPayoutListItem `json:"payout"`
+	Entries               []AdminPayoutEntry  `json:"entries"`
+	Totals                AdminPayoutTotals   `json:"totals"`
+	UncoveredDisputeCents int64               `json:"uncoveredDisputeCents"`
+	CanConfirmPaid        bool                `json:"canConfirmPaid"`
+	CanHold               bool                `json:"canHold"`
+	ConfirmBlockedReason  string              `json:"confirmBlockedReason,omitempty"`
 }

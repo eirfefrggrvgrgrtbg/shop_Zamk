@@ -1,100 +1,107 @@
 import {
   getAdminPayout as apiGetAdminPayout,
   getAdminPayouts as apiGetAdminPayouts,
+  processAdminPayoutBatch as apiProcessAdminPayoutBatch,
+  holdAdminPayoutBatch as apiHoldAdminPayoutBatch,
   updateAdminPayoutStatus as apiUpdateAdminPayoutStatus,
   getAdminPayoutSummary as apiGetAdminPayoutSummary,
   getAdminSellerBalances as apiGetAdminSellerBalances,
 } from '@zamk/api-client/src/admin';
 import { ApiError } from '@zamk/api-client/src/errors';
-import type { AdminPayout } from '@zamk/api-client/src/types';
+import type {
+  AdminPayout,
+  AdminPayoutDetail,
+  AdminPayoutEntry,
+  AdminPayoutTotals,
+  AdminPayoutSummary,
+} from '@zamk/api-client/src/types';
 
-type ListResponse<T> = T[] | { items?: T[]; totalCount?: number };
+export type {
+  AdminPayout,
+  AdminPayoutDetail,
+  AdminPayoutEntry,
+  AdminPayoutTotals,
+  AdminPayoutSummary,
+};
 
-export interface AdminPayoutView {
-  id: string;
-  sellerId: string;
-  sellerName?: string;
-  status: string;
-  statusLabel: string;
-  amount: number;
-  amountCents: number;
-  currency: string;
-  requestedAt?: string;
-  approvedAt?: string;
-  rejectedAt?: string;
-  paidAt?: string;
-  adminUserId?: string;
-  comment?: string;
+export const payoutStatusLabels: Record<string, string> = {
+  scheduled: 'Запланирована',
+  processing: 'В обработке',
+  paid: 'Выплачена',
+  held: 'Заблокирована',
+  failed: 'Ошибка',
+};
+
+export const getPayoutStatusLabel = (status: string): string =>
+  payoutStatusLabels[status] ?? status;
+
+export interface GetAdminPayoutsParams {
+  q?: string;
+  sellerId?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
 }
 
-const labels: Record<string, string> = {
-  requested: 'Запрошена',
-  approved: 'Одобрена',
-  rejected: 'Отклонена',
-  paid: 'Выплачена',
-  cancelled: 'Отменена',
+export interface GetAdminPayoutsResponse {
+  items: AdminPayout[];
+  totalCount: number;
+}
+
+export const getAdminPayouts = async (
+  params?: GetAdminPayoutsParams,
+): Promise<GetAdminPayoutsResponse> => {
+  const response = await apiGetAdminPayouts(params);
+  return {
+    items: response?.items ?? [],
+    totalCount: response?.totalCount ?? 0,
+  };
 };
 
-const unwrapItems = <T>(response: ListResponse<T>): T[] => Array.isArray(response) ? response : response.items ?? [];
-
-const unwrapPayout = (response: { payout?: AdminPayout } | AdminPayout): AdminPayout => {
-  return 'payout' in response && response.payout ? response.payout : response as AdminPayout;
+export const getAdminPayout = async (id: string): Promise<AdminPayoutDetail> => {
+  return await apiGetAdminPayout(id);
 };
 
-export const mapAdminPayout = (payout: AdminPayout): AdminPayoutView => ({
-  id: payout.id,
-  sellerId: payout.sellerId,
-  sellerName: payout.sellerName,
-  status: payout.status,
-  statusLabel: labels[payout.status] ?? payout.status,
-  amount: payout.amountCents / 100,
-  amountCents: payout.amountCents,
-  currency: payout.currency || 'RUB',
-  requestedAt: payout.requestedAt,
-  approvedAt: payout.approvedAt,
-  rejectedAt: payout.rejectedAt,
-  paidAt: payout.paidAt,
-  adminUserId: payout.adminUserId,
-  comment: payout.comment,
-});
-
-export const getPayoutStatusTargets = (status: string): string[] => {
-  switch (status) {
-    case 'requested':
-      return ['approved', 'rejected'];
-    case 'approved':
-      return ['paid', 'cancelled'];
-    default:
-      return [];
-  }
+export const processAdminPayoutBatch = async (id: string): Promise<void> => {
+  await apiProcessAdminPayoutBatch(id);
 };
 
-export const getPayoutStatusLabel = (status: string): string => labels[status] ?? status;
-
-export const getAdminPayouts = async (params?: { q?: string; sellerId?: string; status?: string; limit?: number; offset?: number }): Promise<AdminPayoutView[]> => {
-  const response = await apiGetAdminPayouts(params) as unknown as ListResponse<AdminPayout>;
-  return unwrapItems(response).map(mapAdminPayout);
+export const holdAdminPayoutBatch = async (id: string): Promise<void> => {
+  await apiHoldAdminPayoutBatch(id);
 };
 
-export const getAdminPayout = async (id: string): Promise<AdminPayoutView> => {
-  return mapAdminPayout(unwrapPayout(await apiGetAdminPayout(id)));
-};
-
-export const updateAdminPayoutStatus = async (id: string, status: string, comment?: string): Promise<void> => {
+export const updateAdminPayoutStatus = async (
+  id: string,
+  status: string,
+  comment?: string,
+): Promise<void> => {
   await apiUpdateAdminPayoutStatus(id, { status, comment: comment || undefined });
 };
 
 export const getAdminPayoutErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiError) {
     if (error.status === 403) return 'Недостаточно прав для управления выплатами.';
-    if (error.status === 400 || error.code === 'invalid_status_transition') return 'Backend отклонил действие по выплате.';
+    if (error.status === 409 || error.code === 'already_paid')
+      return 'Выплата уже была подтверждена ранее.';
+    if (error.code === 'open_return_not_covered')
+      return 'Подтверждение заблокировано: обнаружен открытый возврат товара, претендующий на средства этой выплаты.';
+    if (error.code === 'not_processable')
+      return 'Выплата не может быть подтверждена в её текущем статусе.';
+    if (error.code === 'not_holdable')
+      return 'Выплата не может быть заблокирована в её текущем статусе.';
+    if (error.code === 'invalid_status_transition')
+      return 'Недопустимый переход статуса выплаты.';
     if (error.status === 404) return 'Выплата не найдена.';
-    if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
+    if (error.code === 'NETWORK_ERROR')
+      return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
+    if (error.message && typeof error.message === 'string' && error.message.length < 200) {
+      return error.message;
+    }
   }
   return fallback;
 };
 
-export const getAdminPayoutSummary = async () => {
+export const getAdminPayoutSummary = async (): Promise<AdminPayoutSummary> => {
   return await apiGetAdminPayoutSummary();
 };
 

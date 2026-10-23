@@ -687,9 +687,12 @@ func New(
 		// Payouts
 		r.Route("/payouts", func(r chi.Router) {
 			r.With(perm("payouts.read")).Get("/summary", payoutsHandler.GetAdminPayoutSummary)
-			r.With(adminDangerousLimit, perm("payouts.create")).Post("/batch", payoutsHandler.CreatePayoutBatch)
-			r.With(adminDangerousLimit, perm("payouts.update")).Post("/{id}/process", payoutsHandler.ProcessPayoutBatch)
-			r.With(adminDangerousLimit, perm("payouts.update")).Post("/{id}/hold", payoutsHandler.HoldPayoutBatch)
+			r.With(perm("payouts.read")).Get("/", payoutsHandler.ListAdminPayouts)
+			r.With(perm("payouts.read")).Get("/{id}", payoutsHandler.GetAdminPayoutDetail)
+			r.With(adminDangerousLimit, permAny("payouts.create")).Post("/batch", payoutsHandler.CreatePayoutBatch)
+			r.With(adminDangerousLimit, perm("payouts.mark_paid")).Post("/{id}/process", payoutsHandler.ProcessPayoutBatch)
+			r.With(adminDangerousLimit, permAny("payouts.update", "payouts.approve", "payouts.mark_paid")).Post("/{id}/hold", payoutsHandler.HoldPayoutBatch)
+			r.With(adminDangerousLimit, permAny("payouts.update", "payouts.mark_paid")).Patch("/{id}/status", payoutsHandler.UpdatePayoutBatchStatus)
 		})
 
 		// Auctions

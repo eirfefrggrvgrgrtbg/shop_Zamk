@@ -234,59 +234,96 @@ func (s *Service) applyReturnHoldsTx(ctx context.Context, tx pgx.Tx, batchID uui
 	return total, nil
 }
 
-// batchHasUnheldOpenReturnsTx reports whether the batch would pay disputed money: an open return on one of its
-// earnings whose disputed share is NOT covered by a hold (a return opened, or a disputed quantity added, after the
-// batch was formed). Returns that already existed when the batch was formed are covered by their holds inside the
-// batch, so the undisputed part stays payable. Locks the order items so a return cannot appear meanwhile.
-func batchHasUnheldOpenReturnsTx(ctx context.Context, tx pgx.Tx, batchID uuid.UUID) (bool, error) {
-	rows, err := tx.Query(ctx, `SELECT order_item_id, amount_cents FROM seller_ledger_entries WHERE payout_batch_id = $1 AND type = 'seller_earning' AND order_item_id IS NOT NULL`, batchID)
+// batchEarnings lists the seller_earning rows of a batch: order item -> earning amount (sorted item ids).
+func batchEarnings(ctx context.Context, q ledgerQuerier, batchID uuid.UUID) ([]uuid.UUID, map[uuid.UUID]int64, error) {
+	rows, err := q.Query(ctx, `SELECT order_item_id, amount_cents FROM seller_ledger_entries WHERE payout_batch_id = $1 AND type = 'seller_earning' AND order_item_id IS NOT NULL`, batchID)
 	if err != nil {
-		return false, err
+		return nil, nil, err
 	}
+	defer rows.Close()
 	var ids []uuid.UUID
 	earningOf := map[uuid.UUID]int64{}
 	for rows.Next() {
 		var id uuid.UUID
 		var amount int64
 		if err := rows.Scan(&id, &amount); err != nil {
-			rows.Close()
-			return false, err
+			return nil, nil, err
 		}
 		ids = append(ids, id)
 		earningOf[id] = amount
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
-		return false, err
-	}
-	if len(ids) == 0 {
-		return false, nil
+		return nil, nil, err
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i].String() < ids[j].String() })
-	orderQty, err := lockOrderItemsTx(ctx, tx, ids)
-	if err != nil {
-		return false, err
-	}
+	return ids, earningOf, nil
+}
+
+// uncoveredShares sums the disputed share of open returns on the given earnings that no hold covers yet.
+func uncoveredShares(ctx context.Context, q ledgerQuerier, ids []uuid.UUID, earningOf, orderQty map[uuid.UUID]int64) (int64, error) {
+	var total int64
 	for _, id := range ids {
-		items, err := openReturnItemsTx(ctx, tx, id)
+		items, err := openReturnItemsTx(ctx, q, id)
 		if err != nil {
-			return false, err
+			return 0, err
 		}
 		if len(items) == 0 {
 			continue
 		}
-		pa, pq, err := priorDeductions(ctx, tx, id)
+		pa, pq, err := priorDeductions(ctx, q, id)
 		if err != nil {
-			return false, err
+			return 0, err
 		}
 		// disputedShares returns the share still to hold for items without a hold: any positive share is uncovered.
 		for _, share := range disputedShares(earningOf[id], orderQty[id], pa, pq, items) {
-			if share > 0 {
-				return true, nil
-			}
+			total += share
 		}
 	}
-	return false, nil
+	return total, nil
+}
+
+// batchHasUnheldOpenReturnsTx reports whether the batch would pay disputed money: an open return on one of its
+// earnings whose disputed share is NOT covered by a hold (a return opened, or a disputed quantity added, after the
+// batch was formed). Returns that already existed when the batch was formed are covered by their holds inside the
+// batch, so the undisputed part stays payable. Locks the order items so a return cannot appear meanwhile.
+func batchHasUnheldOpenReturnsTx(ctx context.Context, tx pgx.Tx, batchID uuid.UUID) (bool, error) {
+	ids, earningOf, err := batchEarnings(ctx, tx, batchID)
+	if err != nil || len(ids) == 0 {
+		return false, err
+	}
+	orderQty, err := lockOrderItemsTx(ctx, tx, ids)
+	if err != nil {
+		return false, err
+	}
+	uncovered, err := uncoveredShares(ctx, tx, ids, earningOf, orderQty)
+	return uncovered > 0, err
+}
+
+// uncoveredDisputeCents is the read-only twin of batchHasUnheldOpenReturnsTx for the admin detail view.
+func uncoveredDisputeCents(ctx context.Context, q ledgerQuerier, batchID uuid.UUID) (int64, error) {
+	ids, earningOf, err := batchEarnings(ctx, q, batchID)
+	if err != nil || len(ids) == 0 {
+		return 0, err
+	}
+	rows, err := q.Query(ctx, `SELECT id, quantity FROM order_items WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return 0, err
+	}
+	orderQty := map[uuid.UUID]int64{}
+	for rows.Next() {
+		var id uuid.UUID
+		var n int64
+		if err := rows.Scan(&id, &n); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		orderQty[id] = n
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	return uncoveredShares(ctx, q, ids, earningOf, orderQty)
 }
 
 // ReleaseReturnHoldsTx writes, once, the release of every unreleased hold of a return that has just closed

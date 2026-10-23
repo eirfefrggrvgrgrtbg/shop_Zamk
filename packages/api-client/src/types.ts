@@ -1866,8 +1866,44 @@ export interface AdminPayout {
   paidAt?: string;
   adminUserId?: string;
   comment?: string;
+  scheduledFor?: string;
+  processedAt?: string;
+  failureReason?: string;
   createdAt?: string;
   updatedAt?: string;
+  earningsCount?: number;
+  entriesCount?: number;
+  returnHoldCents?: number;
+}
+
+export interface AdminPayoutEntry {
+  id: string;
+  type: string;
+  reason?: string;
+  amountCents: number;
+  orderId?: string;
+  orderNumber?: string;
+  orderItemId?: string;
+  productTitle?: string;
+  availableAt?: string;
+  createdAt: string;
+}
+
+export interface AdminPayoutTotals {
+  earningsCents: number;
+  returnHoldCents: number;
+  adjustmentsCents: number;
+  payoutCents: number;
+}
+
+export interface AdminPayoutDetail {
+  payout: AdminPayout;
+  entries: AdminPayoutEntry[];
+  totals: AdminPayoutTotals;
+  uncoveredDisputeCents: number;
+  canConfirmPaid: boolean;
+  canHold: boolean;
+  confirmBlockedReason?: string;
 }
 
 // ---------------------------------------------------------
@@ -2364,7 +2400,9 @@ export interface AdminPayoutSummary {
   totalAvailableCents: number;
   totalPendingCents: number;
   totalPaidCents: number;
-  totalRejectedCents: number;
+  totalRejectedCents?: number;
+  totalReturnHoldCents?: number;
+  totalFrozenCents?: number;
   totalCommissionCents: number;
   currency: string;
 }

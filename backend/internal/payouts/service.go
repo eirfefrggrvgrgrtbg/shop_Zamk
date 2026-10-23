@@ -2,7 +2,6 @@ package payouts
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -322,7 +321,7 @@ func (s *Service) CreatePayoutBatchForSeller(ctx context.Context, sellerID uuid.
 	}
 
 	if total <= 0 {
-		return nil, errors.New("no positive available balance")
+		return nil, ErrNothingToPay
 	}
 
 	batch := &PayoutBatch{
@@ -351,7 +350,7 @@ func (s *Service) CreatePayoutBatchForSeller(ctx context.Context, sellerID uuid.
 	if held > 0 {
 		batch.AmountCents = total - held
 		if batch.AmountCents <= 0 {
-			return nil, errors.New("no positive available balance")
+			return nil, ErrNothingToPay
 		}
 		if err := s.repo.UpdatePayoutBatchTx(ctx, tx, batch); err != nil {
 			return nil, err
@@ -377,13 +376,13 @@ func (s *Service) ProcessPayoutBatch(ctx context.Context, batchID uuid.UUID) err
 		return err
 	}
 	if batch == nil {
-		return errors.New("not found")
+		return ErrPayoutBatchNotFound
 	}
 	if batch.Status == "paid" {
-		return errors.New("already paid")
+		return ErrPayoutBatchAlreadyPaid
 	}
 	if batch.Status == "held" || batch.Status == "failed" {
-		return errors.New("cannot process batch with status: " + batch.Status)
+		return fmt.Errorf("%w: %s", ErrPayoutBatchNotProcessable, batch.Status)
 	}
 	// PAYOUT.SAFETY.1: fail closed if a return opened after this batch disputes money in it.
 	disputed, err := batchHasUnheldOpenReturnsTx(ctx, tx, batch.ID)
@@ -482,10 +481,14 @@ func (s *Service) HoldPayoutBatch(ctx context.Context, batchID uuid.UUID) error 
 		return err
 	}
 	if batch == nil {
-		return errors.New("not found")
+		return ErrPayoutBatchNotFound
 	}
 	if batch.Status == "paid" {
-		return errors.New("already paid")
+		return ErrPayoutBatchAlreadyPaid
+	}
+	// Only a batch that is still to be paid can be held; a failed batch has released its entries already.
+	if batch.Status != "scheduled" && batch.Status != "processing" && batch.Status != "held" {
+		return fmt.Errorf("%w: %s", ErrPayoutBatchNotHoldable, batch.Status)
 	}
 
 	batch.Status = "held"
@@ -507,10 +510,10 @@ func (s *Service) FailPayoutBatch(ctx context.Context, batchID uuid.UUID) error 
 		return err
 	}
 	if batch == nil {
-		return errors.New("not found")
+		return ErrPayoutBatchNotFound
 	}
 	if batch.Status == "paid" {
-		return errors.New("already paid")
+		return ErrPayoutBatchAlreadyPaid
 	}
 
 	batch.Status = "failed"
@@ -551,6 +554,40 @@ func (s *Service) ListAdminSellerBalances(ctx context.Context, limit, offset int
 	return []AdminSellerBalance{}, 0, nil
 }
 
-func (s *Service) ListAdminPayoutsFiltered(ctx context.Context, filter PayoutFilter, limit, offset int) ([]PayoutBatch, int, error) {
-	return []PayoutBatch{}, 0, nil
+// ListAdminPayoutBatches lists real payout batches (newest first) with their seller and ledger composition.
+func (s *Service) ListAdminPayoutBatches(ctx context.Context, filter PayoutFilter, limit, offset int) ([]AdminPayoutListItem, int, error) {
+	return s.repo.ListAdminPayoutBatches(ctx, filter, limit, offset)
+}
+
+// GetAdminPayoutBatchDetail returns one batch with its ledger rows, totals and the actions its state allows.
+// The confirm-paid check mirrors ProcessPayoutBatch (status + disputes not covered by a hold), read-only.
+func (s *Service) GetAdminPayoutBatchDetail(ctx context.Context, batchID uuid.UUID) (*AdminPayoutDetail, error) {
+	d, err := s.repo.GetAdminPayoutBatchDetail(ctx, batchID)
+	if err != nil {
+		return nil, err
+	}
+	if d == nil {
+		return nil, ErrPayoutBatchNotFound
+	}
+	open := d.Payout.Status == "scheduled" || d.Payout.Status == "processing"
+	if open {
+		uncovered, err := uncoveredDisputeCents(ctx, s.dbPool, batchID)
+		if err != nil {
+			return nil, err
+		}
+		d.UncoveredDisputeCents = uncovered
+	}
+	d.CanConfirmPaid = open && d.UncoveredDisputeCents == 0
+	d.CanHold = open
+	switch {
+	case d.Payout.Status == "paid":
+		d.ConfirmBlockedReason = "already_paid"
+	case d.Payout.Status == "held":
+		d.ConfirmBlockedReason = "held"
+	case d.Payout.Status == "failed":
+		d.ConfirmBlockedReason = "failed"
+	case d.UncoveredDisputeCents > 0:
+		d.ConfirmBlockedReason = "open_return_not_covered"
+	}
+	return d, nil
 }

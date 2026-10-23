@@ -1,5 +1,5 @@
 import { request, requestBlob } from './client';
-import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, ReturnShipment, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, AdminInventoryUnitTraceability, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, StaffMemberPermissionsResponse, UpdateStaffMemberPermissionsRequest, StaffMemberDetailResponse, UpdateStaffMemberProfileRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDispatchContext, AdminDispatchQueueItem, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, SupplyReceivingQueueItem, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse, AdminReturnReceivingState, AdminReturnReceivingQueueItem, ScanReturnUnitResponse, UpdateSerializedUnitInspectionInput, UpdateLegacyItemInspectionInput, AdminCampaign, AdminCampaignTrackingLink, CreateAdminCampaignRequest, UpdateAdminCampaignRequest, CreateAdminTrackingLinkRequest, AdminMarketingOverviewResponse, AdminMarketingSourcesResponse, AdminMarketingSourceDetailResponse, AdminMarketingCampaignsAnalyticsResponse, AdminMarketingTrendResponse } from './types';
+import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, ReturnShipment, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminPayoutDetail, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, AdminInventoryUnitTraceability, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, StaffMemberPermissionsResponse, UpdateStaffMemberPermissionsRequest, StaffMemberDetailResponse, UpdateStaffMemberProfileRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDispatchContext, AdminDispatchQueueItem, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, SupplyReceivingQueueItem, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse, AdminReturnReceivingState, AdminReturnReceivingQueueItem, ScanReturnUnitResponse, UpdateSerializedUnitInspectionInput, UpdateLegacyItemInspectionInput, AdminCampaign, AdminCampaignTrackingLink, CreateAdminCampaignRequest, UpdateAdminCampaignRequest, CreateAdminTrackingLinkRequest, AdminMarketingOverviewResponse, AdminMarketingSourcesResponse, AdminMarketingSourceDetailResponse, AdminMarketingCampaignsAnalyticsResponse, AdminMarketingTrendResponse } from './types';
 
 
 export const getAdminSellers = async (params?: {
@@ -620,8 +620,16 @@ export const getAdminPayouts = async (params?: { q?: string; sellerId?: string; 
   return request<{ items: AdminPayout[]; totalCount: number }>('GET', `/admin/payouts${qStr}`);
 };
 
-export const getAdminPayout = async (id: string): Promise<{ id?: string; payout?: AdminPayout } | AdminPayout> => {
-  return request<{ id?: string; payout?: AdminPayout } | AdminPayout>('GET', `/admin/payouts/${id}`);
+export const getAdminPayout = async (id: string): Promise<AdminPayoutDetail> => {
+  return request<AdminPayoutDetail>('GET', `/admin/payouts/${id}`);
+};
+
+export const processAdminPayoutBatch = async (id: string): Promise<void> => {
+  return request<void>('POST', `/admin/payouts/${id}/process`);
+};
+
+export const holdAdminPayoutBatch = async (id: string): Promise<void> => {
+  return request<void>('POST', `/admin/payouts/${id}/hold`);
 };
 
 export const updateAdminPayoutStatus = async (id: string, data: { status: string; comment?: string }): Promise<void> => {

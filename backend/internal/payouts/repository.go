@@ -518,3 +518,109 @@ func (r *Repository) UnfreezeAvailableEntries(ctx context.Context, now time.Time
 	}
 	return int(tag.RowsAffected()), nil
 }
+
+// AdminPayoutStatuses are the payout_batches statuses an admin can filter by.
+var AdminPayoutStatuses = map[string]bool{"scheduled": true, "processing": true, "paid": true, "failed": true, "held": true}
+
+// ListAdminPayoutBatches: one page of real batches, newest first (created_at, id), with the seller name and the
+// batch's ledger composition aggregated in the same query (no per-batch round trips); plus the filtered total.
+func (r *Repository) ListAdminPayoutBatches(ctx context.Context, f PayoutFilter, limit, offset int) ([]AdminPayoutListItem, int, error) {
+	var sellerID *uuid.UUID
+	if f.SellerID != "" {
+		id, err := uuid.Parse(f.SellerID)
+		if err != nil {
+			return nil, 0, err
+		}
+		sellerID = &id
+	}
+	where := `
+		WHERE ($1 = '' OR pb.status = $1)
+		  AND ($2::uuid IS NULL OR pb.seller_id = $2)
+		  AND ($3 = '' OR pb.id::text ILIKE $3 || '%' OR s.brand_name ILIKE '%' || $3 || '%')`
+	var total int
+	if err := r.db.QueryRow(ctx, `SELECT count(*) FROM payout_batches pb JOIN sellers s ON s.id = pb.seller_id`+where, f.Status, sellerID, f.Q).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT pb.id, pb.seller_id, pb.amount_cents, pb.status, pb.scheduled_for, pb.processed_at, pb.failure_reason,
+		       pb.created_at, pb.updated_at, s.brand_name,
+		       COALESCE(agg.earnings, 0), COALESCE(agg.entries, 0), COALESCE(agg.held, 0)
+		FROM payout_batches pb
+		JOIN sellers s ON s.id = pb.seller_id
+		LEFT JOIN LATERAL (
+			SELECT count(*) FILTER (WHERE sle.type = 'seller_earning') AS earnings,
+			       count(*) FILTER (WHERE sle.type IN ('seller_earning', 'adjustment')) AS entries,
+			       -SUM(sle.amount_cents) FILTER (WHERE sle.type = 'adjustment' AND sle.metadata->>'reason' = 'return_hold') AS held
+			FROM seller_ledger_entries sle WHERE sle.payout_batch_id = pb.id
+		) agg ON true`+where+`
+		ORDER BY pb.created_at DESC, pb.id DESC
+		LIMIT $4 OFFSET $5`, f.Status, sellerID, f.Q, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	items := []AdminPayoutListItem{}
+	for rows.Next() {
+		var it AdminPayoutListItem
+		if err := rows.Scan(&it.ID, &it.SellerID, &it.AmountCents, &it.Status, &it.ScheduledFor, &it.ProcessedAt, &it.FailureReason,
+			&it.CreatedAt, &it.UpdatedAt, &it.SellerName, &it.EarningsCount, &it.EntriesCount, &it.ReturnHoldCents); err != nil {
+			return nil, 0, err
+		}
+		it.Currency = "RUB"
+		items = append(items, it)
+	}
+	return items, total, rows.Err()
+}
+
+// GetAdminPayoutBatchDetail loads a batch, its seller and every ledger row linked to it (nil if not found).
+func (r *Repository) GetAdminPayoutBatchDetail(ctx context.Context, id uuid.UUID) (*AdminPayoutDetail, error) {
+	d := &AdminPayoutDetail{Entries: []AdminPayoutEntry{}}
+	p := &d.Payout
+	err := r.db.QueryRow(ctx, `
+		SELECT pb.id, pb.seller_id, pb.amount_cents, pb.status, pb.scheduled_for, pb.processed_at, pb.failure_reason,
+		       pb.created_at, pb.updated_at, s.brand_name
+		FROM payout_batches pb JOIN sellers s ON s.id = pb.seller_id WHERE pb.id = $1`, id).Scan(
+		&p.ID, &p.SellerID, &p.AmountCents, &p.Status, &p.ScheduledFor, &p.ProcessedAt, &p.FailureReason, &p.CreatedAt, &p.UpdatedAt, &p.SellerName)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	p.Currency = "RUB"
+	rows, err := r.db.Query(ctx, `
+		SELECT sle.id, sle.type, sle.metadata->>'reason', sle.amount_cents, sle.order_id, o.order_number, sle.order_item_id, oi.title,
+		       sle.available_at, sle.created_at
+		FROM seller_ledger_entries sle
+		LEFT JOIN orders o ON o.id = sle.order_id
+		LEFT JOIN order_items oi ON oi.id = sle.order_item_id
+		WHERE sle.payout_batch_id = $1
+		ORDER BY sle.created_at, sle.id`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var e AdminPayoutEntry
+		if err := rows.Scan(&e.ID, &e.Type, &e.Reason, &e.AmountCents, &e.OrderID, &e.OrderNumber, &e.OrderItemID, &e.ProductTitle, &e.AvailableAt, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		switch {
+		case e.Type == "seller_earning":
+			d.Totals.EarningsCents += e.AmountCents
+			p.EarningsCount++
+		case e.Type == "payout":
+			d.Totals.PayoutCents += e.AmountCents
+		case e.Reason != nil && *e.Reason == "return_hold":
+			d.Totals.ReturnHoldCents += -e.AmountCents
+		default:
+			d.Totals.AdjustmentsCents += e.AmountCents
+		}
+		if e.Type == "seller_earning" || e.Type == "adjustment" {
+			p.EntriesCount++
+		}
+		d.Entries = append(d.Entries, e)
+	}
+	p.ReturnHoldCents = d.Totals.ReturnHoldCents
+	return d, rows.Err()
+}
