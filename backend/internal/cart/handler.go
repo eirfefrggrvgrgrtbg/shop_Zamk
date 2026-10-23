@@ -3,6 +3,7 @@ package cart
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -65,7 +66,8 @@ func (h *Handler) AddItem(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusBadRequest, "invalid_item", err.Error())
 			return
 		}
-		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		slog.ErrorContext(r.Context(), "cart add item failed", "error", err)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to add item")
 		return
 	}
 

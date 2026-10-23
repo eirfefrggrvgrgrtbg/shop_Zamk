@@ -194,7 +194,7 @@ func (r *Repository) GetProductValidationInfo(ctx context.Context, productID, va
 	err := r.db.QueryRow(ctx, query, productID, variantID).Scan(&status, &active, &info.Available)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("product or variant not found")
+			return nil, ErrVariantNotFound
 		}
 		return nil, err
 	}
