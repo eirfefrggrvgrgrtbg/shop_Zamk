@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 // Helper to create supply, inventory items, inventory_units and allocations
@@ -590,7 +591,8 @@ func TestSellerReturn_DamagedDoesNotExecuteWriteOff(t *testing.T) {
 	assert.NotContains(t, jsonStr, "written_off")
 }
 
-// 10. Database safety confirmation: tests run exclusively against zamk_test
+// 10. Database safety confirmation (TEST.DB.5): the integration tests run only on a confirmed disposable database,
+// never on the shared zamk, zamk_test or zamk_demo.
 func TestSellerReturn_DatabaseSafety(t *testing.T) {
 	fix := setupM51Fixture(t)
 	ctx := context.Background()
@@ -598,7 +600,10 @@ func TestSellerReturn_DatabaseSafety(t *testing.T) {
 	var dbName string
 	err := fix.client.Pool.QueryRow(ctx, "SELECT current_database()").Scan(&dbName)
 	require.NoError(t, err)
-	assert.Equal(t, "zamk_test", dbName, "Destructive/integration tests MUST run exclusively against zamk_test")
+	for _, shared := range []string{"zamk", "zamk_test", "zamk_demo"} {
+		assert.NotEqual(t, shared, dbName, "Destructive/integration tests MUST NOT run against the shared %s database", shared)
+	}
+	require.NoError(t, testutil.VerifyDisposableDatabase(ctx, fix.client.Pool), "Destructive/integration tests MUST run on a disposable database")
 }
 
 // ----------------------------------------------------------------------------
