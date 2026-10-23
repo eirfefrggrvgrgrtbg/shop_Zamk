@@ -17,10 +17,10 @@
       "colorId": "809cf64c-1ced-49c1-ad7c-984eb641c2ef",
       "file": "files/bag-bazaar/BLACK.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "bag-bazaar",
@@ -30,10 +30,10 @@
       "colorId": "e928db21-07de-43ab-a3d0-1b45df2788ef",
       "file": "files/bag-bazaar/BEIGE.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "bag-evening",
@@ -43,10 +43,10 @@
       "colorId": "809cf64c-1ced-49c1-ad7c-984eb641c2ef",
       "file": "files/bag-evening/BLACK.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "bag-evening",
@@ -56,10 +56,10 @@
       "colorId": "24fa99c1-f63a-4e1b-889a-b17ada65ac9e",
       "file": "files/bag-evening/RED.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "bag-market",
@@ -69,10 +69,10 @@
       "colorId": "e928db21-07de-43ab-a3d0-1b45df2788ef",
       "file": "files/bag-market/BEIGE.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "bag-market",
@@ -82,10 +82,10 @@
       "colorId": "84ad1c63-be46-400d-ab2c-a770b2d213cd",
       "file": "files/bag-market/GREEN.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "bag-office",
@@ -95,10 +95,10 @@
       "colorId": "809cf64c-1ced-49c1-ad7c-984eb641c2ef",
       "file": "files/bag-office/BLACK.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "bag-route",
@@ -108,10 +108,10 @@
       "colorId": "809cf64c-1ced-49c1-ad7c-984eb641c2ef",
       "file": "files/bag-route/BLACK.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "bag-route",
@@ -121,10 +121,10 @@
       "colorId": "5fca3318-1971-4caf-84f4-0a45f999f93a",
       "file": "files/bag-route/BROWN.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "bag-summer",
@@ -134,10 +134,10 @@
       "colorId": "e928db21-07de-43ab-a3d0-1b45df2788ef",
       "file": "files/bag-summer/BEIGE.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "bag-summer",
@@ -147,10 +147,10 @@
       "colorId": "592d2b30-b3a7-44df-b135-f0719fbb5033",
       "file": "files/bag-summer/YELLOW.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "bag-walk",
@@ -160,10 +160,10 @@
       "colorId": "22ce7241-178e-4d0e-961f-bd2badeca8dd",
       "file": "files/bag-walk/GREY.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "bag-walk",
@@ -173,10 +173,10 @@
       "colorId": "84ad1c63-be46-400d-ab2c-a770b2d213cd",
       "file": "files/bag-walk/GREEN.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-bergen",
@@ -186,10 +186,10 @@
       "colorId": "e928db21-07de-43ab-a3d0-1b45df2788ef",
       "file": "files/hoodie-bergen/BEIGE.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-bergen",
@@ -199,10 +199,10 @@
       "colorId": "84ad1c63-be46-400d-ab2c-a770b2d213cd",
       "file": "files/hoodie-bergen/GREEN.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-fjord",
@@ -212,10 +212,10 @@
       "colorId": "809cf64c-1ced-49c1-ad7c-984eb641c2ef",
       "file": "files/hoodie-fjord/BLACK.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-fjord",
@@ -225,10 +225,10 @@
       "colorId": "22ce7241-178e-4d0e-961f-bd2badeca8dd",
       "file": "files/hoodie-fjord/GREY.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-linea-melange",
@@ -238,10 +238,10 @@
       "colorId": "22ce7241-178e-4d0e-961f-bd2badeca8dd",
       "file": "files/hoodie-linea-melange/GREY.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-linea-navy",
@@ -251,10 +251,10 @@
       "colorId": "809cf64c-1ced-49c1-ad7c-984eb641c2ef",
       "file": "files/hoodie-linea-navy/BLACK.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-linea-navy",
@@ -264,10 +264,10 @@
       "colorId": "3dfffeb1-9a56-43ac-ac28-3b45d9371444",
       "file": "files/hoodie-linea-navy/BLUE.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-linea-sand",
@@ -277,10 +277,10 @@
       "colorId": "e928db21-07de-43ab-a3d0-1b45df2788ef",
       "file": "files/hoodie-linea-sand/BEIGE.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-linea-sand",
@@ -290,10 +290,10 @@
       "colorId": "5fca3318-1971-4caf-84f4-0a45f999f93a",
       "file": "files/hoodie-linea-sand/BROWN.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-lofoten",
@@ -303,10 +303,10 @@
       "colorId": "809cf64c-1ced-49c1-ad7c-984eb641c2ef",
       "file": "files/hoodie-lofoten/BLACK.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-lofoten",
@@ -316,10 +316,10 @@
       "colorId": "84ad1c63-be46-400d-ab2c-a770b2d213cd",
       "file": "files/hoodie-lofoten/GREEN.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-oslo",
@@ -329,10 +329,10 @@
       "colorId": "809cf64c-1ced-49c1-ad7c-984eb641c2ef",
       "file": "files/hoodie-oslo/BLACK.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-oslo",
@@ -342,10 +342,10 @@
       "colorId": "3dfffeb1-9a56-43ac-ac28-3b45d9371444",
       "file": "files/hoodie-oslo/BLUE.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-oslo",
@@ -355,10 +355,10 @@
       "colorId": "22ce7241-178e-4d0e-961f-bd2badeca8dd",
       "file": "files/hoodie-oslo/GREY.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-tromso",
@@ -368,10 +368,10 @@
       "colorId": "e928db21-07de-43ab-a3d0-1b45df2788ef",
       "file": "files/hoodie-tromso/BEIGE.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "hoodie-tromso",
@@ -381,10 +381,10 @@
       "colorId": "c76a7551-1029-4f44-965d-4b243d635c22",
       "file": "files/hoodie-tromso/PINK.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-alley",
@@ -394,10 +394,10 @@
       "colorId": "80b2e88e-9b39-4fc1-9dbd-c4cc4313b25f",
       "file": "files/sneakers-alley/WHITE.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-boulevard",
@@ -407,10 +407,10 @@
       "colorId": "80b2e88e-9b39-4fc1-9dbd-c4cc4313b25f",
       "file": "files/sneakers-boulevard/WHITE.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-boulevard",
@@ -420,10 +420,10 @@
       "colorId": "e928db21-07de-43ab-a3d0-1b45df2788ef",
       "file": "files/sneakers-boulevard/BEIGE.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-bridge",
@@ -433,10 +433,10 @@
       "colorId": "809cf64c-1ced-49c1-ad7c-984eb641c2ef",
       "file": "files/sneakers-bridge/BLACK.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-bridge",
@@ -446,10 +446,10 @@
       "colorId": "84ad1c63-be46-400d-ab2c-a770b2d213cd",
       "file": "files/sneakers-bridge/GREEN.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-courier",
@@ -459,10 +459,10 @@
       "colorId": "809cf64c-1ced-49c1-ad7c-984eb641c2ef",
       "file": "files/sneakers-courier/BLACK.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-courier",
@@ -472,10 +472,10 @@
       "colorId": "80b2e88e-9b39-4fc1-9dbd-c4cc4313b25f",
       "file": "files/sneakers-courier/WHITE.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-crossing",
@@ -485,10 +485,10 @@
       "colorId": "e928db21-07de-43ab-a3d0-1b45df2788ef",
       "file": "files/sneakers-crossing/BEIGE.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-crossing",
@@ -498,10 +498,10 @@
       "colorId": "5fca3318-1971-4caf-84f4-0a45f999f93a",
       "file": "files/sneakers-crossing/BROWN.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-dawn",
@@ -511,10 +511,10 @@
       "colorId": "80b2e88e-9b39-4fc1-9dbd-c4cc4313b25f",
       "file": "files/sneakers-dawn/WHITE.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-dawn",
@@ -524,10 +524,10 @@
       "colorId": "c76a7551-1029-4f44-965d-4b243d635c22",
       "file": "files/sneakers-dawn/PINK.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-embankment",
@@ -537,10 +537,10 @@
       "colorId": "80b2e88e-9b39-4fc1-9dbd-c4cc4313b25f",
       "file": "files/sneakers-embankment/WHITE.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-embankment",
@@ -550,10 +550,10 @@
       "colorId": "22ce7241-178e-4d0e-961f-bd2badeca8dd",
       "file": "files/sneakers-embankment/GREY.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-overpass",
@@ -563,10 +563,10 @@
       "colorId": "809cf64c-1ced-49c1-ad7c-984eb641c2ef",
       "file": "files/sneakers-overpass/BLACK.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-overpass",
@@ -576,10 +576,10 @@
       "colorId": "3dfffeb1-9a56-43ac-ac28-3b45d9371444",
       "file": "files/sneakers-overpass/BLUE.jpg",
       "isMain": false,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     },
     {
       "productSlug": "sneakers-passage",
@@ -589,10 +589,10 @@
       "colorId": "809cf64c-1ced-49c1-ad7c-984eb641c2ef",
       "file": "files/sneakers-passage/BLACK.jpg",
       "isMain": true,
-      "origin": "",
-      "source": "",
-      "license": "",
-      "syntheticDemo": false
+      "origin": "synthetic",
+      "source": "Original synthetic ZAMK demo image generated using OpenAI image generation in ChatGPT (October 2026)",
+      "license": "OpenAI-generated synthetic output for ZAMK demo use; use governed by applicable OpenAI Terms of Use",
+      "syntheticDemo": true
     }
   ]
 }
