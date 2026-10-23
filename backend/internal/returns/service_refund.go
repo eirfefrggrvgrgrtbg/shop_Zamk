@@ -537,6 +537,14 @@ func (s *Service) ProcessRefundSuccessTx(ctx context.Context, tx pgx.Tx, refundI
 				}
 			}
 		}
+
+		// PAYOUT.SAFETY.1: the deduction above is authoritative; the temporary hold for this return is released
+		// (hold + release cancel out exactly, so the refund is counted once).
+		if s.payouts != nil {
+			if err := s.payouts.ReleaseReturnHoldsTx(ctx, tx, returnID); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil

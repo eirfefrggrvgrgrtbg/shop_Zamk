@@ -474,7 +474,7 @@ func TestReturn_E2E1_NegativeScenarios(t *testing.T) {
 		assert.Equal(t, 0, f.adjustments(d.items["M"]))
 	})
 
-	t.Run("seller earning already paid out: the return becomes a recoverable adjustment, once", func(t *testing.T) {
+	t.Run("payout batch formed while the return is open: disputed share held, refund deducts once and releases the hold", func(t *testing.T) {
 		d := f.deliveredTwoSkuOrder()
 		retID := f.createApproveAndArrive(k, d, "M", 1)
 		f.receive(k, retID, d.units["M"][:1], "restock")
@@ -492,7 +492,10 @@ func TestReturn_E2E1_NegativeScenarios(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 1, f.count(`SELECT count(*) FROM seller_ledger_entries WHERE order_item_id = $1 AND type = 'adjustment' AND available_at IS NULL AND metadata->>'reason' = 'return_post_payout'`, d.items["M"]))
 		require.NoError(t, k.svc.ProcessRefundSuccess(ctx, uuid.MustParse(f.str(`SELECT id::text FROM refunds WHERE return_id = $1`, retID)), time.Now()))
-		assert.Equal(t, 1, f.adjustments(d.items["M"]))
+		// PAYOUT.SAFETY.1: the batch held the disputed share; the refund adds the deduction and releases the hold
+		assert.Equal(t, 1, f.count(`SELECT count(*) FROM seller_ledger_entries WHERE order_item_id = $1 AND type = 'adjustment' AND metadata->>'reason' IN ('return_deduction','return_post_payout')`, d.items["M"]))
+		assert.Equal(t, 1, f.count(`SELECT count(*) FROM seller_ledger_entries WHERE order_item_id = $1 AND type = 'adjustment' AND metadata->>'reason' = 'return_hold'`, d.items["M"]))
+		assert.Equal(t, 1, f.count(`SELECT count(*) FROM seller_ledger_entries WHERE order_item_id = $1 AND type = 'adjustment' AND metadata->>'reason' = 'return_hold_release'`, d.items["M"]))
 	})
 
 	t.Run("transaction failure while finalizing: full rollback, then a clean receipt", func(t *testing.T) {

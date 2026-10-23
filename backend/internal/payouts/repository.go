@@ -332,6 +332,21 @@ func (r *Repository) GetPayoutBatch(ctx context.Context, id uuid.UUID) (*PayoutB
 	return &p, err
 }
 
+// GetPayoutBatchForUpdateTx reads a batch inside the caller's transaction and locks its row, so concurrent status
+// changes of the same batch (paid / held / failed) serialize on the current status.
+func (r *Repository) GetPayoutBatchForUpdateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*PayoutBatch, error) {
+	query := `
+		SELECT id, seller_id, amount_cents, status, scheduled_for, processed_at, failure_reason, created_at, updated_at
+		FROM payout_batches WHERE id = $1 FOR UPDATE
+	`
+	var p PayoutBatch
+	err := tx.QueryRow(ctx, query, id).Scan(&p.ID, &p.SellerID, &p.AmountCents, &p.Status, &p.ScheduledFor, &p.ProcessedAt, &p.FailureReason, &p.CreatedAt, &p.UpdatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return &p, err
+}
+
 func (r *Repository) CreatePayoutBatchTx(ctx context.Context, tx pgx.Tx, p *PayoutBatch) error {
 	query := `
 		INSERT INTO payout_batches (id, seller_id, amount_cents, status, scheduled_for, processed_at, failure_reason, created_at, updated_at)
@@ -418,9 +433,9 @@ func (r *Repository) UpdateAvailableAtByOrderIdTx(ctx context.Context, tx pgx.Tx
 func (r *Repository) GetAdminPayoutSummary(ctx context.Context) (*AdminPayoutSummary, error) {
 	// A simple aggregated view for admin
 	query := `
-		SELECT type, (available_at <= now() OR (type = 'adjustment' AND available_at IS NULL)), SUM(amount_cents)
+		SELECT type, (available_at <= now() OR (type = 'adjustment' AND available_at IS NULL)), payout_batch_id IS NOT NULL, SUM(amount_cents)
 		FROM seller_ledger_entries
-		GROUP BY type, (available_at <= now() OR (type = 'adjustment' AND available_at IS NULL))
+		GROUP BY type, (available_at <= now() OR (type = 'adjustment' AND available_at IS NULL)), payout_batch_id IS NOT NULL
 	`
 	rows, err := r.db.Query(ctx, query)
 	if err != nil {
@@ -435,11 +450,17 @@ func (r *Repository) GetAdminPayoutSummary(ctx context.Context) (*AdminPayoutSum
 	for rows.Next() {
 		var ltype string
 		var isAvailable *bool
+		var hasBatch bool
 		var total int64
-		if err := rows.Scan(&ltype, &isAvailable, &total); err != nil {
+		if err := rows.Scan(&ltype, &isAvailable, &hasBatch, &total); err != nil {
 			return nil, err
 		}
-		
+
+		// Like the seller balance: earnings and adjustments captured by a payout batch are no longer
+		// available or frozen; they are pending (scheduled batch) or paid (payout entry).
+		if hasBatch && (ltype == "seller_earning" || ltype == "adjustment") {
+			continue
+		}
 		switch ltype {
 		case "zamk_commission":
 			summary.TotalCommissionCents += total
@@ -460,8 +481,15 @@ func (r *Repository) GetAdminPayoutSummary(ctx context.Context) (*AdminPayoutSum
 		}
 	}
 
-	summary.TotalAvailableCents = sellerEarningAvailable + adjustments + summary.TotalPaidCents
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	summary.TotalAvailableCents = sellerEarningAvailable + adjustments
 	summary.TotalFrozenCents = sellerEarningFrozen
+	if err := r.db.QueryRow(ctx, `SELECT COALESCE(SUM(amount_cents), 0) FROM payout_batches WHERE status IN ('scheduled', 'processing')`).Scan(&summary.TotalPendingCents); err != nil {
+		return nil, err
+	}
 	// TotalCommissionCents is negative, make it positive for display
 	summary.TotalCommissionCents = -summary.TotalCommissionCents
 	// TotalPaidCents is negative, make it positive for display

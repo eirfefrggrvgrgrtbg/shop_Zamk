@@ -28,6 +28,7 @@ import (
 type payoutsService interface {
 	ProcessReturnDeduction(ctx context.Context, tx pgx.Tx, returnID uuid.UUID, orderID uuid.UUID, items []payouts.ReturnItemDeduction) error
 	ReconcileReturnCompensationTx(ctx context.Context, tx pgx.Tx, orderItemID uuid.UUID) error
+	ReleaseReturnHoldsTx(ctx context.Context, tx pgx.Tx, returnID uuid.UUID) error
 }
 
 type paymentsService interface {
@@ -511,6 +512,13 @@ func (s *Service) UpdateReturnStatus(ctx context.Context, adminID, returnID uuid
 
 		if err := s.repo.UpdateReturnTx(ctx, tx, ret); err != nil {
 			return err
+		}
+
+		// PAYOUT.SAFETY.1: a return closed without refund frees the earning held for it in a payout batch.
+		if s.payouts != nil && (req.Status == "rejected" || req.Status == "cancelled" || req.Status == "completed") {
+			if err := s.payouts.ReleaseReturnHoldsTx(ctx, tx, ret.ID); err != nil {
+				return err
+			}
 		}
 
 		if s.notifs != nil && (req.Status == "approved" || req.Status == "rejected") {

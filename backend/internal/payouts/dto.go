@@ -9,6 +9,7 @@ type BalanceResponse struct {
 	FrozenCents      int64  `json:"frozenCents"`
 	AvailableCents   int64  `json:"availableCents"`
 	PaidCents        int64  `json:"paidCents"`
+	ReturnHoldCents  int64  `json:"returnHoldCents"` // earning under an open return: neither available nor paid
 	Currency         string `json:"currency"`
 	NextPayoutAt     *time.Time `json:"nextPayoutAt"`
 }
@@ -37,6 +38,8 @@ type PayoutFilter struct {
 type AdminPayoutSummary struct {
 	TotalAvailableCents  int64  `json:"totalAvailableCents"`
 	TotalFrozenCents     int64  `json:"totalFrozenCents"`
+	TotalPendingCents    int64  `json:"totalPendingCents"`
+	TotalReturnHoldCents int64  `json:"totalReturnHoldCents"`
 	TotalPaidCents       int64  `json:"totalPaidCents"`
 	TotalCommissionCents int64  `json:"totalCommissionCents"`
 	Currency             string `json:"currency"`
