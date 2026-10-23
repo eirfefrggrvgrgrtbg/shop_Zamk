@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const safeTestDBConn = testutil.BlockedTestDatabaseDSN
+var safeTestDBConn = testutil.GetTestDatabaseURL()
 
 func makeValidFloatVector(dim int) []float32 {
 	vec := make([]float32, dim)

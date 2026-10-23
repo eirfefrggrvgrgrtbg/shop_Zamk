@@ -28,7 +28,7 @@ func TestEmbeddingsSchema(t *testing.T) {
 	ctx := context.Background()
 
 	// Safe test connection string: only zamk_test is allowed
-	const testConnStr = testutil.BlockedTestDatabaseDSN
+	var testConnStr = testutil.GetTestDatabaseURL()
 	pool, err := testutil.NewTrackedPool(t, ctx, testConnStr)
 	if err != nil {
 		t.Fatalf("failed to connect to db: %v", err)

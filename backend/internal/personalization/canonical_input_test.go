@@ -338,7 +338,7 @@ func TestCategoryPath_HierarchyTests(t *testing.T) {
 func TestCanonicalProductInput_DBIntegration(t *testing.T) {
 	ctx := context.Background()
 
-	const testConnStr = testutil.BlockedTestDatabaseDSN
+	var testConnStr = testutil.GetTestDatabaseURL()
 	pool, err := pgxpool.New(ctx, testConnStr)
 	if err != nil {
 		t.Fatalf("failed to connect to test db: %v", err)

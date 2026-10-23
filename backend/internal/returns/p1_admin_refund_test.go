@@ -23,7 +23,7 @@ import (
 
 func setupHTTPFixture(t *testing.T) (*postgres.Client, *Service) {
 	ctx := context.Background()
-	client, err := postgres.NewClient(ctx, testutil.BlockedTestDatabaseDSN)
+	client, err := postgres.NewClient(ctx, testutil.GetTestDatabaseURL())
 	require.NoError(t, err)
 
 	repo := NewRepository(client.Pool)

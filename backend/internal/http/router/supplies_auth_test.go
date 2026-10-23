@@ -23,7 +23,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/supplies"
 )
 
-const testDBURL = testutil.BlockedTestDatabaseDSN
+var testDBURL = testutil.GetTestDatabaseURL()
 
 func TestSuppliesAuth(t *testing.T) {
 	if testing.Short() {

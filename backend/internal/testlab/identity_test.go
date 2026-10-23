@@ -18,7 +18,7 @@ import (
 
 func TestIsolatedIdentity(t *testing.T) {
 	ctx := context.Background()
-	db, err := pgxpool.New(ctx, testutil.BlockedTestDatabaseDSN)
+	db, err := pgxpool.New(ctx, testutil.GetTestDatabaseURL())
 	if err != nil {
 		t.Fatalf("failed to connect: %v", err)
 	}

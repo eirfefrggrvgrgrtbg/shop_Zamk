@@ -616,7 +616,7 @@ func TestM531A_RouterAuthUploadAndSizeLimit(t *testing.T) {
 	cfg.RateLimit.Enabled = false
 	cfg.Worker.ReturnWindowDays = 14
 
-	pgClient, err := postgres.NewClient(ctx, testutil.BlockedTestDatabaseDSN)
+	pgClient, err := postgres.NewClient(ctx, testutil.GetTestDatabaseURL())
 	require.NoError(t, err)
 	defer pgClient.Close()
 
