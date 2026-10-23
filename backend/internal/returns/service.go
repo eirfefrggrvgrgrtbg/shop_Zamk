@@ -451,16 +451,22 @@ func (s *Service) ListAdminReturns(ctx context.Context, limit, offset int, wareh
 
 func (s *Service) UpdateReturnStatus(ctx context.Context, adminID, returnID uuid.UUID, req UpdateReturnStatusRequest) error {
 	return s.db.RunInTx(ctx, func(tx pgx.Tx) error {
-		ret, items, err := s.repo.GetReturn(ctx, returnID)
+		// Lock the return row first so concurrent decisions (approve vs reject) serialize on the current status.
+		ret, err := s.repo.GetReturnTx(ctx, tx, returnID)
+		if err != nil {
+			return err
+		}
+		_, items, err := s.repo.GetReturn(ctx, returnID)
 		if err != nil {
 			return err
 		}
 
-		// Simple state machine validation
+		// Simple state machine validation. item_received is reached only through warehouse receiving
+		// (FinalizeReceiving) and refunded only through a provider-confirmed refund (ProcessRefundSuccessTx).
 		validTransitions := map[string][]string{
 			"requested":     {"approved", "rejected", "cancelled"},
-			"approved":      {"item_received", "cancelled"},
-			"item_received": {"completed", "refunded"},
+			"approved":      {"cancelled"},
+			"item_received": {"completed"},
 			// refunded and completed are terminal states for the return itself (or refunded leads to completed)
 			"refunded": {"completed"},
 		}

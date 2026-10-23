@@ -1046,7 +1046,10 @@ func TestM51_OldRestockSafety(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 3. Update return status to item_received with Restock = true
+	// 3. The return is in item_received (reached only via warehouse receiving since RETURN.E2E.1; set as fixture
+	// state here), then the old per-item Restock flag is applied through the status endpoint.
+	_, err = fix.client.Pool.Exec(ctx, "UPDATE returns SET status = 'item_received' WHERE id = $1", ret.ID)
+	require.NoError(t, err)
 	err = fix.svc.UpdateReturnStatus(ctx, adminID, ret.ID, returns.UpdateReturnStatusRequest{
 		Status: "item_received",
 		ItemRestock: []returns.UpdateReturnItemRestockRequest{
