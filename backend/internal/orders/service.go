@@ -550,7 +550,7 @@ func (s *Service) executeOrderCancellation(ctx context.Context, orderID uuid.UUI
 		allocReleasedCount = allocCount
 
 		// 3. Release reservations
-		resIDs, err := s.repo.GetActiveOrderReservations(ctx, orderID)
+		resIDs, err := s.repo.GetActiveOrderReservationsTx(ctx, tx, orderID)
 		if err != nil {
 			return err
 		}
@@ -604,7 +604,9 @@ func (s *Service) executeOrderCancellation(ctx context.Context, orderID uuid.UUI
 		}
 
 		// 7. Release any customer first-payment claim
-		_, _ = tx.Exec(ctx, `DELETE FROM customer_first_payment_claims WHERE order_id = $1`, orderID)
+		if _, err := tx.Exec(ctx, `DELETE FROM customer_first_payment_claims WHERE order_id = $1`, orderID); err != nil {
+			return err
+		}
 
 		cancelledOrder = order
 		return nil
@@ -840,20 +842,27 @@ func (s *Service) ExpireAwaitingPaymentOrders(ctx context.Context, now time.Time
 			}
 
 			// Release reservations
-			resIDs, err := s.repo.GetActiveOrderReservations(ctx, orderID)
+			resIDs, err := s.repo.GetActiveOrderReservationsTx(ctx, tx, orderID)
 			if err != nil {
 				return err
 			}
 			orderResReleased := 0
-			for _, rid := range resIDs {
-				if err := s.inventorySvc.ReleaseReservationTx(ctx, tx, rid); err != nil {
-					if !errors.Is(err, inventory.ErrReservationNotActive) {
-						return err
+			if s.inventorySvc != nil {
+				for _, rid := range resIDs {
+					if err := s.inventorySvc.ReleaseReservationTx(ctx, tx, rid); err != nil {
+						if !errors.Is(err, inventory.ErrReservationNotActive) {
+							return err
+						}
+					} else {
+						orderResReleased++
+						result.ReleasedReservations++
 					}
-				} else {
-					orderResReleased++
-					result.ReleasedReservations++
 				}
+			}
+
+			// Cascade cancellation to active fulfillments
+			if _, err := s.repo.CancelActiveOrderFulfillmentsTx(ctx, tx, orderID); err != nil {
+				return err
 			}
 
 			// Release promo reservation if order used promo
@@ -864,7 +873,9 @@ func (s *Service) ExpireAwaitingPaymentOrders(ctx context.Context, now time.Time
 			}
 
 			// Release any customer first-payment claim
-			_, _ = tx.Exec(ctx, `DELETE FROM customer_first_payment_claims WHERE order_id = $1`, orderID)
+			if _, err := tx.Exec(ctx, `DELETE FROM customer_first_payment_claims WHERE order_id = $1`, orderID); err != nil {
+				return err
+			}
 
 			orderNum := ""
 			if order.OrderNumber != nil {
