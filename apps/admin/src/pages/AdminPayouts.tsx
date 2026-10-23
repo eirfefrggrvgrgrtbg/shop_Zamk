@@ -452,7 +452,8 @@ export function AdminPayouts() {
                   return (
                     <tr
                       key={batch.id}
-                      className={`hover:bg-gray-50/80 dark:hover:bg-gray-700/40 transition-colors ${
+                      onClick={() => fetchPayoutDetail(batch.id)}
+                      className={`cursor-pointer hover:bg-gray-50/80 dark:hover:bg-gray-700/40 transition-colors ${
                         isSelected ? 'bg-indigo-50/40 dark:bg-indigo-950/20' : ''
                       }`}
                     >
@@ -485,7 +486,10 @@ export function AdminPayouts() {
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <button
-                          onClick={() => fetchPayoutDetail(batch.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            fetchPayoutDetail(batch.id);
+                          }}
                           className="inline-flex items-center text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
                         >
                           Детали / Управление
