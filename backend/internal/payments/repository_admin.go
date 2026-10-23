@@ -12,7 +12,13 @@ import (
 )
 
 // buildProblems checks all rules and returns an array of PaymentProblem
-func buildProblems(p AdminPaymentDTO, oStatus string, oTotal int64, succeededCount int, hasInvalid bool, hasUnprocessed bool, isStuck bool) []PaymentProblem {
+// bankConfirmedEventSQL marks a payment_events row as a trustworthy bank confirmation of the charge: a signed
+// CONFIRMED notification (or provider check) that does not report a failure (Success=false or an ErrorCode).
+const bankConfirmedEventSQL = `BOOL_OR(event_type = 'CONFIRMED' AND signature_valid = true
+		AND COALESCE(raw_payload->>'Success', 'true') = 'true'
+		AND COALESCE(NULLIF(raw_payload->>'ErrorCode', ''), '0') = '0')`
+
+func buildProblems(p AdminPaymentDTO, oStatus string, oTotal int64, succeededCount int, hasInvalid bool, hasUnprocessed bool, isStuck bool, bankConfirmedConflict bool) []PaymentProblem {
 	var problems []PaymentProblem
 
 	if oStatus == "paid" && succeededCount == 0 {
@@ -26,6 +32,11 @@ func buildProblems(p AdminPaymentDTO, oStatus string, oTotal int64, succeededCou
 	}
 	if p.Status == "succeeded" && p.AmountCents != oTotal {
 		problems = append(problems, PaymentProblem{Code: "AMOUNT_MISMATCH", Severity: "warning"})
+	}
+	if bankConfirmedConflict {
+		// A signed bank notification confirmed the charge, but this payment is not succeeded: money may be taken
+		// without a paid order. Detection only; resolution (refund or manual settlement) is a Product Owner decision.
+		problems = append(problems, PaymentProblem{Code: "BANK_CONFIRMED_PAYMENT_NOT_SUCCEEDED", Severity: "critical"})
 	}
 	if isStuck {
 		problems = append(problems, PaymentProblem{Code: "STUCK_PENDING", Severity: "warning"})
@@ -101,7 +112,8 @@ payment_refunds AS (
 payment_events_summary AS (
 	SELECT payment_id,
 	BOOL_OR(signature_valid = false) as has_invalid_webhook,
-	BOOL_OR(signature_valid = true AND processed_at IS NULL) as has_unprocessed_webhook
+	BOOL_OR(signature_valid = true AND processed_at IS NULL) as has_unprocessed_webhook,
+	`+bankConfirmedEventSQL+` as has_bank_confirmed_event
 	FROM payment_events
 	GROUP BY payment_id
 ),
@@ -115,7 +127,8 @@ base_data AS (
 		COALESCE(pr.pending_amount, 0) as pending_refunded,
 		COALESCE(pes.has_invalid_webhook, false) as has_invalid_webhook,
 		COALESCE(pes.has_unprocessed_webhook, false) as has_unprocessed_webhook,
-		(p.status IN ('created', 'pending') AND p.created_at < now() - interval '1 minute' * $1) as is_stuck
+		(p.status IN ('created', 'pending') AND p.created_at < now() - interval '1 minute' * $1) as is_stuck,
+		(COALESCE(pes.has_bank_confirmed_event, false) AND p.status <> 'succeeded') as bank_confirmed_conflict
 	FROM payments p
 	JOIN orders o ON p.order_id = o.id
 	JOIN users u ON o.user_id = u.id
@@ -214,6 +227,7 @@ SELECT * FROM base_data WHERE 1=1
 			"is_stuck", // STUCK_PENDING
 			"has_invalid_webhook", // INVALID_WEBHOOK_SIGNATURE
 			"has_unprocessed_webhook", // UNPROCESSED_WEBHOOK
+			"bank_confirmed_conflict", // BANK_CONFIRMED_PAYMENT_NOT_SUCCEEDED
 		}
 
 		if probCode != "" {
@@ -225,6 +239,7 @@ SELECT * FROM base_data WHERE 1=1
 			case "STUCK_PENDING": where += " AND " + probConditions[4]
 			case "INVALID_WEBHOOK_SIGNATURE": where += " AND " + probConditions[5]
 			case "UNPROCESSED_WEBHOOK": where += " AND " + probConditions[6]
+			case "BANK_CONFIRMED_PAYMENT_NOT_SUCCEEDED": where += " AND " + probConditions[7]
 			}
 		} else if hasProblem {
 			where += " AND (" + strings.Join(probConditions, " OR ") + ")"
@@ -276,7 +291,7 @@ SELECT * FROM base_data WHERE 1=1
 		var oStatus string
 		var oTotal int64
 		var sCount int
-		var hasInvalid, hasUnprocessed, isStuck bool
+		var hasInvalid, hasUnprocessed, isStuck, bankConflict bool
 
 		p.Customer = &CustomerSummaryDTO{}
 
@@ -288,7 +303,7 @@ SELECT * FROM base_data WHERE 1=1
 			&p.Customer.ID, &p.Customer.Name, &p.Customer.Email, &p.Customer.Phone,
 			&p.AttemptNumber, &p.AttemptsCount, &sCount,
 			&p.SucceededRefundedAmountCents, &p.PendingRefundAmountCents,
-			&hasInvalid, &hasUnprocessed, &isStuck,
+			&hasInvalid, &hasUnprocessed, &isStuck, &bankConflict,
 		)
 		if err != nil {
 			return nil, 0, err
@@ -301,7 +316,7 @@ SELECT * FROM base_data WHERE 1=1
 		if tCancelledAt != nil { s := tCancelledAt.Format(time.RFC3339); p.CancelledAt = &s }
 
 		calculateRefundFields(&p)
-		p.Problems = buildProblems(p, oStatus, oTotal, sCount, hasInvalid, hasUnprocessed, isStuck)
+		p.Problems = buildProblems(p, oStatus, oTotal, sCount, hasInvalid, hasUnprocessed, isStuck, bankConflict)
 
 		payments = append(payments, p)
 	}
@@ -332,7 +347,8 @@ payment_refunds AS (
 payment_events_summary AS (
 	SELECT payment_id,
 	BOOL_OR(signature_valid = false) as has_invalid_webhook,
-	BOOL_OR(signature_valid = true AND processed_at IS NULL) as has_unprocessed_webhook
+	BOOL_OR(signature_valid = true AND processed_at IS NULL) as has_unprocessed_webhook,
+	`+bankConfirmedEventSQL+` as has_bank_confirmed_event
 	FROM payment_events
 	GROUP BY payment_id
 ),
@@ -346,7 +362,8 @@ base_data AS (
 		COALESCE(pr.pending_amount, 0) as pending_refunded,
 		COALESCE(pes.has_invalid_webhook, false) as has_invalid_webhook,
 		COALESCE(pes.has_unprocessed_webhook, false) as has_unprocessed_webhook,
-		(p.status IN ('created', 'pending') AND p.created_at < now() - interval '1 minute' * $2) as is_stuck
+		(p.status IN ('created', 'pending') AND p.created_at < now() - interval '1 minute' * $2) as is_stuck,
+		(COALESCE(pes.has_bank_confirmed_event, false) AND p.status <> 'succeeded') as bank_confirmed_conflict
 	FROM payments p
 	JOIN orders o ON p.order_id = o.id
 	JOIN users u ON o.user_id = u.id
@@ -360,7 +377,7 @@ SELECT * FROM base_data WHERE id = $1
 	var oStatus string
 	var oTotal int64
 	var sCount int
-	var hasInvalid, hasUnprocessed, isStuck bool
+	var hasInvalid, hasUnprocessed, isStuck, bankConflict bool
 	var tCreatedAt, tUpdatedAt, tPaidAt, tFailedAt, tCancelledAt, oCreatedAt *time.Time
 
 	p.Customer = &CustomerSummaryDTO{}
@@ -372,7 +389,7 @@ SELECT * FROM base_data WHERE id = $1
 		&p.Customer.ID, &p.Customer.Name, &p.Customer.Email, &p.Customer.Phone,
 		&p.AttemptNumber, &p.AttemptsCount, &sCount,
 		&p.SucceededRefundedAmountCents, &p.PendingRefundAmountCents,
-		&hasInvalid, &hasUnprocessed, &isStuck,
+		&hasInvalid, &hasUnprocessed, &isStuck, &bankConflict,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -394,7 +411,7 @@ SELECT * FROM base_data WHERE id = $1
 	if oCreatedAt != nil { order.CreatedAt = oCreatedAt.Format(time.RFC3339) }
 
 	calculateRefundFields(&p)
-	problems := buildProblems(p, oStatus, oTotal, sCount, hasInvalid, hasUnprocessed, isStuck)
+	problems := buildProblems(p, oStatus, oTotal, sCount, hasInvalid, hasUnprocessed, isStuck, bankConflict)
 	p.Problems = problems // also assign to parent detail DTO below
 
 	// 2. Fetch Attempts

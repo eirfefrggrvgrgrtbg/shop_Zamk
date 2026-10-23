@@ -262,6 +262,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 						limit = 50
 					}
 					_, _ = paymentsService.ReconcileUnknownPayments(workerCtx, limit)
+					_, _ = paymentsService.DetectLateConfirmations(workerCtx, limit)
 				}
 			}
 		}()

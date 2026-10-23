@@ -121,6 +121,11 @@ func main() {
 				if limit <= 0 {
 					limit = 50
 				}
+				if conflicts, cerr := paymentsService.DetectLateConfirmations(ctx, limit); cerr != nil {
+					logger.Error("failed to check late bank confirmations", "error", cerr)
+				} else if conflicts > 0 {
+					logger.Warn("bank-confirmed payments in a failed local state recorded for admin review", "conflicts", conflicts)
+				}
 				reconciled, err := paymentsService.ReconcileUnknownPayments(ctx, limit)
 				if err != nil {
 					logger.Error("failed to reconcile unknown payments", "error", err)

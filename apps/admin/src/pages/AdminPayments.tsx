@@ -48,6 +48,7 @@ const PROBLEM_CODE_LABELS: Record<string, string> = {
   STUCK_PENDING: 'Завис в ожидании',
   INVALID_WEBHOOK_SIGNATURE: 'Неверная подпись webhook',
   UNPROCESSED_WEBHOOK: 'Необработанный webhook',
+  BANK_CONFIRMED_PAYMENT_NOT_SUCCEEDED: 'Банк подтвердил оплату, платёж в ZAMK не успешен',
 };
 
 type SortOrder = 'asc' | 'desc';

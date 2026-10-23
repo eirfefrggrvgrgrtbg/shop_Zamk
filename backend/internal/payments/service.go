@@ -333,6 +333,11 @@ func (s *Service) applyPaymentConfirmedTx(
 		} else {
 			return err
 		}
+	} else if payment.Status == "failed" || payment.Status == "cancelled" {
+		// The bank confirms a charge for a payment that is failed locally. The event row above is what the admin
+		// problem list reads (BANK_CONFIRMED_PAYMENT_NOT_SUCCEEDED); the payment and the order are left as they are.
+		s.logger.WarnContext(ctx, "bank confirmation for a payment that is not succeeded locally, recorded for admin review",
+			"payment_id", payment.ID.String(), "order_id", payment.OrderID.String(), "local_status", payment.Status)
 	}
 
 	if payment.Status == "succeeded" || payment.Status == "failed" || payment.Status == "cancelled" {
