@@ -1004,5 +1004,6 @@ func TestMinDistinct_CaseX_DevDatabaseGuardRejectsMutation(t *testing.T) {
 	assert.False(t, dirty, "DEV database MUST NOT be dirty")
 
 	err = testutil.VerifyTestDatabase(ctx, tx)
-	require.EqualError(t, err, `REFUSING DESTRUCTIVE TEST SETUP: expected database "zamk_test", connected to "zamk"`)
+	require.ErrorContains(t, err, "REFUSING DESTRUCTIVE TEST SETUP: expected a disposable database")
+	require.ErrorContains(t, err, `connected to "zamk"`)
 }

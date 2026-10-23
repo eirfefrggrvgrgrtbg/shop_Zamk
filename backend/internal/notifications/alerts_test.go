@@ -3,7 +3,6 @@ package notifications_test
 import (
 	"context"
 	"errors"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -12,13 +11,14 @@ import (
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 func getTestDB(t *testing.T) *postgres.Client {
 	t.Helper()
-	connStr := os.Getenv("TEST_DATABASE_URL")
+	connStr := testutil.RunnerDatabaseURL()
 	if connStr == "" {
-		connStr = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
+		connStr = testutil.BlockedTestDatabaseDSN
 	}
 	ctx := context.Background()
 	db, err := postgres.NewClient(ctx, connStr)

@@ -3,7 +3,6 @@ package fulfillment_test
 import (
 	"context"
 	"github.com/jackc/pgx/v5"
-	"os"
 	"testing"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/fulfillment"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 // mockPayoutsService implements payoutsService for testing
@@ -27,7 +27,7 @@ func (m *mockPayoutsService) MarkFulfillmentDeliveredTx(ctx context.Context, tx 
 }
 
 func TestC10ShipmentGuardrails(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
+	dsn := testutil.RunnerDatabaseURL()
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}

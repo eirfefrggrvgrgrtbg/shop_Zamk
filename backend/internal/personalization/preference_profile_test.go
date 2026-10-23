@@ -3,7 +3,6 @@ package personalization_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -20,9 +19,9 @@ func TestPreferenceProfile_CanonicalSignals(t *testing.T) {
 		t.Skip("Skipping database integration test")
 	}
 
-	testDBURL := os.Getenv("TEST_DATABASE_URL")
+	testDBURL := testutil.RunnerDatabaseURL()
 	if testDBURL == "" {
-		testDBURL = testutil.CanonicalTestDatabaseDSN
+		testDBURL = testutil.BlockedTestDatabaseDSN
 	}
 
 	ctx := context.Background()

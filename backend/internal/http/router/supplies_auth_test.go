@@ -23,7 +23,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/supplies"
 )
 
-const testDBURL = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
+const testDBURL = testutil.BlockedTestDatabaseDSN
 
 func TestSuppliesAuth(t *testing.T) {
 	if testing.Short() {

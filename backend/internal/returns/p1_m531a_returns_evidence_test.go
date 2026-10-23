@@ -31,6 +31,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/returns"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 // Dummy storage provider for testing uploads
@@ -615,7 +616,7 @@ func TestM531A_RouterAuthUploadAndSizeLimit(t *testing.T) {
 	cfg.RateLimit.Enabled = false
 	cfg.Worker.ReturnWindowDays = 14
 
-	pgClient, err := postgres.NewClient(ctx, "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable")
+	pgClient, err := postgres.NewClient(ctx, testutil.BlockedTestDatabaseDSN)
 	require.NoError(t, err)
 	defer pgClient.Close()
 

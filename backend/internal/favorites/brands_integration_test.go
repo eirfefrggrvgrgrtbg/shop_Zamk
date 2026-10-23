@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/favorites"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -21,9 +21,9 @@ func setup(t *testing.T) (*postgres.Client, *favorites.Handler) {
 	if testing.Short() {
 		t.Skip("integration test")
 	}
-	dbURL := os.Getenv("TEST_DATABASE_URL")
+	dbURL := testutil.RunnerDatabaseURL()
 	if dbURL == "" {
-		dbURL = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
+		dbURL = testutil.BlockedTestDatabaseDSN
 	}
 	require.True(t, strings.Contains(dbURL, "zamk_test"), "MUST run only against zamk_test")
 	client, err := postgres.NewClient(context.Background(), dbURL)

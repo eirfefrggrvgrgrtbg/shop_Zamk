@@ -3,7 +3,6 @@ package personalization_test
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 	"time"
 
@@ -20,9 +19,9 @@ func TestForYouWeighted_PERS_2B3(t *testing.T) {
 		t.Skip("Skipping database integration test")
 	}
 
-	testDBURL := os.Getenv("TEST_DATABASE_URL")
+	testDBURL := testutil.RunnerDatabaseURL()
 	if testDBURL == "" {
-		testDBURL = testutil.CanonicalTestDatabaseDSN
+		testDBURL = testutil.BlockedTestDatabaseDSN
 	}
 
 	ctx := context.Background()

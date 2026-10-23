@@ -2,22 +2,22 @@ package merchandising_test
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/merchandising"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 func setupTestDB(t *testing.T) (*postgres.Client, *merchandising.Repository, *merchandising.Service) {
 	ctx := context.Background()
-	dbURL := os.Getenv("TEST_DATABASE_URL")
+	dbURL := testutil.RunnerDatabaseURL()
 	if dbURL == "" {
-		dbURL = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
+		dbURL = testutil.BlockedTestDatabaseDSN
 	}
 	require.True(t, strings.Contains(dbURL, "zamk_test"), "MUST run only against zamk_test")
 

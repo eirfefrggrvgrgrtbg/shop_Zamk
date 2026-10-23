@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -69,7 +68,7 @@ type deliveryEventFixture struct {
 
 func newDeliveryServerEventsEnv(t *testing.T, writerOverride behavior.EventWriter) (*postgres.Client, *Service, *behavior.Service) {
 	t.Helper()
-	dsn := os.Getenv("TEST_DATABASE_URL")
+	dsn := testutil.RunnerDatabaseURL()
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}

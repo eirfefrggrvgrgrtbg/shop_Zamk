@@ -3,7 +3,6 @@ package personalization_test
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"reflect"
 	"sync"
 	"testing"
@@ -24,9 +23,9 @@ func setupTestDB(t *testing.T) (context.Context, *postgres.Client, *personalizat
 		t.Skip("Skipping database integration test")
 	}
 
-	testDBURL := os.Getenv("TEST_DATABASE_URL")
+	testDBURL := testutil.RunnerDatabaseURL()
 	if testDBURL == "" {
-		testDBURL = testutil.CanonicalTestDatabaseDSN
+		testDBURL = testutil.BlockedTestDatabaseDSN
 	}
 
 	ctx := context.Background()

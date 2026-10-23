@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -149,7 +148,7 @@ func TestCalculateCleanupBackoff(t *testing.T) {
 }
 
 func TestMediaCleanupExecution(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
+	dsn := testutil.RunnerDatabaseURL()
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set; skipping integration test")
 	}
@@ -567,7 +566,7 @@ func TestNoEligibleJobDeterministicUnit(t *testing.T) {
 }
 
 func TestMediaTTLSweepExecution(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
+	dsn := testutil.RunnerDatabaseURL()
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set; skipping integration test")
 	}

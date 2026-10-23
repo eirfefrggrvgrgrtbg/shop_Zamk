@@ -264,7 +264,7 @@ func TestAuctionConcurrency(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	dbURL := "postgres://postgres:postgres@localhost:5432/zamk?sslmode=disable"
+	dbURL := testutil.GetTestDatabaseURL()
 	pgClient, err := postgres.NewClient(ctx, dbURL)
 	if err != nil {
 		t.Fatalf("Failed to connect to DB: %v", err)
@@ -366,7 +366,7 @@ func TestCreateOrderConcurrency(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	dbURL := "postgres://postgres:postgres@localhost:5432/zamk?sslmode=disable"
+	dbURL := testutil.GetTestDatabaseURL()
 	pgClient, err := postgres.NewClient(ctx, dbURL)
 	if err != nil {
 		t.Fatalf("Failed to connect to DB: %v", err)

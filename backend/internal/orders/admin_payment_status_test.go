@@ -2,17 +2,18 @@ package orders
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 func TestAdminOrderPaymentStatus(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
+	dsn := testutil.RunnerDatabaseURL()
 	if dsn == "" {
 		t.Skip("Skipping test: TEST_DATABASE_URL not set")
 	}
@@ -314,7 +315,7 @@ func TestAdminOrderPaymentStatus(t *testing.T) {
 }
 
 func TestAdminOrderTimeline(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
+	dsn := testutil.RunnerDatabaseURL()
 	if dsn == "" {
 		t.Skip("Skipping test: TEST_DATABASE_URL not set")
 	}

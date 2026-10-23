@@ -47,7 +47,7 @@ func setupShipmentReadFixture(t *testing.T) *shipmentReadFixture {
 	ctx := context.Background()
 
 	dsn := testutil.GetTestDatabaseURL()
-	require.Equal(t, testutil.CanonicalTestDatabaseDSN, dsn, "must use exact canonical test database DSN")
+	require.NotEqual(t, testutil.BlockedTestDatabaseDSN, dsn, "start through backend/scripts/safe_go_test.sh: tests only run on a disposable database")
 
 	pgClient, err := postgres.NewClient(ctx, dsn)
 	require.NoError(t, err)

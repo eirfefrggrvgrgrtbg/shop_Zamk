@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -14,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 func verifyTestDBSafety(t *testing.T, db *pgxpool.Pool) {
@@ -155,9 +156,9 @@ func insertReturnWithItem(t *testing.T, db *pgxpool.Pool, oID, oiID, cID uuid.UU
 }
 
 func TestSellerAnalytics_CohortReturnRate(t *testing.T) {
-	connStr := os.Getenv("TEST_DATABASE_URL")
+	connStr := testutil.RunnerDatabaseURL()
 	if connStr == "" {
-		connStr = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
+		connStr = testutil.BlockedTestDatabaseDSN
 	}
 	db, err := pgxpool.New(context.Background(), connStr)
 	require.NoError(t, err)

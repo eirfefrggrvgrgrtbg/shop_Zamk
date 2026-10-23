@@ -2,14 +2,15 @@ package fulfillment
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 func TestAdminFulfillmentReadAPI(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
+	dsn := testutil.RunnerDatabaseURL()
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}

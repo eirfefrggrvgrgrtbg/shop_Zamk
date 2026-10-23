@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -23,9 +22,9 @@ func TestPopular_PERS_2C1(t *testing.T) {
 		t.Skip("Skipping database integration test")
 	}
 
-	testDBURL := os.Getenv("TEST_DATABASE_URL")
+	testDBURL := testutil.RunnerDatabaseURL()
 	if testDBURL == "" {
-		testDBURL = testutil.CanonicalTestDatabaseDSN
+		testDBURL = testutil.BlockedTestDatabaseDSN
 	}
 
 	ctx := context.Background()

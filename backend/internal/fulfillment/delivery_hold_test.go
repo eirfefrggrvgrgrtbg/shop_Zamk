@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -41,7 +40,7 @@ type deliveryHoldFixture struct {
 
 func setupDeliveryHoldFixture(t *testing.T, ctx context.Context) *deliveryHoldFixture {
 	t.Helper()
-	dbURL := os.Getenv("TEST_DATABASE_URL")
+	dbURL := testutil.RunnerDatabaseURL()
 	if dbURL == "" {
 		dbURL = testutil.GetTestDatabaseURL()
 	}

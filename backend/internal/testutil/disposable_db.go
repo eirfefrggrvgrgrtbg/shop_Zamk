@@ -62,7 +62,7 @@ func MustBeDisposableDatabase(t testing.TB, db DBQueryRow) {
 // disposableServerDSN derives the server connection from TEST_DATABASE_URL (never from the dev database settings):
 // it must point at a local PostgreSQL; the database part is replaced.
 func disposableServerDSN(dbName string) (string, error) {
-	u, err := url.Parse(GetTestDatabaseURL())
+	u, err := url.Parse(sharedServerDSN())
 	if err != nil {
 		return "", fmt.Errorf("invalid TEST_DATABASE_URL: %w", err)
 	}
@@ -291,4 +291,88 @@ func UseDisposableDatabaseForPackage() (string, func(), error) {
 		}
 		dropDisposable(name)
 	}, nil
+}
+
+// RunnerDatabase describes one throw-away database created for a whole test run by backend/scripts/safe_go_test.sh.
+type RunnerDatabase struct {
+	Name, DSN, Token, Host, Port, User, Password string
+}
+
+// CreateRunnerDatabase clones the migrated template into a new zamk_disposable_<12 hex> database, stamps it with a
+// random ownership token (database comment) and re-connects to prove the connected database is that disposable one.
+// On any failure nothing it created is left behind.
+func CreateRunnerDatabase(ctx context.Context) (*RunnerDatabase, error) {
+	name, dsn, err := createDisposable(ctx)
+	if err != nil {
+		return nil, err
+	}
+	fail := func(err error) (*RunnerDatabase, error) {
+		dropDisposable(name)
+		return nil, err
+	}
+	tb := make([]byte, 16)
+	if _, err := rand.Read(tb); err != nil {
+		return fail(err)
+	}
+	token := hex.EncodeToString(tb)
+	adminDSN, err := disposableServerDSN("postgres")
+	if err != nil {
+		return fail(err)
+	}
+	admin, err := pgx.Connect(ctx, adminDSN)
+	if err != nil {
+		return fail(err)
+	}
+	_, err = admin.Exec(ctx, `COMMENT ON DATABASE `+pgx.Identifier{name}.Sanitize()+` IS 'zamk-test-runner:`+token+`'`)
+	admin.Close(ctx)
+	if err != nil {
+		return fail(fmt.Errorf("stamp the disposable database: %w", err))
+	}
+	conn, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		return fail(err)
+	}
+	err = VerifyDisposableDatabase(ctx, conn)
+	conn.Close(ctx)
+	if err != nil {
+		return fail(err)
+	}
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return fail(err)
+	}
+	pw, _ := u.User.Password()
+	return &RunnerDatabase{Name: name, DSN: dsn, Token: token, Host: u.Hostname(), Port: u.Port(), User: u.User.Username(), Password: pw}, nil
+}
+
+// DropRunnerDatabase drops exactly the database the runner created: the name must be a per-run disposable name (never
+// the template, never a shared database) AND its ownership stamp must match the token handed out at creation.
+func DropRunnerDatabase(ctx context.Context, name, token string) error {
+	if !disposableNameRE.MatchString(name) {
+		return fmt.Errorf("REFUSING TO DROP %q: not a per-run disposable database name", name)
+	}
+	if len(token) != 32 {
+		return fmt.Errorf("REFUSING TO DROP %q: missing ownership token", name)
+	}
+	adminDSN, err := disposableServerDSN("postgres")
+	if err != nil {
+		return err
+	}
+	admin, err := pgx.Connect(ctx, adminDSN)
+	if err != nil {
+		return err
+	}
+	defer admin.Close(ctx)
+	var stamp *string
+	if err := admin.QueryRow(ctx, `SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = $1`, name).Scan(&stamp); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil // already gone
+		}
+		return err
+	}
+	if stamp == nil || *stamp != "zamk-test-runner:"+token {
+		return fmt.Errorf("REFUSING TO DROP %q: it is not owned by this runner", name)
+	}
+	_, err = admin.Exec(ctx, `DROP DATABASE IF EXISTS `+pgx.Identifier{name}.Sanitize()+` WITH (FORCE)`)
+	return err
 }

@@ -15,7 +15,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -175,9 +174,9 @@ func buildStageMultipartRequest(url string, clientMediaID string, filename, cont
 }
 
 func TestStagedProductImageUploadEndpoint(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
+	dsn := testutil.RunnerDatabaseURL()
 	if dsn == "" {
-		dsn = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
+		dsn = testutil.BlockedTestDatabaseDSN
 	}
 
 	ctx := context.Background()

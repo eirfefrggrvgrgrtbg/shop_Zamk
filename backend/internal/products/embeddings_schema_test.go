@@ -28,7 +28,7 @@ func TestEmbeddingsSchema(t *testing.T) {
 	ctx := context.Background()
 
 	// Safe test connection string: only zamk_test is allowed
-	const testConnStr = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
+	const testConnStr = testutil.BlockedTestDatabaseDSN
 	pool, err := testutil.NewTrackedPool(t, ctx, testConnStr)
 	if err != nil {
 		t.Fatalf("failed to connect to db: %v", err)

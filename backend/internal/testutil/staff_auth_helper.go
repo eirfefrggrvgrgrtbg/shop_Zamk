@@ -10,7 +10,7 @@ import (
 // GrantStaffAuthorizationState dual-writes the intended permissions to both
 // staff_role_permissions (for current role-based runtime) and
 // staff_member_permissions (for future member-based runtime).
-// It verifies that the connected database is strictly zamk_test before performing any work.
+// It verifies that the connected database is a disposable test database before performing any work.
 // If permissions are empty, no permissions are granted, ensuring negative cases remain unauthorized.
 func GrantStaffAuthorizationState(ctx context.Context, db DBExecutor, userID uuid.UUID, roleID uuid.UUID, permissions ...string) error {
 	if err := VerifyTestDatabase(ctx, db); err != nil {

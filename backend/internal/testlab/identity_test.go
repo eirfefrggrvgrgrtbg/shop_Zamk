@@ -11,13 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testlab"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/users"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/sellers"
 )
 
 func TestIsolatedIdentity(t *testing.T) {
 	ctx := context.Background()
-	db, err := pgxpool.New(ctx, "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable")
+	db, err := pgxpool.New(ctx, testutil.BlockedTestDatabaseDSN)
 	if err != nil {
 		t.Fatalf("failed to connect: %v", err)
 	}

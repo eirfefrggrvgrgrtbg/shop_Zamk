@@ -2,7 +2,6 @@ package payments
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/google/uuid"
@@ -18,7 +17,7 @@ import (
 )
 
 func setupTestDB(t *testing.T) (*postgres.Client, *Service, *orders.Repository) {
-	dbURL := os.Getenv("TEST_DATABASE_URL")
+	dbURL := testutil.RunnerDatabaseURL()
 	if dbURL == "" {
 		t.Skip("TEST_DATABASE_URL not set, skipping DB integration test")
 	}

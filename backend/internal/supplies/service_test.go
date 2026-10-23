@@ -409,8 +409,8 @@ func TestSafetyGuard_RejectsDevDatabase(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected VerifyTestDatabase to reject 'zamk' database, got nil error")
 	}
-	expected := `REFUSING DESTRUCTIVE TEST SETUP: expected database "zamk_test", connected to "zamk"`
-	if !strings.Contains(err.Error(), expected) {
+	expected := `REFUSING DESTRUCTIVE TEST SETUP: expected a disposable database`
+	if !strings.Contains(err.Error(), expected) || !strings.Contains(err.Error(), `connected to "zamk"`) {
 		t.Fatalf("unexpected error message: %v", err)
 	}
 }

@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,11 +14,18 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// RequiredTestDatabaseName is the exact and only database name allowed for destructive test execution.
-const RequiredTestDatabaseName = "zamk_test"
+// SharedTestDatabaseName is the shared, long-lived test database. TEST.DB.5: no test may read or write it any more;
+// every integration test runs on its own disposable database (zamk_disposable_<12 hex>) created by
+// backend/scripts/safe_go_test.sh. The constant exists only so that guards and messages can name what is refused.
+const SharedTestDatabaseName = "zamk_test"
 
-// CanonicalTestDatabaseDSN is the standard connection string to the local test database.
+// CanonicalTestDatabaseDSN is the DSN of the shared zamk_test. It is kept only to locate the local PostgreSQL server
+// (host, port, credentials) when TEST_DATABASE_URL is not set; no test may connect to the database it names.
 const CanonicalTestDatabaseDSN = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
+
+// BlockedTestDatabaseDSN is what GetTestDatabaseURL returns when the test process was not started through the
+// isolating runner: a DSN that cannot connect anywhere and names the cure in the database part.
+const BlockedTestDatabaseDSN = "postgres://blocked@127.0.0.1:1/BLOCKED_run_integration_tests_via_backend_scripts_safe_go_test_sh?sslmode=disable&connect_timeout=1"
 
 // DBQueryRow is an interface for any database connection or pool capable of running QueryRow.
 type DBQueryRow interface {
@@ -30,8 +38,9 @@ type DBExecutor interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 }
 
-// VerifyTestDatabase verifies that the database connected to is "zamk_test" or a disposable test database.
-// It returns a descriptive error if the connected database is anything else, preventing destructive test cleanup.
+// VerifyTestDatabase verifies that the database connected to is a per-run disposable test database
+// (zamk_disposable_<12 hex>). TEST.DB.5: the shared zamk_test (and zamk, zamk_demo, postgres, templates) is refused,
+// so a test that was pointed at a shared database stops before its first write.
 func VerifyTestDatabase(ctx context.Context, db DBQueryRow) error {
 	if db == nil {
 		return fmt.Errorf("REFUSING DESTRUCTIVE TEST SETUP: database connection is nil")
@@ -47,15 +56,14 @@ func VerifyTestDatabase(ctx context.Context, db DBQueryRow) error {
 	}
 
 	currentDB = strings.TrimSpace(currentDB)
-	// TEST.DB.4: a per-test disposable database (zamk_disposable_<12 hex>) is accepted too; it is even safer.
-	if currentDB != RequiredTestDatabaseName && !disposableNameRE.MatchString(currentDB) {
-		return fmt.Errorf("REFUSING DESTRUCTIVE TEST SETUP: expected database %q, connected to %q", RequiredTestDatabaseName, currentDB)
+	if !disposableNameRE.MatchString(currentDB) {
+		return fmt.Errorf("REFUSING DESTRUCTIVE TEST SETUP: expected a disposable database (%s<12 hex>), connected to %q; run integration tests through backend/scripts/safe_go_test.sh", DisposableDatabasePrefix, currentDB)
 	}
 
 	return nil
 }
 
-// AssertTestDatabase asserts via testing.TB that the connected database is strictly "zamk_test".
+// AssertTestDatabase asserts via testing.TB that the connected database is a disposable test database (never zamk_test).
 // If the database is anything else or the query fails, it fails the test immediately (t.Fatalf) before any destructive cleanup.
 func AssertTestDatabase(t testing.TB, db DBQueryRow) {
 	t.Helper()
@@ -69,9 +77,35 @@ func AssertTestDatabase(t testing.TB, db DBQueryRow) {
 	}
 }
 
-// GetTestDatabaseURL retrieves the test database URL from TEST_DATABASE_URL or returns the canonical test DSN.
-// It never falls back to the development database ("zamk").
+// RunnerDatabaseURL returns TEST_DATABASE_URL only when it names a disposable database (what safe_go_test.sh
+// exports); otherwise "". Tests that skip when no database is configured use it instead of reading the variable
+// themselves, so a hand-set shared DSN makes them skip instead of write.
+func RunnerDatabaseURL() string {
+	val := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
+	if val == "" {
+		return ""
+	}
+	u, err := url.Parse(val)
+	if err != nil || !disposableNameRE.MatchString(strings.TrimPrefix(u.Path, "/")) {
+		return ""
+	}
+	return val
+}
+
+// GetTestDatabaseURL returns the DSN of the disposable database the test run was given. TEST.DB.5, fail-closed:
+// it never returns zamk_test, zamk or zamk_demo, whatever TEST_DATABASE_URL says and whether or not it is set. When the
+// process was not started through backend/scripts/safe_go_test.sh it returns BlockedTestDatabaseDSN, so the test
+// fails to connect before it can write.
 func GetTestDatabaseURL() string {
+	if val := RunnerDatabaseURL(); val != "" {
+		return val
+	}
+	return BlockedTestDatabaseDSN
+}
+
+// sharedServerDSN locates the local PostgreSQL server (never a database to test on): TEST_DATABASE_URL when set, else
+// the canonical local DSN. Only host, port and credentials are used; the database part is always replaced.
+func sharedServerDSN() string {
 	if val := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL")); val != "" {
 		return val
 	}
@@ -98,7 +132,7 @@ func findRepoRoot() string {
 
 // EnsureCanonicalStarterTaxonomy guarantees that the canonical starter taxonomy categories
 // and size chart fields (from migrations 60 and 61) are present in the test database.
-// It strictly validates that the database is "zamk_test" before modifying any state.
+// It strictly validates that the database is a disposable test database before modifying any state.
 func EnsureCanonicalStarterTaxonomy(ctx context.Context, db DBExecutor) error {
 	if err := VerifyTestDatabase(ctx, db); err != nil {
 		return err
@@ -150,7 +184,7 @@ func EnsureCanonicalStarterTaxonomy(ctx context.Context, db DBExecutor) error {
 
 // EnsureMarketingMigrations guarantees that the marketing foundation migrations (000095-000098)
 // are applied to the test database.
-// It strictly validates that the database is "zamk_test" before modifying any state.
+// It strictly validates that the database is a disposable test database before modifying any state.
 func EnsureMarketingMigrations(ctx context.Context, db DBExecutor) error {
 	if err := VerifyTestDatabase(ctx, db); err != nil {
 		return err

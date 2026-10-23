@@ -5,12 +5,12 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	goredis "github.com/redis/go-redis/v9"
@@ -433,7 +433,7 @@ func TestStartupDiagnostics_BehindSchemaWarning(t *testing.T) {
 func TestStartupDiagnostics_NoDSNOrPasswordLogged(t *testing.T) {
 	buf, logger := setupTestLogger()
 
-	secretDSN := "postgres://zamk:SuperSecretDBPass@localhost:5433/zamk_test?sslmode=disable"
+	secretDSN := "postgres://zamk:SuperSecretDBPass@localhost:5433/redaction_probe?sslmode=disable"
 	redisSecretPass := "SuperSecretRedisPass"
 
 	// Diagnostics function signature only accepts safe database name and safe host:port
@@ -462,9 +462,9 @@ func TestStartupDiagnostics_NoDSNOrPasswordLogged(t *testing.T) {
 // against zamk_test database, ensuring diagnostics contain request_id, trace_id, component=postgres, sql_state=42P01
 // and strictly DO NOT contain passwords, full DSNs, or query arguments.
 func TestPostgresIntegration_Historical42P01(t *testing.T) {
-	testDBURL := os.Getenv("TEST_DATABASE_URL")
+	testDBURL := testutil.RunnerDatabaseURL()
 	if testDBURL == "" {
-		testDBURL = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
+		testDBURL = testutil.BlockedTestDatabaseDSN
 	}
 
 	exporter, tracer := setupTestTracer()

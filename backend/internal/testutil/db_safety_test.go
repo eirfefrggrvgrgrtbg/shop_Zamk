@@ -37,23 +37,16 @@ func (m *mockDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 	return &mockRow{val: m.dbName, err: m.err}
 }
 
-func TestVerifyTestDatabase_AllowedOnZamkTest(t *testing.T) {
-	db := &mockDB{dbName: "zamk_test"}
-	err := testutil.VerifyTestDatabase(context.Background(), db)
-	if err != nil {
-		t.Fatalf("expected nil error for zamk_test, got: %v", err)
-	}
-}
-
-func TestVerifyTestDatabase_RejectsDevDatabase(t *testing.T) {
-	db := &mockDB{dbName: "zamk"}
-	err := testutil.VerifyTestDatabase(context.Background(), db)
-	if err == nil {
-		t.Fatalf("expected error for dev database 'zamk', got nil")
-	}
-	expectedSubstring := `REFUSING DESTRUCTIVE TEST SETUP: expected database "zamk_test", connected to "zamk"`
-	if !strings.Contains(err.Error(), expectedSubstring) {
-		t.Fatalf("expected error message %q, got: %v", expectedSubstring, err)
+// TEST.DB.5: the shared zamk_test is refused like every other shared database; only a disposable one is accepted.
+func TestVerifyTestDatabase_RefusesTheSharedZamkTest(t *testing.T) {
+	for _, name := range []string{"zamk_test", "zamk", "zamk_demo"} {
+		err := testutil.VerifyTestDatabase(context.Background(), &mockDB{dbName: name})
+		if err == nil {
+			t.Fatalf("expected %q to be refused", name)
+		}
+		if !strings.Contains(err.Error(), "REFUSING DESTRUCTIVE TEST SETUP") || !strings.Contains(err.Error(), "safe_go_test.sh") {
+			t.Fatalf("unexpected message for %q: %v", name, err)
+		}
 	}
 }
 
@@ -86,24 +79,69 @@ func TestVerifyTestDatabase_HandlesNilOrQueryError(t *testing.T) {
 	}
 }
 
-func TestGetTestDatabaseURL(t *testing.T) {
-	// Unset TEST_DATABASE_URL
-	orig := os.Getenv("TEST_DATABASE_URL")
-	defer os.Setenv("TEST_DATABASE_URL", orig)
-
-	os.Unsetenv("TEST_DATABASE_URL")
-	url := testutil.GetTestDatabaseURL()
-	if url != testutil.CanonicalTestDatabaseDSN {
-		t.Fatalf("expected default %q, got %q", testutil.CanonicalTestDatabaseDSN, url)
+// TEST.DB.5: GetTestDatabaseURL is fail-closed. It hands out only a disposable DSN and never zamk_test.
+func TestGetTestDatabaseURL_IsFailClosed(t *testing.T) {
+	const disposable = "postgres://u:p@localhost:5433/zamk_disposable_0123456789ab?sslmode=disable"
+	for name, env := range map[string]string{
+		"unset":                 "",
+		"the shared zamk_test":  testutil.CanonicalTestDatabaseDSN,
+		"a custom zamk_test":    "postgres://custom:pass@localhost:5433/zamk_test?sslmode=disable",
+		"the dev database":      "postgres://zamk:x@localhost:5433/zamk?sslmode=disable",
+		"the demo database":     "postgres://zamk:x@localhost:5433/zamk_demo?sslmode=disable",
+		"the template database": "postgres://zamk:x@localhost:5433/zamk_disposable_tpl_0123456789ab?sslmode=disable",
+		"not a URL":             "::::",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("TEST_DATABASE_URL", env)
+			if got := testutil.GetTestDatabaseURL(); got != testutil.BlockedTestDatabaseDSN {
+				t.Fatalf("expected the blocked DSN, got %q", got)
+			}
+			if got := testutil.RunnerDatabaseURL(); got != "" {
+				t.Fatalf("RunnerDatabaseURL must be empty, got %q", got)
+			}
+		})
 	}
-	if !strings.Contains(url, "/zamk_test") {
-		t.Fatalf("expected default URL to target zamk_test, got %q", url)
-	}
+	t.Run("a disposable database is passed through", func(t *testing.T) {
+		t.Setenv("TEST_DATABASE_URL", disposable)
+		if got := testutil.GetTestDatabaseURL(); got != disposable {
+			t.Fatalf("expected %q, got %q", disposable, got)
+		}
+		if got := testutil.RunnerDatabaseURL(); got != disposable {
+			t.Fatalf("expected %q, got %q", disposable, got)
+		}
+	})
+	t.Run("the blocked DSN cannot name a real database", func(t *testing.T) {
+		if strings.Contains(testutil.BlockedTestDatabaseDSN, "zamk_test") || !strings.Contains(testutil.BlockedTestDatabaseDSN, "127.0.0.1:1") {
+			t.Fatal("the blocked DSN must not point at any real database")
+		}
+	})
+}
 
-	// Custom URL
-	os.Setenv("TEST_DATABASE_URL", "postgres://custom:pass@localhost:5433/zamk_test?sslmode=disable")
-	url = testutil.GetTestDatabaseURL()
-	if url != "postgres://custom:pass@localhost:5433/zamk_test?sslmode=disable" {
-		t.Fatalf("expected custom URL, got %q", url)
+// TEST.DB.5, verification A: only meaningful under backend/scripts/safe_go_test.sh, which exports the run's own database.
+func TestRunnerProvidesItsOwnDisposableDatabase(t *testing.T) {
+	want := os.Getenv("ZAMK_TEST_RUNNER_DB")
+	if os.Getenv("ZAMK_TEST_RUNNER") != "1" || want == "" {
+		t.Skip("not started through backend/scripts/safe_go_test.sh")
+	}
+	dsn := testutil.GetTestDatabaseURL()
+	conn, err := pgx.Connect(context.Background(), dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(context.Background())
+	var got string
+	if err := conn.QueryRow(context.Background(), "SELECT current_database()").Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want || !strings.HasPrefix(got, "zamk_disposable_") || got == "zamk_test" {
+		t.Fatalf("connected to %q, runner created %q", got, want)
+	}
+	if err := testutil.VerifyTestDatabase(context.Background(), conn); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range []string{"DATABASE_URL", "POSTGRES_DB"} {
+		if e := os.Getenv(v); e != "" && !strings.Contains(e, want) {
+			t.Fatalf("%s=%q does not point at the runner database", v, e)
+		}
 	}
 }

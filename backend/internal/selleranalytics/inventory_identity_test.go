@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -12,10 +11,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 func TestSellerAnalytics_InventoryIdentityAndStockConsistency(t *testing.T) {
-	dbURL := os.Getenv("TEST_DATABASE_URL")
+	dbURL := testutil.RunnerDatabaseURL()
 	if dbURL == "" {
 		t.Skip("TEST_DATABASE_URL not set, skipping integration tests")
 	}

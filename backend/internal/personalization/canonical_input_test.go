@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/personalization"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -337,7 +338,7 @@ func TestCategoryPath_HierarchyTests(t *testing.T) {
 func TestCanonicalProductInput_DBIntegration(t *testing.T) {
 	ctx := context.Background()
 
-	const testConnStr = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
+	const testConnStr = testutil.BlockedTestDatabaseDSN
 	pool, err := pgxpool.New(ctx, testConnStr)
 	if err != nil {
 		t.Fatalf("failed to connect to test db: %v", err)

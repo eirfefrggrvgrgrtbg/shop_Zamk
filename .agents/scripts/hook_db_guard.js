@@ -13,7 +13,7 @@ function checkDbSafety(cmd) {
   if (isTest && targetsDevDb && /TEST_DATABASE_URL/i.test(cmd)) {
     return {
       decision: 'deny',
-      reason: 'Blocked by ZAMK DB Safety Hook: Automated tests must target zamk_test, not the development database zamk.'
+      reason: 'Blocked by ZAMK DB Safety Hook: Automated tests never target the development database zamk. Run integration tests only via backend/scripts/safe_go_test.sh, which gives each run its own disposable database.'
     };
   }
 

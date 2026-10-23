@@ -341,7 +341,7 @@ type fkEdge struct {
 	child, childCol, parent string
 }
 
-// Purge deletes the tracked rows (newest first) and everything that depends on them. It only runs against zamk_test.
+// Purge deletes the tracked rows (newest first) and everything that depends on them. It only runs against a disposable test database.
 func (f *FixtureTracker) Purge(ctx context.Context) error {
 	f.mu.Lock()
 	entries := append([]trackedRow(nil), f.entries...)

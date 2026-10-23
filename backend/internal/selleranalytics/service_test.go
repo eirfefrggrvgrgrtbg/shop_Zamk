@@ -3,7 +3,6 @@ package selleranalytics
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 	"encoding/json"
@@ -12,10 +11,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
+	dsn := testutil.RunnerDatabaseURL()
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}

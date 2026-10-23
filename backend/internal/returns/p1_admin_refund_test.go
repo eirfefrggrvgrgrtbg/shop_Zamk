@@ -18,11 +18,12 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payments"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
 func setupHTTPFixture(t *testing.T) (*postgres.Client, *Service) {
 	ctx := context.Background()
-	client, err := postgres.NewClient(ctx, "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable")
+	client, err := postgres.NewClient(ctx, testutil.BlockedTestDatabaseDSN)
 	require.NoError(t, err)
 
 	repo := NewRepository(client.Pool)

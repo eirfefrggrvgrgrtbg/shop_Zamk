@@ -2,7 +2,6 @@ package behavior
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -42,7 +41,7 @@ func TestDeterministicServerEventID(t *testing.T) {
 }
 
 func TestResolveCategoriesTx_DistinguishesNullCategoryFromMissingProduct(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
+	dsn := testutil.RunnerDatabaseURL()
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}
@@ -110,7 +109,7 @@ func TestResolveCategoriesTx_DistinguishesNullCategoryFromMissingProduct(t *test
 }
 
 func TestInsertServerEventsTx_DeterministicIdempotency(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
+	dsn := testutil.RunnerDatabaseURL()
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}

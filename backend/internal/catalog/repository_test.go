@@ -6,7 +6,6 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"os"
 	"testing"
 )
 
@@ -15,9 +14,9 @@ func TestRepository_ListCategories_ActiveOnly(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 	ctx := context.Background()
-	dbURL := os.Getenv("TEST_DATABASE_URL")
+	dbURL := testutil.RunnerDatabaseURL()
 	if dbURL == "" {
-		dbURL = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
+		dbURL = testutil.BlockedTestDatabaseDSN
 	}
 
 	dbClient, err := testutil.NewTrackedClient(t, ctx, dbURL)

@@ -11,12 +11,13 @@ import (
 	"time"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/personalization"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const safeTestDBConn = "postgres://zamk:zamk_password@localhost:5433/zamk_test?sslmode=disable"
+const safeTestDBConn = testutil.BlockedTestDatabaseDSN
 
 func makeValidFloatVector(dim int) []float32 {
 	vec := make([]float32, dim)
