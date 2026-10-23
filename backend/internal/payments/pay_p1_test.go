@@ -49,6 +49,7 @@ type payFixture struct {
 	ctx      context.Context
 	db       *pgxpool.Pool
 	orderH   *orders.Handler
+	ordersSvc *orders.Service
 	svc      *Service
 	payH     *Handler
 	provider *TBankProvider
@@ -79,7 +80,8 @@ func newPayFixture(t *testing.T, terminalKey, password string) *payFixture {
 	cfg := &config.Config{Worker: config.WorkerConfig{MarketplaceCommissionBPS: 1500, OrderPaymentTimeoutMinutes: 30}, App: config.AppConfig{PaymentStuckPendingMinutes: 30}}
 	ordersRepo := orders.NewRepository(db)
 	invSvc := inventory.NewService(inventory.NewRepository(db), nil, pg)
-	f.orderH = orders.NewHandler(orders.NewService(ordersRepo, cart.NewRepository(db), invSvc, pg, cfg))
+	f.ordersSvc = orders.NewService(ordersRepo, cart.NewRepository(db), invSvc, pg, cfg)
+	f.orderH = orders.NewHandler(f.ordersSvc)
 
 	f.net = &noNetwork{t: t}
 	f.provider = NewTBankProvider(terminalKey, password, "", "", "", false, "O", "mock")

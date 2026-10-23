@@ -486,7 +486,7 @@ func (s *Service) applyPaymentConfirmedTx(
 		}
 
 		// 3. Convert Reservations to Sale
-		resIDs, err := s.ordersRepo.GetActiveOrderReservations(ctx, order.ID)
+		resIDs, err := s.ordersRepo.GetActiveOrderReservationsTx(ctx, tx, order.ID)
 		if err != nil {
 			return err
 		}
@@ -497,6 +497,9 @@ func (s *Service) applyPaymentConfirmedTx(
 		}
 
 		for _, rid := range resIDs {
+			if err := linkReservationToOrderTx(ctx, tx, rid, order.ID); err != nil {
+				return err
+			}
 			if err := s.inventorySvc.ConvertReservationToSaleTx(ctx, tx, rid); err != nil {
 				return err
 			}
@@ -1169,7 +1172,7 @@ func (s *Service) ProcessMockPaymentAction(ctx context.Context, paymentID uuid.U
 					return err
 				}
 
-				resIDs, err := s.ordersRepo.GetActiveOrderReservations(ctx, order.ID)
+				resIDs, err := s.ordersRepo.GetActiveOrderReservationsTx(ctx, tx, order.ID)
 				if err != nil {
 					return err
 				}
@@ -1183,6 +1186,9 @@ func (s *Service) ProcessMockPaymentAction(ctx context.Context, paymentID uuid.U
 				}
 
 				for _, rid := range resIDs {
+					if err := linkReservationToOrderTx(ctx, tx, rid, order.ID); err != nil {
+						return err
+					}
 					if err := s.inventorySvc.ConvertReservationToSaleTx(ctx, tx, rid); err != nil {
 						return err
 					}
@@ -1320,7 +1326,7 @@ func (s *Service) releaseOrderReservationsTx(ctx context.Context, tx pgx.Tx, ord
 		return 0, 0, err
 	}
 
-	resIDs, err := s.ordersRepo.GetActiveOrderReservations(ctx, orderID)
+	resIDs, err := s.ordersRepo.GetActiveOrderReservationsTx(ctx, tx, orderID)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -1510,4 +1516,10 @@ func (s *Service) emitOrderPaidEventsTx(ctx context.Context, tx pgx.Tx, order *o
 	}
 
 	return s.behaviorWriter.InsertServerEventsTx(ctx, tx, events)
+}
+// linkReservationToOrderTx stores the order on the reservation (it is only linked through order_reservations at
+// checkout), so the sale stock movement written by the conversion references its order.
+func linkReservationToOrderTx(ctx context.Context, tx pgx.Tx, reservationID, orderID uuid.UUID) error {
+	_, err := tx.Exec(ctx, `UPDATE reservations SET order_id = $2 WHERE id = $1 AND order_id IS NULL`, reservationID, orderID)
+	return err
 }

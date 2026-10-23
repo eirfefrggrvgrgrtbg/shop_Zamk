@@ -683,6 +683,31 @@ func (r *Repository) GetActiveOrderReservations(ctx context.Context, orderID uui
 	return ids, nil
 }
 
+// GetActiveOrderReservationsTx reads inside the caller's transaction. Payment processing must use it: the pool read
+// above takes a second connection while the transaction holds one, so concurrent confirmations can exhaust the pool.
+func (r *Repository) GetActiveOrderReservationsTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT r.id
+		FROM reservations r
+		JOIN order_reservations ord_r ON ord_r.reservation_id = r.id
+		WHERE ord_r.order_id = $1 AND r.status = 'active'
+	`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (r *Repository) ReleaseAllocationsForOrderCountTx(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, reason string) (int, error) {
 	now := time.Now()
 	tag, err := tx.Exec(ctx, `

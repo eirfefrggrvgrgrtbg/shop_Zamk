@@ -109,7 +109,9 @@ func (h *Handler) HandleTBankWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
-		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to process webhook: " + err.Error())
+		// The bank retries on 5xx; the cause stays in the log, never in the response body.
+		log.Printf("HandleTBankWebhook Error: %v", err)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to process webhook")
 		return
 	}
 
