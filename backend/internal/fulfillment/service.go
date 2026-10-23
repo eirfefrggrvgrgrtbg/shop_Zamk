@@ -249,6 +249,13 @@ func (s *Service) UpdateShipmentStatus(ctx context.Context, adminID, shipmentID 
 		if req.Status != oldStatus && (req.Status == "shipped" || req.Status == "delivered") {
 			return ErrDispatchNotAllowed
 		}
+		// After physical dispatch the generic endpoint changes no status (only carrier / tracking): stock and units are
+		// already written off, so a pre-dispatch status would re-enter the dispatch queue, and failed / cancelled would
+		// strand the order without accounting for goods and money. Delivery goes through /deliver; loss, carrier return
+		// and cancellation of a shipped order are separate processes.
+		if req.Status != oldStatus && (oldStatus == "shipped" || fulfillmentStatus == "shipped") {
+			return ErrDispatchNotAllowed
+		}
 		if req.Status == "delivered" && oldStatus != "delivered" {
 			wasDelivered = true
 		}

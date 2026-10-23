@@ -652,10 +652,14 @@ func TestDelivery_FailedThenDeliverRejected(t *testing.T) {
 	`, sID, orderID, fID)
 	require.NoError(t, err)
 
-	// Step 1: UpdateShipmentStatus to 'failed' succeeds
+	// Step 1: after dispatch the generic status endpoint cannot mark the shipment failed (DELIVERY.E2E.1 hardening)
 	err = f.svc.UpdateShipmentStatus(ctx, f.adminID, sID, fulfillment.UpdateShipmentStatusRequest{
 		Status: "failed",
 	})
+	require.ErrorIs(t, err, fulfillment.ErrDispatchNotAllowed)
+
+	// A shipment that is already 'failed' in the data (legacy row) must still not be deliverable
+	_, err = f.db.Exec(ctx, `UPDATE shipments SET status = 'failed' WHERE id = $1`, sID)
 	require.NoError(t, err)
 
 	// Step 2: DeliverShipment on failed shipment must be rejected
