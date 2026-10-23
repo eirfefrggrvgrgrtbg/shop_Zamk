@@ -113,11 +113,8 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 	}
 
 	dm, err := s.repo.GetDeliveryMethod(ctx, req.DeliveryMethodID)
-	if err != nil {
-		return nil, errors.New("invalid delivery method")
-	}
-	if !dm.IsActive {
-		return nil, errors.New("delivery method is not active")
+	if err != nil || !dm.IsActive {
+		return nil, ErrInvalidDeliveryMethod
 	}
 
 	var createdOrder *Order
@@ -129,17 +126,50 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 
 		orderID := uuid.New()
 
+		// The cart is re-read under its row lock: a second concurrent checkout of the same cart (double click
+		// without an idempotency key, a retried request) waits here and then finds the cart already ordered, so one
+		// cart never becomes two orders or two reservations.
+		items, err := s.repo.LockCartItemsTx(ctx, tx, userCart.ID)
+		if err != nil {
+			return err
+		}
+		if len(items) == 0 {
+			return ErrEmptyCart
+		}
+		// A customer without paid orders pays one order at a time (first-payment claim, first-order promo
+		// hardening). While another order's payment is in progress a new order could not be paid and would only
+		// hold stock until expiry, so it is refused before anything is reserved.
+		if pendingID, pendingNumber, found, err := s.repo.GetPendingFirstPaymentOrderTx(ctx, tx, userID); err != nil {
+			return err
+		} else if found {
+			return &FirstPaymentPendingError{OrderID: pendingID, OrderNumber: pendingNumber}
+		}
+		if idempotencyKey != nil && !sameCartLines(items, cartItems) {
+			requestHash = calculateRequestHash(userID, req, items)
+		}
+		// Stock rows are locked in one stable order so concurrent carts with the same SKUs cannot deadlock.
+		variantIDs := make([]uuid.UUID, 0, len(items))
+		for _, it := range items {
+			variantIDs = append(variantIDs, it.ProductVariantID)
+		}
+		if err := s.repo.LockInventoryForVariantsTx(ctx, tx, variantIDs); err != nil {
+			return err
+		}
+
 		// Self-purchase guard: nothing is reserved and no order is created when the buyer belongs to the
 		// store (owner or manager in seller_users) of any product in the cart.
-		if err := s.ensureNotOwnStoreProductsTx(ctx, tx, userID, userCart.Items); err != nil {
+		if err := s.ensureNotOwnStoreProductsTx(ctx, tx, userID, items); err != nil {
 			return err
 		}
 
 		// Prepare order items and reservations
-		for _, item := range userCart.Items {
+		for _, item := range items {
 			// Validate product and variant
 			info, err := s.cartRepo.GetProductValidationInfo(ctx, item.ProductID, item.ProductVariantID)
 			if err != nil {
+				if errors.Is(err, cart.ErrVariantNotFound) {
+					return ErrVariantNotFound
+				}
 				return err
 			}
 			if info.Status != "published" {
@@ -157,6 +187,9 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 			resTTL := time.Duration(timeoutMinutes) * time.Minute
 			res, err := s.inventorySvc.CreateReservationTx(ctx, tx, userID, item.ProductVariantID, item.Quantity, resTTL)
 			if err != nil {
+				if errors.Is(err, inventory.ErrInsufficientStock) || errors.Is(err, inventory.ErrInventoryItemNotFound) {
+					return ErrInsufficientStock
+				}
 				return err
 			}
 
@@ -385,6 +418,15 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 	})
 
 	if err != nil {
+		// The same checkout (same key) committed concurrently and emptied the cart: answer with that order.
+		if errors.Is(err, ErrEmptyCart) && idempotencyKey != nil {
+			if existing, getErr := s.repo.GetOrderByIdempotencyKey(ctx, userID, *idempotencyKey); getErr == nil {
+				if existing.CheckoutRequestHash != nil && *existing.CheckoutRequestHash == requestHash {
+					return existing, nil
+				}
+				return nil, ErrIdempotencyKeyConflict
+			}
+		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "orders_customer_id_idempotency_key_idx" {
 			// Idempotency key conflict due to concurrency
@@ -403,6 +445,26 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 	}
 
 	return createdOrder, nil
+}
+
+// sameCartLines reports whether two reads of a cart hold the same lines (variant and quantity).
+func sameCartLines(a, b []cart.CartItem) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	count := map[uuid.UUID]int{}
+	for _, it := range a {
+		count[it.ProductVariantID] += it.Quantity
+	}
+	for _, it := range b {
+		count[it.ProductVariantID] -= it.Quantity
+	}
+	for _, n := range count {
+		if n != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 type cancelOrderParams struct {

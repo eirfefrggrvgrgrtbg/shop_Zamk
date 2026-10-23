@@ -27,3 +27,32 @@ func TestProductionRejectsMockMode(t *testing.T) {
 
 	_, _ = Load()
 }
+
+// PAY.P1: production never runs on the default STUB terminal; an empty terminal is allowed (payments are then
+// unavailable, not mocked).
+func TestProductionRejectsStubTerminal(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("TBANK_TPAY_MODE", "quick_widget")
+	t.Setenv("TBANK_TERMINAL_KEY", "STUB")
+
+	defer func() {
+		if r := recover(); r != "Cannot use STUB TBank terminal in production environment" {
+			t.Errorf("unexpected panic: %v", r)
+		}
+	}()
+	_, _ = Load()
+}
+
+func TestProductionAllowsEmptyTerminal(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("TBANK_TPAY_MODE", "quick_widget")
+	t.Setenv("TBANK_TERMINAL_KEY", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.TBank.TerminalKey != "" {
+		t.Fatalf("expected the empty terminal to stay empty")
+	}
+}

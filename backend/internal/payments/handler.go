@@ -60,7 +60,13 @@ func (h *Handler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, ErrPaymentMethodUnavailable) {
-			h.writeError(w, http.StatusBadRequest, "payment_method_unavailable", err.Error())
+			h.writeError(w, http.StatusBadRequest, "payment_method_unavailable", "Этот способ оплаты сейчас недоступен. Выберите другой способ оплаты.")
+			return
+		}
+		if errors.Is(err, ErrFirstPaymentInProgress) {
+			// The customer's first payment is in progress for another order (first-payment claim); this order
+			// stays awaiting payment and can be paid once that payment resolves.
+			h.writeError(w, http.StatusConflict, "payment_in_progress", "Оплата другого вашего заказа ещё не завершена. Завершите её или отмените, затем оплатите этот заказ в разделе «Мои заказы».")
 			return
 		}
 		if errors.Is(err, ErrInsufficientStock) {

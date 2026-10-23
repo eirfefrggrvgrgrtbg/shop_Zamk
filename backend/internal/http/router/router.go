@@ -281,6 +281,7 @@ func New(
 		r.Get("/colors", productsHandler.ListPublicColors)
 		r.Get("/brands/{idOrSlug}", productsHandler.GetPublicBrandStore)
 		r.Get("/products", productsHandler.ListPublicProducts)
+		r.Get("/payment-methods", paymentsHandler.GetAvailableMethods)
 		r.Get("/product-previews/{token}", productsHandler.GetProductPreviewByToken)
 		r.Get("/direct-sale", productsHandler.GetDirectSaleProducts)
 		r.Get("/collections", merchHandler.ListPublicCollections)

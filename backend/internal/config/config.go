@@ -284,6 +284,11 @@ func Load() (*Config, error) {
 	if cfg.App.Env == "production" && cfg.TBank.TPayMode == "mock" {
 		panic("Cannot use mock TBank mode in production environment")
 	}
+	// TBANK_TERMINAL_KEY defaults to the local STUB terminal (no requests, every notification accepted): production must
+	// set a real terminal explicitly instead of silently running on the stub.
+	if cfg.App.Env == "production" && cfg.TBank.TerminalKey == "STUB" {
+		panic("Cannot use STUB TBank terminal in production environment")
+	}
 
 	return cfg, nil
 }

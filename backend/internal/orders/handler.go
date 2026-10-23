@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -55,7 +56,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.validator.Struct(req); err != nil {
-		h.writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		h.writeError(w, http.StatusBadRequest, "validation_error", "Проверьте данные получателя: имя, телефон, email и адрес доставки.")
 		return
 	}
 
@@ -70,8 +71,25 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	order, err := h.service.CreateOrder(r.Context(), userID, req, idempotencyKey)
 	if err != nil {
-		if errors.Is(err, ErrEmptyCart) || errors.Is(err, ErrProductNotPublished) || errors.Is(err, ErrVariantNotFound) || errors.Is(err, ErrInsufficientStock) ||
-			errors.Is(err, marketing.ErrPromoNotFound) || errors.Is(err, marketing.ErrPromoInactive) || errors.Is(err, marketing.ErrPromoNotStarted) ||
+		// Cart states the buyer can fix: stable codes and readable messages; the cart is kept, nothing is reserved.
+		switch {
+		case errors.Is(err, ErrEmptyCart):
+			h.writeError(w, http.StatusBadRequest, "empty_cart", "Корзина пуста. Добавьте товары, чтобы оформить заказ.")
+			return
+		case errors.Is(err, ErrInsufficientStock):
+			h.writeError(w, http.StatusConflict, "insufficient_stock", "Недостаточно товара на складе. Вернитесь в корзину и измените количество.")
+			return
+		case errors.Is(err, ErrProductNotPublished) || errors.Is(err, ErrVariantNotFound):
+			h.writeError(w, http.StatusConflict, "item_unavailable", "Один из товаров больше недоступен. Вернитесь в корзину и удалите его.")
+			return
+		case errors.Is(err, ErrInvalidDeliveryMethod):
+			h.writeError(w, http.StatusBadRequest, "invalid_delivery_method", "Выбранный способ доставки недоступен. Выберите другой.")
+			return
+		case errors.Is(err, ErrFirstPaymentPending):
+			h.writeError(w, http.StatusConflict, "payment_in_progress", firstPaymentPendingMessage(err))
+			return
+		}
+		if errors.Is(err, marketing.ErrPromoNotFound) || errors.Is(err, marketing.ErrPromoInactive) || errors.Is(err, marketing.ErrPromoNotStarted) ||
 			errors.Is(err, marketing.ErrPromoExpired) || errors.Is(err, marketing.ErrPromoMinSubtotal) || errors.Is(err, marketing.ErrPromoMinQuantity) || errors.Is(err, marketing.ErrPromoMinDistinctProducts) || errors.Is(err, marketing.ErrPromoGlobalLimit) ||
 			errors.Is(err, marketing.ErrPromoCustomerLimit) || errors.Is(err, marketing.ErrPromoFirstOrderOnly) || errors.Is(err, marketing.ErrPromoRepeatCustomerRequired) || errors.Is(err, marketing.ErrPromoNotApplicable) ||
 			errors.Is(err, marketing.ErrPromoBudgetExhausted) || errors.Is(err, marketing.ErrPromoFullDiscount) {
@@ -83,10 +101,12 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, ErrIdempotencyKeyConflict) {
-			h.writeError(w, http.StatusConflict, "conflict", err.Error())
+			h.writeError(w, http.StatusConflict, "conflict", "Данные заказа изменились после отправки. Проверьте их и оформите заказ ещё раз.")
 			return
 		}
-		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		// Unexpected failure: logged for the team, never shown to the buyer (no database or internal text).
+		slog.ErrorContext(r.Context(), "create order failed", "error", err)
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Не удалось оформить заказ. Попробуйте ещё раз.")
 		return
 	}
 
@@ -456,4 +476,13 @@ func (h *Handler) GetAdminOrderTimeline(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(timeline)
+}
+
+// firstPaymentPendingMessage tells the customer which order to pay (or let lapse) before a new order is accepted.
+func firstPaymentPendingMessage(err error) string {
+	var pending *FirstPaymentPendingError
+	if errors.As(err, &pending) && pending.OrderNumber != "" {
+		return "Оплата заказа " + pending.OrderNumber + " ещё не завершена. Завершите её или отмените на странице оплаты, затем оформите новый заказ. Заказ доступен в разделе «Мои заказы»."
+	}
+	return "Оплата предыдущего заказа ещё не завершена. Завершите её или отмените на странице оплаты, затем оформите новый заказ. Заказ доступен в разделе «Мои заказы»."
 }

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 type TBankProvider struct {
@@ -40,6 +41,17 @@ func NewTBankProvider(terminalKey, password, apiBaseURL, successURL, failURL str
 		tpayMode:    tpayMode,
 		client:      &http.Client{},
 	}
+}
+
+// isStub reports the explicit local stub terminal (TBANK_TERMINAL_KEY=STUB): no request leaves the process.
+func (p *TBankProvider) isStub() bool {
+	return p.terminalKey == "STUB"
+}
+
+// hasCredentials reports a real terminal: both the terminal key and the password are set. Without them no request
+// is sent to T-Bank (an empty key would otherwise reach the real API).
+func (p *TBankProvider) hasCredentials() bool {
+	return !p.isStub() && strings.TrimSpace(p.terminalKey) != "" && strings.TrimSpace(p.password) != ""
 }
 
 type initRequest struct {
@@ -83,7 +95,7 @@ func (p *TBankProvider) generateToken(params map[string]string) string {
 
 func (p *TBankProvider) CreatePayment(ctx context.Context, input CreatePaymentInput) (ProviderCreatePaymentResult, error) {
 	// For sandbox/stub mode, if terminalKey is "STUB", mock the response
-	if p.terminalKey == "STUB" || (input.Method == "tpay" && input.IntegrationMode == "mock") {
+	if p.isStub() || (input.Method == "tpay" && input.IntegrationMode == "mock") {
 		hash := crc32.ChecksumIEEE([]byte(input.IdempotencyKey))
 		pid := fmt.Sprintf("%d", hash)
 		paymentURL := "https://stub.payment.url/pay/" + pid
@@ -95,6 +107,11 @@ func (p *TBankProvider) CreatePayment(ctx context.Context, input CreatePaymentIn
 			PaymentURL:        paymentURL,
 			Status:            "NEW",
 		}, nil
+	}
+
+	if !p.hasCredentials() {
+		// GetMode already reports such methods unavailable; this guard keeps any other caller off the real API.
+		return ProviderCreatePaymentResult{}, fmt.Errorf("%w: %w", ErrProviderRejected, ErrProviderNotConfigured)
 	}
 
 	reqData := initRequest{
@@ -181,8 +198,12 @@ type webhookPayload struct {
 }
 
 func (p *TBankProvider) VerifyWebhook(ctx context.Context, headers map[string]string, body []byte) error {
-	if p.terminalKey == "STUB" {
+	if p.isStub() {
 		return nil
+	}
+	if !p.hasCredentials() {
+		// Without a password any sender could sign a notification: accept none.
+		return ErrInvalidSignature
 	}
 
 	var payload webhookPayload
@@ -264,9 +285,16 @@ func (p *TBankProvider) ParseWebhook(ctx context.Context, body []byte) (Provider
 
 func (p *TBankProvider) GetMode(method string) string {
 	if method == "card" {
+		if !p.isStub() && !p.hasCredentials() {
+			return "unavailable"
+		}
 		return "hosted_form"
 	}
 	if method == "tpay" {
+		// The mock needs no terminal (it is refused in production by config); other modes call T-Bank.
+		if p.tpayMode != "mock" && !p.isStub() && !p.hasCredentials() {
+			return "unavailable"
+		}
 		return p.tpayMode
 	}
 	if method == "sbp" {
@@ -314,7 +342,10 @@ type checkOrderResponse struct {
 }
 
 func (p *TBankProvider) CheckOrder(ctx context.Context, orderID string) (CheckOrderResult, error) {
-	if p.terminalKey == "STUB" {
+	if !p.isStub() && !p.hasCredentials() {
+		return CheckOrderResult{}, ErrProviderNotConfigured
+	}
+	if p.isStub() {
 		return CheckOrderResult{
 			OrderID:  orderID,
 			Payments: []ProviderPaymentItem{},

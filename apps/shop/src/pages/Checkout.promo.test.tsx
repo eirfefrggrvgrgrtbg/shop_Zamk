@@ -17,6 +17,7 @@ vi.mock('@zamk/api-client/src/customer', () => ({
   validatePromo: (c: string) => validatePromo(c),
   createOrder: (...a: unknown[]) => createOrder(...a),
   createPayment: (...a: unknown[]) => createPayment(...a),
+  getPaymentMethods: () => Promise.resolve({ methods: [{ method: 'card', mock: false }, { method: 'tpay', mock: true }], default: 'card' }),
   getAddresses: () => Promise.resolve([]),
   getOrder: () => Promise.resolve(null),
 }));

@@ -19,6 +19,8 @@ var (
 	ErrInsufficientStock        = errors.New("insufficient stock to initiate payment for order")
 	ErrFirstPaymentInProgress   = errors.New("another order is currently in payment for this customer")
 	ErrProviderRejected         = errors.New("payment provider rejected initialization")
+	// ErrProviderNotConfigured: T-Bank terminal key or password is empty, so no request may be sent.
+	ErrProviderNotConfigured = errors.New("payment provider is not configured")
 	ErrPaymentOutcomeUncertain  = errors.New("payment outcome uncertain, awaiting provider resolution")
 	ErrPaymentAmountMismatch             = errors.New("payment amount mismatch")
 	ErrMultipleProviderPaymentsAmbiguous = errors.New("multiple ambiguous matching provider payments")

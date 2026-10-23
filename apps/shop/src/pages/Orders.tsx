@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Package, ChevronRight, MapPin, Star, CheckCircle2, Circle, X } from 'lucide-react';
 import type { CustomerFulfillment } from '@zamk/api-client/src/types';
+import type { AvailablePaymentMethods } from '@zamk/api-client/src/customer';
 import { Drawer } from '../components/ui/Drawer';
 import { PRODUCT_PLACEHOLDER_IMAGE } from '../api/publicCatalog';
 import { formatVariantDetails, getCartItemImageUrl } from '../lib/variantSelection';
@@ -14,6 +15,7 @@ import {
   getOrderStatusStyle,
   getItemCountWord,
 } from '../components/orders/reviewHelpers';
+import { PaymentMethodPicker } from '../components/PaymentMethodPicker';
 import { AccountLayout } from '../components/account/AccountLayout';
 import { useToast } from '../contexts/ToastContext';
 
@@ -35,6 +37,28 @@ function OrdersContent() {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPaying, setIsPaying] = useState(false);
+  // Methods the server can start now; the unpaid order is paid with the chosen one (never a second order).
+  const [payMethods, setPayMethods] = useState<AvailablePaymentMethods | null>(null);
+  const [payMethodsFailed, setPayMethodsFailed] = useState(false);
+  const [payMethod, setPayMethod] = useState('');
+  const loadPayMethods = async () => {
+    setPayMethodsFailed(false);
+    try {
+      const { getPaymentMethods } = await import('@zamk/api-client/src/customer');
+      const res = await getPaymentMethods();
+      const list = res?.methods ?? [];
+      setPayMethods({ methods: list, default: res?.default ?? '' });
+      setPayMethod(prev => (list.some(m => m.method === prev) ? prev : (res?.default ?? '')));
+    } catch {
+      setPayMethods(null);
+      setPayMethodsFailed(true);
+      setPayMethod('');
+    }
+  };
+  const selectedAwaitingPayment = selectedOrder?.rawStatus === 'awaiting_payment';
+  useEffect(() => {
+    if (selectedAwaitingPayment) void loadPayMethods();
+  }, [selectedAwaitingPayment, selectedOrder?.rawId]);
 
   // Modal states
   const [returnModal, setReturnModal] = useState<{ isOpen: boolean; item: any | null }>({ isOpen: false, item: null });
@@ -648,20 +672,29 @@ function OrdersContent() {
                 </div>
 
                 {selectedOrder.rawStatus === 'awaiting_payment' && (
+                  <div className="mt-4">
+                    <PaymentMethodPicker available={payMethods} failed={payMethodsFailed} selected={payMethod} onSelect={setPayMethod} />
+                  </div>
+                )}
+
+                {selectedOrder.rawStatus === 'awaiting_payment' && (
                   <button
                     type="button"
-                    disabled={isPaying}
+                    disabled={isPaying || !payMethod}
                     onClick={async () => {
                       try {
                         setIsPaying(true);
                         const { createPayment } = await import('@zamk/api-client/src/customer');
-                        const payment = await createPayment(selectedOrder.rawId, 'card');
+                        const payment = await createPayment(selectedOrder.rawId, payMethod);
                         if (payment.paymentUrl) {
                           window.location.href = payment.paymentUrl;
                         }
                       } catch (e: any) {
                         setIsPaying(false);
-                        if (e.message && e.message.includes('insufficient_stock')) {
+                        if (e.code === 'payment_method_unavailable') {
+                          void loadPayMethods();
+                          showToast(`${e.message} Заказ сохранён.`, 'error');
+                        } else if (e.message && e.message.includes('insufficient_stock')) {
                           showToast('Товара больше нет в наличии для завершения оплаты', 'error');
                         } else {
                           showToast(e.message || 'Не удалось начать оплату заказа', 'error');

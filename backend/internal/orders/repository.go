@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/cart"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/common"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -803,4 +804,66 @@ func (r *Repository) GetOrderItemByID(ctx context.Context, tx pgx.Tx, id uuid.UU
 		return nil, err
 	}
 	return &item, nil
+}
+
+// LockCartItemsTx locks the cart row and returns its items inside the checkout transaction. A concurrent checkout of
+// the same cart waits on this lock and then reads the items the first checkout left (none after a successful order).
+func (r *Repository) LockCartItemsTx(ctx context.Context, tx pgx.Tx, cartID uuid.UUID) ([]cart.CartItem, error) {
+	var locked uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT id FROM carts WHERE id = $1 FOR UPDATE`, cartID).Scan(&locked); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("lock cart: %w", err)
+	}
+	rows, err := tx.Query(ctx, `SELECT id, cart_id, product_id, product_variant_id, quantity, created_at, updated_at
+		FROM cart_items WHERE cart_id = $1 ORDER BY created_at, id`, cartID)
+	if err != nil {
+		return nil, fmt.Errorf("read cart items: %w", err)
+	}
+	defer rows.Close()
+	var items []cart.CartItem
+	for rows.Next() {
+		var it cart.CartItem
+		if err := rows.Scan(&it.ID, &it.CartID, &it.ProductID, &it.ProductVariantID, &it.Quantity, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, it)
+	}
+	return items, rows.Err()
+}
+
+// LockInventoryForVariantsTx locks the stock rows of the given variants in one stable order (by row id), so concurrent
+// checkouts of carts holding the same SKUs in a different order queue up instead of deadlocking.
+func (r *Repository) LockInventoryForVariantsTx(ctx context.Context, tx pgx.Tx, variantIDs []uuid.UUID) error {
+	if len(variantIDs) == 0 {
+		return nil
+	}
+	rows, err := tx.Query(ctx, `SELECT id FROM inventory_items WHERE product_variant_id = ANY($1) ORDER BY id FOR UPDATE`, variantIDs)
+	if err != nil {
+		return fmt.Errorf("lock stock: %w", err)
+	}
+	rows.Close()
+	return rows.Err()
+}
+
+// GetPendingFirstPaymentOrderTx returns the customer's order that holds the first-payment claim and still awaits
+// payment. A customer without paid orders pays one order at a time (customer_first_payment_claims), so a new order
+// could not be paid until that payment resolves. A plain read: a claim taken concurrently is still refused at payment.
+func (r *Repository) GetPendingFirstPaymentOrderTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID) (uuid.UUID, string, bool, error) {
+	var orderID uuid.UUID
+	var orderNumber string
+	err := tx.QueryRow(ctx, `
+		SELECT o.id, COALESCE(o.order_number, '')
+		FROM customer_first_payment_claims c
+		JOIN orders o ON o.id = c.order_id
+		WHERE c.user_id = $1 AND o.user_id = $1 AND o.status = 'awaiting_payment'
+	`, userID).Scan(&orderID, &orderNumber)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, "", false, nil
+		}
+		return uuid.Nil, "", false, err
+	}
+	return orderID, orderNumber, true, nil
 }

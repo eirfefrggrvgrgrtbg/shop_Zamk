@@ -6,26 +6,31 @@ import { Input } from '../components/ui/Input';
 import { useCart } from '../contexts/CartContext';
 import { formatPrice } from '../lib/utils';
 import { CheckoutPanel, PillFilter, SectionHeader } from '../components/editorial/StudioKit';
-import { createOrder, createPayment } from '@zamk/api-client/src/customer';
+import { createOrder, createPayment, getPaymentMethods } from '@zamk/api-client/src/customer';
 import { getDeliveryMethods } from '@zamk/api-client/src/public';
+import type { AvailablePaymentMethods } from '@zamk/api-client/src/customer';
 import type { PublicDeliveryMethod } from '@zamk/api-client/src/types';
 import { useAuth } from '../contexts/AuthContext';
+import { PaymentMethodPicker } from '../components/PaymentMethodPicker';
 import { formatVariantDetails } from '../lib/variantSelection';
 import { PromoCodeBox } from '../components/PromoCodeBox';
 import { usePromo } from '../contexts/promoContextValue';
 import { isPromoRejection } from '../lib/promo';
+import { cartFixableMessage, isCartFixableCheckoutError, isCheckoutKeyConflict, isPaymentInProgressError, isPaymentMethodUnavailableError, serverMessageOr } from '../lib/checkoutErrors';
 import { trackCheckoutStarted, getOrRenewSession, getOrCreateVisitorId } from '../lib/behavior';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function Checkout() {
-  const { items, totalPrice, clearCart } = useCart();
+  const { items, totalPrice, clearCart, refreshCart } = useCart();
   const { appliedCode, discount, isChecking: isPromoChecking, isUnconfirmed: isPromoUnconfirmed, rejectAfterCheckout, clear: clearPromo } = usePromo();
   const submitLockRef = useRef(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [deliveryMethods, setDeliveryMethods] = useState<PublicDeliveryMethod[]>([]);
   const [selectedMethodId, setSelectedMethodId] = useState<string>('');
   const [done, setDone] = useState(false);
+  // Number of the created order, shown on the confirmation (before the payment page opens).
+  const [confirmedOrderNumber, setConfirmedOrderNumber] = useState<string | null>(null);
   const { isAuthenticated, user, openAuthModal } = useAuth();
   const [firstName, setFirstName] = useState(user?.name?.split(' ')[0] || '');
   const [lastName, setLastName] = useState(user?.name?.split(' ')[1] || '');
@@ -33,8 +38,15 @@ export function Checkout() {
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [validationError, setValidationError] = useState('');
+  // The order was refused for a reason fixed in the cart (stock, unavailable item): offer the way back.
+  const [cartFixable, setCartFixable] = useState(false);
+  // Another order's payment is still in progress: offer the way to «Мои заказы».
+  const [paymentBlocked, setPaymentBlocked] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'tpay' | 'sbp'>('card');
+  // Payment methods come from the server (its configuration decides); nothing is preselected until they are known.
+  const [paymentMethod, setPaymentMethod] = useState<string>('');
+  const [availableMethods, setAvailableMethods] = useState<AvailablePaymentMethods | null>(null);
+  const [methodsFailed, setMethodsFailed] = useState(false);
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(() => {
     return sessionStorage.getItem('zamk_pending_order_id');
   });
@@ -68,6 +80,34 @@ export function Checkout() {
       });
     }
   }, [pendingOrderId, items.length]);
+
+  const loadPaymentMethods = () => {
+    setMethodsFailed(false);
+    return getPaymentMethods().then(res => {
+      const list = res?.methods ?? [];
+      setAvailableMethods({ methods: list, default: res?.default ?? '' });
+      setPaymentMethod(prev => (list.some(m => m.method === prev) ? prev : (res?.default ?? '')));
+    }).catch(() => {
+      setAvailableMethods(null);
+      setMethodsFailed(true);
+      setPaymentMethod('');
+    });
+  };
+
+  useEffect(() => {
+    void loadPaymentMethods();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const noPaymentMethods = methodsFailed || (availableMethods !== null && availableMethods.methods.length === 0);
+  const noPaymentMethodsMessage = methodsFailed
+    ? 'Не удалось получить способы оплаты. Обновите страницу и попробуйте ещё раз.'
+    : 'Сейчас нет доступных способов оплаты. Заказ не оформлен — попробуйте позже.';
+
+  // The confirmation replaces the long checkout form: show it from the top (on mobile the page was scrolled to the button).
+  useEffect(() => {
+    if (done) window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [done]);
 
   useEffect(() => {
     getDeliveryMethods().then(methods => {
@@ -119,8 +159,17 @@ export function Checkout() {
       return;
     }
 
+    // No available method: do not create an order that cannot be paid.
+    if (noPaymentMethods || !paymentMethod) {
+      setValidationError(availableMethods === null && !methodsFailed ? 'Способы оплаты ещё загружаются. Повторите через секунду.' : noPaymentMethodsMessage);
+      return;
+    }
+
     submitLockRef.current = true;
     setIsSubmitting(true);
+    setCartFixable(false);
+    setPaymentBlocked(false);
+    let creatingOrder = false;
 
     const trimmedEmail = email.trim();
     let finalName = `${firstName.trim()} ${lastName.trim()}`.trim();
@@ -162,6 +211,10 @@ export function Checkout() {
       const deliveryAddressText = finalAddress;
 
       let orderId = pendingOrderId;
+      if (orderId) {
+        // Paying the already created order again (e.g. with another method): keep the number already shown.
+        setConfirmedOrderNumber(prev => pendingOrderDetails?.orderNumber ?? prev);
+      }
       if (!orderId) {
         const visitorId = getOrCreateVisitorId();
         const sessionInfo = visitorId ? getOrRenewSession(visitorId) : null;
@@ -170,6 +223,7 @@ export function Checkout() {
           sessionId: sessionInfo.sessionId
         } : undefined;
 
+        creatingOrder = true;
         const order = await createOrder({
           customerName: finalName,
           customerEmail: trimmedEmail,
@@ -179,7 +233,9 @@ export function Checkout() {
           promoCode: appliedCode ?? undefined,
           analyticsContext
         }, idempotencyKey);
+        creatingOrder = false;
         orderId = order.id;
+        setConfirmedOrderNumber(order.orderNumber ?? null);
         setPendingOrderId(order.id);
         sessionStorage.setItem('zamk_pending_order_id', order.id);
       }
@@ -208,7 +264,23 @@ export function Checkout() {
         rejectAfterCheckout(e);
         setIdempotencyKey(crypto.randomUUID());
         setValidationError('Промокод больше не действует. Проверьте обновлённую сумму и оформите заказ ещё раз.');
-      } else if (e.message && e.message.includes('Idempotency key conflict')) {
+      } else if (creatingOrder && isCartFixableCheckoutError(e)) {
+        // No order was created and nothing reserved: reload the cart so the unavailable lines are shown there.
+        setCartFixable(true);
+        setValidationError(cartFixableMessage(e));
+        setIdempotencyKey(crypto.randomUUID());
+        void refreshCart?.();
+      } else if (isPaymentInProgressError(e)) {
+        // Refused before the order was created (or, for an order created earlier, before its payment started):
+        // the earlier order must be paid or its payment cancelled first. Nothing was reserved for a new order.
+        setPaymentBlocked(true);
+        setValidationError(serverMessageOr(e, 'Оплата предыдущего заказа ещё не завершена. Завершите её в разделе «Мои заказы».'));
+        if (creatingOrder) setIdempotencyKey(crypto.randomUUID());
+      } else if (isPaymentMethodUnavailableError(e)) {
+        // The order is saved and still awaits payment; the next submit pays it with the newly chosen method.
+        void loadPaymentMethods();
+        setValidationError(`${serverMessageOr(e, 'Этот способ оплаты сейчас недоступен.')} Заказ сохранён — выберите другой способ оплаты и нажмите кнопку ещё раз.`);
+      } else if (isCheckoutKeyConflict(e)) {
         setValidationError('Вы изменили данные после отправки заказа. Пожалуйста, проверьте информацию и попробуйте снова.');
         setIdempotencyKey(crypto.randomUUID()); // Reset key for next attempt
         setPendingOrderId(null);
@@ -237,9 +309,12 @@ export function Checkout() {
                 <Check className='w-10 h-10 text-success' />
               </div>
               <h1 className='mt-6 text-4xl font-serif text-graphite dark:text-white'>Заказ оформлен</h1>
-              <p className='mt-3 text-graphite-light dark:text-white/70'>Спасибо за покупку. Подтверждение уже отправлено на вашу почту.</p>
+              {confirmedOrderNumber && (
+                <p className='mt-3 text-graphite dark:text-white' data-testid='checkout-order-number'>Номер заказа: <span className='font-semibold'>{confirmedOrderNumber}</span></p>
+              )}
+              <p className='mt-3 text-graphite-light dark:text-white/70'>Заказ ожидает оплаты — открываем страницу оплаты. Заказ всегда доступен в разделе «Мои заказы».</p>
               <div className='mt-7 flex justify-center gap-3'>
-                <Link to='/'><Button>На главную</Button></Link>
+                <Link to='/orders'><Button>Мои заказы</Button></Link>
                 <Link to='/catalog'><Button variant='secondary'>В каталог</Button></Link>
               </div>
             </div>
@@ -268,21 +343,7 @@ export function Checkout() {
             )}
 
             <div className="mb-6">
-              <div className='flex flex-wrap gap-2 items-center'>
-                <PillFilter label='Карта онлайн' active={paymentMethod === 'card'} onClick={() => setPaymentMethod('card')} />
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('tpay')}
-                  className={`px-4 py-2 rounded-full text-xs font-medium border transition-colors flex items-center gap-1.5 ${
-                    paymentMethod === 'tpay'
-                      ? 'bg-[#FFDD2D] text-black border-[#FFDD2D]'
-                      : 'bg-white dark:bg-white/5 text-graphite dark:text-white border-border-lighter dark:border-white/10 hover:border-graphite/30'
-                  }`}
-                >
-                  <span>T-Pay</span>
-                  <span className="text-[10px] bg-black/10 dark:bg-white/10 px-1.5 py-0.5 rounded font-medium">Тестовый режим</span>
-                </button>
-              </div>
+              <PaymentMethodPicker available={availableMethods} failed={methodsFailed} selected={paymentMethod} onSelect={setPaymentMethod} />
             </div>
 
             <div className="flex flex-col gap-3">
@@ -306,7 +367,7 @@ export function Checkout() {
                     }
                   }
                 }}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !paymentMethod}
                 className="w-full"
               >
                 {isSubmitting ? 'Обработка...' : `Оплатить ${(pendingOrderDetails.totalPriceCents / 100).toLocaleString('ru-RU')} ₽`}
@@ -421,6 +482,18 @@ export function Checkout() {
               {validationError && (
                 <p className='mt-3 text-sm text-error' role='alert'>
                   {validationError}
+                  {cartFixable && (
+                    <>
+                      {' '}
+                      <Link to='/cart' data-testid='checkout-back-to-cart' className='underline underline-offset-2'>Вернуться в корзину</Link>
+                    </>
+                  )}
+                  {paymentBlocked && (
+                    <>
+                      {' '}
+                      <Link to='/orders' data-testid='checkout-to-orders' className='underline underline-offset-2'>Мои заказы</Link>
+                    </>
+                  )}
                 </p>
               )}
             </CheckoutPanel>
@@ -445,51 +518,7 @@ export function Checkout() {
 
             <CheckoutPanel>
               <SectionHeader label='Шаг 3' title='Оплата' />
-              {(() => {
-                const isTPayAvailable = true; // Enabled in dev / mock mode
-                return (
-                  <>
-                    <div className='flex flex-wrap gap-2 items-center'>
-                      <PillFilter label='Карта онлайн' active={paymentMethod === 'card'} onClick={() => setPaymentMethod('card')} />
-
-                      <button
-                        type="button"
-                        onClick={() => isTPayAvailable && setPaymentMethod('tpay')}
-                        disabled={!isTPayAvailable}
-                        className={`px-4 py-2 rounded-full text-xs font-medium border transition-colors flex items-center gap-1.5 ${
-                          paymentMethod === 'tpay'
-                            ? 'bg-[#FFDD2D] text-black border-[#FFDD2D]'
-                            : isTPayAvailable
-                            ? 'bg-white dark:bg-white/5 text-graphite dark:text-white border-border-lighter dark:border-white/10 hover:border-graphite/30'
-                            : 'bg-gray-100 text-gray-400 border-gray-200 dark:bg-white/5 dark:text-white/30 dark:border-white/5 cursor-not-allowed'
-                        }`}
-                      >
-                        <span>T-Pay</span>
-                        {isTPayAvailable ? (
-                          <span className="text-[10px] bg-black/10 dark:bg-white/10 px-1.5 py-0.5 rounded font-medium">Тестовый режим</span>
-                        ) : (
-                          <span className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-1.5 py-0.5 rounded font-medium">Временно недоступен</span>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={true}
-                        className="px-4 py-2 rounded-full text-xs font-medium border bg-gray-100 text-gray-400 border-gray-200 dark:bg-white/5 dark:text-white/30 dark:border-white/5 cursor-not-allowed flex items-center gap-1.5"
-                      >
-                        <span>СБП</span>
-                        <span className="text-[10px] bg-gray-200 text-gray-600 dark:bg-white/10 dark:text-white/50 px-1.5 py-0.5 rounded font-medium">Скоро</span>
-                      </button>
-                    </div>
-
-                    <p className='mt-4 text-[13px] text-graphite-light dark:text-white/60 bg-ice dark:bg-white/5 p-3 rounded-xl border border-border-lighter dark:border-white/10'>
-                      {paymentMethod === 'tpay'
-                        ? 'Внимание: Используется эмулятор T-Pay (Development Only). После клика «Оформить заказ» открывается тестовая страница подтверждения.'
-                        : 'Выполняется тестовая оплата по карте. Реальное списание средств не производится.'}
-                    </p>
-                  </>
-                );
-              })()}
+              <PaymentMethodPicker available={availableMethods} failed={methodsFailed} selected={paymentMethod} onSelect={setPaymentMethod} />
             </CheckoutPanel>
           </div>
 
@@ -551,7 +580,7 @@ export function Checkout() {
                 type='button'
                 className='w-full mt-5'
                 onClick={handleCheckout}
-                disabled={isSubmitting || items.some(i => i.inStock === false) || (!!appliedCode && (isPromoChecking || isPromoUnconfirmed))}
+                disabled={isSubmitting || !paymentMethod || items.some(i => i.inStock === false) || (!!appliedCode && (isPromoChecking || isPromoUnconfirmed))}
               >
                 Оформить заказ
               </Button>

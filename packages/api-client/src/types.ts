@@ -327,6 +327,8 @@ export interface OrderItem {
 
 export interface Order {
   id: string;
+  /** Human-readable order number (e.g. ORD-000123), assigned when the order is created. */
+  orderNumber?: string;
   userId: string;
   status: string;
   totalPriceCents: number;

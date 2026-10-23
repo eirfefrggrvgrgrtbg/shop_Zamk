@@ -72,6 +72,17 @@ export const getCustomerShipment = async (orderId: string): Promise<CustomerShip
   return request<CustomerShipment>('GET', `/customer/orders/${orderId}/shipment`);
 };
 
+export interface AvailablePaymentMethods {
+  methods: { method: 'card' | 'tpay' | 'sbp'; mock: boolean }[];
+  /** Method to preselect; empty when no method is available. */
+  default: string;
+}
+
+/** Payment methods the server can start right now (read-only; no provider settings). */
+export const getPaymentMethods = async (): Promise<AvailablePaymentMethods> => {
+  return request('GET', '/public/payment-methods');
+};
+
 // P0 fix: was /pay, backend route is /payment
 export const createPayment = async (orderId: string, method?: string): Promise<{
   paymentId: string;

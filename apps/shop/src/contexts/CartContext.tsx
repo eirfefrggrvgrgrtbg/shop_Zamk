@@ -29,6 +29,8 @@ interface CartContextType {
   removeItem: (itemId: string) => Promise<void>;
   updateQuantity: (itemId: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
+  /** Reload the cart from the server (e.g. after checkout was refused because the cart changed). */
+  refreshCart: () => Promise<void>;
   totalItems: number;
   totalPrice: number;
   isLoadingCart: boolean;
@@ -183,7 +185,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQuantity, clearCart, totalItems, totalPrice, isLoadingCart }}>
+    <CartContext.Provider value={{ items, addItem, removeItem, updateQuantity, clearCart, refreshCart: fetchCart, totalItems, totalPrice, isLoadingCart }}>
       {children}
     </CartContext.Provider>
   );
