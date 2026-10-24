@@ -92,6 +92,14 @@ type TBankConfig struct {
 	TPayEnabled     bool
 	PayType         string
 	TPayMode        string
+
+	// BANK.REFUND.1: real refunds through T-Bank Cancel are off unless TBANK_REFUNDS_ENABLED=true (and a real
+	// terminal is configured). Partial refunds need a fiscal Receipt by default (online cash register assumed), and
+	// no Cancel refusal counts as final until its ErrorCode is listed here as confirmed by T-Bank.
+	RefundsEnabled             bool
+	RefundReceiptRequired      bool
+	RefundDefinitiveErrorCodes []string
+	RefundTimeoutSeconds       int
 }
 
 // HasRealTerminal reports a terminal that can reach T-Bank: a key other than the local STUB, and a password.
@@ -105,7 +113,7 @@ func (c TBankConfig) HasRealTerminal() bool {
 // never while a real T-Bank terminal is configured (e.g. a staging stand), where a simulated success would mark a
 // refund done that the bank never made (BANK.REFUND.0).
 func (c *Config) RefundSimulatorAllowed() bool {
-	return c.App.Env != "production" && !c.TBank.HasRealTerminal()
+	return c.App.Env != "production" && !c.TBank.HasRealTerminal() && !c.TBank.RefundsEnabled
 }
 
 type WorkerConfig struct {
@@ -235,6 +243,11 @@ func Load() (*Config, error) {
 			TPayEnabled:     getEnvAsBool("TBANK_TPAY_ENABLED", false),
 			PayType:         getEnv("TBANK_PAY_TYPE", "O"),
 			TPayMode:        getEnv("TBANK_TPAY_MODE", "mock"),
+
+			RefundsEnabled:             getEnvAsBool("TBANK_REFUNDS_ENABLED", false),
+			RefundReceiptRequired:      getEnvAsBool("TBANK_REFUND_RECEIPT_REQUIRED", true),
+			RefundDefinitiveErrorCodes: splitList(getEnv("TBANK_REFUND_DEFINITIVE_ERROR_CODES", "")),
+			RefundTimeoutSeconds:       getEnvAsInt("TBANK_REFUND_TIMEOUT_SECONDS", 15),
 		},
 		Worker: WorkerConfig{
 			OrderExpirationIntervalSeconds: getEnvAsInt("WORKER_ORDER_EXPIRATION_INTERVAL_SECONDS", 60),
@@ -349,4 +362,15 @@ func splitCSV(value string) []string {
 		}
 	}
 	return result
+}
+
+// splitList splits a comma-separated value, dropping empty items.
+func splitList(v string) []string {
+	var out []string
+	for _, item := range strings.Split(v, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }

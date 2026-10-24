@@ -56,6 +56,8 @@ func NewFakeRefundProvider() *FakeRefundProvider {
 
 func (f *FakeRefundProvider) Name() string { return "fake" }
 
+func (f *FakeRefundProvider) Preflight(in RefundSubmitInput) error { return nil }
+
 // QueueSubmit sets the behaviour of the next submits that create an operation, in order.
 func (f *FakeRefundProvider) QueueSubmit(b ...FakeSubmitBehavior) {
 	f.mu.Lock()

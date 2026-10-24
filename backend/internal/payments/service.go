@@ -705,15 +705,30 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 	var releasedRes, releasedAllocs int
 	var orderNumber string
 	var confirmedPaymentID, confirmedOrderID uuid.UUID
+	var refundNoticePaymentID uuid.UUID
+
+	category := ClassifyProviderStatus(event.ProviderStatus)
+	// A refund notification's Amount need not be the original payment amount: the payment is matched by its bank id.
+	lookupAmount := event.AmountCents
+	if category == ProviderStatusCategoryRefund {
+		lookupAmount = 0
+	}
 
 	err = s.db.RunInTx(ctx, func(tx pgx.Tx) error {
-		payment, err := s.repo.GetPaymentByProviderOrOrderIDForUpdate(ctx, tx, "tbank", event.ProviderPaymentID, event.OrderID, event.AmountCents)
+		payment, err := s.repo.GetPaymentByProviderOrOrderIDForUpdate(ctx, tx, "tbank", event.ProviderPaymentID, event.OrderID, lookupAmount)
 		if err != nil {
 			return err
 		}
 
-		category := ClassifyProviderStatus(event.ProviderStatus)
 		switch category {
+		case ProviderStatusCategoryRefund:
+			// Kept for reconciliation only: the payment stays as it is and no refund is settled from an aggregate
+			// payment status (BANK.REFUND.1). The event row deduplicates repeated notifications.
+			if err := s.recordRefundNotificationTx(ctx, tx, payment, event); err != nil {
+				return err
+			}
+			refundNoticePaymentID = payment.ID
+			return nil
 		case ProviderStatusCategorySuccess:
 			return s.applyPaymentConfirmedTx(ctx, tx, payment, nil, event.ProviderPaymentID, event.RawPayload, event.EventKey,
 				&didConfirm, &confirmedPaymentID, &confirmedOrderID, &orderNumber)
@@ -739,6 +754,20 @@ func (s *Service) HandleWebhook(ctx context.Context, headers map[string]string, 
 			return nil
 		}
 		return err
+	}
+
+	if refundNoticePaymentID != uuid.Nil {
+		observability.EmitBusinessEvent(ctx, s.logger, observability.BusinessEvent{
+			EventName: "payment.refund_notification_recorded",
+			Domain:    "payment",
+			Action:    "record_refund_notification",
+			Result:    "success",
+			ActorRole: "system",
+			Attributes: []slog.Attr{
+				slog.String("payment_id", refundNoticePaymentID.String()),
+				slog.String("provider_status", event.ProviderStatus),
+			},
+		})
 	}
 
 	if didConfirm {
@@ -1527,4 +1556,26 @@ func (s *Service) emitOrderPaidEventsTx(ctx context.Context, tx pgx.Tx, order *o
 func linkReservationToOrderTx(ctx context.Context, tx pgx.Tx, reservationID, orderID uuid.UUID) error {
 	_, err := tx.Exec(ctx, `UPDATE reservations SET order_id = $2 WHERE id = $1 AND order_id IS NULL`, reservationID, orderID)
 	return err
+}
+
+// recordRefundNotificationTx stores a refund / reversal notification as a payment event for reconciliation. A
+// repeated notification (same event key) returns ErrPaymentAlreadyProcessed, which the webhook answers with OK.
+func (s *Service) recordRefundNotificationTx(ctx context.Context, tx pgx.Tx, payment *Payment, event ProviderWebhookEvent) error {
+	now := time.Now()
+	pid := event.ProviderPaymentID
+	raw := event.RawPayload
+	if len(raw) == 0 {
+		raw = []byte("{}")
+	}
+	return s.repo.CreatePaymentEventTx(ctx, tx, &PaymentEvent{
+		ID:                uuid.New(),
+		PaymentID:         &payment.ID,
+		Provider:          payment.Provider,
+		ProviderPaymentID: &pid,
+		EventType:         event.ProviderStatus,
+		EventKey:          event.EventKey,
+		RawPayload:        raw,
+		SignatureValid:    true,
+		ProcessedAt:       &now,
+	})
 }

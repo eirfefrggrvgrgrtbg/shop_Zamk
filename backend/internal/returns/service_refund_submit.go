@@ -57,6 +57,9 @@ type refundAttempt struct {
 	ReviewReason      *string
 	PaymentStatus     *string
 	ProviderPaymentID *string
+	PaymentAmount     *int64
+	PaymentMethod     *string
+	IntegrationMode   *string
 }
 
 func (a *refundAttempt) key() string {
@@ -76,7 +79,7 @@ func (a *refundAttempt) providerPaymentID() string {
 func getRefundAttempt(ctx context.Context, q refundQuerier, refundID uuid.UUID, lock bool) (*refundAttempt, error) {
 	query := `
 		SELECT r.id, r.return_id, r.order_id, r.status, r.amount_cents, r.currency, r.idempotency_key, r.submit_outcome,
-		       r.review_reason, p.status, p.provider_payment_id
+		       r.review_reason, p.status, p.provider_payment_id, p.amount_cents, p.payment_method, p.integration_mode
 		FROM refunds r
 		LEFT JOIN payments p ON p.id = r.payment_id
 		WHERE r.id = $1`
@@ -85,7 +88,8 @@ func getRefundAttempt(ctx context.Context, q refundQuerier, refundID uuid.UUID, 
 	}
 	var a refundAttempt
 	err := q.QueryRow(ctx, query, refundID).Scan(&a.ID, &a.ReturnID, &a.OrderID, &a.Status, &a.AmountCents, &a.Currency,
-		&a.IdempotencyKey, &a.SubmitOutcome, &a.ReviewReason, &a.PaymentStatus, &a.ProviderPaymentID)
+		&a.IdempotencyKey, &a.SubmitOutcome, &a.ReviewReason, &a.PaymentStatus, &a.ProviderPaymentID,
+		&a.PaymentAmount, &a.PaymentMethod, &a.IntegrationMode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrRefundNotFound
 	}
@@ -126,6 +130,19 @@ func (s *Service) SubmitRefund(ctx context.Context, refundID uuid.UUID) (*Refund
 		if key == "" {
 			key = uuid.New().String() // a reservation made before BANK.REFUND.0 gets its key here, before the call
 		}
+		in = payments.RefundSubmitInput{
+			ProviderPaymentID:  a.providerPaymentID(),
+			AmountCents:        a.AmountCents,
+			Currency:           a.Currency,
+			IdempotencyKey:     key,
+			PaymentAmountCents: derefInt64(a.PaymentAmount),
+			PaymentMethod:      derefString(a.PaymentMethod),
+			IntegrationMode:    derefString(a.IntegrationMode),
+		}
+		// Refused before anything is recorded as sent: the refund stays reserved and unsent (the TX rolls back).
+		if err := s.refundProvider.Preflight(in); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `
 			UPDATE refunds
 			SET idempotency_key = $2, submit_outcome = 'sending', submit_attempts = submit_attempts + 1,
@@ -133,12 +150,6 @@ func (s *Service) SubmitRefund(ctx context.Context, refundID uuid.UUID) (*Refund
 			WHERE id = $1
 		`, a.ID, key, s.refundProvider.Name()); err != nil {
 			return err
-		}
-		in = payments.RefundSubmitInput{
-			ProviderPaymentID: a.providerPaymentID(),
-			AmountCents:       a.AmountCents,
-			Currency:          a.Currency,
-			IdempotencyKey:    key,
 		}
 		send = true
 		return nil
@@ -257,6 +268,20 @@ func (s *Service) applyRefundStateTx(ctx context.Context, tx pgx.Tx, a *refundAt
 	if st.Outcome == payments.RefundStateNotFound {
 		return "", slog.LevelInfo, nil
 	}
+	if st.Outcome == payments.RefundStateUnattributed {
+		// An aggregate state of the original payment: it never settles this attempt. When it shows money returned, a
+		// person reconciles it (review); otherwise only the observed status is kept.
+		if !st.ReviewRequired {
+			_, err := tx.Exec(ctx, `UPDATE refunds SET provider_status = COALESCE(NULLIF($2, ''), provider_status) WHERE id = $1`,
+				a.ID, st.ProviderStatus)
+			return "", slog.LevelInfo, err
+		}
+		_, err := tx.Exec(ctx, `
+			UPDATE refunds SET review_reason = $2, provider_status = COALESCE(NULLIF($3, ''), provider_status), updated_at = now()
+			WHERE id = $1
+		`, a.ID, "unattributed provider state: "+st.ReviewNote, st.ProviderStatus)
+		return "refund.bank_review_required", slog.LevelWarn, err
+	}
 	if reason := attributionMismatch(a, st); reason != "" {
 		_, err := tx.Exec(ctx, `
 			UPDATE refunds SET review_reason = $2, provider_status = COALESCE(NULLIF($3, ''), provider_status), updated_at = now()
@@ -319,4 +344,48 @@ func (s *Service) emitRefundBankEvent(ctx context.Context, event string, refundI
 			slog.String("refund_id", refundID.String()),
 		},
 	})
+}
+
+// ReconcileUnresolvedRefunds asks the provider about up to limit unresolved attempts (oldest check first). It applies
+// only attributed results; everything else stays pending or goes to review. Returns how many were checked.
+func (s *Service) ReconcileUnresolvedRefunds(ctx context.Context, limit int) (int, error) {
+	if s.refundProvider == nil {
+		return 0, ErrRefundProviderNotConfigured
+	}
+	rows, err := s.db.Pool.Query(ctx, `
+		SELECT id FROM refunds
+		WHERE status = 'pending' AND submit_outcome IN ('sending', 'accepted', 'unknown') AND review_reason IS NULL
+		ORDER BY last_checked_at NULLS FIRST, submitted_at
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return 0, err
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return 0, err
+	}
+	checked := 0
+	for _, id := range ids {
+		if _, err := s.ReconcileRefund(ctx, id); err != nil {
+			s.logger.WarnContext(ctx, "refund reconciliation failed", "refund_id", id.String(), "error", err)
+			continue
+		}
+		checked++
+	}
+	return checked, nil
+}
+
+func derefInt64(v *int64) int64 {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+
+func derefString(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
 }

@@ -12,6 +12,9 @@ const (
 	ProviderStatusCategoryTerminalFailure ProviderStatusCategory = "terminal_failure"
 	ProviderStatusCategoryNonTerminal     ProviderStatusCategory = "non_terminal"
 	ProviderStatusCategoryUnknown         ProviderStatusCategory = "unknown"
+	// ProviderStatusCategoryRefund: the payment is being or has been refunded / reversed (BANK.REFUND.1). It is an
+	// aggregate statement about the payment: it never changes the payment and never settles a refund attempt.
+	ProviderStatusCategoryRefund ProviderStatusCategory = "refund"
 )
 
 // ClassifyProviderStatus maps any raw provider status string to its canonical category.
@@ -23,6 +26,9 @@ func ClassifyProviderStatus(status string) ProviderStatusCategory {
 
 	case "REJECTED", "CANCELED", "DEADLINE_EXPIRED":
 		return ProviderStatusCategoryTerminalFailure
+
+	case "REFUNDING", "REFUNDED", "PARTIAL_REFUNDED", "REVERSING", "REVERSED", "PARTIAL_REVERSED":
+		return ProviderStatusCategoryRefund
 
 	case "AUTHORIZED", "AUTH_FAIL", "NEW", "FORMSHOWED", "FORM_SHOWED",
 		"3DS_CHECKING", "3DS_CHECKED", "CHECKING", "CHECKED",

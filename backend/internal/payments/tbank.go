@@ -77,7 +77,13 @@ type initResponse struct {
 }
 
 func (p *TBankProvider) generateToken(params map[string]string) string {
-	params["Password"] = p.password
+	return tbankToken(p.password, params)
+}
+
+// tbankToken signs T-Bank API parameters: the root scalar values plus Password, ordered by key, concatenated and
+// SHA-256 hashed. Nested objects (Receipt, DATA, Shops) are never part of params.
+func tbankToken(password string, params map[string]string) string {
+	params["Password"] = password
 	keys := make([]string, 0, len(params))
 	for k := range params {
 		keys = append(keys, k)
