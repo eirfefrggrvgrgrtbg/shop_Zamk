@@ -20,6 +20,7 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/notifications"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/observability"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payments"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/payouts"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storage"
@@ -50,6 +51,10 @@ type Service struct {
 	logisticsProvider ReturnLogisticsProvider
 	logger            *slog.Logger
 	behaviorWriter    behavior.EventWriter
+
+	// BANK.REFUND.0: the bank refund provider (none is wired in the application yet) and the refund simulator gate.
+	refundProvider          payments.RefundProvider
+	refundSimulatorDisabled bool
 }
 
 func NewService(repo *Repository, ordersRepo *orders.Repository, inventorySvc *inventory.Service, db *postgres.Client, payouts payoutsService, payments paymentsService, windowDays int, notifs *notifications.Service, storageProvider storage.Provider, logisticsProvider ReturnLogisticsProvider, behaviorWriter behavior.EventWriter) *Service {

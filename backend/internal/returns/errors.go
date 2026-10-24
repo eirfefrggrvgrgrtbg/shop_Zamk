@@ -64,6 +64,17 @@ var (
 	ErrDevToolDisabled        = errors.New("dev_tool_disabled")
 	ErrNoPendingRefund        = errors.New("no_pending_refund")
 	ErrMultiplePendingRefunds = errors.New("multiple_pending_refunds")
+	// ErrRefundSimulatorDisabled: the refund simulator runs only when no real bank terminal can be reached.
+	ErrRefundSimulatorDisabled = errors.New("refund_simulator_disabled")
+
+	// BANK.REFUND.0 bank refund attempt errors
+	ErrRefundInProgress               = errors.New("an unresolved refund already exists for this return")
+	ErrRefundAwaitingBankConfirmation = errors.New("refund was handed to the bank: only the bank's confirmed result can settle it")
+	ErrRefundNotSubmittedToBank       = errors.New("refund has no unresolved bank attempt")
+	ErrRefundProviderNotConfigured    = errors.New("no refund provider is configured")
+	ErrRefundUnderReview              = errors.New("refund needs manual review: the bank answer could not be attributed to it")
+	ErrRefundPaymentNotLinked         = errors.New("refund has no succeeded payment with a provider payment id")
+	ErrRefundLegacyRecord             = errors.New("refund predates bank submission and is never sent to the bank automatically")
 
 	// Return financial responsibility errors
 	ErrInvalidResponsibilityStatus         = errors.New("invalid responsibility status")

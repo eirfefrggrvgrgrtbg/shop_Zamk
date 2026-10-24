@@ -155,6 +155,7 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 
 	cdekProvider := returns.NewCDEKProvider(cfg.CDEK)
 	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, paymentsService, cfg.Worker.ReturnWindowDays, notificationsService, storageProvider, cdekProvider, behaviorService)
+	returnsService.WithRefundSimulator(cfg.RefundSimulatorAllowed())
 	returnsHandler := returns.NewHandler(returnsService, cfg.App.Env)
 
 	// Staff RBAC

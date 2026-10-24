@@ -377,6 +377,10 @@ func (h *Handler) CreateAdminRefund(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusBadRequest, "invalid_refund_amount", err.Error())
 			return
 		}
+		if errors.Is(err, ErrRefundInProgress) {
+			h.writeError(w, http.StatusBadRequest, "refund_in_progress", "An unresolved refund already exists for this return")
+			return
+		}
 		log.Printf("CreateRefund failed: %v", err)
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create refund")
 		return
@@ -1115,6 +1119,10 @@ func (h *Handler) SimulateRefundSuccess(w http.ResponseWriter, r *http.Request) 
 			h.writeError(w, http.StatusNotFound, "no_pending_refund", "No pending refund found for this return")
 		case errors.Is(err, ErrMultiplePendingRefunds):
 			h.writeError(w, http.StatusConflict, "multiple_pending_refunds", "Multiple pending refunds found for this return")
+		case errors.Is(err, ErrRefundSimulatorDisabled):
+			h.writeError(w, http.StatusForbidden, "dev_tool_disabled", "Refund simulator is disabled while a real bank terminal is configured")
+		case errors.Is(err, ErrRefundAwaitingBankConfirmation):
+			h.writeError(w, http.StatusConflict, "refund_awaiting_bank", "Refund was handed to the bank; only the bank result can settle it")
 		default:
 			h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		}
@@ -1146,6 +1154,10 @@ func (h *Handler) SimulateRefundFailure(w http.ResponseWriter, r *http.Request) 
 			h.writeError(w, http.StatusNotFound, "no_pending_refund", "No pending refund found for this return")
 		case errors.Is(err, ErrMultiplePendingRefunds):
 			h.writeError(w, http.StatusConflict, "multiple_pending_refunds", "Multiple pending refunds found for this return")
+		case errors.Is(err, ErrRefundSimulatorDisabled):
+			h.writeError(w, http.StatusForbidden, "dev_tool_disabled", "Refund simulator is disabled while a real bank terminal is configured")
+		case errors.Is(err, ErrRefundAwaitingBankConfirmation):
+			h.writeError(w, http.StatusConflict, "refund_awaiting_bank", "Refund was handed to the bank; only the bank result can settle it")
 		default:
 			h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		}

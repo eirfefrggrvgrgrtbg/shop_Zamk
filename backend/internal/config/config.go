@@ -94,6 +94,20 @@ type TBankConfig struct {
 	TPayMode        string
 }
 
+// HasRealTerminal reports a terminal that can reach T-Bank: a key other than the local STUB, and a password.
+// Without both, the payment provider sends no request at all.
+func (c TBankConfig) HasRealTerminal() bool {
+	key := strings.TrimSpace(c.TerminalKey)
+	return key != "" && key != "STUB" && strings.TrimSpace(c.Password) != ""
+}
+
+// RefundSimulatorAllowed reports whether the dev refund simulator may settle refunds: never in production and
+// never while a real T-Bank terminal is configured (e.g. a staging stand), where a simulated success would mark a
+// refund done that the bank never made (BANK.REFUND.0).
+func (c *Config) RefundSimulatorAllowed() bool {
+	return c.App.Env != "production" && !c.TBank.HasRealTerminal()
+}
+
 type WorkerConfig struct {
 	OrderExpirationIntervalSeconds int
 	OrderPaymentTimeoutMinutes     int

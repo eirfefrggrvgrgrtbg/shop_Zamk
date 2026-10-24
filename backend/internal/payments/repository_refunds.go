@@ -14,8 +14,9 @@ type RefundSummary struct {
 func (r *Repository) GetRefundSummaryTx(ctx context.Context, tx pgx.Tx, paymentID uuid.UUID) (RefundSummary, error) {
 	query := `
 		SELECT 
-			COALESCE(SUM(amount_cents) FILTER (WHERE status = 'succeeded'), 0) as succeeded_amount,
-			COALESCE(SUM(amount_cents) FILTER (WHERE status = 'pending'), 0) as pending_amount
+			COALESCE(SUM(amount_cents) FILTER (WHERE status IN ('succeeded', 'completed')), 0) as succeeded_amount,
+			-- pending covers every unresolved bank attempt (sending / accepted / unknown keep status pending)
+			COALESCE(SUM(amount_cents) FILTER (WHERE status IN ('pending', 'processing')), 0) as pending_amount
 		FROM refunds
 		WHERE payment_id = $1
 	`
@@ -26,9 +27,10 @@ func (r *Repository) GetRefundSummaryTx(ctx context.Context, tx pgx.Tx, paymentI
 
 func (r *Repository) CreateRefundTx(ctx context.Context, tx pgx.Tx, paymentID, orderID uuid.UUID, amountCents int64, reason string, returnID *uuid.UUID) error {
 	query := `
-		INSERT INTO refunds (id, payment_id, order_id, amount_cents, status, reason, currency, created_at, updated_at, return_id)
-		VALUES ($1, $2, $3, $4, 'pending', $5, 'RUB', now(), now(), $6)
+		INSERT INTO refunds (id, payment_id, order_id, amount_cents, status, reason, currency, created_at, updated_at, return_id, idempotency_key)
+		VALUES ($1, $2, $3, $4, 'pending', $5, 'RUB', now(), now(), $6, $7)
 	`
-	_, err := tx.Exec(ctx, query, uuid.New(), paymentID, orderID, amountCents, reason, returnID)
+	// BANK.REFUND.0: the idempotency key of the bank attempt is fixed with the reservation, before any provider call.
+	_, err := tx.Exec(ctx, query, uuid.New(), paymentID, orderID, amountCents, reason, returnID, uuid.New().String())
 	return err
 }

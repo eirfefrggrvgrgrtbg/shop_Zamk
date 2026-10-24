@@ -387,6 +387,16 @@ func (s *Service) CreateRefund(ctx context.Context, adminID, returnID uuid.UUID,
 				return nil
 			}
 		}
+		// BANK.REFUND.0: an unresolved refund of this return (reserved, or handed to the bank with an unknown
+		// outcome) is never joined by a second reservation, whatever its amount.
+		if err == nil && existingRef != nil && (existingRef.Status == "pending" || existingRef.Status == "processing") {
+			return ErrRefundInProgress
+		}
+		// A retry follows a definitively failed attempt and is linked to it.
+		var retryOf *uuid.UUID
+		if err == nil && existingRef != nil && existingRef.Status == "failed" {
+			retryOf = &existingRef.ID
+		}
 
 		// 4. Find funding payment (fails closed on 0 or >1 payments)
 		paymentID, err := s.payments.GetSucceededPaymentIDForOrder(ctx, ret.OrderID)
@@ -412,6 +422,11 @@ func (s *Service) CreateRefund(ctx context.Context, adminID, returnID uuid.UUID,
 		// 7. Retrieve the created pending refund record within tx
 		createdRef, err := s.repo.GetRefundByReturnIDTx(ctx, tx, returnID)
 		if err == nil && createdRef != nil {
+			if retryOf != nil {
+				if _, err := tx.Exec(ctx, `UPDATE refunds SET retry_of_refund_id = $2 WHERE id = $1`, createdRef.ID, *retryOf); err != nil {
+					return err
+				}
+			}
 			finalRefund = createdRef
 		} else {
 			finalRefund = &Refund{
@@ -439,16 +454,25 @@ func (s *Service) CreateRefund(ctx context.Context, adminID, returnID uuid.UUID,
 
 // ProcessRefundSuccessTx marks a refund as succeeded with its durable processed_at timestamp,
 // transitions the linked Return to 'refunded', and applies the seller finance deduction.
+//
+// BANK.REFUND.0: it completes only a refund that was never handed to a bank provider. A refund with a bank attempt
+// (sending / accepted / unknown) is completed exclusively by the provider's attributed confirmation
+// (applyRefundStateTx), so no other caller can turn an unconfirmed bank refund into a success.
 func (s *Service) ProcessRefundSuccessTx(ctx context.Context, tx pgx.Tx, refundID uuid.UUID, processedAt time.Time) error {
+	return s.processRefundSuccessTx(ctx, tx, refundID, processedAt, false)
+}
+
+func (s *Service) processRefundSuccessTx(ctx context.Context, tx pgx.Tx, refundID uuid.UUID, processedAt time.Time, bankConfirmed bool) error {
 	var ref Refund
+	var submitOutcome string
 	queryRef := `
-		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, processed_at, created_at, updated_at
+		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, processed_at, created_at, updated_at, submit_outcome
 		FROM refunds
 		WHERE id = $1
 		FOR UPDATE
 	`
 	err := tx.QueryRow(ctx, queryRef, refundID).Scan(
-		&ref.ID, &ref.ReturnID, &ref.PaymentID, &ref.OrderID, &ref.Status, &ref.AmountCents, &ref.Currency, &ref.ProcessedAt, &ref.CreatedAt, &ref.UpdatedAt,
+		&ref.ID, &ref.ReturnID, &ref.PaymentID, &ref.OrderID, &ref.Status, &ref.AmountCents, &ref.Currency, &ref.ProcessedAt, &ref.CreatedAt, &ref.UpdatedAt, &submitOutcome,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -463,13 +487,20 @@ func (s *Service) ProcessRefundSuccessTx(ctx context.Context, tx pgx.Tx, refundI
 	if ref.Status == "failed" {
 		return nil // terminal state: failed refund cannot become succeeded
 	}
+	if bankAttemptUnresolved(submitOutcome) != bankConfirmed {
+		if bankConfirmed {
+			return ErrRefundNotSubmittedToBank
+		}
+		return ErrRefundAwaitingBankConfirmation
+	}
 
-	// Update refund to succeeded with processed_at
+	// Update refund to succeeded with processed_at (and the bank outcome, in the same statement)
 	_, err = tx.Exec(ctx, `
 		UPDATE refunds
-		SET status = 'succeeded', processed_at = $1, updated_at = now()
+		SET status = 'succeeded', processed_at = $1, updated_at = now(),
+		    submit_outcome = CASE WHEN $3 THEN 'confirmed' ELSE submit_outcome END
 		WHERE id = $2
-	`, processedAt, refundID)
+	`, processedAt, refundID, bankConfirmed)
 	if err != nil {
 		return err
 	}
@@ -551,16 +582,24 @@ func (s *Service) ProcessRefundSuccessTx(ctx context.Context, tx pgx.Tx, refundI
 }
 
 // ProcessRefundFailureTx marks a refund as failed; linked Return remains in item_received and no seller deduction occurs.
+//
+// BANK.REFUND.0: like ProcessRefundSuccessTx it only applies to a refund never handed to a bank provider; a bank
+// attempt fails only on the provider's definitive, attributed rejection (a timeout is not a failure).
 func (s *Service) ProcessRefundFailureTx(ctx context.Context, tx pgx.Tx, refundID uuid.UUID) error {
+	return s.processRefundFailureTx(ctx, tx, refundID, false, "")
+}
+
+func (s *Service) processRefundFailureTx(ctx context.Context, tx pgx.Tx, refundID uuid.UUID, bankRejected bool, failureCode string) error {
 	var ref Refund
+	var submitOutcome string
 	queryRef := `
-		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, processed_at, created_at, updated_at
+		SELECT id, return_id, payment_id, order_id, status, amount_cents, currency, processed_at, created_at, updated_at, submit_outcome
 		FROM refunds
 		WHERE id = $1
 		FOR UPDATE
 	`
 	err := tx.QueryRow(ctx, queryRef, refundID).Scan(
-		&ref.ID, &ref.ReturnID, &ref.PaymentID, &ref.OrderID, &ref.Status, &ref.AmountCents, &ref.Currency, &ref.ProcessedAt, &ref.CreatedAt, &ref.UpdatedAt,
+		&ref.ID, &ref.ReturnID, &ref.PaymentID, &ref.OrderID, &ref.Status, &ref.AmountCents, &ref.Currency, &ref.ProcessedAt, &ref.CreatedAt, &ref.UpdatedAt, &submitOutcome,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -575,17 +614,31 @@ func (s *Service) ProcessRefundFailureTx(ctx context.Context, tx pgx.Tx, refundI
 	if ref.Status == "succeeded" {
 		return nil // terminal state: succeeded refund cannot become failed
 	}
+	if bankAttemptUnresolved(submitOutcome) != bankRejected {
+		if bankRejected {
+			return ErrRefundNotSubmittedToBank
+		}
+		return ErrRefundAwaitingBankConfirmation
+	}
 
 	_, err = tx.Exec(ctx, `
 		UPDATE refunds
-		SET status = 'failed', updated_at = now()
+		SET status = 'failed', updated_at = now(),
+		    failed_at = CASE WHEN $2 THEN now() ELSE failed_at END,
+		    submit_outcome = CASE WHEN $2 THEN 'rejected' ELSE submit_outcome END,
+		    failure_code = CASE WHEN $2 THEN NULLIF($3, '') ELSE failure_code END
 		WHERE id = $1
-	`, refundID)
+	`, refundID, bankRejected, failureCode)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// bankAttemptUnresolved reports a refund handed to a bank provider whose result is not established yet.
+func bankAttemptUnresolved(submitOutcome string) bool {
+	return submitOutcome == "sending" || submitOutcome == "accepted" || submitOutcome == "unknown"
 }
 
 func (s *Service) ProcessRefundSuccess(ctx context.Context, refundID uuid.UUID, processedAt time.Time) error {
@@ -603,6 +656,9 @@ func (s *Service) ProcessRefundFailure(ctx context.Context, refundID uuid.UUID) 
 // SimulateRefundSuccess resolves the exact single pending refund for a return and completes it via canonical ProcessRefundSuccessTx.
 func (s *Service) SimulateRefundSuccess(ctx context.Context, returnID uuid.UUID) (*Refund, error) {
 	var completedRefund *Refund
+	if s.refundSimulatorDisabled {
+		return nil, ErrRefundSimulatorDisabled
+	}
 	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
 		pendingList, err := s.repo.GetPendingRefundsByReturnIDTx(ctx, tx, returnID)
 		if err != nil {
@@ -637,6 +693,9 @@ func (s *Service) SimulateRefundSuccess(ctx context.Context, returnID uuid.UUID)
 // SimulateRefundFailure resolves the exact single pending refund for a return and fails it via canonical ProcessRefundFailureTx.
 func (s *Service) SimulateRefundFailure(ctx context.Context, returnID uuid.UUID) (*Refund, error) {
 	var completedRefund *Refund
+	if s.refundSimulatorDisabled {
+		return nil, ErrRefundSimulatorDisabled
+	}
 	err := s.db.RunInTx(ctx, func(tx pgx.Tx) error {
 		pendingList, err := s.repo.GetPendingRefundsByReturnIDTx(ctx, tx, returnID)
 		if err != nil {
