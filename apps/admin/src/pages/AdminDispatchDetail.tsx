@@ -17,6 +17,7 @@ import {
   Phone,
   Building2,
   X,
+  Printer,
 } from 'lucide-react';
 import {
   getAdminDispatchContext,
@@ -27,6 +28,7 @@ import {
 } from '../api/adminPicking';
 import { formatOrderNumber } from '../utils/orderFormatters';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
+import { ShippingCard } from '../components/shipments/ShippingCard';
 
 interface DispatchDisplayItem {
   orderItemId: string;
@@ -93,6 +95,8 @@ export function AdminDispatchDetail() {
   };
 
   useEffect(() => {
+    // another parcel: nothing of the previous one may stay on the screen (or be printed)
+    setDispatchContext(null);
     loadData(true);
   }, [id]);
 
@@ -126,6 +130,9 @@ export function AdminDispatchDetail() {
       setIsDispatching(false);
     }
   };
+
+  // printing is offered only for the parcel of this very page, after its context was loaded successfully
+  const printable = Boolean(dispatchContext && !isLoading && !error && (dispatchContext.fulfillmentId || dispatchContext.id) === id);
 
   if (isLoading) {
     return (
@@ -258,6 +265,7 @@ export function AdminDispatchDetail() {
 
   return (
     <div data-testid="dispatch-detail-page" className="max-w-5xl mx-auto space-y-6 pb-16 px-4 sm:px-6">
+      {printable && dispatchContext && <ShippingCard ctx={dispatchContext} />}
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-gray-200 pb-5">
         <div className="space-y-1">
@@ -303,6 +311,17 @@ export function AdminDispatchDetail() {
         </div>
 
         <div className="flex items-center gap-3">
+          {printable && (
+            <button
+              type="button"
+              data-testid="print-shipping-card"
+              onClick={() => window.print()}
+              className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-medium bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 transition-colors shadow-sm"
+            >
+              <Printer className="w-3.5 h-3.5 mr-1.5" />
+              Распечатать карточку отправления
+            </button>
+          )}
           <button
             onClick={() => loadData(true)}
             disabled={isLoading || isDispatching}

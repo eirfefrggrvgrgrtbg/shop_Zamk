@@ -321,7 +321,7 @@ describe('AdminDispatchDetail — M4.3.2A Acceptance Suite (A through J)', () =>
       </MemoryRouter>
     );
 
-    await screen.findByText(/1001/);
+    await screen.findAllByText(/1001/); // the page header and the (print-only) shipping card
     expect(screen.queryByRole('button', { name: /Подтвердить отгрузку/i })).toBeNull();
     expect(screen.getByText(/Для подтверждения отгрузки требуется право warehouse.dispatch/i)).toBeDefined();
   });
