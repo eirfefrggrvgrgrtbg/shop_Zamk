@@ -39,7 +39,8 @@ export function adaptProductList(apiProducts: any[], categoryMap?: Record<string
     if (p.variants && Array.isArray(p.variants)) {
       sizes = p.variants.map((v: any) => ({
         size: formatVariantLabel(v),
-        stock: v.availableStock ?? v.totalStock ?? ((v.inStock === true) ? 1 : 0)
+        stock: v.availableStock ?? v.totalStock ?? ((v.inStock === true) ? 1 : 0),
+        ...(typeof v.isActive === 'boolean' ? { active: v.isActive } : {})
       }));
     }
 

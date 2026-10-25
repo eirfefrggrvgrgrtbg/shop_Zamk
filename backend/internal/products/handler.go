@@ -202,8 +202,17 @@ func (h *Handler) ListSellerProducts(w http.ResponseWriter, r *http.Request) {
 	if q == "" {
 		q = strings.TrimSpace(r.URL.Query().Get("query"))
 	}
-	resp, err := h.service.ListSellerProducts(r.Context(), userID, q, page.Limit, page.Offset)
+	filter := SellerProductFilter{
+		Query:        q,
+		Status:       strings.TrimSpace(r.URL.Query().Get("status")),
+		Availability: strings.TrimSpace(r.URL.Query().Get("availability")),
+	}
+	resp, err := h.service.ListSellerProductsFiltered(r.Context(), userID, filter, page.Limit, page.Offset)
 	if err != nil {
+		if errors.Is(err, ErrInvalidSellerProductFilter) {
+			h.writeError(w, http.StatusBadRequest, "invalid_filter", "Invalid product filter")
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list products")
 		return
 	}

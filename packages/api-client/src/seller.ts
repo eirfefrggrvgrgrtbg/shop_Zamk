@@ -45,14 +45,20 @@ export const getSellerMe = async (): Promise<SellerMe> => {
   return request<SellerMe>('GET', '/seller/me');
 };
 
-export const getSellerProducts = async (params?: GetSellerProductsParams): Promise<SellerProduct[]> => {
+const sellerProductsUrl = (params?: GetSellerProductsParams): string => {
   const query = new URLSearchParams();
   if (params?.q) query.set('q', params.q);
+  if (params?.status && params.status !== 'all') query.set('status', params.status);
+  if (params?.availability && params.availability !== 'all') query.set('availability', params.availability);
   if (params?.limit !== undefined) query.set('limit', String(params.limit));
   if (params?.offset !== undefined) query.set('offset', String(params.offset));
   if (params?.page !== undefined) query.set('page', String(params.page));
   const queryString = query.toString();
-  const url = queryString ? `/seller/products?${queryString}` : '/seller/products';
+  return queryString ? `/seller/products?${queryString}` : '/seller/products';
+};
+
+export const getSellerProducts = async (params?: GetSellerProductsParams): Promise<SellerProduct[]> => {
+  const url = sellerProductsUrl(params);
   const res = await request<any>('GET', url);
   return res?.items || (Array.isArray(res) ? res : []);
 };
@@ -60,17 +66,11 @@ export const getSellerProducts = async (params?: GetSellerProductsParams): Promi
 export const getSellerProductsPaginated = async (
   params?: GetSellerProductsParams
 ): Promise<SellerProductListResponse> => {
-  const query = new URLSearchParams();
-  if (params?.q) query.set('q', params.q);
-  if (params?.limit !== undefined) query.set('limit', String(params.limit));
-  if (params?.offset !== undefined) query.set('offset', String(params.offset));
-  if (params?.page !== undefined) query.set('page', String(params.page));
-  const queryString = query.toString();
-  const url = queryString ? `/seller/products?${queryString}` : '/seller/products';
+  const url = sellerProductsUrl(params);
   const res = await request<any>('GET', url);
   const items = res?.items || (Array.isArray(res) ? res : []);
   const totalCount = typeof res?.totalCount === 'number' ? res.totalCount : items.length;
-  return { items, totalCount };
+  return { items, totalCount, ...(res?.summary ? { summary: res.summary } : {}) };
 };
 
 export const createSellerProduct = async (

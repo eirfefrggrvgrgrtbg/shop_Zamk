@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { SellerProducts } from './SellerProducts';
 import {
   getSellerProducts,
+  getSellerProductsPaginated,
   getSellerMe,
   deleteSellerProduct,
   archiveSellerProduct,
@@ -13,12 +14,21 @@ import {
 
 vi.mock('@zamk/api-client/src/seller', () => ({
   getSellerProducts: vi.fn(),
+  getSellerProductsPaginated: vi.fn(),
   getSellerMe: vi.fn(),
   getSellerCategories: vi.fn().mockResolvedValue([]),
   submitSellerProductModeration: vi.fn(),
   deleteSellerProduct: vi.fn(),
   archiveSellerProduct: vi.fn(),
 }));
+
+// SELLER.PRODUCTS.UX.1: the page reads a server-paginated list; these tests keep feeding it through the array mock.
+beforeEach(() => {
+  vi.mocked(getSellerProductsPaginated).mockImplementation(async (params?: any) => {
+    const items = (await (getSellerProducts as any)(params)) || [];
+    return { items, totalCount: items.length };
+  });
+});
 
 describe('SELLER ASSORTMENT.1C2 - Lifecycle Actions UI & Safety Matrix', () => {
   const baseProductRaw: any = {

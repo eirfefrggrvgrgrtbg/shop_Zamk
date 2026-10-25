@@ -775,8 +775,41 @@ func (r *Repository) ListProductModerationLogs(ctx context.Context, productID uu
 // For simplicity in Phase 4, we use basic lists without pagination arguments in SQL yet,
 // but we structure them to be easily extensible.
 
-func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUID, search string, limit, offset int) ([]Product, int, error) {
-	search = strings.TrimSpace(search)
+// Seller product list filters. The sets are closed: predicates are built from these whitelists, never from input.
+const (
+	SellerProductStatusAll        = "all"
+	SellerProductStatusModeration = "moderation" // pending_moderation, in_review, or a published product with a pending seller edit
+
+	SellerProductAvailabilityAll         = "all"
+	SellerProductAvailabilityAvailable   = "available"   // the canonical storefront eligibility the Shop catalog uses
+	SellerProductAvailabilityUnavailable = "unavailable" // its exact negation
+)
+
+var ErrInvalidSellerProductFilter = errors.New("invalid seller product filter")
+
+type SellerProductFilter struct {
+	Query        string
+	Status       string
+	Availability string
+}
+
+var sellerProductStatuses = map[string]bool{
+	StatusDraft: true, StatusPendingModeration: true, StatusInReview: true, StatusApproved: true, StatusPublished: true,
+	StatusRejected: true, StatusHidden: true, StatusBlocked: true, StatusOutOfStock: true, StatusArchived: true,
+}
+
+const sellerAwaitingReviewSQL = `(p.status IN ('pending_moderation', 'in_review') OR (p.status = 'published' AND EXISTS (SELECT 1 FROM product_revisions pr WHERE pr.product_id = p.id AND pr.status = 'pending')))`
+
+// SellerProductsSummary counts the seller's whole catalog regardless of the list filter, with the same rules the list uses.
+type SellerProductsSummary struct {
+	Total          int `json:"total"`
+	Published      int `json:"published"`
+	Purchasable    int `json:"purchasable"`
+	AwaitingReview int `json:"awaitingReview"`
+}
+
+func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUID, filter SellerProductFilter, limit, offset int) ([]Product, int, error) {
+	search := strings.TrimSpace(filter.Query)
 	whereClauses := []string{"p.seller_id = $1"}
 	args := []any{sellerID}
 	argIdx := 2
@@ -796,9 +829,32 @@ func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUI
 		argIdx++
 	}
 
+	switch {
+	case filter.Status == "" || filter.Status == SellerProductStatusAll:
+	case filter.Status == SellerProductStatusModeration:
+		whereClauses = append(whereClauses, sellerAwaitingReviewSQL)
+	case sellerProductStatuses[filter.Status]:
+		whereClauses = append(whereClauses, fmt.Sprintf("p.status = $%d", argIdx))
+		args = append(args, filter.Status)
+		argIdx++
+	default:
+		return nil, 0, ErrInvalidSellerProductFilter
+	}
+
+	switch filter.Availability {
+	case "", SellerProductAvailabilityAll:
+	case SellerProductAvailabilityAvailable:
+		whereClauses = append(whereClauses, "("+CanonicalStorefrontEligibilitySQL("p", "s")+")")
+	case SellerProductAvailabilityUnavailable:
+		whereClauses = append(whereClauses, "NOT ("+CanonicalStorefrontEligibilitySQL("p", "s")+")")
+	default:
+		return nil, 0, ErrInvalidSellerProductFilter
+	}
+
 	whereSQL := strings.Join(whereClauses, " AND ")
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM products p WHERE %s", whereSQL)
+	// One row per product: the seller join is many-to-one and variants/stock are only read in subqueries.
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM products p JOIN sellers s ON s.id = p.seller_id WHERE %s", whereSQL)
 	var totalCount int
 	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&totalCount); err != nil {
 		return nil, 0, fmt.Errorf("failed to count seller products: %w", err)
@@ -812,9 +868,10 @@ func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUI
 			p.created_at, p.updated_at, p.submitted_at, p.approved_at, p.published_at, p.rejected_at, p.moderation_comment,
 			c.name
 		FROM products p
+		JOIN sellers s ON s.id = p.seller_id
 		LEFT JOIN categories c ON p.category_id = c.id
 		WHERE %s
-		ORDER BY p.created_at DESC
+		ORDER BY p.created_at DESC, p.id DESC
 		LIMIT $%d OFFSET $%d
 	`, whereSQL, argIdx, argIdx+1)
 
@@ -824,6 +881,19 @@ func (r *Repository) ListProductsBySeller(ctx context.Context, sellerID uuid.UUI
 		return nil, 0, err
 	}
 	return products, totalCount, nil
+}
+
+func (r *Repository) GetSellerProductsSummary(ctx context.Context, sellerID uuid.UUID) (SellerProductsSummary, error) {
+	var sum SellerProductsSummary
+	err := r.db.QueryRow(ctx, fmt.Sprintf(`
+		SELECT COUNT(*),
+			COUNT(*) FILTER (WHERE p.status = 'published'),
+			COUNT(*) FILTER (WHERE %s),
+			COUNT(*) FILTER (WHERE %s)
+		FROM products p JOIN sellers s ON s.id = p.seller_id
+		WHERE p.seller_id = $1`, CanonicalStorefrontEligibilitySQL("p", "s"), sellerAwaitingReviewSQL), sellerID).
+		Scan(&sum.Total, &sum.Published, &sum.Purchasable, &sum.AwaitingReview)
+	return sum, err
 }
 
 func (r *Repository) ListAdminProducts(ctx context.Context, filter AdminProductFilter, limit, offset int) ([]Product, int, error) {

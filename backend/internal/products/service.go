@@ -1250,19 +1250,34 @@ func (s *Service) UpdateProductForSeller(ctx context.Context, currentUserID uuid
 }
 
 func (s *Service) ListSellerProducts(ctx context.Context, currentUserID uuid.UUID, search string, limit, offset int) (ProductListResponse, error) {
+	return s.ListSellerProductsFiltered(ctx, currentUserID, SellerProductFilter{Query: search}, limit, offset)
+}
+
+func (s *Service) ListSellerProductsFiltered(ctx context.Context, currentUserID uuid.UUID, filter SellerProductFilter, limit, offset int) (ProductListResponse, error) {
 	seller, err := s.getSellerForUser(ctx, currentUserID)
 	if err != nil {
 		return ProductListResponse{}, err
 	}
 
-	items, totalCount, err := s.repo.ListProductsBySeller(ctx, seller.ID, search, limit, offset)
+	items, totalCount, err := s.repo.ListProductsBySeller(ctx, seller.ID, filter, limit, offset)
 	if err != nil {
 		return ProductListResponse{}, err
 	}
 	if items == nil {
 		items = []Product{}
 	}
-	return ProductListResponse{Items: items, TotalCount: totalCount}, nil
+	// The list query does not load the seller row: without its status the visibility rules would report every product
+	// as "seller inactive". The seller is already known here, so apply its real status and recompute.
+	status := string(seller.Status)
+	for i := range items {
+		items[i].SellerStatus = &status
+		PopulateProductAggregates(&items[i])
+	}
+	summary, err := s.repo.GetSellerProductsSummary(ctx, seller.ID)
+	if err != nil {
+		return ProductListResponse{}, err
+	}
+	return ProductListResponse{Items: items, TotalCount: totalCount, Summary: &summary}, nil
 }
 
 func (s *Service) GetSellerProduct(ctx context.Context, currentUserID, productID uuid.UUID) (Product, error) {

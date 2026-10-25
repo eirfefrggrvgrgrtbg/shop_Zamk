@@ -709,14 +709,27 @@ export interface SellerProduct extends ProductDetail {
 
 export interface GetSellerProductsParams {
   q?: string;
+  /** Exact product status, or 'moderation' (awaiting ZAMK review). Server-side. */
+  status?: string;
+  /** 'available' = a buyer can order it in the Shop right now; 'unavailable' = the opposite. Server-side. */
+  availability?: 'all' | 'available' | 'unavailable';
   limit?: number;
   offset?: number;
   page?: number;
 }
 
+export interface SellerProductsSummary {
+  total: number;
+  published: number;
+  purchasable: number;
+  awaitingReview: number;
+}
+
 export interface SellerProductListResponse {
   items: SellerProduct[];
   totalCount: number;
+  /** Whole-catalog counts, independent of the list filter. */
+  summary?: SellerProductsSummary;
 }
 
 export interface SellerInventoryItem {

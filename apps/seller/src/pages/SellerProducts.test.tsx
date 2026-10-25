@@ -4,14 +4,23 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { SellerProducts } from './SellerProducts';
 import { adaptProductList } from '../api/adapter';
-import { getSellerProducts, getSellerMe, getSellerCategories, submitSellerProductModeration } from '@zamk/api-client/src/seller';
+import { getSellerProducts, getSellerProductsPaginated, getSellerMe, getSellerCategories, submitSellerProductModeration } from '@zamk/api-client/src/seller';
 
 vi.mock('@zamk/api-client/src/seller', () => ({
   getSellerProducts: vi.fn(),
+  getSellerProductsPaginated: vi.fn(),
   getSellerMe: vi.fn(),
   getSellerCategories: vi.fn(),
   submitSellerProductModeration: vi.fn(),
 }));
+
+// SELLER.PRODUCTS.UX.1: the page reads a server-paginated list; these tests keep feeding it through the array mock.
+beforeEach(() => {
+  vi.mocked(getSellerProductsPaginated).mockImplementation(async (params?: any) => {
+    const items = (await (getSellerProducts as any)(params)) || [];
+    return { items, totalCount: items.length };
+  });
+});
 
 describe('SellerProducts - Quick View Truth + Safe Existing Actions', () => {
   beforeEach(() => {

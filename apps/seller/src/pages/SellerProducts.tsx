@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import {
@@ -21,19 +21,23 @@ import {
   SellerDrawer,
 } from '../components/SellerSurface';
 import {
+  availabilityOwnerLabels,
+  getProductAvailability,
   getStorefrontStatusInfo,
+  getSkuState,
   statusLabels,
   type SellerProduct,
   type SellerProductStatus,
 } from '../lib/seller-products';
 import {
-  getSellerProducts,
+  getSellerProductsPaginated,
   getSellerMe,
   getSellerCategories,
   submitSellerProductModeration,
   deleteSellerProduct,
   archiveSellerProduct,
 } from '@zamk/api-client/src/seller';
+import type { SellerProductsSummary } from '@zamk/api-client/src/types';
 import { adaptProductList } from '../api/adapter';
 import { cn } from '../lib/utils';
 import { prepareAddProductNavigation } from '../components/product-studio/productStudioCreateSession';
@@ -50,8 +54,20 @@ const numberFormatter = new Intl.NumberFormat('ru-RU');
 const formatCurrency = (value: number) => currencyFormatter.format(value);
 const formatNumber = (value: number) => numberFormatter.format(value);
 
-const statusFilterOptions: Array<{ value: SellerProductStatus | 'all'; label: string }> = [
+type StatusFilter = SellerProductStatus | 'all' | 'moderation';
+type AvailabilityFilter = 'all' | 'available' | 'unavailable';
+
+const PAGE_SIZE = 20;
+
+const availabilityFilterOptions: Array<{ value: AvailabilityFilter; label: string }> = [
+  { value: 'all', label: 'Все товары' },
+  { value: 'available', label: 'Можно купить' },
+  { value: 'unavailable', label: 'Нельзя купить' },
+];
+
+const statusFilterOptions: Array<{ value: StatusFilter; label: string }> = [
   { value: 'all', label: 'Все статусы' },
+  { value: 'moderation', label: 'Ожидают проверки ZAMK' },
   { value: 'published', label: statusLabels.published },
   { value: 'draft', label: statusLabels.draft },
   { value: 'pending_moderation', label: statusLabels.pending_moderation },
@@ -137,7 +153,8 @@ function ProductDetailPanel({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isDrawerMenuOpen, setIsDrawerMenuOpen] = useState(false);
 
-  const totalStock = product.sizes.reduce((sum, item) => sum + (item.stock || 0), 0);
+  const totalStock = product.sizes.reduce((sum, item) => sum + (item.active === false ? 0 : item.stock || 0), 0);
+  const availability = getProductAvailability(product);
   const isApprovedAndNoStock = product.status === 'approved' && totalStock === 0;
 
   const handleSubmitModeration = async () => {
@@ -209,7 +226,7 @@ function ProductDetailPanel({
           </div>
         )}
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3.5 dark:border-white/10 dark:bg-white/[0.02]">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Цена</p>
             <p className="mt-1.5 text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(product.price)}</p>
@@ -231,7 +248,30 @@ function ProductDetailPanel({
               );
             })()}
           </div>
+          <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3.5 dark:border-white/10 dark:bg-white/[0.02]">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Покупка</p>
+            <p
+              className={cn('mt-1.5 text-sm font-medium', availability.state === 'available' ? 'text-emerald-600 dark:text-emerald-400' : availability.state === 'unavailable' ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500')}
+              data-testid="drawer-availability"
+            >
+              {availability.label}
+            </p>
+          </div>
         </div>
+
+        {availability.state === 'unavailable' && availability.reasons.length > 0 && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3.5 text-sm text-amber-900 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-200" data-testid="drawer-unavailable-reasons">
+            <p className="mb-1.5 font-medium">Почему нельзя купить</p>
+            <ul className="space-y-1">
+              {availability.reasons.map((reason) => (
+                <li key={reason.code} className="flex flex-wrap items-baseline gap-x-2">
+                  <span>{reason.text}</span>
+                  <span className="text-[11px] uppercase tracking-wide opacity-70">{availabilityOwnerLabels[reason.owner]}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50/50 p-3.5 dark:border-white/10 dark:bg-white/[0.02]">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Варианты (SKU)</p>
@@ -239,7 +279,12 @@ function ProductDetailPanel({
             {product.sizes.map((item, idx) => (
               <div key={`${item.size}-${idx}`} className="flex justify-between items-center rounded-md border border-gray-200/70 bg-white dark:bg-white/[0.03] px-3 py-2 text-sm text-gray-800 dark:border-white/10 dark:text-white/80">
                 <span>{item.size}</span>
-                <span className="text-gray-500 font-medium">ZAMK: {item.stock} шт.</span>
+                <span className="flex items-center gap-2 text-gray-500 font-medium">
+                  {item.active !== undefined && (
+                    <ProductBadge tone={getSkuState(item).tone}>{getSkuState(item).label}</ProductBadge>
+                  )}
+                  ZAMK: {item.stock} шт.
+                </span>
               </div>
             ))}
           </div>
@@ -356,10 +401,16 @@ function ProductDetailPanel({
 export function SellerProducts() {
   const navigate = useNavigate();
   const [products, setProducts] = useState<SellerProduct[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [summary, setSummary] = useState<SellerProductsSummary | null>(null);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [availability, setAvailability] = useState<AvailabilityFilter>('all');
+  const [offset, setOffset] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<SellerProductStatus | 'all'>('all');
+  const [status, setStatus] = useState<StatusFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sellerStatus, setSellerStatus] = useState<string>('active');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -369,7 +420,12 @@ export function SellerProducts() {
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
   const [isNotDisposableError, setIsNotDisposableError] = useState(false);
 
+  // Filters change faster than the server answers: only the newest request may write to the page.
+  const latestRequest = useRef(0);
+
   const loadData = useCallback(async (silent = false) => {
+    const requestId = ++latestRequest.current;
+    const isStale = () => requestId !== latestRequest.current;
     try {
       if (!silent) {
         setIsLoading(true);
@@ -377,9 +433,16 @@ export function SellerProducts() {
       }
       const [me, rawProducts, rawCategories] = await Promise.all([
         getSellerMe(),
-        getSellerProducts(),
+        getSellerProductsPaginated({
+          q: debouncedQuery || undefined,
+          status: status === 'all' ? undefined : status,
+          availability: availability === 'all' ? undefined : availability,
+          limit: PAGE_SIZE,
+          offset,
+        }),
         typeof getSellerCategories === 'function' ? getSellerCategories().catch(() => []) : Promise.resolve([])
       ]);
+      if (isStale()) return;
       setSellerStatus(me.seller.status);
       const categoryMap: Record<string, string> = {};
       if (Array.isArray(rawCategories)) {
@@ -389,43 +452,56 @@ export function SellerProducts() {
           }
         }
       }
-      const adapted = adaptProductList(rawProducts, categoryMap);
+      const adapted = adaptProductList(rawProducts.items, categoryMap);
       setProducts(adapted);
+      setTotalCount(rawProducts.totalCount ?? adapted.length);
+      setSummary(rawProducts.summary ?? null);
+      setHasLoaded(true);
       setSelectedId((prev) => {
         if (prev && adapted.some((p) => p.id === prev)) return prev;
         return null;
       });
     } catch (err: any) {
-      if (!silent) {
+      if (!silent && !isStale()) {
         setError(err.message || 'Ошибка загрузки товаров');
       }
     } finally {
-      if (!silent) {
+      if (!isStale()) {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [debouncedQuery, status, availability, offset]);
 
   useEffect(() => {
     loadData(false);
   }, [loadData]);
 
+  // Search is server-side: wait for a pause in typing, and go back to the first page for a new query.
+  useEffect(() => {
+    if (query.trim() === debouncedQuery) return;
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query.trim());
+      setOffset(0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, debouncedQuery]);
+
+  const changeStatus = (next: StatusFilter) => {
+    setSelectedId(null);
+    setOffset(0);
+    setStatus(next);
+  };
+  const changeAvailability = (next: AvailabilityFilter) => {
+    setSelectedId(null);
+    setOffset(0);
+    setAvailability(next);
+  };
+
   useVisibilityPolling(useCallback(() => loadData(true), [loadData]), 4000);
 
-  const filteredProducts = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    return products.filter((product) => {
-      const matchesQuery = !normalizedQuery || [product.title, product.sku, product.category].some((item) => item.toLowerCase().includes(normalizedQuery));
-      const matchesStatus = status === 'all' || product.status === status;
-      return matchesQuery && matchesStatus;
-    });
-  }, [products, query, status]);
+  const filteredProducts = products; // filtered and paginated by the server
 
   const selectedProduct = selectedId ? (products.find((product) => product.id === selectedId) || null) : null;
-  const moderationCount = products.filter((product) => product.status === 'pending_moderation' || product.status === 'in_review').length;
-  const approvedCount = products.filter((product) => product.status === 'approved' || product.status === 'published').length;
-  const revenue = products.reduce((sum, product) => sum + product.revenue, 0);
 
   const handleOpenEdit = useCallback((p: SellerProduct) => {
     navigate(`/products/${p.id}/edit`);
@@ -546,7 +622,7 @@ export function SellerProducts() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !hasLoaded) {
     return (
       <SellerPageFrame variant="wide">
         <div className="flex justify-center py-20">
@@ -556,11 +632,14 @@ export function SellerProducts() {
     );
   }
 
-  if (error) {
+  if (error && !hasLoaded) {
     return (
       <SellerPageFrame variant="wide">
-        <div className="flex justify-center py-20 text-red-500">
-          {error}
+        <div role="alert" className="flex flex-col items-center gap-3 py-20 text-red-500">
+          <span>{error}</span>
+          <button type="button" onClick={() => loadData(false)} className="rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50">
+            Повторить
+          </button>
         </div>
       </SellerPageFrame>
     );
@@ -603,46 +682,47 @@ export function SellerProducts() {
         <section className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
           <SellerKpiCard
             label="Всего карточек"
-            value={formatNumber(products.length)}
+            value={formatNumber(summary?.total ?? totalCount)}
             supportText="создано в системе"
             icon={ShoppingBag}
           />
           <SellerKpiCard
-            label="Одобрено"
-            value={formatNumber(approvedCount)}
-            supportText="готово к поставке"
-            accent={approvedCount > 0 ? "positive" : undefined}
+            label="Опубликовано"
+            value={formatNumber(summary?.published ?? 0)}
+            supportText="статус «Опубликован»"
             icon={Sparkles}
           />
           <SellerKpiCard
-            label="На проверке"
-            value={formatNumber(moderationCount)}
-            supportText="ожидают решения"
-            accent={moderationCount > 0 ? "warning" : undefined}
-            icon={AlertTriangle}
+            label="Можно купить"
+            value={formatNumber(summary?.purchasable ?? 0)}
+            supportText="доступны покупателям сейчас"
+            accent={(summary?.purchasable ?? 0) > 0 ? "positive" : undefined}
+            icon={BarChart3}
           />
           <SellerKpiCard
-            label="Текущая выручка"
-            value={formatCurrency(revenue)}
-            supportText="данные по продажам"
-            icon={BarChart3}
+            label="На проверке"
+            value={formatNumber(summary?.awaitingReview ?? 0)}
+            supportText="ожидают решения ZAMK"
+            accent={(summary?.awaitingReview ?? 0) > 0 ? "warning" : undefined}
+            icon={AlertTriangle}
           />
         </section>
 
         <SellerSurface className="mt-6 p-4">
-          <div className="grid gap-3 sm:grid-cols-[1fr_220px]">
+          <div className="grid gap-3 sm:grid-cols-[1fr_240px]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Поиск по названию или категории..."
+                placeholder="Поиск по названию, SKU или штрихкоду..."
                 className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-10 pr-3 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-white"
               />
             </label>
             <select
               value={status}
-              onChange={(event) => setStatus(event.target.value as SellerProductStatus | 'all')}
+              aria-label="Статус товара"
+              onChange={(event) => changeStatus(event.target.value as StatusFilter)}
               className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-white"
             >
               {statusFilterOptions.map((option) => (
@@ -652,9 +732,41 @@ export function SellerProducts() {
               ))}
             </select>
           </div>
+          <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Доступность для покупателей">
+            {availabilityFilterOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={availability === option.value}
+                data-testid={`products-availability-${option.value}`}
+                onClick={() => changeAvailability(option.value)}
+                className={cn(
+                  'px-3.5 py-1.5 text-sm rounded-full border transition-colors',
+                  availability === option.value
+                    ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 dark:bg-white/5 dark:text-gray-300 dark:border-white/10',
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </SellerSurface>
 
-          {products.length === 0 ? (
+        {error && hasLoaded && (
+          <div role="alert" className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <span className="min-w-0 flex-1">{error}</span>
+            <button type="button" onClick={() => loadData(false)} className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-red-700 hover:bg-red-50">
+              Повторить
+            </button>
+          </div>
+        )}
+
+          {products.length === 0 && !error && (status !== 'all' || availability !== 'all' || debouncedQuery !== '') ? (
+            <SellerSurface className="mt-6 p-10 text-center text-sm text-gray-500" data-testid="products-empty-filtered">
+              По выбранным условиям товаров нет.
+            </SellerSurface>
+          ) : products.length === 0 && !error ? (
             <SellerSurface className="mt-6 flex flex-col items-center justify-center p-12 text-center">
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gray-50 border border-gray-200 text-gray-400 dark:bg-white/5 dark:border-white/10 dark:text-white/60">
                 <PackagePlus className="h-6 w-6" />
@@ -672,10 +784,10 @@ export function SellerProducts() {
                 Добавить товар
               </Link>
             </SellerSurface>
-          ) : (
+          ) : products.length === 0 ? null : (
             <>
-              <SellerTableShell className="mt-6">
-                <div className="overflow-x-auto">
+              <SellerTableShell className={cn('mt-6 transition-opacity', isLoading && 'opacity-60')}>
+                <div className="relative overflow-x-auto">
                   <table className="w-full text-left text-sm whitespace-nowrap">
                     <thead>
                       <tr className="bg-gray-50/60 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/10 text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -685,7 +797,7 @@ export function SellerProducts() {
                         <th className="px-4 py-3.5">Цена</th>
                         <th className="px-4 py-3.5">Статус</th>
                         <th className="px-4 py-3.5">Склад ZAMK</th>
-                        <th className="px-4 py-3.5 text-right">Наличие</th>
+                        <th className="px-4 py-3.5">Покупка</th>
                         <th className="px-4 py-3.5 text-right w-12"><span className="sr-only">Действия</span></th>
                       </tr>
                     </thead>
@@ -707,14 +819,24 @@ export function SellerProducts() {
                               <span className="block font-medium text-gray-900 dark:text-white max-w-[280px] truncate">{product.title}</span>
                               <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">{product.category}</span>
                             </td>
-                            <td className="px-4 py-3.5 text-gray-700 dark:text-gray-300">{product.sizes.length} SKU</td>
+                            <td className="px-4 py-3.5 text-gray-700 dark:text-gray-300">
+                              {product.sizes.length} SKU
+                              {(() => {
+                                const av = getProductAvailability(product);
+                                return av.partial ? (
+                                  <span className="block text-xs text-amber-600 dark:text-amber-400" data-testid="partial-sku">
+                                    Доступны {av.skuSellable} из {av.skuTotal}
+                                  </span>
+                                ) : null;
+                              })()}
+                            </td>
                             <td className="px-4 py-3.5 font-medium text-gray-900 dark:text-white">{formatCurrency(product.price)}</td>
                             <td className="px-4 py-3.5">
                               <ProductBadge tone={getStatusTone(product.status)}>{statusLabels[product.status]}</ProductBadge>
                             </td>
                             <td className="px-4 py-3.5 text-gray-500 dark:text-gray-400">
                               {(() => {
-                                const total = product.sizes?.reduce((sum, s) => sum + (s.stock || 0), 0) || 0;
+                                const total = product.sizes?.reduce((sum, s) => sum + (s.active === false ? 0 : s.stock || 0), 0) || 0;
                                 const needsSupply = (product.status === 'approved' || product.status === 'published') && total === 0;
 
                                 return total > 0 ? (
@@ -729,12 +851,31 @@ export function SellerProducts() {
                                 );
                               })()}
                             </td>
-                            <td className="px-4 py-3.5 text-right">
-                              {product.status === 'published' ? (
-                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Доступен</span>
-                              ) : (
-                                <span className="text-gray-400 dark:text-gray-500">Недоступен</span>
-                              )}
+                            <td className="px-4 py-3.5" data-testid="product-availability">
+                              {(() => {
+                                const av = getProductAvailability(product);
+                                if (av.state === 'available') {
+                                  return <ProductBadge tone="good">{av.label}</ProductBadge>;
+                                }
+                                if (av.state === 'unknown') {
+                                  return <span className="text-gray-400 dark:text-gray-500">{av.label}</span>;
+                                }
+                                const main = av.reasons[0];
+                                return (
+                                  <div className="flex max-w-[240px] flex-col items-start gap-1 whitespace-normal">
+                                    <ProductBadge tone="warning">{av.label}</ProductBadge>
+                                    {main && (
+                                      <span className="text-xs text-gray-500 dark:text-gray-400" data-testid="availability-reason">
+                                        {main.text}
+                                        {av.reasons.length > 1 ? ` · ещё ${av.reasons.length - 1}` : ''}
+                                      </span>
+                                    )}
+                                    {main && (
+                                      <span className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500">{availabilityOwnerLabels[main.owner]}</span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                               <ProductActionMenu
@@ -757,6 +898,32 @@ export function SellerProducts() {
                   </table>
                 </div>
               </SellerTableShell>
+
+              {totalCount > PAGE_SIZE && (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-gray-500" data-testid="products-pagination">
+                  <span>
+                    {offset + 1}–{Math.min(offset + PAGE_SIZE, totalCount)} из {totalCount}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={offset === 0 || isLoading}
+                      onClick={() => { setSelectedId(null); setOffset(Math.max(0, offset - PAGE_SIZE)); }}
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 disabled:opacity-40 dark:border-white/10"
+                    >
+                      Назад
+                    </button>
+                    <button
+                      type="button"
+                      disabled={offset + PAGE_SIZE >= totalCount || isLoading}
+                      onClick={() => { setSelectedId(null); setOffset(offset + PAGE_SIZE); }}
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 disabled:opacity-40 dark:border-white/10"
+                    >
+                      Вперёд
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <SellerDrawer
                 isOpen={Boolean(selectedProduct)}

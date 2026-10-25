@@ -133,6 +133,8 @@ type RejectProductRequest struct {
 type ProductListResponse struct {
 	Items      []Product `json:"items"`
 	TotalCount int       `json:"totalCount"`
+	// Set only on the seller list: counts of the whole catalog, independent of the list filter.
+	Summary *SellerProductsSummary `json:"summary,omitempty"`
 }
 
 type PublicBrand struct {

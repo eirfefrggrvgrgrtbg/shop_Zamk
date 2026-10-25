@@ -174,6 +174,7 @@ vi.mock('@zamk/api-client/src/seller', () => ({
     },
   }),
   getSellerProducts: vi.fn().mockResolvedValue(mockProductsList),
+  getSellerProductsPaginated: vi.fn().mockResolvedValue({ items: mockProductsList, totalCount: mockProductsList.length }),
   getSellerCategories: vi.fn().mockResolvedValue([]),
   getSellerOrders: vi.fn().mockResolvedValue({ items: mockOrders }),
   getSellerOrderSummary: vi.fn().mockResolvedValue({
@@ -517,9 +518,11 @@ describe('SELLER R1.4A — Surface System Reference', () => {
 
       const kpiLabels = screen.getAllByTestId('seller-kpi-label').map(el => el.textContent);
       expect(kpiLabels).toContain('Всего карточек');
-      expect(kpiLabels).toContain('Одобрено');
+      // The page-local "Одобрено" and the placeholder "Текущая выручка" (always 0) were replaced by whole-catalog counts.
+      expect(kpiLabels).toContain('Опубликовано');
+      expect(kpiLabels).toContain('Можно купить');
       expect(kpiLabels).toContain('На проверке');
-      expect(kpiLabels).toContain('Текущая выручка');
+      expect(kpiLabels).not.toContain('Текущая выручка');
 
       // Table shell exists
       expect(screen.getByTestId('seller-table-shell')).toBeTruthy();
