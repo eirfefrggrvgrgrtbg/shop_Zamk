@@ -1430,6 +1430,13 @@ export interface AdminDispatchContext {
   recipientName?: string | null;
   recipientPhone?: string | null;
   deliveryAddress?: string | null;
+  /** The order's own delivery snapshot (not the customer's address book); absent for orders placed before the fields existed. */
+  deliveryPostalCode?: string | null;
+  deliveryCourierComment?: string | null;
+  parcelNumber?: number;
+  parcelsTotal?: number;
+  carrier?: string | null;
+  trackingNumber?: string | null;
   deliveryMethodName?: string | null;
   items: AdminDispatchContextItem[];
 }

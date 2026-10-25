@@ -430,6 +430,13 @@ export interface DispatchContext {
   recipientName?: string | null;
   recipientPhone?: string | null;
   deliveryAddress?: string | null;
+  /** The order's own delivery snapshot; absent for orders placed before the fields existed. */
+  deliveryPostalCode?: string | null;
+  deliveryCourierComment?: string | null;
+  parcelNumber?: number;
+  parcelsTotal?: number;
+  carrier?: string | null;
+  trackingNumber?: string | null;
   deliveryMethodName?: string | null;
   items: DispatchContextItem[];
 }

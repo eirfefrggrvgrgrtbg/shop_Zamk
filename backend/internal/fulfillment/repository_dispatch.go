@@ -377,7 +377,10 @@ func (r *Repository) GetDispatchContext(ctx context.Context, fulfillmentID uuid.
 		SELECT
 			f.id, f.order_id, f.status, f.packed_at,
 			s.status as shipment_status, s.id as shipment_id,
-			o.order_number, o.delivery_address, o.customer_name, o.customer_phone, o.delivery_method_name
+			o.order_number, o.delivery_address, o.customer_name, o.customer_phone, o.delivery_method_name,
+			o.delivery_postal_code, o.delivery_courier_comment, s.carrier, s.tracking_number,
+			(SELECT COUNT(*) FROM order_fulfillments x WHERE x.order_id = f.order_id AND (x.created_at, x.id) <= (f.created_at, f.id))::int,
+			(SELECT COUNT(*) FROM order_fulfillments x WHERE x.order_id = f.order_id)::int
 		FROM order_fulfillments f
 		JOIN orders o ON o.id = f.order_id
 		LEFT JOIN shipments s ON (s.fulfillment_id = f.id) OR (s.fulfillment_id IS NULL AND s.order_id = f.order_id AND (SELECT COUNT(*) FROM order_fulfillments WHERE order_id = f.order_id) = 1)
@@ -389,6 +392,7 @@ func (r *Repository) GetDispatchContext(ctx context.Context, fulfillmentID uuid.
 		&dc.ID, &dc.OrderID, &dc.Status, &dc.PackedAt,
 		&dc.ShipmentStatus, &dc.ShipmentID,
 		&dc.OrderNumber, &dc.DeliveryAddress, &dc.CustomerName, &dc.CustomerPhone, &dc.DeliveryMethodName,
+		&dc.DeliveryPostalCode, &dc.DeliveryCourierComment, &dc.Carrier, &dc.TrackingNumber, &dc.ParcelNumber, &dc.ParcelsTotal,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

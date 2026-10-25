@@ -197,6 +197,14 @@ type DispatchContext struct {
 	RecipientName      *string               `json:"recipientName,omitempty"`
 	RecipientPhone     *string               `json:"recipientPhone,omitempty"`
 	DeliveryAddress    *string               `json:"deliveryAddress,omitempty"`
+	// FBO.DELIVERY.HANDOFF.1: the rest of the order's delivery snapshot (orders.*, never customer_addresses), the
+	// parcel's own number among the order's parcels and its carrier data. Only this staff-only context carries them.
+	DeliveryPostalCode     *string               `json:"deliveryPostalCode,omitempty"`
+	DeliveryCourierComment *string               `json:"deliveryCourierComment,omitempty"`
+	ParcelNumber           int                   `json:"parcelNumber"`
+	ParcelsTotal           int                   `json:"parcelsTotal"`
+	Carrier                *string               `json:"carrier,omitempty"`
+	TrackingNumber         *string               `json:"trackingNumber,omitempty"`
 	DeliveryMethodName *string               `json:"deliveryMethodName,omitempty"`
 	Items              []DispatchContextItem `json:"items"`
 }

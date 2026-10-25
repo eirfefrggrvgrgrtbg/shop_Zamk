@@ -248,6 +248,14 @@ export function AdminDispatchDetail() {
     dispatchContext?.deliveryMethodName ||
     null;
 
+  // FBO.DELIVERY.HANDOFF.1: the rest of the order's delivery snapshot, as given at checkout
+  const postalCode = dispatchContext?.deliveryPostalCode || null;
+  const courierComment = dispatchContext?.deliveryCourierComment || null;
+  const parcelNumber = dispatchContext?.parcelNumber || null;
+  const parcelsTotal = dispatchContext?.parcelsTotal || null;
+  const carrier = dispatchContext?.carrier || null;
+  const trackingNumber = dispatchContext?.trackingNumber || null;
+
   return (
     <div data-testid="dispatch-detail-page" className="max-w-5xl mx-auto space-y-6 pb-16 px-4 sm:px-6">
       {/* Header */}
@@ -412,6 +420,9 @@ export function AdminDispatchDetail() {
             <div className="font-semibold text-gray-900 break-words">
               {deliveryAddress}
             </div>
+            <div data-testid="dispatch-postal-code" className="text-[11px] text-gray-500">
+              Индекс: {postalCode ? <span className="font-semibold text-gray-900">{postalCode}</span> : <span className="text-gray-400">не указан</span>}
+            </div>
             {deliveryMethodName && (
               <div className="text-gray-500 text-[11px]">
                 Способ: {deliveryMethodName}
@@ -448,6 +459,30 @@ export function AdminDispatchDetail() {
             <div className="text-gray-500 text-[11px]">
               Идентификатор сборки: <span className="font-mono">{id?.substring(0, 8)}...</span>
             </div>
+            {parcelNumber && parcelsTotal && (
+              <div data-testid="dispatch-parcel" className="text-gray-500 text-[11px]">
+                Посылка <span className="font-semibold text-gray-900">{parcelNumber} из {parcelsTotal}</span>
+              </div>
+            )}
+            {carrier && (
+              <div data-testid="dispatch-carrier" className="text-gray-500 text-[11px] break-words">
+                Служба доставки: <span className="font-semibold text-gray-900">{carrier}</span>
+              </div>
+            )}
+            {trackingNumber && (
+              <div data-testid="dispatch-tracking" className="text-gray-500 text-[11px] break-all">
+                Трек-номер: <span className="font-mono font-semibold text-gray-900">{trackingNumber}</span>
+              </div>
+            )}
+          </div>
+
+          <div data-testid="dispatch-courier-comment" className="md:col-span-3 space-y-1.5 p-3 rounded-lg bg-amber-50/60 border border-amber-100">
+            <div className="text-gray-500 font-medium">Комментарий для курьера</div>
+            {courierComment ? (
+              <div className="font-semibold text-gray-900 break-words whitespace-pre-wrap">{courierComment}</div>
+            ) : (
+              <div className="text-gray-400">Не указан</div>
+            )}
           </div>
         </div>
       </div>
