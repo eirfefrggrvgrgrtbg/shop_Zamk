@@ -1,4 +1,5 @@
 import { request, requestBlob } from './client';
+import type { AdminBankRefundList, AdminBankRefundDetail } from './types';
 import type { PaginatedAdminUsersResponse, AdminSeller, AdminProduct, AdminOrder, AdminOrderDetail, AdminPayment, AdminShipment, AdminReturn, ReturnShipment, AdminSendReturnMessageRequest, ReturnConversationResponse, AdminReturnRefundQuote, AdminRefund, AdminPayout, AdminPayoutDetail, AdminReview, Category, Brand, AdminInventoryItem, AdminInventoryMovement, AdminInventoryListResponse, AdminInventoryUnitTraceability, StaffMemberView, StaffRoleWithPermissions, AdminMeResponse, CreateStaffMemberRequest, CreateStaffMemberResponse, UpdateStaffRoleRequest, UpdateStaffStatusRequest, ResetStaffPasswordRequest, StaffMemberPermissionsResponse, UpdateStaffMemberPermissionsRequest, StaffMemberDetailResponse, UpdateStaffMemberProfileRequest, SellerDetail, SellerOverviewData, SellerStatusHistoryItem, SellerWarning, SellerViolation, CreateWarningRequest, CreateViolationRequest, AdminFulfillment, AdminDispatchContext, AdminDispatchQueueItem, AdminDashboardSummary, PaginatedAdminProductsResponse, ModerationHistoryResponse, SellerNote, CreateSellerNoteRequest, SellerImprovementPlan, CreateSellerImprovementPlanRequest, SellerSupply, SupplyReceivingSession, SupplyReceivingQueueItem, RecordReceivingScanRequest, FinalizeReceivingRequest, RecordSerializedScanRequest, SerializedScanResponse, SerializedRecentScan, UndoSerializedScanResponse, AdminReturnReceivingState, AdminReturnReceivingQueueItem, ScanReturnUnitResponse, UpdateSerializedUnitInspectionInput, UpdateLegacyItemInspectionInput, AdminCampaign, AdminCampaignTrackingLink, CreateAdminCampaignRequest, UpdateAdminCampaignRequest, CreateAdminTrackingLinkRequest, AdminMarketingOverviewResponse, AdminMarketingSourcesResponse, AdminMarketingSourceDetailResponse, AdminMarketingCampaignsAnalyticsResponse, AdminMarketingTrendResponse } from './types';
 
 
@@ -608,6 +609,28 @@ export const getAdminRefunds = async (): Promise<{ items: AdminRefund[]; totalCo
 export const getAdminRefund = async (id: string): Promise<AdminRefund> => {
   return request<AdminRefund>('GET', `/admin/refunds/${id}`);
 };
+
+// BANK.REFUND.2 bank refund operations
+export const getAdminBankRefunds = async (params: { stage?: string; limit?: number; offset?: number } = {}): Promise<AdminBankRefundList> => {
+  return request<AdminBankRefundList>('GET', '/admin/refunds/bank', { params });
+};
+
+export const getAdminBankRefund = async (id: string): Promise<AdminBankRefundDetail> => {
+  return request<AdminBankRefundDetail>('GET', `/admin/refunds/${id}/bank`);
+};
+
+export const submitAdminBankRefund = async (id: string): Promise<AdminBankRefundDetail> => {
+  return request<AdminBankRefundDetail>('POST', `/admin/refunds/${id}/bank/submit`);
+};
+
+export const reconcileAdminBankRefund = async (id: string): Promise<AdminBankRefundDetail> => {
+  return request<AdminBankRefundDetail>('POST', `/admin/refunds/${id}/bank/reconcile`);
+};
+
+export const addAdminBankRefundNote = async (id: string, comment: string, escalate: boolean): Promise<AdminBankRefundDetail> => {
+  return request<AdminBankRefundDetail>('POST', `/admin/refunds/${id}/bank/notes`, { body: { comment, escalate } });
+};
+
 
 export const getAdminPayouts = async (params?: { q?: string; sellerId?: string; status?: string; limit?: number; offset?: number }): Promise<{ items: AdminPayout[]; totalCount: number }> => {
   const query = new URLSearchParams();

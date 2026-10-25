@@ -1853,6 +1853,72 @@ export interface AdminRefund {
   failedAt?: string;
 }
 
+// BANK.REFUND.2: a bank refund operation as the admin sees it (no keys, tokens or card data).
+export type AdminBankRefundStage =
+  | 'prepared'
+  | 'sending'
+  | 'accepted'
+  | 'unknown'
+  | 'review'
+  | 'confirmed'
+  | 'rejected'
+  | 'legacy'
+  | 'settled_locally'
+  | 'failed_locally';
+
+export type AdminBankRefundAction = 'submit' | 'reconcile' | 'note';
+
+export interface AdminBankRefund {
+  id: string;
+  returnId?: string | null;
+  orderId: string;
+  orderNumber?: string | null;
+  amountCents: number;
+  currency: string;
+  status: string;
+  submitOutcome: string;
+  stage: AdminBankRefundStage;
+  provider?: string | null;
+  providerStatus?: string | null;
+  failureCode?: string | null;
+  reviewReason?: string | null;
+  reviewExplanation?: string | null;
+  submitAttempts: number;
+  paymentAmountCents?: number | null;
+  paymentMethod?: string | null;
+  isPartial: boolean;
+  retryOfRefundId?: string | null;
+  createdAt: string;
+  submittedAt?: string | null;
+  lastCheckedAt?: string | null;
+  processedAt?: string | null;
+  failedAt?: string | null;
+  blockingReason?: string | null;
+  allowedActions: AdminBankRefundAction[];
+}
+
+export interface AdminBankRefundEvent {
+  action: string;
+  actorEmail?: string | null;
+  comment?: string | null;
+  escalated: boolean;
+  outcome?: string | null;
+  createdAt: string;
+}
+
+export interface AdminBankRefundDetail extends AdminBankRefund {
+  providerConfigured: boolean;
+  providerName?: string | null;
+  history: AdminBankRefundEvent[];
+}
+
+export interface AdminBankRefundList {
+  items: AdminBankRefund[];
+  totalCount: number;
+  stageCounts: Partial<Record<AdminBankRefundStage, number>>;
+  providerConfigured: boolean;
+}
+
 export interface AdminPayout {
   id: string;
   sellerId: string;

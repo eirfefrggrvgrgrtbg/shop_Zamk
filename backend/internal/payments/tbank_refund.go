@@ -30,8 +30,9 @@ import (
 //     contract confirms how a refund attempt is identified, such operations stay on manual review. Its answers are
 //     RefundStateUnattributed: a status that shows money returned sends the attempt to manual review, nothing else
 //     changes. No answer of this adapter ever settles a refund automatically; no undocumented field is used.
-//   - A refusal (Success=false) is final only for ErrorCodes listed in DefinitiveErrorCodes (confirmed by T-Bank);
-//     every other refusal, timeout, transport error or unreadable answer is ErrRefundOutcomeUnknown.
+//   - A refusal (Success=false) is final only for an ErrorCode in confirmedFinalCancelErrorCodes, which is empty
+//     until T-Bank confirms final codes in writing (BANK.REFUND.2); so every refusal, timeout, transport error or
+//     unreadable answer is ErrRefundOutcomeUnknown.
 //   - SBP payments (refund status via GetQrState), mock payments and partial refunds that need a fiscal Receipt
 //     ZAMK cannot build are refused by Preflight, before anything is sent.
 // Nothing here logs; errors carry no Token, Password or request body.
@@ -46,19 +47,20 @@ type TBankRefundConfig struct {
 	// ReceiptRequired: the terminal has an online cash register, so a partial Cancel needs a Receipt. ZAMK keeps no
 	// fiscal receipt data, so partial refunds are then refused before sending (no placeholder Receipt is ever sent).
 	ReceiptRequired bool
-	// DefinitiveErrorCodes are Cancel ErrorCodes T-Bank has confirmed as final refusals. Empty by default: with no
-	// confirmed code every refusal is an unknown outcome and the refund stays reserved. A wrongly listed code would let a
-	// refund be retried with a new key while the bank may have executed the first one (a double refund), so a code is
-	// added only on written confirmation from T-Bank.
-	DefinitiveErrorCodes []string
 }
+
+// confirmedFinalCancelErrorCodes are the Cancel ErrorCodes T-Bank has confirmed in writing as final refusals (the
+// money was not and will not be returned). BANK.REFUND.2: none is confirmed, and the list is not configurable: a
+// wrongly listed code would fail a refund that may have been executed, allow a retry with a new ExternalRequestId,
+// release the reservation and the return hold, a possible double refund. A code is added only here, with the
+// bank's confirmation referenced in review.
+var confirmedFinalCancelErrorCodes = map[string]bool{}
 
 type TBankRefundProvider struct {
 	terminalKey     string
 	password        string
 	apiBaseURL      string
 	receiptRequired bool
-	definitive      map[string]bool
 	client          *http.Client
 }
 
@@ -71,44 +73,37 @@ func NewTBankRefundProvider(c TBankRefundConfig) (*TBankRefundProvider, error) {
 	if timeout <= 0 {
 		timeout = defaultTBankRefundTimeout
 	}
-	definitive := map[string]bool{}
-	for _, code := range c.DefinitiveErrorCodes {
-		if code = strings.TrimSpace(code); code != "" && code != "0" {
-			definitive[code] = true
-		}
-	}
 	return &TBankRefundProvider{
 		terminalKey:     key,
 		password:        c.Password,
 		apiBaseURL:      strings.TrimRight(c.APIBaseURL, "/"),
 		receiptRequired: c.ReceiptRequired,
-		definitive:      definitive,
 		client:          &http.Client{Timeout: timeout},
 	}, nil
 }
 
 func (p *TBankRefundProvider) Name() string { return "tbank" }
 
-func notSendable(reason string) error { return fmt.Errorf("%w: %s", ErrRefundNotSendable, reason) }
+func notSendable(code, reason string) error { return &RefundNotSendableError{Code: code, Detail: reason} }
 
 func (p *TBankRefundProvider) Preflight(in RefundSubmitInput) error {
 	switch {
 	case strings.TrimSpace(in.IdempotencyKey) == "":
-		return notSendable("empty ExternalRequestId would disable duplicate protection")
+		return notSendable(NotSendableMissingKey, "empty ExternalRequestId would disable duplicate protection")
 	case strings.TrimSpace(in.ProviderPaymentID) == "":
-		return notSendable("no bank PaymentId")
+		return notSendable(NotSendableNoPaymentID, "no bank PaymentId")
 	case in.Currency != "" && in.Currency != "RUB":
-		return notSendable("only RUB payments are refunded")
+		return notSendable(NotSendableCurrency, "only RUB payments are refunded")
 	case in.IntegrationMode == "mock":
-		return notSendable("the payment was made with the local mock: there is nothing to refund at the bank")
+		return notSendable(NotSendableMockPayment, "the payment was made with the local mock: there is nothing to refund at the bank")
 	case in.PaymentMethod == "sbp":
-		return notSendable("SBP refunds are tracked with GetQrState, which is not implemented")
+		return notSendable(NotSendableSBP, "SBP refunds are tracked with GetQrState, which is not implemented")
 	case in.PaymentAmountCents <= 0:
-		return notSendable("the original payment amount is unknown")
+		return notSendable(NotSendableUnknownPaymentAmount, "the original payment amount is unknown")
 	case in.AmountCents <= 0 || in.AmountCents > in.PaymentAmountCents:
-		return notSendable("the refund amount is outside the original payment")
+		return notSendable(NotSendableAmountOutOfRange, "the refund amount is outside the original payment")
 	case p.receiptRequired && in.AmountCents < in.PaymentAmountCents:
-		return notSendable("a partial refund needs a fiscal Receipt, which ZAMK does not hold")
+		return notSendable(NotSendableReceiptRequired, "a partial refund needs a fiscal Receipt, which ZAMK does not hold")
 	}
 	return nil
 }
@@ -192,7 +187,7 @@ func (p *TBankRefundProvider) SubmitRefund(ctx context.Context, in RefundSubmitI
 	status := strings.ToUpper(strings.TrimSpace(resp.Status))
 	if !resp.Success {
 		code := strings.TrimSpace(resp.ErrorCode)
-		if p.definitive[code] {
+		if confirmedFinalCancelErrorCodes[code] {
 			return RefundSubmitResult{Decision: RefundSubmitRejected, ProviderStatus: status, FailureCode: code}, nil
 		}
 		return RefundSubmitResult{}, fmt.Errorf("%w: T-Bank refused Cancel with ErrorCode %q, not confirmed as final", ErrRefundOutcomeUnknown, code)

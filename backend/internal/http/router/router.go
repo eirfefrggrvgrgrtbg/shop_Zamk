@@ -683,6 +683,15 @@ func New(
 		// Refunds
 		r.With(perm("refunds.read")).Get("/refunds", returnsHandler.ListAdminRefunds)
 		r.With(perm("refunds.read")).Get("/refunds/{id}", returnsHandler.GetAdminRefund)
+		// BANK.REFUND.2: bank refund operations. Viewing needs refunds.read; sending, reconciling and investigation
+		// notes need refunds.create. No route settles a refund by hand.
+		r.With(perm("refunds.read")).Get("/refunds/bank", returnsHandler.ListAdminBankRefunds)
+		r.With(perm("refunds.read")).Get("/refunds/{id}/bank", returnsHandler.GetAdminBankRefund)
+		r.With(adminDangerousLimit, perm("refunds.create")).Post("/refunds/{id}/bank/submit", returnsHandler.SubmitAdminBankRefund)
+		r.With(adminDangerousLimit, perm("refunds.create")).Post("/refunds/{id}/bank/reconcile", returnsHandler.ReconcileAdminBankRefund)
+		r.With(perm("refunds.create")).Post("/refunds/{id}/bank/notes", returnsHandler.AddAdminBankRefundNote)
+		// Only answers while the local fake refund provider is attached (ZAMK_DEV_FAKE_REFUND_PROVIDER).
+		r.With(perm("refunds.create")).Post("/dev/refund-provider", returnsHandler.ScriptDevFakeRefundProvider)
 
 		// Payouts
 		r.Route("/payouts", func(r chi.Router) {

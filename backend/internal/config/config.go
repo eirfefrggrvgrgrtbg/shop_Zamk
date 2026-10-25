@@ -94,12 +94,14 @@ type TBankConfig struct {
 	TPayMode        string
 
 	// BANK.REFUND.1: real refunds through T-Bank Cancel are off unless TBANK_REFUNDS_ENABLED=true (and a real
-	// terminal is configured). Partial refunds need a fiscal Receipt by default (online cash register assumed), and
-	// no Cancel refusal counts as final until its ErrorCode is listed here as confirmed by T-Bank.
-	RefundsEnabled             bool
-	RefundReceiptRequired      bool
-	RefundDefinitiveErrorCodes []string
-	RefundTimeoutSeconds       int
+	// terminal is configured). Partial refunds need a fiscal Receipt by default (online cash register assumed). No
+	// Cancel refusal counts as final (BANK.REFUND.2): there is no configurable list of final error codes.
+	RefundsEnabled        bool
+	RefundReceiptRequired bool
+	RefundTimeoutSeconds  int
+	// RefundFakeProvider (BANK.REFUND.2, ZAMK_DEV_FAKE_REFUND_PROVIDER) attaches the in-memory fake refund provider
+	// for local stands; it is refused in production, on staging and next to a real terminal or real refunds.
+	RefundFakeProvider bool
 }
 
 // HasRealTerminal reports a terminal that can reach T-Bank: a key other than the local STUB, and a password.
@@ -132,6 +134,9 @@ type WorkerConfig struct {
 	MediaTTLSweepBatchLimit              int
 	PaymentReconciliationIntervalSeconds int
 	PaymentReconciliationBatchLimit      int
+	// BANK.REFUND.2: unresolved bank refunds are rechecked at most once per interval, a bounded batch at a time.
+	RefundReconcileIntervalSeconds int
+	RefundReconcileBatchLimit      int
 }
 
 type RateLimitConfig struct {
@@ -244,10 +249,10 @@ func Load() (*Config, error) {
 			PayType:         getEnv("TBANK_PAY_TYPE", "O"),
 			TPayMode:        getEnv("TBANK_TPAY_MODE", "mock"),
 
-			RefundsEnabled:             getEnvAsBool("TBANK_REFUNDS_ENABLED", false),
-			RefundReceiptRequired:      getEnvAsBool("TBANK_REFUND_RECEIPT_REQUIRED", true),
-			RefundDefinitiveErrorCodes: splitList(getEnv("TBANK_REFUND_DEFINITIVE_ERROR_CODES", "")),
-			RefundTimeoutSeconds:       getEnvAsInt("TBANK_REFUND_TIMEOUT_SECONDS", 15),
+			RefundsEnabled:        getEnvAsBool("TBANK_REFUNDS_ENABLED", false),
+			RefundReceiptRequired: getEnvAsBool("TBANK_REFUND_RECEIPT_REQUIRED", true),
+			RefundTimeoutSeconds:  getEnvAsInt("TBANK_REFUND_TIMEOUT_SECONDS", 15),
+			RefundFakeProvider:    getEnvAsBool("ZAMK_DEV_FAKE_REFUND_PROVIDER", false),
 		},
 		Worker: WorkerConfig{
 			OrderExpirationIntervalSeconds: getEnvAsInt("WORKER_ORDER_EXPIRATION_INTERVAL_SECONDS", 60),
@@ -266,6 +271,8 @@ func Load() (*Config, error) {
 			MediaTTLSweepBatchLimit:              getEnvAsInt("MEDIA_TTL_SWEEP_BATCH_LIMIT", 100),
 			PaymentReconciliationIntervalSeconds: getEnvAsInt("PAYMENT_RECONCILIATION_INTERVAL_SECONDS", 30),
 			PaymentReconciliationBatchLimit:      getEnvAsInt("PAYMENT_RECONCILIATION_BATCH_LIMIT", 50),
+			RefundReconcileIntervalSeconds:       getEnvAsInt("WORKER_REFUND_RECONCILE_INTERVAL_SECONDS", 600),
+			RefundReconcileBatchLimit:            getEnvAsInt("WORKER_REFUND_RECONCILE_BATCH_LIMIT", 20),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:                        getEnvAsBool("RATE_LIMIT_ENABLED", true),
@@ -316,6 +323,14 @@ func Load() (*Config, error) {
 	if cfg.App.Env == "production" && cfg.TBank.TerminalKey == "STUB" {
 		panic("Cannot use STUB TBank terminal in production environment")
 	}
+	// BANK.REFUND.2: final T-Bank refusal codes are not configurable until the bank confirms them in writing; a stale
+	// setting must not be silently ignored either.
+	if strings.TrimSpace(os.Getenv("TBANK_REFUND_DEFINITIVE_ERROR_CODES")) != "" {
+		panic("TBANK_REFUND_DEFINITIVE_ERROR_CODES is not accepted: no T-Bank refusal code is confirmed as final")
+	}
+	if cfg.TBank.RefundFakeProvider && (cfg.App.Env == "production" || cfg.App.Env == "staging" || cfg.TBank.HasRealTerminal() || cfg.TBank.RefundsEnabled) {
+		panic("ZAMK_DEV_FAKE_REFUND_PROVIDER is only allowed on a local stand without a real T-Bank terminal")
+	}
 
 	return cfg, nil
 }
@@ -362,15 +377,4 @@ func splitCSV(value string) []string {
 		}
 	}
 	return result
-}
-
-// splitList splits a comma-separated value, dropping empty items.
-func splitList(v string) []string {
-	var out []string
-	for _, item := range strings.Split(v, ",") {
-		if item = strings.TrimSpace(item); item != "" {
-			out = append(out, item)
-		}
-	}
-	return out
 }

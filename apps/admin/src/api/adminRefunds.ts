@@ -60,3 +60,46 @@ export const getAdminRefundErrorMessage = (error: unknown, fallback: string): st
   }
   return fallback;
 };
+
+// BANK.REFUND.2: bank refund operations.
+export {
+  getAdminBankRefunds,
+  getAdminBankRefund,
+  submitAdminBankRefund,
+  reconcileAdminBankRefund,
+  addAdminBankRefundNote,
+} from '@zamk/api-client/src/admin';
+export type {
+  AdminBankRefund,
+  AdminBankRefundDetail,
+  AdminBankRefundEvent,
+  AdminBankRefundList,
+  AdminBankRefundStage,
+} from '@zamk/api-client/src/types';
+
+const bankRefundErrorMessages: Record<string, string> = {
+  already_submitted: 'Возврат уже передан в банк. Повторная отправка запрещена.',
+  refund_provider_disabled: 'Отправка в банк выключена: провайдер возвратов не подключён.',
+  payment_not_linked: 'Нет успешной оплаты с банковским идентификатором платежа.',
+  legacy_refund: 'Историческая запись не отправляется в банк автоматически.',
+  refund_under_review: 'Возврат на ручной сверке: автоматические действия запрещены.',
+  provider_unavailable: 'Банк не ответил. Состояние возврата не изменилось, попробуйте сверку позже.',
+  validation_error: 'Комментарий должен содержать от 1 до 2000 символов.',
+};
+
+// Russian operator message for a bank refund action error; the backend's own Russian reason wins for 409/422.
+export const getBankRefundErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return 'Сессия истекла. Войдите снова.';
+    if (error.status === 403) return 'Недостаточно прав для этого действия с возвратом.';
+    if (error.status === 404) return 'Возврат не найден.';
+    if (error.status === 429) return 'Слишком много операций подряд. Повторите через минуту.';
+    if (error.code === 'NETWORK_ERROR') return 'Не удалось подключиться к серверу. Проверьте, запущен ли backend.';
+    if ((error.code === 'refund_not_submittable' || error.code === 'refund_not_reconcilable' || error.code === 'refund_not_sendable')
+      && error.rawMessage) {
+      return error.rawMessage;
+    }
+    if (error.code && bankRefundErrorMessages[error.code]) return bankRefundErrorMessages[error.code];
+  }
+  return fallback;
+};

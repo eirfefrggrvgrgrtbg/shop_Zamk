@@ -99,10 +99,51 @@ func main() {
 	paymentsRepo := payments.NewRepository(pgClient.Pool)
 	paymentsService := payments.NewService(paymentsRepo, ordersRepo, inventoryService, tbankProvider, pgClient, notificationsService, nil, cfg).WithMarketing(marketingService)
 
+	// BANK.REFUND.2: unresolved bank refunds are rechecked only when the real T-Bank refund adapter is explicitly
+	// enabled (TBANK_REFUNDS_ENABLED); the dev fake lives in the API process and is never used here.
+	var refundReconciler *returns.Service
+	if cfg.TBank.RefundsEnabled {
+		refundProvider, err := payments.RefundProviderFromConfig(cfg)
+		if err != nil {
+			logger.Error("refund reconciliation disabled: refund provider cannot be built", "error", err)
+		} else if refundProvider != nil {
+			refundReconciler = returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, paymentsService,
+				cfg.Worker.ReturnWindowDays, notificationsService, nil, nil, nil).WithRefundProvider(refundProvider)
+		}
+	}
+
 	logger.Info("worker started successfully")
 
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	if refundReconciler != nil {
+		refundInterval := time.Duration(cfg.Worker.RefundReconcileIntervalSeconds) * time.Second
+		if refundInterval < time.Minute {
+			refundInterval = time.Minute
+		}
+		batch := returns.RefundReconcileBatch{
+			Limit:        cfg.Worker.RefundReconcileBatchLimit,
+			RecheckAfter: refundInterval,
+			SendingGrace: 2 * time.Minute,
+		}
+		refundTicker := time.NewTicker(refundInterval)
+		defer refundTicker.Stop()
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-refundTicker.C:
+					if checked, err := refundReconciler.ReconcileUnresolvedRefunds(ctx, batch); err != nil {
+						logger.Error("refund reconciliation run failed", "error", err)
+					} else if checked > 0 {
+						logger.Info("refund reconciliation run completed", "checked", checked)
+					}
+				}
+			}
+		}()
+	}
 
 	reconIntervalSecs := cfg.Worker.PaymentReconciliationIntervalSeconds
 	if reconIntervalSecs <= 0 {

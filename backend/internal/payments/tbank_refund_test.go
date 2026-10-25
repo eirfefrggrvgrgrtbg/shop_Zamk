@@ -216,20 +216,18 @@ func TestTBankRefund_E_AcceptedNotConfirmed(t *testing.T) {
 	assert.Equal(t, expectedToken(map[string]string{"TerminalKey": stubTerminal, "PaymentId": "700000001"}), req["Token"])
 }
 
-// F: a refusal is final only for a confirmed ErrorCode; any other refusal is unknown.
-func TestTBankRefund_F_DefinitiveRefusal(t *testing.T) {
-	bank := newStubTBank(t)
-	bank.cancel = func(map[string]any) (int, string) {
-		return http.StatusOK, `{"Success":false,"ErrorCode":"FINAL-1","Message":"declined","PaymentId":"700000001"}`
+// F (BANK.REFUND.2): no T-Bank refusal code is confirmed as final, so every refusal is an unknown outcome.
+func TestTBankRefund_F_NoRefusalIsFinal(t *testing.T) {
+	require.Empty(t, confirmedFinalCancelErrorCodes,
+		"a final Cancel ErrorCode may be added only with T-Bank's written confirmation, reviewed with this test")
+	for _, code := range []string{"FINAL-1", "9999", "5", "0", ""} {
+		bank := newStubTBank(t)
+		bank.cancel = func(map[string]any) (int, string) {
+			return http.StatusOK, `{"Success":false,"ErrorCode":"` + code + `","Message":"declined","PaymentId":"700000001"}`
+		}
+		res, err := bank.provider(t).SubmitRefund(context.Background(), refundInput("key-f-"+code, 5000, 5000))
+		assertUnknown(t, res, err)
 	}
-	res, err := bank.provider(t, func(c *TBankRefundConfig) { c.DefinitiveErrorCodes = []string{"FINAL-1"} }).
-		SubmitRefund(context.Background(), refundInput("key-f", 5000, 5000))
-	require.NoError(t, err)
-	assert.Equal(t, RefundSubmitRejected, res.Decision)
-	assert.Equal(t, "FINAL-1", res.FailureCode)
-
-	res, err = bank.provider(t).SubmitRefund(context.Background(), refundInput("key-f2", 5000, 5000))
-	assertUnknown(t, res, err)
 }
 
 // G + H + I: unknown status, HTML / HTTP errors, a foreign PaymentId: all unknown.

@@ -346,18 +346,43 @@ func (s *Service) emitRefundBankEvent(ctx context.Context, event string, refundI
 	})
 }
 
-// ReconcileUnresolvedRefunds asks the provider about up to limit unresolved attempts (oldest check first). It applies
-// only attributed results; everything else stays pending or goes to review. Returns how many were checked.
-func (s *Service) ReconcileUnresolvedRefunds(ctx context.Context, limit int) (int, error) {
+// RefundReconcileBatch bounds one reconciliation run (BANK.REFUND.2).
+type RefundReconcileBatch struct {
+	// Limit is the most attempts checked in one run.
+	Limit int
+	// RecheckAfter is the backoff: an attempt checked more recently is skipped (0 checks every eligible attempt).
+	RecheckAfter time.Duration
+	// SendingGrace: a 'sending' attempt younger than this may still be in flight in its submit call and is left alone.
+	SendingGrace time.Duration
+}
+
+// ReconcileUnresolvedRefunds asks the provider about a bounded batch of unresolved attempts: accepted / unknown, and
+// sending older than SendingGrace. Attempts are claimed with FOR UPDATE SKIP LOCKED and stamped last_checked_at, so
+// concurrent runs never pick the same attempt within RecheckAfter; ReconcileRefund itself re-locks and re-checks
+// each attempt, so even an overlapping check cannot settle it twice. It never sends a refund. Legacy rows and rows
+// under review are not picked: a review stays in the admin queue until a person resolves it. Returns how many
+// attempts were checked without a provider error.
+func (s *Service) ReconcileUnresolvedRefunds(ctx context.Context, b RefundReconcileBatch) (int, error) {
 	if s.refundProvider == nil {
 		return 0, ErrRefundProviderNotConfigured
 	}
+	if b.Limit <= 0 {
+		return 0, nil
+	}
 	rows, err := s.db.Pool.Query(ctx, `
-		SELECT id FROM refunds
-		WHERE status = 'pending' AND submit_outcome IN ('sending', 'accepted', 'unknown') AND review_reason IS NULL
-		ORDER BY last_checked_at NULLS FIRST, submitted_at
-		LIMIT $1
-	`, limit)
+		UPDATE refunds SET last_checked_at = now()
+		WHERE id IN (
+			SELECT id FROM refunds
+			WHERE status = 'pending' AND review_reason IS NULL
+			  AND (submit_outcome IN ('accepted', 'unknown')
+			       OR (submit_outcome = 'sending' AND submitted_at < now() - make_interval(secs => $3)))
+			  AND (last_checked_at IS NULL OR last_checked_at <= now() - make_interval(secs => $2))
+			ORDER BY last_checked_at NULLS FIRST, submitted_at
+			LIMIT $1
+			FOR UPDATE SKIP LOCKED
+		)
+		RETURNING id
+	`, b.Limit, b.RecheckAfter.Seconds(), b.SendingGrace.Seconds())
 	if err != nil {
 		return 0, err
 	}

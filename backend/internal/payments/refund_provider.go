@@ -18,6 +18,27 @@ var ErrRefundOutcomeUnknown = errors.New("refund submission outcome unknown")
 // ErrRefundNotSendable: Preflight refused the attempt; nothing was sent and the refund stays reserved, unsent.
 var ErrRefundNotSendable = errors.New("refund cannot be sent to the provider")
 
+// Preflight refusal codes (BANK.REFUND.2), so operators can be told why a refund cannot be sent.
+const (
+	NotSendableMissingKey           = "missing_idempotency_key"
+	NotSendableNoPaymentID          = "no_provider_payment_id"
+	NotSendableCurrency             = "unsupported_currency"
+	NotSendableMockPayment          = "mock_payment"
+	NotSendableSBP                  = "sbp_not_supported"
+	NotSendableUnknownPaymentAmount = "unknown_payment_amount"
+	NotSendableAmountOutOfRange     = "amount_out_of_range"
+	NotSendableReceiptRequired      = "receipt_required"
+)
+
+// RefundNotSendableError is a Preflight refusal; errors.Is(err, ErrRefundNotSendable) holds for it.
+type RefundNotSendableError struct {
+	Code   string
+	Detail string
+}
+
+func (e *RefundNotSendableError) Error() string { return ErrRefundNotSendable.Error() + ": " + e.Detail }
+func (e *RefundNotSendableError) Unwrap() error { return ErrRefundNotSendable }
+
 type RefundSubmitInput struct {
 	// ProviderPaymentID is the bank id of the original payment (payments.provider_payment_id).
 	ProviderPaymentID string

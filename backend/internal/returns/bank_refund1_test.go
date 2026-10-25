@@ -78,7 +78,7 @@ func (b *r1Bank) provider(t *testing.T, receiptRequired bool, timeout time.Durat
 	t.Helper()
 	p, err := payments.NewTBankRefundProvider(payments.TBankRefundConfig{
 		TerminalKey: r1Terminal, Password: r1Password, APIBaseURL: b.server.URL + "/v2",
-		Timeout: timeout, ReceiptRequired: receiptRequired, DefinitiveErrorCodes: []string{"FINAL-1"},
+		Timeout: timeout, ReceiptRequired: receiptRequired,
 	})
 	require.NoError(t, err)
 	return p
@@ -184,7 +184,7 @@ func TestBankRefund1_AggregateStateGoesToReview(t *testing.T) {
 	require.NoError(t, fix.client.Pool.QueryRow(ctx, `SELECT count(*) FROM seller_ledger_entries WHERE type = 'adjustment'`).Scan(&adjustmentsBefore))
 
 	// A large limit: both of our attempts are certainly inside the batch, wherever the other rows sort.
-	checked, err := fix.svc.ReconcileUnresolvedRefunds(ctx, 10000)
+	checked, err := fix.svc.ReconcileUnresolvedRefunds(ctx, returns.RefundReconcileBatch{Limit: 10000})
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, checked, 2, "at least our two attempts were checked (others may be in the batch too)")
 
@@ -253,8 +253,9 @@ func TestBankRefund1_TimeoutThenRepeat(t *testing.T) {
 	assert.Equal(t, 1, readRefundRow(t, fix, ref.ID).Attempts)
 }
 
-// F: a refusal with a confirmed final ErrorCode fails the attempt; an unconfirmed code stays unknown.
-func TestBankRefund1_DefinitiveAndUnconfirmedRefusal(t *testing.T) {
+// F (BANK.REFUND.2): a T-Bank refusal is never final: the attempt stays unknown, the amount stays reserved, the
+// return keeps holding the seller earning, and no second attempt with another key can be created.
+func TestBankRefund1_RefusalIsNeverFinal(t *testing.T) {
 	fix := setupM51Fixture(t)
 	ctx := context.Background()
 	bank := newR1Bank(t)
@@ -265,26 +266,26 @@ func TestBankRefund1_DefinitiveAndUnconfirmedRefusal(t *testing.T) {
 	retID := newReceivedReturn(t, fix, o, 3)
 	ref, err := fix.svc.CreateRefund(ctx, fix.userID, retID, returns.CreateRefundRequest{})
 	require.NoError(t, err)
+	key := *readRefundRow(t, fix, ref.ID).Key
 	bank.set(`{"Success":false,"ErrorCode":"FINAL-1","Message":"declined"}`, "")
 	got, err := fix.svc.SubmitRefund(ctx, ref.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "failed", got.Status)
+	assert.Equal(t, "pending", got.Status)
 	row := readRefundRow(t, fix, ref.ID)
-	assert.Equal(t, "rejected", row.SubmitOutcome)
-	assert.Equal(t, "FINAL-1", *row.FailureCode)
-	n, _ := returnDeductions(t, fix, o.ord.orderID)
-	assert.Equal(t, 0, n)
+	assert.Equal(t, "unknown", row.SubmitOutcome, "an unconfirmed refusal is not a failure")
+	assert.Nil(t, row.FailureCode)
+	assertNoFinancialSuccess(t, fix, o, ref.ID, retID)
 
-	o2 := newBankRefundOrder(t, fix, 3)
-	setProviderPaymentID(t, fix, &o2)
-	ret2 := newReceivedReturn(t, fix, o2, 3)
-	ref2, err := fix.svc.CreateRefund(ctx, fix.userID, ret2, returns.CreateRefundRequest{})
+	quote, err := fix.svc.CalculateRefundQuote(ctx, retID)
 	require.NoError(t, err)
-	bank.set(`{"Success":false,"ErrorCode":"9999","Message":"internal"}`, "")
-	_, err = fix.svc.SubmitRefund(ctx, ref2.ID)
+	assert.Equal(t, int64(3000), quote.PendingRefundCents, "the reservation is kept")
+	assert.False(t, quote.CanRefund)
+	again, err := fix.svc.CreateRefund(ctx, fix.userID, retID, returns.CreateRefundRequest{})
 	require.NoError(t, err)
-	assert.Equal(t, "unknown", readRefundRow(t, fix, ref2.ID).SubmitOutcome, "an unconfirmed refusal code is not a failure")
-	assertNoFinancialSuccess(t, fix, o2, ref2.ID, ret2)
+	assert.Equal(t, ref.ID, again.ID, "no new attempt, no new ExternalRequestId")
+	assert.Equal(t, key, *readRefundRow(t, fix, ref.ID).Key)
+	assert.Equal(t, 1, refundCountForReturn(t, fix, retID))
+	assert.Equal(t, 1, bank.count("Cancel"))
 }
 
 // L + mock + legacy: nothing is sent when it cannot be sent safely; the refund stays reserved and unsent.

@@ -156,26 +156,15 @@ func BuildRouter(ctx context.Context, cfg *config.Config, pgClient *postgres.Cli
 	cdekProvider := returns.NewCDEKProvider(cfg.CDEK)
 	returnsService := returns.NewService(returnsRepo, ordersRepo, inventoryService, pgClient, payoutsService, paymentsService, cfg.Worker.ReturnWindowDays, notificationsService, storageProvider, cdekProvider, behaviorService)
 	returnsService.WithRefundSimulator(cfg.RefundSimulatorAllowed())
-	// BANK.REFUND.1: the T-Bank refund adapter is attached only on explicit TBANK_REFUNDS_ENABLED; a real terminal
-	// alone never enables real refunds.
-	if cfg.TBank.RefundsEnabled {
-		refundProvider, err := payments.NewTBankRefundProvider(payments.TBankRefundConfig{
-			TerminalKey:          cfg.TBank.TerminalKey,
-			Password:             cfg.TBank.Password,
-			APIBaseURL:           cfg.TBank.APIBaseURL,
-			Timeout:              time.Duration(cfg.TBank.RefundTimeoutSeconds) * time.Second,
-			ReceiptRequired:      cfg.TBank.RefundReceiptRequired,
-			DefinitiveErrorCodes: cfg.TBank.RefundDefinitiveErrorCodes,
-		})
-		if err != nil {
-			logger.Error("T-Bank refunds are enabled but no real terminal is configured: refunds stay unsent", "error", err)
-		} else {
-			if len(cfg.TBank.RefundDefinitiveErrorCodes) > 0 {
-				logger.Warn("T-Bank refund refusals with these ErrorCodes are treated as final and may be retried with a new key: list only codes confirmed in writing by T-Bank",
-					"codes", cfg.TBank.RefundDefinitiveErrorCodes)
-			}
-			returnsService.WithRefundProvider(refundProvider)
+	// BANK.REFUND.1/2: a refund provider is attached only on explicit configuration (TBANK_REFUNDS_ENABLED for the
+	// real T-Bank adapter, ZAMK_DEV_FAKE_REFUND_PROVIDER for the local fake); a real terminal alone enables nothing.
+	if refundProvider, err := payments.RefundProviderFromConfig(cfg); err != nil {
+		logger.Error("refund provider is enabled but cannot be built: refunds stay unsent", "error", err)
+	} else if refundProvider != nil {
+		if refundProvider.Name() == "fake" {
+			logger.Warn("dev fake refund provider attached: refunds are simulated in memory, no bank is called")
 		}
+		returnsService.WithRefundProvider(refundProvider)
 	}
 	returnsHandler := returns.NewHandler(returnsService, cfg.App.Env)
 
