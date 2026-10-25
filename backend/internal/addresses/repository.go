@@ -52,6 +52,13 @@ func (r *Repository) ListAddresses(ctx context.Context, userID uuid.UUID) ([]Add
 	return addresses, nil
 }
 
+// lockUserTx serializes every change of one customer's address book. It is the first statement of each writing
+// transaction, so the state read afterwards (count, current main address) cannot change underneath it.
+func lockUserTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID) error {
+	var id uuid.UUID
+	return tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&id)
+}
+
 func (r *Repository) CreateAddress(ctx context.Context, a *Address) error {
 	tx, err := r.db.Pool.Begin(ctx)
 	if err != nil {
@@ -59,24 +66,9 @@ func (r *Repository) CreateAddress(ctx context.Context, a *Address) error {
 	}
 	defer tx.Rollback(ctx)
 
-	if a.IsDefault {
-		if err := r.clearDefaultTx(ctx, tx, a.UserID); err != nil {
-			return err
-		}
-	} else {
-		// If this is the first address, make it default automatically
-		var count int
-		err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM customer_addresses WHERE user_id = $1", a.UserID).Scan(&count)
-		if err != nil {
-			return err
-		}
-		if count == 0 {
-			a.IsDefault = true
-		}
-	}
-	// Serialize the customer's address changes and enforce the limit under that lock.
-	var lock uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, a.UserID).Scan(&lock); err != nil {
+	// lock first: the limit, the "first address is the main one" rule and the unique main-address index are all
+	// decided inside this protected section, so two parallel requests queue up instead of colliding.
+	if err := lockUserTx(ctx, tx, a.UserID); err != nil {
 		return err
 	}
 	var total int
@@ -86,17 +78,23 @@ func (r *Repository) CreateAddress(ctx context.Context, a *Address) error {
 	if total >= maxAddressesPerUser {
 		return ErrAddressLimit
 	}
+	if a.IsDefault {
+		if err := r.clearDefaultTx(ctx, tx, a.UserID); err != nil {
+			return err
+		}
+	} else if total == 0 {
+		a.IsDefault = true // the first address is the main one
+	}
 
 	query := `
 		INSERT INTO customer_addresses (id, user_id, label, recipient_name, phone, city, street, house, apartment, postal_code, comment, is_default)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 	// created_at / updated_at come from the column defaults (the zero time of the struct must never be stored)
-	_, err = tx.Exec(ctx, query,
+	if _, err = tx.Exec(ctx, query,
 		a.ID, a.UserID, a.Label, a.RecipientName, a.Phone, a.City, a.Street,
 		a.House, a.Apartment, a.PostalCode, a.Comment, a.IsDefault,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("failed to create address: %w", err)
 	}
 
@@ -130,6 +128,9 @@ func (r *Repository) UpdateAddress(ctx context.Context, a *Address) error {
 	}
 	defer tx.Rollback(ctx)
 
+	if err := lockUserTx(ctx, tx, a.UserID); err != nil {
+		return err
+	}
 	if a.IsDefault {
 		if err := r.clearDefaultTx(ctx, tx, a.UserID); err != nil {
 			return err
@@ -162,6 +163,9 @@ func (r *Repository) DeleteAddress(ctx context.Context, id, userID uuid.UUID) er
 	}
 	defer tx.Rollback(ctx)
 
+	if err := lockUserTx(ctx, tx, userID); err != nil {
+		return err
+	}
 	var wasDefault bool
 	err = tx.QueryRow(ctx, `DELETE FROM customer_addresses WHERE id = $1 AND user_id = $2 RETURNING is_default`, id, userID).Scan(&wasDefault)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -188,6 +192,9 @@ func (r *Repository) SetDefault(ctx context.Context, id, userID uuid.UUID) error
 	}
 	defer tx.Rollback(ctx)
 
+	if err := lockUserTx(ctx, tx, userID); err != nil {
+		return err
+	}
 	if err := r.clearDefaultTx(ctx, tx, userID); err != nil {
 		return err
 	}

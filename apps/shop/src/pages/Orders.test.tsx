@@ -650,6 +650,26 @@ describe('M4.3.3C2B — Shop Multi-Fulfillment Tracking & Observer Status Regres
     expect(screen.queryByRole('button', { name: 'Оформить возврат' })).toBeNull();
   });
 
+  it('20. SHOP.DELIVERY.DETAILS.1 the order shows its postal code and courier comment as text; absent values are not shown', async () => {
+    mockGetOrders.mockResolvedValue([{ ...mockPackedOrder, id: 'ord-det-uuid', orderNumber: 'ORD-100310', status: 'paid', deliveryPostalCode: '101000', deliveryCourierComment: 'Домофон 12 <img src=x onerror=alert(1)>' }, { ...mockPackedOrder, id: 'ord-nodet-uuid', orderNumber: 'ORD-100311', status: 'paid' }]);
+    mockGetCustomerOrderFulfillments.mockResolvedValue([]);
+    render(<MemoryRouter><Orders /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('ORD-100310')).toBeDefined());
+    fireEvent.click(screen.getByText('ORD-100310'));
+    await waitFor(() => expect(screen.getByTestId('order-delivery-postal')).toBeDefined());
+    expect(screen.getByTestId('order-delivery-postal').textContent).toContain('101000');
+    expect(screen.getByTestId('order-delivery-comment').textContent).toContain('<img src=x onerror=alert(1)>');
+    expect(screen.getByTestId('order-delivery-comment').querySelector('img')).toBeNull();
+    cleanup();
+    render(<MemoryRouter><Orders /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('ORD-100311')).toBeDefined());
+    fireEvent.click(screen.getByText('ORD-100311'));
+    await waitFor(() => expect(screen.getByText('Заказ ORD-100311')).toBeDefined());
+    expect(screen.queryByTestId('order-delivery-postal')).toBeNull();
+    expect(screen.queryByTestId('order-delivery-comment')).toBeNull();
+    expect(screen.queryByText(/Индекс:/)).toBeNull();
+  });
+
   it('15. no customer-visible internal concepts (ZMU, fulfillment_id, warehouse.dispatch, reserved_stock)', async () => {
     mockGetOrders.mockResolvedValue([mockShippedOrder]);
     mockGetCustomerOrderFulfillments.mockResolvedValue([

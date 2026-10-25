@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -268,5 +269,72 @@ func TestAddressBookIsolation(t *testing.T) {
 
 	t.Run("a bad id is 400, not a server error", func(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, k.call(&k.a, http.MethodDelete, "/addresses/x", map[string]string{"id": "nope"}, nil).Code)
+	})
+}
+
+// SHOP.DELIVERY.DETAILS.1: parallel requests queue up on the customer's lock instead of colliding.
+func TestAddressBookConcurrency(t *testing.T) {
+	run := func(k *kit, n int, body func(i int) map[string]any) (codes []int) {
+		var wg sync.WaitGroup
+		out := make([]int, n)
+		start := make(chan struct{})
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				<-start
+				out[i] = k.call(&k.a, http.MethodPost, "/addresses", nil, body(i)).Code
+			}(i)
+		}
+		close(start)
+		wg.Wait()
+		return out
+	}
+
+	t.Run("two first addresses at once: both saved, exactly one main, no 500", func(t *testing.T) {
+		for round := 0; round < 5; round++ { // the race is timing-dependent: repeat on fresh books
+			k := newKit(t)
+			codes := run(k, 2, func(i int) map[string]any { b := valid(); b["label"] = fmt.Sprintf("Адрес %d", i); return b })
+			for _, c := range codes {
+				require.Equal(t, http.StatusCreated, c, "round %d: %v", round, codes)
+			}
+			require.Len(t, k.list(k.a), 2)
+			require.Equal(t, 1, k.defaults(k.a), "round %d", round)
+		}
+	})
+
+	t.Run("two first addresses, both asking to be main: both saved, exactly one main", func(t *testing.T) {
+		for round := 0; round < 3; round++ {
+			k := newKit(t)
+			codes := run(k, 2, func(i int) map[string]any { b := valid(); b["isDefault"] = true; return b })
+			for _, c := range codes {
+				require.Equal(t, http.StatusCreated, c, "%v", codes)
+			}
+			require.Len(t, k.list(k.a), 2)
+			require.Equal(t, 1, k.defaults(k.a))
+		}
+	})
+
+	t.Run("the limit holds under concurrency: 19 saved, 6 more at once, exactly one gets in", func(t *testing.T) {
+		k := newKit(t)
+		for i := 0; i < 19; i++ {
+			k.create(k.a, valid())
+		}
+		codes := run(k, 6, func(int) map[string]any { return valid() })
+		created, limited := 0, 0
+		for _, c := range codes {
+			switch c {
+			case http.StatusCreated:
+				created++
+			case http.StatusConflict:
+				limited++
+			default:
+				t.Fatalf("unexpected status %d in %v", c, codes)
+			}
+		}
+		require.Equal(t, 1, created, "%v", codes)
+		require.Equal(t, 5, limited)
+		require.Len(t, k.list(k.a), 20)
+		require.Equal(t, 1, k.defaults(k.a))
 	})
 }

@@ -61,3 +61,15 @@ export function toAddressPayload(form: AddressForm): Required<AddressForm> {
 export function formatDeliveryAddress(a: { city: string; street: string; house: string; apartment?: string | null }): string {
   return `г. ${a.city}, ул. ${a.street}, д. ${a.house}${a.apartment ? `, кв. ${a.apartment}` : ''}`;
 }
+
+/** The optional extras of a checkout (postal code and a note for the courier), checked like the API checks them. */
+export function validateDeliveryExtras(postalCode: string, comment: string): Record<'postalCode' | 'comment', string | undefined> {
+  const postal = postalCode.trim();
+  const note = comment.trim();
+  const out: Record<'postalCode' | 'comment', string | undefined> = { postalCode: undefined, comment: undefined };
+  if ([...postal].length > ADDRESS_MAX.postalCode) out.postalCode = 'Индекс слишком длинный (не более 12 символов)';
+  else if (postal && !/^[\p{L}\p{N} -]+$/u.test(postal)) out.postalCode = 'Индекс может содержать только буквы, цифры, пробел и дефис';
+  if ([...note].length > ADDRESS_MAX.comment) out.comment = 'Комментарий для курьера слишком длинный (не более 500 символов)';
+  else if (/\p{Cc}/u.test(note)) out.comment = 'Комментарий для курьера содержит недопустимые символы';
+  return out;
+}

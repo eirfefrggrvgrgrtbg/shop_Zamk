@@ -67,6 +67,10 @@ func (s *Service) SetLogger(l *slog.Logger) *Service {
 }
 
 func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateOrderRequest, idempotencyKey *uuid.UUID) (*Order, error) {
+	// the optional postal code and courier comment are checked before anything is read or reserved
+	if err := normalizeDeliveryDetails(&req); err != nil {
+		return nil, err
+	}
 	// 1. Load cart
 	userCart, err := s.cartRepo.GetCartByUserID(ctx, userID)
 	if err != nil && !errors.Is(err, cart.ErrCartNotFound) {
@@ -301,6 +305,8 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 			CustomerPhone:            req.CustomerPhone,
 			CustomerEmail:            req.CustomerEmail,
 			DeliveryAddress:          req.DeliveryAddress,
+			DeliveryPostalCode:       req.DeliveryPostalCode,
+			DeliveryCourierComment:   req.DeliveryCourierComment,
 			DeliveryMethodID:         &dm.ID,
 			DeliveryMethodCode:       &dm.Code,
 			DeliveryMethodName:       &dm.Name,
@@ -714,12 +720,16 @@ func calculateRequestHash(userID uuid.UUID, req CreateOrderRequest, cartItems []
 		UserID           string
 		DeliveryMethodID string
 		DeliveryAddress  string
+		PostalCode       string
+		CourierComment   string
 		PromoCode        *string
 		Items            []hashItem
 	}{
 		UserID:           userID.String(),
 		DeliveryMethodID: req.DeliveryMethodID.String(),
 		DeliveryAddress:  req.DeliveryAddress, // spaces normalization can be added, assuming exact match for now
+		PostalCode:       trimmed(req.DeliveryPostalCode),
+		CourierComment:   trimmed(req.DeliveryCourierComment),
 		PromoCode:        req.PromoCode,
 		Items:            items,
 	}

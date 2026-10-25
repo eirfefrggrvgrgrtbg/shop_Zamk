@@ -71,6 +71,13 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	order, err := h.service.CreateOrder(r.Context(), userID, req, idempotencyKey)
 	if err != nil {
+		var dderr *DeliveryDetailsError
+		if errors.As(err, &dderr) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": "validation_error", "message": dderr.Message, "field": dderr.Field}})
+			return
+		}
 		// Cart states the buyer can fix: stable codes and readable messages; the cart is kept, nothing is reserved.
 		switch {
 		case errors.Is(err, ErrEmptyCart):

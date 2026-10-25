@@ -11,6 +11,9 @@ type CreateOrderRequest struct {
 	CustomerPhone    string    `json:"customerPhone" validate:"required"`
 	CustomerEmail    string    `json:"customerEmail" validate:"required,email"`
 	DeliveryAddress  string    `json:"deliveryAddress" validate:"required"`
+	// optional: the postal code and a note for the courier, stored as part of the order's delivery snapshot
+	DeliveryPostalCode     *string `json:"deliveryPostalCode,omitempty"`
+	DeliveryCourierComment *string `json:"deliveryCourierComment,omitempty"`
 	DeliveryMethodID uuid.UUID            `json:"deliveryMethodId" validate:"required"`
 	PromoCode        *string              `json:"promoCode,omitempty"`
 	AnalyticsContext *AnalyticsContextDTO `json:"analyticsContext,omitempty"`
@@ -99,6 +102,8 @@ type AdminOrderDetail struct {
 	AdminOrder
 	CustomerPhone              string               `json:"customerPhone"`
 	DeliveryAddress            string               `json:"deliveryAddress"`
+	DeliveryPostalCode         *string              `json:"deliveryPostalCode,omitempty"`
+	DeliveryCourierComment     *string              `json:"deliveryCourierComment,omitempty"`
 	DeliveryMethodID           *uuid.UUID           `json:"deliveryMethodId"`
 	DeliveryMethodCode         *string              `json:"deliveryMethodCode"`
 	DeliveryMethodName         *string              `json:"deliveryMethodName"`

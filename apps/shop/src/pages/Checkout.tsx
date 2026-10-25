@@ -11,7 +11,7 @@ import { getDeliveryMethods } from '@zamk/api-client/src/public';
 import type { AvailablePaymentMethods } from '@zamk/api-client/src/customer';
 import type { PublicDeliveryMethod } from '@zamk/api-client/src/types';
 import { useAuth } from '../contexts/AuthContext';
-import { formatDeliveryAddress } from '../lib/addressValidation';
+import { formatDeliveryAddress, validateDeliveryExtras } from '../lib/addressValidation';
 import { PaymentMethodPicker } from '../components/PaymentMethodPicker';
 import { formatVariantDetails } from '../lib/variantSelection';
 import { PromoCodeBox } from '../components/PromoCodeBox';
@@ -38,6 +38,9 @@ export function Checkout() {
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  // optional extras of a manually typed address (a saved address brings its own)
+  const [postalCode, setPostalCode] = useState('');
+  const [courierComment, setCourierComment] = useState('');
   const [validationError, setValidationError] = useState('');
   // The order was refused for a reason fixed in the cart (stock, unavailable item): offer the way back.
   const [cartFixable, setCartFixable] = useState(false);
@@ -138,7 +141,7 @@ export function Checkout() {
   // Regenerate idempotency key when user actively modifies customer checkout details
   useEffect(() => {
     setIdempotencyKey(crypto.randomUUID());
-  }, [selectedMethodId, selectedAddressId, firstName, lastName, email, phone, address, appliedCode]);
+  }, [selectedMethodId, selectedAddressId, firstName, lastName, email, phone, address, postalCode, courierComment, appliedCode]);
 
   const handleCheckout = async () => {
     if (!isAuthenticated) {
@@ -176,6 +179,8 @@ export function Checkout() {
     let finalName = `${firstName.trim()} ${lastName.trim()}`.trim();
     let finalPhone = phone.trim();
     let finalAddress = address.trim();
+    let finalPostal = postalCode.trim();
+    let finalComment = courierComment.trim();
 
     if (selectedAddressId !== 'new') {
       const addr = savedAddresses.find(a => a.id === selectedAddressId);
@@ -183,7 +188,17 @@ export function Checkout() {
         finalName = addr.recipientName;
         finalPhone = addr.phone;
         finalAddress = formatDeliveryAddress(addr);
+        finalPostal = (addr.postalCode ?? '').trim();
+        finalComment = (addr.comment ?? '').trim();
       }
+    }
+
+    const extrasError = validateDeliveryExtras(finalPostal, finalComment);
+    if (extrasError.postalCode || extrasError.comment) {
+      setValidationError(extrasError.postalCode || extrasError.comment || '');
+      submitLockRef.current = false;
+      setIsSubmitting(false);
+      return;
     }
 
     if (!finalName || !trimmedEmail || !finalPhone || !finalAddress) {
@@ -230,6 +245,8 @@ export function Checkout() {
           customerEmail: trimmedEmail,
           customerPhone: finalPhone,
           deliveryAddress: deliveryAddressText,
+          deliveryPostalCode: finalPostal || undefined,
+          deliveryCourierComment: finalComment || undefined,
           deliveryMethodId: selectedMethodId,
           promoCode: appliedCode ?? undefined,
           analyticsContext
@@ -271,6 +288,10 @@ export function Checkout() {
         setValidationError(cartFixableMessage(e));
         setIdempotencyKey(crypto.randomUUID());
         void refreshCart?.();
+      } else if (e?.code === 'validation_error') {
+        // the server refused the delivery details (nothing was created or reserved): say why, keep the cart
+        setValidationError(e.rawMessage || e.message || 'Проверьте данные доставки.');
+        setIdempotencyKey(crypto.randomUUID());
       } else if (isPaymentInProgressError(e)) {
         // Refused before the order was created (or, for an order created earlier, before its payment started):
         // the earlier order must be paid or its payment cancelled first. Nothing was reserved for a new order.
@@ -462,6 +483,8 @@ export function Checkout() {
                   <div className='md:col-span-2'>
                     <Input placeholder='Полный адрес доставки' value={address} onChange={(event) => { setAddress(event.target.value); if (validationError) setValidationError(''); }} required />
                   </div>
+                  <Input placeholder='Индекс (необязательно)' value={postalCode} maxLength={12} data-testid='checkout-postal-code' onChange={(event) => { setPostalCode(event.target.value); if (validationError) setValidationError(''); }} autoComplete='postal-code' />
+                  <Input placeholder='Комментарий для курьера (необязательно)' value={courierComment} maxLength={500} data-testid='checkout-courier-comment' onChange={(event) => { setCourierComment(event.target.value); if (validationError) setValidationError(''); }} />
                 </div>
               ) : (
                 <div data-testid="saved-address-summary" className="p-4 bg-ice/50 dark:bg-white/5 rounded-xl border border-border-lighter dark:border-white/10 text-sm text-graphite dark:text-white mt-4">
@@ -475,6 +498,8 @@ export function Checkout() {
                         <p className="text-graphite-light dark:text-white/80 leading-relaxed">
                           {formatDeliveryAddress(a)}
                         </p>
+                        {a.postalCode && <p data-testid="saved-address-postal" className="text-graphite-light dark:text-white/80 mt-1">Индекс: {a.postalCode}</p>}
+                        {a.comment && <p data-testid="saved-address-comment" className="text-graphite-light dark:text-white/80 mt-1 break-words">Комментарий для курьера: {a.comment}</p>}
                       </>
                     );
                   })()}

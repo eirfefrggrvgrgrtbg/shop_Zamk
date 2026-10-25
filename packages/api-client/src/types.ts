@@ -337,6 +337,9 @@ export interface Order {
   customerPhone: string;
   customerEmail: string;
   deliveryAddress: string;
+  /** The order's own copy of what the customer gave at checkout; absent when not given and on older orders. */
+  deliveryPostalCode?: string;
+  deliveryCourierComment?: string;
   createdAt: string;
   updatedAt: string;
   cancelledAt?: string;

@@ -215,6 +215,8 @@ export function Settings() {
                     {item.recipientName}, {item.phone}<br/>
                     г. {item.city}, ул. {item.street}, д. {item.house}
                     {item.apartment && `, кв. ${item.apartment}`}
+                    {item.postalCode && <><br/>Индекс {item.postalCode}</>}
+                    {item.comment && <><br/>{item.comment}</>}
                   </p>
                   {!item.isDefault && (
                      <div className="pl-6 mt-3">
@@ -347,6 +349,20 @@ export function Settings() {
             </div>
           </div>
           
+          <div>
+            <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Комментарий для курьера</label>
+            <Input
+              value={editingAddress?.comment || ''}
+              onChange={(e) => setField('comment', e.target.value)}
+              maxLength={ADDRESS_MAX.comment}
+              aria-invalid={Boolean(addressErrors.comment)}
+              data-testid="addr-comment"
+              className="bg-white/50 dark:bg-white/10 border-white/40 dark:border-white/20"
+              placeholder="Домофон, этаж, удобное время"
+            />
+            {addressErrors.comment && <p role="alert" data-testid="addr-error-comment" className="mt-1.5 text-[12.5px] text-red-600 dark:text-red-400">{addressErrors.comment}</p>}
+          </div>
+
           <Button onClick={handleSaveAddress} disabled={isSavingAddress} data-testid="addr-save" className="w-full mt-4">
             {isSavingAddress ? 'Сохранение…' : 'Сохранить адрес'}
           </Button>

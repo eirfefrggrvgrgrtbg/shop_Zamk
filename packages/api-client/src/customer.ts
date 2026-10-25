@@ -46,7 +46,7 @@ export const validatePromo = async (code: string): Promise<PromoQuote> => {
   return request<PromoQuote>('POST', '/customer/promotions/validate', { body: { code } });
 };
 
-export const createOrder = async (input: { customerName: string; customerPhone: string; customerEmail: string; deliveryAddress: string; deliveryMethodId: string; promoCode?: string; analyticsContext?: { visitorId: string, sessionId: string } }, idempotencyKey?: string): Promise<Order> => {
+export const createOrder = async (input: { customerName: string; customerPhone: string; customerEmail: string; deliveryAddress: string; deliveryPostalCode?: string; deliveryCourierComment?: string; deliveryMethodId: string; promoCode?: string; analyticsContext?: { visitorId: string, sessionId: string } }, idempotencyKey?: string): Promise<Order> => {
   const headers: Record<string, string> = {};
   if (idempotencyKey) {
     headers['Idempotency-Key'] = idempotencyKey;

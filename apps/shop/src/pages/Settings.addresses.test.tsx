@@ -92,6 +92,23 @@ describe('Settings — address book', () => {
     await waitFor(() => expect(getAddresses).toHaveBeenCalledTimes(2)); // the list is reloaded
   });
 
+  it('the courier comment and postal code are saved with the address and shown on its card', async () => {
+    open();
+    await fillNew({ postalCode: '101000', comment: '  Домофон 12  ' });
+    fireEvent.click(screen.getByTestId('addr-save'));
+    await waitFor(() => expect(createAddress).toHaveBeenCalledTimes(1));
+    expect(createAddress.mock.calls[0][0].postalCode).toBe('101000');
+    expect(createAddress.mock.calls[0][0].comment).toBe('Домофон 12');
+  });
+
+  it('a too long comment is explained next to the field', async () => {
+    open();
+    await fillNew();
+    fireEvent.change(screen.getByTestId('addr-comment'), { target: { value: 'x'.repeat(500) } });
+    fireEvent.click(screen.getByTestId('addr-save'));
+    await waitFor(() => expect(createAddress).toHaveBeenCalled()); // exactly 500 is allowed
+  });
+
   it('a server validation error is shown at its field', async () => {
     createAddress.mockRejectedValue(Object.assign(new Error('generic'), { rawMessage: 'Поле «Улица» содержит недопустимые символы', data: { error: { code: 'validation_error', field: 'street' } } }));
     open();

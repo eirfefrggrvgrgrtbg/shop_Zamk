@@ -115,4 +115,72 @@ describe('Checkout — saved addresses', () => {
     expect(await screen.findByPlaceholderText('Полный адрес доставки')).toBeDefined();
     expect(screen.queryByTestId('saved-address-select')).toBeNull();
   });
+
+  it('a saved address brings its postal code and courier comment: shown before the order, sent with it', async () => {
+    getAddresses.mockResolvedValue([{ ...home, postalCode: '101000', comment: 'Домофон 12, <b>позвонить</b>' }]);
+    open();
+    const summary = await screen.findByTestId('saved-address-summary');
+    expect(screen.getByTestId('saved-address-postal').textContent).toContain('101000');
+    expect(screen.getByTestId('saved-address-comment').textContent).toContain('Домофон 12, <b>позвонить</b>');
+    expect(summary.querySelector('b')).toBeNull(); // shown as text, never as markup
+    fireEvent.change(screen.getByPlaceholderText('Эл. почта для получения чека'), { target: { value: 'anna@example.com' } });
+    await screen.findByText(/Курьер/);
+    fireEvent.click(screen.getByRole('button', { name: 'Оформить заказ' }));
+    await waitFor(() => expect(createOrder).toHaveBeenCalled());
+    const [input] = createOrder.mock.calls[0];
+    expect(input.deliveryPostalCode).toBe('101000');
+    expect(input.deliveryCourierComment).toBe('Домофон 12, <b>позвонить</b>');
+  });
+
+  it('a saved address without extras sends none', async () => {
+    getAddresses.mockResolvedValue([home]);
+    open();
+    await screen.findByTestId('saved-address-summary');
+    expect(screen.queryByTestId('saved-address-postal')).toBeNull();
+    expect(screen.queryByTestId('saved-address-comment')).toBeNull();
+    fireEvent.change(screen.getByPlaceholderText('Эл. почта для получения чека'), { target: { value: 'anna@example.com' } });
+    await screen.findByText(/Курьер/);
+    fireEvent.click(screen.getByRole('button', { name: 'Оформить заказ' }));
+    await waitFor(() => expect(createOrder).toHaveBeenCalled());
+    expect(createOrder.mock.calls[0][0].deliveryPostalCode).toBeUndefined();
+    expect(createOrder.mock.calls[0][0].deliveryCourierComment).toBeUndefined();
+  });
+
+  it('manual entry: optional postal code and comment are sent trimmed; blank ones are not sent', async () => {
+    getAddresses.mockResolvedValue([]);
+    open();
+    fireEvent.change(await screen.findByPlaceholderText('Телефон'), { target: { value: '+79990001122' } });
+    fireEvent.change(screen.getByPlaceholderText('Полный адрес доставки'), { target: { value: 'Москва, Тверская 1' } });
+    fireEvent.change(screen.getByTestId('checkout-postal-code'), { target: { value: ' 101000 ' } });
+    fireEvent.change(screen.getByTestId('checkout-courier-comment'), { target: { value: '  Оставить у консьержа ' } });
+    await screen.findByText(/Курьер/);
+    fireEvent.click(screen.getByRole('button', { name: 'Оформить заказ' }));
+    await waitFor(() => expect(createOrder).toHaveBeenCalled());
+    expect(createOrder.mock.calls[0][0].deliveryPostalCode).toBe('101000');
+    expect(createOrder.mock.calls[0][0].deliveryCourierComment).toBe('Оставить у консьержа');
+  });
+
+  it('a bad postal code is refused in the form before anything is sent', async () => {
+    getAddresses.mockResolvedValue([]);
+    open();
+    fireEvent.change(await screen.findByPlaceholderText('Телефон'), { target: { value: '+79990001122' } });
+    fireEvent.change(screen.getByPlaceholderText('Полный адрес доставки'), { target: { value: 'Москва, Тверская 1' } });
+    fireEvent.change(screen.getByTestId('checkout-postal-code'), { target: { value: '10<1>' } });
+    await screen.findByText(/Курьер/);
+    fireEvent.click(screen.getByRole('button', { name: 'Оформить заказ' }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Индекс/);
+    expect(createOrder).not.toHaveBeenCalled();
+  });
+
+  it('the server refuses the delivery details: its message is shown, no order is kept', async () => {
+    getAddresses.mockResolvedValue([]);
+    createOrder.mockRejectedValue(Object.assign(new Error('x'), { code: 'validation_error', rawMessage: 'Комментарий для курьера слишком длинный (не более 500 символов)' }));
+    open();
+    fireEvent.change(await screen.findByPlaceholderText('Телефон'), { target: { value: '+79990001122' } });
+    fireEvent.change(screen.getByPlaceholderText('Полный адрес доставки'), { target: { value: 'Москва, Тверская 1' } });
+    await screen.findByText(/Курьер/);
+    fireEvent.click(screen.getByRole('button', { name: 'Оформить заказ' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('слишком длинный');
+    expect(createPayment).not.toHaveBeenCalled();
+  });
 });

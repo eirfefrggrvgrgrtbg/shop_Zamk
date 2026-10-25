@@ -138,6 +138,8 @@ function OrdersContent() {
         total: (o.totalPriceCents || 0) / 100,
         delivery: {
           address: o.deliveryAddress || 'Адрес не указан',
+          postalCode: o.deliveryPostalCode || undefined,
+          courierComment: o.deliveryCourierComment || undefined,
           methodName: o.deliveryMethodName || 'Курьерская доставка ZAMK',
           cost: o.deliveryPriceCents !== undefined ? (o.deliveryPriceCents || 0) / 100 : 0,
         },
@@ -552,8 +554,17 @@ function OrdersContent() {
                     <div>
                       <p className="text-[12px] text-graphite/60 dark:text-white/50 uppercase tracking-wider font-semibold">Адрес доставки</p>
                       <p className="text-[14px] text-graphite dark:text-white font-medium mt-0.5">{selectedOrder.delivery.address}</p>
+                      {selectedOrder.delivery.postalCode && (
+                        <p data-testid="order-delivery-postal" className="text-[13px] text-graphite/70 dark:text-white/70 mt-1">Индекс: {selectedOrder.delivery.postalCode}</p>
+                      )}
                     </div>
                   </div>
+                  {selectedOrder.delivery.courierComment && (
+                    <div data-testid="order-delivery-comment" className="p-3.5 rounded-2xl bg-graphite/[0.02] dark:bg-white/5 border border-border-lighter dark:border-white/10">
+                      <p className="text-[12px] text-graphite/60 dark:text-white/50 uppercase tracking-wider font-semibold">Комментарий для курьера</p>
+                      <p className="text-[14px] text-graphite dark:text-white mt-0.5 break-words whitespace-pre-wrap">{selectedOrder.delivery.courierComment}</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Карточка отслеживания для переданных в доставку / доставленных заказов */}

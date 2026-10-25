@@ -16,6 +16,10 @@ type Order struct {
 	CustomerPhone   string     `json:"customerPhone" db:"customer_phone"`
 	CustomerEmail   string     `json:"customerEmail" db:"customer_email"`
 	DeliveryAddress            string     `json:"deliveryAddress" db:"delivery_address"`
+	// DeliveryPostalCode / DeliveryCourierComment are the order's own copy of what the customer gave at checkout
+	// (NULL when not given, and for orders placed before they existed).
+	DeliveryPostalCode         *string    `json:"deliveryPostalCode,omitempty" db:"delivery_postal_code"`
+	DeliveryCourierComment     *string    `json:"deliveryCourierComment,omitempty" db:"delivery_courier_comment"`
 	DeliveryMethodID           *uuid.UUID `json:"deliveryMethodId" db:"delivery_method_id"`
 	DeliveryMethodCode         *string    `json:"deliveryMethodCode" db:"delivery_method_code"`
 	DeliveryMethodName         *string    `json:"deliveryMethodName" db:"delivery_method_name"`
