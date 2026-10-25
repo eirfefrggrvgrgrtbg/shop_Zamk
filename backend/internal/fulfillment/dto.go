@@ -1,5 +1,7 @@
 package fulfillment
 
+import "github.com/google/uuid"
+
 type CreateShipmentRequest struct {
 	Carrier        *string `json:"carrier"`
 	TrackingNumber *string `json:"trackingNumber"`
@@ -29,7 +31,23 @@ type CustomerFulfillmentResponse struct {
 	TrackingUrl     *string           `json:"trackingUrl,omitempty"`
 	ShippedAt       *string           `json:"shippedAt,omitempty"`
 	DeliveredAt     *string           `json:"deliveredAt,omitempty"`
-	Items           []FulfillmentItem `json:"items"`
+	Items           []CustomerFulfillmentItemResponse `json:"items"`
+}
+
+// CustomerFulfillmentItemResponse is what a customer sees of a parcel line. It carries none of the warehouse data of
+// FulfillmentItem (barcode, allocation mode, physical unit codes).
+type CustomerFulfillmentItemResponse struct {
+	OrderItemID    uuid.UUID  `json:"orderItemId"`
+	ProductID      uuid.UUID  `json:"productId"`
+	ProductTitle   string     `json:"productTitle"`
+	VariantID      *uuid.UUID `json:"variantId,omitempty"`
+	VariantSize    *string    `json:"variantSize,omitempty"`
+	VariantColor   *string    `json:"variantColor,omitempty"`
+	SKU            *string    `json:"sku,omitempty"`
+	Quantity       int        `json:"quantity"`
+	UnitPriceCents int64      `json:"unitPriceCents"`
+	LineTotalCents int64      `json:"lineTotalCents"`
+	ImageURL       *string    `json:"imageUrl,omitempty"`
 }
 
 type ResolveReceivingCodeRequest struct {

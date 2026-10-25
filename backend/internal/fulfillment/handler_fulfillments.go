@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/http/pagination"
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/orders"
 )
 
 type FulfillmentListResponse struct {
@@ -102,7 +103,12 @@ func (h *Handler) GetCustomerOrderFulfillments(w http.ResponseWriter, r *http.Re
 
 	fulfillments, err := h.svc.CustomerGetOrderFulfillments(r.Context(), customerID, orderID)
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		// Someone else's order and a missing order look the same (as in GET /customer/orders/{id}); no internal text.
+		if errors.Is(err, ErrUnauthorized) || errors.Is(err, orders.ErrOrderNotFound) {
+			h.writeError(w, http.StatusNotFound, "not_found", "Order not found")
+			return
+		}
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get order fulfillments")
 		return
 	}
 
@@ -124,6 +130,15 @@ func (h *Handler) GetCustomerOrderFulfillments(w http.ResponseWriter, r *http.Re
 			deliveredAtStr = &s
 		}
 
+		items := make([]CustomerFulfillmentItemResponse, 0, len(f.Items))
+		for _, it := range f.Items {
+			items = append(items, CustomerFulfillmentItemResponse{
+				OrderItemID: it.OrderItemID, ProductID: it.ProductID, ProductTitle: it.ProductTitle,
+				VariantID: it.VariantID, VariantSize: it.VariantSize, VariantColor: it.VariantColor, SKU: it.SKU,
+				Quantity: it.Quantity, UnitPriceCents: it.UnitPriceCents, LineTotalCents: it.LineTotalCents, ImageURL: it.ImageURL,
+			})
+		}
+
 		safeFulfillments = append(safeFulfillments, CustomerFulfillmentResponse{
 			ID:             f.ID.String(),
 			OrderID:        f.OrderID.String(),
@@ -139,7 +154,7 @@ func (h *Handler) GetCustomerOrderFulfillments(w http.ResponseWriter, r *http.Re
 			TrackingUrl:    f.TrackingUrl,
 			ShippedAt:      shippedAtStr,
 			DeliveredAt:    deliveredAtStr,
-			Items:          f.Items,
+			Items:          items,
 		})
 	}
 	if safeFulfillments == nil {

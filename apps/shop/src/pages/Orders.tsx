@@ -15,6 +15,7 @@ import {
   getOrderStatusStyle,
   getItemCountWord,
 } from '../components/orders/reviewHelpers';
+import { OrderTracking } from '../components/orders/OrderTracking';
 import { PaymentMethodPicker } from '../components/PaymentMethodPicker';
 import { AccountLayout } from '../components/account/AccountLayout';
 import { useToast } from '../contexts/ToastContext';
@@ -132,6 +133,7 @@ function OrdersContent() {
         rawStatus: o.status,
         date: new Date(o.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
         createdAt: o.createdAt,
+        cancelledAt: o.cancelledAt,
         status: mapOrderStatus(o.status),
         total: (o.totalPriceCents || 0) / 100,
         delivery: {
@@ -180,7 +182,8 @@ function OrdersContent() {
   useEffect(() => {
     if (!selectedOrder) return;
     const orderId = selectedOrder.rawId;
-    const isRelevant = selectedOrder.rawStatus === 'shipped' || selectedOrder.rawStatus === 'delivered';
+    // parcels are read for every order that is past payment: partial shipments are visible while the order is still being assembled
+    const isRelevant = ['paid', 'assembling', 'packed', 'shipped', 'delivered', 'returned', 'refunded'].includes(selectedOrder.rawStatus);
     if (!isRelevant) return;
     if (shipmentsMap[orderId] !== undefined || shipmentLoadingMap[orderId]) return;
 
@@ -361,38 +364,14 @@ function OrdersContent() {
               </div>
               <p className="text-[13.5px] font-medium text-graphite/70 dark:text-white/70 mt-1">{selectedOrder.date}</p>
 
-              {/* Компактный прогресс-бар доставки (Оформлен → В пути → Доставлен) */}
-              <div className="mt-5 pt-4 border-t border-border-lighter/60 dark:border-white/5">
-                <div className="flex items-center justify-between text-xs">
-                  {[
-                    { label: 'Оформлен', isDone: true },
-                    {
-                      label: 'В пути',
-                      isDone: selectedOrder.rawStatus === 'shipped' || selectedOrder.rawStatus === 'delivered' || selectedOrder.rawStatus === 'returned' || selectedOrder.rawStatus === 'refunded',
-                    },
-                    {
-                      label: 'Доставлен',
-                      isDone: selectedOrder.rawStatus === 'delivered' || selectedOrder.rawStatus === 'returned' || selectedOrder.rawStatus === 'refunded',
-                    },
-                  ].map((step, idx, arr) => (
-                    <div key={step.label} className="flex items-center flex-1 last:flex-none">
-                      <div className="flex items-center gap-1.5">
-                        {step.isDone ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <Circle className="w-4 h-4 text-graphite/30 dark:text-white/20" />
-                        )}
-                        <span className={`text-[13px] font-medium ${step.isDone ? 'text-graphite dark:text-white font-semibold' : 'text-graphite/50 dark:text-white/40'}`}>
-                          {step.label}
-                        </span>
-                      </div>
-                      {idx < arr.length - 1 && (
-                        <div className={`h-px flex-1 mx-2 ${step.isDone && arr[idx + 1].isDone ? 'bg-emerald-600 dark:bg-emerald-400' : 'bg-border-lighter dark:bg-white/10'}`} />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <OrderTracking
+                status={selectedOrder.rawStatus}
+                createdAt={selectedOrder.createdAt}
+                cancelledAt={selectedOrder.cancelledAt}
+                fulfillments={shipmentsMap[selectedOrder.rawId]}
+                loading={Boolean(shipmentLoadingMap[selectedOrder.rawId])}
+                failed={shipmentsMap[selectedOrder.rawId] === null}
+              />
             </div>
 
             {/* Контент Drawer'а */}
@@ -417,6 +396,8 @@ function OrdersContent() {
                   const isDelivered = selectedOrder.status === 'Доставлен' || selectedOrder.rawStatus === 'delivered';
                   const returnRecords = returnsMap[selectedOrder.rawId] || [];
                   const activeReturn = returnRecords.find((r: any) => r.status !== 'cancelled');
+                  // the return that contains this very line (the order stays «Доставлен»; the return carries its own status)
+                  const itemReturn = returnRecords.find((r: any) => r.status !== 'cancelled' && (r.items || []).some((ri: any) => ri.orderItemId === item.orderItemId));
                   const variantDetails = formatVariantDetails(item.variantColor || item.color, item.variantSize || item.size);
                   const qtySuffix = (item.quantity ?? 1) > 1 ? `${item.quantity} шт.` : '';
                   const subtitle = [variantDetails, qtySuffix].filter(Boolean).join(' · ');
@@ -502,6 +483,18 @@ function OrdersContent() {
                         </div>
                       )}
 
+                      {/* Статус возврата по товару: заказ остаётся «Доставлен», возврат ведётся отдельной записью */}
+                      {itemReturn && (
+                        <Link
+                          to={`/returns/${itemReturn.id}`}
+                          data-testid="item-return-status"
+                          className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-purple-200/70 dark:border-purple-800/40 bg-purple-50/50 dark:bg-purple-950/20 text-[13.5px]"
+                        >
+                          <span className="text-graphite/80 dark:text-white/80">Возврат</span>
+                          <span className="font-semibold text-purple-700 dark:text-purple-300">{itemReturn.statusText}</span>
+                        </Link>
+                      )}
+
                       {/* Интеграция отзыва прямо под товаром: Секция "Ваш отзыв" */}
                       {hasReview && (
                         <div className="p-4 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-800/40 space-y-2.5">
@@ -564,14 +557,20 @@ function OrdersContent() {
                 </div>
 
                 {/* Карточка отслеживания для переданных в доставку / доставленных заказов */}
-                {(selectedOrder.rawStatus === 'shipped' || selectedOrder.rawStatus === 'delivered') && (
+                {(['paid', 'assembling', 'packed', 'shipped', 'delivered'].includes(selectedOrder.rawStatus)) && (
                   <div className="mt-3">
                     {shipmentLoadingMap[selectedOrder.rawId] ? (
                       <div className="p-4 rounded-2xl bg-graphite/[0.02] dark:bg-white/5 border border-border-lighter dark:border-white/10 flex items-center justify-center py-6">
                         <div className="animate-spin w-5 h-5 border-2 border-graphite border-t-transparent rounded-full dark:border-white dark:border-t-transparent" />
                       </div>
                     ) : (() => {
-                      const fulfillments = shipmentsMap[selectedOrder.rawId];
+                      const allFulfillments = shipmentsMap[selectedOrder.rawId];
+                      const orderShipped = selectedOrder.rawStatus === 'shipped' || selectedOrder.rawStatus === 'delivered';
+                      const hasParcelData = (f: CustomerFulfillment) => Boolean(f.shippedAt || f.carrier || f.trackingNumber || f.trackingUrl || f.deliveredAt);
+                      // While the order is still being assembled only parcels that already left are described here
+                      // (a partial shipment); the rest is shown by the timeline.
+                      const fulfillments = orderShipped ? allFulfillments : allFulfillments?.filter(hasParcelData);
+                      if (!orderShipped && (!fulfillments || fulfillments.length === 0)) return null;
                       if (!fulfillments || fulfillments.length === 0) {
                         return (
                           <div className="p-3.5 rounded-2xl bg-graphite/[0.02] dark:bg-white/5 border border-border-lighter dark:border-white/10 text-[13.5px] text-graphite/60 dark:text-white/50">
@@ -587,11 +586,12 @@ function OrdersContent() {
                             const hasCarrier = Boolean(fulfillment.carrier);
                             const hasTrackingNumber = Boolean(fulfillment.trackingNumber);
                             const hasTrackingUrl = Boolean(fulfillment.trackingUrl);
+                            const hasDeliveredAt = Boolean(fulfillment.deliveredAt);
 
-                            if (!hasShippedAt && !hasCarrier && !hasTrackingNumber && !hasTrackingUrl) {
+                            if (!hasShippedAt && !hasCarrier && !hasTrackingNumber && !hasTrackingUrl && !hasDeliveredAt) {
                               return (
                                 <div key={fulfillment.id} className="p-3.5 rounded-2xl bg-graphite/[0.02] dark:bg-white/5 border border-border-lighter dark:border-white/10 text-[13.5px] text-graphite/60 dark:text-white/50">
-                                  {fulfillments.length > 1 && <div className="font-medium text-graphite dark:text-white mb-2">Посылка {idx + 1}</div>}
+                                  {(allFulfillments?.length ?? 0) > 1 && <div className="font-medium text-graphite dark:text-white mb-2">Посылка {(allFulfillments?.indexOf(fulfillment) ?? idx) + 1}</div>}
                                   Данные отслеживания пока недоступны
                                 </div>
                               );
@@ -603,15 +603,23 @@ function OrdersContent() {
 
                             return (
                               <div key={fulfillment.id} className="p-4 rounded-2xl bg-graphite/[0.02] dark:bg-white/5 border border-border-lighter dark:border-white/10 space-y-2.5">
-                                {fulfillments.length > 1 && (
+                                {(allFulfillments?.length ?? 0) > 1 && (
                                   <div className="font-medium text-[14.5px] text-graphite dark:text-white mb-1.5 pb-2 border-b border-border-lighter/60 dark:border-white/5">
-                                    Посылка {idx + 1}
+                                    Посылка {(allFulfillments?.indexOf(fulfillment) ?? idx) + 1}
                                   </div>
                                 )}
                                 {formattedShippedDate && (
                                   <div className="flex justify-between items-center text-[13.5px]">
                                     <span className="text-graphite/70 dark:text-white/60">Передан в доставку</span>
                                     <span className="font-medium text-graphite dark:text-white">{formattedShippedDate}</span>
+                                  </div>
+                                )}
+                                {hasDeliveredAt && (
+                                  <div className="flex justify-between items-center text-[13.5px]" data-testid="delivered-at-row">
+                                    <span className="text-graphite/70 dark:text-white/60">Доставлен</span>
+                                    <span className="font-medium text-graphite dark:text-white">
+                                      {new Date(fulfillment.deliveredAt as string).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                    </span>
                                   </div>
                                 )}
                                 {hasCarrier && (

@@ -487,8 +487,11 @@ describe('M4.3.3C2B — Shop Multi-Fulfillment Tracking & Observer Status Regres
 
     // Tracking card has no shipped date row
     // Primary status badge in order list and drawer header have 'Передан в доставку'
+    // (and the timeline step of the same name, which carries no date when the backend reports none)
     const statusBadges = screen.getAllByText('Передан в доставку');
-    expect(statusBadges.length).toBe(2);
+    expect(statusBadges.length).toBe(3);
+    const shippedStep = screen.getByTestId('tracking-step-shipped');
+    expect(shippedStep.textContent).not.toMatch(/\d{4}/);
   });
 
   it('12. failure behavior: getCustomerOrderFulfillments rejection keeps status/timeline and shows neutral fallback', async () => {
@@ -587,6 +590,64 @@ describe('M4.3.3C2B — Shop Multi-Fulfillment Tracking & Observer Status Regres
     // Review and return CTAs must remain available for delivered order
     expect(screen.getByRole('button', { name: 'Оставить отзыв' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Оформить возврат' })).toBeDefined();
+  });
+
+  it('16. SHOP.ORDER.TRACKING.1 delivered: the confirmed delivery date is shown from the backend', async () => {
+    mockGetOrders.mockResolvedValue([mockDeliveredOrder]);
+    mockGetCustomerOrderFulfillments.mockResolvedValue([
+      { id: 'f-deliv', orderId: 'ord-100209-uuid', status: 'delivered', carrier: 'CDEK', trackingNumber: 'T-1', shippedAt: '2026-09-25T11:00:00Z', deliveredAt: '2026-09-28T15:00:00Z', items: [] },
+    ]);
+    render(<MemoryRouter><Orders /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('ORD-100209')).toBeDefined());
+    fireEvent.click(screen.getByText('ORD-100209'));
+    await waitFor(() => expect(screen.getByTestId('delivered-at-row')).toBeDefined());
+    expect(screen.getByTestId('delivered-at-row').textContent).toContain('28 сентября 2026');
+    expect(screen.getByTestId('tracking-step-delivered').getAttribute('data-state')).toBe('done');
+    expect(screen.getByTestId('tracking-step-delivered').textContent).toContain('28 сентября 2026');
+  });
+
+  it('17. SHOP.ORDER.TRACKING.1 cancelled order: cancellation step, no fake progress, no parcel request', async () => {
+    mockGetOrders.mockResolvedValue([{ ...mockPackedOrder, id: 'ord-cancel-uuid', orderNumber: 'ORD-100299', status: 'cancelled', cancelledAt: '2026-09-21T08:00:00Z' }]);
+    render(<MemoryRouter><Orders /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('ORD-100299')).toBeDefined());
+    fireEvent.click(screen.getByText('ORD-100299'));
+    await waitFor(() => expect(screen.getByTestId('order-tracking')).toBeDefined());
+    expect(screen.getByTestId('tracking-step-cancelled').textContent).toContain('21 сентября 2026');
+    expect(screen.queryByTestId('tracking-step-delivered')).toBeNull();
+    expect(mockGetCustomerOrderFulfillments).not.toHaveBeenCalled();
+  });
+
+  it('18. SHOP.ORDER.TRACKING.1 packed order with two parcels, one already shipped: partial shipment is visible', async () => {
+    mockGetOrders.mockResolvedValue([mockPackedOrder]);
+    mockGetCustomerOrderFulfillments.mockResolvedValue([
+      { id: 'fa', orderId: mockPackedOrder.id, status: 'shipped', shippedAt: '2026-09-25T11:00:00Z', carrier: 'CarrierA', items: [] },
+      { id: 'fb', orderId: mockPackedOrder.id, status: 'packed', items: [] },
+    ]);
+    render(<MemoryRouter><Orders /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('ORD-100208')).toBeDefined());
+    fireEvent.click(screen.getByText('ORD-100208'));
+    await waitFor(() => expect(screen.getByTestId('tracking-parcels')).toBeDefined());
+    expect(screen.getByTestId('tracking-step-shipped').textContent).toContain('Передано посылок: 1 из 2');
+    expect(screen.getByTestId('tracking-parcels').textContent).toContain('Упакована');
+    // the parcel that already left is described (carrier, number of the parcel); the packed one is not
+    expect(screen.getByText('CarrierA')).toBeDefined();
+    expect(screen.getByText('Посылка 1')).toBeDefined();
+    expect(screen.queryByText('Посылка 2')).toBeNull();
+    expect(screen.queryByText('Данные отслеживания пока недоступны')).toBeNull();
+  });
+
+  it('19. SHOP.ORDER.TRACKING.E2E.1 a return shows its own status under the product; the order stays delivered', async () => {
+    mockGetOrders.mockResolvedValue([mockDeliveredOrder]);
+    mockGetCustomerOrderFulfillments.mockResolvedValue([{ id: 'f-deliv', orderId: 'ord-100209-uuid', status: 'delivered', deliveredAt: '2026-09-28T15:00:00Z', items: [] }]);
+    mockGetCustomerReturns.mockResolvedValue({ items: [{ id: 'ret-1', orderId: 'ord-100209-uuid', status: 'refunded', items: [{ orderItemId: 'item-3', quantity: 1 }] }] });
+    render(<MemoryRouter><Orders /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('ORD-100209')).toBeDefined());
+    fireEvent.click(screen.getByText('ORD-100209'));
+    await waitFor(() => expect(screen.getByTestId('item-return-status')).toBeDefined());
+    expect(screen.getByTestId('item-return-status').textContent).toContain('Возмещён');
+    expect(screen.getByTestId('item-return-status').getAttribute('href')).toBe('/returns/ret-1');
+    expect(screen.getByTestId('tracking-step-delivered').getAttribute('data-state')).toBe('done');
+    expect(screen.queryByRole('button', { name: 'Оформить возврат' })).toBeNull();
   });
 
   it('15. no customer-visible internal concepts (ZMU, fulfillment_id, warehouse.dispatch, reserved_stock)', async () => {
