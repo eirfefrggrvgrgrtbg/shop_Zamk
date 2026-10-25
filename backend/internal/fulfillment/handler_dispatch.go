@@ -1,6 +1,7 @@
 package fulfillment
 
 import (
+	"log"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -40,6 +41,10 @@ func (h *Handler) DispatchFulfillment(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusConflict, "dispatch_not_allowed", "Dispatch is not allowed for this fulfillment or order state")
 			return
 		}
+		if errors.Is(err, ErrDispatchDeliveryDataMissing) {
+			h.writeError(w, http.StatusConflict, "dispatch_delivery_data_missing", "Recipient, phone or delivery address is missing in the order")
+			return
+		}
 		if errors.Is(err, ErrFulfillmentNotFullyPicked) {
 			h.writeError(w, http.StatusConflict, "fulfillment_not_fully_picked", "Fulfillment is not fully picked")
 			return
@@ -64,7 +69,8 @@ func (h *Handler) DispatchFulfillment(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusInternalServerError, "invariant_violation", "Invariant violation in allocation data")
 			return
 		}
-		h.writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		log.Printf("DispatchFulfillment failed: %v", err) // the cause stays in the log, never in the answer
+		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to dispatch fulfillment")
 		return
 	}
 

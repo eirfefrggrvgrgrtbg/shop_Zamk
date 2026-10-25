@@ -29,6 +29,7 @@ import {
 import { formatOrderNumber } from '../utils/orderFormatters';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 import { ShippingCard } from '../components/shipments/ShippingCard';
+import { DispatchReadinessCard } from '../components/shipments/DispatchReadinessCard';
 
 interface DispatchDisplayItem {
   orderItemId: string;
@@ -126,12 +127,17 @@ export function AdminDispatchDetail() {
       const msg = getDispatchErrorMessage(err);
       setDispatchError(msg);
       setShowConfirmModal(false);
+      // the state changed since the screen was loaded: show the fresh checklist next to the reason
+      const fresh = await getAdminDispatchContext(id).catch(() => null);
+      if (fresh) setDispatchContext(fresh);
     } finally {
       setIsDispatching(false);
     }
   };
 
   // printing is offered only for the parcel of this very page, after its context was loaded successfully
+  // the screen only reflects the backend's readiness; the dispatch endpoint checks everything again on fresh data
+  const notReady = dispatchContext?.readiness ? !dispatchContext.readiness.ready : false;
   const printable = Boolean(dispatchContext && !isLoading && !error && (dispatchContext.fulfillmentId || dispatchContext.id) === id);
 
   if (isLoading) {
@@ -423,6 +429,9 @@ export function AdminDispatchDetail() {
         </div>
       )}
 
+      {/* Readiness to dispatch: computed by the backend; the dispatch checks everything again */}
+      {dispatchContext?.readiness && <DispatchReadinessCard readiness={dispatchContext.readiness} />}
+
       {/* Delivery & Customer Info Card */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm space-y-4">
         <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
@@ -611,12 +620,13 @@ export function AdminDispatchDetail() {
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-indigo-100">
               <div className="text-xs text-gray-500">
-                Передача курьеру службы доставки ZAMK.
+                {notReady ? 'Отгрузка недоступна, пока не устранены препятствия в блоке «Готовность к отгрузке».' : 'Передача курьеру службы доставки ZAMK.'}
               </div>
 
               <button
                 onClick={() => setShowConfirmModal(true)}
-                disabled={isDispatching}
+                disabled={isDispatching || notReady}
+                data-testid="dispatch-open-confirm"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-bold rounded-xl transition-all shadow-sm shrink-0"
               >
                 <Truck className="w-4 h-4" />

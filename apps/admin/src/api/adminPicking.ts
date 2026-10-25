@@ -379,6 +379,8 @@ export const getDispatchErrorMessage = (error: unknown, fallback = 'Не уда�
       case 'insufficient_reserved_stock':
       case 'invariant_violation':
         return 'Не удалось подтвердить отгрузку. Обновите данные и повторите попытку.';
+      case 'dispatch_delivery_data_missing':
+        return 'Отгрузка недоступна: в заказе не указан получатель, телефон или адрес доставки.';
       case 'shipment_contradictory_state':
         return 'Отгрузка уже находится в противоречивом или завершенном статусе.';
       case 'fulfillment_not_found':
@@ -416,6 +418,24 @@ export interface DispatchContextItem {
   allocatedUnits?: DispatchContextAllocatedUnit[];
 }
 
+export type ReadinessSeverity = 'blocking' | 'warning' | 'info';
+
+export interface ReadinessCheck {
+  code: string;
+  severity: ReadinessSeverity;
+  ok: boolean;
+  /** What is wrong, or what is known; computed on the backend, never contains personal data. */
+  detail?: string;
+}
+
+/** Computed by the backend from the data the dispatch itself uses. It informs the screen; the dispatch decides again. */
+export interface DispatchReadiness {
+  ready: boolean;
+  blockingCount: number;
+  warningCount: number;
+  checks: ReadinessCheck[];
+}
+
 export interface DispatchContext {
   id: string;
   fulfillmentId: string;
@@ -438,6 +458,7 @@ export interface DispatchContext {
   carrier?: string | null;
   trackingNumber?: string | null;
   deliveryMethodName?: string | null;
+  readiness?: DispatchReadiness;
   items: DispatchContextItem[];
 }
 

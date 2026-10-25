@@ -95,6 +95,16 @@ func (r *Repository) DispatchFulfillmentTx(ctx context.Context, tx pgx.Tx, admin
 		}
 	}
 
+	// 4b. The recipient, phone and address of the order's own snapshot are required to hand a parcel to a carrier
+	// (the same rule the readiness checklist shows). Decided here on the locked order, never from the screen.
+	var snapName, snapPhone, snapAddr *string
+	if err := tx.QueryRow(ctx, `SELECT customer_name, customer_phone, delivery_address FROM orders WHERE id = $1`, orderID).Scan(&snapName, &snapPhone, &snapAddr); err != nil {
+		return nil, fmt.Errorf("failed to read delivery data for dispatch: %w", err)
+	}
+	if noName, noPhone, noAddr := DeliveryDataMissing(snapName, snapPhone, snapAddr); noName || noPhone || noAddr {
+		return nil, ErrDispatchDeliveryDataMissing
+	}
+
 	// 5. Query order items for this fulfillment
 	queryItems := `
 		SELECT id, product_variant_id, quantity, picked_quantity
@@ -470,6 +480,11 @@ func (r *Repository) GetDispatchContext(ctx context.Context, fulfillmentID uuid.
 	}
 
 	dc.Items = items
+	readiness, err := r.GetDispatchReadiness(ctx, fulfillmentID)
+	if err != nil {
+		return nil, err
+	}
+	dc.Readiness = readiness
 	return &dc, nil
 }
 

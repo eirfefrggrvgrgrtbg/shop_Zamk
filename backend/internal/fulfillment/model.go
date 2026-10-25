@@ -207,6 +207,8 @@ type DispatchContext struct {
 	TrackingNumber         *string               `json:"trackingNumber,omitempty"`
 	DeliveryMethodName *string               `json:"deliveryMethodName,omitempty"`
 	Items              []DispatchContextItem `json:"items"`
+	// Readiness is computed on the backend from the same data and rules the dispatch applies (FBO.DISPATCH.CHECKLIST.1).
+	Readiness *DispatchReadiness `json:"readiness,omitempty"`
 }
 
 type DispatchContextItem struct {

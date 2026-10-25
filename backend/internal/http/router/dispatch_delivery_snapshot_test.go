@@ -156,6 +156,34 @@ func TestDispatchContextDeliverySnapshot(t *testing.T) {
 		assert.Equal(t, []string{"Курьер ZAMK", "TRK-HO-B"}, []string{*b.Carrier, *b.TrackingNumber}, "each parcel has its own carrier and track")
 	})
 
+	t.Run("K: the context carries a readiness checklist for staff only, without personal data in it", func(t *testing.T) {
+		code, body := get(path(f1[0]), dispatch)
+		require.Equal(t, http.StatusOK, code)
+		var d struct {
+			Readiness struct {
+				Ready  bool              `json:"ready"`
+				Checks []json.RawMessage `json:"checks"`
+			} `json:"readiness"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(body), &d))
+		assert.NotEmpty(t, d.Readiness.Checks)
+		// this fixture has no inventory record for its variant, so the dispatch itself would refuse it: the checklist says so
+		assert.False(t, d.Readiness.Ready, body)
+		assert.Contains(t, body, `"code":"UNITS_AND_STOCK","severity":"blocking","ok":false`)
+		raw, _ := json.Marshal(d.Readiness)
+		for _, leak := range []string{secretComment, "101000", "Анна Иванова", "+7 999 000-11-22", "Тверская"} {
+			assert.NotContains(t, string(raw), leak)
+		}
+		for name, tok := range map[string]string{"no right": noRight, "seller": sellerTok, "customer": customerTok} {
+			c, b := get(path(f1[0]), tok)
+			assert.Equal(t, http.StatusForbidden, c, name)
+			assert.NotContains(t, b, "readiness", name)
+		}
+		c, b := get(path(f1[0]), "")
+		assert.Equal(t, http.StatusUnauthorized, c)
+		assert.NotContains(t, b, "readiness")
+	})
+
 	t.Run("B + D: an old order has no postal code or comment and still works; orders are not mixed", func(t *testing.T) {
 		d := read(f2[0], dispatch)
 		assert.Equal(t, "ORD-HO-2", d.OrderNumber)
