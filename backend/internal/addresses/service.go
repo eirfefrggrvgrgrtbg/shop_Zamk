@@ -33,6 +33,9 @@ func (s *Service) CreateAddress(ctx context.Context, userID uuid.UUID, req Creat
 		Comment:       req.Comment,
 		IsDefault:     req.IsDefault,
 	}
+	if verr := normalizeAndValidate(addr); verr != nil {
+		return nil, verr
+	}
 	if err := s.repo.CreateAddress(ctx, addr); err != nil {
 		return nil, err
 	}
@@ -76,6 +79,9 @@ func (s *Service) UpdateAddress(ctx context.Context, id, userID uuid.UUID, req U
 		addr.IsDefault = *req.IsDefault
 	}
 
+	if verr := normalizeAndValidate(addr); verr != nil {
+		return nil, verr
+	}
 	if err := s.repo.UpdateAddress(ctx, addr); err != nil {
 		return nil, err
 	}

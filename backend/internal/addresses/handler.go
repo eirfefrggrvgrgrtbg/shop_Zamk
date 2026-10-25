@@ -45,15 +45,16 @@ func (h *Handler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreateAddressRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
 		return
 	}
 
-	// Basic validation could go here
-
 	addr, err := h.service.CreateAddress(r.Context(), userID, req)
 	if err != nil {
+		if h.writeDomainError(w, err) {
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create address")
 		return
 	}
@@ -78,7 +79,7 @@ func (h *Handler) UpdateAddress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req UpdateAddressRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
 		return
 	}
@@ -87,6 +88,9 @@ func (h *Handler) UpdateAddress(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrAddressNotFound) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Address not found")
+			return
+		}
+		if h.writeDomainError(w, err) {
 			return
 		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update address")
@@ -172,4 +176,20 @@ func (h *Handler) writeError(w http.ResponseWriter, statusCode int, code, messag
 			"message": message,
 		},
 	})
+}
+
+// writeDomainError answers validation and limit errors; other errors are the caller's 500.
+func (h *Handler) writeDomainError(w http.ResponseWriter, err error) bool {
+	var verr *ValidationError
+	if errors.As(err, &verr) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": "validation_error", "message": verr.Message, "field": verr.Field}})
+		return true
+	}
+	if errors.Is(err, ErrAddressLimit) {
+		h.writeError(w, http.StatusConflict, "address_limit", "Можно сохранить не более 20 адресов. Удалите ненужные адреса.")
+		return true
+	}
+	return false
 }

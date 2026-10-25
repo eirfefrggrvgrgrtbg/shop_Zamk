@@ -74,14 +74,27 @@ func (r *Repository) CreateAddress(ctx context.Context, a *Address) error {
 			a.IsDefault = true
 		}
 	}
+	// Serialize the customer's address changes and enforce the limit under that lock.
+	var lock uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, a.UserID).Scan(&lock); err != nil {
+		return err
+	}
+	var total int
+	if err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM customer_addresses WHERE user_id = $1", a.UserID).Scan(&total); err != nil {
+		return err
+	}
+	if total >= maxAddressesPerUser {
+		return ErrAddressLimit
+	}
 
 	query := `
-		INSERT INTO customer_addresses (id, user_id, label, recipient_name, phone, city, street, house, apartment, postal_code, comment, is_default, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		INSERT INTO customer_addresses (id, user_id, label, recipient_name, phone, city, street, house, apartment, postal_code, comment, is_default)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
+	// created_at / updated_at come from the column defaults (the zero time of the struct must never be stored)
 	_, err = tx.Exec(ctx, query,
 		a.ID, a.UserID, a.Label, a.RecipientName, a.Phone, a.City, a.Street,
-		a.House, a.Apartment, a.PostalCode, a.Comment, a.IsDefault, a.CreatedAt, a.UpdatedAt,
+		a.House, a.Apartment, a.PostalCode, a.Comment, a.IsDefault,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create address: %w", err)
@@ -143,15 +156,29 @@ func (r *Repository) UpdateAddress(ctx context.Context, a *Address) error {
 }
 
 func (r *Repository) DeleteAddress(ctx context.Context, id, userID uuid.UUID) error {
-	query := `DELETE FROM customer_addresses WHERE id = $1 AND user_id = $2`
-	res, err := r.db.Pool.Exec(ctx, query, id, userID)
+	tx, err := r.db.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var wasDefault bool
+	err = tx.QueryRow(ctx, `DELETE FROM customer_addresses WHERE id = $1 AND user_id = $2 RETURNING is_default`, id, userID).Scan(&wasDefault)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrAddressNotFound
+	}
 	if err != nil {
 		return fmt.Errorf("failed to delete address: %w", err)
 	}
-	if res.RowsAffected() == 0 {
-		return ErrAddressNotFound
+	if wasDefault {
+		// the newest remaining address becomes the main one, so a customer with addresses always has one
+		if _, err := tx.Exec(ctx, `
+			UPDATE customer_addresses SET is_default = true, updated_at = now()
+			WHERE id = (SELECT id FROM customer_addresses WHERE user_id = $1 ORDER BY created_at DESC, id LIMIT 1)`, userID); err != nil {
+			return err
+		}
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (r *Repository) SetDefault(ctx context.Context, id, userID uuid.UUID) error {

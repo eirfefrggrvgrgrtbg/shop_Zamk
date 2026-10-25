@@ -8,6 +8,7 @@ import { Input } from '../components/ui/Input';
 import { getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress } from '@zamk/api-client/src/customer';
 import { useToast } from '../contexts/ToastContext';
 import { AccountLayout } from '../components/account/AccountLayout';
+import { ADDRESS_MAX, toAddressPayload, validateAddress } from '../lib/addressValidation';
 
 // --- Компоненты UI для настроек ---
 
@@ -65,8 +66,19 @@ export function Settings() {
 
   const [isAddressModalOpen, setAddressModalOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<Partial<Address> | null>(null);
+  const [addressErrors, setAddressErrors] = useState<Record<string, string>>({});
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+  const setField = (name: string, value: string) => {
+    setEditingAddress(prev => (prev ? { ...prev, [name]: value } : {}));
+    setAddressErrors(prev => {
+      if (!prev[name]) return prev;
+      const { [name]: _removed, ...rest } = prev;
+      return rest;
+    });
+  };
 
   const handleOpenAddressModal = (address?: Address) => {
+    setAddressErrors({});
     if (address) {
       setEditingAddress(address);
     } else {
@@ -86,23 +98,31 @@ export function Settings() {
   };
 
   const handleSaveAddress = async () => {
-    if (!editingAddress || !editingAddress.recipientName || !editingAddress.phone || !editingAddress.city || !editingAddress.street || !editingAddress.house) {
-      showToast('Заполните обязательные поля: ФИО, Телефон, Город, Улица, Дом');
+    if (!editingAddress || isSavingAddress) return;
+    const errors = validateAddress(editingAddress);
+    if (Object.keys(errors).length > 0) {
+      setAddressErrors(errors);
       return;
     }
-
+    const payload = toAddressPayload(editingAddress);
     try {
+      setIsSavingAddress(true);
       if (editingAddress.id) {
-        await updateAddress(editingAddress.id, editingAddress);
+        await updateAddress(editingAddress.id, payload);
         showToast('Адрес обновлен');
       } else {
-        await createAddress(editingAddress);
+        await createAddress(payload);
         showToast('Адрес добавлен');
       }
       setAddressModalOpen(false);
       fetchAddresses();
     } catch (err: any) {
-      showToast(err.message || 'Ошибка при сохранении адреса');
+      const field = err?.data?.error?.field;
+      const message = err?.rawMessage || err?.message || 'Ошибка при сохранении адреса';
+      if (field && ADDRESS_MAX[field]) setAddressErrors({ [field]: message });
+      else showToast(message);
+    } finally {
+      setIsSavingAddress(false);
     }
   };
 
@@ -177,7 +197,7 @@ export function Settings() {
               <p className="text-[14px] text-graphite/50 dark:text-white/50 text-center py-4">У вас пока нет сохранённых адресов.</p>
             ) : (
               addresses.map((item) => (
-                <div key={item.id} className={`p-4 rounded-2xl border transition-all ${item.isDefault ? 'border-graphite/30 dark:border-white/20 bg-white/60 dark:bg-white/5' : 'border-white/50 dark:border-white/10 bg-white/20 dark:bg-white/5'}`}>
+                <div key={item.id} data-testid="address-card" data-default={item.isDefault ? 'true' : 'false'} className={`p-4 rounded-2xl border transition-all ${item.isDefault ? 'border-graphite/30 dark:border-white/20 bg-white/60 dark:bg-white/5' : 'border-white/50 dark:border-white/10 bg-white/20 dark:bg-white/5'}`}>
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-graphite/50 dark:text-white/50" />
@@ -188,7 +208,7 @@ export function Settings() {
                     </div>
                     <div className="flex gap-3 text-[12px] font-medium">
                       <button onClick={() => handleOpenAddressModal(item)} className="text-graphite/40 dark:text-white/40 hover:text-graphite dark:hover:text-white transition-colors">Изм.</button>
-                      {!item.isDefault && <button onClick={() => handleDeleteAddress(item.id)} className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors">Удал.</button>}
+                      <button data-testid="address-delete" onClick={() => handleDeleteAddress(item.id)} className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors">Удал.</button>
                     </div>
                   </div>
                   <p className="text-[13px] text-graphite/60 dark:text-white/60 pl-6 leading-relaxed">
@@ -222,56 +242,80 @@ export function Settings() {
             <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Название (например, Дом или Офис)</label>
             <Input 
               value={editingAddress?.label || ''} 
-              onChange={(e) => setEditingAddress(prev => prev ? { ...prev, label: e.target.value } : {})}
+              onChange={(e) => setField('label', e.target.value)}
+              maxLength={ADDRESS_MAX.label}
+              aria-invalid={Boolean(addressErrors.label)}
+              data-testid="addr-label"
               className="bg-white/50 dark:bg-white/10 border-white/40 dark:border-white/20"
               placeholder="Дом"
             />
+            {addressErrors.label && <p role="alert" data-testid="addr-error-label" className="mt-1.5 text-[12.5px] text-red-600 dark:text-red-400">{addressErrors.label}</p>}
           </div>
           <div>
             <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">ФИО получателя *</label>
             <Input 
               value={editingAddress?.recipientName || ''} 
-              onChange={(e) => setEditingAddress(prev => prev ? { ...prev, recipientName: e.target.value } : {})}
+              onChange={(e) => setField('recipientName', e.target.value)}
+              maxLength={ADDRESS_MAX.recipientName}
+              aria-invalid={Boolean(addressErrors.recipientName)}
+              data-testid="addr-recipientName"
               className="bg-white/50 dark:bg-white/10 border-white/40 dark:border-white/20"
               placeholder="Иванов Иван"
             />
+            {addressErrors.recipientName && <p role="alert" data-testid="addr-error-recipientName" className="mt-1.5 text-[12.5px] text-red-600 dark:text-red-400">{addressErrors.recipientName}</p>}
           </div>
           <div>
             <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Телефон *</label>
             <Input 
               value={editingAddress?.phone || ''} 
-              onChange={(e) => setEditingAddress(prev => prev ? { ...prev, phone: e.target.value } : {})}
+              onChange={(e) => setField('phone', e.target.value)}
+              maxLength={ADDRESS_MAX.phone}
+              aria-invalid={Boolean(addressErrors.phone)}
+              data-testid="addr-phone"
               className="bg-white/50 dark:bg-white/10 border-white/40 dark:border-white/20"
               placeholder="+7 999 000-00-00"
             />
+            {addressErrors.phone && <p role="alert" data-testid="addr-error-phone" className="mt-1.5 text-[12.5px] text-red-600 dark:text-red-400">{addressErrors.phone}</p>}
           </div>
           <div>
             <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Город *</label>
             <Input 
               value={editingAddress?.city || ''} 
-              onChange={(e) => setEditingAddress(prev => prev ? { ...prev, city: e.target.value } : {})}
+              onChange={(e) => setField('city', e.target.value)}
+              maxLength={ADDRESS_MAX.city}
+              aria-invalid={Boolean(addressErrors.city)}
+              data-testid="addr-city"
               className="bg-white/50 dark:bg-white/10 border-white/40 dark:border-white/20"
               placeholder="Москва"
             />
+            {addressErrors.city && <p role="alert" data-testid="addr-error-city" className="mt-1.5 text-[12.5px] text-red-600 dark:text-red-400">{addressErrors.city}</p>}
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2">
               <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Улица *</label>
               <Input 
                 value={editingAddress?.street || ''} 
-                onChange={(e) => setEditingAddress(prev => prev ? { ...prev, street: e.target.value } : {})}
+                onChange={(e) => setField('street', e.target.value)}
+              maxLength={ADDRESS_MAX.street}
+              aria-invalid={Boolean(addressErrors.street)}
+              data-testid="addr-street"
                 className="bg-white/50 dark:bg-white/10 border-white/40 dark:border-white/20"
                 placeholder="Пушкина"
               />
+            {addressErrors.street && <p role="alert" data-testid="addr-error-street" className="mt-1.5 text-[12.5px] text-red-600 dark:text-red-400">{addressErrors.street}</p>}
             </div>
             <div>
               <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Дом *</label>
               <Input 
                 value={editingAddress?.house || ''} 
-                onChange={(e) => setEditingAddress(prev => prev ? { ...prev, house: e.target.value } : {})}
+                onChange={(e) => setField('house', e.target.value)}
+              maxLength={ADDRESS_MAX.house}
+              aria-invalid={Boolean(addressErrors.house)}
+              data-testid="addr-house"
                 className="bg-white/50 dark:bg-white/10 border-white/40 dark:border-white/20"
                 placeholder="10"
               />
+            {addressErrors.house && <p role="alert" data-testid="addr-error-house" className="mt-1.5 text-[12.5px] text-red-600 dark:text-red-400">{addressErrors.house}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -279,24 +323,32 @@ export function Settings() {
               <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Квартира</label>
               <Input 
                 value={editingAddress?.apartment || ''} 
-                onChange={(e) => setEditingAddress(prev => prev ? { ...prev, apartment: e.target.value } : {})}
+                onChange={(e) => setField('apartment', e.target.value)}
+              maxLength={ADDRESS_MAX.apartment}
+              aria-invalid={Boolean(addressErrors.apartment)}
+              data-testid="addr-apartment"
                 className="bg-white/50 dark:bg-white/10 border-white/40 dark:border-white/20"
                 placeholder="123"
               />
+            {addressErrors.apartment && <p role="alert" data-testid="addr-error-apartment" className="mt-1.5 text-[12.5px] text-red-600 dark:text-red-400">{addressErrors.apartment}</p>}
             </div>
             <div>
               <label className="text-[12px] font-medium text-graphite/60 dark:text-white/60 uppercase tracking-wider mb-2 block">Индекс</label>
               <Input 
                 value={editingAddress?.postalCode || ''} 
-                onChange={(e) => setEditingAddress(prev => prev ? { ...prev, postalCode: e.target.value } : {})}
+                onChange={(e) => setField('postalCode', e.target.value)}
+              maxLength={ADDRESS_MAX.postalCode}
+              aria-invalid={Boolean(addressErrors.postalCode)}
+              data-testid="addr-postalCode"
                 className="bg-white/50 dark:bg-white/10 border-white/40 dark:border-white/20"
                 placeholder="101000"
               />
+            {addressErrors.postalCode && <p role="alert" data-testid="addr-error-postalCode" className="mt-1.5 text-[12.5px] text-red-600 dark:text-red-400">{addressErrors.postalCode}</p>}
             </div>
           </div>
           
-          <Button onClick={handleSaveAddress} className="w-full mt-4">
-            Сохранить адрес
+          <Button onClick={handleSaveAddress} disabled={isSavingAddress} data-testid="addr-save" className="w-full mt-4">
+            {isSavingAddress ? 'Сохранение…' : 'Сохранить адрес'}
           </Button>
         </div>
       </Modal>

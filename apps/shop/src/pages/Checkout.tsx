@@ -11,6 +11,7 @@ import { getDeliveryMethods } from '@zamk/api-client/src/public';
 import type { AvailablePaymentMethods } from '@zamk/api-client/src/customer';
 import type { PublicDeliveryMethod } from '@zamk/api-client/src/types';
 import { useAuth } from '../contexts/AuthContext';
+import { formatDeliveryAddress } from '../lib/addressValidation';
 import { PaymentMethodPicker } from '../components/PaymentMethodPicker';
 import { formatVariantDetails } from '../lib/variantSelection';
 import { PromoCodeBox } from '../components/PromoCodeBox';
@@ -181,7 +182,7 @@ export function Checkout() {
       if (addr) {
         finalName = addr.recipientName;
         finalPhone = addr.phone;
-        finalAddress = `г. ${addr.city}, ул. ${addr.street}, д. ${addr.house}${addr.apartment ? `, кв. ${addr.apartment}` : ''}`;
+        finalAddress = formatDeliveryAddress(addr);
       }
     }
 
@@ -434,14 +435,18 @@ export function Checkout() {
 
               {isAuthenticated && savedAddresses.length > 0 && (
                 <div className="mb-4">
-                  <label className="text-sm font-medium text-graphite dark:text-white mb-2 block">Сохранённый адрес</label>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <label className="text-sm font-medium text-graphite dark:text-white block">Сохранённый адрес</label>
+                    <Link to="/settings" data-testid="manage-addresses" className="text-[12.5px] text-graphite/60 dark:text-white/60 underline underline-offset-2">Управлять адресами</Link>
+                  </div>
                   <select
+                    data-testid="saved-address-select"
                     className="w-full bg-white dark:bg-white/5 border border-border-lighter dark:border-white/10 rounded-lg p-3 text-sm text-graphite dark:text-white outline-none focus:ring-1 focus:ring-graphite/20 dark:focus:ring-white/30"
                     value={selectedAddressId}
                     onChange={(e) => setSelectedAddressId(e.target.value)}
                   >
                     {savedAddresses.map(a => (
-                      <option key={a.id} value={a.id}>{a.label || a.city + ', ' + a.street} ({a.recipientName})</option>
+                      <option key={a.id} value={a.id}>{a.label || a.city + ', ' + a.street} ({a.recipientName}){a.isDefault ? ' · основной' : ''}</option>
                     ))}
                     <option value="new">Ввести новый адрес...</option>
                   </select>
@@ -459,7 +464,7 @@ export function Checkout() {
                   </div>
                 </div>
               ) : (
-                <div className="p-4 bg-ice/50 dark:bg-white/5 rounded-xl border border-border-lighter dark:border-white/10 text-sm text-graphite dark:text-white mt-4">
+                <div data-testid="saved-address-summary" className="p-4 bg-ice/50 dark:bg-white/5 rounded-xl border border-border-lighter dark:border-white/10 text-sm text-graphite dark:text-white mt-4">
                   {(() => {
                     const a = savedAddresses.find(x => x.id === selectedAddressId);
                     if (!a) return null;
@@ -468,7 +473,7 @@ export function Checkout() {
                         <p className="font-medium text-[15px] mb-1">{a.recipientName}</p>
                         <p className="text-graphite/70 dark:text-white/70 mb-2">{a.phone}</p>
                         <p className="text-graphite-light dark:text-white/80 leading-relaxed">
-                          г. {a.city}, ул. {a.street}, д. {a.house}{a.apartment ? `, кв. ${a.apartment}` : ''}
+                          {formatDeliveryAddress(a)}
                         </p>
                       </>
                     );
