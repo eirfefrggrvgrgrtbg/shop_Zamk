@@ -749,13 +749,34 @@ export interface SellerOrder {
   createdAt: string;
   commercialStatus: string;
   deliveryStatus: string;
+  /** Seller-facing stage: awaiting_payment | paid | processing | shipped | delivered | cancelled. */
+  fulfillmentStage?: string;
+  /** Who acts next: buyer | zamk | none. The seller never has an order action. */
+  nextStepOwner?: 'buyer' | 'zamk' | 'none';
+  hasReturns?: boolean;
   payoutStatus?: string;
   sellerItemCount: number;
   sellerUnits: number;
   sellerGrossAmount: number;
   sellerRefundAmount: number;
   sellerNetAmount: number;
-  items?: OrderItem[];
+  items?: SellerOrderItem[];
+}
+
+export interface SellerOrderItem extends OrderItem {
+  fulfillmentStage?: string;
+  /** Units: a return request, a return being processed and an actual refund are separate facts. */
+  returnRequestedUnits?: number;
+  returnInProgressUnits?: number;
+  returnRefundedUnits?: number;
+}
+
+export type SellerOrderFilter = 'all' | 'new' | 'processing' | 'shipped' | 'delivered' | 'returns';
+
+export interface SellerOrderListParams {
+  filter?: SellerOrderFilter;
+  limit?: number;
+  offset?: number;
 }
 
 export interface SellerReturnUnitDetail {

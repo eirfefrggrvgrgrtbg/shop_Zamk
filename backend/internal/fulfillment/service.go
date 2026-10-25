@@ -504,7 +504,7 @@ func (s *Service) GetSellerShipment(ctx context.Context, userID, orderID uuid.UU
 		return nil, ErrUnauthorized
 	}
 	// Return limited details (filtering done in handler/dto mapping)
-	return s.repo.GetShipmentByOrderID(ctx, orderID)
+	return s.repo.GetShipmentForSellerOrder(ctx, orderID, sellerID)
 }
 
 func (s *Service) emitOrderDeliveredEventsTx(ctx context.Context, tx pgx.Tx, order *orders.Order, occurredAt time.Time) error {

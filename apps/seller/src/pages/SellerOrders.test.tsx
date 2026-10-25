@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { SellerOrders } from './SellerOrders';
 import { getSellerOrders, getSellerOrderSummary } from '@zamk/api-client/src/seller';
@@ -30,6 +30,9 @@ describe('SellerOrders — Canonical Status Presentation and Shipped Observer St
     createdAt: '2026-09-25T11:00:00Z',
     commercialStatus: 'shipped',
     deliveryStatus: 'shipped',
+    fulfillmentStage: 'shipped',
+    nextStepOwner: 'zamk',
+    hasReturns: false,
     sellerItemCount: 1,
     sellerUnits: 1,
     sellerGrossAmount: 122200,
@@ -254,34 +257,144 @@ describe('SellerOrders — Canonical Status Presentation and Shipped Observer St
     });
   });
 
-  it('H. return/refund statuses remain unchanged', async () => {
-    const returnOrder = createOrder({
-      id: 'ord-has-return',
-      orderNumber: 'ORD-100201',
-      commercialStatus: 'has_return',
-      deliveryStatus: 'delivered',
-    });
-    const fullyReturnedOrder = createOrder({
-      id: 'ord-fully-returned',
-      orderNumber: 'ORD-100202',
-      commercialStatus: 'fully_returned',
-      deliveryStatus: 'delivered',
-    });
-
-    vi.mocked(getSellerOrders).mockResolvedValueOnce({
-      items: [returnOrder, fullyReturnedOrder],
-      totalCount: 2,
-    });
-
+  const renderPage = () =>
     render(
       <MemoryRouter>
         <SellerOrders />
       </MemoryRouter>
     );
 
-    await waitFor(() => {
-      expect(screen.getByText('Есть возврат')).toBeTruthy();
-      expect(screen.getByText('Возвращён')).toBeTruthy();
+  it('H. a partial return is shown per item and does not turn the delivered order into "Возвращён"', async () => {
+    const base = createOrder({}).items![0];
+    const order = createOrder({
+      id: 'ord-partial',
+      orderNumber: 'ORD-100201',
+      commercialStatus: 'delivered',
+      deliveryStatus: 'delivered',
+      fulfillmentStage: 'delivered',
+      nextStepOwner: 'none',
+      hasReturns: true,
+      sellerItemCount: 2,
+      sellerUnits: 4,
+      items: [
+        { ...base, id: 'i-ret', title: 'Футболка', quantity: 3, returnRefundedUnits: 1, returnRequestedUnits: 0, returnInProgressUnits: 0, fulfillmentStage: 'delivered' },
+        { ...base, id: 'i-ok', title: 'Кепка', quantity: 1, returnRefundedUnits: 0, returnRequestedUnits: 0, returnInProgressUnits: 0, fulfillmentStage: 'delivered' },
+      ],
     });
+    vi.mocked(getSellerOrders).mockResolvedValueOnce({ items: [order], totalCount: 1 });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText('#ORD-100201')).toBeTruthy());
+    expect(screen.queryByText('Возвращён')).toBeNull();
+    expect(screen.getAllByText('Доставлен').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByTestId('order-has-returns')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('#ORD-100201').closest('tr')!);
+    const items = await screen.findAllByTestId('order-item');
+    expect(items).toHaveLength(2);
+    const [returned, clean] = items;
+    expect(within(returned).getByTestId('item-return-ref').textContent).toBe('Возмещено: 1 шт.');
+    expect(within(clean).queryByTestId('item-return-ref')).toBeNull();
+    expect(within(clean).queryByTestId('item-return-req')).toBeNull();
+  });
+
+  it('I. a return request, a return in progress and a refund are three different labels', async () => {
+    const base = createOrder({}).items![0];
+    const order = createOrder({
+      id: 'ord-ret-kinds',
+      orderNumber: 'ORD-100301',
+      deliveryStatus: 'delivered',
+      fulfillmentStage: 'delivered',
+      hasReturns: true,
+      items: [{ ...base, returnRequestedUnits: 1, returnInProgressUnits: 2, returnRefundedUnits: 3 }],
+    });
+    vi.mocked(getSellerOrders).mockResolvedValueOnce({ items: [order], totalCount: 1 });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('#ORD-100301')).toBeTruthy());
+    fireEvent.click(screen.getByText('#ORD-100301').closest('tr')!);
+    expect((await screen.findByTestId('item-return-req')).textContent).toBe('Запрошен возврат: 1 шт.');
+    expect(screen.getByTestId('item-return-prog').textContent).toBe('Возврат в обработке: 2 шт.');
+    expect(screen.getByTestId('item-return-ref').textContent).toBe('Возмещено: 3 шт.');
+  });
+
+  it('J. a delivered order without returns shows no return marker', async () => {
+    vi.mocked(getSellerOrders).mockResolvedValueOnce({
+      items: [createOrder({ orderNumber: 'ORD-100302', deliveryStatus: 'delivered', fulfillmentStage: 'delivered', nextStepOwner: 'none' })],
+      totalCount: 1,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('#ORD-100302')).toBeTruthy());
+    expect(screen.queryByTestId('order-has-returns')).toBeNull();
+    expect(screen.getByText('Действий не требуется')).toBeTruthy();
+  });
+
+  it('K. FBO: the detail says ZAMK warehouse does the work and offers no warehouse action', async () => {
+    vi.mocked(getSellerOrders).mockResolvedValueOnce({
+      items: [createOrder({ orderNumber: 'ORD-100303', deliveryStatus: 'packed', fulfillmentStage: 'processing' })],
+      totalCount: 1,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('#ORD-100303')).toBeTruthy());
+    fireEvent.click(screen.getByText('#ORD-100303').closest('tr')!);
+    const notice = await screen.findByTestId('fbo-notice');
+    expect(notice.textContent).toContain('Сборку, упаковку и отправку выполняет склад ZAMK');
+    expect(screen.queryByRole('button', { name: /собрать|упаковать|отгрузить|подтвердить/i })).toBeNull();
+  });
+
+  it('L. filters ask the server, reset the page and keep the real status names', async () => {
+    vi.mocked(getSellerOrders).mockResolvedValue({ items: [], totalCount: 0 });
+    renderPage();
+    await waitFor(() => expect(getSellerOrders).toHaveBeenCalledWith({ filter: 'all', limit: 20, offset: 0 }));
+
+    for (const [id, label] of [['new', 'Новые'], ['processing', 'В обработке ZAMK'], ['shipped', 'Отгружены'], ['delivered', 'Доставлены'], ['returns', 'С возвратами']] as const) {
+      fireEvent.click(screen.getByRole('button', { name: label }));
+      await waitFor(() => expect(getSellerOrders).toHaveBeenLastCalledWith({ filter: id, limit: 20, offset: 0 }));
+      expect(screen.getByRole('button', { name: label }).getAttribute('aria-pressed')).toBe('true');
+    }
+    await waitFor(() => expect(screen.getByText('В этом разделе заказов нет.')).toBeTruthy());
+  });
+
+  it('M. pagination uses the server total and requests the next page by offset', async () => {
+    const many = Array.from({ length: 20 }, (_, i) => createOrder({ id: `o-${i}`, orderNumber: `ORD-P${i}` }));
+    vi.mocked(getSellerOrders).mockResolvedValue({ items: many, totalCount: 45 });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('#ORD-P0')).toBeTruthy());
+    expect(screen.getByTestId('orders-pagination').textContent).toContain('1–20 из 45');
+    fireEvent.click(screen.getByRole('button', { name: 'Вперёд' }));
+    await waitFor(() => expect(getSellerOrders).toHaveBeenLastCalledWith({ filter: 'all', limit: 20, offset: 20 }));
+    await waitFor(() => expect(screen.getByTestId('orders-pagination').textContent).toContain('21–40 из 45'));
+  });
+
+  it('N. a load error shows a message and a retry that recovers', async () => {
+    vi.mocked(getSellerOrders)
+      .mockRejectedValueOnce(Object.assign(new Error('boom'), { status: 500 }))
+      .mockResolvedValueOnce({ items: [createOrder({ orderNumber: 'ORD-100304' })], totalCount: 1 });
+    renderPage();
+    expect((await screen.findByRole('alert')).textContent).toContain('Не удалось загрузить данные продаж.');
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(screen.getByText('#ORD-100304')).toBeTruthy());
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('O. a seller with no orders sees the empty state', async () => {
+    vi.mocked(getSellerOrders).mockResolvedValueOnce({ items: [], totalCount: 0 });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('У вас пока нет продаж.')).toBeTruthy());
+  });
+
+  it('P. a paid order shows a Russian sub-status, never the raw "paid", and no duplicate label', async () => {
+    vi.mocked(getSellerOrders).mockResolvedValueOnce({
+      items: [
+        createOrder({ id: 'o-paid', orderNumber: 'ORD-100305', deliveryStatus: 'paid', fulfillmentStage: 'paid' }),
+        createOrder({ id: 'o-del', orderNumber: 'ORD-100306', deliveryStatus: 'delivered', fulfillmentStage: 'delivered', nextStepOwner: 'none' }),
+      ],
+      totalCount: 2,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('#ORD-100305')).toBeTruthy());
+    expect(screen.queryByText('paid')).toBeNull();
+    expect(screen.queryByText(/🚚 paid/)).toBeNull();
+    expect(screen.getByText('🚚 Ожидает сборки на складе ZAMK')).toBeTruthy();
+    expect(screen.queryByText('🚚 Доставлен')).toBeNull();
   });
 });

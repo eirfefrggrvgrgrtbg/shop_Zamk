@@ -5,6 +5,7 @@ import type {
   SellerProduct,
   SellerInventoryItem,
   SellerOrder,
+  SellerOrderListParams,
   SellerReturn,
   SellerReturnDetailResponse,
   SellerReview,
@@ -142,8 +143,15 @@ export const getSellerInventory = async (): Promise<{ items: SellerInventoryItem
 };
 
 // P0 fix: backend returns { items, totalCount } not bare array
-export const getSellerOrders = async (): Promise<{ items: SellerOrder[]; totalCount: number }> => {
-  const res = await request<any>('GET', '/seller/orders');
+export const getSellerOrders = async (
+  params: SellerOrderListParams = {},
+): Promise<{ items: SellerOrder[]; totalCount: number }> => {
+  const query = new URLSearchParams();
+  if (params.filter && params.filter !== 'all') query.set('filter', params.filter);
+  if (params.limit !== undefined) query.set('limit', String(params.limit));
+  if (params.offset !== undefined) query.set('offset', String(params.offset));
+  const qs = query.toString();
+  const res = await request<any>('GET', `/seller/orders${qs ? `?${qs}` : ''}`);
   return { ...res, items: res?.items || [] };
 };
 

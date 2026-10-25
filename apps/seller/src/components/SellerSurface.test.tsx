@@ -435,7 +435,8 @@ describe('SELLER R1.4A — Surface System Reference', () => {
 
       // Order rows and status
       expect(screen.getByText('#12345')).toBeTruthy();
-      expect(screen.getByText('Оплачен')).toBeTruthy();
+      // the badge now follows the fulfillment stage (shipped), not the payment-level order status
+      expect(screen.getByText('Отгружен')).toBeTruthy();
       expect(screen.getByText('🚚 Передан в доставку')).toBeTruthy();
 
       // Row expansion interaction

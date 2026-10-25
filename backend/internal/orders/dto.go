@@ -38,21 +38,39 @@ type OrderListResponse struct {
 type SellerOrderListResponse struct {
 	Items      []SellerOrder `json:"items"`
 	TotalCount int           `json:"totalCount"`
+	Limit      int           `json:"limit"`
+	Offset     int           `json:"offset"`
+	Filter     string        `json:"filter"`
 }
 
 type SellerOrder struct {
-	ID                 uuid.UUID    `json:"id"`
-	OrderNumber        *string      `json:"orderNumber,omitempty"`
-	CreatedAt          time.Time    `json:"createdAt"`
-	CommercialStatus   string       `json:"commercialStatus"`
-	DeliveryStatus     string       `json:"deliveryStatus"`
-	PayoutStatus       *string      `json:"payoutStatus,omitempty"`
-	SellerItemCount    int          `json:"sellerItemCount"`
-	SellerUnits        int          `json:"sellerUnits"`
-	SellerGrossAmount  int64        `json:"sellerGrossAmount"`
-	SellerRefundAmount int64        `json:"sellerRefundAmount"`
-	SellerNetAmount    int64        `json:"sellerNetAmount"`
-	Items              []OrderItem  `json:"items"`
+	ID                 uuid.UUID         `json:"id"`
+	OrderNumber        *string           `json:"orderNumber,omitempty"`
+	CreatedAt          time.Time         `json:"createdAt"`
+	CommercialStatus   string            `json:"commercialStatus"`
+	DeliveryStatus     string            `json:"deliveryStatus"`
+	FulfillmentStage   string            `json:"fulfillmentStage"`
+	NextStepOwner      string            `json:"nextStepOwner"`
+	HasReturns         bool              `json:"hasReturns"`
+	PayoutStatus       *string           `json:"payoutStatus,omitempty"`
+	SellerItemCount    int               `json:"sellerItemCount"`
+	SellerUnits        int               `json:"sellerUnits"`
+	SellerGrossAmount  int64             `json:"sellerGrossAmount"`
+	SellerRefundAmount int64             `json:"sellerRefundAmount"`
+	SellerNetAmount    int64             `json:"sellerNetAmount"`
+	Items              []SellerOrderItem `json:"items"`
+}
+
+// SellerOrderItem is one of the seller's own order lines with its fulfillment stage and per-item return units.
+// Return units are kept apart on purpose: a request, an in-progress return and an actual refund are different facts.
+type SellerOrderItem struct {
+	OrderItem
+	// Shadows the embedded internal fulfillment id so it never reaches the seller.
+	OrderFulfillmentID    *uuid.UUID `json:"orderFulfillmentId,omitempty"` // always nil
+	FulfillmentStage      string `json:"fulfillmentStage"`
+	ReturnRequestedUnits  int    `json:"returnRequestedUnits"`
+	ReturnInProgressUnits int    `json:"returnInProgressUnits"`
+	ReturnRefundedUnits   int    `json:"returnRefundedUnits"`
 }
 
 type SellerOrderSummary struct {

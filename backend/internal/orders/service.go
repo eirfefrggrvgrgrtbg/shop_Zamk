@@ -751,12 +751,12 @@ func (s *Service) ListAdminOrders(ctx context.Context, q, status, paymentStatus,
 	return s.repo.ListAdminOrders(ctx, q, status, paymentStatus, fulfillmentStatus, sourceType, sellerId, limit, offset)
 }
 
-func (s *Service) ListSellerOrders(ctx context.Context, userID uuid.UUID, limit, offset int) ([]SellerOrder, error) {
+func (s *Service) ListSellerOrders(ctx context.Context, userID uuid.UUID, filter string, limit, offset int) ([]SellerOrder, int, error) {
 	sellerID, err := s.repo.GetSellerIDByUserID(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return s.repo.ListSellerOrders(ctx, sellerID, limit, offset)
+	return s.repo.ListSellerOrders(ctx, sellerID, filter, limit, offset)
 }
 
 func (s *Service) GetSellerOrder(ctx context.Context, userID, orderID uuid.UUID) (*SellerOrder, error) {

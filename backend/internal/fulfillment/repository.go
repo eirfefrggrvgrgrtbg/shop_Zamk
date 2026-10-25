@@ -73,6 +73,29 @@ func (r *Repository) GetShipment(ctx context.Context, id uuid.UUID) (*Shipment, 
 	return &s, nil
 }
 
+// GetShipmentForSellerOrder returns the shipment that belongs to the seller's own fulfillment. A shipment bound to
+// another seller's fulfillment in the same order is never returned; unbound legacy shipments are.
+func (r *Repository) GetShipmentForSellerOrder(ctx context.Context, orderID, sellerID uuid.UUID) (*Shipment, error) {
+	query := `
+		SELECT s.id, s.order_id, s.fulfillment_id, s.status, s.carrier, s.tracking_number, s.tracking_url, s.shipped_at, s.delivered_at, s.created_at, s.updated_at
+		FROM shipments s
+		LEFT JOIN order_fulfillments f ON f.id = s.fulfillment_id
+		WHERE s.order_id = $1 AND (s.fulfillment_id IS NULL OR f.seller_id = $2)
+		ORDER BY s.created_at ASC LIMIT 1
+	`
+	var s Shipment
+	err := r.db.QueryRow(ctx, query, orderID, sellerID).Scan(
+		&s.ID, &s.OrderID, &s.FulfillmentID, &s.Status, &s.Carrier, &s.TrackingNumber, &s.TrackingUrl, &s.ShippedAt, &s.DeliveredAt, &s.CreatedAt, &s.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrShipmentNotFound
+		}
+		return nil, err
+	}
+	return &s, nil
+}
+
 func (r *Repository) GetShipmentByOrderID(ctx context.Context, orderID uuid.UUID) (*Shipment, error) {
 	query := `
 		SELECT id, order_id, fulfillment_id, status, carrier, tracking_number, tracking_url, shipped_at, delivered_at, created_at, updated_at

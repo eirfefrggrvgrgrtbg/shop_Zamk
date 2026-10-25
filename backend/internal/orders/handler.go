@@ -415,15 +415,26 @@ func (h *Handler) ListSellerOrders(w http.ResponseWriter, r *http.Request) {
 	sellerID := val.(uuid.UUID)
 
 	page := pagination.FromRequest(r)
-	orders, err := h.service.ListSellerOrders(r.Context(), sellerID, page.Limit, page.Offset)
+	filter := r.URL.Query().Get("filter")
+	if filter == "" {
+		filter = SellerOrderFilterAll
+	}
+	orders, total, err := h.service.ListSellerOrders(r.Context(), sellerID, filter, page.Limit, page.Offset)
 	if err != nil {
+		if errors.Is(err, ErrInvalidSellerOrderFilter) {
+			h.writeError(w, http.StatusBadRequest, "invalid_filter", "Invalid order filter")
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list orders")
 		return
 	}
 
 	resp := SellerOrderListResponse{
 		Items:      orders,
-		TotalCount: len(orders),
+		TotalCount: total,
+		Limit:      page.Limit,
+		Offset:     page.Offset,
+		Filter:     filter,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
