@@ -24,7 +24,8 @@ import {
   availabilityOwnerLabels,
   getProductAvailability,
   getStorefrontStatusInfo,
-  getSkuState,
+  getSkuDiagnosis,
+  type SkuDiagnosis,
   statusLabels,
   type SellerProduct,
   type SellerProductStatus,
@@ -36,6 +37,7 @@ import {
   submitSellerProductModeration,
   deleteSellerProduct,
   archiveSellerProduct,
+  getSellerProduct,
 } from '@zamk/api-client/src/seller';
 import type { SellerProductsSummary } from '@zamk/api-client/src/types';
 import { adaptProductList } from '../api/adapter';
@@ -130,6 +132,62 @@ function ProductAvatar({ product }: { product: SellerProduct }) {
   );
 }
 
+function skuActionHref(product: SellerProduct, item: SellerProduct['sizes'][number], action: SkuDiagnosis['action']): string | null {
+  if (action === 'edit_variant' && item.variantId) return `/products/${product.id}/edit?variant=${encodeURIComponent(item.variantId)}`;
+  if (action === 'edit_product') return `/products/${product.id}/edit`;
+  if (action === 'supply') return '/supplies/new';
+  return null;
+}
+
+type PendingSkuChange = 'enable' | 'disable';
+
+function SkuRow({ product, item, actionsAllowed, pendingChange }: { product: SellerProduct; item: SellerProduct['sizes'][number]; actionsAllowed: boolean; pendingChange?: PendingSkuChange }) {
+  const diagnosis = getSkuDiagnosis(item, product);
+  const href = actionsAllowed ? skuActionHref(product, item, diagnosis.action) : null;
+  const stockKnown = item.available !== undefined;
+  return (
+    <div
+      data-testid="drawer-sku-row"
+      data-sku-code={diagnosis.code}
+      className="rounded-md border border-gray-200/70 bg-white dark:bg-white/[0.03] px-3 py-2 text-sm text-gray-800 dark:border-white/10 dark:text-white/80"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="min-w-0 break-words font-medium">{item.size}</span>
+        <span className="flex flex-wrap items-center gap-2">
+          <ProductBadge tone={diagnosis.tone}>{diagnosis.label}</ProductBadge>
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400" data-testid="drawer-sku-stock">
+        {item.price !== undefined && <>{formatCurrency(item.price)} · </>}
+        {stockKnown
+          ? `Свободно ${item.available} шт.${item.reserved ? ` · в резерве ${item.reserved}` : ''}`
+          : 'Остаток не загружен'}
+      </p>
+      {diagnosis.reason && (
+        <p className="mt-1 text-xs text-gray-700 dark:text-gray-300" data-testid="drawer-sku-reason">
+          {diagnosis.reason}{' '}
+          <span className="text-[11px] uppercase tracking-wide opacity-70">{availabilityOwnerLabels[diagnosis.owner]}</span>
+        </p>
+      )}
+      {pendingChange && (
+        <p className="mt-1 text-xs font-medium text-blue-700 dark:text-blue-300" data-testid="drawer-sku-pending">
+          Изменение ждёт проверки ZAMK: вариант будет {pendingChange === 'enable' ? 'включён' : 'выключен'} после одобрения. Сейчас в магазине всё как раньше.{' '}
+          <span className="text-[11px] uppercase tracking-wide opacity-70">{availabilityOwnerLabels.moderation}</span>
+        </p>
+      )}
+      {href && (
+        <Link
+          to={href}
+          data-testid="drawer-sku-action"
+          className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-gray-900 underline hover:no-underline dark:text-white"
+        >
+          {diagnosis.actionLabel}
+        </Link>
+      )}
+    </div>
+  );
+}
+
 function ProductDetailPanel({
   product,
   sellerStatus,
@@ -152,9 +210,40 @@ function ProductDetailPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isDrawerMenuOpen, setIsDrawerMenuOpen] = useState(false);
+  const [pending, setPending] = useState<{ changes: Record<string, PendingSkuChange> } | null>(null);
+
+  // The list does not carry the seller's unapproved edit of a published product; the product card does.
+  // Only the newest answer for the open product is applied; a failed read simply shows nothing extra.
+  useEffect(() => {
+    let cancelled = false;
+    setPending(null);
+    (async () => {
+      try {
+        const detail = await getSellerProduct(product.id);
+        if (cancelled || !detail?.pendingRevision) return;
+        const revVariants = detail.pendingRevision.variants || [];
+        const changes: Record<string, PendingSkuChange> = {};
+        // The product card already shows the seller's own edit, so the live state is the one the list carries.
+        for (const live of product.sizes) {
+          if (!live.variantId) continue;
+          const rev = revVariants.find((v) => v.id === live.variantId);
+          const liveOn = live.active !== false;
+          const revOn = Boolean(rev) && rev!.isActive !== false;
+          if (liveOn !== revOn) changes[live.variantId] = revOn ? 'enable' : 'disable';
+        }
+        setPending({ changes });
+      } catch {
+        // the drawer stays usable without the extra hint
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [product.id, product.updatedAt]);
 
   const totalStock = product.sizes.reduce((sum, item) => sum + (item.active === false ? 0 : item.stock || 0), 0);
   const availability = getProductAvailability(product);
+  const shopActive = sellerStatus !== 'blocked' && sellerStatus !== 'archived';
   const isApprovedAndNoStock = product.status === 'approved' && totalStock === 0;
 
   const handleSubmitModeration = async () => {
@@ -273,19 +362,17 @@ function ProductDetailPanel({
           </div>
         )}
 
+        {pending && (
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3.5 text-sm text-blue-800 dark:border-blue-900/30 dark:bg-blue-950/20 dark:text-blue-200" data-testid="drawer-pending-revision">
+            Есть изменения, которые ждут проверки ZAMK. В магазине остаётся прежняя версия товара.
+          </div>
+        )}
+
         <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50/50 p-3.5 dark:border-white/10 dark:bg-white/[0.02]">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Варианты (SKU)</p>
-          <div className="mt-2.5 flex flex-col gap-1.5">
+          <div className="mt-2.5 flex flex-col gap-1.5" data-testid="drawer-sku-list">
             {product.sizes.map((item, idx) => (
-              <div key={`${item.size}-${idx}`} className="flex justify-between items-center rounded-md border border-gray-200/70 bg-white dark:bg-white/[0.03] px-3 py-2 text-sm text-gray-800 dark:border-white/10 dark:text-white/80">
-                <span>{item.size}</span>
-                <span className="flex items-center gap-2 text-gray-500 font-medium">
-                  {item.active !== undefined && (
-                    <ProductBadge tone={getSkuState(item).tone}>{getSkuState(item).label}</ProductBadge>
-                  )}
-                  ZAMK: {item.stock} шт.
-                </span>
-              </div>
+              <SkuRow key={item.variantId || `${item.size}-${idx}`} product={product} item={item} actionsAllowed={shopActive} pendingChange={item.variantId ? pending?.changes[item.variantId] : undefined} />
             ))}
           </div>
         </div>

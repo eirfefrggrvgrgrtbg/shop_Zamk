@@ -40,7 +40,12 @@ export function adaptProductList(apiProducts: any[], categoryMap?: Record<string
       sizes = p.variants.map((v: any) => ({
         size: formatVariantLabel(v),
         stock: v.availableStock ?? v.totalStock ?? ((v.inStock === true) ? 1 : 0),
-        ...(typeof v.isActive === 'boolean' ? { active: v.isActive } : {})
+        ...(typeof v.isActive === 'boolean' ? { active: v.isActive } : {}),
+        ...(typeof v.id === 'string' && v.id ? { variantId: v.id } : {}),
+        ...(typeof v.totalStock === 'number' ? { total: v.totalStock } : {}),
+        ...(typeof v.reservedStock === 'number' ? { reserved: v.reservedStock } : {}),
+        ...(typeof v.availableStock === 'number' ? { available: v.availableStock } : {}),
+        ...(typeof v.priceCents === 'number' && v.priceCents > 0 ? { price: v.priceCents / 100 } : {}),
       }));
     }
 

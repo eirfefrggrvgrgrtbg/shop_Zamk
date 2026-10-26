@@ -202,6 +202,8 @@ export interface PendingProductRevision {
   id: string;
   createdAt?: string;
   variantsChanged: boolean;
+  /** The variants the seller's unapproved edit would leave in place (the live variants are unchanged until approval). */
+  variants?: ProductVariant[];
   imagesChanged: boolean;
   imagesCount: number;
   images?: ProductImage[];

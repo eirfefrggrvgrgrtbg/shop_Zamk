@@ -69,7 +69,10 @@ function getCanonicalSizeLabel(
   return 'Размер недоступен';
 }
 
-export function ProductStudioFormWorkspace() {
+export function ProductStudioFormWorkspace({
+  focusVariantId,
+  focusVariantStored,
+}: { focusVariantId?: string; focusVariantStored?: ProductStudioVariant } = {}) {
   const {
     activeSection,
     setActiveSection,
@@ -497,6 +500,20 @@ export function ProductStudioFormWorkspace() {
   const activeVariants = useMemo(() => {
     return (draft.variants || []).filter((v) => v.isActive !== false);
   }, [draft.variants]);
+
+  // The variant the seller came for from the product list; looked up only among this product's own variants.
+  // A switched-off variant is not in the draft, so the stored copy of exactly that variant backs the banner.
+  const focusedVariant = useMemo(() => {
+    if (!focusVariantId) return undefined;
+    return (
+      (draft.variants || []).find((v) => v.id === focusVariantId) ||
+      (focusVariantStored?.id === focusVariantId ? focusVariantStored : undefined)
+    );
+  }, [focusVariantId, focusVariantStored, draft.variants]);
+  const focusedVariantIsOn = Boolean(
+    focusedVariant &&
+      activeVariants.some((v) => v.colorId === focusedVariant.colorId && v.sizeValueId === focusedVariant.sizeValueId)
+  );
 
   const totalPossibleVariants = configuredColors.length * configuredSizes.length;
   const activeVariantsInMatrix = useMemo(() => {
@@ -1865,6 +1882,34 @@ export function ProductStudioFormWorkspace() {
                 ? 'Для данной категории обязателен размер *.'
                 : 'Товар без разделения по цветам и размерам.'}
             </p>
+            {focusVariantId && (
+              <div
+                data-testid="studio-focused-variant"
+                className="rounded-lg border border-indigo-200 bg-indigo-50 p-3.5 text-sm text-indigo-900 dark:border-indigo-900/40 dark:bg-indigo-950/20 dark:text-indigo-200"
+              >
+                {focusedVariant ? (
+                  <>
+                    <p className="font-medium">
+                      Вариант: {[focusedVariant.colorName || focusedVariant.legacyColorText, focusedVariant.size].filter(Boolean).join(' / ') || 'без размера и цвета'}
+                      {focusedVariantIsOn ? '' : ' · выключен: нажмите на выделенную ячейку, чтобы включить, и сохраните'}
+                    </p>
+                    {focusedVariantIsOn && focusVariantStored?.isActive === false && draft.hasPendingRevision && (
+                      <p className="mt-1 text-xs" data-testid="studio-focused-variant-pending">
+                        Изменение ждёт проверки ZAMK. В магазине вариант остаётся выключенным до одобрения.
+                      </p>
+                    )}
+                    {(focusedVariant.totalStock !== undefined || focusedVariant.reservedStock !== undefined) && (
+                      <p className="mt-1 text-xs" data-testid="studio-focused-variant-stock">
+                        На складе ZAMK: {focusedVariant.totalStock ?? 0} шт., в резерве: {focusedVariant.reservedStock ?? 0} шт.
+                        Остаток меняет только склад ZAMK. Здесь можно включить или выключить вариант и изменить его данные.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p>Этот вариант не найден в товаре. Выберите вариант в таблице ниже.</p>
+                )}
+              </div>
+            )}
             {isColorAttention && (
               <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
                 Для данной категории необходимо выбрать хотя бы один цвет.
@@ -2148,6 +2193,7 @@ export function ProductStudioFormWorkspace() {
                                 <button
                                   type="button"
                                   data-testid={`form-matrix-cell-${c.id}-${s.id}`}
+                                  data-focused={focusedVariant?.colorId === c.id && focusedVariant?.sizeValueId === s.id ? 'true' : undefined}
                                   aria-label={
                                     isCellBlocked
                                       ? blockedTooltip
@@ -2159,6 +2205,7 @@ export function ProductStudioFormWorkspace() {
                                   onClick={() => toggleMatrixCell(c.id, s.id, isActive)}
                                   className={cn(
                                     "w-7 h-7 rounded-md inline-flex items-center justify-center transition-colors",
+                                    focusedVariant && focusedVariant.colorId === c.id && focusedVariant.sizeValueId === s.id && "ring-2 ring-offset-2 ring-amber-500 dark:ring-offset-gray-900",
                                     isActive
                                       ? isCellBlocked
                                         ? "bg-indigo-600/80 text-white cursor-not-allowed"

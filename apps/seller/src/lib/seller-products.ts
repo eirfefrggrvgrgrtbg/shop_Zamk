@@ -7,6 +7,14 @@ export interface SellerProductSize {
   stock: number;
   /** False when the SKU is switched off; undefined when the backend did not say. */
   active?: boolean;
+  /** Persisted variant id; absent for the synthetic single variant of a product without variants. */
+  variantId?: string;
+  /** Warehouse figures straight from the backend; undefined when the DTO did not carry them (never guessed as 0). */
+  total?: number;
+  reserved?: number;
+  available?: number;
+  /** Variant price in roubles when the variant has its own price. */
+  price?: number;
 }
 
 export interface SellerProduct {
@@ -180,12 +188,13 @@ export function getStorefrontStatusInfo(product: {
  * Who has to act for a product to become purchasable. The seller never receives warehouse actions: "warehouse" only
  * tells them that stock comes from a supply to the ZAMK warehouse.
  */
-export type AvailabilityOwner = 'seller' | 'moderation' | 'warehouse' | 'info';
+export type AvailabilityOwner = 'seller' | 'moderation' | 'warehouse' | 'system' | 'info';
 
 export const availabilityOwnerLabels: Record<AvailabilityOwner, string> = {
   seller: 'Действие продавца',
   moderation: 'Решение модерации ZAMK',
   warehouse: 'Склад ZAMK',
+  system: 'Система ZAMK',
   info: 'Информация',
 };
 
@@ -280,4 +289,95 @@ export function getSkuState(size: SellerProductSize): { label: string; tone: 'go
   if (size.active === false) return { label: 'Выключен', tone: 'neutral' };
   if ((size.stock || 0) > 0) return { label: 'Есть в наличии', tone: 'good' };
   return { label: 'Нет остатка', tone: 'warning' };
+}
+
+export type SkuIssueCode =
+  | 'ok'
+  | 'unknown'
+  | 'disabled'
+  | 'no_stock'
+  | 'reserved'
+  | 'product_pending'
+  | 'product_blocked'
+  | 'product_hidden'
+  | 'product_unpublished';
+
+export type SkuFixAction = 'edit_variant' | 'edit_product' | 'supply' | 'none';
+
+export interface SkuDiagnosis {
+  code: SkuIssueCode;
+  label: string;
+  tone: 'good' | 'warning' | 'neutral' | 'info' | 'danger';
+  /** Why this particular variant is (not) sellable; empty when nothing needs saying. */
+  reason: string;
+  owner: AvailabilityOwner;
+  /** The only way the seller can act on it; 'none' when the fix is on the ZAMK side. */
+  action: SkuFixAction;
+  actionLabel?: string;
+}
+
+/**
+ * Explains one variant using only DTO facts: its own switch and warehouse numbers plus the product status.
+ * Physical stock is never an input for the seller to change: the stock/reserve fixes live on ZAMK's side.
+ */
+export function getSkuDiagnosis(size: SellerProductSize, product: Pick<SellerProduct, 'status'>): SkuDiagnosis {
+  if (size.active === false) {
+    const editable = product.status !== 'archived' && product.status !== 'blocked';
+    return {
+      code: 'disabled',
+      label: 'Выключен',
+      tone: 'neutral',
+      reason: 'Вариант выключен и не продаётся. Включить его можно в карточке товара.',
+      owner: 'seller',
+      action: editable && size.variantId ? 'edit_variant' : 'none',
+      actionLabel: 'Открыть вариант',
+    };
+  }
+  switch (product.status) {
+    case 'blocked':
+      return { code: 'product_blocked', label: 'Товар заблокирован', tone: 'danger', reason: 'Товар заблокирован ZAMK, варианты не продаются.', owner: 'moderation', action: 'none' };
+    case 'hidden':
+      return { code: 'product_hidden', label: 'Товар скрыт', tone: 'warning', reason: 'Товар скрыт из каталога, варианты не продаются.', owner: 'info', action: 'none' };
+    case 'pending_moderation':
+    case 'in_review':
+      return { code: 'product_pending', label: 'Ожидает проверки', tone: 'info', reason: 'Изменения проверяет ZAMK. Вариант станет доступен после одобрения.', owner: 'moderation', action: 'none' };
+    case 'draft':
+    case 'rejected':
+      return {
+        code: 'product_unpublished',
+        label: product.status === 'draft' ? 'Черновик' : 'Нужны исправления',
+        tone: 'warning',
+        reason: product.status === 'draft' ? 'Товар не отправлен на модерацию.' : 'Товар нужно исправить и снова отправить на проверку.',
+        owner: 'seller',
+        action: 'edit_product',
+        actionLabel: 'Открыть карточку',
+      };
+    default:
+  }
+  if (size.available === undefined) {
+    return { code: 'unknown', label: 'Нет данных', tone: 'neutral', reason: '', owner: 'info', action: 'none' };
+  }
+  if (size.available > 0) {
+    return { code: 'ok', label: 'Есть в наличии', tone: 'good', reason: '', owner: 'info', action: 'none' };
+  }
+  if ((size.reserved ?? 0) > 0) {
+    return {
+      code: 'reserved',
+      label: 'Всё зарезервировано',
+      tone: 'warning',
+      reason: `Остаток (${size.total ?? size.reserved} шт.) зарезервирован под заказы покупателей. Резервы освободит система.`,
+      owner: 'system',
+      action: 'none',
+    };
+  }
+  const canSupply = product.status === 'approved' || product.status === 'published' || product.status === 'out_of_stock';
+  return {
+    code: 'no_stock',
+    label: 'Нет остатка',
+    tone: 'warning',
+    reason: 'На складе ZAMK нет свободных единиц этого варианта. Остаток появится после приёмки поставки.',
+    owner: 'warehouse',
+    action: canSupply ? 'supply' : 'none',
+    actionLabel: 'Создать поставку',
+  };
 }

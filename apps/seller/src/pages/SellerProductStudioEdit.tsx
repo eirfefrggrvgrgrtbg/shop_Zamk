@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import {
   getSellerProduct,
   getSellerCategorySchema,
@@ -13,6 +13,7 @@ import {
 import {
   ProductStudioProvider,
   type ProductStudioDraft,
+  type ProductStudioVariant,
 } from '../contexts/ProductStudioContext';
 import { ProductStudio } from '../components/product-studio/ProductStudio';
 import {
@@ -28,6 +29,9 @@ interface ErrorState {
 
 export default function SellerProductStudioEdit() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const focusVariantId = searchParams.get('variant') || undefined;
+  const [focusVariantStored, setFocusVariantStored] = useState<ProductStudioVariant | undefined>(undefined);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ErrorState | null>(null);
@@ -130,6 +134,22 @@ export default function SellerProductStudioEdit() {
         dictionaryValuesMap: dictMap,
       });
 
+      // The exact variant the seller came for, switched off or not (switched-off variants are not part of the draft).
+      const stored = focusVariantId ? (product.variants || []).find((v) => v.id === focusVariantId) : undefined;
+      setFocusVariantStored(
+        stored
+          ? {
+              id: stored.id,
+              colorId: stored.colorId || undefined,
+              colorName: stored.colorName || undefined,
+              sizeValueId: stored.sizeValueId || undefined,
+              size: stored.size || stored.sizeName || undefined,
+              isActive: stored.isActive,
+              totalStock: typeof stored.totalStock === 'number' ? stored.totalStock : undefined,
+              reservedStock: typeof stored.reservedStock === 'number' ? stored.reservedStock : undefined,
+            }
+          : undefined
+      );
       setDraft(hydratedDraft);
       setCategorySchema(schema);
       setCanonicalColors(colors);
@@ -168,7 +188,7 @@ export default function SellerProductStudioEdit() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, focusVariantId]);
 
   useEffect(() => {
     loadProductAndDependencies();
@@ -294,7 +314,7 @@ export default function SellerProductStudioEdit() {
       canonicalColors={canonicalColors}
       dictionaryValuesMap={dictionaryValuesMap}
     >
-      <ProductStudio />
+      <ProductStudio focusVariantId={focusVariantId} focusVariantStored={focusVariantStored} />
     </ProductStudioProvider>
   );
 }
