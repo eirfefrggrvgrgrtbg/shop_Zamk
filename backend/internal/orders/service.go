@@ -182,6 +182,12 @@ func (s *Service) CreateOrder(ctx context.Context, userID uuid.UUID, req CreateO
 			if !info.VariantActive {
 				return ErrVariantNotFound
 			}
+			// A product of an inactive store is not for sale. The storefront's free-stock minimum is deliberately not
+			// applied here: it decides visibility, not whether an already chosen unit can be bought. The real limit is
+			// the reservation below, taken under the stock row lock.
+			if !info.SellerActive {
+				return ErrProductNotPublished
+			}
 
 			// Reserve stock with TTL bounded to payment timeout
 			timeoutMinutes := 30

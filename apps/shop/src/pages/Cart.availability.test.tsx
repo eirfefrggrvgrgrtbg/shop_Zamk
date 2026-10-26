@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Cart } from './Cart';
 import { diffCartPrices, readLastSeenCartPrices, saveLastSeenCartPrices } from '../lib/cartAvailability';
@@ -51,6 +51,37 @@ vi.stubGlobal('localStorage', {
 });
 
 const renderCart = () => render(<MemoryRouter><Cart /></MemoryRouter>);
+
+describe('SHOP.CART.ELIGIBILITY.1 — отказ сервера увеличить количество', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    updateQuantity.mockReset();
+    removeItem.mockReset();
+  });
+  afterEach(cleanup);
+
+  it('если сервер отказал в увеличении, показывает понятное объяснение и оставляет позицию, минус и удаление', async () => {
+    items = [line({ quantity: 1 })];
+    updateQuantity.mockResolvedValue(false);
+    renderCart();
+    fireEvent.click(screen.getByLabelText('Увеличить количество Худи Осло'));
+    const note = await screen.findByTestId('cart-item-increase-refused');
+    expect(note.textContent).toContain('Увеличить количество сейчас нельзя');
+    expect(note.textContent).toContain('уменьшить количество или удалить позицию');
+    expect(screen.getByText('Худи Осло')).toBeDefined();
+    fireEvent.click(screen.getByLabelText('Удалить Худи Осло из корзины'));
+    expect(removeItem).toHaveBeenCalledWith('i1');
+  });
+
+  it('успешное увеличение не показывает объяснения', async () => {
+    items = [line({ quantity: 1 })];
+    updateQuantity.mockResolvedValue(true);
+    renderCart();
+    fireEvent.click(screen.getByLabelText('Увеличить количество Худи Осло'));
+    await waitFor(() => expect(updateQuantity).toHaveBeenCalledWith('i1', 2));
+    expect(screen.queryByTestId('cart-item-increase-refused')).toBeNull();
+  });
+});
 
 describe('CART.C2 — недоступные позиции в корзине Shop', () => {
   beforeEach(() => {

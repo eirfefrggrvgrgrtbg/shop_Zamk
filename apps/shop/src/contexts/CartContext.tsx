@@ -27,7 +27,8 @@ interface CartContextType {
   items: UIContextCartItem[];
   addItem: (productId: string, productVariantId: string, quantity?: number) => Promise<void>;
   removeItem: (itemId: string) => Promise<void>;
-  updateQuantity: (itemId: string, quantity: number) => Promise<void>;
+  /** Resolves to false when the server refused the change (the cart is reloaded either way). */
+  updateQuantity: (itemId: string, quantity: number) => Promise<boolean>;
   clearCart: () => Promise<void>;
   /** Reload the cart from the server (e.g. after checkout was refused because the cart changed). */
   refreshCart: () => Promise<void>;
@@ -146,7 +147,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const updateQuantity = useCallback(async (itemId: string, quantity: number) => {
     if (quantity <= 0) {
       await removeItem(itemId);
-      return;
+      return true;
     }
     const existing = items.find(i => i.id === itemId);
     const prevQty = existing?.quantity ?? 0;
@@ -168,8 +169,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           quantity: Math.abs(delta),
         });
       }
+      return true;
     } catch (e) {
       console.error(e);
+      // The server's verdict is the truth: reload so the line shows its real state instead of a stale one.
+      await fetchCart().catch(() => undefined);
+      return false;
     }
   }, [items, fetchCart, removeItem]);
 

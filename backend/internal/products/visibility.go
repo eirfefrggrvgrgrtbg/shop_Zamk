@@ -1,33 +1,23 @@
 package products
 
-import "fmt"
+import "github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storefront"
 
 // MinStorefrontFreeSellableUnits defines the canonical minimum free sellable units across active variants
 // required for a product to be publicly visible on the storefront (Shop catalog and PDP).
-const MinStorefrontFreeSellableUnits = 2
+// The definition lives in the dependency-free storefront package so that cart can use it too.
+const MinStorefrontFreeSellableUnits = storefront.MinFreeSellableUnits
 
 // CanonicalProductFreeStockSQL returns the authoritative SQL expression that calculates
 // the total canonical free sellable units across active variants for a given product ID column/expression.
 func CanonicalProductFreeStockSQL(productIDExpr string) string {
-	return fmt.Sprintf(`(
-		SELECT COALESCE(SUM(GREATEST(0, ii.total_stock - ii.reserved_stock)), 0)
-		FROM product_variants pv
-		LEFT JOIN inventory_items ii ON pv.id = ii.product_variant_id
-		WHERE pv.product_id = %s AND pv.is_active = true
-	)`, productIDExpr)
+	return storefront.ProductFreeStockSQL(productIDExpr)
 }
 
 // CanonicalStorefrontEligibilitySQL returns the authoritative SQL predicate expression
 // that filters products and sellers according to canonical storefront eligibility:
 // published status, active seller status, and free sellable stock meeting the storefront minimum.
 func CanonicalStorefrontEligibilitySQL(productAlias, sellerAlias string) string {
-	return fmt.Sprintf(
-		"%s.status = 'published' AND %s.status = 'active' AND %s >= %d",
-		productAlias,
-		sellerAlias,
-		CanonicalProductFreeStockSQL(productAlias+".id"),
-		MinStorefrontFreeSellableUnits,
-	)
+	return storefront.EligibilitySQL(productAlias, sellerAlias)
 }
 
 // CanonicalVariantFreeStock returns the canonical free sellable quantity for a variant.

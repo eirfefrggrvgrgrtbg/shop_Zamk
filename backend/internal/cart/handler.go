@@ -62,6 +62,10 @@ func (h *Handler) AddItem(w http.ResponseWriter, r *http.Request) {
 
 	cart, err := h.service.AddItem(r.Context(), userID, req)
 	if err != nil {
+		if errors.Is(err, ErrProductUnavailable) {
+			h.writeError(w, http.StatusConflict, "product_unavailable", "Этот товар сейчас недоступен для заказа.")
+			return
+		}
 		if errors.Is(err, ErrProductNotPublished) || errors.Is(err, ErrVariantNotFound) || errors.Is(err, ErrInsufficientStock) {
 			h.writeError(w, http.StatusBadRequest, "invalid_item", err.Error())
 			return
@@ -106,6 +110,10 @@ func (h *Handler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrCartItemNotFound) {
 			h.writeError(w, http.StatusNotFound, "not_found", "Cart item not found")
+			return
+		}
+		if errors.Is(err, ErrProductUnavailable) {
+			h.writeError(w, http.StatusConflict, "product_unavailable", "Этот товар сейчас недоступен для заказа. Можно уменьшить количество или удалить позицию.")
 			return
 		}
 		if errors.Is(err, ErrInsufficientStock) {

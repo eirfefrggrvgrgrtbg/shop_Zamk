@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/storefront"
 )
 
 type Repository struct {
@@ -180,7 +182,13 @@ func (r *Repository) DeleteCart(ctx context.Context, cartID uuid.UUID) error {
 type ProductValidationInfo struct {
 	Status        string
 	VariantActive bool
-	Available     int
+	// Available is the free stock of this very SKU (total_stock - reserved_stock).
+	Available int
+	// SellerActive is true when the product's store is active.
+	SellerActive bool
+	// StorefrontEligible is the canonical public-catalog verdict for the product as a whole (published, active store,
+	// free stock over all active SKUs at the storefront minimum). It is not a per-SKU rule.
+	StorefrontEligible bool
 }
 
 func (r *Repository) GetProductValidationInfo(ctx context.Context, productID, variantID uuid.UUID) (*ProductValidationInfo, error) {
@@ -188,16 +196,19 @@ func (r *Repository) GetProductValidationInfo(ctx context.Context, productID, va
 		SELECT 
 			p.status, 
 			pv.is_active, 
-			COALESCE(ii.total_stock - ii.reserved_stock, 0) AS available
+			COALESCE(ii.total_stock - ii.reserved_stock, 0) AS available,
+			COALESCE(s.status = 'active', false) AS seller_active,
+			COALESCE(` + storefront.EligibilitySQL("p", "s") + `, false) AS eligible
 		FROM products p
 		JOIN product_variants pv ON p.id = pv.product_id
+		JOIN sellers s ON s.id = p.seller_id
 		LEFT JOIN inventory_items ii ON pv.id = ii.product_variant_id
 		WHERE p.id = $1 AND pv.id = $2
 	`
 	var info ProductValidationInfo
 	var status sql.NullString
 	var active sql.NullBool
-	err := r.db.QueryRow(ctx, query, productID, variantID).Scan(&status, &active, &info.Available)
+	err := r.db.QueryRow(ctx, query, productID, variantID).Scan(&status, &active, &info.Available, &info.SellerActive, &info.StorefrontEligible)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrVariantNotFound

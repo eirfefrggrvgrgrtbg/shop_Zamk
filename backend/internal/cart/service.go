@@ -43,6 +43,11 @@ func (s *Service) AddItem(ctx context.Context, userID uuid.UUID, req AddItemRequ
 	if !info.VariantActive {
 		return nil, ErrVariantNotFound
 	}
+	// A new line must pass the same eligibility the public catalog applies. This is a product-level verdict; the
+	// stock of the chosen SKU is still checked on its own below.
+	if !info.StorefrontEligible {
+		return nil, ErrProductUnavailable
+	}
 	if info.Available < req.Quantity {
 		return nil, ErrInsufficientStock
 	}
@@ -102,7 +107,7 @@ func (s *Service) UpdateItemQuantity(ctx context.Context, userID, itemID uuid.UU
 		return nil, err
 	}
 	// Lowering the quantity of an unavailable line is always allowed (the buyer is fixing the cart);
-	// raising it is not.
+	// raising it must pass the current server checks.
 	if req.Quantity > foundItem.Quantity {
 		if info.Status != "published" {
 			return nil, ErrProductNotPublished
@@ -110,9 +115,12 @@ func (s *Service) UpdateItemQuantity(ctx context.Context, userID, itemID uuid.UU
 		if !info.VariantActive {
 			return nil, ErrVariantNotFound
 		}
-	}
-	if info.Available < req.Quantity {
-		return nil, ErrInsufficientStock
+		if !info.StorefrontEligible {
+			return nil, ErrProductUnavailable
+		}
+		if info.Available < req.Quantity {
+			return nil, ErrInsufficientStock
+		}
 	}
 
 	if err := s.repo.UpdateItemQuantity(ctx, itemID, req.Quantity); err != nil {

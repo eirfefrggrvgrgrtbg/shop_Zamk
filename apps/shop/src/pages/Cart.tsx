@@ -29,6 +29,8 @@ export function Cart() {
   // Цены, виденные при прошлом открытии, читаем один раз при монтировании; изменения выводятся при рендере.
   const [lastSeenPrices] = useState(readLastSeenCartPrices);
   const priceChanges = diffCartPrices(lastSeenPrices, items);
+  // A line whose increase the server refused (the product is no longer orderable as a larger line).
+  const [refusedIncreaseId, setRefusedIncreaseId] = useState<string | null>(null);
   const hasUnavailable = items.some(i => cartUnavailableMessage(i) !== null);
   const unavailableCount = items.filter(i => cartUnavailableMessage(i) !== null).length;
 
@@ -160,6 +162,11 @@ export function Cart() {
                       Уменьшить до {item.availableQuantity} шт.
                     </button>
                   )}
+                  {refusedIncreaseId === item.id && (
+                    <p className='mt-2 text-xs text-error' data-testid="cart-item-increase-refused" role="status">
+                      Увеличить количество сейчас нельзя: товара нет в нужном количестве или он больше недоступен для заказа. Можно уменьшить количество или удалить позицию.
+                    </p>
+                  )}
 
                   <div className='mt-auto pt-4 flex items-center justify-between'>
                     <div className='flex items-center gap-2'>
@@ -177,7 +184,10 @@ export function Cart() {
                         type='button'
                         aria-label={`Увеличить количество ${productName}`}
                         className='h-8 w-8 rounded-full border border-border-soft dark:border-white/20 flex items-center justify-center text-graphite dark:text-gray-300 hover:bg-graphite/5 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed'
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        onClick={async () => {
+                          setRefusedIncreaseId(null);
+                          if ((await updateQuantity(item.id, item.quantity + 1)) === false) setRefusedIncreaseId(item.id);
+                        }}
                         disabled={isUnavailable}
                       >
                         <Plus className='w-3.5 h-3.5' />
