@@ -102,6 +102,8 @@ export function ProductDetail() {
   const { toggleFavorite, isFavorite } = useFavorites();
   const { showToast } = useToast();
 
+  const addInFlightRef = useRef(false);
+  const selectedVariantIdRef = useRef<string | null>(null);
   const lastTrackedKeyRef = useRef<string | null>(null);
   const lastTrackedProductIdRef = useRef<string | null>(null);
 
@@ -156,6 +158,8 @@ export function ProductDetail() {
     setSizeSelectionNotice,
     restoreSelection,
   } = useVariantSelection(product?.variants, product?.sizeChart);
+
+  selectedVariantIdRef.current = selectedVariant?.id ?? null;
 
   const defaultImage = { url: 'https://placehold.co/400x500/e2e8f0/64748b?text=No+Image' };
 
@@ -377,7 +381,7 @@ export function ProductDetail() {
   const liked = isFavorite(product.id);
 
   const handleAddToCart = async () => {
-    if (product.isPreview || isAddingToCart || isProductUnavailable) return;
+    if (product.isPreview || addInFlightRef.current || isProductUnavailable) return;
     if (requiresSize && !selectedSizeId) {
       setSizeError('Выберите размер перед добавлением в корзину');
       return;
@@ -394,14 +398,36 @@ export function ProductDetail() {
       return;
     }
 
+    // The request is bound to this exact SKU; later selection changes must not reinterpret its result.
+    const requestedVariant = selectedVariant;
+    const requestedSizeLabel = selectedSize?.label || requestedVariant.size;
+    const requestedColorId = selectedColorId;
+    const requestedSizeId = selectedSizeId;
+
+    if (!isAuthenticated) {
+      // CartContext opens the sign-in modal and adds nothing: never confirm in that case.
+      await addItem(product.id, requestedVariant.id, 1);
+      return;
+    }
+
     try {
+      addInFlightRef.current = true;
       setIsAddingToCart(true);
       setRefreshErrorNotice(null);
-      await addItem(product.id, selectedVariant.id, 1);
+      await addItem(product.id, requestedVariant.id, 1);
       showToast('Товар добавлен в корзину');
     } catch (e: any) {
-      if (isInsufficientStockError(e)) {
-        const prevSizeLabel = selectedSize?.label || selectedVariant.size;
+      const code = e?.code as string | undefined;
+      if (code === 'NETWORK_ERROR' || code === 'TIMEOUT_ERROR') {
+        showToast('Не удалось подтвердить добавление в корзину. Проверьте соединение и попробуйте ещё раз.');
+      } else if (
+        isInsufficientStockError(e) ||
+        code === 'product_unavailable' ||
+        code === 'invalid_item' ||
+        e?.status === 409
+      ) {
+        // The backend refused this SKU: re-read the catalog and reconcile only if the buyer is still on it.
+        const selectionUnchanged = selectedVariantIdRef.current === requestedVariant.id;
         try {
           const freshProduct = token
             ? await fetchProductPreviewByToken(token)
@@ -411,13 +437,17 @@ export function ProductDetail() {
 
           const reconciliation = reconcileSelectionAfterStaleStock(
             dimensionType,
-            selectedColorId,
-            selectedSizeId,
+            requestedColorId,
+            requestedSizeId,
             freshProduct.variants,
-            prevSizeLabel
+            requestedSizeLabel
           );
 
-          if (!reconciliation.isBuyable) {
+          if (reconciliation.isBuyable) {
+            showToast('Не удалось добавить выбранный вариант. Попробуйте ещё раз чуть позже.');
+          } else if (!selectionUnchanged) {
+            showToast(reconciliation.notice || 'Выбранный вариант больше недоступен.');
+          } else {
             if (reconciliation.nextSizeId === null && selectedSizeId !== null) {
               clearSelectedSize();
               if (searchParams.has('size')) {
@@ -426,10 +456,9 @@ export function ProductDetail() {
                 setSearchParams(nextParams, { replace: true });
               }
             }
-            if (reconciliation.notice) {
-              setSizeSelectionNotice(reconciliation.notice);
-              showToast(reconciliation.notice);
-            }
+            const notice = reconciliation.notice || 'Выбранный вариант больше недоступен.';
+            setSizeSelectionNotice(notice);
+            showToast(notice);
           }
         } catch (refreshErr: any) {
           if (
@@ -453,9 +482,10 @@ export function ProductDetail() {
           }
         }
       } else {
-        showToast(e.message || 'Ошибка при добавлении в корзину');
+        showToast(e?.message || 'Ошибка при добавлении в корзину');
       }
     } finally {
+      addInFlightRef.current = false;
       setIsAddingToCart(false);
     }
   };
