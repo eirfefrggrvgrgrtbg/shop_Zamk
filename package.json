@@ -20,6 +20,7 @@
     "build:backend": "cd backend && go build ./cmd/...",
     "build": "npm run build --workspaces --if-present",
     "test:backend": "bash backend/scripts/safe_go_test.sh",
+    "test:backend:cart-catalog": "bash backend/scripts/safe_go_test_redis.sh ./internal/http/router/ -- -run '^(TestCartAddItemVariantErrors|TestCartStaleness|TestCartBrandConsistency|TestCartVariantImageTruth|TestCatalogDeterminism|TestEditorialCollections_AdminAndPublic|TestProductPublicationContract|TestProductVariantTruth|TestCartEligibilityAndCheckout)$' -v",
     "test:migrations": "cd backend && bash scripts/test_migrations_clean.sh",
     "check:seller": "npm run test --workspace=seller && npm run build --workspace=seller",
     "check:admin": "npm run test --workspace=admin && npm run build --workspace=admin",

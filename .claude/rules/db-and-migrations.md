@@ -17,6 +17,27 @@ paths:
 - В тестах брать БД только из `testutil` (`GetTestDatabaseURL`, `RunnerDatabaseURL`, `DisposableDatabaseURL`, `NewDisposableDatabase`). Не зашивать DSN и не читать `TEST_DATABASE_URL` напрямую: это ловит guard `TestNoSharedTestDatabaseAccessOutsideTestutil`.
 - Пароли и DSN не копировать в файлы и ответы.
 
+## Тесты с Redis (TEST.REDIS.ISOLATION.1)
+
+- Тесты, которым нужен Redis, запускать через `backend/scripts/safe_go_test_redis.sh`. Он поднимает собственный Docker-контейнер Redis на запуск и затем вызывает `safe_go_test.sh` без изменений, то есть тест получает и свою disposable-PostgreSQL, и свой Redis. Интерфейс тот же: явные пакеты `./internal/...`, затем `-- <флаги go test>`; других параметров у wrapper нет.
+- Нужны Docker и локальный образ `redis:7-alpine`. Образ никогда не скачивается (`--pull never`). Нет Docker, образа, контейнера или подтверждённого владельца: wrapper выходит с `REFUSED`, тесты не стартуют.
+- Контейнер: порт только на `127.0.0.1`, выбирается динамически, пароль = случайный токен запуска, persistence и AOF выключены. Адрес и токен передаются тестам в `ZAMK_TEST_REDIS_ADDR` и `ZAMK_TEST_REDIS_TOKEN`.
+- Cleanup: wrapper удаляет только свой контейнер по полному ID и после сверки метки владельца с токеном; на выходе, при провале тестов и при INT/TERM/HUP. По порту и имени ничего не останавливается. При SIGKILL или аварии машины очистка не гарантирована.
+- Токен временного Redis виден в аргументах процессов и в Docker metadata, пока контейнер жив. Токен не коммитить, не печатать и не копировать в отчёты.
+- Общий Redis `localhost:6379` и контейнер `zamk_redis` для тестов запрещены. Выбор другой логической базы (DB 9 и т. п.) на общем сервере изоляцией не считается.
+- Новый Redis-интеграционный тест получает клиент только через `testutil.NewTestRedis(t, ctx)`; хардкод `localhost:6379` и прямой `redis.NewClient` с общим адресом недопустимы. Helper без переменных runner-а останавливает тест до подключения и отклоняет порт 6379, не-loopback, неверный токен и Redis с persistence.
+- Тесты, которые ещё подключаются к `localhost:6379`, безопасными не считаются. Не запускать их ради зелёного результата. Если безопасность среды не доказана, тест не запускать.
+
+### Подтверждённый набор (команда)
+
+Изоляция Redis и PostgreSQL подтверждена прогонами только для этих девяти тестов: `TestCartAddItemVariantErrors`, `TestCartStaleness`, `TestCartBrandConsistency`, `TestCartVariantImageTruth`, `TestCatalogDeterminism`, `TestEditorialCollections_AdminAndPublic`, `TestProductPublicationContract`, `TestProductVariantTruth`, `TestCartEligibilityAndCheckout`.
+
+```bash
+npm run test:backend:cart-catalog
+```
+
+Это `backend/scripts/safe_go_test_redis.sh ./internal/http/router/ -- -run '^(...эти девять...)$' -v`; для случайного порядка добавить `-shuffle=on` в конец `-- ...` при ручном вызове wrapper. Прямой `go test` и `./...` не использовать. Их нельзя запускать напрямую против `zamk_test`.
+
 ## Рабочая база и миграции
 
 - Никаких миграций и записей в рабочую базу `zamk` без отдельного явного разрешения. Допустимы только read-only `SELECT`.
