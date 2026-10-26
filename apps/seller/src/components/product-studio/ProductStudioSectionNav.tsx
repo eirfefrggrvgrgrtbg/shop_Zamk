@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import {
   PRODUCT_STUDIO_SECTIONS,
   useProductStudio,
@@ -6,9 +7,21 @@ import { cn } from '../../lib/utils';
 
 export function ProductStudioSectionNav() {
   const { activeSection, setActiveSection } = useProductStudio();
+  const navRef = useRef<HTMLElement>(null);
+
+  // On a narrow screen the tab strip scrolls on its own: keep the active tab inside it (the page itself never moves).
+  useEffect(() => {
+    const nav = navRef.current;
+    const tab = nav?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!nav || !tab) return;
+    const left = tab.offsetLeft - nav.offsetLeft;
+    if (left < nav.scrollLeft) nav.scrollLeft = left - 8;
+    else if (left + tab.offsetWidth > nav.scrollLeft + nav.clientWidth) nav.scrollLeft = left + tab.offsetWidth - nav.clientWidth + 8;
+  }, [activeSection]);
 
   return (
     <nav
+      ref={navRef}
       role="tablist"
       aria-label="Секции формы товара"
       data-testid="product-studio-section-nav"

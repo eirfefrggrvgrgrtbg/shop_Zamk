@@ -515,6 +515,18 @@ export function ProductStudioFormWorkspace({
       activeVariants.some((v) => v.colorId === focusedVariant.colorId && v.sizeValueId === focusedVariant.sizeValueId)
   );
 
+  // On a small screen the matrix can sit below the fold or inside its own horizontal scroll: bring the cell into view once.
+  const scrolledToFocusRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusedVariant || activeSection !== 'variants') return;
+    const key = `${focusedVariant.colorId}-${focusedVariant.sizeValueId}`;
+    if (scrolledToFocusRef.current === key) return;
+    const cell = document.querySelector<HTMLElement>('[data-focused="true"]');
+    if (!cell) return;
+    scrolledToFocusRef.current = key;
+    cell.scrollIntoView?.({ block: 'center', inline: 'center' });
+  }, [focusedVariant, activeSection, configuredColors, configuredSizes]);
+
   const totalPossibleVariants = configuredColors.length * configuredSizes.length;
   const activeVariantsInMatrix = useMemo(() => {
     return activeVariants.filter((v) =>
@@ -2132,7 +2144,7 @@ export function ProductStudioFormWorkspace({
                   <table className="border-collapse text-left inline-table">
                     <thead>
                       <tr className="border-b border-gray-200 dark:border-white/10">
-                        <th className="py-2.5 px-3 font-medium text-xs text-gray-500 w-[160px] min-w-[140px] max-w-[180px]">
+                        <th className="sticky left-0 z-10 bg-white dark:bg-[#121214] py-2.5 px-2 sm:px-3 font-medium text-xs text-gray-500 w-[104px] min-w-[104px] max-w-[104px] sm:w-[160px] sm:min-w-[140px] sm:max-w-[180px]">
                           Цвет \ Размер
                         </th>
                         {configuredSizes.map((s) => (
@@ -2167,7 +2179,7 @@ export function ProductStudioFormWorkspace({
                           key={c.id}
                           className="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50/50 dark:hover:bg-white/[0.02]"
                         >
-                          <td className="py-2.5 px-3 text-xs font-medium text-gray-900 dark:text-white w-[160px] min-w-[140px] max-w-[180px]">
+                          <td className="sticky left-0 z-10 bg-white dark:bg-[#121214] py-2.5 px-2 sm:px-3 text-xs font-medium text-gray-900 dark:text-white w-[104px] min-w-[104px] max-w-[104px] sm:w-[160px] sm:min-w-[140px] sm:max-w-[180px]">
                             <div className="flex items-center gap-2">
                               <span
                                 className="w-3.5 h-3.5 rounded-full border border-black/10 dark:border-white/20 shrink-0"
@@ -2377,8 +2389,8 @@ export function ProductStudioFormWorkspace({
 
             {activeVariants.length > 0 && (
               <div className="pt-4 border-t border-gray-200 dark:border-white/10 space-y-3" data-testid="form-variant-sku-section">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
                       Артикулы продавца (SKU) <span className={activeVariants.some((v) => !v.sellerSku || !v.sellerSku.trim()) && isPriceAttention ? "text-amber-600 dark:text-amber-400" : "text-gray-400 dark:text-gray-500"}>*</span>
                     </h3>

@@ -89,11 +89,11 @@ export function ProductStudioHeader() {
   return (
     <header
       data-testid="product-studio-header"
-      className="sticky top-[var(--seller-shell-header-height,56px)] z-20 w-full border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#121214] shadow-sm"
+      className="relative lg:sticky lg:top-[var(--seller-shell-header-height,56px)] z-20 w-full border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#121214] shadow-sm"
     >
-      <div className="max-w-[1360px] mx-auto px-4 min-h-[56px] py-2 flex items-center justify-between gap-4">
+      <div className="max-w-[1360px] mx-auto px-4 min-h-[56px] py-2 flex flex-wrap lg:flex-nowrap items-center justify-between gap-x-4 gap-y-2">
         {/* LEFT: Context & Title */}
-        <div className="flex items-center gap-4 min-w-0 flex-1">
+        <div className="flex items-center gap-4 min-w-0 basis-full lg:basis-0 lg:flex-1">
           <Link
             to="/products"
             data-testid="studio-back-to-products"
@@ -117,7 +117,7 @@ export function ProductStudioHeader() {
                 {displayTitle}
               </h1>
 
-              <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+              <div className="flex items-center gap-1.5 min-w-0 max-w-full flex-wrap">
                 <span
                   data-testid="studio-entry-badge"
                   className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-gray-300 shrink-0"
@@ -226,12 +226,12 @@ export function ProductStudioHeader() {
         </div>
 
         {/* CENTER: Mode Switcher */}
-        <div className="flex-shrink-0 flex items-center justify-center">
+        <div className="flex-shrink-0 flex items-center justify-start lg:justify-center">
           <ProductStudioViewToggle />
         </div>
 
         {/* RIGHT: Actions */}
-        <div className="flex items-center justify-end gap-3 flex-1">
+        <div className="flex items-center justify-between lg:justify-end gap-3 min-w-0 basis-full lg:basis-0 lg:flex-1 flex-wrap">
           {/* Autosave status indicator */}
           <div data-testid="studio-save-status" className="flex items-center gap-1.5 text-xs shrink-0">
             {saveStatus === 'staging' || saveStatus === 'saving' ? (
@@ -290,7 +290,7 @@ export function ProductStudioHeader() {
         <div
           data-testid="studio-save-error-toast"
           role="alert"
-          className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white shadow-xl animate-in fade-in slide-in-from-bottom-2"
+          className="fixed bottom-5 right-5 left-5 sm:left-auto max-w-[calc(100vw-2.5rem)] z-50 flex items-center gap-3 rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white shadow-xl animate-in fade-in slide-in-from-bottom-2"
         >
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{saveError}</span>
@@ -329,7 +329,7 @@ export function ProductStudioHeader() {
         <div
           data-testid="studio-moderation-error-toast"
           role="alert"
-          className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white shadow-xl animate-in fade-in slide-in-from-bottom-2"
+          className="fixed bottom-5 right-5 left-5 sm:left-auto max-w-[calc(100vw-2.5rem)] z-50 flex items-center gap-3 rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white shadow-xl animate-in fade-in slide-in-from-bottom-2"
         >
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{moderationError}</span>
