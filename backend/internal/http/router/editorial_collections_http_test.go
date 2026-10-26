@@ -21,7 +21,6 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/app"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/products"
 )
 
@@ -39,8 +38,7 @@ func TestEditorialCollections_AdminAndPublic(t *testing.T) {
 	require.NoError(t, err)
 	defer pgClient.Close()
 	require.NoError(t, testutil.VerifyTestDatabase(ctx, pgClient.Pool))
-	redisClient, err := redis.NewClient(ctx, "localhost:6379", "", 0)
-	require.NoError(t, err)
+	redisClient := testutil.NewTestRedis(t, ctx)
 	defer redisClient.Close()
 	r, cancel := app.BuildRouter(ctx, cfg, pgClient, redisClient, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	defer cancel()

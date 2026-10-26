@@ -21,7 +21,6 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/postgres"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
 )
 
 func setupProductPublicationTestEnv(t *testing.T) (context.Context, http.Handler, func(), *postgres.Client, *auth.TokenService) {
@@ -47,8 +46,7 @@ func setupProductPublicationTestEnv(t *testing.T) (context.Context, http.Handler
 	// TEST.DISPOSABLE.COMPAT.1: fail closed unless this is the run's own disposable database (never zamk_test).
 	require.NoError(t, testutil.VerifyTestDatabase(ctx, pgClient.Pool))
 
-	redisClient, err := redis.NewClient(ctx, "localhost:6379", "", 0)
-	require.NoError(t, err)
+	redisClient := testutil.NewTestRedis(t, ctx)
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	r, cancel := app.BuildRouter(ctx, cfg, pgClient, redisClient, logger)

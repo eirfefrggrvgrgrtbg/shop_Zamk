@@ -18,7 +18,6 @@ import (
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/app"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/auth"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/config"
-	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/platform/redis"
 	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 )
 
@@ -37,8 +36,7 @@ func TestCartEligibilityAndCheckout(t *testing.T) {
 	require.NoError(t, err)
 	defer pg.Close()
 	testutil.AssertTestDatabase(t, pg.Pool)
-	rc, err := redis.NewClient(ctx, "localhost:6379", "", 9)
-	require.NoError(t, err)
+	rc := testutil.NewTestRedis(t, ctx)
 	defer rc.Close()
 	r, cancel := app.BuildRouter(ctx, cfg, pg, rc, slog.New(slog.NewJSONHandler(io.Discard, nil)))
 	defer cancel()
