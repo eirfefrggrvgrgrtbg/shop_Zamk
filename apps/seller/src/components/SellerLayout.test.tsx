@@ -424,4 +424,26 @@ describe('SellerLayout - R1.1B Desktop Top Navigation Shell', () => {
     expect(headerLink).toBeTruthy();
     expect(headerLink.getAttribute('href')).toBe('/payouts');
   });
+
+  // SELLER.SHELL.TABLET.1: class-level checks only; the real overflow is measured in the live Playwright run.
+  it('switches between the burger menu and the inline top navigation at lg, so a tablet gets the burger', () => {
+    renderLayout('/dashboard');
+    const burger = screen.getByLabelText('Открыть меню');
+    expect(burger.className).toContain('lg:hidden');
+    expect(burger.className).not.toContain('md:hidden');
+    const nav = screen.getByLabelText('Основная навигация');
+    expect(nav.className).toContain('hidden');
+    expect(nav.className).toContain('lg:flex');
+    expect(nav.className).not.toContain('md:flex');
+    expect(document.getElementById('nav-trigger-profile')!.parentElement!.className).toContain('lg:block');
+  });
+
+  it('the burger opens the mobile drawer with working navigation links', () => {
+    renderLayout('/dashboard');
+    fireEvent.click(screen.getByLabelText('Открыть меню'));
+    const drawer = screen.getAllByRole('link', { name: 'Заказы' }).find((a) => a.closest('aside'));
+    expect(drawer).toBeTruthy();
+    expect(drawer!.getAttribute('href')).toBe('/orders');
+    expect(drawer!.closest('aside')!.className).toContain('lg:hidden');
+  });
 });

@@ -228,7 +228,7 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -237,7 +237,7 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
       <aside
         data-testid="mobile-drawer"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-gray-200 flex flex-col transition-transform duration-200 md:hidden",
+          "fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-gray-200 flex flex-col transition-transform duration-200 lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -356,7 +356,7 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
-              className="p-1.5 -ml-1.5 rounded-md text-gray-600 hover:bg-gray-100 md:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+              className="p-1.5 -ml-1.5 rounded-md text-gray-600 hover:bg-gray-100 lg:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
               aria-label="Открыть меню"
             >
               <Menu className="h-5 w-5" />
@@ -370,7 +370,7 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Middle: Desktop navigation */}
-          <nav className="hidden md:flex items-center gap-1 lg:gap-1.5" aria-label="Основная навигация">
+          <nav className="hidden lg:flex items-center gap-1.5" aria-label="Основная навигация">
             {/* Direct Link: Обзор */}
             <Link
               to="/dashboard"
@@ -462,7 +462,7 @@ export function SellerLayout({ children }: { children: React.ReactNode }) {
             {/* Profile Menu (Desktop) */}
             <div
               ref={openMenu === 'profile' ? activeMenuRef : undefined}
-              className="relative hidden md:block"
+              className="relative hidden lg:block"
             >
               <button
                 type="button"
