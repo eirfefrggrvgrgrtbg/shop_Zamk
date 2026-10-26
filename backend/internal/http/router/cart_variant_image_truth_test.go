@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,8 +38,7 @@ func TestCartVariantImageTruth(t *testing.T) {
 	)
 
 	t.Cleanup(func() {
-		var dbName string
-		if err := pgClient.Pool.QueryRow(ctx, "SELECT current_database()").Scan(&dbName); err == nil && dbName == "zamk_test" {
+		if testutil.VerifyTestDatabase(ctx, pgClient.Pool) == nil {
 			if len(createdUserIDs) > 0 {
 				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM cart_items WHERE cart_id IN (SELECT id FROM carts WHERE user_id = ANY($1))", createdUserIDs)
 				_, _ = pgClient.Pool.Exec(ctx, "DELETE FROM carts WHERE user_id = ANY($1)", createdUserIDs)

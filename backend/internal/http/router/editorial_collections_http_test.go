@@ -1,6 +1,6 @@
 package router_test
 
-// MARKETING.M1.5 — editorial collections through the real router on zamk_test:
+// MARKETING.M1.5 — editorial collections through the real router on the run's disposable database:
 // RBAC (storefront.manage), create/edit/items/order, and what customers get from the public API.
 
 import (
@@ -38,6 +38,7 @@ func TestEditorialCollections_AdminAndPublic(t *testing.T) {
 	pgClient, err := testutil.NewTrackedClient(t, ctx, testDBURL)
 	require.NoError(t, err)
 	defer pgClient.Close()
+	require.NoError(t, testutil.VerifyTestDatabase(ctx, pgClient.Pool))
 	redisClient, err := redis.NewClient(ctx, "localhost:6379", "", 0)
 	require.NoError(t, err)
 	defer redisClient.Close()
@@ -75,9 +76,13 @@ func TestEditorialCollections_AdminAndPublic(t *testing.T) {
 		return w.Code, w.Body.Bytes()
 	}
 
-	// Fixtures: two storefront-eligible products and one product customers cannot see.
+	// Fixtures: two storefront-eligible products and one product customers cannot see, all of this test's own seller
+	// (TEST.DISPOSABLE.COMPAT.1: no reliance on whatever a shared database happens to contain).
+	fx := seedStorefrontSeller(t, pgClient.Pool, 3)
+	_, err = pgClient.Pool.Exec(ctx, `UPDATE products SET status = 'draft', published_at = NULL WHERE id = $1`, fx.ProductIDs[2])
+	require.NoError(t, err)
 	loadIDs := func(query string, limit int) []uuid.UUID {
-		rows, err := pgClient.Pool.Query(ctx, query, limit)
+		rows, err := pgClient.Pool.Query(ctx, query, limit, fx.SellerID)
 		require.NoError(t, err)
 		defer rows.Close()
 		var ids []uuid.UUID
@@ -89,10 +94,11 @@ func TestEditorialCollections_AdminAndPublic(t *testing.T) {
 		return ids
 	}
 	eligibility := products.CanonicalStorefrontEligibilitySQL("p", "s")
-	eligible := loadIDs(`SELECT p.id FROM products p JOIN sellers s ON s.id = p.seller_id WHERE `+eligibility+` ORDER BY p.created_at DESC LIMIT $1`, 2)
-	require.Len(t, eligible, 2, "zamk_test must contain two storefront-eligible products")
-	hiddenIDs := loadIDs(`SELECT p.id FROM products p JOIN sellers s ON s.id = p.seller_id WHERE NOT (`+eligibility+`) LIMIT $1`, 1)
-	require.Len(t, hiddenIDs, 1, "zamk_test must contain a product that is not visible to customers")
+	eligible := loadIDs(`SELECT p.id FROM products p JOIN sellers s ON s.id = p.seller_id WHERE p.seller_id = $2 AND `+eligibility+` ORDER BY p.created_at DESC, p.id LIMIT $1`, 2)
+	require.Len(t, eligible, 2, "fixture must contain two storefront-eligible products")
+	hiddenIDs := loadIDs(`SELECT p.id FROM products p JOIN sellers s ON s.id = p.seller_id WHERE p.seller_id = $2 AND NOT (`+eligibility+`) LIMIT $1`, 1)
+	require.Len(t, hiddenIDs, 1, "fixture must contain a product that is not visible to customers")
+	require.Equal(t, fx.ProductIDs[2], hiddenIDs[0])
 	hidden := hiddenIDs[0]
 
 	slug := "m15-" + uuid.NewString()[:8]

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eirfefrggrvgrgrtbg/shop-zamk/backend/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,8 +26,7 @@ func TestCartStaleness(t *testing.T) {
 		sellerIDs, categoryIDs, productIDs, variantIDs, userIDs []uuid.UUID
 	)
 	t.Cleanup(func() {
-		var dbName string
-		if err := pgClient.Pool.QueryRow(ctx, "SELECT current_database()").Scan(&dbName); err != nil || dbName != "zamk_test" {
+		if testutil.VerifyTestDatabase(ctx, pgClient.Pool) != nil {
 			return
 		}
 		if len(userIDs) > 0 {

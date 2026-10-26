@@ -61,10 +61,8 @@ func setupCatalogDeterminismTestEnv(t *testing.T) (context.Context, http.Handler
 	pgClient, err := testutil.NewTrackedClient(t, ctx, testDBURL)
 	require.NoError(t, err)
 
-	var dbName string
-	err = pgClient.Pool.QueryRow(ctx, "SELECT current_database()").Scan(&dbName)
-	require.NoError(t, err)
-	require.Equal(t, "zamk_test", dbName, "tests must strictly run against zamk_test")
+	// TEST.DISPOSABLE.COMPAT.1: fail closed unless this is the run's own disposable database (never zamk_test).
+	require.NoError(t, testutil.VerifyTestDatabase(ctx, pgClient.Pool))
 
 	redisClient, err := redis.NewClient(ctx, "localhost:6379", "", 0)
 	require.NoError(t, err)
